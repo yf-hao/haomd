@@ -1,0 +1,83 @@
+# 阶段 4 实施计划（文件系统与历史版本）
+
+## 设计原则
+- **高内聚**：文件 IO、历史版本、自动保存、冲突检测各自封装；UI 仅调用服务接口。
+- **低耦合**：前端通过抽象的 file service/版本 service 调 Tauri 命令；后端命令屏蔽平台差异；路径/策略集中配置。
+- **可扩展**：支持后续接入云端同步、回收站、差异对比；版本存储与策略可配置；新增存储后端不影响现有接口。
+- **可维护**：统一错误码与日志字段；可测试的最小用例；明确超时/节流/容量上限。
+
+## 目标
+- 打开/保存本地文件；最近文件列表；脏标记与提示。
+- 自动保存（节流/防抖）；历史版本快照（基于哈希命名）；版本列表/恢复。
+- 冲突检测：外部修改监测；保存前校验文件时间戳/哈希。
+- 日志与错误可追踪；测试用例与验收标准明确。
+
+## 实施步骤
+1) **配置与常量**
+   - 新增 `app/src/config/files.ts`（若无）：
+     - 路径：`appDataDir` 下的 `historyDir` 名称，最大版本数/容量（如 50 个版本或 200MB）。
+     - 自动保存：`autoSave.enabled`、`debounceMs`、`idleMs`。
+     - 冲突检测：`statThresholdMs`、`hashOnSave` 开关。
+     - 日志字段对齐：`timestamp`、`level`、`action`（open/save/autoSave/history/restore/conflict）、`file`, `outcome`, `code`, `message`, `trace_id`。
+
+2) **后端命令（Tauri）**
+   - 定义命令（Rust）：
+     - `read_file(path: String) -> Result<FilePayload, ErrorStruct>`
+     - `write_file(path: String, content: String, expected_mtime: Option<u64>, expected_hash: Option<String>) -> Result<WriteResult, ErrorStruct>`
+     - `list_recent() -> Result<Vec<RecentFile>, ErrorStruct>`（可存于配置/存储）
+     - `make_snapshot(path: String, content: String, trace_id?) -> Result<SnapshotMeta, ErrorStruct>`（写入 historyDir，文件名含时间戳+hash）
+     - `list_snapshots(path: String) -> Result<Vec<SnapshotMeta>, ErrorStruct>`
+     - `restore_snapshot(path: String, snapshot: String) -> Result<FilePayload, ErrorStruct>`
+   - 统一错误结构：`code`（如 `IO_ERROR`、`NOT_FOUND`、`CONFLICT`、`TOO_LARGE`）、`message`、`trace_id`。
+   - 校验：文件大小上限；路径安全（禁止跳出用户作用域）；创建历史目录。
+
+3) **后端实现细节**
+   - 使用 `tauri::api::file` 或 `std::fs` + `tauri::async_runtime::spawn_blocking`，避免阻塞主线程。
+   - 历史版本：
+     - 存储路径：`app_data_dir/history/{escaped_path}/{timestamp}_{hash}.md`。
+     - 维护 manifest（可选 json）记录最近 N 个版本，超出删除最旧。
+   - 冲突检测：
+     - `write_file` 接收前端传的 `expected_mtime`/`hash`；若磁盘已变更则返回 `CONFLICT`。
+   - 日志：使用 `tauri-plugin-log`，按字段输出 JSON Lines，附 `trace_id`。
+
+4) **前端服务层**
+   - 新建 `src/modules/files/service.ts`：封装 Tauri 命令调用，返回标准 Result。
+   - 维护最近文件列表（可结合 localStorage/后端存储），并暴露：open/save/autoSave/restore/listHistory。
+   - 自动保存：在 editor 变更时 debounce（如 800ms）触发；保存时附带 `expected_mtime`/`hash`。
+   - 冲突处理：收到 `CONFLICT` 弹出提示，提供“覆盖保存/重新加载/另存为”选项。
+
+5) **状态与 UI 集成**
+   - 增加文件状态：当前文件路径、脏标记、最后保存时间、最近版本列表。
+   - 编辑器顶部显示当前文件名、保存状态（已保存/自动保存中/失败）。
+   - 历史版本面板：列出时间戳+哈希，支持预览差异（可先用纯文本比对占位），支持恢复。
+   - 最近文件下拉/侧边栏，点击打开。
+
+6) **菜单栏与快捷键（参考 VS Code，含 AI 菜单）**
+   - File：Open / Open Folder / Open Recent（含 Clear Recent）/ Save / Save As / Close File / Quit；快捷键如 Cmd/Ctrl+O、Cmd/Ctrl+Shift+O、Cmd/Ctrl+S、Cmd/Ctrl+Shift+S、Cmd/Ctrl+W、Cmd/Ctrl+Q。
+   - Edit：Undo/Redo，Cut/Copy/Paste，Find/Replace，Select All，Toggle Comment，Format Document（预留）。
+   - Selection：扩展/收缩选区，选中行，选中所有匹配（预留）。
+   - View：Toggle Preview、Split View、Toggle Sidebar/Status Bar、Zoom In/Out/Reset、Word Wrap、Developer Tools。
+   - Go：Go to Line、Go to Symbol（预留）、Next/Prev Tab、Back/Forward（预留）。
+   - Help：Docs、Release Notes、Report Issue、About。
+   - AI：Open AI Chat、Set API Key、AI Settings、Ask AI About This File/Selection（预留）。
+   - 实现：Tauri 菜单定义+Accelerator，`on_menu_event` 发 action；前端 dispatcher 处理脏检查、保存对话、打开/最近/AI 面板等。
+
+7) **错误与降级**
+   - 无法访问文件系统时，提供只读模式提示。
+   - 自动保存失败时记录日志并显示重试入口；重试有上限与退避。
+   - 历史目录写满/超限时返回错误码，提示用户清理。
+
+8) **测试与验收**
+   - 用例：
+     - 打开/保存小文件；超限文件拒绝。
+     - 自动保存触发，历史版本生成，限制数量/容量生效。
+     - 外部修改后保存返回 `CONFLICT`，UI 弹提示。
+     - 恢复历史版本成功，内容覆盖编辑器。
+   - 冒烟：`npm run build`、`npm run tauri:dev`；无致命报错。
+   - 验收：功能可用，错误有码有提示；日志包含 trace_id，可追踪 open/save/history 行为。
+
+## 交付物
+- `config/files.ts` 配置文件。
+- 后端命令实现（open/save/list/历史/恢复/冲突检测）。
+- 前端 file service、自动保存与 UI 集成（状态、历史面板、冲突提示）。
+- 测试用例与验收清单。
