@@ -9,7 +9,7 @@ const seed = [
   '# ZenMark',
   '',
   '- 实时预览',
-  '- 支持 KaTeX / Mermaid / PlantUML / XMind',
+  '- 支持 KaTeX / Mermaid / XMind',
   '- 多标签与离线文件',
   '',
   '> 这里是占位文案，后续会接入渲染管线。',
@@ -22,13 +22,6 @@ const seed = [
   'graph LR',
   '    user[用户] --> editor[编辑器]',
   '    editor --> preview[实时预览]',
-  '```',
-  '',
-  '## PlantUML',
-  '```plantuml',
-  '@startuml',
-  'Alice -> Bob : Hello',
-  '@enduml',
   '```',
   '',
   '## Mind-elixir ',
@@ -163,7 +156,7 @@ function App() {
             <section className="pane preview">
               <header className="pane-header">
                 <div className="pane-title">预览</div>
-                <div className="hint">KaTeX / Mermaid / PlantUML / XMind</div>
+                <div className="hint">KaTeX / Mermaid / XMind</div>
               </header>
               <div className="preview-body">
                 <MarkdownViewer value={previewValue} activeLine={activeLine} />

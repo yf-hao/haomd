@@ -1,10 +1,8 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import mermaid from 'mermaid'
 import MindElixir, { SIDE } from 'mind-elixir'
 import 'mind-elixir/style'
-import { encode } from 'plantuml-encoder'
-import { mermaidConfig, backendLimits } from '../config/renderers'
-import { renderPlantUML } from '../modules/visualization/service'
+import { mermaidConfig } from '../config/renderers'
 
 mermaid.initialize({
   startOnLoad: false,
@@ -15,19 +13,6 @@ mermaid.initialize({
 
 const mermaidCache = new Map<string, string>()
 const mindCache = new Map<string, MindElixirData>()
-
-type RenderStatus = 'idle' | 'loading' | 'success' | 'error'
-
-type RenderState = {
-  status: RenderStatus
-  traceId?: string
-  message?: string
-  data?: string
-  errorCode?: string
-  retryCount: number
-}
-
-const MAX_RETRIES_PLANTUML = backendLimits.plantuml.maxRetries ?? 2
 
 export const MermaidBlock = memo(function MermaidBlock({ code }: Readonly<{ code: string }>) {
   const [svg, setSvg] = useState<string>(() => mermaidCache.get(code) ?? '加载中…')
@@ -80,91 +65,6 @@ export const MermaidBlock = memo(function MermaidBlock({ code }: Readonly<{ code
     </div>
   )
 })
-
-export function PlantUMLBlock({ code }: Readonly<{ code: string }>) {
-  const [state, setState] = useState<RenderState>({ status: 'idle', retryCount: 0 })
-  const cancelledRef = useRef(false)
-  const retryRef = useRef(0)
-
-  const triggerRender = useCallback(
-    (retry = false) => {
-      const nextRetry = retry ? Math.min(retryRef.current + 1, MAX_RETRIES_PLANTUML) : 0
-      retryRef.current = nextRetry
-      cancelledRef.current = false
-      setState({
-        status: 'loading',
-        retryCount: nextRetry,
-        message: '队列中或渲染中…（可取消）',
-      })
-
-      renderPlantUML(code).then((res) => {
-        if (cancelledRef.current) return
-        if (res.ok) {
-          retryRef.current = 0
-          setState({ status: 'success', data: res.data, traceId: res.traceId, retryCount: 0 })
-        } else {
-          setState({
-            status: 'error',
-            message: res.error.message,
-            errorCode: res.error.code,
-            traceId: res.error.traceId,
-            retryCount: nextRetry,
-          })
-        }
-      })
-    },
-    [code],
-  )
-
-  useEffect(() => {
-    triggerRender(false)
-    return () => {
-      cancelledRef.current = true
-    }
-  }, [code, triggerRender])
-
-  const cancel = () => {
-    cancelledRef.current = true
-    setState((prev) => ({ ...prev, status: 'idle', message: '已取消' }))
-  }
-
-  const canRetry = state.retryCount < MAX_RETRIES_PLANTUML
-
-  return (
-    <>
-      {state.status === 'loading' && (
-        <div className="diagram-placeholder">
-          <p>{state.message ?? '渲染中…'}</p>
-          <button className="ghost" onClick={cancel}>
-            取消
-          </button>
-        </div>
-      )}
-      {state.status === 'success' && state.data && (
-        <div className="diagram-canvas" dangerouslySetInnerHTML={{ __html: state.data }} />
-      )}
-      {state.status === 'error' && (
-        <div className="diagram-placeholder">
-          <p>渲染失败：{state.message}</p>
-          {state.errorCode && <p className="mono">code: {state.errorCode}</p>}
-          {state.traceId && <p className="mono">trace: {state.traceId}</p>}
-          <p className="mono">checksum: {encode(code).slice(0, 18)}…</p>
-          <div className="actions">
-            <button className="ghost" onClick={() => triggerRender(true)} disabled={!canRetry}>
-              重试
-            </button>
-            {!canRetry && <span className="hint">已达最大重试次数</span>}
-          </div>
-        </div>
-      )}
-      {state.status === 'idle' && (
-        <div className="diagram-placeholder">
-          <p>等待渲染</p>
-        </div>
-      )}
-    </>
-  )
-}
 
 type MindNode = {
   title: string

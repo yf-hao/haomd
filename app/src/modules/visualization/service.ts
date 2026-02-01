@@ -1,28 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { backendLimits, enabledRenderers } from '../../config/renderers'
 
-type Renderer = 'plantuml' | 'xmind'
-const enabledMap: Record<Renderer, boolean> = {
-  plantuml: enabledRenderers.plantuml,
-  xmind: enabledRenderers.xmind,
-}
-
-type RenderPayload = {
-  data: string
-  trace_id?: string
-  format?: 'svg' | 'png'
-}
-
-type RenderError = {
-  code: string
-  message: string
-  traceId?: string
-}
-
-type RenderResult =
-  | { ok: true; data: string; format: 'svg' | 'png'; traceId: string; renderer: Renderer }
-  | { ok: false; error: RenderError; renderer: Renderer }
-
 const isTauri = () =>
   typeof window !== 'undefined' &&
   (Boolean((window as any).__TAURI_INTERNALS__) || Boolean((window as any).__TAURI__))
@@ -32,7 +10,7 @@ const makeTraceId = () =>
     ? crypto.randomUUID()
     : `trace_${Date.now()}_${Math.random().toString(16).slice(2)}`
 
-const normalizeError = (err: unknown, renderer: Renderer, traceId?: string): RenderResult => {
+const normalizeError = (err: unknown, renderer: 'xmind', traceId?: string) => {
   const obj = err as Record<string, unknown> | null
   const explicitMsg =
     obj && typeof obj.message === 'string'
@@ -43,17 +21,20 @@ const normalizeError = (err: unknown, renderer: Renderer, traceId?: string): Ren
   const message = explicitMsg || String(err) || '渲染失败'
   const code = obj && typeof obj.code === 'string' ? obj.code : 'RENDER_FAILED'
   const trace = obj && typeof obj.trace_id === 'string' ? obj.trace_id : traceId
-  return { ok: false, error: { code, message, traceId: trace }, renderer }
+  return { ok: false, error: { code, message, traceId: trace }, renderer: 'xmind' } as const
 }
 
-async function callRenderer(command: string, payload: Record<string, unknown>, renderer: Renderer): Promise<RenderResult> {
-  const traceId = (payload.trace_id as string | undefined) ?? makeTraceId()
+export async function renderXMind(input: string): Promise<
+  | { ok: true; data: string; format: 'svg' | 'png'; traceId: string; renderer: 'xmind' }
+  | { ok: false; error: { code: string; message: string; traceId?: string }; renderer: 'xmind' }
+> {
+  const traceId = makeTraceId()
 
-  if (!enabledMap[renderer]) {
+  if (!enabledRenderers.xmind) {
     return {
       ok: false,
-      error: { code: 'DISABLED', message: `${renderer} 已禁用`, traceId },
-      renderer,
+      error: { code: 'DISABLED', message: 'xmind 已禁用', traceId },
+      renderer: 'xmind',
     }
   }
 
@@ -61,42 +42,23 @@ async function callRenderer(command: string, payload: Record<string, unknown>, r
     return {
       ok: false,
       error: { code: 'TAURI_UNAVAILABLE', message: 'Tauri 后端未启动，无法离线渲染', traceId },
-      renderer,
+      renderer: 'xmind',
     }
   }
 
   try {
-    const response = await invoke<RenderPayload>(command, { ...payload, trace_id: traceId })
+    const response = await invoke<{ data: string; format?: 'svg' | 'png'; trace_id?: string }>(
+      'render_xmind',
+      { input, limits: backendLimits.xmind, trace_id: traceId },
+    )
     return {
       ok: true,
       data: response.data,
       format: response.format ?? 'svg',
       traceId: response.trace_id ?? traceId,
-      renderer,
+      renderer: 'xmind',
     }
   } catch (error) {
-    return normalizeError(error, renderer, traceId)
+    return normalizeError(error, 'xmind', traceId)
   }
-}
-
-export async function renderPlantUML(code: string): Promise<RenderResult> {
-  return callRenderer(
-    'render_plantuml',
-    {
-      puml: code,
-      limits: backendLimits.plantuml,
-    },
-    'plantuml',
-  )
-}
-
-export async function renderXMind(input: string): Promise<RenderResult> {
-  return callRenderer(
-    'render_xmind',
-    {
-      input,
-      limits: backendLimits.xmind,
-    },
-    'xmind',
-  )
 }

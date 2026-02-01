@@ -5,7 +5,7 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import rehypeHighlight from 'rehype-highlight'
 import 'github-markdown-css/github-markdown.css'
-import { MermaidBlock, PlantUMLBlock, XMindBlock } from './diagrams'
+import { MermaidBlock, XMindBlock } from './diagrams'
 import { getRenderer, registerRenderer } from '../modules/markdown/plugins'
 
 export type Renderer = (code: string) => React.ReactNode
@@ -17,9 +17,6 @@ const rehypePlugins = [rehypeKatex, rehypeHighlight]
 const ensureDefaultRenderers = () => {
   if (!getRenderer('mermaid')) {
     registerRenderer('mermaid', (code) => <MermaidBlock code={code} />)
-  }
-  if (!getRenderer('plantuml')) {
-    registerRenderer('plantuml', (code) => <PlantUMLBlock code={code} />)
   }
   if (!getRenderer('xmind')) {
     registerRenderer('xmind', (code) => <XMindBlock code={code} />)
@@ -72,7 +69,6 @@ function MarkdownViewerComponent(props: Readonly<{ value: string; activeLine?: n
           const renderer = getRenderer(lang)
           if (renderer) return renderer(content)
           if (lang === 'mermaid') return <MermaidBlock code={content} />
-          if (lang === 'plantuml' || lang === 'puml') return <PlantUMLBlock code={content} />
           if (lang === 'xmind') return <XMindBlock code={content} />
         }
 
@@ -80,7 +76,6 @@ function MarkdownViewerComponent(props: Readonly<{ value: string; activeLine?: n
           const renderer = getRenderer(lang)
           if (renderer) return renderer(content)
           if (lang === 'mermaid') return <MermaidBlock code={content} />
-          if (lang === 'plantuml' || lang === 'puml') return <PlantUMLBlock code={content} />
           if (lang === 'xmind') return <XMindBlock code={content} />
         }
 
