@@ -23,7 +23,10 @@
 
 ## 菜单与快捷键（含 AI 菜单，占位可提示）
 - File：Open / Open Folder / Open Recent / Save / Save As / Close File / Quit。
-- Edit/View/Selection/Go/Help/AI：定义事件名与快捷键；未实现动作给占位提示。
+- Edit/View/Selection/
+- Go
+- AI
+- Help：定义事件名与快捷键；未实现动作给占位提示。
 - Dispatcher：菜单事件 → 脏检查/保存对话/打开/最近/AI 面板。
 
 ## 错误与降级

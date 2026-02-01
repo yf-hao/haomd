@@ -261,11 +261,3 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
   )
 }
 
-function DiagramHeader({ label }: Readonly<{ label: string }>) {
-  return (
-    <div className="diagram-header">
-      <span className="dot" />
-      <span className="diagram-title">{label}</span>
-    </div>
-  )
-}

@@ -10,7 +10,7 @@ const makeTraceId = () =>
     ? crypto.randomUUID()
     : `trace_${Date.now()}_${Math.random().toString(16).slice(2)}`
 
-const normalizeError = (err: unknown, renderer: 'xmind', traceId?: string) => {
+const normalizeError = (err: unknown, traceId?: string) => {
   const obj = err as Record<string, unknown> | null
   const explicitMsg =
     obj && typeof obj.message === 'string'
@@ -59,6 +59,6 @@ export async function renderXMind(input: string): Promise<
       renderer: 'xmind',
     }
   } catch (error) {
-    return normalizeError(error, 'xmind', traceId)
+    return normalizeError(error, traceId)
   }
 }

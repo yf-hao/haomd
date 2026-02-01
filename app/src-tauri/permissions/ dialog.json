@@ -1,0 +1,6 @@
+{
+  "permissions": [
+    "dialog:default",
+    "dialog:allow-save"
+  ]
+}
