@@ -1,8 +1,8 @@
 [package]
-name = "app"
+name = "HaoMD"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "An AI-powered Markdown editor for writing, thinking, and knowledge management"
+authors = ["hao yufeng"]
 license = ""
 repository = ""
 edition = "2021"

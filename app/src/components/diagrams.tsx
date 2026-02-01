@@ -15,15 +15,36 @@ const mermaidCache = new Map<string, string>()
 const mindCache = new Map<string, MindElixirData>()
 
 export const MermaidBlock = memo(function MermaidBlock({ code }: Readonly<{ code: string }>) {
-  const [svg, setSvg] = useState<string>(() => mermaidCache.get(code) ?? '加载中…')
+  const [svg, setSvg] = useState<string>('加载中…')
   const [error, setError] = useState<string | null>(null)
   const idRef = useRef(`mermaid-${Math.random().toString(36).slice(2)}`)
   const runIdRef = useRef(0)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const [containerWidth, setContainerWidth] = useState<number | null>(null)
+
+  const cacheKey = useMemo(() => {
+    const width = containerWidth ?? 0
+    return `${code}__w:${Math.round(width)}`
+  }, [code, containerWidth])
 
   useEffect(() => {
-    if (mermaidCache.has(code)) {
+    if (!containerRef.current) return
+    const observer = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect?.width ?? 0
+      setContainerWidth((prev) => {
+        const next = Math.round(w)
+        return prev === next ? prev : next
+      })
+    })
+    observer.observe(containerRef.current)
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    if (containerWidth === null) return
+    if (mermaidCache.has(cacheKey)) {
       setError(null)
-      setSvg(mermaidCache.get(code) || '')
+      setSvg(mermaidCache.get(cacheKey) || '')
       return
     }
 
@@ -37,7 +58,7 @@ export const MermaidBlock = memo(function MermaidBlock({ code }: Readonly<{ code
         .render(idRef.current, code)
         .then(({ svg: rendered }) => {
           if (cancelled || currentRun !== runIdRef.current) return
-          mermaidCache.set(code, rendered)
+          mermaidCache.set(cacheKey, rendered)
           setSvg(rendered)
         })
         .catch((err) => {
@@ -50,15 +71,15 @@ export const MermaidBlock = memo(function MermaidBlock({ code }: Readonly<{ code
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [code])
+  }, [cacheKey, code, containerWidth])
 
   return (
-    <div className="diagram-block">
+    <div className="diagram-block" ref={containerRef}>
       {error ? (
         <div className="diagram-error">{error}</div>
       ) : (
         <div
-          className="diagram-canvas"
+          className="diagram-canvas mermaid-center"
           dangerouslySetInnerHTML={{ __html: svg }}
         />
       )}
@@ -208,6 +229,11 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
 
       try {
         mind.scaleFit()
+        const targetScale = 1.6
+        const currentScale = (mind as any).view?.scale ?? 1
+        if (currentScale < targetScale) {
+          mind.scale(targetScale / currentScale)
+        }
         mind.toCenter()
       } catch (e) {
         console.warn('Mind-elixir scaleFit failed', e)
@@ -219,17 +245,26 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
     const resizeHandler = () => {
       if (!mindRef.current) return
       try {
+        const targetScale = 1.6
         mindRef.current.scaleFit()
+        const currentScale = (mindRef.current as any).view?.scale ?? 1
+        if (currentScale < targetScale) {
+          mindRef.current.scale(targetScale / currentScale)
+        }
         mindRef.current.toCenter()
       } catch (e) {
         console.warn('Mind-elixir scaleFit on resize failed', e)
       }
     }
+
+    const observer = new ResizeObserver(() => resizeHandler())
+    observer.observe(el)
     window.addEventListener('resize', resizeHandler)
 
     return () => {
       if (timer) window.clearTimeout(timer)
       window.removeEventListener('resize', resizeHandler)
+      observer.disconnect()
       if (mindRef.current) {
         try {
           mindRef.current.destroy?.()
@@ -252,7 +287,7 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
       {!error && (
         <div
           ref={containerRef}
-          className="diagram-canvas"
+          className="diagram-canvas mind-center"
           style={{height: '100%', width: '100%', pointerEvents: 'none', cursor: 'default' }}
           aria-hidden
         />

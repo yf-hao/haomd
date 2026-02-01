@@ -18,16 +18,16 @@ const ensureDefaultRenderers = () => {
   if (!getRenderer('mermaid')) {
     registerRenderer('mermaid', (code) => <MermaidBlock code={code} />)
   }
-  if (!getRenderer('xmind')) {
-    registerRenderer('xmind', (code) => <XMindBlock code={code} />)
+  if (!getRenderer('mind')) {
+    registerRenderer('mind', (code) => <XMindBlock code={code} />)
   }
 }
 
 ensureDefaultRenderers()
 
-function MarkdownViewerComponent(props: Readonly<{ value: string; activeLine?: number }>) {
+function MarkdownViewerComponent(props: Readonly<{ value: string; activeLine?: number; previewWidth?: number }>) {
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const { value, activeLine } = props
+  const { value, activeLine, previewWidth } = props
 
   const components = useMemo(() => {
     const blockWithAnchor = (Tag: keyof React.JSX.IntrinsicElements) => {
@@ -69,14 +69,14 @@ function MarkdownViewerComponent(props: Readonly<{ value: string; activeLine?: n
           const renderer = getRenderer(lang)
           if (renderer) return renderer(content)
           if (lang === 'mermaid') return <MermaidBlock code={content} />
-          if (lang === 'xmind') return <XMindBlock code={content} />
+          if (lang === 'mind') return <XMindBlock code={content} />
         }
 
         if (!inline && lang) {
           const renderer = getRenderer(lang)
           if (renderer) return renderer(content)
           if (lang === 'mermaid') return <MermaidBlock code={content} />
-          if (lang === 'xmind') return <XMindBlock code={content} />
+          if (lang === 'mind') return <XMindBlock code={content} />
         }
 
         if (!inline) {
@@ -137,7 +137,7 @@ function MarkdownViewerComponent(props: Readonly<{ value: string; activeLine?: n
   }, [activeLine])
 
   return (
-    <div className="markdown-body gh-markdown" ref={containerRef}>
+    <div className="markdown-body gh-markdown" ref={containerRef} data-preview-width={previewWidth}>
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
         rehypePlugins={rehypePlugins}

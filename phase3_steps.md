@@ -1,4 +1,4 @@
-# 阶段 3 实施步骤（可视化：Mermaid / PlantUML / XMind / KaTeX）
+# 阶段 3 实施步骤（可视化：Mermaid / PlantUML / mind / KaTeX）
 
 ## 设计准则
 - 分层与单一职责：前端渲染/调用层 ↔ 后端命令/渲染层 ↔ 配置/安全策略分离。
@@ -10,9 +10,9 @@
 1) **配置与常量落地**
    - 更新/完善 `src/config/renderers.ts`：
      - Mermaid：`securityLevel/theme/fontFamily`。
-     - PlantUML/XMind：命令名、命令路径（如需）、超时、输入大小/文件类型白名单。
+     - PlantUML/mind：命令名、命令路径（如需）、超时、输入大小/文件类型白名单。
      - 并发与队列：`maxConcurrentPerRenderer`（建议默认 2）、`queueSize`（默认 20）、`queueStrategy`（如 `drop_tail`/`reject`/`cancel_oldest`），`timeoutMs`，重试开关/最大次数/退避间隔常量（预留）。
-     - 启用开关：`enabledRenderers = { mermaid, plantuml, xmind, katex }`。
+     - 启用开关：`enabledRenderers = { mermaid, plantuml, mind, katex }`。
    - 统一错误模型定义：`{ code: string; message: string }`。
    - 日志常量：约定后端日志文件位置，统一 JSON Lines 字段：`timestamp`、`level`、`renderer`、`action`、`duration_ms`、`outcome`、`code`、`message`、`trace_id`。
 
@@ -24,7 +24,7 @@
 
 3) **后端实现与安全**
    - PlantUML：调用本地 jar/二进制（命令取自配置），写临时文件，渲染为 SVG/PNG，超时与输入大小限制，扩展名校验。
-   - XMind：
+   - mind：
      - 方案 A：调用 CLI 渲染为 SVG/PNG；
      - 方案 B：解析 JSON AST 生成 SVG；
      - 同样做扩展名/大小校验与超时。
@@ -40,7 +40,7 @@
 
 5) **渲染器集成与降级**
    - 在 `diagrams.tsx`：
-     - PlantUML/XMind 调用 service，loading/错误状态显示；若处于队列等待，文案显示“队列中…（可取消）”；超时/可重试错误时显示重试按钮，点击触发新请求并生成新的 `trace_id`。
+     - PlantUML/mind 调用 service，loading/错误状态显示；若处于队列等待，文案显示“队列中…（可取消）”；超时/可重试错误时显示重试按钮，点击触发新请求并生成新的 `trace_id`。
      - 重试交互：请求中按钮置灰；超过最大重试次数或检测到不可重试错误（如校验失败）时显示“请稍后再试/联系支持”。
      - 保留 Mermaid/KaTeX 现有逻辑（Mermaid 前端渲染，KaTeX 由 rehype-katex）。
    - `MarkdownViewer` 依旧通过注册表分派 renderer，保持开闭。
@@ -50,11 +50,11 @@
    - 前端：统一错误结构，过滤已处理/可预期错误，仅输出 fatal/未处理；在控制台打印 `trace_id` 便于后端对齐。
 
 7) **测试与验收**
-   - Seed：Mermaid、KaTeX、PlantUML、XMind，包含无效 UML/XMind 以验证错误提示与错误码；加入并发/队列场景（超过并发与队列上限）。
+   - Seed：Mermaid、KaTeX、PlantUML、mind，包含无效 UML/mind 以验证错误提示与错误码；加入并发/队列场景（超过并发与队列上限）。
    - 冒烟：`npm run build`、`npm run tauri:dev`，检查 TS 0 error、控制台无致命错误、后端日志无 panic。
    - 验收：
      - Mermaid/KaTeX 正常渲染。
-     - PlantUML/XMind 后端开启时返回可视化；关闭/失败时显示占位与错误文案；重试可用（若实现），重试按钮灰度与次数限制生效。
+     - PlantUML/mind 后端开启时返回可视化；关闭/失败时显示占位与错误文案；重试可用（若实现），重试按钮灰度与次数限制生效。
      - 并发/队列：超过并发数时请求排队，队列满时按策略拒绝并返回错误码；日志包含 enqueue/execute/timeout/retry 记录与 `trace_id` 对齐。
 
 ## 交付物

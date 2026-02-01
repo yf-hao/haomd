@@ -2,7 +2,7 @@
 
 ## 目标与基线
 - 跨平台桌面端（Tauri 2.9.x + React + Vite + TS），离线优先。
-- Markdown 实时预览，支持 KaTeX / Mermaid / PlantUML / XMind 插件化渲染。
+- Markdown 实时预览，支持 KaTeX / Mermaid / PlantUML / mind 插件化渲染。
 - 本地文件读写、自动保存、历史版本；导出 PDF/HTML/Word。
 - 性能优化：大文件渲染、输入时延、预览同步；支持多标签页。
 - 主题系统、快捷键、可插拔扩展。
@@ -48,14 +48,14 @@
 
 ## 阶段 2：Markdown 渲染管线与插件架构
 - [ ] 建立 `react-markdown + remark-gfm + remark-math + rehype-katex + rehype-highlight` 渲染链。
-- [ ] 统一 `code` 组件分派：Mermaid → 前端渲染；PlantUML/XMind → 通过接口占位，后续调用后端。
+- [ ] 统一 `code` 组件分派：Mermaid → 前端渲染；PlantUML/mind → 通过接口占位，后续调用后端。
 - [ ] 定义插件注册表接口（可扩展自定义 renderer / remark/rehype 插件）。
 
-## 阶段 3：可视化（Mermaid / PlantUML / XMind / KaTeX）
+## 阶段 3：可视化（Mermaid / PlantUML / mind / KaTeX）
 - [ ] Mermaid：前端安全配置（`securityLevel: strict`），错误回退与重试。
 - [ ] KaTeX：公式块/行内渲染，错误提示。
 - [ ] PlantUML：Tauri 后端调用本地 jar + Graphviz 渲染为 SVG/PNG，前端接收 base64/SVG；离线缓存。
-- [ ] XMind：支持导入 `.xmind` 或 JSON AST，后端解析为 SVG/PNG，前端展示；错误提示。
+- [ ] mind：支持导入 `.mind` 或 JSON AST，后端解析为 SVG/PNG，前端展示；错误提示。
 
 ## 阶段 4：文件系统与历史版本
 - [ ] 接入 Tauri FS API：打开/保存、最近文件列表、修改提示。
@@ -88,6 +88,6 @@
 - [ ] 文档：开发指南、运行/打包步骤、已知问题。
 
 ## 里程碑验收标准
-- 预览可正确渲染 Markdown/KaTeX/Mermaid；PlantUML/XMind 调用后端返回可视化占位或图片。
+- 预览可正确渲染 Markdown/KaTeX/Mermaid；PlantUML/mind 调用后端返回可视化占位或图片。
 - 文件读写、自动保存与历史版本可用；导出至少 HTML/PDF 可用。
 - 多标签、主题、快捷键、基础插件接口可用；大文件下输入/预览无明显卡顿。

@@ -13,6 +13,7 @@ import {
 import { createAutoSaver, type AutoSaveHandle } from './modules/files/autoSave'
 import type { RecentFile, SnapshotMeta, WriteResult, ServiceError, Result } from './modules/files/types'
 import { listen } from '@tauri-apps/api/event'
+import { invoke } from '@tauri-apps/api/core'
 import { save as saveDialog } from '@tauri-apps/plugin-dialog'
 
 const isTauri = () =>
@@ -20,10 +21,10 @@ const isTauri = () =>
   (Boolean((window as any).__TAURI_INTERNALS__) || Boolean((window as any).__TAURI__))
 
 const seed = [
-  '# ZenMark',
+  '# HaoMD',
   '',
   '- 实时预览',
-  '- 支持 KaTeX / Mermaid / XMind',
+  '- 支持 KaTeX / Mermaid / mind',
   '- 多标签与离线文件',
   '',
   '> 这里是占位文案，后续会接入渲染管线。',
@@ -39,7 +40,7 @@ const seed = [
   '```',
   '',
   '## Mind-elixir ',
-  '```xmind',
+  '```mind',
   '{',
   '  "title": "根节点",',
   '  "children": [',
@@ -54,6 +55,28 @@ const seed = [
   '  ]',
   '}',
   '```',
+    '## Mind-elixir ',
+  '```mind',
+  'root',
+  '-A',
+  '--A1',
+  '--A2',
+  '-B',
+  '--B1',
+  '---B11',
+  '---B12',
+  '-C',
+  '--C1',
+  '---C11',
+  '---C12',
+  '--B1',
+  '---B11',
+  '---B12',
+  '-C',
+  '--C1',
+  '---C11',
+  '---C12',
+  '```',
 ].join('\n')
 
 const DEFAULT_PATH = '未命名.md'
@@ -64,6 +87,8 @@ function App() {
   const [markdown, setMarkdown] = useState(seed)
   const [previewValue, setPreviewValue] = useState(seed)
   const [activeLine, setActiveLine] = useState(1)
+  type Layout = 'preview-left' | 'preview-right' | 'editor-only' | 'preview-only'
+  const [layout, setLayout] = useState<Layout>('preview-left')
   const [showPreview, setShowPreview] = useState(true)
   const [editorWidth, setEditorWidth] = useState(55)
   const [dragging, setDragging] = useState(false)
@@ -94,12 +119,27 @@ function App() {
     return window.confirm('存在未保存变更，确认继续？')
   }, [dirty])
 
+  const effectiveLayout = useMemo<Layout>(() => {
+    if (!showPreview) return 'editor-only'
+    return layout
+  }, [layout, showPreview])
+
+  const clampedEditorWidth = useMemo(() => Math.min(70, Math.max(30, editorWidth)), [editorWidth])
+  const clampedPreviewWidth = useMemo(() => Math.max(30, 100 - clampedEditorWidth), [clampedEditorWidth])
+  const previewWidthForRender = useMemo(
+    () => (effectiveLayout === 'preview-only' ? 100 : clampedPreviewWidth),
+    [clampedPreviewWidth, effectiveLayout],
+  )
+
   const gridTemplateColumns = useMemo(() => {
-    if (!showPreview) return '1fr'
-    const editor = Math.min(70, Math.max(30, editorWidth))
-    const preview = Math.max(30, 100 - editor)
-    return `${editor}% 10px ${preview}%`
-  }, [editorWidth, showPreview])
+    if (effectiveLayout === 'editor-only') return '1fr'
+    if (effectiveLayout === 'preview-only') return '1fr'
+    const previewCol = `minmax(0, ${clampedPreviewWidth}%)`
+    const editorCol = `minmax(0, ${clampedEditorWidth}%)`
+    return effectiveLayout === 'preview-left'
+      ? `${previewCol} 10px ${editorCol}`
+      : `${editorCol} 10px ${previewCol}`
+  }, [clampedEditorWidth, clampedPreviewWidth, effectiveLayout])
 
   useEffect(() => {
     const handleMove = (e: MouseEvent) => {
@@ -108,7 +148,12 @@ function App() {
       const x = e.clientX - rect.left
       const percent = (x / rect.width) * 100
       const clamped = Math.min(70, Math.max(30, percent))
-      setEditorWidth(clamped)
+      if (effectiveLayout === 'preview-left') {
+        // divider 位于预览和编辑之间，x 越大编辑越窄
+        setEditorWidth(Math.max(30, Math.min(70, 100 - clamped)))
+      } else {
+        setEditorWidth(clamped)
+      }
     }
     const handleUp = () => dragging && setDragging(false)
     window.addEventListener('mousemove', handleMove)
@@ -117,7 +162,7 @@ function App() {
       window.removeEventListener('mousemove', handleMove)
       window.removeEventListener('mouseup', handleUp)
     }
-  }, [dragging])
+  }, [dragging, effectiveLayout])
 
   useEffect(() => {
     if (markdown === previewValue) return
@@ -137,6 +182,27 @@ function App() {
     }
   }, [markdown, previewValue])
 
+  const formatTitle = useCallback(
+    (path: string, isDirty: boolean) => {
+      const name = path.split('/').pop() || path || DEFAULT_PATH
+      const prefix = isDirty ? '*' : ''
+      return `${prefix}${name}`
+    },
+    [],
+  )
+
+  const updateTitle = useCallback(
+    async (path: string, isDirty: boolean) => {
+      if (!isTauri()) return
+      try {
+        await invoke('set_title', { title: formatTitle(path, isDirty) })
+      } catch (err) {
+        console.warn('set_title failed', err)
+      }
+    },
+    [formatTitle],
+  )
+
   const handleSave = useCallback(
     async (targetPath?: string): Promise<Result<WriteResult>> => {
       const pathToUse = targetPath ?? filePath
@@ -154,10 +220,11 @@ function App() {
         setCurrentHash(resp.data.hash)
         setCurrentMtime(resp.data.mtimeMs)
         setLastSavedAt(Date.now())
+        void updateTitle(pathToUse, false)
       }
       return resp
     },
-    [filePath, markdown, currentHash, currentMtime],
+    [filePath, markdown, currentHash, currentMtime, updateTitle],
   )
 
   useEffect(() => {
@@ -165,6 +232,7 @@ function App() {
     saverRef.current = createAutoSaver({
       save: () => handleSave(),
       isDirty: () => dirty,
+      enabled: filePath !== DEFAULT_PATH, // 避免未命名文件写入项目目录触发 Tauri 重建
       onStart: () => {
         setSaveStatus('saving')
         setStatusMessage('自动保存中...')
@@ -196,6 +264,10 @@ function App() {
     setDirty(true)
     saverRef.current?.schedule()
   }, [markdown])
+
+  useEffect(() => {
+    void updateTitle(filePath, dirty)
+  }, [filePath, dirty, updateTitle])
 
   useEffect(() => {
     // 预加载最近列表
@@ -246,6 +318,28 @@ function App() {
     return resp
   }, [filePath, handleSave, refreshSnapshots])
 
+  useEffect(() => {
+    const storedLayout = localStorage.getItem('haomd:layout') as Layout | null
+    const storedWidth = localStorage.getItem('haomd:layout:width')
+    const storedShow = localStorage.getItem('haomd:layout:show')
+    if (storedLayout) {
+      setLayout(storedLayout)
+    }
+    if (storedWidth) {
+      const w = Number(storedWidth)
+      if (!Number.isNaN(w)) setEditorWidth(w)
+    }
+    if (storedShow != null) {
+      setShowPreview(storedShow !== 'false')
+    }
+  }, [])
+
+  useEffect(() => {
+    localStorage.setItem('haomd:layout', layout)
+    localStorage.setItem('haomd:layout:width', String(editorWidth))
+    localStorage.setItem('haomd:layout:show', String(showPreview))
+  }, [layout, editorWidth, showPreview])
+
   const handleManualSave = async () => {
     await saveWithDialog()
   }
@@ -268,6 +362,28 @@ function App() {
   const dispatchAction = useCallback(
     async (action: string) => {
       switch (action) {
+        // Layout
+        case 'layout_preview_left':
+          setLayout('preview-left')
+          setShowPreview(true)
+          setStatusMessage('布局：预览在左')
+          break
+        case 'layout_preview_right':
+          setLayout('preview-right')
+          setShowPreview(true)
+          setStatusMessage('布局：预览在右')
+          break
+        case 'layout_editor_only':
+          setLayout('editor-only')
+          setShowPreview(false)
+          setStatusMessage('布局：仅编辑器')
+          break
+        case 'layout_preview_only':
+          setLayout('preview-only')
+          setShowPreview(true)
+          setStatusMessage('布局：仅预览')
+          break
+
         // HaoMD
         case 'haomd_about':
           setStatusMessage('HaoMD · 关于（占位）')
@@ -329,7 +445,12 @@ function App() {
 
         // View
         case 'toggle_preview':
-          setShowPreview((v) => !v)
+          setShowPreview((v) => {
+            if (!v && layout === 'editor-only') {
+              setLayout('preview-right')
+            }
+            return !v
+          })
           break
         case 'split_view':
         case 'toggle_sidebar':
@@ -381,6 +502,11 @@ function App() {
       const meta = e.metaKey || e.ctrlKey
       const key = e.key.toLowerCase()
       if (!meta) return
+
+      // 避免在 Tauri 中与系统菜单快捷键（会发 menu://action 事件）重复触发
+      const tauriBlocks = ['s', 'o'] as const
+      if (isTauri() && tauriBlocks.includes(key as (typeof tauriBlocks)[number])) return
+
       if (key === 's') {
         e.preventDefault()
         if (e.shiftKey) {
@@ -432,80 +558,80 @@ function App() {
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <div className="brand">
-          <span className="dot" />
-          <div className="file-meta">
-            <div className="file-name-row">
-              <span className="title">{currentFileName}</span>
-              {dirty && <span className="dirty-dot" title="未保存变更" />}
-            </div>
-            <div className="file-sub">{filePath}</div>
-          </div>
-        </div>
-        <div className="toolbar">
-          <div className="status-group">
-            <span className={`status-pill ${saveStatus}`}>
-              {saveStatus === 'saving'
-                ? '保存中'
-                : saveStatus === 'saved'
-                  ? '已保存'
-                  : saveStatus === 'conflict'
-                    ? '冲突'
-                    : saveStatus === 'error'
-                      ? '错误'
-                      : '空闲'}
-            </span>
-            <span className="muted">{statusMessage || `上次保存：${formatTs(lastSavedAt)}`}</span>
-          </div>
-          <div className="toolbar-group">
-            <button className="ghost" onClick={handleShowRecent}>
-              最近
-            </button>
-            <button className="ghost" onClick={handleShowHistory}>
-              历史
-            </button>
-            <button className="ghost primary" onClick={handleManualSave}>
-              保存
-            </button>
-          </div>
-        </div>
-      </header>
-
       <main
         className={`workspace ${dragging ? 'dragging' : ''}`}
         style={{ gridTemplateColumns }}
         ref={workspaceRef}
       >
-        <section className="pane">
-          <header className="pane-header">
-            <div className="pane-title">编辑器</div>
+        {effectiveLayout === 'preview-left' && (
+          <>
+            <section className="pane preview">
+              <div className="preview-body">
+                <MarkdownViewer
+                  value={previewValue}
+                  activeLine={activeLine}
+                  previewWidth={previewWidthForRender}
+                />
+              </div>
+            </section>
             <div
-              className="hint clickable"
-              role="button"
-              tabIndex={0}
-              onClick={() => setShowPreview((v) => !v)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault()
-                  setShowPreview((v) => !v)
-                }
+              className={`divider ${dragging ? 'active' : ''}`}
+              onMouseDown={(e) => {
+                e.preventDefault()
+                setDragging(true)
               }}
             >
-              {showPreview ? '点击隐藏预览' : '点击显示预览'}
+              <span className="divider-handle" />
             </div>
-          </header>
-          <CodeEditor
-            value={markdown}
-            onChange={setMarkdown}
-            onCursorChange={setActiveLine}
-            placeholder="在此输入 Markdown..."
-            className="code-editor"
-          />
-        </section>
+            <section className="pane">
+              <button
+                className="floating-toggle"
+                aria-label={showPreview ? '隐藏预览' : '显示预览'}
+                onClick={() => setShowPreview((v) => !v)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    setShowPreview((v) => !v)
+                  }
+                }}
+              >
+                {showPreview ? '隐藏预览' : '显示预览'}
+              </button>
+              <CodeEditor
+                value={markdown}
+                onChange={setMarkdown}
+                onCursorChange={setActiveLine}
+                placeholder="在此输入 Markdown..."
+                className="code-editor"
+              />
+            </section>
+          </>
+        )}
 
-        {showPreview && (
+        {effectiveLayout === 'preview-right' && (
           <>
+            <section className="pane">
+              <button
+                className="floating-toggle"
+                aria-label={showPreview ? '隐藏预览' : '显示预览'}
+                onClick={() => setShowPreview((v) => !v)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    setShowPreview((v) => !v)
+                  }
+                }}
+              >
+                {showPreview ? '隐藏预览' : '显示预览'}
+              </button>
+              <CodeEditor
+                value={markdown}
+                onChange={setMarkdown}
+                onCursorChange={setActiveLine}
+                placeholder="在此输入 Markdown..."
+                className="code-editor"
+              />
+            </section>
             <div
               className={`divider ${dragging ? 'active' : ''}`}
               onMouseDown={(e) => {
@@ -516,15 +642,52 @@ function App() {
               <span className="divider-handle" />
             </div>
             <section className="pane preview">
-              <header className="pane-header">
-                <div className="pane-title">预览</div>
-                <div className="hint">KaTeX / Mermaid / XMind</div>
-              </header>
               <div className="preview-body">
-                <MarkdownViewer value={previewValue} activeLine={activeLine} />
+                <MarkdownViewer
+                  value={previewValue}
+                  activeLine={activeLine}
+                  previewWidth={previewWidthForRender}
+                />
               </div>
             </section>
           </>
+        )}
+
+        {effectiveLayout === 'preview-only' && (
+          <section className="pane preview" style={{ gridColumn: '1 / -1' }}>
+            <div className="preview-body">
+              <MarkdownViewer
+                value={previewValue}
+                activeLine={activeLine}
+                previewWidth={previewWidthForRender}
+              />
+            </div>
+          </section>
+        )}
+
+        {effectiveLayout === 'editor-only' && (
+          <section className="pane" style={{ gridColumn: '1 / -1' }}>
+            <button
+              className="floating-toggle"
+              aria-label={showPreview ? '隐藏预览' : '显示预览'}
+              onClick={() => setShowPreview((v) => !v)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  setShowPreview((v) => !v)
+                }
+              }}
+            >
+              {showPreview ? '隐藏预览' : '显示预览'}
+            </button>
+            <CodeEditor
+              value={markdown}
+              onChange={setMarkdown}
+              onCursorChange={setActiveLine}
+              placeholder="在此输入 Markdown..."
+              className="code-editor"
+            />
+          </section>
         )}
       </main>
 

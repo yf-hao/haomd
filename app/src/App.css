@@ -197,8 +197,10 @@ button.ghost.primary {
 }
 
 .pane {
+  position: relative;
   display: flex;
   flex-direction: column;
+  min-width: 0;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 14px;
@@ -206,38 +208,28 @@ button.ghost.primary {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
 }
 
-.pane-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-}
-
-.pane-title {
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  color: #cdd8ff;
-}
-
-.hint {
+.floating-toggle {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 5;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e8ecf5;
+  padding: 8px 12px;
+  border-radius: 10px;
   font-size: 12px;
-  color: #8fa1c7;
+  backdrop-filter: blur(6px);
+  transition: all 0.2s ease;
 }
 
-.hint.clickable {
-  cursor: pointer;
-  color: #9ab8ff;
-  transition: color 0.2s ease, text-shadow 0.2s ease;
-}
-
-.hint.clickable:hover,
-.hint.clickable:focus-visible {
-  color: #cfe0ff;
-  text-shadow: 0 0 8px rgba(98, 195, 255, 0.5);
+.floating-toggle:hover,
+.floating-toggle:focus-visible {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
   outline: none;
+  box-shadow: 0 0 12px rgba(92, 124, 250, 0.35);
 }
 
 .editor {
@@ -372,6 +364,23 @@ button.ghost.primary {
 .diagram-canvas svg {
   width: 100%;
   height: auto;
+}
+
+.diagram-canvas.mermaid-center,
+.diagram-canvas.mind-center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  overflow: auto;
+}
+
+.diagram-canvas.mermaid-center svg,
+.diagram-canvas.mind-center svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
 }
 
 .diagram-placeholder {

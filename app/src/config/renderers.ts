@@ -1,6 +1,6 @@
 export const enabledRenderers = {
   mermaid: true,
-  xmind: true,
+  mind: true,
   katex: true,
 }
 
@@ -12,11 +12,11 @@ export const mermaidConfig = {
 }
 
 export const backendLimits = {
-  xmind: {
-    command: 'xmind-render',
+  mind: {
+    command: 'mind-render',
     timeoutMs: 10_000,
     maxFileMB: 5,
-    allowedTypes: ['.xmind', '.json'],
+    allowedTypes: ['.mind', '.json'],
     maxConcurrent: 2,
     queueSize: 20,
     queueStrategy: 'drop_tail' as const,

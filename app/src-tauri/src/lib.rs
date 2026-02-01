@@ -10,7 +10,7 @@ use once_cell::sync::Lazy;
 use serde_json;
 use sha2::{Digest, Sha256};
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::fs;
 use tokio::sync::Mutex;
 
@@ -469,6 +469,16 @@ async fn restore_snapshot(
   ok(result, trace)
 }
 
+#[tauri::command]
+async fn set_title(app: AppHandle, title: String) -> Result<(), String> {
+  let window = app
+    .get_webview_window("main")
+    .ok_or_else(|| "window not found".to_string())?;
+  window
+    .set_title(&title)
+    .map_err(|e: tauri::Error| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -478,6 +488,7 @@ pub fn run() {
         .level(log::LevelFilter::Info)
         .build();
       handle.plugin(log_plugin)?;
+      handle.plugin(tauri_plugin_dialog::init())?;
 
       // 构建原生菜单（参考 VS Code）
       let haomd_menu = SubmenuBuilder::new(app, "HaoMD")
@@ -520,6 +531,13 @@ pub fn run() {
         .item(&MenuItemBuilder::new("Select All Matches").id("select_all_matches").build(app)?)
         .build()?;
 
+      let layout_menu = SubmenuBuilder::new(app, "Layout")
+        .item(&MenuItemBuilder::new("Preview Left").id("layout_preview_left").build(app)?)
+        .item(&MenuItemBuilder::new("Preview Right").id("layout_preview_right").build(app)?)
+        .item(&MenuItemBuilder::new("Editor Only").id("layout_editor_only").build(app)?)
+        .item(&MenuItemBuilder::new("Preview Only").id("layout_preview_only").build(app)?)
+        .build()?;
+
       let view_menu = SubmenuBuilder::new(app, "View")
         .item(&MenuItemBuilder::new("Toggle Preview (⌘P)").id("toggle_preview").accelerator("CmdOrCtrl+P").build(app)?)
         .item(&MenuItemBuilder::new("Split View").id("split_view").build(app)?)
@@ -530,6 +548,11 @@ pub fn run() {
         .item(&MenuItemBuilder::new("Reset Zoom").id("zoom_reset").accelerator("CmdOrCtrl+0").build(app)?)
         .item(&MenuItemBuilder::new("Word Wrap").id("word_wrap").build(app)?)
         .item(&MenuItemBuilder::new("Developer Tools").id("devtools").accelerator("CmdOrCtrl+Shift+I").build(app)?)
+        .item(&layout_menu)
+        .build()?;
+
+      let history_menu = SubmenuBuilder::new(app, "History")
+        .item(&MenuItemBuilder::new("Show History").id("open_history").accelerator("CmdOrCtrl+H").build(app)?)
         .build()?;
 
       let go_menu = SubmenuBuilder::new(app, "Go")
@@ -562,6 +585,7 @@ pub fn run() {
         .item(&edit_menu)
         .item(&selection_menu)
         .item(&view_menu)
+        .item(&history_menu)
         .item(&go_menu)
         .item(&ai_menu)
         .item(&help_menu)
@@ -586,7 +610,8 @@ pub fn run() {
       list_recent,
       make_snapshot,
       list_snapshots,
-      restore_snapshot
+      restore_snapshot,
+      set_title
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

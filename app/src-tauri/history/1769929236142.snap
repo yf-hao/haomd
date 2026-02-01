@@ -1,7 +1,7 @@
 # ZenMark
 
 - 实时预览
-- 支持 KaTeX / Mermaid / XMind
+- 支持 KaTeX / Mermaid / mind
 - 多标签与离线文件
 
 > 这里是占位文案，后续会接入渲染管线。
@@ -17,7 +17,7 @@ graph LR
 ```
 
 ## Mind-elixir 
-```xmind
+```mind
 {
   "title": "根节点",
   "children": [
