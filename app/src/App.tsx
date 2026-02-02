@@ -1,20 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import 'katex/dist/katex.min.css'
 import 'highlight.js/styles/atom-one-dark.css'
 import './App.css'
 import { MarkdownViewer } from './components/MarkdownViewer'
 import { CodeEditor } from './components/Editor/CodeEditor'
-import {
-  listRecent,
-  listSnapshots,
-  makeSnapshot,
-  writeFile,
-} from './modules/files/service'
-import { createAutoSaver, type AutoSaveHandle } from './modules/files/autoSave'
-import type { RecentFile, SnapshotMeta, WriteResult, ServiceError, Result } from './modules/files/types'
 import { listen } from '@tauri-apps/api/event'
-import { invoke } from '@tauri-apps/api/core'
-import { save as saveDialog } from '@tauri-apps/plugin-dialog'
+import { useWorkspaceLayout } from './hooks/useWorkspaceLayout'
+import { useFilePersistence } from './hooks/useFilePersistence'
 
 const isTauri = () =>
   typeof window !== 'undefined' &&
@@ -79,90 +71,54 @@ const seed = [
   '```',
 ].join('\n')
 
-const DEFAULT_PATH = '未命名.md'
-
-type SaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'conflict'
-
 function App() {
   const [markdown, setMarkdown] = useState(seed)
   const [previewValue, setPreviewValue] = useState(seed)
   const [activeLine, setActiveLine] = useState(1)
-  type Layout = 'preview-left' | 'preview-right' | 'editor-only' | 'preview-only'
-  const [layout, setLayout] = useState<Layout>('preview-left')
-  const [showPreview, setShowPreview] = useState(true)
-  const [editorWidth, setEditorWidth] = useState(55)
-  const [dragging, setDragging] = useState(false)
-  const workspaceRef = useRef<HTMLElement | null>(null)
+  const {
+    layout,
+    setLayout,
+    showPreview,
+    setShowPreview,
+    dragging,
+    workspaceRef,
+    effectiveLayout,
+    gridTemplateColumns,
+    previewWidthForRender,
+    startDragging,
+  } = useWorkspaceLayout()
   const previewTimerRef = useRef<number | null>(null)
-
-  const [filePath, setFilePath] = useState<string>(DEFAULT_PATH)
-  const [dirty, setDirty] = useState(false)
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
-  const [statusMessage, setStatusMessage] = useState('')
-  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null)
-  const [currentHash, setCurrentHash] = useState<string | undefined>(undefined)
-  const [currentMtime, setCurrentMtime] = useState<number | undefined>(undefined)
-
-  const [historyOpen, setHistoryOpen] = useState(false)
-  const [historyLoading, setHistoryLoading] = useState(false)
-  const [snapshots, setSnapshots] = useState<SnapshotMeta[]>([])
+  const pasteSeqRef = useRef(0)
 
   const [recentOpen, setRecentOpen] = useState(false)
-  const [recent, setRecent] = useState<RecentFile[]>([])
 
-  const [conflictError, setConflictError] = useState<ServiceError | null>(null)
+  const {
+    DEFAULT_PATH,
+    filePath,
+    setStatusMessage,
+    conflictError,
+    setConflictError,
+    recent,
+    refreshRecent,
+    setRecent,
+    save,
+    saveToPath,
+    saveAs,
+    openFile,
+    openFromPath,
+    markDirty,
+    confirmLoseChanges,
+    newDocument,
+  } = useFilePersistence(markdown)
 
-  const saverRef = useRef<AutoSaveHandle | null>(null)
-
-  const confirmLoseChanges = useCallback(() => {
-    if (!dirty) return true
-    return window.confirm('存在未保存变更，确认继续？')
-  }, [dirty])
-
-  const effectiveLayout = useMemo<Layout>(() => {
-    if (!showPreview) return 'editor-only'
-    return layout
-  }, [layout, showPreview])
-
-  const clampedEditorWidth = useMemo(() => Math.min(70, Math.max(30, editorWidth)), [editorWidth])
-  const clampedPreviewWidth = useMemo(() => Math.max(30, 100 - clampedEditorWidth), [clampedEditorWidth])
-  const previewWidthForRender = useMemo(
-    () => (effectiveLayout === 'preview-only' ? 100 : clampedPreviewWidth),
-    [clampedPreviewWidth, effectiveLayout],
+  const handleMarkdownChange = useCallback(
+    (val: string) => {
+      setMarkdown(val)
+      markDirty()
+    },
+    [markDirty],
   )
 
-  const gridTemplateColumns = useMemo(() => {
-    if (effectiveLayout === 'editor-only') return '1fr'
-    if (effectiveLayout === 'preview-only') return '1fr'
-    const previewCol = `minmax(0, ${clampedPreviewWidth}%)`
-    const editorCol = `minmax(0, ${clampedEditorWidth}%)`
-    return effectiveLayout === 'preview-left'
-      ? `${previewCol} 10px ${editorCol}`
-      : `${editorCol} 10px ${previewCol}`
-  }, [clampedEditorWidth, clampedPreviewWidth, effectiveLayout])
-
-  useEffect(() => {
-    const handleMove = (e: MouseEvent) => {
-      if (!dragging || !workspaceRef.current) return
-      const rect = workspaceRef.current.getBoundingClientRect()
-      const x = e.clientX - rect.left
-      const percent = (x / rect.width) * 100
-      const clamped = Math.min(70, Math.max(30, percent))
-      if (effectiveLayout === 'preview-left') {
-        // divider 位于预览和编辑之间，x 越大编辑越窄
-        setEditorWidth(Math.max(30, Math.min(70, 100 - clamped)))
-      } else {
-        setEditorWidth(clamped)
-      }
-    }
-    const handleUp = () => dragging && setDragging(false)
-    window.addEventListener('mousemove', handleMove)
-    window.addEventListener('mouseup', handleUp)
-    return () => {
-      window.removeEventListener('mousemove', handleMove)
-      window.removeEventListener('mouseup', handleUp)
-    }
-  }, [dragging, effectiveLayout])
 
   useEffect(() => {
     if (markdown === previewValue) return
@@ -182,182 +138,99 @@ function App() {
     }
   }, [markdown, previewValue])
 
-  const formatTitle = useCallback(
-    (path: string, isDirty: boolean) => {
-      const name = path.split('/').pop() || path || DEFAULT_PATH
-      const prefix = isDirty ? '*' : ''
-      return `${prefix}${name}`
-    },
-    [],
-  )
-
-  const updateTitle = useCallback(
-    async (path: string, isDirty: boolean) => {
-      if (!isTauri()) return
-      try {
-        await invoke('set_title', { title: formatTitle(path, isDirty) })
-      } catch (err) {
-        console.warn('set_title failed', err)
-      }
-    },
-    [formatTitle],
-  )
-
-  const handleSave = useCallback(
-    async (targetPath?: string): Promise<Result<WriteResult>> => {
-      const pathToUse = targetPath ?? filePath
-      const resp = await writeFile({
-        path: pathToUse,
-        content: markdown,
-        expectedHash: currentHash,
-        expectedMtime: currentMtime,
-      })
-      if (resp.ok) {
-        setFilePath(pathToUse)
-        setDirty(false)
-        setSaveStatus('saved')
-        setStatusMessage('已保存')
-        setCurrentHash(resp.data.hash)
-        setCurrentMtime(resp.data.mtimeMs)
-        setLastSavedAt(Date.now())
-        void updateTitle(pathToUse, false)
-      }
-      return resp
-    },
-    [filePath, markdown, currentHash, currentMtime, updateTitle],
-  )
-
-  useEffect(() => {
-    saverRef.current?.cancel()
-    saverRef.current = createAutoSaver({
-      save: () => handleSave(),
-      isDirty: () => dirty,
-      enabled: filePath !== DEFAULT_PATH, // 避免未命名文件写入项目目录触发 Tauri 重建
-      onStart: () => {
-        setSaveStatus('saving')
-        setStatusMessage('自动保存中...')
-      },
-      onSuccess: (res) => {
-        setDirty(false)
-        setSaveStatus('saved')
-        setStatusMessage('自动保存完成')
-        setCurrentHash(res.hash)
-        setCurrentMtime(res.mtimeMs)
-        setLastSavedAt(Date.now())
-      },
-      onConflict: (error) => {
-        setSaveStatus('conflict')
-        setConflictError(error)
-        setStatusMessage(error.message)
-      },
-      onError: (error) => {
-        setSaveStatus('error')
-        setStatusMessage(error.message)
-      },
-    })
-    return () => {
-      saverRef.current?.cancel()
-    }
-  }, [dirty, handleSave])
-
-  useEffect(() => {
-    setDirty(true)
-    saverRef.current?.schedule()
-  }, [markdown])
-
-  useEffect(() => {
-    void updateTitle(filePath, dirty)
-  }, [filePath, dirty, updateTitle])
-
-  useEffect(() => {
-    // 预加载最近列表
-    listRecent().then((resp) => {
-      if (resp.ok) setRecent(resp.data)
-    })
-  }, [])
-
-  const refreshSnapshots = useCallback(async () => {
-    setHistoryLoading(true)
-    const resp = await listSnapshots(filePath)
-    if (resp.ok) setSnapshots(resp.data)
-    setHistoryLoading(false)
-  }, [filePath])
-
-  const saveWithDialog = useCallback(async () => {
-    if (!isTauri()) {
-      setSaveStatus('error')
-      setStatusMessage('需在 Tauri 应用中才能弹出系统保存对话框')
-      return { ok: false as const, error: { code: 'UNKNOWN', message: 'Tauri 未运行', traceId: undefined } }
-    }
-
-    setSaveStatus('saving')
-    setStatusMessage('选择存储位置...')
-    const suggested = filePath && filePath !== DEFAULT_PATH ? filePath : '文稿.md'
-    const chosen = await saveDialog({
-      defaultPath: suggested,
-      filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdx'] }],
-    })
-    if (!chosen) {
-      setSaveStatus('idle')
-      setStatusMessage('已取消保存')
-      return { ok: false as const, error: { code: 'CANCELLED', message: '用户取消', traceId: undefined } }
-    }
-    setSaveStatus('saving')
-    setStatusMessage('保存中...')
-    const resp = await handleSave(chosen)
-    if (resp.ok) {
-      await refreshSnapshots()
-      await makeSnapshot(chosen)
-    } else if (resp.error.code === 'CONFLICT') {
-      setConflictError(resp.error)
-      setSaveStatus('conflict')
-    } else {
-      setSaveStatus('error')
-      setStatusMessage(resp.error.message)
-    }
-    return resp
-  }, [filePath, handleSave, refreshSnapshots])
-
-  useEffect(() => {
-    const storedLayout = localStorage.getItem('haomd:layout') as Layout | null
-    const storedWidth = localStorage.getItem('haomd:layout:width')
-    const storedShow = localStorage.getItem('haomd:layout:show')
-    if (storedLayout) {
-      setLayout(storedLayout)
-    }
-    if (storedWidth) {
-      const w = Number(storedWidth)
-      if (!Number.isNaN(w)) setEditorWidth(w)
-    }
-    if (storedShow != null) {
-      setShowPreview(storedShow !== 'false')
-    }
-  }, [])
-
-  useEffect(() => {
-    localStorage.setItem('haomd:layout', layout)
-    localStorage.setItem('haomd:layout:width', String(editorWidth))
-    localStorage.setItem('haomd:layout:show', String(showPreview))
-  }, [layout, editorWidth, showPreview])
-
   const handleManualSave = async () => {
-    await saveWithDialog()
-  }
-
-  const handleShowHistory = async () => {
-    setHistoryOpen((v) => !v)
-    if (!historyOpen) {
-      await refreshSnapshots()
+    // 冲突重试时，已命名文件应直接保存到原路径；未命名则走保存对话框
+    if (filePath !== DEFAULT_PATH) {
+      await saveToPath()
+    } else {
+      await saveAs()
     }
   }
+
+  const handlePaste = useCallback(
+    async (source: 'keydown' | 'menu') => {
+      // 调试：记录来源 + 次数，帮助确认是否有多次触发
+      pasteSeqRef.current += 1
+      console.log(
+        '[paste] call',
+        pasteSeqRef.current,
+        'source =',
+        source,
+        'time =',
+        new Date().toISOString(),
+      )
+
+      if (typeof window === 'undefined' || typeof document === 'undefined') return
+
+      let pasted = false
+
+      // 1) 尝试 navigator.clipboard.readText + insertText
+      if (navigator.clipboard && 'readText' in navigator.clipboard) {
+        try {
+          const text = await navigator.clipboard.readText()
+          console.log('[paste] readText length =', text.length)
+          if (text) {
+            // 使用 insertText 命令插入文本，依赖编辑器/当前焦点处理
+            const ok = document.execCommand('insertText', false, text)
+            console.log('[paste] insertText ok =', ok)
+            if (!ok) {
+              // 某些环境不支持 insertText，则回退到 paste
+              console.log('[paste] insertText failed, try execCommand(paste)')
+              document.execCommand('paste')
+            }
+            pasted = true
+          }
+        } catch (err) {
+          console.warn('clipboard.readText failed, fallback to execCommand(paste)', err)
+        }
+      }
+
+      // 2) 回退：直接调用 paste，让 WebView/编辑器自己处理
+      if (!pasted) {
+        try {
+          console.log('[paste] fallback execCommand(paste)')
+          const ok = document.execCommand('paste')
+          console.log('[paste] fallback paste ok =', ok)
+          if (!ok) {
+            setStatusMessage('粘贴未生效（可能被系统限制）')
+          }
+        } catch (err) {
+          console.warn('execCommand paste failed', err)
+          setStatusMessage('粘贴未生效（可能被系统限制）')
+        }
+      }
+
+      // 简单：1 秒后把计数清零，方便下一次观察
+      window.setTimeout(() => {
+        pasteSeqRef.current = 0
+      }, 1000)
+    },
+    [setStatusMessage],
+  )
 
   const handleShowRecent = async () => {
     setRecentOpen((v) => !v)
     if (!recentOpen) {
-      const resp = await listRecent()
-      if (resp.ok) setRecent(resp.data)
+      await refreshRecent()
     }
   }
+
+  const applyOpenedContent = useCallback((content: string) => {
+    setMarkdown(content)
+    setPreviewValue(content)
+    setActiveLine(1)
+  }, [])
+
+  const handleOpenPath = useCallback(
+    async (path: string) => {
+      const resp = await openFromPath(path)
+      if (resp.ok) {
+        applyOpenedContent(resp.data.content)
+      }
+      return resp
+    },
+    [applyOpenedContent, openFromPath],
+  )
 
   const dispatchAction = useCallback(
     async (action: string) => {
@@ -390,14 +263,26 @@ function App() {
           break
 
         // File
-        case 'save':
-        case 'save_as':
-          await saveWithDialog()
-          break
-        case 'open_file':
+        case 'new_file': {
           if (!confirmLoseChanges()) return
-          setStatusMessage('占位：Open File 未实现')
+          newDocument()
+          applyOpenedContent('')
           break
+        }
+        case 'save':
+          await save()
+          break
+        case 'save_as':
+          await saveAs()
+          break
+        case 'open_file': {
+          if (!confirmLoseChanges()) return
+          const resp = await openFile()
+          if (resp.ok) {
+            applyOpenedContent(resp.data.content)
+          }
+          break
+        }
         case 'open_folder':
           if (!confirmLoseChanges()) return
           setStatusMessage('占位：Open Folder 未实现')
@@ -407,10 +292,7 @@ function App() {
           break
         case 'clear_recent':
           setRecent([])
-          setStatusMessage('已清空最近列表（占位，未持久化）')
-          break
-        case 'open_history':
-          await handleShowHistory()
+          setStatusMessage('已清空最近文件')
           break
         case 'close_file':
           if (!confirmLoseChanges()) return
@@ -422,11 +304,26 @@ function App() {
           break
 
         // Edit
+        case 'paste':
+          await handlePaste('menu')
+          break
+        case 'copy': {
+          if (typeof document !== 'undefined') {
+            try {
+              const ok = document.execCommand('copy')
+              if (!ok) setStatusMessage('复制未生效')
+            } catch (err) {
+              console.warn('execCommand copy failed', err)
+              setStatusMessage('复制未生效')
+            }
+            break
+          }
+          setStatusMessage('复制未生效')
+          break
+        }
         case 'undo':
         case 'redo':
         case 'cut':
-        case 'copy':
-        case 'paste':
         case 'find':
         case 'replace':
         case 'select_all':
@@ -494,7 +391,7 @@ function App() {
           setStatusMessage('暂未实现的菜单')
       }
     },
-    [confirmLoseChanges, handleShowHistory, handleShowRecent, saveWithDialog],
+    [applyOpenedContent, confirmLoseChanges, handlePaste, handleShowRecent, newDocument, openFile, save, saveAs],
   )
 
   useEffect(() => {
@@ -504,10 +401,14 @@ function App() {
       if (!meta) return
 
       // 避免在 Tauri 中与系统菜单快捷键（会发 menu://action 事件）重复触发
-      const tauriBlocks = ['s', 'o'] as const
+      const tauriBlocks = ['s', 'o', 'n'] as const
       if (isTauri() && tauriBlocks.includes(key as (typeof tauriBlocks)[number])) return
 
-      if (key === 's') {
+      if (key === 'v') {
+        // 统一由 handlePaste 处理，避免默认行为 + 其他路径导致多次粘贴
+        e.preventDefault()
+        void handlePaste('keydown')
+      } else if (key === 's') {
         e.preventDefault()
         if (e.shiftKey) {
           void dispatchAction('save_as')
@@ -521,6 +422,9 @@ function App() {
         } else {
           void dispatchAction('open_file')
         }
+      } else if (key === 'n') {
+        e.preventDefault()
+        void dispatchAction('new_file')
       } else if (key === 'p') {
         e.preventDefault()
         void dispatchAction('toggle_preview')
@@ -537,14 +441,28 @@ function App() {
 
   useEffect(() => {
     let unlisten: (() => void) | undefined
-    listen<string>('menu://action', (event) => {
-      console.log('menu action', event.payload)
-      void dispatchAction(event.payload)
-    }).then((un) => {
-      unlisten = un
-    })
+    let disposed = false
+
+    const setup = async () => {
+      const un = await listen<string>('menu://action', (event) => {
+        console.log('menu action', event.payload)
+        void dispatchAction(event.payload)
+      })
+      if (disposed) {
+        // 如果在监听完成前 effect 已经清理，立刻注销，避免遗留多个监听
+        un()
+      } else {
+        unlisten = un
+      }
+    }
+
+    void setup()
+
     return () => {
-      unlisten?.()
+      disposed = true
+      if (unlisten) {
+        unlisten()
+      }
     }
   }, [dispatchAction])
 
@@ -553,8 +471,6 @@ function App() {
     const d = new Date(ts)
     return `${d.toLocaleDateString()} ${d.toLocaleTimeString()}`
   }
-
-  const currentFileName = filePath.split('/').pop() || filePath
 
   return (
     <div className="app-shell">
@@ -576,10 +492,7 @@ function App() {
             </section>
             <div
               className={`divider ${dragging ? 'active' : ''}`}
-              onMouseDown={(e) => {
-                e.preventDefault()
-                setDragging(true)
-              }}
+              onMouseDown={startDragging}
             >
               <span className="divider-handle" />
             </div>
@@ -599,7 +512,7 @@ function App() {
               </button>
               <CodeEditor
                 value={markdown}
-                onChange={setMarkdown}
+                onChange={handleMarkdownChange}
                 onCursorChange={setActiveLine}
                 placeholder="在此输入 Markdown..."
                 className="code-editor"
@@ -626,7 +539,7 @@ function App() {
               </button>
               <CodeEditor
                 value={markdown}
-                onChange={setMarkdown}
+                onChange={handleMarkdownChange}
                 onCursorChange={setActiveLine}
                 placeholder="在此输入 Markdown..."
                 className="code-editor"
@@ -634,10 +547,7 @@ function App() {
             </section>
             <div
               className={`divider ${dragging ? 'active' : ''}`}
-              onMouseDown={(e) => {
-                e.preventDefault()
-                setDragging(true)
-              }}
+              onMouseDown={startDragging}
             >
               <span className="divider-handle" />
             </div>
@@ -682,7 +592,7 @@ function App() {
             </button>
             <CodeEditor
               value={markdown}
-              onChange={setMarkdown}
+              onChange={handleMarkdownChange}
               onCursorChange={setActiveLine}
               placeholder="在此输入 Markdown..."
               className="code-editor"
@@ -690,30 +600,6 @@ function App() {
           </section>
         )}
       </main>
-
-      {historyOpen && (
-        <aside className="side-panel">
-          <div className="side-header">
-            <div>
-              <div className="pane-title">历史版本</div>
-              <div className="muted">最近 {snapshots.length} 条快照</div>
-            </div>
-            <button className="ghost" onClick={refreshSnapshots} disabled={historyLoading}>
-              {historyLoading ? '加载中...' : '刷新'}
-            </button>
-          </div>
-          <div className="side-body">
-            {snapshots.length === 0 && <div className="muted">暂无快照</div>}
-            {snapshots.map((snap) => (
-              <div key={snap.snapshotPath} className="history-item">
-                <div className="history-title">{snap.snapshotPath.split('/').pop()}</div>
-                <div className="muted small">{formatTs(snap.createdAt)}</div>
-                <div className="muted small">{(snap.sizeBytes / 1024).toFixed(1)} KB · {snap.hash.slice(0, 8)}</div>
-              </div>
-            ))}
-          </div>
-        </aside>
-      )}
 
       {recentOpen && (
         <aside className="side-panel recent-panel">
@@ -726,7 +612,25 @@ function App() {
           <div className="side-body">
             {recent.length === 0 && <div className="muted">暂无记录</div>}
             {recent.map((item) => (
-              <div key={item.path} className="history-item">
+              <div
+                key={item.path}
+                className="history-item"
+                role="button"
+                tabIndex={0}
+                onClick={async () => {
+                  if (!confirmLoseChanges()) return
+                  await handleOpenPath(item.path)
+                  setRecentOpen(false)
+                }}
+                onKeyDown={async (e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    if (!confirmLoseChanges()) return
+                    await handleOpenPath(item.path)
+                    setRecentOpen(false)
+                  }
+                }}
+              >
                 <div className="history-title">{item.displayName}</div>
                 <div className="muted small">{item.path}</div>
                 <div className="muted small">{formatTs(item.lastOpenedAt)}</div>

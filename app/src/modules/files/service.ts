@@ -1,14 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { filesConfig } from '../../config/files'
-import type {
-  ErrorCode,
-  FilePayload,
-  WriteResult,
-  SnapshotMeta,
-  RecentFile,
-  Result,
-  ServiceError,
-} from './types'
+import type { ErrorCode, FilePayload, RecentFile, Result, ServiceError, WriteResult } from './types'
 
 const isTauri = () =>
   typeof window !== 'undefined' &&
@@ -57,14 +49,6 @@ type BackendRecent = {
   display_name: string
   last_opened_at: number
   is_folder: boolean
-}
-
-type BackendSnapshot = {
-  path: string
-  snapshot_path: string
-  created_at: number
-  hash: string
-  size_bytes: number
 }
 
 const mapCode = (code: BackendCode): ErrorCode => {
@@ -148,14 +132,6 @@ const mapRecent = (data: BackendRecent): RecentFile => ({
   isFolder: data.is_folder,
 })
 
-const mapSnapshot = (data: BackendSnapshot): SnapshotMeta => ({
-  path: data.path,
-  snapshotPath: data.snapshot_path,
-  createdAt: data.created_at,
-  hash: data.hash,
-  sizeBytes: data.size_bytes,
-})
-
 export async function readFile(path: string, traceId = makeTraceId()): Promise<Result<FilePayload>> {
   if (!isTauri()) return notAvailable(traceId)
   try {
@@ -202,48 +178,6 @@ export async function listRecent(traceId = makeTraceId()): Promise<Result<Recent
   }
 }
 
-export async function makeSnapshot(path: string, traceId = makeTraceId()): Promise<Result<SnapshotMeta>> {
-  if (!isTauri()) return notAvailable(traceId)
-  try {
-    const resp = await invoke<BackendResult<BackendSnapshot>>('make_snapshot', { path, trace_id: traceId })
-    return toResult(resp, mapSnapshot)
-  } catch (error) {
-    return normalizeInvokeError(error, traceId)
-  }
-}
-
-export async function listSnapshots(path: string, traceId = makeTraceId()): Promise<Result<SnapshotMeta[]>> {
-  if (!isTauri()) return notAvailable(traceId)
-  try {
-    const resp = await invoke<BackendResult<BackendSnapshot[]>>('list_snapshots', { path, trace_id: traceId })
-    return toResult(resp, (list) => list.map(mapSnapshot))
-  } catch (error) {
-    return normalizeInvokeError(error, traceId)
-  }
-}
-
-export async function restoreSnapshot(params: {
-  snapshotPath: string
-  targetPath?: string
-  traceId?: string
-}): Promise<Result<WriteResult>> {
-  const traceId = params.traceId ?? makeTraceId()
-  if (!isTauri()) return notAvailable(traceId)
-  try {
-    const resp = await invoke<BackendResult<BackendWriteResult>>('restore_snapshot', {
-      snapshot_path: params.snapshotPath,
-      target_path: params.targetPath,
-      trace_id: traceId,
-    })
-    if ('Ok' in resp) {
-      return mapWriteResult(resp.Ok.data)
-    }
-    return { ok: false, error: toError(resp.Err.error, traceId) }
-  } catch (error) {
-    return normalizeInvokeError(error, traceId)
-  }
-}
-
 const normalizeInvokeError = (err: unknown, traceId?: string): Result<never> => {
   const obj = err as Record<string, unknown> | null
   const msg = obj && typeof obj.message === 'string' ? obj.message : err instanceof Error ? err.message : String(err)
@@ -251,7 +185,7 @@ const normalizeInvokeError = (err: unknown, traceId?: string): Result<never> => 
   return { ok: false, error: { code: mapCode(code), message: msg || '调用失败', traceId } }
 }
 
-export const mergeRecent = (list: RecentFile[], entry: RecentFile, limit = filesConfig.maxSnapshots): RecentFile[] => {
+export const mergeRecent = (list: RecentFile[], entry: RecentFile, limit = filesConfig.maxRecent): RecentFile[] => {
   const merged = [entry, ...list.filter((item) => item.path !== entry.path)]
   merged.sort((a, b) => b.lastOpenedAt - a.lastOpenedAt)
   return merged.slice(0, limit)

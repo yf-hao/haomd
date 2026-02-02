@@ -1,7 +1,5 @@
 export const filesConfig = {
-  historyDirName: 'history',
-  maxSnapshots: 50,
-  maxSnapshotBytes: 200 * 1024 * 1024, // 200MB
+  maxRecent: 50,
   maxFileBytes: 20 * 1024 * 1024, // 20MB
   autoSave: {
     enabled: true,

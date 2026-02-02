@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 mod fs_types;
 
-use fs_types::{ErrorCode, FilePayload, RecentFile, ResultPayload, ServiceError, SnapshotMeta, WriteResult};
+use fs_types::{ErrorCode, FilePayload, RecentFile, ResultPayload, ServiceError, WriteResult};
 use log::info;
 use once_cell::sync::Lazy;
 use serde_json;
@@ -14,9 +14,6 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::fs;
 use tokio::sync::Mutex;
 
-const HISTORY_DIR_NAME: &str = "history";
-const MAX_SNAPSHOTS: usize = 50;
-const MAX_SNAPSHOT_BYTES: u64 = 200 * 1024 * 1024; // 200MB
 const MAX_FILE_BYTES: u64 = 20 * 1024 * 1024; // 20MB
 
 static FILE_LOCKS: Lazy<Mutex<HashMap<String, std::sync::Arc<Mutex<()>>>>> =
@@ -120,33 +117,6 @@ async fn read_recent_store(_app: &AppHandle) -> std::io::Result<Vec<RecentFile>>
     Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(vec![]),
     Err(err) => Err(err),
   }
-}
-
-async fn write_recent_store(_app: &AppHandle, list: &[RecentFile]) -> std::io::Result<()> {
-  let dir = std::env::current_dir()?;
-  fs::create_dir_all(&dir).await?;
-  let path = dir.join("recent.json");
-  let data = serde_json::to_vec(list).unwrap_or_default();
-  fs::write(path, data).await
-}
-
-fn history_dir_for(path: &Path) -> PathBuf {
-  path
-    .parent()
-    .map(|p| p.join(HISTORY_DIR_NAME))
-    .unwrap_or_else(|| PathBuf::from(HISTORY_DIR_NAME))
-}
-
-async fn enforce_size_limit(path: &Path, limit: u64) -> std::io::Result<()> {
-  if let Ok(meta) = fs::metadata(path).await {
-    if meta.len() > limit {
-      return Err(std::io::Error::new(
-        std::io::ErrorKind::Other,
-        format!("文件超过大小限制 {} bytes", limit),
-      ));
-    }
-  }
-  Ok(())
 }
 
 #[tauri::command]
@@ -281,195 +251,6 @@ async fn list_recent(app: AppHandle, trace_id: Option<String>) -> ResultPayload<
 }
 
 #[tauri::command]
-async fn make_snapshot(path: String, trace_id: Option<String>) -> ResultPayload<SnapshotMeta> {
-  let trace = trace_id.unwrap_or_else(new_trace_id);
-  let normalized = match normalize_path(&path) {
-    Ok(p) => p,
-    Err(e) => return ResultPayload::Err { error: e },
-  };
-
-  if let Err(err) = enforce_size_limit(&normalized, MAX_SNAPSHOT_BYTES).await {
-    return err_payload(ErrorCode::TooLarge, err.to_string(), trace);
-  }
-
-  let lock = file_lock(&normalized).await;
-  let _guard = lock.lock().await;
-
-  let bytes = match fs::read(&normalized).await {
-    Ok(b) => b,
-    Err(err) => return err_payload(ErrorCode::IoError, format!("读取文件失败: {err}"), trace),
-  };
-
-  let hist_dir = history_dir_for(&normalized);
-  if let Err(err) = fs::create_dir_all(&hist_dir).await {
-    return err_payload(ErrorCode::IoError, format!("创建历史目录失败: {err}"), trace);
-  }
-
-  // 简单滚动：超过上限时删除最老的
-  if let Ok(mut entries) = fs::read_dir(&hist_dir).await {
-    let mut files = Vec::new();
-    while let Ok(Some(entry)) = entries.next_entry().await {
-      if let Ok(meta) = entry.metadata().await {
-        files.push((meta.modified().ok(), entry.path()));
-      }
-    }
-    if files.len() >= MAX_SNAPSHOTS {
-      files.sort_by_key(|(m, _)| *m);
-      for (_, p) in files.iter().take(files.len() + 1 - MAX_SNAPSHOTS) {
-        let _ = fs::remove_file(p).await;
-      }
-    }
-  }
-
-  let ts = SystemTime::now()
-    .duration_since(UNIX_EPOCH)
-    .map(|d| d.as_millis())
-    .unwrap_or(0);
-  let snap_path = hist_dir.join(format!("{}.snap", ts));
-
-  if let Err(err) = fs::write(&snap_path, &bytes).await {
-    return err_payload(ErrorCode::IoError, format!("写入快照失败: {err}"), trace);
-  }
-
-  let meta = SnapshotMeta {
-    path: normalized.to_string_lossy().into_owned(),
-    snapshot_path: snap_path.to_string_lossy().into_owned(),
-    created_at: ts as u64,
-    hash: hash_bytes(&bytes),
-    size_bytes: bytes.len() as u64,
-  };
-
-  info!(
-    "action=make_snapshot outcome=ok path={} snapshot={} trace_id={}",
-    meta.path,
-    meta.snapshot_path,
-    trace
-  );
-
-  ok(meta, trace)
-}
-
-#[tauri::command]
-async fn list_snapshots(path: String, trace_id: Option<String>) -> ResultPayload<Vec<SnapshotMeta>> {
-  let trace = trace_id.unwrap_or_else(new_trace_id);
-  let normalized = match normalize_path(&path) {
-    Ok(p) => p,
-    Err(e) => return ResultPayload::Err { error: e },
-  };
-  let hist_dir = history_dir_for(&normalized);
-  let mut result = Vec::new();
-  let mut entries = match fs::read_dir(&hist_dir).await {
-    Ok(e) => e,
-    Err(err) if err.kind() == std::io::ErrorKind::NotFound => return ok(result, trace),
-    Err(err) => return err_payload(ErrorCode::IoError, format!("读取历史目录失败: {err}"), trace),
-  };
-
-  while let Ok(Some(entry)) = entries.next_entry().await {
-    let path = entry.path();
-    if path.extension().and_then(|s| s.to_str()) != Some("snap") {
-      continue;
-    }
-    if let Ok(meta) = entry.metadata().await {
-      let size = meta.len();
-      let created_at = meta
-        .modified()
-        .ok()
-        .and_then(|m| m.duration_since(UNIX_EPOCH).ok())
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0);
-      result.push(SnapshotMeta {
-        path: normalized.to_string_lossy().into_owned(),
-        snapshot_path: path.to_string_lossy().into_owned(),
-        created_at,
-        hash: String::new(),
-        size_bytes: size,
-      });
-    }
-  }
-
-  result.sort_by_key(|m| m.created_at);
-  ok(result, trace)
-}
-
-#[tauri::command]
-async fn restore_snapshot(
-  snapshot_path: String,
-  target_path: Option<String>,
-  trace_id: Option<String>,
-) -> ResultPayload<WriteResult> {
-  let trace = trace_id.unwrap_or_else(new_trace_id);
-  let snapshot = match normalize_path(&snapshot_path) {
-    Ok(p) => p,
-    Err(e) => return ResultPayload::Err { error: e },
-  };
-
-  let target = match target_path {
-    Some(p) => match normalize_path(&p) {
-      Ok(v) => v,
-      Err(e) => return ResultPayload::Err { error: e },
-    },
-    None => {
-      // 默认从 snapshot 路径推断原文件：../<orig>
-      if let Some(parent) = snapshot.parent() {
-        if let Some(file_name) = snapshot.file_stem() {
-          parent.parent().map(|p| p.join(file_name)).unwrap_or(snapshot.clone())
-        } else {
-          snapshot.clone()
-        }
-      } else {
-        snapshot.clone()
-      }
-    }
-  };
-
-  if let Err(err) = enforce_size_limit(&snapshot, MAX_SNAPSHOT_BYTES).await {
-    return err_payload(ErrorCode::TooLarge, err.to_string(), trace);
-  }
-
-  let bytes = match fs::read(&snapshot).await {
-    Ok(b) => b,
-    Err(err) => return err_payload(ErrorCode::IoError, format!("读取快照失败: {err}"), trace),
-  };
-
-  if (bytes.len() as u64) > MAX_FILE_BYTES {
-    return err_payload(ErrorCode::TooLarge, "恢复内容超过文件上限", trace);
-  }
-
-  let lock = file_lock(&target).await;
-  let _guard = lock.lock().await;
-
-  if let Some(parent) = target.parent() {
-    let _ = fs::create_dir_all(parent).await;
-  }
-
-  if let Err(err) = fs::write(&target, &bytes).await {
-    return err_payload(ErrorCode::IoError, format!("写入目标失败: {err}"), trace);
-  }
-
-  let meta = fs::metadata(&target)
-    .await
-    .map_err(|err| service_error(ErrorCode::IoError, format!("获取元数据失败: {err}"), Some(trace.clone())))
-    .ok();
-
-  let result = WriteResult {
-    path: target.to_string_lossy().into_owned(),
-    mtime_ms: meta.as_ref().map(mtime_ms).unwrap_or(0),
-    hash: hash_bytes(&bytes),
-    code: ErrorCode::OK,
-    message: None,
-  };
-
-  info!(
-    "action=restore_snapshot outcome=ok snapshot={} target={} trace_id={}",
-    snapshot.to_string_lossy(),
-    result.path,
-    trace
-  );
-
-  ok(result, trace)
-}
-
-#[tauri::command]
 async fn set_title(app: AppHandle, title: String) -> Result<(), String> {
   let window = app
     .get_webview_window("main")
@@ -497,30 +278,31 @@ pub fn run() {
         .build()?;
 
       let file_menu = SubmenuBuilder::new(app, "File")
-        .item(&MenuItemBuilder::new("Open (⌘O)").id("open_file").accelerator("CmdOrCtrl+O").build(app)?)
-        .item(&MenuItemBuilder::new("Open Folder (⌘⇧O)").id("open_folder").accelerator("CmdOrCtrl+Shift+O").build(app)?)
-        .item(&MenuItemBuilder::new("Open Recent (⌘⌥H)").id("open_recent").accelerator("CmdOrCtrl+Alt+H").build(app)?)
+        .item(&MenuItemBuilder::new("New (⌘N)").id("new_file").accelerator("CmdOrCtrl+n").build(app)?)
+        .separator()
+        .item(&MenuItemBuilder::new("Open").id("open_file").accelerator("CmdOrCtrl+o").build(app)?)
+        .item(&MenuItemBuilder::new("Open Folder").id("open_folder").accelerator("CmdOrCtrl+Shift+o").build(app)?)
+        .item(&MenuItemBuilder::new("Open Recent").id("open_recent").accelerator("CmdOrCtrl+Alt+h").build(app)?)
         .item(&MenuItemBuilder::new("Clear Recent").id("clear_recent").build(app)?)
         .separator()
-        .item(&MenuItemBuilder::new("Save (⌘S)").id("save").accelerator("CmdOrCtrl+S").build(app)?)
-        .item(&MenuItemBuilder::new("Save As (⌘⇧S)").id("save_as").accelerator("CmdOrCtrl+Shift+S").build(app)?)
+        .item(&MenuItemBuilder::new("Save").id("save").accelerator("CmdOrCtrl+s").build(app)?)
+        .item(&MenuItemBuilder::new("Save As").id("save_as").accelerator("CmdOrCtrl+Shift+s").build(app)?)
         .separator()
-        .item(&MenuItemBuilder::new("Close File (⌘W)").id("close_file").accelerator("CmdOrCtrl+W").build(app)?)
-        .item(&MenuItemBuilder::new("Quit (⌘Q)").id("quit").accelerator("CmdOrCtrl+Q").build(app)?)
+        .item(&MenuItemBuilder::new("Close File").id("close_file").accelerator("CmdOrCtrl+w").build(app)?)
         .build()?;
 
       let edit_menu = SubmenuBuilder::new(app, "Edit")
-        .item(&MenuItemBuilder::new("Undo").id("undo").accelerator("CmdOrCtrl+Z").build(app)?)
-        .item(&MenuItemBuilder::new("Redo").id("redo").accelerator("CmdOrCtrl+Shift+Z").build(app)?)
+        .item(&MenuItemBuilder::new("Undo").id("undo").build(app)?)
+        .item(&MenuItemBuilder::new("Redo").id("redo").build(app)?)
         .separator()
-        .item(&MenuItemBuilder::new("Cut").id("cut").accelerator("CmdOrCtrl+X").build(app)?)
+        .item(&MenuItemBuilder::new("Cut").id("cut").build(app)?)
         .item(&MenuItemBuilder::new("Copy").id("copy").accelerator("CmdOrCtrl+C").build(app)?)
-        .item(&MenuItemBuilder::new("Paste").id("paste").accelerator("CmdOrCtrl+V").build(app)?)
+        .item(&MenuItemBuilder::new("Paste").id("paste").accelerator("CmdOrCtrl+v").build(app)?)
         .separator()
-        .item(&MenuItemBuilder::new("Find").id("find").accelerator("CmdOrCtrl+F").build(app)?)
-        .item(&MenuItemBuilder::new("Replace").id("replace").accelerator("CmdOrCtrl+H").build(app)?)
-        .item(&MenuItemBuilder::new("Select All").id("select_all").accelerator("CmdOrCtrl+A").build(app)?)
-        .item(&MenuItemBuilder::new("Toggle Comment").id("toggle_comment").accelerator("CmdOrCtrl+/").build(app)?)
+        .item(&MenuItemBuilder::new("Find").id("find").build(app)?)
+        .item(&MenuItemBuilder::new("Replace").id("replace").build(app)?)
+        .item(&MenuItemBuilder::new("Select All").id("select_all").build(app)?)
+        .item(&MenuItemBuilder::new("Toggle Comment").id("toggle_comment").build(app)?)
         .item(&MenuItemBuilder::new("Format Document").id("format_document").build(app)?)
         .build()?;
 
@@ -549,10 +331,6 @@ pub fn run() {
         .item(&MenuItemBuilder::new("Word Wrap").id("word_wrap").build(app)?)
         .item(&MenuItemBuilder::new("Developer Tools").id("devtools").accelerator("CmdOrCtrl+Shift+I").build(app)?)
         .item(&layout_menu)
-        .build()?;
-
-      let history_menu = SubmenuBuilder::new(app, "History")
-        .item(&MenuItemBuilder::new("Show History").id("open_history").accelerator("CmdOrCtrl+H").build(app)?)
         .build()?;
 
       let go_menu = SubmenuBuilder::new(app, "Go")
@@ -585,7 +363,6 @@ pub fn run() {
         .item(&edit_menu)
         .item(&selection_menu)
         .item(&view_menu)
-        .item(&history_menu)
         .item(&go_menu)
         .item(&ai_menu)
         .item(&help_menu)
@@ -608,9 +385,6 @@ pub fn run() {
       read_file,
       write_file,
       list_recent,
-      make_snapshot,
-      list_snapshots,
-      restore_snapshot,
       set_title
     ])
     .run(tauri::generate_context!())

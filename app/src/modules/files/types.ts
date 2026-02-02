@@ -32,14 +32,6 @@ export interface RecentFile {
   isFolder?: boolean
 }
 
-export interface SnapshotMeta {
-  path: string // 原始文件路径
-  snapshotPath: string // 历史文件实际路径
-  createdAt: number
-  hash: string
-  sizeBytes: number
-}
-
 export interface ServiceError {
   code: ErrorCode
   message: string

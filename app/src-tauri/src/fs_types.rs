@@ -42,15 +42,6 @@ pub struct RecentFile {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct SnapshotMeta {
-  pub path: String,          // original file
-  pub snapshot_path: String, // stored snapshot path
-  pub created_at: u64,
-  pub hash: String,
-  pub size_bytes: u64,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ServiceError {
   pub code: ErrorCode,
   pub message: String,
