@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import type { Extension } from '@codemirror/state'
+import type { EditorView } from '@codemirror/view'
 import { createExtensions, type EditorOptions } from './extensions'
 
 export type CodeEditorProps = {
@@ -11,10 +12,11 @@ export type CodeEditorProps = {
   extensions?: Extension[]
   className?: string
   placeholder?: string
+  onViewReady?: (view: EditorView) => void
 }
 
 export function CodeEditor(props: Readonly<CodeEditorProps>) {
-  const { value, onChange, onCursorChange, readOnly, extensions, className, placeholder } = props
+  const { value, onChange, onCursorChange, readOnly, extensions, className, placeholder, onViewReady } = props
 
   const mergedExtensions = useMemo(() => {
     if (extensions && extensions.length) return extensions
@@ -32,6 +34,9 @@ export function CodeEditor(props: Readonly<CodeEditorProps>) {
       placeholder={placeholder}
       extensions={mergedExtensions}
       onChange={(val) => onChange(val)}
+      onCreateEditor={(view) => {
+        onViewReady?.(view)
+      }}
     />
   )
 }

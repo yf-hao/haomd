@@ -423,6 +423,18 @@ button.ghost.primary {
   z-index: 20;
 }
 
+/* 最近文件面板：靠近窗口左上角，贴近 File 菜单右侧的位置，风格与整体顶部一致 */
+.recent-panel {
+  right: auto;
+  left: 72px; /* 大致与系统 File 菜单右侧对齐，在 macOS 上更自然 */
+  top: 48px;
+  width: 360px;
+  background: rgba(8, 10, 18, 0.96);
+  border-radius: 10px;
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+}
+
 .side-header {
   display: flex;
   align-items: center;

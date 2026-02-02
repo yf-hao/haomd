@@ -169,10 +169,63 @@ export async function writeFile(params: {
 }
 
 export async function listRecent(traceId = makeTraceId()): Promise<Result<RecentFile[]>> {
+  // 兼容旧接口：默认请求第 0 页，limit 使用前端配置
+  return listRecentPage(0, filesConfig.maxRecent, traceId)
+}
+
+export async function listRecentPage(
+  offset: number,
+  limit: number,
+  traceId = makeTraceId(),
+): Promise<Result<RecentFile[]>> {
   if (!isTauri()) return notAvailable(traceId)
   try {
-    const resp = await invoke<BackendResult<BackendRecent[]>>('list_recent', { trace_id: traceId })
+    const resp = await invoke<BackendResult<BackendRecent[]>>('list_recent', {
+      offset,
+      limit,
+      trace_id: traceId,
+    })
     return toResult(resp, (list) => list.map(mapRecent))
+  } catch (error) {
+    return normalizeInvokeError(error, traceId)
+  }
+}
+
+export async function logRecentFile(path: string, isFolder: boolean, traceId = makeTraceId()): Promise<Result<null>> {
+  if (!isTauri()) return notAvailable(traceId)
+  try {
+    const resp = await invoke<BackendResult<unknown>>('log_recent_file', { path, is_folder: isFolder, trace_id: traceId })
+    // 后端数据为空，直接返回 ok
+    if ('Ok' in resp) {
+      return { ok: true, data: null, traceId: resp.Ok.trace_id }
+    }
+    return { ok: false, error: toError(resp.Err.error, traceId) }
+  } catch (error) {
+    return normalizeInvokeError(error, traceId)
+  }
+}
+
+export async function clearRecentRemote(traceId = makeTraceId()): Promise<Result<null>> {
+  if (!isTauri()) return notAvailable(traceId)
+  try {
+    const resp = await invoke<BackendResult<unknown>>('clear_recent', { trace_id: traceId })
+    if ('Ok' in resp) {
+      return { ok: true, data: null, traceId: resp.Ok.trace_id }
+    }
+    return { ok: false, error: toError(resp.Err.error, traceId) }
+  } catch (error) {
+    return normalizeInvokeError(error, traceId)
+  }
+}
+
+export async function deleteRecentRemote(path: string, traceId = makeTraceId()): Promise<Result<null>> {
+  if (!isTauri()) return notAvailable(traceId)
+  try {
+    const resp = await invoke<BackendResult<unknown>>('delete_recent_entry', { path, trace_id: traceId })
+    if ('Ok' in resp) {
+      return { ok: true, data: null, traceId: resp.Ok.trace_id }
+    }
+    return { ok: false, error: toError(resp.Err.error, traceId) }
   } catch (error) {
     return normalizeInvokeError(error, traceId)
   }

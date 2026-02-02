@@ -9,15 +9,23 @@ use log::info;
 use once_cell::sync::Lazy;
 use serde_json;
 use sha2::{Digest, Sha256};
-use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+use arboard::Clipboard;
+use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::fs;
 use tokio::sync::Mutex;
 
 const MAX_FILE_BYTES: u64 = 20 * 1024 * 1024; // 20MB
+const MAX_RECENT_ITEMS: usize = 100; // 最近文件最大条数
 
 static FILE_LOCKS: Lazy<Mutex<HashMap<String, std::sync::Arc<Mutex<()>>>>> =
   Lazy::new(|| Mutex::new(HashMap::new()));
+
+// 最近文件原生菜单映射：菜单项 id -> 文件路径
+static RECENT_MENU_MAP: Lazy<std::sync::Mutex<HashMap<String, String>>> =
+  Lazy::new(|| std::sync::Mutex::new(HashMap::new()));
+
+const RECENT_MENU_PREFIX: &str = "recent_item_";
 
 fn new_trace_id() -> String {
   let nanos = SystemTime::now()
@@ -117,6 +125,51 @@ async fn read_recent_store(_app: &AppHandle) -> std::io::Result<Vec<RecentFile>>
     Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(vec![]),
     Err(err) => Err(err),
   }
+}
+
+async fn write_recent_store(_app: &AppHandle, items: &[RecentFile]) -> std::io::Result<()> {
+  let dir = std::env::current_dir()?;
+  let path = dir.join("recent.json");
+  let bytes = serde_json::to_vec_pretty(items)?;
+  fs::write(path, bytes).await
+}
+
+async fn update_recent(app: &AppHandle, path: &str, is_folder: bool) -> std::io::Result<()> {
+  let mut list = read_recent_store(app).await?;
+
+  let display_name = std::path::Path::new(path)
+    .file_name()
+    .unwrap_or_default()
+    .to_string_lossy()
+    .into_owned();
+
+  let now_ms = SystemTime::now()
+    .duration_since(UNIX_EPOCH)
+    .unwrap_or_default()
+    .as_millis() as u64;
+
+  if let Some(item) = list.iter_mut().find(|item| item.path == path) {
+    item.display_name = display_name.clone();
+    item.last_opened_at = now_ms;
+    item.is_folder = is_folder;
+  } else {
+    list.push(RecentFile {
+      path: path.to_string(),
+      display_name,
+      last_opened_at: now_ms,
+      is_folder,
+    });
+  }
+
+  // 按最近使用时间降序排序
+  list.sort_by(|a, b| b.last_opened_at.cmp(&a.last_opened_at));
+
+  // 截断到最大条数
+  if list.len() > MAX_RECENT_ITEMS {
+    list.truncate(MAX_RECENT_ITEMS);
+  }
+
+  write_recent_store(app, &list).await
 }
 
 #[tauri::command]
@@ -242,11 +295,81 @@ async fn write_file(
 }
 
 #[tauri::command]
-async fn list_recent(app: AppHandle, trace_id: Option<String>) -> ResultPayload<Vec<RecentFile>> {
+async fn list_recent(
+  app: AppHandle,
+  offset: Option<u32>,
+  limit: Option<u32>,
+  trace_id: Option<String>,
+) -> ResultPayload<Vec<RecentFile>> {
   let trace = trace_id.unwrap_or_else(new_trace_id);
-  match read_recent_store(&app).await {
-    Ok(list) => ok(list, trace),
-    Err(err) => err_payload(ErrorCode::IoError, format!("读取最近文件失败: {err}"), trace),
+  let mut list = match read_recent_store(&app).await {
+    Ok(list) => list,
+    Err(err) => return err_payload(ErrorCode::IoError, format!("读取最近文件失败: {err}"), trace),
+  };
+
+  // 始终按最近使用时间降序排序，保证一致性
+  list.sort_by(|a, b| b.last_opened_at.cmp(&a.last_opened_at));
+
+  let offset = offset.unwrap_or(0) as usize;
+  let limit = limit.unwrap_or(10) as usize;
+
+  if offset >= list.len() {
+    return ok(Vec::new(), trace);
+  }
+
+  let end = std::cmp::min(offset + limit, list.len());
+  let slice = list[offset..end].to_vec();
+
+  ok(slice, trace)
+}
+
+#[tauri::command]
+async fn log_recent_file(
+  app: AppHandle,
+  path: String,
+  is_folder: bool,
+  trace_id: Option<String>,
+) -> ResultPayload<()> {
+  let trace = trace_id.unwrap_or_else(new_trace_id);
+  match update_recent(&app, &path, is_folder).await {
+    Ok(()) => {
+      refresh_app_menu(&app).await;
+      ok((), trace)
+    }
+    Err(err) => err_payload(ErrorCode::IoError, format!("更新最近文件失败: {err}"), trace),
+  }
+}
+
+#[tauri::command]
+async fn clear_recent(app: AppHandle, trace_id: Option<String>) -> ResultPayload<()> {
+  let trace = trace_id.unwrap_or_else(new_trace_id);
+  match write_recent_store(&app, &[]).await {
+    Ok(()) => {
+      refresh_app_menu(&app).await;
+      ok((), trace)
+    }
+    Err(err) => err_payload(ErrorCode::IoError, format!("清空最近文件失败: {err}"), trace),
+  }
+}
+
+#[tauri::command]
+async fn delete_recent_entry(
+  app: AppHandle,
+  path: String,
+  trace_id: Option<String>,
+) -> ResultPayload<()> {
+  let trace = trace_id.unwrap_or_else(new_trace_id);
+  let mut list = match read_recent_store(&app).await {
+    Ok(list) => list,
+    Err(err) => return err_payload(ErrorCode::IoError, format!("读取最近文件失败: {err}"), trace),
+  };
+  list.retain(|item| item.path != path);
+  match write_recent_store(&app, &list).await {
+    Ok(()) => {
+      refresh_app_menu(&app).await;
+      ok((), trace)
+    }
+    Err(err) => err_payload(ErrorCode::IoError, format!("写入最近文件失败: {err}"), trace),
   }
 }
 
@@ -260,38 +383,58 @@ async fn set_title(app: AppHandle, title: String) -> Result<(), String> {
     .map_err(|e: tauri::Error| e.to_string())
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-  tauri::Builder::default()
-    .setup(|app| {
-      let handle = app.handle();
-      let log_plugin = tauri_plugin_log::Builder::default()
-        .level(log::LevelFilter::Info)
-        .build();
-      handle.plugin(log_plugin)?;
-      handle.plugin(tauri_plugin_dialog::init())?;
+async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+  // 读取最近文件列表，用于构建 Open Recent 子菜单
+  let mut recent = read_recent_store(app).await.unwrap_or_default();
+  // 按时间降序，防御性处理
+  recent.sort_by(|a, b| b.last_opened_at.cmp(&a.last_opened_at));
 
-      // 构建原生菜单（参考 VS Code）
-      let haomd_menu = SubmenuBuilder::new(app, "HaoMD")
-        .item(&MenuItemBuilder::new("About HaoMD").id("haomd_about").build(app)?)
-        .item(&MenuItemBuilder::new("Quit").id("quit").accelerator("CmdOrCtrl+Q").build(app)?)
-        .build()?;
+  // HaoMD 菜单
+  let haomd_menu = SubmenuBuilder::new(app, "HaoMD")
+    .item(&MenuItemBuilder::new("About HaoMD").id("haomd_about").build(app)?)
+    .item(&MenuItemBuilder::new("Quit").id("quit").accelerator("CmdOrCtrl+Q").build(app)?)
+    .build()?;
 
-      let file_menu = SubmenuBuilder::new(app, "File")
-        .item(&MenuItemBuilder::new("New (⌘N)").id("new_file").accelerator("CmdOrCtrl+n").build(app)?)
-        .separator()
-        .item(&MenuItemBuilder::new("Open").id("open_file").accelerator("CmdOrCtrl+o").build(app)?)
-        .item(&MenuItemBuilder::new("Open Folder").id("open_folder").accelerator("CmdOrCtrl+Shift+o").build(app)?)
-        .item(&MenuItemBuilder::new("Open Recent").id("open_recent").accelerator("CmdOrCtrl+Alt+h").build(app)?)
-        .item(&MenuItemBuilder::new("Clear Recent").id("clear_recent").build(app)?)
-        .separator()
-        .item(&MenuItemBuilder::new("Save").id("save").accelerator("CmdOrCtrl+s").build(app)?)
-        .item(&MenuItemBuilder::new("Save As").id("save_as").accelerator("CmdOrCtrl+Shift+s").build(app)?)
-        .separator()
-        .item(&MenuItemBuilder::new("Close File").id("close_file").accelerator("CmdOrCtrl+w").build(app)?)
-        .build()?;
+  // Open Recent 原生子菜单
+  let mut open_recent_builder = SubmenuBuilder::new(app, "Open Recent");
+  {
+    let mut map = RECENT_MENU_MAP.lock().unwrap();
+    map.clear();
 
-      let edit_menu = SubmenuBuilder::new(app, "Edit")
+    for (idx, item) in recent.iter().take(10).enumerate() {
+      let id = format!("{RECENT_MENU_PREFIX}{idx}");
+      map.insert(id.clone(), item.path.clone());
+
+      open_recent_builder = open_recent_builder.item(
+        &MenuItemBuilder::new(&item.display_name)
+          .id(&id)
+          .build(app)?,
+      );
+    }
+  }
+
+  open_recent_builder = open_recent_builder
+    .separator()
+    .item(&MenuItemBuilder::new("Clear Recent").id("clear_recent").build(app)?);
+
+  let open_recent_menu = open_recent_builder.build()?;
+
+  // File 菜单
+  let file_menu = SubmenuBuilder::new(app, "File")
+    .item(&MenuItemBuilder::new("New (⌘N)").id("new_file").accelerator("CmdOrCtrl+n").build(app)?)
+    .separator()
+    .item(&MenuItemBuilder::new("Open").id("open_file").accelerator("CmdOrCtrl+o").build(app)?)
+    .item(&MenuItemBuilder::new("Open Folder").id("open_folder").accelerator("CmdOrCtrl+Shift+o").build(app)?)
+    .item(&open_recent_menu)
+    .separator()
+    .item(&MenuItemBuilder::new("Save").id("save").accelerator("CmdOrCtrl+s").build(app)?)
+    .item(&MenuItemBuilder::new("Save As").id("save_as").accelerator("CmdOrCtrl+Shift+s").build(app)?)
+    .separator()
+    .item(&MenuItemBuilder::new("Close File").id("close_file").accelerator("CmdOrCtrl+w").build(app)?)
+    .build()?;
+
+  // Edit 菜单
+  let edit_menu = SubmenuBuilder::new(app, "Edit")
         .item(&MenuItemBuilder::new("Undo").id("undo").build(app)?)
         .item(&MenuItemBuilder::new("Redo").id("redo").build(app)?)
         .separator()
@@ -306,21 +449,21 @@ pub fn run() {
         .item(&MenuItemBuilder::new("Format Document").id("format_document").build(app)?)
         .build()?;
 
-      let selection_menu = SubmenuBuilder::new(app, "Selection")
+  let selection_menu = SubmenuBuilder::new(app, "Selection")
         .item(&MenuItemBuilder::new("Expand Selection").id("expand_selection").build(app)?)
         .item(&MenuItemBuilder::new("Shrink Selection").id("shrink_selection").build(app)?)
         .item(&MenuItemBuilder::new("Select Line").id("select_line").build(app)?)
         .item(&MenuItemBuilder::new("Select All Matches").id("select_all_matches").build(app)?)
         .build()?;
 
-      let layout_menu = SubmenuBuilder::new(app, "Layout")
+  let layout_menu = SubmenuBuilder::new(app, "Layout")
         .item(&MenuItemBuilder::new("Preview Left").id("layout_preview_left").build(app)?)
         .item(&MenuItemBuilder::new("Preview Right").id("layout_preview_right").build(app)?)
         .item(&MenuItemBuilder::new("Editor Only").id("layout_editor_only").build(app)?)
         .item(&MenuItemBuilder::new("Preview Only").id("layout_preview_only").build(app)?)
         .build()?;
 
-      let view_menu = SubmenuBuilder::new(app, "View")
+  let view_menu = SubmenuBuilder::new(app, "View")
         .item(&MenuItemBuilder::new("Toggle Preview (⌘P)").id("toggle_preview").accelerator("CmdOrCtrl+P").build(app)?)
         .item(&MenuItemBuilder::new("Split View").id("split_view").build(app)?)
         .item(&MenuItemBuilder::new("Toggle Sidebar").id("toggle_sidebar").build(app)?)
@@ -333,7 +476,7 @@ pub fn run() {
         .item(&layout_menu)
         .build()?;
 
-      let go_menu = SubmenuBuilder::new(app, "Go")
+  let go_menu = SubmenuBuilder::new(app, "Go")
         .item(&MenuItemBuilder::new("Go to Line").id("go_line").accelerator("CmdOrCtrl+L").build(app)?)
         .item(&MenuItemBuilder::new("Go to Symbol").id("go_symbol").build(app)?)
         .item(&MenuItemBuilder::new("Next Tab").id("next_tab").accelerator("Ctrl+Tab").build(app)?)
@@ -342,7 +485,7 @@ pub fn run() {
         .item(&MenuItemBuilder::new("Forward").id("go_forward").build(app)?)
         .build()?;
 
-      let ai_menu = SubmenuBuilder::new(app, "AI")
+  let ai_menu = SubmenuBuilder::new(app, "AI")
         .item(&MenuItemBuilder::new("Open AI Chat").id("ai_chat").build(app)?)
         .item(&MenuItemBuilder::new("Set API Key").id("ai_set_key").build(app)?)
         .item(&MenuItemBuilder::new("AI Settings").id("ai_settings").build(app)?)
@@ -350,29 +493,82 @@ pub fn run() {
         .item(&MenuItemBuilder::new("Ask AI About Selection").id("ai_ask_selection").build(app)?)
         .build()?;
 
-      let help_menu = SubmenuBuilder::new(app, "Help")
+  let help_menu = SubmenuBuilder::new(app, "Help")
         .item(&MenuItemBuilder::new("Docs").id("help_docs").build(app)?)
         .item(&MenuItemBuilder::new("Release Notes").id("help_release").build(app)?)
         .item(&MenuItemBuilder::new("Report Issue").id("help_issue").build(app)?)
         .item(&MenuItemBuilder::new("About").id("help_about").build(app)?)
         .build()?;
 
-      let menu = MenuBuilder::new(app)
-        .item(&haomd_menu)
-        .item(&file_menu)
-        .item(&edit_menu)
-        .item(&selection_menu)
-        .item(&view_menu)
-        .item(&go_menu)
-        .item(&ai_menu)
-        .item(&help_menu)
-        .build()?;
+  let menu = MenuBuilder::new(app)
+    .item(&haomd_menu)
+    .item(&file_menu)
+    .item(&edit_menu)
+    .item(&selection_menu)
+    .item(&view_menu)
+    .item(&go_menu)
+    .item(&ai_menu)
+    .item(&help_menu)
+    .build()?;
 
-      app.set_menu(menu)?;
+  Ok(menu)
+}
+
+async fn refresh_app_menu(app: &AppHandle) {
+  if let Ok(menu) = build_app_menu(app).await {
+    let _ = app.set_menu(menu);
+  }
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+  tauri::Builder::default()
+    .setup(|app| {
+      let handle = app.handle();
+      let log_plugin = tauri_plugin_log::Builder::default()
+        .level(log::LevelFilter::Info)
+        .build();
+      handle.plugin(log_plugin)?;
+      handle.plugin(tauri_plugin_dialog::init())?;
+
+      // 构建原生菜单（参考 VS Code）
+      tauri::async_runtime::block_on(async {
+        let menu = build_app_menu(&handle).await?;
+        handle.set_menu(menu)?;
+        Ok::<(), tauri::Error>(())
+      })?;
 
       app.on_menu_event(|app, event| {
         let action = event.id().as_ref();
-        // 统一推送到前端 dispatcher
+
+        // 最近文件原生子菜单：菜单项 id -> 文件路径
+        if action.starts_with(RECENT_MENU_PREFIX) {
+          let path_opt = {
+            let map = RECENT_MENU_MAP.lock().unwrap();
+            map.get(action).cloned()
+          };
+          if let Some(path) = path_opt {
+            let _ = app.emit("menu://open_recent_file", path);
+          }
+          return;
+        }
+
+        // 原生剪贴板粘贴：避免 WebView 的 execCommand 安全限制
+        if action == "paste" {
+          match Clipboard::new().and_then(|mut cb| cb.get_text()) {
+            Ok(text) => {
+              //log::info!("clipboard text length = {}", text.len());
+              let _ = app.emit("native://paste", text);
+            }
+            Err(err) => {
+             //log::error!("clipboard read error: {err}");
+              let _ = app.emit("native://paste_error", format!("读取剪贴板失败: {err}"));
+            }
+          }
+          return;
+        }
+
+        // 其他菜单统一推送到前端 dispatcher
         let _ = app.emit("menu://action", action.to_string());
         if action == "quit" {
           std::process::exit(0);
@@ -385,6 +581,9 @@ pub fn run() {
       read_file,
       write_file,
       list_recent,
+      log_recent_file,
+      clear_recent,
+      delete_recent_entry,
       set_title
     ])
     .run(tauri::generate_context!())

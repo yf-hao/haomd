@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 import { invoke } from '@tauri-apps/api/core'
-import { mergeRecent, readFile, writeFile } from '../modules/files/service'
+import { clearRecentRemote, deleteRecentRemote, listRecentPage, logRecentFile, readFile, writeFile } from '../modules/files/service'
 import { createAutoSaver, type AutoSaveHandle } from '../modules/files/autoSave'
 import type { RecentFile, Result, ServiceError, WriteResult } from '../modules/files/types'
 
 const DEFAULT_PATH = '未命名.md'
-const STORAGE_RECENT = 'haomd:recent'
+const STORAGE_RECENT_HOT = 'haomd:recent:hot'
+const RECENT_PAGE_SIZE = 10
 
 const isTauri = () =>
   typeof window !== 'undefined' &&
@@ -26,6 +27,9 @@ export function useFilePersistence(markdown: string) {
   const [conflictError, setConflictError] = useState<ServiceError | null>(null)
 
   const [recent, setRecent] = useState<RecentFile[]>([])
+  const [recentHasMore, setRecentHasMore] = useState(false)
+  const [recentLoading, setRecentLoading] = useState(false)
+  const [recentLoadedFromDisk, setRecentLoadedFromDisk] = useState(false)
 
   const saverRef = useRef<AutoSaveHandle | null>(null)
 
@@ -87,10 +91,10 @@ export function useFilePersistence(markdown: string) {
     [markdown, currentHash, currentMtime, updateTitle],
   )
 
-  const readRecentFromStorage = useCallback((): RecentFile[] => {
+  const readRecentHotFromStorage = useCallback((): RecentFile[] => {
     if (typeof window === 'undefined') return []
     try {
-      const raw = window.localStorage.getItem(STORAGE_RECENT)
+      const raw = window.localStorage.getItem(STORAGE_RECENT_HOT)
       if (!raw) return []
       const parsed = JSON.parse(raw) as unknown
       return Array.isArray(parsed) ? (parsed as RecentFile[]) : []
@@ -99,9 +103,121 @@ export function useFilePersistence(markdown: string) {
     }
   }, [])
 
+  const fetchRecent = useCallback(
+    async (reset: boolean) => {
+      setRecentLoading(true)
+      try {
+        const offset = reset ? 0 : recent.length
+        const resp = await listRecentPage(offset, RECENT_PAGE_SIZE)
+        if (!resp.ok) {
+          setStatusMessage(resp.error.message)
+          return
+        }
+        const items = resp.data
+
+        setRecent((prev) => {
+          const base = reset ? [] : prev
+          const nextAll = [...base, ...items]
+
+          // 更新 localStorage 中的前 10 条热缓存
+          if (typeof window !== 'undefined') {
+            try {
+              const hot = nextAll.slice(0, RECENT_PAGE_SIZE)
+              window.localStorage.setItem(STORAGE_RECENT_HOT, JSON.stringify(hot))
+            } catch {
+              // ignore
+            }
+          }
+
+        return nextAll
+        })
+
+        setRecentHasMore(items.length === RECENT_PAGE_SIZE)
+        setRecentLoadedFromDisk(true)
+      } finally {
+        setRecentLoading(false)
+      }
+    },
+    [listRecentPage, recent.length, setStatusMessage],
+  )
+
   const refreshRecent = useCallback(async () => {
-    setRecent(readRecentFromStorage())
-  }, [readRecentFromStorage])
+    await fetchRecent(true)
+  }, [fetchRecent])
+
+  const loadMoreRecent = useCallback(async () => {
+    await fetchRecent(false)
+  }, [fetchRecent])
+
+  const clearRecentAll = useCallback(async () => {
+    const resp = await clearRecentRemote()
+    if (!resp.ok) {
+      setStatusMessage(resp.error.message)
+      return resp
+    }
+    setRecent([])
+    setRecentHasMore(false)
+    setRecentLoadedFromDisk(true)
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.removeItem(STORAGE_RECENT_HOT)
+      } catch {
+        // ignore
+      }
+    }
+    return resp
+  }, [setStatusMessage])
+
+  const deleteRecent = useCallback(
+    async (path: string) => {
+      const resp = await deleteRecentRemote(path)
+      if (!resp.ok) {
+        setStatusMessage(resp.error.message)
+        return resp
+      }
+      setRecent((prev) => {
+        const next = prev.filter((item) => item.path !== path)
+        if (typeof window !== 'undefined') {
+          try {
+            const hot = next.slice(0, RECENT_PAGE_SIZE)
+            window.localStorage.setItem(STORAGE_RECENT_HOT, JSON.stringify(hot))
+          } catch {
+            // ignore
+          }
+        }
+        return next
+      })
+      return resp
+    },
+    [setStatusMessage],
+  )
+
+  const upsertRecentLocal = useCallback(
+    (path: string, isFolder: boolean) => {
+      const displayName = path.split('/').pop() || path
+      const now = Date.now()
+
+      setRecent((prev) => {
+        const without = prev.filter((item) => item.path !== path)
+        const nextAll: RecentFile[] = [
+          { path, displayName, lastOpenedAt: now, isFolder },
+          ...without,
+        ]
+        const hot = nextAll.slice(0, RECENT_PAGE_SIZE)
+
+        if (typeof window !== 'undefined') {
+          try {
+            window.localStorage.setItem(STORAGE_RECENT_HOT, JSON.stringify(hot))
+          } catch {
+            // ignore
+          }
+        }
+
+        return hot
+      })
+    },
+    [setRecent],
+  )
 
   const dialogInFlightRef = useRef(false)
   const openDialogInFlightRef = useRef(false)
@@ -233,17 +349,11 @@ export function useFilePersistence(markdown: string) {
   }, [filePath, dirty, updateTitle])
 
   useEffect(() => {
-    void refreshRecent()
-  }, [refreshRecent])
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    try {
-      window.localStorage.setItem(STORAGE_RECENT, JSON.stringify(recent))
-    } catch {
-      // ignore
+    const hot = readRecentHotFromStorage()
+    if (hot.length > 0) {
+      setRecent(hot)
     }
-  }, [recent])
+  }, [readRecentHotFromStorage])
 
   const markDirty = useCallback(() => {
     setDirty(true)
@@ -283,43 +393,36 @@ export function useFilePersistence(markdown: string) {
         setStatusMessage('已打开')
         void updateTitle(nextPath, false)
 
-        const displayName = nextPath.split('/').pop() || nextPath
-        const entry: RecentFile = {
-          path: nextPath,
-          displayName,
-          lastOpenedAt: Date.now(),
-          isFolder: false,
-        }
-        setRecent((list) => mergeRecent(list, entry))
+        // 记录最近文件：后端维护完整持久化，本地维护最近 10 条热缓存
+        void logRecentFile(nextPath, false)
+        upsertRecentLocal(nextPath, false)
 
         return resp
       } finally {
         openInFlightRef.current = false
       }
     },
-    [updateTitle],
+    [updateTitle, upsertRecentLocal],
   )
 
   const openFile = useCallback(
     async () => {
+      console.log('[openFile] called, inFlight =', openDialogInFlightRef.current)
       if (openDialogInFlightRef.current) {
+        console.warn('[openFile] dialog already in flight, skip')
         return { ok: false as const, error: { code: 'CANCELLED', message: '已在打开系统对话框', traceId: undefined } }
       }
       openDialogInFlightRef.current = true
       try {
-        if (!isTauri()) {
-          setSaveStatus('error')
-          setStatusMessage('需在 Tauri 应用中才能弹出系统打开对话框')
-          return { ok: false as const, error: { code: 'UNKNOWN', message: 'Tauri 未运行', traceId: undefined } }
-        }
-
         setSaveStatus('idle')
         setStatusMessage('选择要打开的文件...')
+        console.log('[openFile] before openDialog')
         const chosen = await openDialog({
           multiple: false,
           directory: false,
           filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdx'] }],
         })
+        console.log('[openFile] after openDialog, chosen =', chosen)
 
         if (!chosen) {
           setSaveStatus('idle')
@@ -328,9 +431,16 @@ export function useFilePersistence(markdown: string) {
         }
 
         const path = Array.isArray(chosen) ? chosen[0] : chosen
+        console.log('[openFile] openFromPath', path)
         return await openFromPath(path)
+      } catch (err) {
+        console.error('[openFile] openDialog failed', err)
+        setSaveStatus('error')
+        setStatusMessage(`无法打开文件: ${String((err as any)?.message ?? err)}`)
+        return { ok: false as const, error: { code: 'UNKNOWN', message: '打开失败', traceId: undefined } }
       } finally {
         openDialogInFlightRef.current = false
+        console.log('[openFile] dialog done, reset inFlight')
       }
     },
     [openFromPath],
@@ -371,7 +481,13 @@ export function useFilePersistence(markdown: string) {
     conflictError,
     setConflictError,
     recent,
+    recentHasMore,
+    recentLoading,
+    recentLoadedFromDisk,
     refreshRecent,
+    loadMoreRecent,
+    clearRecentAll,
+    deleteRecent,
     setRecent,
     handleSave,
     save,

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { EditorView } from '@codemirror/view'
 import 'katex/dist/katex.min.css'
 import 'highlight.js/styles/atom-one-dark.css'
 import './App.css'
@@ -88,7 +89,7 @@ function App() {
     startDragging,
   } = useWorkspaceLayout()
   const previewTimerRef = useRef<number | null>(null)
-  const pasteSeqRef = useRef(0)
+  const editorViewRef = useRef<EditorView | null>(null)
 
   const [recentOpen, setRecentOpen] = useState(false)
 
@@ -99,7 +100,12 @@ function App() {
     conflictError,
     setConflictError,
     recent,
+    recentHasMore,
+    recentLoading,
     refreshRecent,
+    loadMoreRecent,
+    clearRecentAll,
+    deleteRecent,
     setRecent,
     save,
     saveToPath,
@@ -147,72 +153,11 @@ function App() {
     }
   }
 
-  const handlePaste = useCallback(
-    async (source: 'keydown' | 'menu') => {
-      // 调试：记录来源 + 次数，帮助确认是否有多次触发
-      pasteSeqRef.current += 1
-      console.log(
-        '[paste] call',
-        pasteSeqRef.current,
-        'source =',
-        source,
-        'time =',
-        new Date().toISOString(),
-      )
-
-      if (typeof window === 'undefined' || typeof document === 'undefined') return
-
-      let pasted = false
-
-      // 1) 尝试 navigator.clipboard.readText + insertText
-      if (navigator.clipboard && 'readText' in navigator.clipboard) {
-        try {
-          const text = await navigator.clipboard.readText()
-          console.log('[paste] readText length =', text.length)
-          if (text) {
-            // 使用 insertText 命令插入文本，依赖编辑器/当前焦点处理
-            const ok = document.execCommand('insertText', false, text)
-            console.log('[paste] insertText ok =', ok)
-            if (!ok) {
-              // 某些环境不支持 insertText，则回退到 paste
-              console.log('[paste] insertText failed, try execCommand(paste)')
-              document.execCommand('paste')
-            }
-            pasted = true
-          }
-        } catch (err) {
-          console.warn('clipboard.readText failed, fallback to execCommand(paste)', err)
-        }
-      }
-
-      // 2) 回退：直接调用 paste，让 WebView/编辑器自己处理
-      if (!pasted) {
-        try {
-          console.log('[paste] fallback execCommand(paste)')
-          const ok = document.execCommand('paste')
-          console.log('[paste] fallback paste ok =', ok)
-          if (!ok) {
-            setStatusMessage('粘贴未生效（可能被系统限制）')
-          }
-        } catch (err) {
-          console.warn('execCommand paste failed', err)
-          setStatusMessage('粘贴未生效（可能被系统限制）')
-        }
-      }
-
-      // 简单：1 秒后把计数清零，方便下一次观察
-      window.setTimeout(() => {
-        pasteSeqRef.current = 0
-      }, 1000)
-    },
-    [setStatusMessage],
-  )
 
   const handleShowRecent = async () => {
+    // 只负责打开/关闭最近文件面板，不在这里访问磁盘；
+    // 如需加载更多记录，通过“加载更多”按钮触发后端分页加载。
     setRecentOpen((v) => !v)
-    if (!recentOpen) {
-      await refreshRecent()
-    }
   }
 
   const applyOpenedContent = useCallback((content: string) => {
@@ -231,6 +176,26 @@ function App() {
     },
     [applyOpenedContent, openFromPath],
   )
+
+  // 监听 Tauri 原生菜单中 File → Open Recent 子菜单点击事件
+  useEffect(() => {
+    let unlisten: (() => void) | undefined
+
+    const setup = async () => {
+      const un = await listen<string>('menu://open_recent_file', async (event) => {
+        const path = event.payload
+        if (!confirmLoseChanges()) return
+        await handleOpenPath(path)
+      })
+      unlisten = un
+    }
+
+    void setup()
+
+    return () => {
+      unlisten?.()
+    }
+  }, [confirmLoseChanges, handleOpenPath])
 
   const dispatchAction = useCallback(
     async (action: string) => {
@@ -276,10 +241,16 @@ function App() {
           await saveAs()
           break
         case 'open_file': {
-          if (!confirmLoseChanges()) return
-          const resp = await openFile()
-          if (resp.ok) {
-            applyOpenedContent(resp.data.content)
+          console.log('[dispatchAction] open_file, openFile =', openFile)
+          // 打开文件时，临时跳过未保存确认，避免浏览器/环境禁用 window.confirm 导致无法打开
+          try {
+            const resp = await openFile()
+            console.log('[dispatchAction] open_file resp =', resp)
+            if (resp && resp.ok) {
+              applyOpenedContent(resp.data.content)
+            }
+          } catch (err) {
+            console.error('[dispatchAction] open_file openFile threw', err)
           }
           break
         }
@@ -290,10 +261,13 @@ function App() {
         case 'open_recent':
           await handleShowRecent()
           break
-        case 'clear_recent':
-          setRecent([])
-          setStatusMessage('已清空最近文件')
+        case 'clear_recent': {
+          const resp = await clearRecentAll()
+          if (resp.ok) {
+            setStatusMessage('已清空最近文件')
+          }
           break
+        }
         case 'close_file':
           if (!confirmLoseChanges()) return
           setStatusMessage('占位：Close File 未实现')
@@ -304,9 +278,10 @@ function App() {
           break
 
         // Edit
-        case 'paste':
-          await handlePaste('menu')
+        case 'paste': {
+          // 粘贴由原生菜单 -> native://paste 事件负责，这里不再调用 execCommand
           break
+        }
         case 'copy': {
           if (typeof document !== 'undefined') {
             try {
@@ -391,8 +366,58 @@ function App() {
           setStatusMessage('暂未实现的菜单')
       }
     },
-    [applyOpenedContent, confirmLoseChanges, handlePaste, handleShowRecent, newDocument, openFile, save, saveAs],
+    [applyOpenedContent, confirmLoseChanges, handleShowRecent, newDocument, openFile, save, saveAs],
   )
+
+  // 监听来自原生剪贴板的粘贴事件
+  useEffect(() => {
+    let unlistenPaste: (() => void) | undefined
+    let unlistenError: (() => void) | undefined
+    let disposed = false
+
+    const setup = async () => {
+      const unPaste = await listen<string>('native://paste', (event) => {
+        const text = event.payload
+        const view = editorViewRef.current
+        console.log('[native://paste] handler fired, view =', view)
+        if (!view || !text) return
+
+        const { state } = view
+        const tr = state.changeByRange((range) => ({
+          range,
+          changes: { from: range.from, to: range.to, insert: text },
+        }))
+        view.dispatch(tr)
+      })
+      if (disposed) {
+        // 如果在监听完成前 effect 已经清理，立刻注销，避免遗留多个监听
+        unPaste()
+      } else {
+        unlistenPaste = unPaste
+      }
+
+      const unErr = await listen<string>('native://paste_error', (event) => {
+        setStatusMessage(event.payload || '粘贴失败：无法读取剪贴板')
+      })
+      if (disposed) {
+        unErr()
+      } else {
+        unlistenError = unErr
+      }
+    }
+
+    void setup()
+
+    return () => {
+      disposed = true
+      if (unlistenPaste) {
+        unlistenPaste()
+      }
+      if (unlistenError) {
+        unlistenError()
+      }
+    }
+  }, [setStatusMessage])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -404,11 +429,7 @@ function App() {
       const tauriBlocks = ['s', 'o', 'n'] as const
       if (isTauri() && tauriBlocks.includes(key as (typeof tauriBlocks)[number])) return
 
-      if (key === 'v') {
-        // 统一由 handlePaste 处理，避免默认行为 + 其他路径导致多次粘贴
-        e.preventDefault()
-        void handlePaste('keydown')
-      } else if (key === 's') {
+      if (key === 's') {
         e.preventDefault()
         if (e.shiftKey) {
           void dispatchAction('save_as')
@@ -516,6 +537,9 @@ function App() {
                 onCursorChange={setActiveLine}
                 placeholder="在此输入 Markdown..."
                 className="code-editor"
+                onViewReady={(view) => {
+                  editorViewRef.current = view
+                }}
               />
             </section>
           </>
@@ -543,6 +567,9 @@ function App() {
                 onCursorChange={setActiveLine}
                 placeholder="在此输入 Markdown..."
                 className="code-editor"
+                onViewReady={(view) => {
+                  editorViewRef.current = view
+                }}
               />
             </section>
             <div
@@ -596,6 +623,9 @@ function App() {
               onCursorChange={setActiveLine}
               placeholder="在此输入 Markdown..."
               className="code-editor"
+              onViewReady={(view) => {
+                editorViewRef.current = view
+              }}
             />
           </section>
         )}
@@ -612,30 +642,54 @@ function App() {
           <div className="side-body">
             {recent.length === 0 && <div className="muted">暂无记录</div>}
             {recent.map((item) => (
-              <div
-                key={item.path}
-                className="history-item"
-                role="button"
-                tabIndex={0}
-                onClick={async () => {
-                  if (!confirmLoseChanges()) return
-                  await handleOpenPath(item.path)
-                  setRecentOpen(false)
-                }}
-                onKeyDown={async (e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
+              <div key={item.path} className="history-item-row">
+                <div
+                  className="history-item"
+                  role="button"
+                  tabIndex={0}
+                  onClick={async () => {
                     if (!confirmLoseChanges()) return
                     await handleOpenPath(item.path)
                     setRecentOpen(false)
-                  }
-                }}
-              >
-                <div className="history-title">{item.displayName}</div>
-                <div className="muted small">{item.path}</div>
-                <div className="muted small">{formatTs(item.lastOpenedAt)}</div>
+                  }}
+                  onKeyDown={async (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      if (!confirmLoseChanges()) return
+                      await handleOpenPath(item.path)
+                      setRecentOpen(false)
+                    }
+                  }}
+                >
+                  <div className="history-title">{item.displayName}</div>
+                  <div className="muted small">{item.path}</div>
+                  <div className="muted small">{formatTs(item.lastOpenedAt)}</div>
+                </div>
+                <button
+                  className="ghost small danger"
+                  onClick={async (e) => {
+                    e.stopPropagation()
+                    const resp = await deleteRecent(item.path)
+                    if (!resp.ok) return
+                  }}
+                >
+                  删除
+                </button>
               </div>
             ))}
+            {recentHasMore && (
+              <div className="recent-more">
+                <button
+                  className="ghost"
+                  disabled={recentLoading}
+                  onClick={async () => {
+                    await loadMoreRecent()
+                  }}
+                >
+                  {recentLoading ? '加载中…' : '加载更多'}
+                </button>
+              </div>
+            )}
           </div>
         </aside>
       )}
