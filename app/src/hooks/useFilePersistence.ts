@@ -15,6 +15,158 @@ const isTauri = () =>
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'conflict'
 
+function useRecentFilesState(setStatusMessage: (msg: string) => void) {
+  const [recent, setRecent] = useState<RecentFile[]>([])
+  const [recentHasMore, setRecentHasMore] = useState(false)
+  const [recentLoading, setRecentLoading] = useState(false)
+  const [recentLoadedFromDisk, setRecentLoadedFromDisk] = useState(false)
+
+  const readRecentHotFromStorage = useCallback((): RecentFile[] => {
+    if (typeof window === 'undefined') return []
+    try {
+      const raw = window.localStorage.getItem(STORAGE_RECENT_HOT)
+      if (!raw) return []
+      const parsed = JSON.parse(raw) as unknown
+      return Array.isArray(parsed) ? (parsed as RecentFile[]) : []
+    } catch {
+      return []
+    }
+  }, [])
+
+  const fetchRecent = useCallback(
+    async (reset: boolean) => {
+      setRecentLoading(true)
+      try {
+        const offset = reset ? 0 : recent.length
+        const resp = await listRecentPage(offset, RECENT_PAGE_SIZE)
+        if (!resp.ok) {
+          setStatusMessage(resp.error.message)
+          return
+        }
+        const items = resp.data
+
+        setRecent((prev) => {
+          const base = reset ? [] : prev
+          const nextAll = [...base, ...items]
+
+          // 更新 localStorage 中的前 10 条热缓存
+          if (typeof window !== 'undefined') {
+            try {
+              const hot = nextAll.slice(0, RECENT_PAGE_SIZE)
+              window.localStorage.setItem(STORAGE_RECENT_HOT, JSON.stringify(hot))
+            } catch {
+              // ignore
+            }
+          }
+
+          return nextAll
+        })
+
+        setRecentHasMore(items.length === RECENT_PAGE_SIZE)
+        setRecentLoadedFromDisk(true)
+      } finally {
+        setRecentLoading(false)
+      }
+    },
+    [recent.length, setStatusMessage],
+  )
+
+  const refreshRecent = useCallback(async () => {
+    await fetchRecent(true)
+  }, [fetchRecent])
+
+  const loadMoreRecent = useCallback(async () => {
+    await fetchRecent(false)
+  }, [fetchRecent])
+
+  const clearRecentAll = useCallback(async () => {
+    const resp = await clearRecentRemote()
+    if (!resp.ok) {
+      setStatusMessage(resp.error.message)
+      return resp
+    }
+    setRecent([])
+    setRecentHasMore(false)
+    setRecentLoadedFromDisk(true)
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.removeItem(STORAGE_RECENT_HOT)
+      } catch {
+        // ignore
+      }
+    }
+    return resp
+  }, [setStatusMessage])
+
+  const deleteRecent = useCallback(
+    async (path: string) => {
+      const resp = await deleteRecentRemote(path)
+      if (!resp.ok) {
+        setStatusMessage(resp.error.message)
+        return resp
+      }
+      setRecent((prev) => {
+        const next = prev.filter((item) => item.path !== path)
+        if (typeof window !== 'undefined') {
+          try {
+            const hot = next.slice(0, RECENT_PAGE_SIZE)
+            window.localStorage.setItem(STORAGE_RECENT_HOT, JSON.stringify(hot))
+          } catch {
+            // ignore
+          }
+        }
+        return next
+      })
+      return resp
+    },
+    [setStatusMessage],
+  )
+
+  const upsertRecentLocal = useCallback((path: string, isFolder: boolean) => {
+    const displayName = path.split('/').pop() || path
+    const now = Date.now()
+
+    setRecent((prev) => {
+      const without = prev.filter((item) => item.path !== path)
+      const nextAll: RecentFile[] = [
+        { path, displayName, lastOpenedAt: now, isFolder },
+        ...without,
+      ]
+      const hot = nextAll.slice(0, RECENT_PAGE_SIZE)
+
+      if (typeof window !== 'undefined') {
+        try {
+          window.localStorage.setItem(STORAGE_RECENT_HOT, JSON.stringify(hot))
+        } catch {
+          // ignore
+        }
+      }
+
+      return hot
+    })
+  }, [])
+
+  useEffect(() => {
+    const hot = readRecentHotFromStorage()
+    if (hot.length > 0) {
+      setRecent(hot)
+    }
+  }, [readRecentHotFromStorage])
+
+  return {
+    recent,
+    setRecent,
+    recentHasMore,
+    recentLoading,
+    recentLoadedFromDisk,
+    refreshRecent,
+    loadMoreRecent,
+    clearRecentAll,
+    deleteRecent,
+    upsertRecentLocal,
+  }
+}
+
 export function useFilePersistence(markdown: string) {
   const [filePath, setFilePath] = useState<string>(DEFAULT_PATH)
   const pathRef = useRef<string>(DEFAULT_PATH)
@@ -26,10 +178,18 @@ export function useFilePersistence(markdown: string) {
   const [currentMtime, setCurrentMtime] = useState<number | undefined>(undefined)
   const [conflictError, setConflictError] = useState<ServiceError | null>(null)
 
-  const [recent, setRecent] = useState<RecentFile[]>([])
-  const [recentHasMore, setRecentHasMore] = useState(false)
-  const [recentLoading, setRecentLoading] = useState(false)
-  const [recentLoadedFromDisk, setRecentLoadedFromDisk] = useState(false)
+  const {
+    recent,
+    setRecent,
+    recentHasMore,
+    recentLoading,
+    recentLoadedFromDisk,
+    refreshRecent,
+    loadMoreRecent,
+    clearRecentAll,
+    deleteRecent,
+    upsertRecentLocal,
+  } = useRecentFilesState(setStatusMessage)
 
   const saverRef = useRef<AutoSaveHandle | null>(null)
 
@@ -89,134 +249,6 @@ export function useFilePersistence(markdown: string) {
       }
     },
     [markdown, currentHash, currentMtime, updateTitle],
-  )
-
-  const readRecentHotFromStorage = useCallback((): RecentFile[] => {
-    if (typeof window === 'undefined') return []
-    try {
-      const raw = window.localStorage.getItem(STORAGE_RECENT_HOT)
-      if (!raw) return []
-      const parsed = JSON.parse(raw) as unknown
-      return Array.isArray(parsed) ? (parsed as RecentFile[]) : []
-    } catch {
-      return []
-    }
-  }, [])
-
-  const fetchRecent = useCallback(
-    async (reset: boolean) => {
-      setRecentLoading(true)
-      try {
-        const offset = reset ? 0 : recent.length
-        const resp = await listRecentPage(offset, RECENT_PAGE_SIZE)
-        if (!resp.ok) {
-          setStatusMessage(resp.error.message)
-          return
-        }
-        const items = resp.data
-
-        setRecent((prev) => {
-          const base = reset ? [] : prev
-          const nextAll = [...base, ...items]
-
-          // 更新 localStorage 中的前 10 条热缓存
-          if (typeof window !== 'undefined') {
-            try {
-              const hot = nextAll.slice(0, RECENT_PAGE_SIZE)
-              window.localStorage.setItem(STORAGE_RECENT_HOT, JSON.stringify(hot))
-            } catch {
-              // ignore
-            }
-          }
-
-        return nextAll
-        })
-
-        setRecentHasMore(items.length === RECENT_PAGE_SIZE)
-        setRecentLoadedFromDisk(true)
-      } finally {
-        setRecentLoading(false)
-      }
-    },
-    [listRecentPage, recent.length, setStatusMessage],
-  )
-
-  const refreshRecent = useCallback(async () => {
-    await fetchRecent(true)
-  }, [fetchRecent])
-
-  const loadMoreRecent = useCallback(async () => {
-    await fetchRecent(false)
-  }, [fetchRecent])
-
-  const clearRecentAll = useCallback(async () => {
-    const resp = await clearRecentRemote()
-    if (!resp.ok) {
-      setStatusMessage(resp.error.message)
-      return resp
-    }
-    setRecent([])
-    setRecentHasMore(false)
-    setRecentLoadedFromDisk(true)
-    if (typeof window !== 'undefined') {
-      try {
-        window.localStorage.removeItem(STORAGE_RECENT_HOT)
-      } catch {
-        // ignore
-      }
-    }
-    return resp
-  }, [setStatusMessage])
-
-  const deleteRecent = useCallback(
-    async (path: string) => {
-      const resp = await deleteRecentRemote(path)
-      if (!resp.ok) {
-        setStatusMessage(resp.error.message)
-        return resp
-      }
-      setRecent((prev) => {
-        const next = prev.filter((item) => item.path !== path)
-        if (typeof window !== 'undefined') {
-          try {
-            const hot = next.slice(0, RECENT_PAGE_SIZE)
-            window.localStorage.setItem(STORAGE_RECENT_HOT, JSON.stringify(hot))
-          } catch {
-            // ignore
-          }
-        }
-        return next
-      })
-      return resp
-    },
-    [setStatusMessage],
-  )
-
-  const upsertRecentLocal = useCallback(
-    (path: string, isFolder: boolean) => {
-      const displayName = path.split('/').pop() || path
-      const now = Date.now()
-
-      setRecent((prev) => {
-        const without = prev.filter((item) => item.path !== path)
-        const nextAll: RecentFile[] = [
-          { path, displayName, lastOpenedAt: now, isFolder },
-          ...without,
-        ]
-        const hot = nextAll.slice(0, RECENT_PAGE_SIZE)
-
-        if (typeof window !== 'undefined') {
-          try {
-            window.localStorage.setItem(STORAGE_RECENT_HOT, JSON.stringify(hot))
-          } catch {
-            // ignore
-          }
-        }
-
-        return hot
-      })
-    },
-    [setRecent],
   )
 
   const dialogInFlightRef = useRef(false)
@@ -347,13 +379,6 @@ export function useFilePersistence(markdown: string) {
   useEffect(() => {
     void updateTitle(filePath, dirty)
   }, [filePath, dirty, updateTitle])
-
-  useEffect(() => {
-    const hot = readRecentHotFromStorage()
-    if (hot.length > 0) {
-      setRecent(hot)
-    }
-  }, [readRecentHotFromStorage])
 
   const markDirty = useCallback(() => {
     setDirty(true)
