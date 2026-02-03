@@ -146,12 +146,60 @@ function useRecentFilesState(setStatusMessage: (msg: string) => void) {
     })
   }, [])
 
+  const reloadRecentLocal = useCallback(() => {
+    const hot = readRecentHotFromStorage()
+    if (!hot.length) return
+
+    setRecent((prev) => {
+      if (!prev.length) {
+        return hot
+      }
+
+      const byPath = new Map<string, RecentFile>()
+      for (const item of prev) {
+        byPath.set(item.path, item)
+      }
+      for (const item of hot) {
+        const existing = byPath.get(item.path)
+        if (!existing || item.lastOpenedAt > existing.lastOpenedAt) {
+          byPath.set(item.path, item)
+        }
+      }
+      const merged = Array.from(byPath.values()).sort(
+        (a, b) => b.lastOpenedAt - a.lastOpenedAt,
+      )
+      const hotSlice = merged.slice(0, RECENT_PAGE_SIZE)
+
+      if (typeof window !== 'undefined') {
+        try {
+          window.localStorage.setItem(STORAGE_RECENT_HOT, JSON.stringify(hotSlice))
+        } catch {
+          // ignore
+        }
+      }
+
+      return hotSlice
+    })
+    setRecentLoadedFromDisk(true)
+  }, [readRecentHotFromStorage])
+
   useEffect(() => {
     const hot = readRecentHotFromStorage()
     if (hot.length > 0) {
       setRecent(hot)
+      setRecentLoadedFromDisk(true)
     }
   }, [readRecentHotFromStorage])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const handler = (e: StorageEvent) => {
+      if (e.key && e.key !== STORAGE_RECENT_HOT) return
+      reloadRecentLocal()
+    }
+    window.addEventListener('storage', handler)
+    return () => window.removeEventListener('storage', handler)
+  }, [reloadRecentLocal])
 
   return {
     recent,
@@ -164,6 +212,7 @@ function useRecentFilesState(setStatusMessage: (msg: string) => void) {
     clearRecentAll,
     deleteRecent,
     upsertRecentLocal,
+    reloadRecentLocal,
   }
 }
 
@@ -189,6 +238,7 @@ export function useFilePersistence(markdown: string) {
     clearRecentAll,
     deleteRecent,
     upsertRecentLocal,
+    reloadRecentLocal,
   } = useRecentFilesState(setStatusMessage)
 
   const saverRef = useRef<AutoSaveHandle | null>(null)
@@ -242,13 +292,19 @@ export function useFilePersistence(markdown: string) {
           setCurrentMtime(resp.data.mtimeMs)
           setLastSavedAt(Date.now())
           void updateTitle(pathToUse, false)
+
+          // 记录最近文件：保存成功后也写入后端 recent.json 和本地热缓存
+          if (isTauri()) {
+            void logRecentFile(pathToUse, false)
+          }
+          upsertRecentLocal(pathToUse, false)
         }
         return resp
       } finally {
         saveInFlightRef.current = false
       }
     },
-    [markdown, currentHash, currentMtime, updateTitle],
+    [markdown, currentHash, currentMtime, updateTitle, upsertRecentLocal],
   )
 
   const dialogInFlightRef = useRef(false)
@@ -419,7 +475,14 @@ export function useFilePersistence(markdown: string) {
         void updateTitle(nextPath, false)
 
         // 记录最近文件：后端维护完整持久化，本地维护最近 10 条热缓存
-        void logRecentFile(nextPath, false)
+        if (isTauri()) {
+          void logRecentFile(nextPath, false).then((res) => {
+            if (!res.ok) {
+              console.warn('[logRecentFile] openFromPath failed', res.error)
+              setStatusMessage(res.error.message)
+            }
+          })
+        }
         upsertRecentLocal(nextPath, false)
 
         return resp
@@ -427,7 +490,7 @@ export function useFilePersistence(markdown: string) {
         openInFlightRef.current = false
       }
     },
-    [updateTitle, upsertRecentLocal],
+    [setStatusMessage, updateTitle, upsertRecentLocal],
   )
 
   const openFile = useCallback(
@@ -514,6 +577,7 @@ export function useFilePersistence(markdown: string) {
     clearRecentAll,
     deleteRecent,
     setRecent,
+    reloadRecentLocal,
     handleSave,
     save,
     saveToPath,

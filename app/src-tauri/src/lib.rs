@@ -173,7 +173,7 @@ async fn update_recent(app: &AppHandle, path: &str, is_folder: bool) -> std::io:
 }
 
 #[tauri::command]
-async fn read_file(path: String, trace_id: Option<String>) -> ResultPayload<FilePayload> {
+async fn read_file(app: AppHandle, path: String, trace_id: Option<String>) -> ResultPayload<FilePayload> {
   let trace = trace_id.unwrap_or_else(new_trace_id);
   let normalized = match normalize_path(&path) {
     Ok(p) => p,
@@ -216,6 +216,18 @@ async fn read_file(path: String, trace_id: Option<String>) -> ResultPayload<File
     trace,
     meta.len()
   );
+
+  // 兜底：只要后端成功读取文件，就将其写入最近文件列表，并刷新菜单
+  if let Err(err) = update_recent(&app, &payload.path, false).await {
+    info!(
+      "action=log_recent_from_read outcome=err path={} trace_id={} error={}",
+      payload.path,
+      trace,
+      err
+    );
+  } else {
+    refresh_app_menu(&app).await;
+  }
 
   ok(payload, trace)
 }
