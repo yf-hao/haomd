@@ -7,6 +7,7 @@ mod fs_types;
 use fs_types::{ErrorCode, FilePayload, RecentFile, ResultPayload, ServiceError, WriteResult};
 use log::info;
 use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
 use serde_json;
 use sha2::{Digest, Sha256};
 use arboard::Clipboard;
@@ -130,6 +131,48 @@ fn recent_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
   // 兜底：退回到当前工作目录
   let dir = std::env::current_dir()?;
   Ok(dir.join("recent.json"))
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct SidebarState {
+  root: Option<String>,
+  expanded_paths: Vec<String>,
+  #[serde(default)]
+  standalone_files: Vec<String>,
+  #[serde(default)]
+  folder_roots: Vec<String>,
+}
+
+fn sidebar_state_path(app: &AppHandle) -> std::io::Result<PathBuf> {
+  // 与 recent.json 相同策略：优先使用配置目录
+  if let Ok(mut dir) = app.path().config_dir() {
+    dir.push("haomd");
+    std::fs::create_dir_all(&dir)?;
+    return Ok(dir.join("sidebar_state.json"));
+  }
+
+  // 兜底：退回到当前工作目录
+  let dir = std::env::current_dir()?;
+  Ok(dir.join("sidebar_state.json"))
+}
+
+async fn read_sidebar_state(app: &AppHandle) -> std::io::Result<SidebarState> {
+  let path = sidebar_state_path(app)?;
+  match fs::read(&path).await {
+    Ok(bytes) => {
+      let state: SidebarState = serde_json::from_slice(&bytes)
+        .unwrap_or(SidebarState { root: None, expanded_paths: Vec::new(), standalone_files: Vec::new(), folder_roots: Vec::new() });
+      Ok(state)
+    }
+    Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(SidebarState { root: None, expanded_paths: Vec::new(), standalone_files: Vec::new(), folder_roots: Vec::new() }),
+    Err(err) => Err(err),
+  }
+}
+
+async fn write_sidebar_state(app: &AppHandle, state: &SidebarState) -> std::io::Result<()> {
+  let path = sidebar_state_path(app)?;
+  let bytes = serde_json::to_vec_pretty(state)?;
+  fs::write(path, bytes).await
 }
 
 async fn read_recent_store(app: &AppHandle) -> std::io::Result<Vec<RecentFile>> {
@@ -415,6 +458,161 @@ async fn delete_recent_entry(
 }
 
 #[tauri::command]
+async fn load_sidebar_state(
+  app: AppHandle,
+  trace_id: Option<String>,
+) -> ResultPayload<SidebarState> {
+  let trace = trace_id.unwrap_or_else(new_trace_id);
+  match read_sidebar_state(&app).await {
+    Ok(state) => ok(state, trace),
+    Err(err) => err_payload(
+      ErrorCode::IoError,
+      format!("读取侧边栏状态失败: {err}"),
+      trace,
+    ),
+  }
+}
+
+#[tauri::command]
+async fn save_sidebar_state(
+  app: AppHandle,
+  state: SidebarState,
+  trace_id: Option<String>,
+) -> ResultPayload<()> {
+  let trace = trace_id.unwrap_or_else(new_trace_id);
+  match write_sidebar_state(&app, &state).await {
+    Ok(()) => ok((), trace),
+    Err(err) => err_payload(
+      ErrorCode::IoError,
+      format!("写入侧边栏状态失败: {err}"),
+      trace,
+    ),
+  }
+}
+
+#[tauri::command]
+async fn delete_fs_entry(
+  _app: AppHandle,
+  path: String,
+  trace_id: Option<String>,
+) -> ResultPayload<()> {
+  let trace = trace_id.unwrap_or_else(new_trace_id);
+  let normalized = match normalize_path(&path) {
+    Ok(p) => p,
+    Err(e) => return ResultPayload::Err { error: e },
+  };
+
+  // 根据实际类型选择删除文件或目录
+  match fs::metadata(&normalized).await {
+    Ok(meta) => {
+      let res = if meta.is_file() {
+        fs::remove_file(&normalized).await
+      } else if meta.is_dir() {
+        fs::remove_dir_all(&normalized).await
+      } else {
+        return err_payload(ErrorCode::UNSUPPORTED, "不支持删除该类型的条目", trace);
+      };
+
+      match res {
+        Ok(()) => ok((), trace),
+        Err(err) => err_payload(ErrorCode::IoError, format!("删除失败: {err}"), trace),
+      }
+    }
+    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+      err_payload(ErrorCode::NotFound, "目标不存在", trace)
+    }
+    Err(err) => err_payload(ErrorCode::IoError, format!("获取元数据失败: {err}"), trace),
+  }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "lowercase")]
+enum FsEntryKind {
+  File,
+  Dir,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct FsEntry {
+  path: String,
+  name: String,
+  kind: FsEntryKind,
+}
+
+fn collect_entries(dir: &Path, acc: &mut Vec<FsEntry>) -> std::io::Result<()> {
+  let rd = std::fs::read_dir(dir)?;
+  for entry_res in rd {
+    let entry = entry_res?;
+    let path = entry.path();
+    let name = entry
+      .file_name()
+      .to_string_lossy()
+      .into_owned();
+    let meta = entry.metadata()?;
+
+    if meta.is_dir() {
+      acc.push(FsEntry {
+        path: path.to_string_lossy().into_owned(),
+        name: name.clone(),
+        kind: FsEntryKind::Dir,
+      });
+      collect_entries(&path, acc)?;
+    } else if meta.is_file() {
+      if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+        let ext_lower = ext.to_ascii_lowercase();
+        if matches!(ext_lower.as_str(), "md" | "markdown" | "mdx" | "txt") {
+          acc.push(FsEntry {
+            path: path.to_string_lossy().into_owned(),
+            name,
+            kind: FsEntryKind::File,
+          });
+        }
+      }
+    }
+  }
+  Ok(())
+}
+
+#[tauri::command]
+async fn list_folder(
+  _app: AppHandle,
+  path: String,
+  trace_id: Option<String>,
+) -> ResultPayload<Vec<FsEntry>> {
+  let trace = trace_id.unwrap_or_else(new_trace_id);
+  let normalized = match normalize_path(&path) {
+    Ok(p) => p,
+    Err(e) => return ResultPayload::Err { error: e },
+  };
+
+  let meta = match fs::metadata(&normalized).await {
+    Ok(m) => m,
+    Err(err) => {
+      return err_payload(
+        ErrorCode::IoError,
+        format!("读取目录元数据失败: {err}"),
+        trace,
+      )
+    }
+  };
+
+  if !meta.is_dir() {
+    return err_payload(ErrorCode::InvalidPath, "目标不是目录", trace);
+  }
+
+  let mut entries = Vec::new();
+  if let Err(err) = collect_entries(&normalized, &mut entries) {
+    return err_payload(
+      ErrorCode::IoError,
+      format!("遍历目录失败: {err}"),
+      trace,
+    );
+  }
+
+  ok(entries, trace)
+}
+
+#[tauri::command]
 async fn set_title(app: AppHandle, title: String) -> Result<(), String> {
   let window = app
     .get_webview_window("main")
@@ -523,7 +721,7 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 
   // File 菜单
   let file_menu = SubmenuBuilder::new(app, "File")
-    .item(&MenuItemBuilder::new("New (⌘N)").id("new_file").accelerator("CmdOrCtrl+n").build(app)?)
+    .item(&MenuItemBuilder::new("New").id("new_file").accelerator("CmdOrCtrl+n").build(app)?)
     .separator()
     .item(&MenuItemBuilder::new("Open").id("open_file").accelerator("CmdOrCtrl+o").build(app)?)
     .item(&MenuItemBuilder::new("Open Folder").id("open_folder").accelerator("CmdOrCtrl+Shift+o").build(app)?)
@@ -724,7 +922,11 @@ pub fn run() {
       log_recent_file,
       clear_recent,
       delete_recent_entry,
-      set_title
+      load_sidebar_state,
+      save_sidebar_state,
+      list_folder,
+      set_title,
+      delete_fs_entry
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

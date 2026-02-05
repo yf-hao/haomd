@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { filesConfig } from '../../config/files'
-import type { ErrorCode, FilePayload, RecentFile, Result, ServiceError, WriteResult } from './types'
+import type { ErrorCode, FileEntry, FilePayload, RecentFile, Result, ServiceError, WriteResult } from './types'
 
 const isTauri = () =>
   typeof window !== 'undefined' &&
@@ -49,6 +49,14 @@ type BackendRecent = {
   display_name: string
   last_opened_at: number
   is_folder: boolean
+}
+
+type BackendFsEntryKind = 'file' | 'dir'
+
+type BackendFsEntry = {
+  path: string
+  name: string
+  kind: BackendFsEntryKind
 }
 
 const mapCode = (code: BackendCode): ErrorCode => {
@@ -130,6 +138,13 @@ const mapRecent = (data: BackendRecent): RecentFile => ({
   displayName: data.display_name,
   lastOpenedAt: data.last_opened_at,
   isFolder: data.is_folder,
+})
+
+const mapFsEntry = (data: BackendFsEntry): FileEntry => ({
+  path: data.path,
+  name: data.name,
+  // 后端 kind 已是 "file"/"dir"，这里保持一致
+  kind: data.kind === 'dir' ? 'dir' : 'file',
 })
 
 export async function readFile(path: string, traceId = makeTraceId()): Promise<Result<FilePayload>> {
@@ -222,6 +237,29 @@ export async function deleteRecentRemote(path: string, traceId = makeTraceId()):
   if (!isTauri()) return notAvailable(traceId)
   try {
     const resp = await invoke<BackendResult<unknown>>('delete_recent_entry', { path, trace_id: traceId })
+    if ('Ok' in resp) {
+      return { ok: true, data: null, traceId: resp.Ok.trace_id }
+    }
+    return { ok: false, error: toError(resp.Err.error, traceId) }
+  } catch (error) {
+    return normalizeInvokeError(error, traceId)
+  }
+}
+
+export async function listFolder(path: string, traceId = makeTraceId()): Promise<Result<FileEntry[]>> {
+  if (!isTauri()) return notAvailable(traceId)
+  try {
+    const resp = await invoke<BackendResult<BackendFsEntry[]>>('list_folder', { path, trace_id: traceId })
+    return toResult(resp, (list) => list.map(mapFsEntry))
+  } catch (error) {
+    return normalizeInvokeError(error, traceId)
+  }
+}
+
+export async function deleteFsEntry(path: string, traceId = makeTraceId()): Promise<Result<null>> {
+  if (!isTauri()) return notAvailable(traceId)
+  try {
+    const resp = await invoke<BackendResult<unknown>>('delete_fs_entry', { path, trace_id: traceId })
     if ('Ok' in resp) {
       return { ok: true, data: null, traceId: resp.Ok.trace_id }
     }

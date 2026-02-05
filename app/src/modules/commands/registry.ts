@@ -10,6 +10,10 @@ export type CommandContext = {
   setShowPreview: (value: boolean | ((prev: boolean) => boolean)) => void
   setStatusMessage: (msg: string) => void
   confirmLoseChanges: () => boolean
+  /**
+   * 是否存在需要用户确认的未保存变更
+   */
+  hasUnsavedChanges: () => boolean
   newDocument: () => void
   setFilePath: (path: string) => void
   applyOpenedContent: (content: string) => void
@@ -20,6 +24,8 @@ export type CommandContext = {
   clearRecentAll: () => Promise<any>
   createTab: () => void
   updateActiveMeta: (path: string, dirty: boolean) => void
+  openFolderInSidebar?: () => Promise<void>
+  toggleSidebarVisible?: () => void
 }
 
 export const createCommandRegistry = (ctx: CommandContext): CommandRegistry => ({
@@ -68,9 +74,14 @@ export const createCommandRegistry = (ctx: CommandContext): CommandRegistry => (
       ctx.updateActiveMeta(resp.data.path, false)
     }
   },
-  open_folder: () => {
-    if (!ctx.confirmLoseChanges()) return
-    ctx.setStatusMessage('占位：Open Folder 未实现')
+  open_folder: async () => {
+    // 只有在确实存在未保存变更时才弹确认，避免「空文档」也被拦截
+    if (ctx.hasUnsavedChanges() && !ctx.confirmLoseChanges()) return
+    if (!ctx.openFolderInSidebar) {
+      ctx.setStatusMessage('当前版本暂不支持 Sidebar 打开文件夹')
+      return
+    }
+    await ctx.openFolderInSidebar()
   },
   open_recent: async () => {
     if (!ctx.handleShowRecent) {

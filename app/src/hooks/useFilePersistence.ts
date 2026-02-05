@@ -92,6 +92,7 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
   const saverRef = useRef<AutoSaveHandle | null>(null)
 
   const saveInFlightRef = useRef(false)
+  const firstRenderRef = useRef(true)
 
   useEffect(() => {
     pathRef.current = filePath
@@ -257,6 +258,11 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
   }, [dirty, handleSave, filePath])
 
   useEffect(() => {
+    // 首次渲染仅用于建立依赖，不应直接把文档标记为脏
+    if (firstRenderRef.current) {
+      firstRenderRef.current = false
+      return
+    }
     if (suppressDirtyOnceRef.current) {
       suppressDirtyOnceRef.current = false
       setDirty(false)
@@ -363,6 +369,15 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
     [openFromPath],
   )
 
+  // 仅当文档「实际有内容」且存在未保存修改时，才认为需要用户确认
+  const hasUnsavedChanges = useCallback(() => {
+    // 完全未命名、内容为空的初始文档，不拦截 Open Folder 等操作
+    if (pathRef.current === DEFAULT_PATH && (!markdown || markdown.length === 0)) {
+      return false
+    }
+    return dirty
+  }, [dirty, markdown])
+
   const confirmLoseChanges = useCallback(() => {
     if (!dirty) return true
     return window.confirm('存在未保存变更，确认继续？')
@@ -413,6 +428,7 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
     openFile,
     openFromPath,
     markDirty,
+    hasUnsavedChanges,
     confirmLoseChanges,
     newDocument,
   }

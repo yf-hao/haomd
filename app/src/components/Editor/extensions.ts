@@ -8,6 +8,7 @@ import {
   drawSelection,
   lineNumbers,
   ViewPlugin,
+  ViewUpdate,
 } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { indentOnInput } from '@codemirror/language'
@@ -41,7 +42,7 @@ const baseTheme = EditorView.theme(
       color: '#8fa1c7',
       borderRight: '1px solid rgba(255, 255, 255, 0.04)',
       fontSize: '12px',
-      padding: '0px 5px 0px 5px',
+      // padding: '0px 5px 0px 5px',
       margin: 0,
     },
     '.cm-activeLineGutter': {
@@ -53,6 +54,8 @@ const baseTheme = EditorView.theme(
     '.cm-scroller': {
       lineHeight: '1.6',
       padding: 0,
+      // 在文档末尾预留一段“虚拟空白”，避免最后一行贴着底部
+      paddingBottom: '25vh',
     },
     '&.cm-editor.cm-focused': {
       outline: 'none',
@@ -81,6 +84,8 @@ function cursorSyncPlugin(onCursorChange?: (line: number) => void): Extension[] 
         private reportLine(view: EditorView) {
           const pos = view.state.selection.main.head
           const line = view.state.doc.lineAt(pos).number
+          // 调试：输出 CodeMirror 内部计算的行号
+          console.log('[Editor] cursor line =', line)
           if (line !== this.lastLine) {
             this.lastLine = line
             onCursorChange(line)
@@ -89,6 +94,20 @@ function cursorSyncPlugin(onCursorChange?: (line: number) => void): Extension[] 
       },
     ),
   ]
+}
+
+// 在输入内容时，使用 CodeMirror 自带的 scrollIntoView 效果，避免光标贴在底部
+function smartScrollOnInputPlugin(): Extension {
+  return EditorView.updateListener.of((update) => {
+    if (!update.docChanged) return
+
+    const head = update.state.selection.main.head
+
+    // 使用官方的滚动效果，把光标位置滚动到视窗的中部附近
+    update.view.dispatch({
+      effects: EditorView.scrollIntoView(head, { y: 'center' }),
+    })
+  })
 }
 
 export function createExtensions(options: EditorOptions = {}): Extension[] {
@@ -111,6 +130,7 @@ export function createExtensions(options: EditorOptions = {}): Extension[] {
     history(),
     keymap.of([...defaultKeymap, ...historyKeymap]),
     EditorView.lineWrapping,
+    smartScrollOnInputPlugin(),
     language,
     EditorView.editable.of(!readOnly),
   ]

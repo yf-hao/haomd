@@ -19,9 +19,10 @@ body,
 #root {
   margin: 0;
   min-width: 320px;
-  min-height: 100vh;
+  height: 100vh;
   background: #05060a;
   color: #e8ecf5;
+  overflow: hidden;
 }
 
 a {

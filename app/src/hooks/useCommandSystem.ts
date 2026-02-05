@@ -17,6 +17,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     setShowPreview,
     setStatusMessage,
     confirmLoseChanges,
+    hasUnsavedChanges,
     newDocument,
     setFilePath,
     applyOpenedContent,
@@ -27,6 +28,8 @@ export function useCommandSystem(params: CommandSystemParams) {
     clearRecentAll,
     createTab,
     updateActiveMeta,
+    openFolderInSidebar,
+    toggleSidebarVisible,
     isTauriEnv,
   } = params
 
@@ -38,6 +41,7 @@ export function useCommandSystem(params: CommandSystemParams) {
         setShowPreview,
         setStatusMessage,
         confirmLoseChanges,
+        hasUnsavedChanges,
         newDocument,
         setFilePath,
         applyOpenedContent,
@@ -48,6 +52,8 @@ export function useCommandSystem(params: CommandSystemParams) {
         clearRecentAll,
         createTab,
         updateActiveMeta,
+        openFolderInSidebar,
+        toggleSidebarVisible,
       }),
     [
       layout,
@@ -55,6 +61,7 @@ export function useCommandSystem(params: CommandSystemParams) {
       setShowPreview,
       setStatusMessage,
       confirmLoseChanges,
+      hasUnsavedChanges,
       newDocument,
       setFilePath,
       applyOpenedContent,
@@ -65,6 +72,8 @@ export function useCommandSystem(params: CommandSystemParams) {
       clearRecentAll,
       createTab,
       updateActiveMeta,
+      openFolderInSidebar,
+      toggleSidebarVisible,
     ],
   )
 

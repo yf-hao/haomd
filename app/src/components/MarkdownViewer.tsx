@@ -98,8 +98,6 @@ function MarkdownViewerComponent(props: Readonly<{ value: string; activeLine?: n
   }, [])
 
 
-  const lastAnchoredLine = useRef<number | null>(null)
-
   useEffect(() => {
     if (!containerRef.current || typeof activeLine !== 'number') return
     const rafId = requestAnimationFrame(() => {
@@ -118,23 +116,24 @@ function MarkdownViewerComponent(props: Readonly<{ value: string; activeLine?: n
       if (!target) return
       target.classList.add('active-block')
 
-      const startLine = Number(target.dataset.lineStart)
-      if (lastAnchoredLine.current === startLine) return
-      lastAnchoredLine.current = startLine
-
       const scrollParent = containerRef.current?.closest('.preview-body') as HTMLElement | null
       if (!scrollParent) return
 
       const parentRect = scrollParent.getBoundingClientRect()
       const targetRect = target.getBoundingClientRect()
-      const offsetTop = targetRect.top - parentRect.top
-      const delta = offsetTop - parentRect.height / 2 + targetRect.height / 2
+
+      // 当前块到底部的距离
+      const currentBottomOffset = parentRect.height - (targetRect.bottom - parentRect.top)
+      // 期望：块的底部距离视口底部约为视口高度的 1/4
+      const desiredBottomOffset = parentRect.height / 4
+      const delta = desiredBottomOffset - currentBottomOffset
+
       scrollParent.scrollTo({ top: scrollParent.scrollTop + delta })
     })
     return () => {
       if (rafId) cancelAnimationFrame(rafId)
     }
-  }, [activeLine])
+  }, [activeLine, value])
 
   return (
     <div className="markdown-body gh-markdown" ref={containerRef} data-preview-width={previewWidth}>

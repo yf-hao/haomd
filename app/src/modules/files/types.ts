@@ -32,6 +32,14 @@ export interface RecentFile {
   isFolder?: boolean
 }
 
+export type FileKind = 'file' | 'dir'
+
+export interface FileEntry {
+  path: string
+  name: string
+  kind: FileKind
+}
+
 export interface ServiceError {
   code: ErrorCode
   message: string
