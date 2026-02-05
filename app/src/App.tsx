@@ -1,81 +1,37 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { EditorView } from '@codemirror/view'
+import { invoke } from '@tauri-apps/api/core'
 import 'katex/dist/katex.min.css'
 import 'highlight.js/styles/atom-one-dark.css'
 import './App.css'
 import { EditorPane } from './components/EditorPane'
 import { PreviewPane } from './components/PreviewPane'
-import { RecentPanel } from './components/RecentPanel'
 import { ConflictModal } from './components/ConflictModal'
+import { TabBar } from './components/TabBar'
 import { useWorkspaceLayout } from './hooks/useWorkspaceLayout'
 import { useFilePersistence } from './hooks/useFilePersistence'
+import { useTabs } from './hooks/useTabs'
 import { useCommandSystem } from './hooks/useCommandSystem'
 import { onOpenRecentFile } from './modules/platform/menuEvents'
 import { useNativePaste } from './hooks/useNativePaste'
+import type { EditorTab } from './types/tabs'
 
 const isTauri = () =>
   typeof window !== 'undefined' &&
   (Boolean((window as any).__TAURI_INTERNALS__) || Boolean((window as any).__TAURI__))
 
-const seed = [
-  '# HaoMD',
-  '',
-  '- 实时预览',
-  '- 支持 KaTeX / Mermaid / mind',
-  '- 多标签与离线文件',
-  '',
-  '> 这里是占位文案，后续会接入渲染管线。',
-  '',
-  '## 数学 (KaTeX)',
-  '$$ E = mc^2 $$',
-  '',
-  '## Mermaid',
-  '```mermaid',
-  'graph LR',
-  '    user[用户] --> editor[编辑器]',
-  '    editor --> preview[实时预览]',
-  '```',
-  '',
-  '## Mind-elixir ',
-  '```mind',
-  '{',
-  '  "title": "根节点",',
-  '  "children": [',
-  '    {',
-  '      "title": "分支 A",',
-  '      "children": [',
-  '        { "title": "子 A1" },',
-  '        { "title": "子 A2" }',
-  '      ]',
-  '    },',
-  '    { "title": "分支 B" }',
-  '  ]',
-  '}',
-  '```',
-    '## Mind-elixir ',
-  '```mind',
-  'root',
-  '-A',
-  '--A1',
-  '--A2',
-  '-B',
-  '--B1',
-  '---B11',
-  '---B12',
-  '-C',
-  '--C1',
-  '---C11',
-  '---C12',
-  '--B1',
-  '---B11',
-  '---B12',
-  '-C',
-  '--C1',
-  '---C11',
-  '---C12',
-  '```',
-].join('\n')
+const seed = ''
+const DEFAULT_TITLE = '未命名.md'
 
+function formatWindowTitleFromTab(tab: EditorTab | null): string {
+  if (!tab) return DEFAULT_TITLE
+  const path = tab.path
+  const name = path
+    ? path.split(/[/\\]/).pop() || path
+    : tab.title || DEFAULT_TITLE
+  const prefix = tab.dirty ? '*' : ''
+  return `${prefix}${name}`
+}
 
 function App() {
   const [markdown, setMarkdown] = useState(seed)
@@ -93,24 +49,44 @@ function App() {
     previewWidthForRender,
     startDragging,
   } = useWorkspaceLayout()
+
+  const { tabs, activeId, activeTab, createTab, setActiveTab, closeTab, updateActiveContent, updateActiveMeta } = useTabs()
   const previewTimerRef = useRef<number | null>(null)
   const editorViewRef = useRef<EditorView | null>(null)
 
-  const [recentOpen, setRecentOpen] = useState(false)
+  // 切换标签时，同步编辑内容和预览内容到当前标签
+  useEffect(() => {
+    if (!activeId) return
+    const tab = tabs.find((t) => t.id === activeId) || null
+    if (!tab) return
+    setMarkdown(tab.content)
+    setPreviewValue(tab.content)
+    setActiveLine(1)
+  }, [activeId, tabs])
+
+  // 根据当前标签更新窗口标题
+  useEffect(() => {
+    const title = formatWindowTitleFromTab(activeTab ?? null)
+    if (!isTauri()) return
+    void invoke('set_title', { title }).catch((err) => {
+      console.warn('set_title failed', err)
+    })
+  }, [activeTab])
+
+  const persistenceOptions = {
+    onSaved: (path: string) => {
+      updateActiveMeta(path, false)
+    },
+  }
 
   const {
     DEFAULT_PATH,
     filePath,
+    setFilePath,
     setStatusMessage,
     conflictError,
     setConflictError,
-    recent,
-    recentHasMore,
-    recentLoading,
-    loadMoreRecent,
     clearRecentAll,
-    deleteRecent,
-    reloadRecentLocal,
     save,
     saveToPath,
     saveAs,
@@ -119,16 +95,22 @@ function App() {
     markDirty,
     confirmLoseChanges,
     newDocument,
-  } = useFilePersistence(markdown)
+  } = useFilePersistence(markdown, persistenceOptions)
+
+  // 每个标签拥有自己的保存路径：切换标签时让持久化层跟随当前标签的路径
+  useEffect(() => {
+    if (!activeTab) return
+    setFilePath(activeTab.path)
+  }, [activeTab, setFilePath])
 
   const handleMarkdownChange = useCallback(
     (val: string) => {
       setMarkdown(val)
       markDirty()
+      updateActiveContent(val)
     },
-    [markDirty],
+    [markDirty, updateActiveContent],
   )
-
 
   useEffect(() => {
     if (markdown === previewValue) return
@@ -157,47 +139,49 @@ function App() {
     }
   }
 
+  const applyOpenedContent = useCallback(
+    (content: string) => {
+      setMarkdown(content)
+      setPreviewValue(content)
+      setActiveLine(1)
+      // 打开文件或新文档时同步更新当前标签内容，但保持 dirty 由持久化逻辑控制
+      updateActiveContent(content)
+    },
+    [updateActiveContent],
+  )
 
-  const handleShowRecent = async () => {
-    // 负责打开/关闭最近文件面板；首次或再次打开时，尝试从 localStorage 合并最新记录。
-    setRecentOpen((open) => {
-      const next = !open
-      if (!open && next) {
-        // 面板从关闭 -> 打开时，按需从 localStorage 合并最近记录
-        reloadRecentLocal()
-      }
-      return next
-    })
-  }
-
-  const applyOpenedContent = useCallback((content: string) => {
-    setMarkdown(content)
-    setPreviewValue(content)
-    setActiveLine(1)
-  }, [])
-
-  const handleOpenPath = useCallback(
+  // 在新标签中打开指定路径的文件：先通过持久化层读取，再创建带 path+content 的标签
+  const openPathInNewTab = useCallback(
     async (path: string) => {
       const resp = await openFromPath(path)
-      if (resp.ok) {
-        applyOpenedContent(resp.data.content)
-      }
+      if (!resp.ok) return resp
+
+      const { path: realPath, content } = resp.data
+
+      // 为该文件创建一个独立标签，标题由路径自动推导
+      createTab({ path: realPath, content })
+
+      // 同步编辑区/预览区内容到新标签
+      setMarkdown(content)
+      setPreviewValue(content)
+      setActiveLine(1)
+
       return resp
     },
-    [applyOpenedContent, openFromPath],
+    [createTab, openFromPath],
   )
 
   // 监听 Tauri 原生菜单中 File → Open Recent 子菜单点击事件
+  // 行为与 File → Open 一致：总是新建一个标签页，再将文件内容及路径加载进去
   useEffect(() => {
     const unlisten = onOpenRecentFile(async (path) => {
-      if (!confirmLoseChanges()) return
-      await handleOpenPath(path)
+      await openPathInNewTab(path)
     })
 
     return () => {
       unlisten()
     }
-  }, [confirmLoseChanges, handleOpenPath])
+  }, [openPathInNewTab])
 
   useCommandSystem({
     layout,
@@ -206,26 +190,29 @@ function App() {
     setStatusMessage,
     confirmLoseChanges,
     newDocument,
+    setFilePath,
     applyOpenedContent,
     openFile,
     save,
     saveAs,
-    handleShowRecent,
+    handleShowRecent: undefined,
     clearRecentAll,
+    createTab,
+    updateActiveMeta,
     isTauriEnv: isTauri,
   })
 
   // 监听来自原生剪贴板的粘贴事件（通过 Hook 封装）
   useNativePaste(editorViewRef, setStatusMessage)
 
-  const formatTs = (ts?: number | null) => {
-    if (!ts) return '未保存'
-    const d = new Date(ts)
-    return `${d.toLocaleDateString()} ${d.toLocaleTimeString()}`
-  }
-
   return (
     <div className="app-shell">
+      <TabBar
+        tabs={tabs}
+        activeId={activeId}
+        onTabClick={setActiveTab}
+        onTabClose={closeTab}
+      />
       <main
         className={`workspace ${dragging ? 'dragging' : ''}`}
         style={{ gridTemplateColumns }}
@@ -238,12 +225,6 @@ function App() {
               activeLine={activeLine}
               previewWidth={previewWidthForRender}
             />
-            <div
-              className={`divider ${dragging ? 'active' : ''}`}
-              onMouseDown={startDragging}
-            >
-              <span className="divider-handle" />
-            </div>
             <section className="pane">
               <EditorPane
                 markdown={markdown}
@@ -269,18 +250,29 @@ function App() {
                 editorViewRef={editorViewRef}
               />
             </section>
-            <div
-              className={`divider ${dragging ? 'active' : ''}`}
-              onMouseDown={startDragging}
-            >
-              <span className="divider-handle" />
-            </div>
             <PreviewPane
               value={previewValue}
               activeLine={activeLine}
               previewWidth={previewWidthForRender}
             />
           </>
+        )}
+
+        {(effectiveLayout === 'preview-left' || effectiveLayout === 'preview-right') && (
+          <div
+            className={`divider-hotzone ${dragging ? 'active' : ''}`}
+            style={{
+              left:
+                effectiveLayout === 'preview-left'
+                  ? `${previewWidthForRender}%`
+                  : `${100 - previewWidthForRender}%`,
+            }}
+            onMouseDown={startDragging}
+          >
+            <div className="divider-rail">
+              <span className="divider-handle" />
+            </div>
+          </div>
         )}
 
         {effectiveLayout === 'preview-only' && (
@@ -305,22 +297,6 @@ function App() {
           </section>
         )}
       </main>
-
-      <RecentPanel
-        open={recentOpen}
-        items={recent}
-        hasMore={recentHasMore}
-        loading={recentLoading}
-        formatTs={formatTs}
-        confirmLoseChanges={confirmLoseChanges}
-        onClose={handleShowRecent}
-        onLoadMore={loadMoreRecent}
-        onOpenItem={handleOpenPath}
-        onDeleteItem={async (path) => {
-          const resp = await deleteRecent(path)
-          if (!resp.ok) return
-        }}
-      />
 
       {conflictError && (
         <ConflictModal

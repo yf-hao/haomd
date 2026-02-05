@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
-import { invoke } from '@tauri-apps/api/core'
 import { clearRecentRemote, deleteRecentRemote, listRecentPage, logRecentFile, readFile, writeFile } from '../modules/files/service'
 import { createAutoSaver, type AutoSaveHandle } from '../modules/files/autoSave'
 import type { RecentFile, Result, ServiceError, WriteResult } from '../modules/files/types'
@@ -17,83 +16,15 @@ export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'conflict'
 
 function useRecentFilesState(setStatusMessage: (msg: string) => void) {
   const [recent, setRecent] = useState<RecentFile[]>([])
-  const [recentHasMore, setRecentHasMore] = useState(false)
-  const [recentLoading, setRecentLoading] = useState(false)
-  const [recentLoadedFromDisk, setRecentLoadedFromDisk] = useState(false)
+  const recentHasMore = false
+  const recentLoading = false
+  const recentLoadedFromDisk = false
 
-  const readRecentHotFromStorage = useCallback((): RecentFile[] => {
-    if (typeof window === 'undefined') return []
-    try {
-      const raw = window.localStorage.getItem(STORAGE_RECENT_HOT)
-      if (!raw) return []
-      const parsed = JSON.parse(raw) as unknown
-      return Array.isArray(parsed) ? (parsed as RecentFile[]) : []
-    } catch {
-      return []
-    }
-  }, [])
-
-  const fetchRecent = useCallback(
-    async (reset: boolean) => {
-      setRecentLoading(true)
-      try {
-        const offset = reset ? 0 : recent.length
-        const resp = await listRecentPage(offset, RECENT_PAGE_SIZE)
-        if (!resp.ok) {
-          setStatusMessage(resp.error.message)
-          return
-        }
-        const items = resp.data
-
-        setRecent((prev) => {
-          const base = reset ? [] : prev
-          const nextAll = [...base, ...items]
-
-          // 更新 localStorage 中的前 10 条热缓存
-          if (typeof window !== 'undefined') {
-            try {
-              const hot = nextAll.slice(0, RECENT_PAGE_SIZE)
-              window.localStorage.setItem(STORAGE_RECENT_HOT, JSON.stringify(hot))
-            } catch {
-              // ignore
-            }
-          }
-
-          return nextAll
-        })
-
-        setRecentHasMore(items.length === RECENT_PAGE_SIZE)
-        setRecentLoadedFromDisk(true)
-      } finally {
-        setRecentLoading(false)
-      }
-    },
-    [recent.length, setStatusMessage],
-  )
-
-  const refreshRecent = useCallback(async () => {
-    await fetchRecent(true)
-  }, [fetchRecent])
-
-  const loadMoreRecent = useCallback(async () => {
-    await fetchRecent(false)
-  }, [fetchRecent])
-
+  // 前端最近文件列表 / 热缓存整体下线，仅保留「清空/删除最近」调用后端的能力
   const clearRecentAll = useCallback(async () => {
     const resp = await clearRecentRemote()
     if (!resp.ok) {
       setStatusMessage(resp.error.message)
-      return resp
-    }
-    setRecent([])
-    setRecentHasMore(false)
-    setRecentLoadedFromDisk(true)
-    if (typeof window !== 'undefined') {
-      try {
-        window.localStorage.removeItem(STORAGE_RECENT_HOT)
-      } catch {
-        // ignore
-      }
     }
     return resp
   }, [setStatusMessage])
@@ -103,103 +34,16 @@ function useRecentFilesState(setStatusMessage: (msg: string) => void) {
       const resp = await deleteRecentRemote(path)
       if (!resp.ok) {
         setStatusMessage(resp.error.message)
-        return resp
       }
-      setRecent((prev) => {
-        const next = prev.filter((item) => item.path !== path)
-        if (typeof window !== 'undefined') {
-          try {
-            const hot = next.slice(0, RECENT_PAGE_SIZE)
-            window.localStorage.setItem(STORAGE_RECENT_HOT, JSON.stringify(hot))
-          } catch {
-            // ignore
-          }
-        }
-        return next
-      })
       return resp
     },
     [setStatusMessage],
   )
 
-  const upsertRecentLocal = useCallback((path: string, isFolder: boolean) => {
-    const displayName = path.split('/').pop() || path
-    const now = Date.now()
-
-    setRecent((prev) => {
-      const without = prev.filter((item) => item.path !== path)
-      const nextAll: RecentFile[] = [
-        { path, displayName, lastOpenedAt: now, isFolder },
-        ...without,
-      ]
-      const hot = nextAll.slice(0, RECENT_PAGE_SIZE)
-
-      if (typeof window !== 'undefined') {
-        try {
-          window.localStorage.setItem(STORAGE_RECENT_HOT, JSON.stringify(hot))
-        } catch {
-          // ignore
-        }
-      }
-
-      return hot
-    })
-  }, [])
-
-  const reloadRecentLocal = useCallback(() => {
-    const hot = readRecentHotFromStorage()
-    if (!hot.length) return
-
-    setRecent((prev) => {
-      if (!prev.length) {
-        return hot
-      }
-
-      const byPath = new Map<string, RecentFile>()
-      for (const item of prev) {
-        byPath.set(item.path, item)
-      }
-      for (const item of hot) {
-        const existing = byPath.get(item.path)
-        if (!existing || item.lastOpenedAt > existing.lastOpenedAt) {
-          byPath.set(item.path, item)
-        }
-      }
-      const merged = Array.from(byPath.values()).sort(
-        (a, b) => b.lastOpenedAt - a.lastOpenedAt,
-      )
-      const hotSlice = merged.slice(0, RECENT_PAGE_SIZE)
-
-      if (typeof window !== 'undefined') {
-        try {
-          window.localStorage.setItem(STORAGE_RECENT_HOT, JSON.stringify(hotSlice))
-        } catch {
-          // ignore
-        }
-      }
-
-      return hotSlice
-    })
-    setRecentLoadedFromDisk(true)
-  }, [readRecentHotFromStorage])
-
-  useEffect(() => {
-    const hot = readRecentHotFromStorage()
-    if (hot.length > 0) {
-      setRecent(hot)
-      setRecentLoadedFromDisk(true)
-    }
-  }, [readRecentHotFromStorage])
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const handler = (e: StorageEvent) => {
-      if (e.key && e.key !== STORAGE_RECENT_HOT) return
-      reloadRecentLocal()
-    }
-    window.addEventListener('storage', handler)
-    return () => window.removeEventListener('storage', handler)
-  }, [reloadRecentLocal])
+  const upsertRecentLocal = () => {}
+  const reloadRecentLocal = () => {}
+  const refreshRecent = async () => {}
+  const loadMoreRecent = async () => {}
 
   return {
     recent,
@@ -216,7 +60,11 @@ function useRecentFilesState(setStatusMessage: (msg: string) => void) {
   }
 }
 
-export function useFilePersistence(markdown: string) {
+export type FilePersistenceOptions = {
+  onSaved?: (path: string) => void
+}
+
+export function useFilePersistence(markdown: string, options?: FilePersistenceOptions) {
   const [filePath, setFilePath] = useState<string>(DEFAULT_PATH)
   const pathRef = useRef<string>(DEFAULT_PATH)
   const [dirty, setDirty] = useState(false)
@@ -242,24 +90,6 @@ export function useFilePersistence(markdown: string) {
   } = useRecentFilesState(setStatusMessage)
 
   const saverRef = useRef<AutoSaveHandle | null>(null)
-
-  const formatTitle = useCallback((path: string, isDirty: boolean) => {
-    const name = path.split('/').pop() || path || DEFAULT_PATH
-    const prefix = isDirty ? '*' : ''
-    return `${prefix}${name}`
-  }, [])
-
-  const updateTitle = useCallback(
-    async (path: string, isDirty: boolean) => {
-      if (!isTauri()) return
-      try {
-        await invoke('set_title', { title: formatTitle(path, isDirty) })
-      } catch (err) {
-        console.warn('set_title failed', err)
-      }
-    },
-    [formatTitle],
-  )
 
   const saveInFlightRef = useRef(false)
 
@@ -291,20 +121,24 @@ export function useFilePersistence(markdown: string) {
           setCurrentHash(resp.data.hash)
           setCurrentMtime(resp.data.mtimeMs)
           setLastSavedAt(Date.now())
-          void updateTitle(pathToUse, false)
 
           // 记录最近文件：保存成功后也写入后端 recent.json 和本地热缓存
           if (isTauri()) {
             void logRecentFile(pathToUse, false)
           }
           upsertRecentLocal(pathToUse, false)
+
+          // 通知外层：保存成功，可用于更新多标签元信息
+          if (options?.onSaved) {
+            options.onSaved(pathToUse)
+          }
         }
         return resp
       } finally {
         saveInFlightRef.current = false
       }
     },
-    [markdown, currentHash, currentMtime, updateTitle, upsertRecentLocal],
+    [markdown, currentHash, currentMtime, upsertRecentLocal, options],
   )
 
   const dialogInFlightRef = useRef(false)
@@ -432,10 +266,6 @@ export function useFilePersistence(markdown: string) {
     saverRef.current?.schedule()
   }, [markdown])
 
-  useEffect(() => {
-    void updateTitle(filePath, dirty)
-  }, [filePath, dirty, updateTitle])
-
   const markDirty = useCallback(() => {
     setDirty(true)
     saverRef.current?.schedule()
@@ -472,7 +302,6 @@ export function useFilePersistence(markdown: string) {
         suppressDirtyOnceRef.current = true
         setSaveStatus('idle')
         setStatusMessage('已打开')
-        void updateTitle(nextPath, false)
 
         // 记录最近文件：后端维护完整持久化，本地维护最近 10 条热缓存
         if (isTauri()) {
@@ -490,7 +319,7 @@ export function useFilePersistence(markdown: string) {
         openInFlightRef.current = false
       }
     },
-    [setStatusMessage, updateTitle, upsertRecentLocal],
+    [setStatusMessage, upsertRecentLocal],
   )
 
   const openFile = useCallback(
@@ -551,8 +380,7 @@ export function useFilePersistence(markdown: string) {
     setSaveStatus('idle')
     setConflictError(null)
     setStatusMessage('新建文档')
-    void updateTitle(DEFAULT_PATH, false)
-  }, [updateTitle])
+  }, [])
 
   return {
     DEFAULT_PATH,

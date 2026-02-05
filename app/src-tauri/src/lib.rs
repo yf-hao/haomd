@@ -17,6 +17,7 @@ use tokio::sync::Mutex;
 
 const MAX_FILE_BYTES: u64 = 20 * 1024 * 1024; // 20MB
 const MAX_RECENT_ITEMS: usize = 100; // 最近文件最大条数
+const RECENT_PAGE_SIZE: usize = 20; // Open Recent 子菜单每页显示条数
 
 static FILE_LOCKS: Lazy<Mutex<HashMap<String, std::sync::Arc<Mutex<()>>>>> =
   Lazy::new(|| Mutex::new(HashMap::new()));
@@ -24,6 +25,10 @@ static FILE_LOCKS: Lazy<Mutex<HashMap<String, std::sync::Arc<Mutex<()>>>>> =
 // 最近文件原生菜单映射：菜单项 id -> 文件路径
 static RECENT_MENU_MAP: Lazy<std::sync::Mutex<HashMap<String, String>>> =
   Lazy::new(|| std::sync::Mutex::new(HashMap::new()));
+
+// 最近文件分页状态：当前页（从 0 开始）
+static RECENT_PAGE: Lazy<std::sync::Mutex<u32>> =
+  Lazy::new(|| std::sync::Mutex::new(0));
 
 const RECENT_MENU_PREFIX: &str = "recent_item_";
 
@@ -114,9 +119,21 @@ fn mtime_ms(meta: &std::fs::Metadata) -> u64 {
     .unwrap_or(0)
 }
 
-async fn read_recent_store(_app: &AppHandle) -> std::io::Result<Vec<RecentFile>> {
+fn recent_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
+  // 优先使用应用配置目录，避免落在 src-tauri 下被 dev 进程当作源码变更
+  if let Ok(mut dir) = app.path().config_dir() {
+    dir.push("haomd");
+    std::fs::create_dir_all(&dir)?;
+    return Ok(dir.join("recent.json"));
+  }
+
+  // 兜底：退回到当前工作目录
   let dir = std::env::current_dir()?;
-  let path = dir.join("recent.json");
+  Ok(dir.join("recent.json"))
+}
+
+async fn read_recent_store(app: &AppHandle) -> std::io::Result<Vec<RecentFile>> {
+  let path = recent_store_path(app)?;
   match fs::read(&path).await {
     Ok(bytes) => {
       let items: Vec<RecentFile> = serde_json::from_slice(&bytes).unwrap_or_default();
@@ -127,9 +144,8 @@ async fn read_recent_store(_app: &AppHandle) -> std::io::Result<Vec<RecentFile>>
   }
 }
 
-async fn write_recent_store(_app: &AppHandle, items: &[RecentFile]) -> std::io::Result<()> {
-  let dir = std::env::current_dir()?;
-  let path = dir.join("recent.json");
+async fn write_recent_store(app: &AppHandle, items: &[RecentFile]) -> std::io::Result<()> {
+  let path = recent_store_path(app)?;
   let bytes = serde_json::to_vec_pretty(items)?;
   fs::write(path, bytes).await
 }
@@ -234,6 +250,7 @@ async fn read_file(app: AppHandle, path: String, trace_id: Option<String>) -> Re
 
 #[tauri::command]
 async fn write_file(
+  app: AppHandle,
   path: String,
   content: String,
   expected_mtime: Option<u64>,
@@ -302,6 +319,18 @@ async fn write_file(
     trace,
     meta.len()
   );
+
+  // 写入成功后，自动记录到最近文件，并刷新原生菜单
+  if let Err(err) = update_recent(&app, &result.path, false).await {
+    info!(
+      "action=log_recent_from_write outcome=err path={} trace_id={} error={}",
+      result.path,
+      trace,
+      err
+    );
+  } else {
+    refresh_app_menu(&app).await;
+  }
 
   ok(result, trace)
 }
@@ -395,11 +424,58 @@ async fn set_title(app: AppHandle, title: String) -> Result<(), String> {
     .map_err(|e: tauri::Error| e.to_string())
 }
 
+fn abbreviate_path_for_menu(path: &str) -> String {
+  // 将用户主目录替换为 ~，让路径更短更易读
+  if let Ok(home) = std::env::var("HOME") {
+    if path.starts_with(&home) {
+      let rest = &path[home.len()..];
+      return format!("~{}", rest);
+    }
+  }
+  path.to_string()
+}
+
+fn format_recent_menu_label(item: &RecentFile) -> String {
+  // 仅显示完整路径（带 ~ 缩写），避免重复信息
+  abbreviate_path_for_menu(&item.path)
+}
+
 async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
   // 读取最近文件列表，用于构建 Open Recent 子菜单
   let mut recent = read_recent_store(app).await.unwrap_or_default();
   // 按时间降序，防御性处理
   recent.sort_by(|a, b| b.last_opened_at.cmp(&a.last_opened_at));
+
+  let total = recent.len();
+  let page_size = RECENT_PAGE_SIZE as u32;
+  let max_page = if total == 0 {
+    0
+  } else {
+    ((total.saturating_sub(1)) as u32) / page_size
+  };
+
+  let current_page = {
+    let mut guard = RECENT_PAGE.lock().unwrap();
+    if *guard > max_page {
+      *guard = max_page;
+    }
+    *guard
+  };
+
+  let start = (current_page * page_size) as usize;
+  let end = ((current_page + 1) * page_size) as usize;
+
+  let slice = if start >= total {
+    &recent[0..0]
+  } else {
+    &recent[start..std::cmp::min(end, total)]
+  };
+
+  let page_label = if total == 0 {
+    "Page 0 / 0".to_string()
+  } else {
+    format!("Page {} / {}", current_page + 1, max_page + 1)
+  };
 
   // HaoMD 菜单
   let haomd_menu = SubmenuBuilder::new(app, "HaoMD")
@@ -413,20 +489,34 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let mut map = RECENT_MENU_MAP.lock().unwrap();
     map.clear();
 
-    for (idx, item) in recent.iter().take(10).enumerate() {
+    for (idx, item) in slice.iter().enumerate() {
       let id = format!("{RECENT_MENU_PREFIX}{idx}");
       map.insert(id.clone(), item.path.clone());
 
+      let label = format_recent_menu_label(item);
       open_recent_builder = open_recent_builder.item(
-        &MenuItemBuilder::new(&item.display_name)
+        &MenuItemBuilder::new(&label)
           .id(&id)
           .build(app)?,
       );
     }
   }
 
+  // 分页控制：仅在总页数大于 1 时展示
+  open_recent_builder = if max_page > 0 {
+    open_recent_builder
+      .separator()
+      .item(&MenuItemBuilder::new(&page_label).id("recent_page_info").build(app)?)
+      .item(&MenuItemBuilder::new("Previous Page").id("recent_prev_page").build(app)?)
+      .item(&MenuItemBuilder::new("Next Page").id("recent_next_page").build(app)?)
+      .separator()
+  } else {
+    // 只有一页（或无记录）时，不展示分页信息和按钮
+    open_recent_builder
+      .separator()
+  };
+
   open_recent_builder = open_recent_builder
-    .separator()
     .item(&MenuItemBuilder::new("Clear Recent").id("clear_recent").build(app)?);
 
   let open_recent_menu = open_recent_builder.build()?;
@@ -562,6 +652,44 @@ pub fn run() {
           if let Some(path) = path_opt {
             let _ = app.emit("menu://open_recent_file", path);
           }
+          return;
+        }
+
+        // 最近文件分页控制：上一页 / 下一页
+        if action == "recent_prev_page" || action == "recent_next_page" {
+          let app_handle = app.clone();
+          let action_id = action.to_string();
+          tauri::async_runtime::spawn(async move {
+            if let Ok(list) = read_recent_store(&app_handle).await {
+              let total = list.len();
+              let page_size = RECENT_PAGE_SIZE as u32;
+              let max_page = if total == 0 {
+                0
+              } else {
+                ((total.saturating_sub(1)) as u32) / page_size
+              };
+
+              {
+                let mut page = RECENT_PAGE.lock().unwrap();
+                if action_id == "recent_prev_page" {
+                  if *page > 0 {
+                    *page -= 1;
+                  }
+                } else if action_id == "recent_next_page" {
+                  if *page < max_page {
+                    *page += 1;
+                  }
+                }
+              }
+
+              refresh_app_menu(&app_handle).await;
+            }
+          });
+          return;
+        }
+
+        // 分页信息项：点击时忽略
+        if action == "recent_page_info" {
           return;
         }
 

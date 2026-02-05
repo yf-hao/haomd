@@ -60,9 +60,10 @@ export function useWorkspaceLayout() {
     if (effectiveLayout === 'preview-only') return '1fr'
     const previewCol = `minmax(0, ${clampedPreviewWidth}%)`
     const editorCol = `minmax(0, ${clampedEditorWidth}%)`
+    // 仅保留左右两列，由浮动的 divider 热区覆盖在交界处
     return effectiveLayout === 'preview-left'
-      ? `${previewCol} 10px ${editorCol}`
-      : `${editorCol} 10px ${previewCol}`
+      ? `${previewCol} ${editorCol}`
+      : `${editorCol} ${previewCol}`
   }, [clampedEditorWidth, clampedPreviewWidth, effectiveLayout])
 
   useEffect(() => {

@@ -1,3 +1,5 @@
+import usageDocs from '../../docs/使用说明.md?raw'
+
 export type AppCommand = () => void | Promise<void>
 
 export type CommandRegistry = Record<string, AppCommand>
@@ -9,12 +11,15 @@ export type CommandContext = {
   setStatusMessage: (msg: string) => void
   confirmLoseChanges: () => boolean
   newDocument: () => void
+  setFilePath: (path: string) => void
   applyOpenedContent: (content: string) => void
   openFile: () => Promise<any>
   save: () => Promise<any>
   saveAs: () => Promise<any>
-  handleShowRecent: () => Promise<void>
+  handleShowRecent?: () => Promise<void>
   clearRecentAll: () => Promise<any>
+  createTab: () => void
+  updateActiveMeta: (path: string, dirty: boolean) => void
 }
 
 export const createCommandRegistry = (ctx: CommandContext): CommandRegistry => ({
@@ -42,9 +47,9 @@ export const createCommandRegistry = (ctx: CommandContext): CommandRegistry => (
     ctx.setStatusMessage('HaoMD · 关于（占位）')
   },
   new_file: () => {
-    if (!ctx.confirmLoseChanges()) return
+    // 总是新建一个空白标签页，不打断当前未保存的标签
+    ctx.createTab()
     ctx.newDocument()
-    ctx.applyOpenedContent('')
   },
   save: async () => {
     await ctx.save()
@@ -53,9 +58,14 @@ export const createCommandRegistry = (ctx: CommandContext): CommandRegistry => (
     await ctx.saveAs()
   },
   open_file: async () => {
+    // 像「新建 + 打开」一样，为每个打开的文件创建独立标签
+    ctx.createTab()
     const resp = await ctx.openFile()
     if (resp && resp.ok) {
       ctx.applyOpenedContent(resp.data.content)
+      // 更新当前标签的路径和标题，并标记为未脏
+      ctx.setFilePath(resp.data.path)
+      ctx.updateActiveMeta(resp.data.path, false)
     }
   },
   open_folder: () => {
@@ -63,6 +73,10 @@ export const createCommandRegistry = (ctx: CommandContext): CommandRegistry => (
     ctx.setStatusMessage('占位：Open Folder 未实现')
   },
   open_recent: async () => {
+    if (!ctx.handleShowRecent) {
+      ctx.setStatusMessage('最近文件面板已移除，请使用菜单 File → Open Recent')
+      return
+    }
     await ctx.handleShowRecent()
   },
   clear_recent: async () => {
@@ -104,7 +118,12 @@ export const createCommandRegistry = (ctx: CommandContext): CommandRegistry => (
     })
   },
   help_docs: () => {
-    ctx.setStatusMessage('HaoMD · 菜单占位/帮助')
+    if (!ctx.confirmLoseChanges()) return
+    ctx.newDocument()
+    ctx.applyOpenedContent(usageDocs)
+    // 将逻辑文件名设置为“使用说明.md”，用于窗口标题等展示
+    ctx.setFilePath('使用说明.md')
+    ctx.setStatusMessage('已打开使用说明')
   },
   help_release: () => {
     ctx.setStatusMessage('HaoMD · 菜单占位/帮助')

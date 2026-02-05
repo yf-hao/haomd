@@ -20,30 +20,15 @@ export function EditorPane({
   editorViewRef,
 }: EditorPaneProps) {
   return (
-    <>
-      <button
-        className="floating-toggle"
-        aria-label={showPreview ? '隐藏预览' : '显示预览'}
-        onClick={() => setShowPreview((v) => !v)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            setShowPreview((v) => !v)
-          }
-        }}
-      >
-        {showPreview ? '隐藏预览' : '显示预览'}
-      </button>
-      <CodeEditor
-        value={markdown}
-        onChange={onChange}
-        onCursorChange={onCursorChange}
-        placeholder="在此输入 Markdown..."
-        className="code-editor"
-        onViewReady={(view) => {
-          editorViewRef.current = view
-        }}
-      />
-    </>
+    <CodeEditor
+      value={markdown}
+      onChange={onChange}
+      onCursorChange={onCursorChange}
+      placeholder="在此输入 Markdown..."
+      className="code-editor"
+      onViewReady={(view) => {
+        editorViewRef.current = view
+      }}
+    />
   )
 }

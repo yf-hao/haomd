@@ -6,6 +6,70 @@
   color: #e8ecf5;
 }
 
+.tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  /* padding: 6px 10px; */
+  padding-right: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(8, 10, 18, 0.85);
+  backdrop-filter: blur(6px);
+}
+
+.tab-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  color: #c4ccee;
+  background: transparent;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.tab-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.tab-item.active {
+  position: relative;
+  color: #e8ecf5;
+}
+
+.tab-item.active::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 999px;
+  background: #5ad8a6;
+}
+
+.tab-title {
+  max-width: 160px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.tab-close {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 12px;
+}
+
+.tab-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .topbar {
   display: flex;
   align-items: center;
@@ -60,7 +124,6 @@
   gap: 10px;
   align-items: center;
 }
-
 
 .status-group {
   display: flex;
@@ -159,41 +222,62 @@ button.ghost.primary {
 
 .workspace {
   flex: 1;
+  position: relative; /* 允许 divider 热区绝对定位覆盖在内部 */
   display: grid;
   column-gap: 0;
   row-gap: 12px;
-  padding: 12px 16px 16px;
   align-items: stretch;
 }
 
-.divider {
-  width: 10px;
+/* 浮在编辑区和预览区交界处的透明热区 */
+.divider-hotzone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 10px; /* 热区宽度，鼠标可命中区域 */
+  transform: translateX(-50%); /* 让 left 落在热区中央，即真实交界线上 */
   cursor: col-resize;
-  background: linear-gradient(180deg, rgba(92, 124, 250, 0.2), rgba(98, 195, 255, 0.2));
+  pointer-events: auto;
+  background: transparent;
+  opacity: 0; /* 默认透明 */
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.2s ease, box-shadow 0.2s ease;
-  border-left: 1px solid rgba(255, 255, 255, 0.05);
-  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  transition: opacity 0.2s ease;
 }
 
-.divider:hover {
-  background: linear-gradient(180deg, rgba(92, 124, 250, 0.35), rgba(98, 195, 255, 0.35));
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
-}
-
-.divider.active {
-  background: linear-gradient(180deg, rgba(92, 124, 250, 0.6), rgba(98, 195, 255, 0.6));
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2), 0 0 0 1px rgba(92, 124, 250, 0.2);
+/* 内部实际显示的轨道和 handle */
+.divider-rail {
+  width: 4px;
+  height: 60%;
+  border-radius: 999px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .divider-handle {
-  width: 4px;
-  height: 28px;
+  width: 2px;
+  height: 100%;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.6);
-  box-shadow: 0 0 10px rgba(92, 124, 250, 0.6);
+  background: #5ad8a6; /* 与当前激活标签顶部的绿色保持一致 */
+  box-shadow: 0 0 10px rgba(90, 216, 166, 0.7);
+}
+
+/* 当鼠标 hover 到热区或正在拖拽时显示出来 */
+.divider-hotzone:hover,
+.divider-hotzone.active {
+  opacity: 1;
+}
+
+.divider-hotzone:hover .divider-rail,
+.divider-hotzone.active .divider-rail {
+  background: linear-gradient(
+    180deg,
+    rgba(92, 124, 250, 0.35),
+    rgba(98, 195, 255, 0.35)
+  );
 }
 
 .pane {
@@ -258,245 +342,4 @@ button.ghost.primary {
   border: none;
   border-radius: 0;
   box-shadow: none;
-}
-
-.preview {
-  background: rgba(255, 255, 255, 0.01);
-}
-
-.preview-body {
-  padding: 16px;
-  flex: 1;
-  overflow: auto;
-  color: #e8ecf5;
-  font-size: 14px;
-  line-height: 1.7;
-}
-
-.preview-body h1,
-.preview-body h2,
-.preview-body h3 {
-  margin: 12px 0 8px;
-  color: #dfe7ff;
-}
-
-.preview-body p,
-.preview-body ul {
-  margin: 8px 0;
-}
-
-.preview-body code {
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 6px;
-  padding: 2px 6px;
-}
-
-.markdown-body {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.gh-markdown {
-  color: #e8ecf5;
-  background: transparent;
-  max-width: 100%;
-  padding: 0;
-}
-
-.markdown-body.gh-markdown pre {
-  background: #0d1117 !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  padding: 0 !important;
-  overflow: auto;
-}
-
-.gh-markdown code {
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 6px;
-  padding: 2px 6px;
-}
-
-.gh-markdown blockquote {
-  color: #cbd6f4;
-  border-left: 4px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.04);
-  padding: 10px 12px;
-  border-radius: 10px;
-}
-
-.markdown-body pre {
-  margin: 0;
-}
-
-.code-block {
-  background: #0d1117;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 10px;
-  padding: 12px;
-  overflow: auto;
-}
-
-.diagram-block {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.diagram-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-  color: #cdd8ff;
-}
-
-.diagram-title {
-  font-size: 13px;
-  letter-spacing: 0.3px;
-}
-
-.diagram-canvas svg {
-  width: 100%;
-  height: auto;
-}
-
-.diagram-canvas.mermaid-center,
-.diagram-canvas.mind-center {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 100%;
-  overflow: auto;
-}
-
-.diagram-canvas.mermaid-center svg,
-.diagram-canvas.mind-center svg {
-  display: block;
-  max-width: 100%;
-  height: auto;
-  margin: 0 auto;
-}
-
-.diagram-placeholder {
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 10px;
-  color: #9fb3d9;
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.diagram-error {
-  padding: 10px;
-  border-radius: 8px;
-  background: rgba(255, 99, 99, 0.12);
-  color: #ffb3b3;
-  font-size: 13px;
-}
-
-.code-inline {
-  background: rgba(255, 255, 255, 0.05);
-  padding: 6px 8px;
-  border-radius: 8px;
-  overflow: auto;
-}
-
-.side-panel {
-  position: fixed;
-  right: 16px;
-  top: 80px;
-  width: 320px;
-  max-height: calc(100vh - 120px);
-  background: rgba(15, 18, 28, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  z-index: 20;
-}
-
-/* 最近文件面板：靠近窗口左上角，贴近 File 菜单右侧的位置，风格与整体顶部一致 */
-.recent-panel {
-  right: auto;
-  left: 72px; /* 大致与系统 File 菜单右侧对齐，在 macOS 上更自然 */
-  top: 48px;
-  width: 360px;
-  background: rgba(8, 10, 18, 0.96);
-  border-radius: 10px;
-  border-color: rgba(255, 255, 255, 0.1);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
-}
-
-.side-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.side-body {
-  padding: 12px;
-  overflow: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.history-item {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  padding: 10px;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.history-title {
-  font-weight: 700;
-  margin-bottom: 4px;
-}
-
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 30;
-}
-
-.modal {
-  background: rgba(18, 22, 32, 0.98);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
-  padding: 18px;
-  width: 360px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-}
-
-.modal-title {
-  font-size: 16px;
-  font-weight: 700;
-  margin-bottom: 8px;
-}
-
-.modal-content {
-  margin-bottom: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
 }
