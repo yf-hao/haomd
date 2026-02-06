@@ -1010,3 +1010,10 @@ button.ghost.primary {
   display: inline;
   margin: 0 2px;
 }
+.markdown-body pre.code-block > pre{
+  background-color: transparent !important;
+  padding: 0 !important;
+}
+.markdown-body pre.code-block > pre>code{
+  background-color: transparent !important;
+}
