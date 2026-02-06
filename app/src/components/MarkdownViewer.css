@@ -1,0 +1,51 @@
+.markdown-body {
+  padding: 5px 10px;
+}
+
+/* 提高语义权重覆盖原始 */
+.markdown-body pre:not(.no-style) {
+  padding: 6px 6px;
+  margin: 0.5em;
+}
+
+#footnote-label {
+  /* 隐藏原来的文字 */
+  visibility: hidden;
+  /* 或者 visibility: hidden */
+  position: relative;
+  /* 为 ::after 定位 */
+}
+
+#footnote-label::after {
+  content: "注释";
+  /* 替换文字 */
+  visibility: visible;
+  position: absolute;
+  /* 可根据需要调整位置 */
+  left: 0;
+  top: 0;
+}
+
+/* .markdown-body pre:not(:has(> pre)):has(> code) {
+  background-color: rgba(100, 100, 100, 255); 
+  padding: 2px 5px;
+  border-radius: 4px;
+  display: inline;
+} */
+/* var(--bgColor-muted) */
+.markdown-body code:not(:is(pre code)) {
+  background-color: rgb(5,6,10);
+  padding: 2px 5px;
+  border-radius: 4px;
+  display: inline;
+  margin: 0 2px;
+}
+
+.markdown-body pre.code-block > pre{
+  background-color: transparent !important;
+  padding: 0 !important;
+}
+
+.markdown-body pre.code-block > pre>code{
+  background-color: transparent !important;
+}

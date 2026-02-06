@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useMemo, useRef } from 'react'
+import React, { memo, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -7,6 +7,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import 'katex/dist/katex.min.css'
 import 'github-markdown-css/github-markdown.css'
+import './MarkdownViewer.css'
 import { getRenderer } from '../modules/markdown/plugins'
 
 export type Renderer = (code: string) => React.ReactNode
@@ -71,7 +72,7 @@ function MarkdownViewerComponent(
       // code 渲染器
       code({ inline, className, children, node, ...rest }: any) {
         const content = String(children).trim()
-        const match = /language-(\w+)/.exec(className || '')
+        const match = /language-([\w]+)/.exec(className || '')
         const lang = match?.[1]
 
         // // 行内 code
@@ -132,10 +133,32 @@ function MarkdownViewerComponent(
     }
   }, [])
 
+  // 保存和恢复滚动位置
+  useLayoutEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    // 保存当前滚动位置和是否在底部
+    const scrollParent = container.closest('.preview-body') as HTMLElement | null
+    if (!scrollParent) return
+
+    const savedScrollTop = scrollParent.scrollTop
+    const wasNearBottom = scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight < 100
+
+    // 立即恢复滚动位置（在 DOM 更新后、浏览器绘制前）
+    // 用户看不到跳转，因为浏览器还未绘制
+    if (wasNearBottom) {
+      scrollParent.scrollTop = scrollParent.scrollHeight
+    } else {
+      scrollParent.scrollTop = savedScrollTop
+    }
+  }, [value])
+
   // 高亮当前行逻辑
   useEffect(() => {
     const container = containerRef.current
-    if (!container || typeof activeLine !== 'number') return
+    if (!container || typeof activeLine !== 'number' || activeLine < 1) return
+    
     const rafId = requestAnimationFrame(() => {
       const anchors = Array.from(
         container.querySelectorAll<HTMLElement>('[data-line-start]')
@@ -148,7 +171,21 @@ function MarkdownViewerComponent(
       })
 
       anchors.forEach((el) => el.classList.remove('active-block'))
-      if (!target) return
+      if (!target) {
+        // 如果找不到目标元素（新增的最后一行还未渲染）
+        const scrollParent = container.closest('.preview-body') as HTMLElement | null
+        if (scrollParent) {
+          // 判断是否在底部区域（滚动位置在最后 100px）
+          const isNearBottom = scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight < 100
+          
+          // 如果在底部，滚动到文档末尾
+          if (isNearBottom) {
+            scrollParent.scrollTo({ top: scrollParent.scrollHeight, behavior: 'smooth' })
+          }
+        }
+        return
+      }
+      
       target.classList.add('active-block')
 
       const scrollParent = container.closest('.preview-body') as HTMLElement | null
@@ -156,16 +193,26 @@ function MarkdownViewerComponent(
 
       const parentRect = scrollParent.getBoundingClientRect()
       const targetRect = target.getBoundingClientRect()
-      const currentBottomOffset = parentRect.height - (targetRect.bottom - parentRect.top)
-      const desiredBottomOffset = parentRect.height / 4
-      const delta = desiredBottomOffset - currentBottomOffset
-
-      scrollParent.scrollTo({ top: scrollParent.scrollTop + delta })
+      
+      // 判断目标元素是否在可视区域内
+      const isVisible = 
+        targetRect.top >= parentRect.top && 
+        targetRect.bottom <= parentRect.bottom
+      
+      // 只在目标元素不可见时滚动
+      if (!isVisible) {
+        const currentBottomOffset = parentRect.height - (targetRect.bottom - parentRect.top)
+        const desiredBottomOffset = parentRect.height / 4
+        const delta = desiredBottomOffset - currentBottomOffset
+        
+        scrollParent.scrollTo({ top: scrollParent.scrollTop + delta })
+      }
     })
+    
     return () => {
       if (rafId) cancelAnimationFrame(rafId)
     }
-  }, [activeLine, value])
+  }, [activeLine])
 
   return (
     <div className="markdown-body gh-markdown" ref={containerRef} data-preview-width={previewWidth}>

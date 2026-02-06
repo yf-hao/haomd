@@ -1,0 +1,12 @@
+.preview {
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  /* 与编辑区保持一致，在预览末尾预留一段“虚拟空白”，避免最后一行贴底 */
+  padding-bottom: 25vh;
+}

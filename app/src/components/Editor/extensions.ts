@@ -83,11 +83,38 @@ function cursorSyncPlugin(onCursorChange?: (line: number) => void): Extension[] 
         private reportLine(view: EditorView) {
           const pos = view.state.selection.main.head
           const line = view.state.doc.lineAt(pos).number
+          
           // 调试：输出 CodeMirror 内部计算的行号
-          console.log('[Editor] cursor line =', line)
-          if (line !== this.lastLine) {
-            this.lastLine = line
-            onCursorChange(line)
+          console.log('[Editor] cursor line =', line, 'lastLine =', this.lastLine)
+          
+          // 换行时的特殊处理 - 检查是否是新行
+          if (line === 1 && this.lastLine && this.lastLine > 1) {
+            console.log('[Editor] 可能是换行操作，检查是否是新行')
+            
+            // 检查光标是否在新行的开头
+            const doc = view.state.doc
+            const currentLine = doc.lineAt(pos)
+            const lineContent = doc.sliceString(currentLine.from, currentLine.to).trim()
+            
+            // 如果是新行且内容为空，可能是刚换行
+            if (lineContent === '') {
+              console.log('[Editor] 新行内容为空，可能是刚换行，立即更新到新行')
+              const newLine = this.lastLine + 1
+              if (newLine !== this.lastLine) {
+                this.lastLine = newLine
+                onCursorChange(newLine)
+                console.log('[Editor] sending new line number after newline:', newLine)
+              }
+              return
+            }
+          }
+          
+          // 确保行号是有效的正数
+          const safeLine = Math.max(1, line)
+          if (safeLine !== this.lastLine) {
+            this.lastLine = safeLine
+            onCursorChange(safeLine)
+            console.log('[Editor] sending activeLine to parent:', safeLine)
           }
         }
       },

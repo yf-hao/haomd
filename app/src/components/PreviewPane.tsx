@@ -1,4 +1,5 @@
 import { MarkdownViewer } from './MarkdownViewer'
+import './PreviewPane.css'
 
 export type PreviewPaneProps = {
   value: string

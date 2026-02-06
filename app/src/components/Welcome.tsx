@@ -1,4 +1,5 @@
 import logo from '../assets/logo.png'
+import './Welcome.css'
 export interface WelcomeProps {
   onNewFile: () => void
   onOpenFile: () => void

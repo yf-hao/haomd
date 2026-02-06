@@ -1,6 +1,7 @@
 import type { RefObject } from 'react'
 import type { EditorView } from '@codemirror/view'
 import { CodeEditor } from './Editor/CodeEditor'
+import './EditorPane.css'
 
 export type EditorPaneProps = {
   markdown: string

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FileTreeNode } from '../domain/sidebarTree'
+import './Sidebar.css'
 
 export type StandaloneFileItem = {
   path: string

@@ -84,6 +84,8 @@ export function WorkspaceShell({
 
   // 使用 ref 存储关闭当前标签的回调，避免循环依赖
   const closeCurrentTabRef = useRef<(() => void) | null>(null)
+  // 记录上一次激活的标签 id，用于避免在每次内容变更时重置 activeLine
+  const prevActiveIdRef = useRef<string | null>(null)
 
   const handleSidebarResizeStart = useCallback((event: any) => {
     if (!activeLeftPanel) return
@@ -178,6 +180,12 @@ export function WorkspaceShell({
   // 切换标签时，同步编辑内容和预览内容到当前标签
   useEffect(() => {
     if (!activeId) return
+
+    // 仅在激活标签真正发生变更时才重置内容和 activeLine，
+    // 避免因为 tabs 内容更新（打字）导致 activeLine 每次被重置为 1
+    if (prevActiveIdRef.current === activeId) return
+    prevActiveIdRef.current = activeId
+
     const tab = tabs.find((t) => t.id === activeId) || null
     if (!tab) return
     setMarkdown(tab.content)
@@ -384,13 +392,40 @@ export function WorkspaceShell({
 
   useEffect(() => {
     if (markdown === previewValue) return
-    if (previewTimerRef.current) {
+
+    // 计算当前和之前的换行数
+    const currentLineCount = (markdown.match(/\\n/g) || []).length
+    const previousLineCount = (previewValue.match(/\\n/g) || []).length
+
+    // 调试输出
+    console.log('[PreviewUpdate]', {
+      activeLine: activeLine,
+      markdownLineCount: currentLineCount,
+      previewLineCount: previousLineCount,
+      markdownLength: markdown.length,
+      previewLength: previewValue.length,
+      hasCodeBlock: markdown.includes('```'),
+      hasMath: markdown.includes('$'),
+      hasHeading: markdown.startsWith('# '),
+    })
+
+    // 智能检测：判断是否需要渲染预览（暂时放宽为：只要内容变化就渲染）
+    const shouldRender = true
+
+    console.log('[PreviewUpdate] shouldRender:', shouldRender)
+
+    if (shouldRender && previewTimerRef.current) {
       window.clearTimeout(previewTimerRef.current)
     }
-    previewTimerRef.current = window.setTimeout(() => {
-      setPreviewValue(markdown)
-      previewTimerRef.current = null
-    }, 320)
+
+    if (shouldRender) {
+      // 换行或其他重大变化时，稍微延迟渲染
+      previewTimerRef.current = window.setTimeout(() => {
+        setPreviewValue(markdown)
+        previewTimerRef.current = null
+        console.log('[PreviewUpdate] Rendering preview...')
+      }, 100)
+    }
 
     return () => {
       if (previewTimerRef.current) {
@@ -398,7 +433,7 @@ export function WorkspaceShell({
         previewTimerRef.current = null
       }
     }
-  }, [markdown, previewValue])
+  }, [markdown, previewValue, activeLine])
 
   const handleManualSave = async () => {
     // 冲突重试时，已命名文件应直接保存到原路径；未命名则走保存对话框

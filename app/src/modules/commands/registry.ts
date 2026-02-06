@@ -1,4 +1,5 @@
 import usageDocs from '../../docs/使用说明.md?raw'
+import { loadDefaultChatConfig } from '../ai/settings'
 
 export type AppCommand = () => void | Promise<void>
 
@@ -157,5 +158,30 @@ export const createCommandRegistry = (ctx: CommandContext): CommandRegistry => (
   },
   help_about: () => {
     ctx.setStatusMessage('HaoMD · 菜单占位/帮助')
+  },
+  ai_chat: async () => {
+    const cfg = await loadDefaultChatConfig()
+    if (!cfg) {
+      ctx.setStatusMessage('AI Chat 未配置：请先在 AI Settings 中设置默认 Provider/Model')
+      return
+    }
+    // 目前仅展示将要使用的模型，后续可在此处打开真正的对话窗口
+    ctx.setStatusMessage(`AI Chat 将使用默认模型：${cfg.model}`)
+  },
+  ai_ask_file: async () => {
+    const cfg = await loadDefaultChatConfig()
+    if (!cfg) {
+      ctx.setStatusMessage('Ask AI About File 未配置：请先在 AI Settings 中设置默认 Provider/Model')
+      return
+    }
+    ctx.setStatusMessage(`Ask AI About File 将使用默认模型：${cfg.model}`)
+  },
+  ai_ask_selection: async () => {
+    const cfg = await loadDefaultChatConfig()
+    if (!cfg) {
+      ctx.setStatusMessage('Ask AI About Selection 未配置：请先在 AI Settings 中设置默认 Provider/Model')
+      return
+    }
+    ctx.setStatusMessage(`Ask AI About Selection 将使用默认模型：${cfg.model}`)
   },
 })

@@ -1,5 +1,7 @@
 import type { EditorTab } from '../types/tabs'
 
+import './TabBar.css'
+
 export type TabBarProps = {
   tabs: EditorTab[]
   activeId: string | null

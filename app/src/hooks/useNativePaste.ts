@@ -15,6 +15,15 @@ export function useNativePaste(
       console.log('[native://paste] handler fired, view =', view)
       if (!view || !text) return
 
+      // 仅当当前焦点在编辑器内部时，才处理粘贴，避免与其他输入区域（如对话框）冲突
+      if (typeof document !== 'undefined') {
+        const active = document.activeElement
+        if (active && !view.dom.contains(active)) {
+          console.log('[native://paste] skip: active element is outside editor')
+          return
+        }
+      }
+
       const { state } = view
       const tr = state.changeByRange((range) => ({
         range,

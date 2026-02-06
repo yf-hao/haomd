@@ -2,6 +2,7 @@ import type { FC, MouseEventHandler, ChangeEvent, FormEvent } from 'react'
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import './AiSettingsDialog.css'
+import { onNativePaste, onNativePasteError } from '../modules/platform/clipboardEvents'
 
 export type AiSettingsDialogProps = {
   open: boolean
@@ -68,6 +69,33 @@ type AiSettingsCfg = {
   default_provider_id?: string | null
 }
 
+type BackendCode =
+  | 'OK'
+  | 'CANCELLED'
+  | 'IoError'
+  | 'NotFound'
+  | 'TooLarge'
+  | 'CONFLICT'
+  | 'InvalidPath'
+  | 'UNSUPPORTED'
+  | 'UNKNOWN'
+
+type BackendError = { code: BackendCode; message: string; trace_id?: string }
+
+type BackendOk<T> = { data: T; trace_id?: string }
+
+type BackendResult<T> = { Ok: BackendOk<T> } | { Err: { error: BackendError } }
+
+function normalizeProviderName(name: string): string {
+  return name.trim().toLocaleLowerCase('en-US')
+}
+
+function normalizeBaseUrl(url: string): string {
+  const trimmed = url.trim()
+  // 去掉末尾多余的 '/'
+  return trimmed.replace(/\/+$/, '')
+}
+
 function parseModelsInput(input: string): string[] {
   return Array.from(
     new Set(
@@ -117,6 +145,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [initialSnapshot, setInitialSnapshot] = useState<AiSettingsState | null>(null)
+  const [activeField, setActiveField] = useState<keyof ProviderDraft | null>(null)
 
   // 打开对话框时，从后端加载配置
   useEffect(() => {
@@ -126,11 +155,16 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
 
     const load = async () => {
       try {
-        const cfg = await invoke<AiSettingsCfg>('load_ai_settings')
+        const resp = await invoke<BackendResult<AiSettingsCfg>>('load_ai_settings')
         if (disposed) return
-        const state = fromCfg(cfg)
-        setSettings(state)
-        setInitialSnapshot(state)
+
+        if ('Ok' in resp) {
+          const state = fromCfg(resp.Ok.data)
+          setSettings(state)
+          setInitialSnapshot(state)
+        } else {
+          console.error('Failed to load ai_settings (backend error):', resp.Err.error)
+        }
       } catch (err) {
         console.error('Failed to load ai_settings:', err)
       }
@@ -143,17 +177,52 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
     }
   }, [open])
 
+  // 监听原生粘贴事件，将内容插入当前激活的输入字段
+  useEffect(() => {
+    if (!open) return
+
+    const unPaste = onNativePaste((text) => {
+      if (!text || !activeField) return
+
+      setDraft((prev) => {
+        const key = activeField
+        const current = prev[key] ?? ''
+
+        let start = current.length
+        let end = current.length
+
+        if (typeof document !== 'undefined') {
+          const el = document.activeElement as HTMLInputElement | HTMLTextAreaElement | null
+          if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
+            if (typeof el.selectionStart === 'number') start = el.selectionStart
+            if (typeof el.selectionEnd === 'number') end = el.selectionEnd ?? start
+          }
+        }
+
+        const before = current.slice(0, start)
+        const after = current.slice(end)
+
+        return {
+          ...prev,
+          [key]: before + text + after,
+        }
+      })
+    })
+
+    const unError = onNativePasteError((message) => {
+      // 先仅记录日志，如有需要可接入表单错误区域
+      console.warn('[AiSettingsDialog] native paste error:', message)
+    })
+
+    return () => {
+      unPaste()
+      unError()
+    }
+  }, [open, activeField])
+
   const defaultProvider = settings.providers.find((p) => p.id === settings.defaultProviderId) ?? null
 
   if (!open) return null
-
-  const handleBackdropClick = () => {
-    onClose()
-  }
-
-  const handleInnerClick: MouseEventHandler<HTMLDivElement> = (e) => {
-    e.stopPropagation()
-  }
 
   const handleDraftChange = (field: keyof ProviderDraft) => (
     e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
@@ -180,6 +249,52 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
       return
     }
 
+    // 查找是否存在“同名（忽略大小写）且 Base URL 相同”的 Provider
+    const targetName = normalizeProviderName(draft.name)
+    const targetUrl = normalizeBaseUrl(draft.baseUrl)
+
+    const existing = settings.providers.find(
+      (p) =>
+        normalizeProviderName(p.name) === targetName &&
+        normalizeBaseUrl(p.baseUrl) === targetUrl,
+    )
+
+    if (existing) {
+      // 追加新模型到已有 Provider，避免重复
+      const existingIds = new Set(existing.models.map((m) => m.id))
+      const newIds = models.filter((id) => !existingIds.has(id))
+
+      if (newIds.length === 0) {
+        setError('该 Provider 已包含这些模型，无需重复添加')
+        return
+      }
+
+      setSettings((prev) => {
+        const providers = prev.providers.map((p) => {
+          if (p.id !== existing.id) return p
+
+          const pExistingIds = new Set(p.models.map((m) => m.id))
+          const reallyNewIds = models.filter((id) => !pExistingIds.has(id))
+          if (reallyNewIds.length === 0) return p
+
+          const newModels = reallyNewIds.map((id) => ({ id }))
+          return {
+            ...p,
+            models: [...p.models, ...newModels],
+            defaultModelId: p.defaultModelId ?? reallyNewIds[0],
+          }
+        })
+
+        return { ...prev, providers }
+      })
+
+      setExpandedId(existing.id)
+      setDraft(emptyDraft)
+      setError(null)
+      return
+    }
+
+    // 不存在同名且 Base URL 相同的 Provider，正常新增一个
     const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const provider: UiProvider = {
       id,
@@ -268,18 +383,61 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
 
   const handleSave = async () => {
     try {
-      const cfg = toCfg(settings)
+      let stateToSave = settings
+
+      // 如果当前还没有任何 Provider，但左侧表单里已经填写了内容，
+      // 则自动将草稿作为一个新的 Provider 一并保存，避免用户“只点 Save 不点 Test & Add” 时丢配置。
+      const hasDraft =
+        draft.name.trim() ||
+        draft.baseUrl.trim() ||
+        draft.apiKey.trim() ||
+        draft.modelsInput.trim() ||
+        draft.description.trim()
+
+      if (!settings.providers.length && hasDraft) {
+        const models = parseModelsInput(draft.modelsInput)
+        if (!draft.name.trim() || !draft.baseUrl.trim() || !draft.apiKey.trim()) {
+          setError('请填写 Provider Name / Base URL / API Key，或先点击 “Test & Add Provider”')
+          return
+        }
+        if (models.length === 0) {
+          setError('请至少填写一个 ModelID，或先点击 “Test & Add Provider”')
+          return
+        }
+
+        const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+        const provider: UiProvider = {
+          id,
+          name: draft.name.trim(),
+          baseUrl: draft.baseUrl.trim(),
+          apiKey: draft.apiKey.trim(),
+          models: models.map((m) => ({ id: m })),
+          defaultModelId: models[0],
+          description: draft.description.trim() || undefined,
+        }
+
+        stateToSave = {
+          providers: [...settings.providers, provider],
+          defaultProviderId: settings.defaultProviderId ?? id,
+        }
+      }
+
+      const cfg = toCfg(stateToSave)
       await invoke('save_ai_settings', { cfg })
-      setInitialSnapshot(settings)
+      setSettings(stateToSave)
+      setInitialSnapshot(stateToSave)
+      setDraft(emptyDraft)
+      setError(null)
       onClose()
     } catch (err) {
       console.error('Failed to save ai_settings:', err)
+      setError('保存失败：请稍后重试')
     }
   }
 
   return (
-    <div className="modal-backdrop" onClick={handleBackdropClick}>
-      <div className="modal modal-ai-settings" onClick={handleInnerClick}>
+    <div className="modal-backdrop">
+      <div className="modal modal-ai-settings">
         <div className="modal-title">AI Settings</div>
         <div className="modal-content ai-settings-body">
           <div className="ai-settings-column-left">
@@ -291,6 +449,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                   type="text"
                   value={draft.name}
                   onChange={handleDraftChange('name')}
+                  onFocus={() => setActiveField('name')}
                 />
               </div>
 
@@ -301,6 +460,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                   type="text"
                   value={draft.baseUrl}
                   onChange={handleDraftChange('baseUrl')}
+                  onFocus={() => setActiveField('baseUrl')}
                 />
               </div>
 
@@ -311,6 +471,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                   type="password"
                   value={draft.apiKey}
                   onChange={handleDraftChange('apiKey')}
+                  onFocus={() => setActiveField('apiKey')}
                 />
               </div>
 
@@ -322,6 +483,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                   placeholder="gpt-4.1, gpt-4o-mini"
                   value={draft.modelsInput}
                   onChange={handleDraftChange('modelsInput')}
+                  onFocus={() => setActiveField('modelsInput')}
                 />
               </div>
 
@@ -332,6 +494,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                   rows={3}
                   value={draft.description}
                   onChange={handleDraftChange('description')}
+                  onFocus={() => setActiveField('description')}
                 />
               </div>
 

@@ -1,0 +1,35 @@
+---
+description: 
+alwaysApply: false
+enabled: true
+updatedAt: 2026-02-06T14:06:57.213Z
+provider: 
+---
+
+### AI Settings Provider Merge Rule
+
+**目的**：在 `AiSettingsDialog` 中添加新的 Provider 时，如果已存在“同名（英文忽略大小写）且 Base URL 相同”的 Provider，则不创建新 Provider，而是将新模型合并到已有 Provider 下，并避免重复模型。
+
+**约束与行为**：
+
+- Provider 唯一性判定：
+  - `name` 比较时忽略大小写：`normalizeProviderName(name) = name.trim().toLocaleLowerCase('en-US')`。
+  - `baseUrl` 比较时先 `trim()` 并去掉末尾 `/`：`normalizeBaseUrl(url)`。
+- 在处理“添加 Provider”动作（当前是 `AiSettingsDialog.tsx` 中的 `handleTestAndAdd`）时：
+  1. 先对草稿执行原有字段校验（必填项、至少一个 ModelID）。
+  2. 在现有 `settings.providers` 中查找是否存在满足：
+     - `normalizeProviderName(existing.name) === normalizeProviderName(draft.name)` 且
+     - `normalizeBaseUrl(existing.baseUrl) === normalizeBaseUrl(draft.baseUrl)` 的 Provider。
+  3. 若找到：
+     - 只向该 Provider 的 `models` 追加草稿中的新 ModelID：
+       - 新模型集合 = 草稿 `models` 减去已有 `models` 的差集；
+       - 若差集为空：不更新 `settings`，并通过 `setError` 提示“该 Provider 已包含这些模型，无需重复添加”（文案可调整）。
+       - 若差集非空：将差集映射为 `{ id }` 的新模型条目追加到 `models`，并在 Provider 没有默认模型时，将第一条新模型作为默认模型。
+     - 更新完后，保持或切换展开状态到该 Provider，并视情况清空草稿与错误。
+  4. 若未找到：
+     - 按原逻辑创建一个新的 Provider，并在没有默认 Provider 的情况下将其设为默认 Provider。
+
+**不改变的部分**：
+
+- `Save` 按钮仍主要负责“持久化当前 `settings` 到后端”，是否在 `Save` 时自动合并草稿可以按当前产品决策保持或单独优化。
+- 不修改后端 `AiSettingsCfg` 结构和读写逻辑，仅在前端 UI 层做合并与去重。
