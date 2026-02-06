@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
-import { clearRecentRemote, deleteRecentRemote, listRecentPage, logRecentFile, readFile, writeFile } from '../modules/files/service'
+import { clearRecentRemote, deleteRecentRemote, logRecentFile, readFile, writeFile } from '../modules/files/service'
 import { createAutoSaver, type AutoSaveHandle } from '../modules/files/autoSave'
 import type { RecentFile, Result, ServiceError, WriteResult } from '../modules/files/types'
 
 const DEFAULT_PATH = '未命名.md'
-const STORAGE_RECENT_HOT = 'haomd:recent:hot'
-const RECENT_PAGE_SIZE = 10
 
 const isTauri = () =>
   typeof window !== 'undefined' &&
@@ -127,7 +125,7 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
           if (isTauri()) {
             void logRecentFile(pathToUse, false)
           }
-          upsertRecentLocal(pathToUse, false)
+          upsertRecentLocal()
 
           // 通知外层：保存成功，可用于更新多标签元信息
           if (options?.onSaved) {
@@ -318,7 +316,7 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
             }
           })
         }
-        upsertRecentLocal(nextPath, false)
+        upsertRecentLocal()
 
         return resp
       } finally {

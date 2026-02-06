@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "HaoMD",
   "version": "0.1.0",
-  "identifier": "com.tauri.dev",
+  "identifier": "com.yfhao.haomd",
   "build": {
     "frontendDist": "../build",
     "devUrl": "http://localhost:5173",

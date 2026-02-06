@@ -8,7 +8,6 @@ import {
   drawSelection,
   lineNumbers,
   ViewPlugin,
-  ViewUpdate,
 } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { indentOnInput } from '@codemirror/language'

@@ -4,13 +4,15 @@ export type OutlinePanelProps = {
   items: OutlineItem[]
   activeId: string | null
   onSelect: (item: OutlineItem) => void
+  panelWidth?: number
 }
 
-export function OutlinePanel({ items, activeId, onSelect }: OutlinePanelProps) {
+export function OutlinePanel({ items, activeId, onSelect, panelWidth }: OutlinePanelProps) {
   const hasItems = items.length > 0
+  const style = panelWidth ? { width: panelWidth } : undefined
 
   return (
-    <aside className="outline-panel">
+    <aside className="outline-panel" style={style}>
       <div className="outline-header">Outline</div>
 
       {hasItems ? (

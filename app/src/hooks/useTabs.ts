@@ -25,13 +25,15 @@ function createEmptyTab(id: string): EditorTab {
 }
 
 export function useTabs(options?: UseTabsOptions) {
-  console.log('[useTabs] hook 已初始化')
+  if (import.meta.env.DEV) {
+    console.log('[useTabs] hook 已初始化')
+  }
   const idRef = useRef(1)
   const [tabs, setTabs] = useState<EditorTab[]>(() => {
-    const firstId = String(1)
-    return [createEmptyTab(firstId)]
+    // 初始不创建标签，返回空数组
+    return []
   })
-  const [activeId, setActiveId] = useState<string | null>(() => '1')
+  const [activeId, setActiveId] = useState<string | null>(() => null)
 
   const activeTab = useMemo(
     () => tabs.find((t) => t.id === activeId) ?? null,
@@ -51,13 +53,19 @@ export function useTabs(options?: UseTabsOptions) {
         content: opts?.content ?? base.content,
       }
       setTabs((prev) => {
-        console.log('[createTab] 添加标签前:', prev.map(t => ({ id: t.id, title: t.title })))
+        if (import.meta.env.DEV) {
+          console.log('[createTab] 添加标签前:', prev.map(t => ({ id: t.id, title: t.title })))
+        }
         const newTabs = [...prev, tab]
-        console.log('[createTab] 添加标签后:', newTabs.map(t => ({ id: t.id, title: t.title })))
+        if (import.meta.env.DEV) {
+          console.log('[createTab] 添加标签后:', newTabs.map(t => ({ id: t.id, title: t.title })))
+        }
         return newTabs
       })
       setActiveId(nextId)
-      console.log('[createTab] 设置 activeId 为:', nextId)
+      if (import.meta.env.DEV) {
+        console.log('[createTab] 设置 activeId 为:', nextId)
+      }
       return tab
     },
     [],
@@ -71,17 +79,8 @@ export function useTabs(options?: UseTabsOptions) {
     (id: string) => {
       setTabs((prev) => {
         if (prev.length === 1) {
-          // 最后一个标签：清空内容而不是删除，保持有一个空标签
-          const only = prev[0]
-          return [
-            {
-              ...only,
-              content: '',
-              dirty: false,
-              path: DEFAULT_UNTITLED,
-              title: DEFAULT_UNTITLED,
-            },
-          ]
+          // 最后一个标签：返回空数组，显示欢迎页
+          return []
         }
 
         const next = prev.filter((t) => t.id !== id)
@@ -136,41 +135,59 @@ export function useTabs(options?: UseTabsOptions) {
 
   const closeCurrentTab = useCallback(
     () => {
-      console.log('[closeCurrentTab] 被调用')
+      if (import.meta.env.DEV) {
+        console.log('[closeCurrentTab] 被调用')
+      }
       if (!activeId) {
-        console.warn('[closeCurrentTab] 没有激活标签，跳过')
+        if (import.meta.env.DEV) {
+          console.warn('[closeCurrentTab] 没有激活标签，跳过')
+        }
         return
       }
 
       const tab = tabs.find(t => t.id === activeId)
       if (!tab) {
-        console.warn('[closeCurrentTab] 未找到当前标签，跳过', { activeId, tabs: tabs.map(t => t.id) })
+        if (import.meta.env.DEV) {
+          console.warn('[closeCurrentTab] 未找到当前标签，跳过', { activeId, tabs: tabs.map(t => t.id) })
+        }
         return
       }
 
-      console.log('[closeCurrentTab] 当前标签状态', { tabId: tab.id, title: tab.title, dirty: tab.dirty })
+      if (import.meta.env.DEV) {
+        console.log('[closeCurrentTab] 当前标签状态', { tabId: tab.id, title: tab.title, dirty: tab.dirty })
+      }
 
       // 如果提供了 UI 层的确认回调，优先使用（与 TabBar 保持一致）
       if (options?.onRequestCloseCurrentTab) {
-        console.log('[closeCurrentTab] 使用 App 层的确认对话框')
+        if (import.meta.env.DEV) {
+          console.log('[closeCurrentTab] 使用 App 层的确认对话框')
+        }
         options.onRequestCloseCurrentTab()
         return
       }
 
       // 回退实现：如果有未保存变更，使用浏览器确认对话框
       if (tab.dirty) {
-        console.log('[closeCurrentTab] 准备弹出确认对话框...')
+        if (import.meta.env.DEV) {
+          console.log('[closeCurrentTab] 准备弹出确认对话框...')
+        }
         const shouldClose = window.confirm(
           `标签 "${tab.title}" 有未保存的更改。关闭将丢弃所有更改，是否继续？`
         )
-        console.log('[closeCurrentTab] 用户选择:', { shouldClose })
+        if (import.meta.env.DEV) {
+          console.log('[closeCurrentTab] 用户选择:', { shouldClose })
+        }
         if (!shouldClose) {
-          console.log('[closeCurrentTab] 用户取消关闭')
+          if (import.meta.env.DEV) {
+            console.log('[closeCurrentTab] 用户取消关闭')
+          }
           return
         }
       }
 
-      console.log('[closeCurrentTab] 关闭当前标签', { tabId: tab.id, title: tab.title })
+      if (import.meta.env.DEV) {
+        console.log('[closeCurrentTab] 关闭当前标签', { tabId: tab.id, title: tab.title })
+      }
       // 复用现有的 closeTab 逻辑
       closeTab(activeId)
     },

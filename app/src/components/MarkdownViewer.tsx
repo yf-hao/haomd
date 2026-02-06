@@ -5,25 +5,17 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import 'katex/dist/katex.min.css'
 import 'github-markdown-css/github-markdown.css'
-import { MermaidBlock, XMindBlock } from './diagrams'
-import { getRenderer, registerRenderer } from '../modules/markdown/plugins'
+import { getRenderer } from '../modules/markdown/plugins'
 
 export type Renderer = (code: string) => React.ReactNode
 
 const remarkPlugins = [remarkGfm, remarkMath]
 const rehypePlugins = [rehypeKatex] // 高亮由 SyntaxHighlighter 处理
 
-// 注册内置 renderer
-const ensureDefaultRenderers = () => {
-  if (!getRenderer('mermaid')) {
-    registerRenderer('mermaid', (code) => <MermaidBlock code={code} />)
-  }
-  if (!getRenderer('mind')) {
-    registerRenderer('mind', (code) => <XMindBlock code={code} />)
-  }
-}
-ensureDefaultRenderers()
+const DiagramsLazy = React.lazy(() => import('./diagrams'))
+
 
 function MarkdownViewerComponent(
   props: Readonly<{ value: string; activeLine?: number; previewWidth?: number }>
@@ -98,8 +90,14 @@ function MarkdownViewerComponent(
         if (lang) {
           const renderer = getRenderer(lang)
           if (renderer) return renderer(content)
-          if (lang === 'mermaid') return <MermaidBlock code={content} />
-          if (lang === 'mind') return <XMindBlock code={content} />
+
+          if (lang === 'mermaid' || lang === 'mind') {
+            return (
+              <React.Suspense fallback={<pre>图表加载中…</pre>}>
+                <DiagramsLazy lang={lang} code={content} />
+              </React.Suspense>
+            )
+          }
 
           // 使用 SyntaxHighlighter 渲染并显示行号
           return (
@@ -136,10 +134,11 @@ function MarkdownViewerComponent(
 
   // 高亮当前行逻辑
   useEffect(() => {
-    if (!containerRef.current || typeof activeLine !== 'number') return
+    const container = containerRef.current
+    if (!container || typeof activeLine !== 'number') return
     const rafId = requestAnimationFrame(() => {
       const anchors = Array.from(
-        containerRef.current.querySelectorAll<HTMLElement>('[data-line-start]')
+        container.querySelectorAll<HTMLElement>('[data-line-start]')
       )
       const target = anchors.find((el) => {
         const start = Number(el.dataset.lineStart)
@@ -152,7 +151,7 @@ function MarkdownViewerComponent(
       if (!target) return
       target.classList.add('active-block')
 
-      const scrollParent = containerRef.current.closest('.preview-body') as HTMLElement | null
+      const scrollParent = container.closest('.preview-body') as HTMLElement | null
       if (!scrollParent) return
 
       const parentRect = scrollParent.getBoundingClientRect()

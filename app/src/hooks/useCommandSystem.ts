@@ -152,6 +152,7 @@ export function useCommandSystem(params: CommandSystemParams) {
   // 统一处理来自 Tauri 原生菜单的命令分发
   useEffect(() => {
     const unlisten = onMenuAction((actionId) => {
+      if (actionId === 'ai_settings') return
       console.log('menu action', actionId)
       void dispatchAction(actionId)
     })

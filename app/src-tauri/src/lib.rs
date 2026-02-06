@@ -143,6 +143,31 @@ struct SidebarState {
   folder_roots: Vec<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct AiProviderModelCfg {
+  id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct AiProviderCfg {
+  id: String,
+  name: String,
+  base_url: String,
+  api_key: String,
+  models: Vec<AiProviderModelCfg>,
+  #[serde(default)]
+  default_model_id: Option<String>,
+  #[serde(default)]
+  description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct AiSettingsCfg {
+  providers: Vec<AiProviderCfg>,
+  #[serde(default)]
+  default_provider_id: Option<String>,
+}
+
 fn sidebar_state_path(app: &AppHandle) -> std::io::Result<PathBuf> {
   // 与 recent.json 相同策略：优先使用配置目录
   if let Ok(mut dir) = app.path().config_dir() {
@@ -154,6 +179,17 @@ fn sidebar_state_path(app: &AppHandle) -> std::io::Result<PathBuf> {
   // 兜底：退回到当前工作目录
   let dir = std::env::current_dir()?;
   Ok(dir.join("sidebar_state.json"))
+}
+
+fn ai_settings_path(app: &AppHandle) -> std::io::Result<PathBuf> {
+  if let Ok(mut dir) = app.path().config_dir() {
+    dir.push("haomd");
+    std::fs::create_dir_all(&dir)?;
+    return Ok(dir.join("ai_settings.json"));
+  }
+
+  let dir = std::env::current_dir()?;
+  Ok(dir.join("ai_settings.json"))
 }
 
 async fn read_sidebar_state(app: &AppHandle) -> std::io::Result<SidebarState> {
@@ -791,9 +827,8 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .build()?;
 
   let ai_menu = SubmenuBuilder::new(app, "AI")
+        .item(&MenuItemBuilder::new("AI Settings").id("ai_settings").accelerator("CmdOrCtrl+,").build(app)?)
         .item(&MenuItemBuilder::new("Open AI Chat").id("ai_chat").build(app)?)
-        .item(&MenuItemBuilder::new("Set API Key").id("ai_set_key").build(app)?)
-        .item(&MenuItemBuilder::new("AI Settings").id("ai_settings").build(app)?)
         .item(&MenuItemBuilder::new("Ask AI About File").id("ai_ask_file").build(app)?)
         .item(&MenuItemBuilder::new("Ask AI About Selection").id("ai_ask_selection").build(app)?)
         .build()?;
@@ -822,6 +857,80 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 async fn refresh_app_menu(app: &AppHandle) {
   if let Ok(menu) = build_app_menu(app).await {
     let _ = app.set_menu(menu);
+  }
+}
+
+#[tauri::command]
+async fn load_ai_settings(app: AppHandle) -> ResultPayload<AiSettingsCfg> {
+  let trace = new_trace_id();
+  let path = match ai_settings_path(&app) {
+    Ok(p) => p,
+    Err(err) => {
+      return err_payload(
+        ErrorCode::IoError,
+        format!("获取 ai_settings 路径失败: {err}"),
+        trace,
+      );
+    }
+  };
+
+  match fs::read(&path).await {
+    Ok(bytes) => {
+      let cfg: AiSettingsCfg = serde_json::from_slice(&bytes).unwrap_or(AiSettingsCfg {
+        providers: Vec::new(),
+        default_provider_id: None,
+      });
+      ok(cfg, trace)
+    }
+    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+      ok(
+        AiSettingsCfg {
+          providers: Vec::new(),
+          default_provider_id: None,
+        },
+        trace,
+      )
+    }
+    Err(err) => err_payload(
+      ErrorCode::IoError,
+      format!("读取 ai_settings 失败: {err}"),
+      trace,
+    ),
+  }
+}
+
+#[tauri::command]
+async fn save_ai_settings(app: AppHandle, cfg: AiSettingsCfg) -> ResultPayload<()> {
+  let trace = new_trace_id();
+  let path = match ai_settings_path(&app) {
+    Ok(p) => p,
+    Err(err) => {
+      return err_payload(
+        ErrorCode::IoError,
+        format!("获取 ai_settings 路径失败: {err}"),
+        trace,
+      );
+    }
+  };
+
+  let bytes = match serde_json::to_vec_pretty(&cfg) {
+    Ok(b) => b,
+    Err(err) => {
+      return err_payload(
+        ErrorCode::IoError,
+        format!("序列化 ai_settings 失败: {err}"),
+        trace,
+      );
+    }
+  };
+
+  match fs::write(&path, bytes).await {
+    Ok(()) => ok((), trace),
+    Err(err) => err_payload(
+      ErrorCode::IoError,
+      format!("写入 ai_settings 失败: {err}"),
+      trace,
+    ),
   }
 }
 
@@ -930,7 +1039,9 @@ pub fn run() {
       list_folder,
       set_title,
       delete_fs_entry,
-      quit_app
+      quit_app,
+      load_ai_settings,
+      save_ai_settings,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

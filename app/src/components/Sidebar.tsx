@@ -25,6 +25,7 @@ export type SidebarProps = {
   onFileClick: (path: string) => void
   onContextAction?: (payload: SidebarContextActionPayload) => void
   activePath?: string | null
+  panelWidth?: number
 }
 
 type TreeNodeProps = {
@@ -179,7 +180,7 @@ function SidebarContextMenu({ x, y, target, onAction, onRequestClose }: SidebarC
   )
 }
 
-export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, onToggle, onFileClick, onContextAction, activePath }: SidebarProps) {
+export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, onToggle, onFileClick, onContextAction, activePath, panelWidth }: SidebarProps) {
   const hasStandalone = standaloneFiles.length > 0
   const hasTree = folderRoots.some((rootPath) => (treesByRoot[rootPath]?.length ?? 0) > 0)
 
@@ -202,9 +203,11 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
     closeMenu()
   }
 
+  const asideStyle = panelWidth ? { width: panelWidth } : undefined
+
   if (!hasTree && !hasStandalone) {
     return (
-      <aside className="sidebar" onClick={closeMenu} onContextMenu={closeMenu}>
+      <aside className="sidebar" style={asideStyle} onClick={closeMenu} onContextMenu={closeMenu}>
         <div className="sidebar-header">
           <div className="pane-title">File Browser</div>
         </div>
@@ -214,7 +217,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
   }
 
   return (
-    <aside className="sidebar" onClick={closeMenu} onContextMenu={closeMenu}>
+    <aside className="sidebar" style={asideStyle} onClick={closeMenu} onContextMenu={closeMenu}>
       <div className="sidebar-header">
         <div className="pane-title">File Browser</div>
       </div>

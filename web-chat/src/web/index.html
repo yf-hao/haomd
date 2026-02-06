@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Haode AI Chat</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <!-- 侧边栏：配置 -->
+    <aside class="sidebar">
+      <h2>⚙️ 配置</h2>
+
+      <div class="form-group">
+        <label>API Key:</label>
+        <input type="password" id="apiKey" value="app-komLx9RsMdpuC1uRyIPpJSaC">
+      </div>
+
+      <div class="form-group">
+        <label>Base URL:</label>
+        <input type="text" id="baseUrl" value="https://aigc.sias.edu.cn/v1">
+      </div>
+
+      <div class="form-group">
+        <label>Model:</label>
+        <input type="text" id="model" value="GPT-5.2-chat">
+      </div>
+
+      <div class="form-group">
+        <label>Provider:</label>
+        <select id="provider">
+          <option value="openai">OpenAI</option>
+          <option value="dify" selected>Dify</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>系统提示词:</label>
+        <textarea id="systemPrompt" rows="6" placeholder="你是一个有用的助手...">你是一个有用的编程助手，名字叫 Haode。</textarea>
+      </div>
+
+      <button id="saveConfig" class="btn-primary">💾 保存配置</button>
+      <button id="clearHistory" class="btn-secondary">🗑️ 清除历史</button>
+    </aside>
+
+    <!-- 主区域：聊天 -->
+    <main class="chat-area">
+      <header class="chat-header">
+        <h1>🤖 Haode AI Chat</h1>
+      </header>
+
+      <div class="chat-messages" id="chatMessages">
+        <div class="message assistant">
+          你好！我是你的 AI 助手，有什么可以帮助你的吗？
+        </div>
+      </div>
+
+      <div class="chat-input-area">
+        <input
+          type="text"
+          id="userInput"
+          placeholder="输入消息... (Enter 发送)"
+          autocomplete="off"
+        >
+        <button id="sendBtn">📤 发送</button>
+      </div>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

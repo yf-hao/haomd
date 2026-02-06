@@ -11,14 +11,8 @@ export type EditorPaneProps = {
   editorViewRef: RefObject<EditorView | null>
 }
 
-export function EditorPane({
-  markdown,
-  onChange,
-  onCursorChange,
-  showPreview,
-  setShowPreview,
-  editorViewRef,
-}: EditorPaneProps) {
+export function EditorPane(props: EditorPaneProps) {
+  const { markdown, onChange, onCursorChange, editorViewRef } = props
   return (
     <CodeEditor
       value={markdown}

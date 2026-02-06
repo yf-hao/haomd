@@ -1,0 +1,19 @@
+{
+  "name": "haode-web-chat",
+  "version": "1.0.0",
+  "description": "Haode AI Chat - Web 版本",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run build:web && open dist/index.html",
+    "build": "bun run build:web",
+    "build:web": "bun build ./src/web/app.ts --outdir ./dist --target browser --minify --sourcemap && cp src/web/index.html dist/ && cp src/web/styles.css dist/",
+    "serve": "cd dist && python3 -m http.server 8000"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

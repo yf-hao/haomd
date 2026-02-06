@@ -296,3 +296,20 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
   )
 }
 
+export interface DiagramRendererProps {
+  lang: 'mermaid' | 'mind'
+  code: string
+}
+
+export default function DiagramRenderer(props: Readonly<DiagramRendererProps>) {
+  if (props.lang === 'mermaid') {
+    return <MermaidBlock code={props.code} />
+  }
+  if (props.lang === 'mind') {
+    return <XMindBlock code={props.code} />
+  }
+  return (
+    <pre className="diagram-placeholder">不支持的图表类型：{props.lang}</pre>
+  )
+}
+
