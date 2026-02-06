@@ -8,6 +8,8 @@ export type CommandSystemParams = CommandContext & {
    * 可选的环境检查函数，用于区分 Tauri / 非 Tauri 环境
    */
   isTauriEnv?: () => boolean
+  onRequestCloseCurrentTab?: () => void
+  onRequestQuit?: () => void
 }
 
 export function useCommandSystem(params: CommandSystemParams) {
@@ -30,7 +32,10 @@ export function useCommandSystem(params: CommandSystemParams) {
     updateActiveMeta,
     openFolderInSidebar,
     toggleSidebarVisible,
+    closeCurrentTab,
     isTauriEnv,
+    onRequestCloseCurrentTab,
+    onRequestQuit,
   } = params
 
   const commands: CommandRegistry = useMemo(
@@ -54,6 +59,9 @@ export function useCommandSystem(params: CommandSystemParams) {
         updateActiveMeta,
         openFolderInSidebar,
         toggleSidebarVisible,
+        closeCurrentTab,
+        onRequestCloseCurrentTab,
+        onRequestQuit,
       }),
     [
       layout,
@@ -74,6 +82,9 @@ export function useCommandSystem(params: CommandSystemParams) {
       updateActiveMeta,
       openFolderInSidebar,
       toggleSidebarVisible,
+      closeCurrentTab,
+      onRequestCloseCurrentTab,
+      onRequestQuit,
     ],
   )
 
@@ -97,7 +108,7 @@ export function useCommandSystem(params: CommandSystemParams) {
       if (!meta) return
 
       // 避免在 Tauri 中与系统菜单快捷键（会发 menu://action 事件）重复触发
-      const tauriBlocks = ['s', 'o', 'n'] as const
+      const tauriBlocks = ['s', 'o', 'n', 'w'] as const
       if (isTauriEnv && isTauriEnv() && tauriBlocks.includes(key as (typeof tauriBlocks)[number])) return
 
       if (key === 's') {
@@ -117,6 +128,9 @@ export function useCommandSystem(params: CommandSystemParams) {
       } else if (key === 'n') {
         e.preventDefault()
         void dispatchAction('new_file')
+      } else if (key === 'w') {
+        e.preventDefault()
+        void dispatchAction('close_file')
       } else if (key === 'p') {
         e.preventDefault()
         void dispatchAction('toggle_preview')

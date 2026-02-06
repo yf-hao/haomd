@@ -67,7 +67,16 @@ function App() {
     startDragging,
   } = useWorkspaceLayout()
 
-  const { tabs, activeId, activeTab, createTab, setActiveTab, closeTab, updateActiveContent, updateActiveMeta } = useTabs()
+  // 使用 ref 存储关闭当前标签的回调，避免循环依赖
+  const closeCurrentTabRef = useRef<(() => void) | null>(null)
+
+  const { tabs, activeId, activeTab, createTab, setActiveTab, closeTab, closeCurrentTab, getUnsavedTabs, updateActiveContent, updateActiveMeta } = useTabs({
+    onRequestCloseCurrentTab: () => {
+      if (closeCurrentTabRef.current) {
+        closeCurrentTabRef.current()
+      }
+    },
+  })
   const sidebar = useSidebar()
   const previewTimerRef = useRef<number | null>(null)
   const editorViewRef = useRef<EditorView | null>(null)
@@ -86,6 +95,14 @@ function App() {
     onExtra?: () => void
   } | null
   const [confirmDialog, setConfirmDialog] = useState<ConfirmState>(null)
+
+  // Quit Confirm Dialog State
+  type QuitConfirmState = {
+    unsavedCount: number
+    onSaveAll: () => void
+    onQuitWithoutSaving: () => void
+  } | null
+  const [quitConfirmDialog, setQuitConfirmDialog] = useState<QuitConfirmState>(null)
 
   // 切换标签时，同步编辑内容和预览内容到当前标签
   useEffect(() => {
@@ -141,6 +158,120 @@ function App() {
     if (!activeTab) return
     setFilePath(activeTab.path)
   }, [activeTab, setFilePath])
+
+  const handleCurrentTabClose = useCallback(() => {
+    console.log('[App] handleCurrentTabClose called', { activeId })
+    if (!activeId) {
+      console.warn('[App] 没有激活标签，无法关闭')
+      return
+    }
+
+    const tab = tabs.find((t) => t.id === activeId)
+    if (!tab) {
+      console.warn('[App] 未找到当前标签，无法关闭', { activeId })
+      return
+    }
+
+    // 如果有未保存的变更，显示确认对话框
+    if (tab.dirty) {
+      console.log('[App] 当前标签有未保存变更，显示确认对话框', { tabId: tab.id, title: tab.title })
+      setConfirmDialog({
+        title: `Do you want to save changes you made to ${tab.title}?`,
+        message: 'Your changes will be lost if you don\'t save them.',
+        confirmText: 'Save',
+        cancelText: 'Cancel',
+        extraText: "Don't Save",
+        variant: 'stacked',
+        onConfirm: async () => {
+          console.log('[App] 用户选择保存当前标签', { tabId: tab.id })
+          setConfirmDialog(null)
+          const result = await save()
+          if ((result as any)?.ok === false) {
+            setStatusMessage((result as any)?.error?.message ?? '保存失败')
+            return
+          }
+          console.log('[App] 保存成功，关闭当前标签', { tabId: tab.id })
+          closeTab(activeId)
+        },
+        onExtra: () => {
+          console.log('[App] 用户选择不保存直接关闭', { tabId: tab.id })
+          setConfirmDialog(null)
+          closeTab(activeId)
+        },
+      })
+      return
+    }
+
+    // 没有未保存变更，直接关闭
+    console.log('[App] 当前标签无未保存变更，直接关闭', { tabId: tab.id, title: tab.title })
+    closeTab(activeId)
+  }, [activeId, tabs, closeTab, save])
+
+  const handleQuit = useCallback(() => {
+    console.log('[App] handleQuit called')
+    const unsavedTabs = getUnsavedTabs()
+    console.log('[App] 检测未保存标签', { count: unsavedTabs.length })
+
+    if (unsavedTabs.length === 0) {
+      // 没有未保存变更，直接退出
+      console.log('[App] 没有未保存变更，直接退出')
+      if (isTauri()) {
+        void invoke('quit_app').catch((err) => {
+          console.warn('[App] quit_app failed', err)
+        })
+      } else {
+        window.close()
+      }
+      return
+    }
+
+    // 有未保存变更，显示确认对话框
+    setQuitConfirmDialog({
+      unsavedCount: unsavedTabs.length,
+      onSaveAll: async () => {
+        console.log('[App] 用户选择保存所有标签')
+        setQuitConfirmDialog(null)
+
+        // 切换到每个未保存的标签并保存
+        for (const tab of unsavedTabs) {
+          console.log('[App] 切换到标签并保存', { tabId: tab.id, title: tab.title })
+          setActiveTab(tab.id)
+          // 等待状态更新
+          await new Promise(resolve => setTimeout(resolve, 10))
+          const result = await save()
+          if ((result as any)?.ok === false) {
+            setStatusMessage(`保存 ${tab.title} 失败: ${(result as any)?.error?.message ?? '未知错误'}`)
+            console.warn('[App] 保存失败，取消退出', { tabId: tab.id })
+            return
+          }
+          console.log('[App] 标签保存成功', { tabId: tab.id })
+        }
+
+        console.log('[App] 所有文件保存成功，退出')
+        if (isTauri()) {
+          void invoke('quit_app').catch((err) => {
+            console.warn('[App] quit_app failed', err)
+          })
+        } else {
+          window.close()
+        }
+      },
+      onQuitWithoutSaving: () => {
+        console.log('[App] 用户选择不保存直接退出')
+        setQuitConfirmDialog(null)
+        if (isTauri()) {
+          void invoke('quit_app').catch((err) => {
+            console.warn('[App] quit_app failed', err)
+          })
+        } else {
+          window.close()
+        }
+      },
+    })
+  }, [getUnsavedTabs, save, setActiveTab, setStatusMessage])
+
+  // 更新 ref，使 useTabs 中的回调能够访问最新的 handleCurrentTabClose
+  closeCurrentTabRef.current = handleCurrentTabClose
 
   const handleMarkdownChange = useCallback(
     (val: string) => {
@@ -343,6 +474,13 @@ function App() {
     createTab,
     updateActiveMeta,
     openFolderInSidebar,
+    closeCurrentTab,
+    onRequestCloseCurrentTab: () => {
+      if (closeCurrentTabRef.current) {
+        closeCurrentTabRef.current()
+      }
+    },
+    onRequestQuit: handleQuit,
     isTauriEnv: isTauri,
   })
 
@@ -368,18 +506,98 @@ function App() {
   }, [])
 
   const scrollEditorToLineCenter = useCallback(
-    (line: number) => {
+    (line: number, searchText?: string) => {
       const view = editorViewRef.current
-      if (!view) return
+      if (!view) {
+        console.warn('[scrollEditorToLineCenter] editorView not available')
+        return
+      }
 
       const totalLines = view.state.doc.lines
       const targetLine = Math.min(Math.max(line, 1), totalLines)
+
+      // 方案3：如果提供了搜索文本，优先通过文本精确定位
+      if (searchText) {
+        const doc = view.state.doc
+        for (let searchLine = 1; searchLine <= doc.lines; searchLine++) {
+          const lineInfo = doc.line(searchLine)
+          const content = doc.sliceString(lineInfo.from, lineInfo.to).trim()
+          // 移除 # 符号和空格后比较
+          const cleanContent = content.replace(/^#{1,6}\s+/, '').trim()
+
+          if (cleanContent === searchText) {
+            console.log('[scrollEditorToLineCenter] 通过文本找到匹配行:', searchLine, cleanContent)
+            const rect = view.coordsAtPos(lineInfo.from)
+            const scrollDOM = view.scrollDOM
+
+            if (rect) {
+              // 滚动到该行
+              const scrollRect = scrollDOM.getBoundingClientRect()
+              const lineCenter = rect.top + (rect.bottom - rect.top) / 2
+              const delta = lineCenter - (scrollRect.top + scrollRect.height / 2)
+              scrollDOM.scrollTo({ top: scrollDOM.scrollTop + delta })
+
+              // 设置光标位置
+              view.dispatch({
+                selection: { anchor: lineInfo.from },
+              })
+              return
+            }
+          }
+        }
+        console.warn('[scrollEditorToLineCenter] 未找到匹配的文本:', searchText)
+      }
+
+      // 方案1：回退到行号定位（改进后的行号计算）
       const lineInfo = view.state.doc.line(targetLine)
+
+      // 校验：检查目标行是否真的是标题行
+      const lineContent = view.state.doc.sliceString(lineInfo.from, lineInfo.to)
+      const isHeading = /^(#{1,6})\s/.test(lineContent)
+
+      console.log('[scrollEditorToLineCenter]', {
+        targetLine,
+        lineContent: lineContent.slice(0, 60),
+        isHeading,
+        totalLines,
+      })
+
+      // 如果不是标题行且有搜索文本，尝试向前查找最近的标题
+      if (!isHeading && searchText && targetLine > 1) {
+        console.log('[scrollEditorToLineCenter] 目标行不是标题，向前查找最近标题')
+        for (let prevLine = targetLine - 1; prevLine >= 1; prevLine--) {
+          const prevLineInfo = view.state.doc.line(prevLine)
+          const prevContent = view.state.doc.sliceString(
+            prevLineInfo.from,
+            prevLineInfo.to
+          )
+          const prevClean = prevContent.replace(/^#{1,6}\s+/, '').trim()
+          if (prevClean === searchText) {
+            console.log('[scrollEditorToLineCenter] 向前找到匹配标题:', prevLine)
+            const rect = view.coordsAtPos(prevLineInfo.from)
+            if (rect) {
+              const scrollDOM = view.scrollDOM
+              const scrollRect = scrollDOM.getBoundingClientRect()
+              const lineCenter = rect.top + (rect.bottom - rect.top) / 2
+              const delta = lineCenter - (scrollRect.top + scrollRect.height / 2)
+              scrollDOM.scrollTo({ top: scrollDOM.scrollTop + delta })
+
+              view.dispatch({
+                selection: { anchor: prevLineInfo.from },
+              })
+              return
+            }
+          }
+        }
+      }
 
       // 使用编辑器内坐标 + DOM 计算，将目标行尽量滚动到编辑区中间
       const rect = view.coordsAtPos(lineInfo.from)
       const scrollDOM = view.scrollDOM
-      if (!rect) return
+      if (!rect) {
+        console.warn('[scrollEditorToLineCenter] 无法获取行坐标，line:', targetLine)
+        return
+      }
 
       const scrollRect = scrollDOM.getBoundingClientRect()
       const lineCenter = rect.top + (rect.bottom - rect.top) / 2
@@ -397,7 +615,7 @@ function App() {
   const handleOutlineSelect = useCallback(
     (item: OutlineItem) => {
       setActiveOutlineId(item.id)
-      scrollEditorToLineCenter(item.line)
+      scrollEditorToLineCenter(item.line, item.searchText)
     },
     [scrollEditorToLineCenter],
   )
@@ -624,6 +842,23 @@ function App() {
           onConfirm={confirmDialog.onConfirm}
           onExtra={confirmDialog.onExtra}
           onCancel={() => setConfirmDialog(null)}
+        />
+      )}
+
+      {quitConfirmDialog && (
+        <ConfirmDialog
+          title={quitConfirmDialog.unsavedCount === 1
+            ? 'Do you want to save the changes you made to 1 file?'
+            : `Do you want to save the changes you made to ${quitConfirmDialog.unsavedCount} files?`
+          }
+          message="Your changes will be lost if you don't save them."
+          confirmText="Save All"
+          cancelText="Cancel"
+          extraText="Don't Save"
+          variant="stacked"
+          onConfirm={quitConfirmDialog.onSaveAll}
+          onExtra={quitConfirmDialog.onQuitWithoutSaving}
+          onCancel={() => setQuitConfirmDialog(null)}
         />
       )}
     </div>

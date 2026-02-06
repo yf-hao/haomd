@@ -3,7 +3,8 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
-import rehypeHighlight from 'rehype-highlight'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import 'github-markdown-css/github-markdown.css'
 import { MermaidBlock, XMindBlock } from './diagrams'
 import { getRenderer, registerRenderer } from '../modules/markdown/plugins'
@@ -11,9 +12,9 @@ import { getRenderer, registerRenderer } from '../modules/markdown/plugins'
 export type Renderer = (code: string) => React.ReactNode
 
 const remarkPlugins = [remarkGfm, remarkMath]
-const rehypePlugins = [rehypeKatex, rehypeHighlight]
+const rehypePlugins = [rehypeKatex] // 高亮由 SyntaxHighlighter 处理
 
-// 默认注册内置 renderer（避免重复注册）
+// 注册内置 renderer
 const ensureDefaultRenderers = () => {
   if (!getRenderer('mermaid')) {
     registerRenderer('mermaid', (code) => <MermaidBlock code={code} />)
@@ -22,24 +23,22 @@ const ensureDefaultRenderers = () => {
     registerRenderer('mind', (code) => <XMindBlock code={code} />)
   }
 }
-
 ensureDefaultRenderers()
 
-function MarkdownViewerComponent(props: Readonly<{ value: string; activeLine?: number; previewWidth?: number }>) {
+function MarkdownViewerComponent(
+  props: Readonly<{ value: string; activeLine?: number; previewWidth?: number }>
+) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const { value, activeLine, previewWidth } = props
 
   const components = useMemo(() => {
     const blockWithAnchor = (Tag: keyof React.JSX.IntrinsicElements) => {
-      const BlockComponent = ({ node, children, className, ...rest }: any) => {
+      return ({ node, children, className, ...rest }: any) => {
         const start = node?.position?.start?.line
         const end = node?.position?.end?.line ?? start
-        const dataProps = start
-          ? { 'data-line-start': start, 'data-line-end': end ?? start }
-          : undefined
+        const dataProps = start ? { 'data-line-start': start, 'data-line-end': end } : undefined
         return React.createElement(Tag, { className, ...dataProps, ...rest }, children)
       }
-      return BlockComponent
     }
 
     return {
@@ -54,55 +53,93 @@ function MarkdownViewerComponent(props: Readonly<{ value: string; activeLine?: n
       ol: blockWithAnchor('ol'),
       li: blockWithAnchor('li'),
       blockquote: blockWithAnchor('blockquote'),
-      pre: blockWithAnchor('pre'),
-      code({ inline, className, children, node, ...rest }: any) {
-        const match = /language-(\w+)/.exec(className || '')
-        const lang = match?.[1]
-        const content = String(children).trim()
+
+      // pre 渲染器
+      pre: ({ node, children, className, ...rest }: any) => {
         const start = node?.position?.start?.line
         const end = node?.position?.end?.line ?? start
         const dataProps = start
-          ? { 'data-line-start': start, 'data-line-end': end ?? start }
+          ? { 'data-line-start': start, 'data-line-end': end }
           : undefined
 
-        if (!inline && lang) {
+        const parentIsPre =
+          node?.parent?.type === 'element' &&
+          node.parent.tagName === 'pre'
+
+        const classNames = []
+        if (!parentIsPre) classNames.push('code-block')
+
+        return (
+          <pre className={classNames.join(' ')} {...dataProps} {...rest}>
+            {children}
+          </pre>
+        )
+      },
+
+      // code 渲染器
+      code({ inline, className, children, node, ...rest }: any) {
+        const content = String(children).trim()
+        const match = /language-(\w+)/.exec(className || '')
+        const lang = match?.[1]
+
+        // // 行内 code
+        // if (inline) {
+        //   return (
+        //     <code className="inline-code" {...rest}>
+        //       {children}
+        //     </code>
+        //   )
+        // }
+
+        // 块级代码处理
+        const isMultiline = content.includes('\n')
+
+        // 优先使用自定义 renderer
+        if (lang) {
           const renderer = getRenderer(lang)
           if (renderer) return renderer(content)
           if (lang === 'mermaid') return <MermaidBlock code={content} />
           if (lang === 'mind') return <XMindBlock code={content} />
-        }
 
-        if (!inline && lang) {
-          const renderer = getRenderer(lang)
-          if (renderer) return renderer(content)
-          if (lang === 'mermaid') return <MermaidBlock code={content} />
-          if (lang === 'mind') return <XMindBlock code={content} />
-        }
-
-        if (!inline) {
+          // 使用 SyntaxHighlighter 渲染并显示行号
           return (
-            <pre className={`code-block ${className || ''}`.trim()} {...dataProps} {...rest}>
-              <code>{content}</code>
-            </pre>
+            <SyntaxHighlighter
+              language={lang}
+              style={oneDark}
+              showLineNumbers
+              wrapLines
+              {...rest}
+            >
+              {content}
+            </SyntaxHighlighter>
           )
         }
 
-        // inline code: 始终作为行内代码渲染，不占整行
+        // 单行无语言 → 行内 code
+        if (!isMultiline) {
+          return (
+            <code className="code" {...rest}>
+              {content}
+            </code>
+          )
+        }
+
+        // 多行无语言 → 普通 pre/code
         return (
-          <code className={className} {...rest} {...dataProps}>
-            {children}
-          </code>
+          <pre {...rest}>
+            <code className="plain">{content}</code>
+          </pre>
         )
       },
     }
   }, [])
 
-
+  // 高亮当前行逻辑
   useEffect(() => {
     if (!containerRef.current || typeof activeLine !== 'number') return
     const rafId = requestAnimationFrame(() => {
       const anchors = Array.from(
-        containerRef.current?.querySelectorAll<HTMLElement>('[data-line-start]') ?? [],
+        containerRef.current.querySelectorAll<HTMLElement>('[data-line-start]')
       )
       const target = anchors.find((el) => {
         const start = Number(el.dataset.lineStart)
@@ -112,19 +149,15 @@ function MarkdownViewerComponent(props: Readonly<{ value: string; activeLine?: n
       })
 
       anchors.forEach((el) => el.classList.remove('active-block'))
-
       if (!target) return
       target.classList.add('active-block')
 
-      const scrollParent = containerRef.current?.closest('.preview-body') as HTMLElement | null
+      const scrollParent = containerRef.current.closest('.preview-body') as HTMLElement | null
       if (!scrollParent) return
 
       const parentRect = scrollParent.getBoundingClientRect()
       const targetRect = target.getBoundingClientRect()
-
-      // 当前块到底部的距离
       const currentBottomOffset = parentRect.height - (targetRect.bottom - parentRect.top)
-      // 期望：块的底部距离视口底部约为视口高度的 1/4
       const desiredBottomOffset = parentRect.height / 4
       const delta = desiredBottomOffset - currentBottomOffset
 

@@ -1,6 +1,10 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import type { EditorTab } from '../types/tabs'
 
+export type UseTabsOptions = {
+  onRequestCloseCurrentTab?: () => void
+}
+
 const DEFAULT_UNTITLED = '未命名.md'
 
 function deriveTitleFromPath(path: string): string {
@@ -20,7 +24,7 @@ function createEmptyTab(id: string): EditorTab {
   }
 }
 
-export function useTabs() {
+export function useTabs(options?: UseTabsOptions) {
   console.log('[useTabs] hook 已初始化')
   const idRef = useRef(1)
   const [tabs, setTabs] = useState<EditorTab[]>(() => {
@@ -130,6 +134,53 @@ export function useTabs() {
     [activeId],
   )
 
+  const closeCurrentTab = useCallback(
+    () => {
+      console.log('[closeCurrentTab] 被调用')
+      if (!activeId) {
+        console.warn('[closeCurrentTab] 没有激活标签，跳过')
+        return
+      }
+
+      const tab = tabs.find(t => t.id === activeId)
+      if (!tab) {
+        console.warn('[closeCurrentTab] 未找到当前标签，跳过', { activeId, tabs: tabs.map(t => t.id) })
+        return
+      }
+
+      console.log('[closeCurrentTab] 当前标签状态', { tabId: tab.id, title: tab.title, dirty: tab.dirty })
+
+      // 如果提供了 UI 层的确认回调，优先使用（与 TabBar 保持一致）
+      if (options?.onRequestCloseCurrentTab) {
+        console.log('[closeCurrentTab] 使用 App 层的确认对话框')
+        options.onRequestCloseCurrentTab()
+        return
+      }
+
+      // 回退实现：如果有未保存变更，使用浏览器确认对话框
+      if (tab.dirty) {
+        console.log('[closeCurrentTab] 准备弹出确认对话框...')
+        const shouldClose = window.confirm(
+          `标签 "${tab.title}" 有未保存的更改。关闭将丢弃所有更改，是否继续？`
+        )
+        console.log('[closeCurrentTab] 用户选择:', { shouldClose })
+        if (!shouldClose) {
+          console.log('[closeCurrentTab] 用户取消关闭')
+          return
+        }
+      }
+
+      console.log('[closeCurrentTab] 关闭当前标签', { tabId: tab.id, title: tab.title })
+      // 复用现有的 closeTab 逻辑
+      closeTab(activeId)
+    },
+    [activeId, tabs, closeTab, options?.onRequestCloseCurrentTab],
+  )
+
+  const getUnsavedTabs = useCallback(() => {
+    return tabs.filter(t => t.dirty)
+  }, [tabs])
+
   return {
     tabs,
     activeId,
@@ -137,6 +188,8 @@ export function useTabs() {
     createTab,
     setActiveTab,
     closeTab,
+    closeCurrentTab,
+    getUnsavedTabs,
     updateActiveContent,
     updateActiveMeta,
   }

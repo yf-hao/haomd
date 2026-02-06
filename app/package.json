@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "scripts": { 
+  "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
@@ -23,8 +23,8 @@
     "@codemirror/view": "^6.39.12",
     "@tauri-apps/api": "^2.9.1",
     "@tauri-apps/plugin-dialog": "^2",
-    "github-markdown-css": "^5.5.1",
     "@uiw/react-codemirror": "^4.25.4",
+    "github-markdown-css": "^5.5.1",
     "highlight.js": "^11.11.1",
     "katex": "^0.16.28",
     "mermaid": "^11.12.2",
@@ -32,6 +32,7 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-markdown": "^10.1.0",
+    "react-syntax-highlighter": "^16.1.0",
     "rehype-highlight": "^7.0.2",
     "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.1",

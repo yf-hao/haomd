@@ -286,7 +286,7 @@
   padding-right: 4px;
 }
 
-.sidebar-section + .sidebar-section {
+.sidebar-section+.sidebar-section {
   margin-top: 12px;
 }
 
@@ -626,12 +626,14 @@ button.ghost.primary {
 .workspace {
   flex: 1;
   min-height: 0;
-  position: relative; /* 允许 divider 热区绝对定位覆盖在内部 */
+  position: relative;
+  /* 允许 divider 热区绝对定位覆盖在内部 */
   display: grid;
   column-gap: 0;
   row-gap: 12px;
   align-items: stretch;
-  overflow: auto; /* 仅在工作区内部滚动 */
+  overflow: auto;
+  /* 仅在工作区内部滚动 */
 }
 
 /* 浮在编辑区和预览区交界处的透明热区 */
@@ -639,17 +641,21 @@ button.ghost.primary {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 10px; /* 热区宽度，鼠标可命中区域 */
-  transform: translateX(-50%); /* 让 left 落在热区中央，即真实交界线上 */
+  width: 10px;
+  /* 热区宽度，鼠标可命中区域 */
+  transform: translateX(-50%);
+  /* 让 left 落在热区中央，即真实交界线上 */
   cursor: col-resize;
   pointer-events: auto;
   background: transparent;
-  opacity: 0; /* 默认透明 */
+  opacity: 0;
+  /* 默认透明 */
   display: flex;
   align-items: center;
   justify-content: center;
   transition: opacity 0.2s ease;
-  z-index: 20; /* 保证拖拽热区始终在最上层，可点击 */
+  z-index: 20;
+  /* 保证拖拽热区始终在最上层，可点击 */
 }
 
 /* 内部实际显示的轨道和 handle */
@@ -667,7 +673,8 @@ button.ghost.primary {
   width: 2px;
   height: 100%;
   border-radius: 999px;
-  background: #5ad8a6; /* 与当前激活标签顶部的绿色保持一致 */
+  background: #5ad8a6;
+  /* 与当前激活标签顶部的绿色保持一致 */
   box-shadow: 0 0 10px rgba(90, 216, 166, 0.7);
 }
 
@@ -679,11 +686,9 @@ button.ghost.primary {
 
 .divider-hotzone:hover .divider-rail,
 .divider-hotzone.active .divider-rail {
-  background: linear-gradient(
-    180deg,
-    rgba(92, 124, 250, 0.35),
-    rgba(98, 195, 255, 0.35)
-  );
+  background: linear-gradient(180deg,
+      rgba(92, 124, 250, 0.35),
+      rgba(98, 195, 255, 0.35));
 }
 
 .pane {
@@ -807,6 +812,7 @@ button.ghost.primary {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -850,6 +856,7 @@ button.ghost.primary {
     transform: translateY(-20px) scale(0.95);
     opacity: 0;
   }
+
   to {
     transform: translateY(0) scale(1);
     opacity: 1;
@@ -886,26 +893,61 @@ button.ghost.primary {
 
 .modal-actions-stacked .modal-btn {
   width: 100%;
-  padding: 10px 12px;
+  padding: 12px 16px;
   border-radius: 10px;
   font-size: 14px;
   font-weight: 600;
   border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .modal-actions-stacked .modal-btn.primary {
   background: linear-gradient(135deg, #2563eb, #3b82f6);
   color: #ffffff;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.modal-actions-stacked .modal-btn.primary:hover {
+  background: linear-gradient(135deg, #1d4ed8, #2563eb);
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+  transform: translateY(-1px);
+}
+
+.modal-actions-stacked .modal-btn.primary:active {
+  transform: translateY(0);
 }
 
 .modal-actions-stacked .modal-btn.secondary {
   background: rgba(148, 163, 184, 0.24);
   color: #e5e7eb;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.modal-actions-stacked .modal-btn.secondary:hover {
+  background: rgba(148, 163, 184, 0.36);
+  border-color: rgba(148, 163, 184, 0.4);
+  transform: translateY(-1px);
+}
+
+.modal-actions-stacked .modal-btn.secondary:active {
+  transform: translateY(0);
 }
 
 .modal-actions-stacked .modal-btn.tertiary {
-  background: transparent;
+  background: rgba(148, 163, 184, 0.24);
   color: #e5e7eb;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.modal-actions-stacked .modal-btn.tertiary:hover {
+  background: rgba(148, 163, 184, 0.36);
+  border-color: rgba(148, 163, 184, 0.4);
+  transform: translateY(-1px);
+}
+
+.modal-actions-stacked .modal-btn.tertiary:active {
+  transform: translateY(0);
 }
 
 
@@ -924,4 +966,47 @@ button.ghost.primary {
 
 .markdown-body {
   padding: 5px 10px;
+}
+
+/* 提高语义权重覆盖原始 */
+.markdown-body pre:not(.no-style) {
+  padding: 6px 6px;
+  margin: 0.5em;
+}
+
+
+
+#footnote-label {
+  /* 隐藏原来的文字 */
+  visibility: hidden;
+  /* 或者 visibility: hidden */
+  position: relative;
+  /* 为 ::after 定位 */
+}
+
+#footnote-label::after {
+  content: "注释";
+  /* 替换文字 */
+  visibility: visible;
+  position: absolute;
+  /* 可根据需要调整位置 */
+  left: 0;
+  top: 0;
+}
+
+
+
+/* .markdown-body pre:not(:has(> pre)):has(> code) {
+  background-color: rgba(100, 100, 100, 255); 
+  padding: 2px 5px;
+  border-radius: 4px;
+  display: inline;
+} */
+/* var(--bgColor-muted) */
+.markdown-body code:not(:is(pre code)) {
+  background-color: rgba(100, 100, 100, 255);
+  padding: 2px 5px;
+  border-radius: 4px;
+  display: inline;
+  margin: 0 2px;
 }

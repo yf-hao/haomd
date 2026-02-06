@@ -26,6 +26,9 @@ export type CommandContext = {
   updateActiveMeta: (path: string, dirty: boolean) => void
   openFolderInSidebar?: () => Promise<void>
   toggleSidebarVisible?: () => void
+  closeCurrentTab: () => void
+  onRequestCloseCurrentTab?: () => void
+  onRequestQuit?: () => void
 }
 
 export const createCommandRegistry = (ctx: CommandContext): CommandRegistry => ({
@@ -97,12 +100,22 @@ export const createCommandRegistry = (ctx: CommandContext): CommandRegistry => (
     }
   },
   close_file: () => {
-    if (!ctx.confirmLoseChanges()) return
-    ctx.setStatusMessage('占位：Close File 未实现')
+    // 优先使用 App 层的确认对话框（与 TabBar 一致）
+    if (ctx.onRequestCloseCurrentTab) {
+      ctx.onRequestCloseCurrentTab()
+    } else {
+      // 回退到基础实现
+      ctx.closeCurrentTab()
+    }
   },
   quit: () => {
-    if (!ctx.confirmLoseChanges()) return
-    ctx.setStatusMessage('占位：Quit 未实现')
+    if (ctx.onRequestQuit) {
+      ctx.onRequestQuit()
+    } else {
+      // 回退实现：如果有未保存变更，使用浏览器确认对话框
+      if (!ctx.confirmLoseChanges()) return
+      ctx.setStatusMessage('占位：Quit 未实现')
+    }
   },
   paste: () => {
     // 粘贴由原生菜单 -> native://paste 事件负责，这里不再调用 execCommand

@@ -622,6 +622,11 @@ async fn set_title(app: AppHandle, title: String) -> Result<(), String> {
     .map_err(|e: tauri::Error| e.to_string())
 }
 
+#[tauri::command]
+async fn quit_app() {
+  std::process::exit(0);
+}
+
 fn abbreviate_path_for_menu(path: &str) -> String {
   // 将用户主目录替换为 ~，让路径更短更易读
   if let Ok(home) = std::env::var("HOME") {
@@ -908,9 +913,7 @@ pub fn run() {
 
         // 其他菜单统一推送到前端 dispatcher
         let _ = app.emit("menu://action", action.to_string());
-        if action == "quit" {
-          std::process::exit(0);
-        }
+        // 注意：quit 事件不立即退出，等待前端处理完确认对话框后再调用 quit 命令
       });
 
       Ok(())
@@ -926,7 +929,8 @@ pub fn run() {
       save_sidebar_state,
       list_folder,
       set_title,
-      delete_fs_entry
+      delete_fs_entry,
+      quit_app
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
