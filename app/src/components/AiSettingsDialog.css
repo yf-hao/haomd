@@ -1,0 +1,271 @@
+/* AI Settings dialog styles */
+.modal.modal-ai-settings {
+  max-width: 920px;
+  width: 900px;
+  min-width: 760px;
+  padding: 20px 24px 18px;
+}
+
+.ai-settings-body {
+  display: flex;
+  gap: 20px;
+  align-items: stretch;
+}
+
+.ai-settings-column-left,
+.ai-settings-column-right {
+  flex: 1;
+  min-width: 0;
+}
+
+.ai-settings-column-left {
+  border-right: 1px solid rgba(148, 163, 184, 0.3);
+  padding-right: 16px;
+}
+
+.ai-settings-column-right {
+  padding-left: 4px;
+  display: flex;
+  flex-direction: column;
+}
+
+.ai-settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field-group.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.field-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #9ca3af;
+}
+
+.field-input,
+.field-textarea,
+.field-select {
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  background: rgba(15, 23, 42, 0.9);
+  color: #e5e7eb;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+.field-input::placeholder {
+  color: rgba(148, 163, 184, 0.7);
+}
+
+.field-textarea {
+  resize: vertical;
+}
+
+.field-input:focus,
+.field-textarea:focus,
+.field-select:focus {
+  outline: none;
+  border-color: #5c7cfa;
+  box-shadow: 0 0 0 1px rgba(92, 124, 250, 0.5);
+}
+
+.field-select {
+  min-width: 160px;
+}
+
+.form-error {
+  margin-top: 4px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.6);
+  font-size: 12px;
+  color: #fecaca;
+}
+
+.ai-settings-form-actions {
+  margin-top: 4px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.providers-header {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8fa1c7;
+  margin-bottom: 8px;
+}
+
+.providers-empty {
+  flex: 1;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px dashed rgba(148, 163, 184, 0.45);
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+.providers-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.provider-item {
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: rgba(15, 23, 42, 0.9);
+}
+
+.provider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.provider-row:hover {
+  background: rgba(30, 64, 175, 0.4);
+}
+
+.provider-default-dot {
+  border: none;
+  background: transparent;
+  color: #e5e7eb;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.provider-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.provider-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #e5e7eb;
+}
+
+.provider-sub {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.provider-toggle {
+  border: none;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.provider-details {
+  padding: 8px 10px 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.provider-detail-row {
+  font-size: 12px;
+  color: #c4ccee;
+}
+
+.provider-models {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.provider-model-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 12px;
+}
+
+.provider-model-id {
+  color: #e5e7eb;
+}
+
+.link-button {
+  border: none;
+  background: transparent;
+  color: #60a5fa;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.link-button:hover {
+  text-decoration: underline;
+}
+
+.provider-actions {
+  margin-top: 6px;
+  display: flex;
+  gap: 8px;
+}
+
+.provider-actions .ghost {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.provider-actions .ghost.danger {
+  border-color: rgba(248, 113, 113, 0.7);
+  color: #fecaca;
+}
+
+.default-summary {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(148, 163, 184, 0.35);
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+@media (max-width: 960px) {
+  .modal.modal-ai-settings {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .ai-settings-body {
+    flex-direction: column;
+  }
+
+  .ai-settings-column-left {
+    border-right: none;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+    padding-right: 0;
+    padding-bottom: 12px;
+    margin-bottom: 8px;
+  }
+
+  .ai-settings-column-right {
+    padding-left: 0;
+  }
+}
