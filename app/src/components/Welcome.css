@@ -25,7 +25,7 @@
 .logo-mark {
   width: 64px;
   height: 64px;
-  background: linear-gradient(135deg, #5ad8a6, #7cf5c6);
+  
   border-radius: 16px;
   display: flex;
   align-items: center;
@@ -33,19 +33,19 @@
   font-size: 28px;
   font-weight: 700;
   color: #0a0c12;
-  box-shadow: 0 8px 24px rgba(90, 216, 166, 0.35);
+
 }
 
 .logo-title {
   font-size: 36px;
   font-weight: 700;
-  color: #e8ecf5;
+  color: var(--z-color-fg-default);
   letter-spacing: -0.5px;
 }
 
 .welcome-subtitle {
   font-size: 16px;
-  color: #9ca3af;
+  color: var(--z-color-fg-muted);
   text-align: center;
   margin: 0 0 56px 0;
 }
@@ -72,7 +72,7 @@
 }
 
 .welcome-button.primary {
-  background: linear-gradient(135deg, #2563eb, #3b82f6);
+  background: linear-gradient(135deg, var(--z-color-accent-primary), var(--z-color-accent-primary-soft));
   color: #ffffff;
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
 }
@@ -86,7 +86,7 @@
 .welcome-button.secondary {
   background: rgba(148, 163, 184, 0.24);
   color: #e5e7eb;
-  border: 1px solid rgba(148, 163, 184, 0.3);
+  border: 1px solid var(--z-color-border-strong);
 }
 
 .welcome-button.secondary:hover {

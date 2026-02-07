@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "test": "vitest"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.0",
@@ -26,6 +27,7 @@
     "@tauri-apps/plugin-dialog": "^2",
     "@uiw/react-codemirror": "^4.25.4",
     "github-markdown-css": "^5.5.1",
+    "jsdom": "^28.0.0",
     "katex": "^0.16.28",
     "mermaid": "^11.12.2",
     "mind-elixir": "^5.6.1",
@@ -41,17 +43,21 @@
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@tauri-apps/cli": "^2.9.1",
+    "@testing-library/jest-dom": "^6.4.0",
+    "@testing-library/react": "^14.0.0",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
+    "@vitest/ui": "^1.6.0",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
-    "vite": "npm:rolldown-vite@7.2.5"
+    "vite": "npm:rolldown-vite@7.2.5",
+    "vitest": "^1.6.0"
   },
   "overrides": {
     "vite": "npm:rolldown-vite@7.2.5"

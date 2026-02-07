@@ -168,6 +168,24 @@ struct AiSettingsCfg {
   default_provider_id: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct PromptRoleCfg {
+  id: String,
+  name: String,
+  #[serde(default)]
+  description: Option<String>,
+  prompt: String,
+  #[serde(default)]
+  is_default: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct PromptSettingsCfg {
+  roles: Vec<PromptRoleCfg>,
+  #[serde(default)]
+  default_role_id: Option<String>,
+}
+
 fn sidebar_state_path(app: &AppHandle) -> std::io::Result<PathBuf> {
   // 与 recent.json 相同策略：优先使用配置目录
   if let Ok(mut dir) = app.path().config_dir() {
@@ -190,6 +208,17 @@ fn ai_settings_path(app: &AppHandle) -> std::io::Result<PathBuf> {
 
   let dir = std::env::current_dir()?;
   Ok(dir.join("ai_settings.json"))
+}
+
+fn prompt_settings_path(app: &AppHandle) -> std::io::Result<PathBuf> {
+  if let Ok(mut dir) = app.path().config_dir() {
+    dir.push("haomd");
+    std::fs::create_dir_all(&dir)?;
+    return Ok(dir.join("prompt_settings.json"));
+  }
+
+  let dir = std::env::current_dir()?;
+  Ok(dir.join("prompt_settings.json"))
 }
 
 async fn read_sidebar_state(app: &AppHandle) -> std::io::Result<SidebarState> {
@@ -827,7 +856,8 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .build()?;
 
   let ai_menu = SubmenuBuilder::new(app, "AI")
-        .item(&MenuItemBuilder::new("AI Settings").id("ai_settings").accelerator("CmdOrCtrl+,").build(app)?)
+        .item(&MenuItemBuilder::new("Provider Settings").id("ai_settings").accelerator("CmdOrCtrl+,").build(app)?)
+        .item(&MenuItemBuilder::new("Prompt Settings").id("ai_prompt_settings").build(app)?)
         .item(&MenuItemBuilder::new("Open AI Chat").id("ai_chat").build(app)?)
         .item(&MenuItemBuilder::new("Ask AI About File").id("ai_ask_file").build(app)?)
         .item(&MenuItemBuilder::new("Ask AI About Selection").id("ai_ask_selection").build(app)?)
@@ -929,6 +959,80 @@ async fn save_ai_settings(app: AppHandle, cfg: AiSettingsCfg) -> ResultPayload<(
     Err(err) => err_payload(
       ErrorCode::IoError,
       format!("写入 ai_settings 失败: {err}"),
+      trace,
+    ),
+  }
+}
+
+#[tauri::command]
+async fn load_prompt_settings(app: AppHandle) -> ResultPayload<PromptSettingsCfg> {
+  let trace = new_trace_id();
+  let path = match prompt_settings_path(&app) {
+    Ok(p) => p,
+    Err(err) => {
+      return err_payload(
+        ErrorCode::IoError,
+        format!("获取 prompt_settings 路径失败: {err}"),
+        trace,
+      );
+    }
+  };
+
+  match fs::read(&path).await {
+    Ok(bytes) => {
+      let cfg: PromptSettingsCfg = serde_json::from_slice(&bytes).unwrap_or(PromptSettingsCfg {
+        roles: Vec::new(),
+        default_role_id: None,
+      });
+      ok(cfg, trace)
+    }
+    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+      ok(
+        PromptSettingsCfg {
+          roles: Vec::new(),
+          default_role_id: None,
+        },
+        trace,
+      )
+    }
+    Err(err) => err_payload(
+      ErrorCode::IoError,
+      format!("读取 prompt_settings 失败: {err}"),
+      trace,
+    ),
+  }
+}
+
+#[tauri::command]
+async fn save_prompt_settings(app: AppHandle, cfg: PromptSettingsCfg) -> ResultPayload<()> {
+  let trace = new_trace_id();
+  let path = match prompt_settings_path(&app) {
+    Ok(p) => p,
+    Err(err) => {
+      return err_payload(
+        ErrorCode::IoError,
+        format!("获取 prompt_settings 路径失败: {err}"),
+        trace,
+      );
+    }
+  };
+
+  let bytes = match serde_json::to_vec_pretty(&cfg) {
+    Ok(b) => b,
+    Err(err) => {
+      return err_payload(
+        ErrorCode::IoError,
+        format!("序列化 prompt_settings 失败: {err}"),
+        trace,
+      );
+    }
+  };
+
+  match fs::write(&path, bytes).await {
+    Ok(()) => ok((), trace),
+    Err(err) => err_payload(
+      ErrorCode::IoError,
+      format!("写入 prompt_settings 失败: {err}"),
       trace,
     ),
   }
@@ -1042,6 +1146,8 @@ pub fn run() {
       quit_app,
       load_ai_settings,
       save_ai_settings,
+      load_prompt_settings,
+      save_prompt_settings,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

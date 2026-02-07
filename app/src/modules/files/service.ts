@@ -1,32 +1,15 @@
 import { invoke } from '@tauri-apps/api/core'
 import { filesConfig } from '../../config/files'
 import type { ErrorCode, FileEntry, FilePayload, RecentFile, Result, ServiceError, WriteResult } from './types'
+import type { BackendCode, BackendError, BackendOk, BackendResult } from '../platform/backendTypes'
+import { isTauriEnv } from '../platform/runtime'
 
-const isTauri = () =>
-  typeof window !== 'undefined' &&
-  (Boolean((window as any).__TAURI_INTERNALS__) || Boolean((window as any).__TAURI__))
+const isTauri = isTauriEnv
 
 const makeTraceId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
     : `trace_${Date.now()}_${Math.random().toString(16).slice(2)}`
-
-type BackendCode =
-  | 'OK'
-  | 'CANCELLED'
-  | 'IoError'
-  | 'NotFound'
-  | 'TooLarge'
-  | 'CONFLICT'
-  | 'InvalidPath'
-  | 'UNSUPPORTED'
-  | 'UNKNOWN'
-
-type BackendError = { code: BackendCode; message: string; trace_id?: string }
-
-type BackendOk<T> = { data: T; trace_id?: string }
-
-type BackendResult<T> = { Ok: BackendOk<T> } | { Err: { error: BackendError } }
 
 type BackendFile = {
   path: string

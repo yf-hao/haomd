@@ -2,8 +2,8 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: radial-gradient(circle at 10% 10%, #10131a, #06070b 35%), #05060a;
-  color: #e8ecf5;
+  background: radial-gradient(circle at 10% 10%, #10131a, #06070b 35%), var(--z-color-bg-app);
+  color: var(--z-color-fg-default);
   overflow: hidden;
 }
 
@@ -118,11 +118,11 @@
   align-items: center;
   justify-content: space-between;
   padding: 0 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(5, 7, 12, 0.96);
+  border-top: 1px solid var(--z-color-border-subtle);
+  background: var(--z-color-bg-elevated);
   backdrop-filter: blur(8px);
   font-size: 11px;
-  color: #9ca3af;
+  color: var(--z-color-fg-muted);
 }
 
 .bottom-bar-left,
@@ -138,9 +138,9 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--z-color-border-subtle);
   backdrop-filter: blur(8px);
-  background: rgba(8, 10, 18, 0.7);
+  background: var(--z-color-bg-elevated-soft);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -162,7 +162,7 @@
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
   font-size: 12px;
-  color: #9ab8ff;
+  color: var(--z-color-fg-accent);
 }
 
 .dot {
@@ -260,9 +260,9 @@
 button.ghost {
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.04);
-  color: #e8ecf5;
+  color: var(--z-color-fg-default);
   padding: 8px 12px;
-  border-radius: 10px;
+  border-radius: var(--z-radius-md);
   transition: all 0.2s ease;
 }
 
@@ -277,8 +277,8 @@ button.ghost:hover {
 }
 
 button.ghost.primary {
-  border-color: #5c7cfa;
-  background: linear-gradient(135deg, #5c7cfa, #62c3ff);
+  border-color: var(--z-color-accent-primary-alt);
+  background: linear-gradient(135deg, var(--z-color-accent-primary-alt), var(--z-color-accent-primary-alt-soft));
   color: #0a0c12;
   font-weight: 700;
 }
@@ -356,11 +356,11 @@ button.ghost.primary {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--z-color-bg-surface);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 14px;
+  border-radius: var(--z-radius-lg);
   overflow: hidden;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--z-shadow-elevated);
 }
 
 .floating-toggle {
@@ -370,9 +370,9 @@ button.ghost.primary {
   z-index: 5;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.06);
-  color: #e8ecf5;
+  color: var(--z-color-fg-default);
   padding: 8px 12px;
-  border-radius: 10px;
+  border-radius: var(--z-radius-md);
   font-size: 12px;
   backdrop-filter: blur(6px);
   transition: all 0.2s ease;
@@ -417,8 +417,8 @@ button.ghost.primary {
 
 .modal {
   background: rgba(15, 23, 42, 0.98);
-  border: 1px solid rgba(148, 163, 184, 0.35);
-  border-radius: 12px;
+  border: 1px solid var(--z-color-border-strong);
+  border-radius: var(--z-radius-md);
   box-shadow:
     0 20px 60px rgba(0, 0, 0, 0.8),
     0 0 0 1px rgba(148, 163, 184, 0.2);
@@ -463,7 +463,7 @@ button.ghost.primary {
 .modal-title {
   font-size: 18px;
   font-weight: 600;
-  color: #e8ecf5;
+  color: var(--z-color-fg-default);
   margin-bottom: 16px;
 }
 

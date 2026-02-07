@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import type { BackendResult } from '../platform/backendTypes'
 
 export type UiProviderModel = {
   id: string
@@ -43,23 +44,6 @@ export type AiSettingsCfg = {
   providers: AiProviderCfg[]
   default_provider_id?: string | null
 }
-
-export type BackendCode =
-  | 'OK'
-  | 'CANCELLED'
-  | 'IoError'
-  | 'NotFound'
-  | 'TooLarge'
-  | 'CONFLICT'
-  | 'InvalidPath'
-  | 'UNSUPPORTED'
-  | 'UNKNOWN'
-
-export type BackendError = { code: BackendCode; message: string; trace_id?: string }
-
-export type BackendOk<T> = { data: T; trace_id?: string }
-
-export type BackendResult<T> = { Ok: BackendOk<T> } | { Err: { error: BackendError } }
 
 export function fromCfg(cfg: AiSettingsCfg | null | undefined): AiSettingsState {
   if (!cfg) return emptySettings

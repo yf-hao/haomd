@@ -1,4 +1,17 @@
 {
+  "scripts": {
+    "test": "cd app && vitest"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0",
+    "vitest": "^1.6.0",
+    "@vitest/ui": "^1.6.0",
+    "@testing-library/react": "^14.0.0",
+    "@testing-library/jest-dom": "^6.4.0",
+    "@types/react": "^18.0.38",
+    "@types/react-dom": "^18.0.11",
+    "@vitejs/plugin-react": "^4.0.0"
+  },
   "dependencies": {
     "@types/react-syntax-highlighter": "^15.5.13",
     "react-syntax-highlighter": "^16.1.0"

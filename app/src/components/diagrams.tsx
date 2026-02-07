@@ -228,12 +228,8 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
       lastHashRef.current = codeHash
 
       try {
+        // 自动缩放以适配当前画布尺寸，然后居中
         mind.scaleFit()
-        const targetScale = 1.6
-        const currentScale = (mind as any).view?.scale ?? 1
-        if (currentScale < targetScale) {
-          mind.scale(targetScale / currentScale)
-        }
         mind.toCenter()
       } catch (e) {
         console.warn('Mind-elixir scaleFit failed', e)
@@ -245,12 +241,8 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
     const resizeHandler = () => {
       if (!mindRef.current) return
       try {
-        const targetScale = 1.6
+        // 视图尺寸变化时重新自适应缩放并居中
         mindRef.current.scaleFit()
-        const currentScale = (mindRef.current as any).view?.scale ?? 1
-        if (currentScale < targetScale) {
-          mindRef.current.scale(targetScale / currentScale)
-        }
         mindRef.current.toCenter()
       } catch (e) {
         console.warn('Mind-elixir scaleFit on resize failed', e)

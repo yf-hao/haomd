@@ -50,13 +50,13 @@
 .field-label {
   font-size: 12px;
   font-weight: 500;
-  color: #9ca3af;
+  color: var(--z-color-fg-muted);
 }
 
 .field-input,
 .field-textarea,
 .field-select {
-  border-radius: 8px;
+  border-radius: var(--z-radius-sm);
   border: 1px solid rgba(148, 163, 184, 0.45);
   background: rgba(15, 23, 42, 0.9);
   color: #e5e7eb;
@@ -106,7 +106,7 @@
   font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #8fa1c7;
+  color: var(--z-color-fg-subtle);
   margin-bottom: 8px;
 }
 
@@ -231,6 +231,100 @@
 .provider-actions .ghost {
   padding: 4px 8px;
   font-size: 12px;
+  border-radius: 6px;
+}
+
+.provider-actions .ghost.danger {
+  border-color: rgba(248, 113, 113, 0.7);
+  color: #fecaca;
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.provider-actions .ghost.primary {
+  border-color: rgba(92, 124, 250, 0.7);
+  color: #5c7cfa;
+  background: rgba(92, 124, 250, 0.1);
+}
+
+.provider-actions .ghost:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.field-select,
+.field-input,
+.field-textarea {
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  background: rgba(15, 23, 42, 0.9);
+  color: #e5e7eb;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+.field-select:focus {
+  outline: none;
+  border-color: #5c7cfa;
+  box-shadow: 0 0 0 1px rgba(92, 124, 250, 0.5);
+}
+
+.provider-actions button {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.provider-actions button:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.provider-actions button.danger {
+  border: 1px solid rgba(248, 113, 113, 0.7);
+  color: #fecaca;
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.provider-actions button.danger:hover {
+  background: rgba(248, 113, 113, 0.2);
+}
+
+.provider-actions button.primary {
+  border: 1px solid rgba(92, 124, 250, 0.7);
+  color: #5c7cfa;
+  background: rgba(92, 124, 250, 0.1);
+}
+
+.provider-actions button.primary:hover {
+  background: rgba(92, 124, 250, 0.2);
+}
+
+.provider-actions button.ghost {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #9ca3af;
+}
+
+.provider-actions button.ghost:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.field-group.inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.field-label {
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+  color: #9ca3af;
+}
+
+.field-group.inline > .field-select {
+  min-width: 140px;
 }
 
 .provider-actions .ghost.danger {

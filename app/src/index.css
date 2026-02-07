@@ -2,12 +2,48 @@
   font-family: 'Inter', 'SF Pro Display', 'Segoe UI', 'PingFang SC', system-ui, -apple-system, sans-serif;
   line-height: 1.6;
   font-weight: 400;
-  color: #e8ecf5;
-  background-color: #05060a;
+  color: var(--z-color-fg-default);
+  background-color: var(--z-color-bg-app);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /* 设计 Tokens：颜色 */
+  --z-color-bg-app: #05060a;
+  --z-color-bg-elevated: rgba(5, 7, 12, 0.96);
+  --z-color-bg-elevated-soft: rgba(8, 10, 18, 0.7);
+  --z-color-bg-surface: rgba(255, 255, 255, 0.02);
+
+  --z-color-fg-default: #e8ecf5;
+  --z-color-fg-muted: #9ca3af;
+  --z-color-fg-subtle: #8fa1c7;
+  --z-color-fg-accent: #9ab8ff;
+
+  --z-color-border-subtle: rgba(255, 255, 255, 0.06);
+  --z-color-border-strong: rgba(148, 163, 184, 0.35);
+
+  --z-color-accent-primary: #2563eb;
+  --z-color-accent-primary-soft: #3b82f6;
+  --z-color-accent-primary-alt: #5c7cfa;
+  --z-color-accent-primary-alt-soft: #62c3ff;
+  --z-color-accent-success: #5ad8a6;
+  --z-color-danger: #f87171;
+
+  /* 设计 Tokens：圆角 */
+  --z-radius-xs: 4px;
+  --z-radius-sm: 6px;
+  --z-radius-md: 10px;
+  --z-radius-lg: 14px;
+
+  /* 设计 Tokens：间距 */
+  --z-spacing-xs: 4px;
+  --z-spacing-sm: 8px;
+  --z-spacing-md: 12px;
+  --z-spacing-lg: 16px;
+
+  /* 设计 Tokens：阴影 */
+  --z-shadow-elevated: 0 10px 30px rgba(0, 0, 0, 0.4);
 }
 
 * {
@@ -20,17 +56,9 @@ body,
   margin: 0;
   min-width: 320px;
   height: 100vh;
-  background: #05060a;
-  color: #e8ecf5;
+  background: var(--z-color-bg-app);
+  color: var(--z-color-fg-default);
   overflow: hidden;
-}
-
-a {
-  color: inherit;
-}
-
-button {
-  font-family: inherit;
 }
 
 a {

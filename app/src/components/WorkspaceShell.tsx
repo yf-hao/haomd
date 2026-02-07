@@ -5,7 +5,7 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { ConflictModal } from './ConflictModal'
 import { ConfirmDialog } from './ConfirmDialog'
 import { TabBar } from './TabBar'
-import { Sidebar, type SidebarContextActionPayload } from './Sidebar'
+import { Sidebar } from './Sidebar'
 import { OutlinePanel } from './OutlinePanel'
 import { Welcome } from './Welcome'
 import { useOutline } from '../hooks/useOutline'
@@ -15,6 +15,8 @@ import { useFilePersistence } from '../hooks/useFilePersistence'
 import { useTabs } from '../hooks/useTabs'
 import { useCommandSystem } from '../hooks/useCommandSystem'
 import { useSidebar } from '../hooks/useSidebar'
+import { useSidebarActions } from '../hooks/useSidebarActions'
+import { useConfirmDialog } from '../hooks/useConfirmDialogs'
 import { onOpenRecentFile } from '../modules/platform/menuEvents'
 import { deleteFsEntry } from '../modules/files/service'
 import { useNativePaste } from '../hooks/useNativePaste'
@@ -154,28 +156,6 @@ export function WorkspaceShell({
     }
   }, [isSidebarResizing, MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH])
 
-  // Confirm Dialog State
-  type ConfirmState = {
-    title: string
-    message: string
-    confirmText?: string
-    cancelText?: string
-    extraText?: string
-    variant?: 'default' | 'stacked'
-    onConfirm: () => void
-    onExtra?: () => void
-  } | null
-
-  const [confirmDialog, setConfirmDialog] = useState<ConfirmState>(null)
-
-  // Quit Confirm Dialog State
-  type QuitConfirmState = {
-    unsavedCount: number
-    onSaveAll: () => void
-    onQuitWithoutSaving: () => void
-  } | null
-
-  const [quitConfirmDialog, setQuitConfirmDialog] = useState<QuitConfirmState>(null)
 
   // 切换标签时，同步编辑内容和预览内容到当前标签
   useEffect(() => {
@@ -297,86 +277,6 @@ export function WorkspaceShell({
     closeTab(activeId)
   }, [activeId, tabs, closeTab, save, setStatusMessage])
 
-  const handleQuit = useCallback(() => {
-    if (import.meta.env.DEV) {
-      console.log('[App] handleQuit called')
-    }
-    const unsavedTabs = getUnsavedTabs()
-    if (import.meta.env.DEV) {
-      console.log('[App] 检测未保存标签', { count: unsavedTabs.length })
-    }
-
-    if (unsavedTabs.length === 0) {
-      // 没有未保存变更，直接退出
-      if (import.meta.env.DEV) {
-        console.log('[App] 没有未保存变更，直接退出')
-      }
-      if (isTauriEnv()) {
-        void invoke('quit_app').catch((err) => {
-          console.warn('[App] quit_app failed', err)
-        })
-      } else {
-        window.close()
-      }
-      return
-    }
-
-    // 有未保存变更，显示确认对话框
-    setQuitConfirmDialog({
-      unsavedCount: unsavedTabs.length,
-      onSaveAll: async () => {
-        if (import.meta.env.DEV) {
-          console.log('[App] 用户选择保存所有标签')
-        }
-        setQuitConfirmDialog(null)
-
-        // 切换到每个未保存的标签并保存
-        for (const tab of unsavedTabs) {
-          if (import.meta.env.DEV) {
-            console.log('[App] 切换到标签并保存', { tabId: tab.id, title: tab.title })
-          }
-          setActiveTab(tab.id)
-          // 等待状态更新
-          await new Promise((resolve) => setTimeout(resolve, 10))
-          const result = await save()
-          if ((result as any)?.ok === false) {
-            setStatusMessage(`保存 ${tab.title} 失败: ${(result as any)?.error?.message ?? '未知错误'}`)
-            if (import.meta.env.DEV) {
-              console.warn('[App] 保存失败，取消退出', { tabId: tab.id })
-            }
-            return
-          }
-          if (import.meta.env.DEV) {
-            console.log('[App] 标签保存成功', { tabId: tab.id })
-          }
-        }
-
-        if (import.meta.env.DEV) {
-          console.log('[App] 所有文件保存成功，退出')
-        }
-        if (isTauriEnv()) {
-          void invoke('quit_app').catch((err) => {
-            console.warn('[App] quit_app failed', err)
-          })
-        } else {
-          window.close()
-        }
-      },
-      onQuitWithoutSaving: () => {
-        if (import.meta.env.DEV) {
-          console.log('[App] 用户选择不保存直接退出')
-        }
-        setQuitConfirmDialog(null)
-        if (isTauriEnv()) {
-          void invoke('quit_app').catch((err) => {
-            console.warn('[App] quit_app failed', err)
-          })
-        } else {
-          window.close()
-        }
-      },
-    })
-  }, [getUnsavedTabs, isTauriEnv, save, setActiveTab, setStatusMessage])
 
   // 更新 ref，使 useTabs 中的回调能够访问最新的 handleCurrentTabClose
   closeCurrentTabRef.current = handleCurrentTabClose
@@ -476,33 +376,6 @@ export function WorkspaceShell({
     [createTab, openFromPath],
   )
 
-  // 从 Sidebar 打开文件：若已有对应标签则只激活，否则创建新标签
-  const openFileFromSidebar = useCallback(
-    async (path: string) => {
-      // 先检查是否已经有该路径的标签
-      const existing = tabs.find((t) => t.path === path)
-      if (existing) {
-        setActiveTab(existing.id)
-        return { ok: true, data: { path: existing.path } } as any
-      }
-
-      // 没有标签时，走统一的新标签打开逻辑
-      return await openFileInNewTab(path)
-    },
-    [tabs, setActiveTab, openFileInNewTab],
-  )
-
-  // Open Recent 专用：仅将文件加入 Sidebar 的单文件列表，不加载整个目录树
-  const openRecentFileInNewTab = useCallback(
-    async (path: string) => {
-      const resp = await openFileInNewTab(path)
-      if (!resp || !resp.ok) return resp
-
-      sidebar.addStandaloneFile(resp.data.path)
-      return resp
-    },
-    [openFileInNewTab, sidebar],
-  )
 
   const openFolderInSidebar = useCallback(async () => {
     if (!isTauriEnv()) {
@@ -527,69 +400,40 @@ export function WorkspaceShell({
     setStatusMessage(`已打开文件夹：${path}`)
   }, [isTauriEnv, sidebar, setStatusMessage])
 
-  const closeTabsByPath = useCallback(
-    (targetPath: string) => {
-      const norm = targetPath
-      tabs.forEach((tab) => {
-        if (tab.path === norm) {
-          closeTab(tab.id)
-        }
-      })
-    },
-    [tabs, closeTab],
-  )
 
-  const handleSidebarContextAction = useCallback(
-    async (payload: SidebarContextActionPayload) => {
-      const { path, kind, action } = payload
+  const { confirmDialog, setConfirmDialog } = useConfirmDialog()
 
-      if (action === 'open') {
-        await openFileFromSidebar(path)
-        return
-      }
+  // 退出确认对话框状态
+  type QuitConfirmState = {
+    unsavedCount: number
+    onSaveAll: () => void
+    onQuitWithoutSaving: () => void
+  } | null
 
-      if (action === 'remove') {
-        if (kind === 'standalone-file') {
-          sidebar.removeStandaloneFile(path)
-        } else if (kind === 'folder-root') {
-          sidebar.removeFolderRoot(path)
-        }
-        return
-      }
+  const [quitConfirmDialog, setQuitConfirmDialog] = useState<QuitConfirmState>(null)
 
-      if (action === 'delete') {
-        setConfirmDialog({
-          title: '确认删除',
-          message: `确认删除该文件？此操作不可撤销。\n\n${path}`,
-          confirmText: '删除',
-          onConfirm: async () => {
-            setConfirmDialog(null)
-            const resp = await deleteFsEntry(path)
-            if (!resp.ok) {
-              setStatusMessage(resp.error.message)
-              return
-            }
-            sidebar.removeStandaloneFile(path)
-            closeTabsByPath(path)
-          },
-        })
-        return
-      }
-    },
-    [openFileFromSidebar, sidebar, setStatusMessage, closeTabsByPath],
-  )
+  const sidebarActions = useSidebarActions({
+    tabs,
+    setActiveTab,
+    openFileInNewTab,
+    sidebar,
+    deleteFsEntry,
+    setStatusMessage,
+    closeTab,
+    setConfirmDialog,
+  })
 
   // 监听 Tauri 原生菜单中 File → Open Recent 子菜单点击事件
   // 行为：新建标签页并把文件加入 Sidebar 的单文件列表，不展开整个文件夹
   useEffect(() => {
     const unlisten = onOpenRecentFile(async (path) => {
-      await openRecentFileInNewTab(path)
+      await sidebarActions.openRecentFileInNewTab(path)
     })
 
     return () => {
       unlisten()
     }
-  }, [openRecentFileInNewTab])
+  }, [sidebarActions])
 
   useCommandSystem({
     layout,
@@ -615,7 +459,58 @@ export function WorkspaceShell({
         closeCurrentTabRef.current()
       }
     },
-    onRequestQuit: handleQuit,
+    onRequestQuit: () => {
+      if (import.meta.env.DEV) {
+        console.log('[App] handleQuit called')
+      }
+
+      const unsavedTabs = getUnsavedTabs()
+      if (unsavedTabs.length === 0) {
+        if (isTauriEnv()) {
+          void invoke('quit_app').catch((err) => {
+            console.warn('[App] quit_app failed', err)
+          })
+        } else {
+          window.close()
+        }
+        return
+      }
+
+      setQuitConfirmDialog({
+        unsavedCount: unsavedTabs.length,
+        onSaveAll: async () => {
+          setQuitConfirmDialog(null)
+
+          for (const tab of unsavedTabs) {
+            setActiveTab(tab.id)
+            await new Promise((resolve) => setTimeout(resolve, 10))
+            const result = await save()
+            if ((result as any)?.ok === false) {
+              setStatusMessage(`保存 ${tab.title} 失败: ${(result as any)?.error?.message ?? '未知错误'}`)
+              return
+            }
+          }
+
+          if (isTauriEnv()) {
+            void invoke('quit_app').catch((err) => {
+              console.warn('[App] quit_app failed', err)
+            })
+          } else {
+            window.close()
+          }
+        },
+        onQuitWithoutSaving: () => {
+          setQuitConfirmDialog(null)
+          if (isTauriEnv()) {
+            void invoke('quit_app').catch((err) => {
+              console.warn('[App] quit_app failed', err)
+            })
+          } else {
+            window.close()
+          }
+        },
+      })
+    },
     isTauriEnv,
   })
 
@@ -825,14 +720,14 @@ export function WorkspaceShell({
     } else if (initialAction === 'open_folder') {
       void openFolderInSidebar()
     } else if (initialAction === 'open_recent' && initialOpenRecentPath) {
-      void openRecentFileInNewTab(initialOpenRecentPath)
+      void sidebarActions.openRecentFileInNewTab(initialOpenRecentPath)
     } else {
       return
     }
 
     initialActionHandledRef.current = true
     onInitialActionHandled?.()
-  }, [initialAction, initialOpenRecentPath, createTab, openFile, openFolderInSidebar, openRecentFileInNewTab, onInitialActionHandled])
+  }, [initialAction, initialOpenRecentPath, createTab, openFile, openFolderInSidebar, sidebarActions, onInitialActionHandled])
 
   return (
     <>
@@ -843,8 +738,8 @@ export function WorkspaceShell({
           treesByRoot={sidebar.treesByRoot}
           expanded={sidebar.expanded}
           onToggle={sidebar.toggleNode}
-          onFileClick={openFileFromSidebar}
-          onContextAction={handleSidebarContextAction}
+          onFileClick={sidebarActions.openFileFromSidebar}
+          onContextAction={sidebarActions.handleSidebarContextAction}
           activePath={activeTab?.path ?? null}
           panelWidth={sidebarWidth}
         />

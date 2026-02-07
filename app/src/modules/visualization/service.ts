@@ -1,9 +1,8 @@
 import { invoke } from '@tauri-apps/api/core'
 import { backendLimits, enabledRenderers } from '../../config/renderers'
+import { isTauriEnv } from '../platform/runtime'
 
-const isTauri = () =>
-  typeof window !== 'undefined' &&
-  (Boolean((window as any).__TAURI_INTERNALS__) || Boolean((window as any).__TAURI__))
+const isTauri = isTauriEnv
 
 const makeTraceId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto

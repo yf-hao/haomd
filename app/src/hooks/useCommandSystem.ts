@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo } from 'react'
 import type { CommandContext, CommandRegistry } from '../modules/commands/registry'
 import { createCommandRegistry } from '../modules/commands/registry'
 import { onMenuAction } from '../modules/platform/menuEvents'
+import type { IAiClient } from '../modules/ai/client'
+import { createDefaultAiClient } from '../modules/ai/client'
 
 export type CommandSystemParams = CommandContext & {
   /**
@@ -10,6 +12,10 @@ export type CommandSystemParams = CommandContext & {
   isTauriEnv?: () => boolean
   onRequestCloseCurrentTab?: () => void
   onRequestQuit?: () => void
+  /**
+   * 可选的 AI 客户端实现，默认使用基于 AI Settings 的实现。
+   */
+  aiClient?: IAiClient
 }
 
 export function useCommandSystem(params: CommandSystemParams) {
@@ -36,7 +42,12 @@ export function useCommandSystem(params: CommandSystemParams) {
     isTauriEnv,
     onRequestCloseCurrentTab,
     onRequestQuit,
+    aiClient: aiClientFromParams,
   } = params
+
+  const aiClient = useMemo<IAiClient>(() => {
+    return aiClientFromParams ?? createDefaultAiClient()
+  }, [aiClientFromParams])
 
   const commands: CommandRegistry = useMemo(
     () =>
@@ -62,6 +73,7 @@ export function useCommandSystem(params: CommandSystemParams) {
         closeCurrentTab,
         onRequestCloseCurrentTab,
         onRequestQuit,
+        aiClient,
       }),
     [
       layout,
@@ -85,6 +97,7 @@ export function useCommandSystem(params: CommandSystemParams) {
       closeCurrentTab,
       onRequestCloseCurrentTab,
       onRequestQuit,
+      aiClient,
     ],
   )
 

@@ -4,11 +4,9 @@ import './App.css'
 import { Welcome } from './components/Welcome'
 import WorkspaceShell, { type LeftPanelId, type InitialWorkspaceAction } from './components/WorkspaceShell'
 import { AiSettingsDialog } from './components/AiSettingsDialog'
+import { PromptSettingsDialog } from './components/PromptSettingsDialog'
 import { onMenuAction, onOpenRecentFile } from './modules/platform/menuEvents'
-
-const isTauri = () =>
-  typeof window !== 'undefined' &&
-  (Boolean((window as any).__TAURI_INTERNALS__) || Boolean((window as any).__TAURI__))
+import { isTauriEnv } from './modules/platform/runtime'
 
 const appStartTime = performance.now()
 
@@ -18,6 +16,7 @@ function App() {
   const [initialWorkspaceAction, setInitialWorkspaceAction] = useState<InitialWorkspaceAction>(null)
   const [initialOpenRecentPath, setInitialOpenRecentPath] = useState<string | null>(null)
   const [isAiSettingsOpen, setAiSettingsOpen] = useState(false)
+  const [isPromptSettingsOpen, setPromptSettingsOpen] = useState(false)
 
   const handleLeftPanelToggle = useCallback(
     (id: LeftPanelId) => {
@@ -48,11 +47,15 @@ function App() {
 
   // 轻量监听 Tauri 菜单：仅在尚未进入工作区时拦截 File 菜单的新建/打开/打开文件夹/打开最近/退出
   useEffect(() => {
-    if (!isTauri()) return
+    if (!isTauriEnv()) return
 
     const unlistenAction = onMenuAction((actionId) => {
       if (actionId === 'ai_settings') {
         setAiSettingsOpen(true)
+        return
+      }
+      if (actionId === 'ai_prompt_settings') {
+        setPromptSettingsOpen(true)
         return
       }
 
@@ -121,7 +124,7 @@ function App() {
         ) : (
           <WorkspaceShell
             activeLeftPanel={activeLeftPanel}
-            isTauriEnv={isTauri}
+            isTauriEnv={isTauriEnv}
             initialAction={initialWorkspaceAction}
             initialOpenRecentPath={initialOpenRecentPath}
             onInitialActionHandled={handleInitialActionHandled}
@@ -135,6 +138,7 @@ function App() {
       </div>
 
       <AiSettingsDialog open={isAiSettingsOpen} onClose={() => setAiSettingsOpen(false)} />
+      <PromptSettingsDialog open={isPromptSettingsOpen} onClose={() => setPromptSettingsOpen(false)} />
     </div>
   )
 }

@@ -3,12 +3,11 @@ import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialo
 import { clearRecentRemote, deleteRecentRemote, logRecentFile, readFile, writeFile } from '../modules/files/service'
 import { createAutoSaver, type AutoSaveHandle } from '../modules/files/autoSave'
 import type { RecentFile, Result, ServiceError, WriteResult } from '../modules/files/types'
+import { isTauriEnv } from '../modules/platform/runtime'
 
 const DEFAULT_PATH = '未命名.md'
 
-const isTauri = () =>
-  typeof window !== 'undefined' &&
-  (Boolean((window as any).__TAURI_INTERNALS__) || Boolean((window as any).__TAURI__))
+const isTauri = isTauriEnv
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'conflict'
 
