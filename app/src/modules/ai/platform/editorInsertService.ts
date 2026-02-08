@@ -10,7 +10,28 @@
  * - 若当前行为空，则直接在当前行插入文本；
  * - 需保证 undo/redo 正常工作（由具体编辑器实现负责）。
  */
-export async function insertMarkdownAtCursorBelow(_text: string): Promise<void> {
-  // 占位实现：仅定义调用约定，不做任何实际操作。
-  // 后续可以在此处调用实际编辑器 API，例如通过全局对象或依赖注入获得编辑器实例。
+type InsertImpl = ((text: string) => void | Promise<void>) | null
+
+let insertImpl: InsertImpl = null
+
+/**
+ * 由宿主应用注册具体的“插入到编辑器”实现。
+ *
+ * 通常在工作区 Shell（如 WorkspaceShell）中调用，利用实际的 EditorView 来完成插入。
+ */
+export function registerEditorInsertBelow(fn: (text: string) => void | Promise<void>): void {
+  insertImpl = fn
+}
+
+/**
+ * 在当前编辑区光标所在行的下一行插入 Markdown 文本。
+ *
+ * 若未注册具体实现，将输出警告但不会抛错，保证在纯 Web 环境下仍可运行。
+ */
+export async function insertMarkdownAtCursorBelow(text: string): Promise<void> {
+  if (!insertImpl) {
+    console.warn('[editorInsertService] insertMarkdownAtCursorBelow called but no implementation registered')
+    return
+  }
+  await Promise.resolve(insertImpl(text))
 }

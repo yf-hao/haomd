@@ -1,5 +1,5 @@
-import type { PromptRole } from '../promptSettings'
-import { loadPromptSettingsState } from '../promptSettings'
+import type { PromptRole, PromptSettingsState } from '../promptSettings'
+import { loadPromptSettingsStateWithBuiltin } from '../promptSettings'
 
 export type SystemPromptInfo = {
   roles: PromptRole[]
@@ -9,12 +9,13 @@ export type SystemPromptInfo = {
 
 /**
  * 从 Prompt Settings 加载角色列表与当前系统提示词。
+ * - 内置角色与用户角色会合并；
  * - 若存在 defaultRoleId，则以其为当前角色；
  * - 否则在有角色时使用第一条；
  * - 若没有任何角色，则返回空列表与 undefined 的 systemPrompt。
  */
 export async function loadSystemPromptInfo(): Promise<SystemPromptInfo> {
-  const state = await loadPromptSettingsState()
+  const state: PromptSettingsState = await loadPromptSettingsStateWithBuiltin()
   const roles = state.roles ?? []
 
   if (!roles.length) {

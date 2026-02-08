@@ -1,10 +1,11 @@
-import type { ChangeEvent, FC, FormEvent, KeyboardEvent, MouseEventHandler } from 'react'
+import type { ChangeEvent, FC, FormEvent, KeyboardEvent, MouseEvent, MouseEventHandler } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import type { ChatEntryMode, EntryContext } from '../domain/chatSession'
 import { MarkdownViewer } from '../../../components/MarkdownViewer'
 import { useAiChat } from './hooks/useAiChat'
 import { copyTextToClipboard } from '../platform/clipboardService'
 import { insertMarkdownAtCursorBelow } from '../platform/editorInsertService'
+import { onNativePaste } from '../../platform/clipboardEvents'
 
 export type AiChatDialogProps = {
   open: boolean
@@ -32,6 +33,36 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     initialContext,
     open,
   })
+
+  // 监听原生粘贴事件：当焦点在 AI 输入框时，支持 Cmd/Ctrl+V 粘贴
+  useEffect(() => {
+    const unPaste = onNativePaste((text) => {
+      if (!text) return
+      const el = inputRef.current
+      if (!el) return
+
+      if (typeof document !== 'undefined') {
+        const active = document.activeElement
+        // 仅在 AI 输入框聚焦时处理粘贴，避免影响编辑器或其他输入框
+        if (active !== el) return
+      }
+
+      const start = el.selectionStart ?? el.value.length
+      const end = el.selectionEnd ?? el.value.length
+      const value = el.value
+
+      const next = value.slice(0, start) + text + value.slice(end)
+      el.value = next
+      setInput(next)
+
+      const pos = start + text.length
+      el.setSelectionRange(pos, pos)
+    })
+
+    return () => {
+      unPaste()
+    }
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -83,6 +114,10 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
 
   const messages = state?.viewMessages ?? []
   const [visibleLengths, setVisibleLengths] = useState<Record<string, number>>({})
+
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
+  const [dragging, setDragging] = useState(false)
+  const dragStateRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null)
 
   const isDifyProvider = providerType === 'dify'
 
@@ -145,6 +180,52 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     const length = Math.max(0, Math.min(full.length, visible))
     return full.slice(0, length)
   }
+
+  const handleDragStart: MouseEventHandler<HTMLDivElement> = (e) => {
+    if (e.button !== 0) return
+
+    // 如果用户在可交互控件上按下（如 select/button/input/textarea），不要触发拖拽
+    const target = e.target as HTMLElement | null
+    if (target) {
+      const interactive = target.closest('select, button, input, textarea')
+      if (interactive) return
+    }
+
+    const { clientX, clientY } = e
+    dragStateRef.current = {
+      startX: clientX,
+      startY: clientY,
+      originX: dragOffset.x,
+      originY: dragOffset.y,
+    }
+    setDragging(true)
+    e.preventDefault()
+  }
+
+  useEffect(() => {
+    if (!dragging) return
+
+    const handleMove = (e: MouseEvent) => {
+      const state = dragStateRef.current
+      if (!state) return
+      const dx = e.clientX - state.startX
+      const dy = e.clientY - state.startY
+      setDragOffset({ x: state.originX + dx, y: state.originY + dy })
+    }
+
+    const handleUp = () => {
+      setDragging(false)
+      dragStateRef.current = null
+    }
+
+    window.addEventListener('mousemove', handleMove)
+    window.addEventListener('mouseup', handleUp)
+
+    return () => {
+      window.removeEventListener('mousemove', handleMove)
+      window.removeEventListener('mouseup', handleUp)
+    }
+  }, [dragging])
   const roles = systemPromptInfo?.roles ?? []
   const activeRoleId = systemPromptInfo?.activeRoleId
   const lastMessage = messages[messages.length - 1]
@@ -164,12 +245,38 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     el.scrollTop = el.scrollHeight
   }, [lastMessageKey])
 
+  // 当 AI Chat 打开时，拦截 Cmd/Ctrl+W，优先关闭 AI Chat 而不是文档
+  useEffect(() => {
+    if (!open) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isMeta = e.metaKey || e.ctrlKey
+      if (!isMeta) return
+
+      const key = e.key.toLowerCase()
+      if (key !== 'w') return
+
+      e.preventDefault()
+      e.stopPropagation()
+      onClose()
+    }
+
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true)
+    }
+  }, [open, onClose])
+
   if (!open) return null
 
   return (
-    <div className="modal-backdrop">
-      <div className="modal modal-ai-chat" onClick={handleDialogClick}>
-        <div className="modal-title ai-chat-title">
+    <div className="modal-backdrop modal-backdrop-plain">
+      <div
+        className="modal modal-ai-chat"
+        onClick={handleDialogClick}
+        style={{ transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)` }}
+      >
+        <div className="modal-title ai-chat-title" onMouseDown={handleDragStart}>
           <button
             type="button"
             className="ai-chat-close-button"
@@ -270,6 +377,20 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
             </div>
           </form>
         </div>
+
+        {/* 额外拖拽区域：底部 + 左右两侧 */}
+        <div
+          className="ai-chat-drag-handle ai-chat-drag-bottom"
+          onMouseDown={handleDragStart}
+        />
+        <div
+          className="ai-chat-drag-handle ai-chat-drag-left"
+          onMouseDown={handleDragStart}
+        />
+        <div
+          className="ai-chat-drag-handle ai-chat-drag-right"
+          onMouseDown={handleDragStart}
+        />
       </div>
     </div>
   )

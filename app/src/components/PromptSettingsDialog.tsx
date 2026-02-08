@@ -1,9 +1,10 @@
-import type { FC, ChangeEvent, FormEvent } from 'react'
-import { useEffect } from 'react'
+import type { FC, ChangeEvent, FormEvent, MouseEvent as ReactMouseEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './PromptSettingsDialog.css'
 import { emptyPromptSettings, type PromptRole } from '../modules/ai/promptSettings'
 import { usePromptSettingsPersistence } from '../hooks/usePromptSettingsPersistence'
 import { usePromptSettingsState, type PromptRoleDraft } from '../hooks/usePromptSettingsState'
+import { onNativePaste } from '../modules/platform/clipboardEvents'
 
 export type PromptSettingsDialogProps = {
   open: boolean
@@ -28,11 +29,22 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
     resetDraft,
     addOrUpdateRoleFromDraft,
     deleteRole,
+    moveRole,
     setDefaultRole,
     editRoleIntoDraft,
     applyInitialSnapshot,
     updateInitialSnapshot,
   } = usePromptSettingsState(emptyPromptSettings)
+
+  const nameInputRef = useRef<HTMLInputElement | null>(null)
+  const descInputRef = useRef<HTMLInputElement | null>(null)
+  const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const [draggingRoleId, setDraggingRoleId] = useState<string | null>(null)
+  const [previewTargetId, setPreviewTargetId] = useState<string | null>(null)
+  const rolesListRef = useRef<HTMLDivElement | null>(null)
+
+  // 拖拽排序时容器上下的安全范围（像素），用于允许在列表附近一点的位置松手
+  const DRAG_SAFE_MARGIN = 48
 
   useEffect(() => {
     if (!open) return
@@ -52,6 +64,144 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
       disposed = true
     }
   }, [open, load, setSettings, setInitialSnapshot])
+
+  // 支持在 Prompt Settings 窗口输入框中使用 Cmd/Ctrl+V 粘贴
+  useEffect(() => {
+    if (!open) return
+
+    const unPaste = onNativePaste((text) => {
+      if (!text) return
+      if (typeof document === 'undefined') return
+
+      const active = document.activeElement as HTMLElement | null
+      if (!active) return
+
+      let el: HTMLInputElement | HTMLTextAreaElement | null = null
+      let field: keyof PromptRoleDraft | null = null
+
+      if (active === nameInputRef.current) {
+        el = active as HTMLInputElement
+        field = 'name'
+      } else if (active === descInputRef.current) {
+        el = active as HTMLInputElement
+        field = 'description'
+      } else if (active === promptTextareaRef.current) {
+        el = active as HTMLTextAreaElement
+        field = 'prompt'
+      } else {
+        return
+      }
+
+      const start = el.selectionStart ?? el.value.length
+      const end = el.selectionEnd ?? el.value.length
+      const value = el.value
+      const next = value.slice(0, start) + text + value.slice(end)
+
+      el.value = next
+      if (field) {
+        updateDraftField(field, next)
+      }
+
+      const pos = start + text.length
+      el.setSelectionRange(pos, pos)
+    })
+
+    return () => {
+      unPaste()
+    }
+  }, [open, updateDraftField])
+
+  const handleRoleMouseDown = (roleId: string) => (e: ReactMouseEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    setDraggingRoleId(roleId)
+
+    const container = rolesListRef.current
+    if (!container) return
+
+    const items = Array.from(container.querySelectorAll<HTMLDivElement>('.prompt-role-item'))
+    if (!items.length) return
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      moveEvent.preventDefault()
+
+      const mouseY = moveEvent.clientY
+      const containerRect = container.getBoundingClientRect()
+
+      const insideExtendedContainer =
+        mouseY >= containerRect.top - DRAG_SAFE_MARGIN &&
+        mouseY <= containerRect.bottom + DRAG_SAFE_MARGIN
+
+      if (!insideExtendedContainer) {
+        setPreviewTargetId(null)
+        return
+      }
+
+      let nearestIndex = 0
+      let nearestDistance = Number.POSITIVE_INFINITY
+
+      items.forEach((el, index) => {
+        const rect = el.getBoundingClientRect()
+        const centerY = (rect.top + rect.bottom) / 2
+        const dist = Math.abs(centerY - mouseY)
+        if (dist < nearestDistance) {
+          nearestDistance = dist
+          nearestIndex = index
+        }
+      })
+
+      const roles = settings.roles
+      const targetRole = roles[nearestIndex]
+      setPreviewTargetId(targetRole?.id ?? null)
+    }
+
+    const handleMouseUp = (upEvent: MouseEvent) => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+
+      const sourceId = roleId
+      const containerRect = container.getBoundingClientRect()
+      const mouseY = upEvent.clientY
+
+      const insideExtendedContainer =
+        mouseY >= containerRect.top - DRAG_SAFE_MARGIN &&
+        mouseY <= containerRect.bottom + DRAG_SAFE_MARGIN
+
+      setDraggingRoleId(null)
+      setPreviewTargetId(null)
+
+      if (!sourceId || !insideExtendedContainer) {
+        return
+      }
+
+      let nearestIndex = 0
+      let nearestDistance = Number.POSITIVE_INFINITY
+
+      items.forEach((el, index) => {
+        const rect = el.getBoundingClientRect()
+        const centerY = (rect.top + rect.bottom) / 2
+        const dist = Math.abs(centerY - mouseY)
+        if (dist < nearestDistance) {
+          nearestDistance = dist
+          nearestIndex = index
+        }
+      })
+
+      const roles = settings.roles
+      const fromIndex = roles.findIndex((r) => r.id === sourceId)
+      const targetRole = roles[nearestIndex]
+
+      if (!targetRole || fromIndex === -1 || targetRole.id === sourceId) {
+        return
+      }
+
+      moveRole(sourceId, targetRole.id)
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+  }
 
   if (!open) return null
 
@@ -124,6 +274,7 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
                   value={draft.name}
                   onChange={handleDraftChange('name')}
                   placeholder="e.g. Expert Markdown Editor"
+                  ref={nameInputRef}
                 />
               </div>
 
@@ -135,6 +286,7 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
                   value={draft.description}
                   onChange={handleDraftChange('description')}
                   placeholder="Short description shown in the list"
+                  ref={descInputRef}
                 />
               </div>
 
@@ -146,6 +298,7 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
                   value={draft.prompt}
                   onChange={handleDraftChange('prompt')}
                   placeholder="You are an expert Markdown editor..."
+                  ref={promptTextareaRef}
                 />
               </div>
 
@@ -167,16 +320,45 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
             {settings.roles.length === 0 ? (
               <div className="providers-empty">No roles configured yet.</div>
             ) : (
-              <div className="providers-list">
+              <div
+                className="providers-list prompt-roles-list"
+                ref={rolesListRef}
+              >
                 {settings.roles.map((r) => {
                   const isExpanded = expandedId === r.id
                   const isDefault = settings.defaultRoleId === r.id
+                  const isDragging = draggingRoleId === r.id
+                  const isInsertPreview = previewTargetId === r.id
+                  const isBuiltin = r.builtin
+                  const itemClassName = `provider-item prompt-role-item${
+                    isDragging ? ' prompt-role-item-dragging' : ''
+                  }${isInsertPreview ? ' prompt-role-item-insert-target' : ''}${
+                    isBuiltin ? ' prompt-role-item-builtin' : ''
+                  }`
+
                   return (
-                    <div key={r.id} className="provider-item">
+                    <div
+                      key={r.id}
+                      className={itemClassName}
+                    >
                       <div
                         className="provider-row"
-                        onClick={() => setExpandedId(isExpanded ? null : r.id)}
+                        onClick={() => {
+                          if (isBuiltin) return
+                          setExpandedId(isExpanded ? null : r.id)
+                        }}
                       >
+                        {!isBuiltin && (
+                          <div
+                            className="provider-drag-handle"
+                            onMouseDown={handleRoleMouseDown(r.id)}
+                            onClick={(e) => e.stopPropagation()}
+                            aria-label="Drag to reorder"
+                            role="button"
+                          >
+                            ⋮⋮
+                          </div>
+                        )}
                         <button
                           type="button"
                           className="provider-default-dot"
@@ -203,8 +385,9 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
                         </button>
                       </div>
 
-{isExpanded && (
-                <div className="provider-details">
+                      {isExpanded && !isBuiltin && (
+                        <div className="provider-details">
+
                   <div className="provider-detail-row">Prompt Preview:</div>
                   <div className="prompt-preview">
                     {(() => {
@@ -226,16 +409,20 @@ if (previewText.length > 150) {
                     })()}
                   </div>
                   <div className="provider-actions">
-                    <button type="button" className="ghost" onClick={() => handleEditRole(r)}>
-                      Edit Role
-                    </button>
-                    <button
-                      type="button"
-                      className="ghost danger"
-                      onClick={() => handleDeleteRole(r.id)}
-                    >
-                      Delete Role
-                    </button>
+                    {!isBuiltin && (
+                      <>
+                        <button type="button" className="ghost" onClick={() => handleEditRole(r)}>
+                          Edit Role
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost danger"
+                          onClick={() => handleDeleteRole(r.id)}
+                        >
+                          Delete Role
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               )}

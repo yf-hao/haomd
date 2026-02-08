@@ -9,6 +9,7 @@ import 'katex/dist/katex.min.css'
 import 'github-markdown-css/github-markdown.css'
 import './MarkdownViewer.css'
 import { getRenderer } from '../modules/markdown/plugins'
+import { invoke } from '@tauri-apps/api/core'
 
 export type Renderer = (code: string) => React.ReactNode
 
@@ -46,6 +47,35 @@ function MarkdownViewerComponent(
       ol: blockWithAnchor('ol'),
       li: blockWithAnchor('li'),
       blockquote: blockWithAnchor('blockquote'),
+
+      // 自定义链接渲染：在应用内新建浏览器窗口
+      a: ({ node, href, children, ...props }: any) => {
+        const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+          e.preventDefault()
+          if (!href) return
+          void invoke('open_webview_browser', { url: href })
+        }
+
+        return (
+          <a
+            href={href}
+            onClick={handleClick}
+            target="_blank"
+            rel="noreferrer"
+            {...props}
+          >
+            {children}
+          </a>
+        )
+      },
+
+      // 图片渲染器：统一控制宽高
+      img: ({ node, ...props }: any) => (
+        <img
+          {...props}
+          style={{ maxWidth: '50%', height: 'auto', width: '300px' }}
+        />
+      ),
 
       // pre 渲染器
       pre: ({ node, children, className, ...rest }: any) => {

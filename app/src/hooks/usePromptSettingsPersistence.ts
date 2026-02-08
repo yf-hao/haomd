@@ -1,5 +1,10 @@
 import { useCallback, useState } from 'react'
-import { emptyPromptSettings, loadPromptSettingsState, savePromptSettingsState, type PromptSettingsState } from '../modules/ai/promptSettings'
+import {
+  emptyPromptSettings,
+  loadPromptSettingsStateWithBuiltin,
+  savePromptSettingsState,
+  type PromptSettingsState,
+} from '../modules/ai/promptSettings'
 
 export function usePromptSettingsPersistence() {
   const [loading, setLoading] = useState(false)
@@ -10,7 +15,8 @@ export function usePromptSettingsPersistence() {
     setLoading(true)
     setError(null)
     try {
-      const state = await loadPromptSettingsState()
+      // 加载时自动合并内置角色和用户角色
+      const state = await loadPromptSettingsStateWithBuiltin()
       return state
     } catch (err) {
       console.error('Failed to load prompt_settings:', err)
@@ -25,7 +31,12 @@ export function usePromptSettingsPersistence() {
     setSaving(true)
     setError(null)
     try {
-      await savePromptSettingsState(state)
+      // 只保存用户自定义角色，忽略内置角色
+      const userRolesState = {
+        roles: state.roles.filter((r) => !r.builtin),
+        defaultRoleId: state.defaultRoleId,
+      }
+      await savePromptSettingsState(userRolesState)
       return true
     } catch (err) {
       console.error('Failed to save prompt_settings:', err)

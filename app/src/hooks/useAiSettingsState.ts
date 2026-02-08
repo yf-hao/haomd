@@ -43,6 +43,8 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
   const [settings, setSettings] = useState<AiSettingsState>(initial ?? { providers: [], defaultProviderId: undefined })
   const [draft, setDraft] = useState<ProviderDraft>(emptyDraft)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  // 当前正在编辑（左侧表单绑定）的 Provider，如果为 null 表示在创建新 Provider
+  const [editingProviderId, setEditingProviderId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [initialSnapshot, setInitialSnapshot] = useState<AiSettingsState | null>(initial)
 
@@ -57,6 +59,7 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
 
   const resetDraft = useCallback(() => {
     setDraft(emptyDraft)
+    setEditingProviderId(null)
     setError(null)
   }, [])
 
@@ -82,24 +85,42 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
       const existingIds = new Set(existing.models.map((m) => m.id))
       const newIds = models.filter((id) => !existingIds.has(id))
 
-      if (newIds.length === 0) {
+      // 预先计算 API Key 是否发生变化
+      const newApiKeyCandidate = draft.apiKey.trim()
+      const shouldUpdateApiKey = !!newApiKeyCandidate && newApiKeyCandidate !== existing.apiKey
+
+      // 情况 1：模型完全重复且 API Key 也未变化 -> 视为重复添加，给出错误提示
+      if (newIds.length === 0 && !shouldUpdateApiKey) {
         setError('该 Provider 已包含这些模型，无需重复添加')
         return false
       }
 
+      // 情况 2：没有任何新模型，但 API Key 发生变化 -> 仅 Key 变化
+      // 这种情况不直接修改配置，由对话框弹出子模态提示用户使用 Save 更新 Key
+      if (newIds.length === 0 && shouldUpdateApiKey) {
+        return 'key-only'
+      }
+
+      // 情况 3：存在新增模型（无论是否顺便更新 API Key），执行合并
       setSettings((prev) => {
         const providers = prev.providers.map((p) => {
           if (p.id !== existing.id) return p
 
           const pExistingIds = new Set(p.models.map((m) => m.id))
           const reallyNewIds = models.filter((id) => !pExistingIds.has(id))
-          if (reallyNewIds.length === 0) return p
+
+          // 计算是否需要更新 API Key：只有当草稿中提供了非空且与旧值不同的 key 时才覆盖
+          const shouldUpdateApiKeyForThis = !!newApiKeyCandidate && newApiKeyCandidate !== p.apiKey
+
+          if (reallyNewIds.length === 0 && !shouldUpdateApiKeyForThis) return p
 
           const newModels = reallyNewIds.map((id) => ({ id }))
           return {
             ...p,
-            models: [...p.models, ...newModels],
-            defaultModelId: p.defaultModelId ?? reallyNewIds[0],
+            apiKey: shouldUpdateApiKeyForThis ? newApiKeyCandidate : p.apiKey,
+            models: reallyNewIds.length > 0 ? [...p.models, ...newModels] : p.models,
+            defaultModelId:
+              p.defaultModelId ?? (reallyNewIds.length > 0 ? reallyNewIds[0] : p.defaultModelId),
           }
         })
 
@@ -151,9 +172,12 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
       if (expandedId === id) {
         setExpandedId(null)
       }
+      if (editingProviderId === id) {
+        setEditingProviderId(null)
+      }
       return { providers, defaultProviderId }
     })
-  }, [expandedId])
+  }, [expandedId, editingProviderId])
 
   const removeModel = useCallback((providerId: string, modelId: string) => {
     setSettings((prev) => {
@@ -211,6 +235,7 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
       providerType: provider.providerType ?? 'dify',
     })
     setExpandedId(provider.id)
+    setEditingProviderId(provider.id)
   }, [])
 
   const applyInitialSnapshot = useCallback(() => {
@@ -230,6 +255,8 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
     setDraft,
     expandedId,
     setExpandedId,
+    editingProviderId,
+    setEditingProviderId,
     error,
     setError,
     initialSnapshot,

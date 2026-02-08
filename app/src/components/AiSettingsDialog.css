@@ -32,6 +32,7 @@
   margin-top: -10px;
   position: relative;
   justify-content: flex-end; /* 让右侧 Role 靠右，对话标题单独居中处理 */
+  z-index: 20; /* 确保标题栏（包括角色下拉）在拖拽区域之上 */
 }
 
 .ai-chat-close-button {
@@ -110,6 +111,34 @@
   overflow-y: auto;
 }
 
+/* AI Chat 额外拖拽 handle：底部 + 左右两侧 */
+.ai-chat-drag-handle {
+  position: absolute;
+  z-index: 10;
+  cursor: move;
+}
+
+.ai-chat-drag-bottom {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 40px;
+}
+
+.ai-chat-drag-left {
+  top: 40px; /* 避开标题栏，避免遮挡角色选择下拉框 */
+  bottom: 0;
+  left: 0;
+  width: 20px;
+}
+
+.ai-chat-drag-right {
+  top: 40px; /* 避开标题栏，避免遮挡角色选择下拉框 */
+  bottom: 0;
+  right: 0;
+  width: 20px;
+}
+
 .ai-chat-input {
   margin-top: 4px;
 }
@@ -154,11 +183,19 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  transition: all 0.2s ease;
 }
 
 .ai-chat-icon-button:hover {
   background: rgba(30, 64, 175, 0.5);
   border-color: rgba(129, 140, 248, 0.9);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.ai-chat-icon-button:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
 }
 
 .ai-chat-icon {
@@ -166,62 +203,91 @@
   display: inline-block;
 }
 
-/* 复制为 Markdown：小文件图标 */
+/* 复制为 Markdown：改进的复制图标，体现复制的感觉 */
 .ai-chat-icon-copy {
-  width: 14px;
+  width: 16px;
   height: 16px;
-  border-radius: 3px;
-  border: 1.5px solid rgba(226, 232, 240, 0.9);
-  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.9);
+  position: relative;
 }
 
+/* 后面的文档（原始文档） */
 .ai-chat-icon-copy::before {
   content: '';
   position: absolute;
-  top: -1px;
-  right: -1px;
-  width: 7px;
-  height: 7px;
+  left: 2px;
+  top: 2px;
+  width: 10px;
+  height: 12px;
+  background: rgba(148, 163, 184, 0.4);
+  border: 1.5px solid rgba(226, 232, 240, 0.9);
   border-radius: 2px;
-  background: rgba(15, 23, 42, 0.98);
-  border-left: 1.5px solid rgba(226, 232, 240, 0.9);
-  border-bottom: 1.5px solid rgba(226, 232, 240, 0.9);
-  transform: translate(-1px, 1px);
 }
 
-/* 插入到编辑器：向下箭头 + 底部横线 */
+/* 前面的文档（复制的文档，稍微偏移） */
+.ai-chat-icon-copy::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  width: 10px;
+  height: 12px;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1.5px solid rgba(226, 232, 240, 0.9);
+  border-radius: 2px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* 文档内部的内容行 */
+.ai-chat-icon-button:active .ai-chat-icon-copy::after {
+  transform: scale(0.95);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* 插入到编辑器：改进的插入图标，体现插入的感觉 */
 .ai-chat-icon-insert {
-  width: 14px;
+  width: 16px;
   height: 16px;
+  position: relative;
 }
 
-.ai-chat-icon-insert::before,
+/* 向下的箭头 */
+.ai-chat-icon-insert::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 2px;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid rgba(226, 232, 240, 0.95);
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.2));
+}
+
+/* 箭头下方的横线（插入位置） */
 .ai-chat-icon-insert::after {
   content: '';
   position: absolute;
-  left: 3px;
-  right: 3px;
-  border-radius: 999px;
+  left: 50%;
+  bottom: 3px;
+  transform: translateX(-50%);
+  width: 10px;
+  height: 2px;
   background: rgba(226, 232, 240, 0.95);
+  border-radius: 2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
 }
 
-/* 底部横线（插入位置） */
-.ai-chat-icon-insert::before {
+/* 点击时的动画效果 */
+.ai-chat-icon-button:active .ai-chat-icon-insert::before {
+  transform: translateX(-50%) translateY(1px);
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.3));
+}
+
+.ai-chat-icon-button:active .ai-chat-icon-insert::after {
+  transform: translateX(-50%) translateY(1px);
   height: 1.5px;
-  bottom: 2px;
-}
-
-/* 箭头主体：用上边框画一个倒 V */
-.ai-chat-icon-insert::after {
-  top: 3px;
-  height: 8px;
-  border-left: 1.5px solid rgba(226, 232, 240, 0.95);
-  border-right: 1.5px solid rgba(226, 232, 240, 0.95);
-  border-bottom: 1.5px solid rgba(226, 232, 240, 0.95);
-  background: transparent;
-  left: 5px;
-  right: 5px;
-  border-radius: 0 0 3px 3px;
 }
 
 .ai-chat-empty {
@@ -620,6 +686,69 @@
   border-top: 1px solid rgba(148, 163, 184, 0.35);
   font-size: 12px;
   color: #9ca3af;
+}
+
+/* AI Chat 模态窗使用的无遮罩容器：背景透明并允许点击穿透到文档 */
+.modal-backdrop.modal-backdrop-plain {
+  background: transparent;
+  backdrop-filter: none;
+  /* 让文档可以被点击/滚动 */
+  pointer-events: none;
+}
+
+/* 保证 AI Chat 对话框本身仍然可交互 */
+.modal-backdrop.modal-backdrop-plain .modal.modal-ai-chat {
+  pointer-events: auto;
+}
+
+/* AI Settings 中的“仅修改 API Key”提示，使用覆盖在主弹窗之上的子模态窗样式 */
+.ai-settings-submodal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(2px);
+  z-index: 9999; /* 覆盖主设置模态窗 */
+}
+
+.ai-settings-submodal {
+  min-width: 320px;
+  max-width: 480px;
+  padding: 16px 18px 14px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+}
+
+.ai-settings-submodal .submodal-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.ai-settings-submodal .submodal-body {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #e5e7eb;
+  margin-bottom: 12px;
+}
+
+.ai-settings-submodal .submodal-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ai-settings-submodal .submodal-actions .ghost.primary {
+  border: 1px solid rgba(92, 124, 250, 0.7);
+  color: #5c7cfa;
+  background: rgba(92, 124, 250, 0.1);
+}
+
+.ai-settings-submodal .submodal-actions .ghost.primary:hover {
+  background: rgba(92, 124, 250, 0.2);
 }
 
 @media (max-width: 960px) {

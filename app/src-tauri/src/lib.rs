@@ -865,8 +865,8 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
   let ai_menu = SubmenuBuilder::new(app, "AI")
         .item(&MenuItemBuilder::new("Provider Settings").id("ai_settings").accelerator("CmdOrCtrl+,").build(app)?)
         .item(&MenuItemBuilder::new("Prompt Settings").id("ai_prompt_settings").build(app)?)
-        .item(&MenuItemBuilder::new("Open AI Chat").id("ai_chat").accelerator("CmdOrCtrl+Shift+K").build(app)?)
-        .item(&MenuItemBuilder::new("Ask AI About File").id("ai_ask_file").accelerator("CmdOrCtrl+Shift+J").build(app)?)
+        .item(&MenuItemBuilder::new("Open AI Chat").id("ai_chat").accelerator("CmdOrCtrl+Shift+J").build(app)?)
+        .item(&MenuItemBuilder::new("Ask AI About File").id("ai_ask_file").accelerator("CmdOrCtrl+Shift+K").build(app)?)
         .item(&MenuItemBuilder::new("Ask AI About Selection").id("ai_ask_selection").accelerator("CmdOrCtrl+Shift+L").build(app)?)
         .build()?;
 

@@ -43,6 +43,72 @@
   gap: 8px;
 }
 
+/* Prompt roles draggable list */
+.prompt-roles-list {
+  cursor: default;
+}
+
+/* 单个角色 item，用于放插入预览线 */
+.prompt-role-item {
+  position: relative;
+}
+
+.prompt-role-item-dragging {
+  opacity: 0.85;
+  border-style: dashed;
+}
+
+/* 内置角色：不可编辑/删除，可用样式做轻微区分 */
+.prompt-role-item-builtin {
+  border-style: solid;
+  border-color: rgba(148, 163, 184, 0.7);
+}
+
+.prompt-role-item-builtin .provider-name::after {
+  content: ' (builtin)';
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+/* 当前插入目标行高亮样式 */
+.prompt-role-item-insert-target {
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.9);
+  background: rgba(37, 99, 235, 0.15);
+}
+
+/* 插入位置的蓝色横线 */
+.prompt-role-item-insert-target::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: -2px;
+  height: 2px;
+  border-radius: 999px;
+  background: #60a5fa;
+  box-shadow: 0 0 4px rgba(96, 165, 250, 0.8);
+}
+
+/* 插入预览时，把手显示上下拖拽光标 */
+.prompt-role-item-insert-target .provider-drag-handle {
+  cursor: ns-resize;
+}
+
+.provider-drag-handle {
+  width: 14px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.provider-drag-handle:active {
+  cursor: grabbing;
+}
+
 .prompt-preview {
   margin-top: 4px;
   padding: 8px;

@@ -15,6 +15,7 @@ export type AiSettingsDialogProps = {
 export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) => {
   const [activeField, setActiveField] = useState<keyof ProviderDraft | null>(null)
   const [testResult, setTestResult] = useState<string | null>(null)
+  const [showKeyOnlyModal, setShowKeyOnlyModal] = useState(false)
   const { load, save } = useAiSettingsPersistence()
   const {
     settings,
@@ -23,6 +24,8 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
     setDraft,
     expandedId,
     setExpandedId,
+    editingProviderId,
+    setEditingProviderId,
     error,
     setError,
     initialSnapshot,
@@ -175,7 +178,10 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
 
   const handleTestAndAdd = (e: FormEvent) => {
     e.preventDefault()
-    void addOrMergeProviderFromDraft()
+    const result = addOrMergeProviderFromDraft()
+    if (result === 'key-only') {
+      setShowKeyOnlyModal(true)
+    }
   }
 
   const handleDeleteProvider = (id: string) => {
@@ -184,6 +190,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
     if (expandedId === id) {
       resetDraft()
       setActiveField(null)
+      setEditingProviderId(null)
     }
   }
 
@@ -231,8 +238,8 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
       draft.modelsInput.trim() ||
       draft.description.trim()
 
-    // 如果当前还没有任何 Provider，但左侧表单里已经填写了内容，
-    // 在 Save 的时候自动把草稿作为首个 Provider 一并保存（不依赖异步 setState）
+    // 情况 1：当前还没有任何 Provider，但左侧表单里已经填写了内容，
+    // Save 时自动把草稿作为首个 Provider 一并保存（不依赖异步 setState）
     if (!settings.providers.length && hasDraft) {
       const models = parseModelsInput(draft.modelsInput)
       if (!draft.name.trim() || !draft.baseUrl.trim() || !draft.apiKey.trim()) {
@@ -262,6 +269,33 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
       }
     }
 
+    // 情况 2：已有 Provider，支持在 Save 时根据草稿覆盖 API Key
+    if (settings.providers.length && editingProviderId && initialSnapshot) {
+      const providerIndex = stateToSave.providers.findIndex((p) => p.id === editingProviderId)
+      if (providerIndex !== -1) {
+        const currentProvider = stateToSave.providers[providerIndex]
+        const originalProvider =
+          initialSnapshot.providers.find((p) => p.id === editingProviderId) ?? currentProvider
+        const oldApiKey = originalProvider.apiKey
+        const newApiKeyCandidate = draft.apiKey.trim()
+
+        // 只有当草稿中填写了非空且与旧值不同的 API Key 时才覆盖
+        if (newApiKeyCandidate && newApiKeyCandidate !== oldApiKey) {
+          const updatedProvider: UiProvider = {
+            ...currentProvider,
+            apiKey: newApiKeyCandidate,
+          }
+
+          const nextProviders = [...stateToSave.providers]
+          nextProviders[providerIndex] = updatedProvider
+          stateToSave = {
+            ...stateToSave,
+            providers: nextProviders,
+          }
+        }
+      }
+    }
+
     const ok = await save(stateToSave)
     if (!ok) {
       setError('保存失败：请稍后重试')
@@ -282,6 +316,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
         <div className="modal-content ai-settings-body">
           <div className="ai-settings-column-left">
             <form onSubmit={handleTestAndAdd} className="ai-settings-form">
+              {/* 左侧表单内容保持不变 */}
               <div className="field-group">
                 <label className="field-label">Provider Name</label>
                 <input
@@ -362,12 +397,13 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                   Test
                 </button>
                 <button type="submit" className="ghost primary">
-                  Add 
+                  Add
                 </button>
               </div>
             </form>
           </div>
 
+          {/* 右侧 Provider 列表保持原有渲染 */}
           <div className="ai-settings-column-right">
             <div className="providers-header">Configured Providers</div>
             {settings.providers.length === 0 ? (
@@ -451,7 +487,11 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                           </div>
 
                           <div className="provider-actions">
-                            <button type="button" className="ghost primary" onClick={() => handleEditProvider(p)}>
+                            <button
+                              type="button"
+                              className="ghost primary"
+                              onClick={() => handleEditProvider(p)}
+                            >
                               Edit Provider
                             </button>
                             <button
@@ -487,6 +527,28 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
             Save
           </button>
         </div>
+
+        {showKeyOnlyModal && (
+          <div className="ai-settings-submodal-backdrop">
+            <div className="ai-settings-submodal">
+              <div className="submodal-title">提示</div>
+              <div className="submodal-body">
+                检测到当前 Provider 没有新增模型，只修改了 API Key。
+                <br />
+                如需更新 API Key，请直接点击右下角的 Save 按钮保存配置。
+              </div>
+              <div className="submodal-actions">
+                <button
+                  type="button"
+                  className="ghost primary"
+                  onClick={() => setShowKeyOnlyModal(false)}
+                >
+                  知道了
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -22,6 +22,7 @@ import { useConfirmDialog } from '../hooks/useConfirmDialogs'
 import { onOpenRecentFile } from '../modules/platform/menuEvents'
 import { deleteFsEntry } from '../modules/files/service'
 import { useNativePaste } from '../hooks/useNativePaste'
+import { registerEditorInsertBelow } from '../modules/ai/platform/editorInsertService'
 import type { EditorTab } from '../types/tabs'
 
 const EditorPaneLazy = lazy(() =>
@@ -129,6 +130,46 @@ export function WorkspaceShell({
   const sidebar = useSidebar()
   const previewTimerRef = useRef<number | null>(null)
   const editorViewRef = useRef<EditorView | null>(null)
+
+  // 注册“AI 插入到编辑器”实现：在当前光标所在行的下一行插入 Markdown 文本
+  useEffect(() => {
+    registerEditorInsertBelow(async (text: string) => {
+      const view = editorViewRef.current
+      if (!view) {
+        console.warn('[editorInsertService] editorView not available, skip insertMarkdownAtCursorBelow')
+        return
+      }
+      if (!text) return
+
+      const { state } = view
+      const { main } = state.selection
+      const pos = main.head
+      const doc = state.doc
+      const line = doc.lineAt(pos)
+      const lineText = doc.sliceString(line.from, line.to)
+      const isEmptyLine = lineText.trim().length === 0
+
+      let insertText = text
+      let from = line.to
+      let to = line.to
+
+      if (isEmptyLine) {
+        from = line.from
+        to = line.to
+        insertText = text
+      } else {
+        insertText = '\n' + text
+      }
+
+      const tr = state.update({
+        changes: { from, to, insert: insertText },
+        selection: { anchor: from + insertText.length },
+        scrollIntoView: true,
+      })
+
+      view.dispatch(tr)
+    })
+  }, [])
 
   const openAiChatDialog = useCallback(
     (options: { entryMode: ChatEntryMode; initialContext?: EntryContext }) => {
@@ -570,6 +611,32 @@ export function WorkspaceShell({
 
   // 监听来自原生剪贴板的粘贴事件（通过 Hook 封装）
   useNativePaste(editorViewRef, setStatusMessage)
+
+  // 全局支持在输入框中使用 Cmd/Ctrl+A 全选，仅作用于 input/textarea
+  useEffect(() => {
+    const handleSelectAll = (e: KeyboardEvent) => {
+      const isMeta = e.metaKey || e.ctrlKey
+      if (!isMeta) return
+
+      const key = e.key.toLowerCase()
+      if (key !== 'a') return
+
+      const active = document.activeElement as HTMLElement | null
+      if (!active) return
+
+      if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
+        e.preventDefault()
+        e.stopPropagation()
+        active.select()
+      }
+    }
+
+    // 使用 capture 阶段，优先于其他监听器处理
+    window.addEventListener('keydown', handleSelectAll, true)
+    return () => {
+      window.removeEventListener('keydown', handleSelectAll, true)
+    }
+  }, [])
 
   // Global click logger for debugging tab-close issues（仅开发环境启用）
   useEffect(() => {

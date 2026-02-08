@@ -46,12 +46,22 @@ export function usePromptSettingsState(initial: PromptSettingsState | null) {
       return false
     }
 
+    // 如果当前是在编辑一个内置角色，则禁止修改
+    if (draft.id) {
+      const current = settings.roles.find((r) => r.id === draft.id)
+      if (current?.builtin) {
+        setError('Builtin roles cannot be edited.')
+        return false
+      }
+    }
+
     const id = draft.id ?? `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const role: PromptRole = {
       id,
       name: draft.name.trim(),
       description: draft.description.trim() || undefined,
       prompt: draft.prompt,
+      builtin: false,
     }
 
     setSettings((prev) => {
@@ -70,10 +80,15 @@ export function usePromptSettingsState(initial: PromptSettingsState | null) {
     setDraft(emptyDraft)
     setError(null)
     return true
-  }, [draft])
-
+  }, [draft, settings.roles])
   const deleteRole = useCallback((id: string) => {
     setSettings((prev) => {
+      const target = prev.roles.find((r) => r.id === id)
+      if (target?.builtin) {
+        console.warn('[usePromptSettingsState] attempt to delete builtin role, ignored')
+        return prev
+      }
+
       const roles = prev.roles.filter((r) => r.id !== id)
       let defaultRoleId = prev.defaultRoleId
       if (defaultRoleId === id) {
@@ -88,12 +103,42 @@ export function usePromptSettingsState(initial: PromptSettingsState | null) {
       return { roles, defaultRoleId }
     })
   }, [expandedId])
+  const moveRole = useCallback((sourceId: string, targetId: string) => {
+    console.log('[usePromptSettingsState] moveRole', sourceId, '->', targetId)
+    setSettings((prev) => {
+      if (sourceId === targetId) return prev
 
+      const roles = [...prev.roles]
+      const fromIndex = roles.findIndex((r) => r.id === sourceId)
+      const toIndex = roles.findIndex((r) => r.id === targetId)
+
+      if (fromIndex === -1 || toIndex === -1) {
+        console.warn('[usePromptSettingsState] moveRole index not found', { sourceId, targetId })
+        return prev
+      }
+
+      // 内置角色不参与排序
+      if (roles[fromIndex]?.builtin || roles[toIndex]?.builtin) {
+        console.warn('[usePromptSettingsState] skip moveRole for builtin role')
+        return prev
+      }
+
+      const [moved] = roles.splice(fromIndex, 1)
+      roles.splice(toIndex, 0, moved)
+
+      return { ...prev, roles }
+    })
+  }, [])
   const setDefaultRole = useCallback((id: string) => {
     setSettings((prev) => ({ ...prev, defaultRoleId: id }))
   }, [])
 
   const editRoleIntoDraft = useCallback((role: PromptRole) => {
+    if (role.builtin) {
+      console.warn('[usePromptSettingsState] attempt to edit builtin role, ignored')
+      return
+    }
+
     setDraft({
       id: role.id,
       name: role.name,
@@ -102,7 +147,6 @@ export function usePromptSettingsState(initial: PromptSettingsState | null) {
     })
     setExpandedId(role.id)
   }, [])
-
   const applyInitialSnapshot = useCallback(() => {
     if (initialSnapshot) {
       setSettings(initialSnapshot)
@@ -129,6 +173,7 @@ export function usePromptSettingsState(initial: PromptSettingsState | null) {
     resetDraft,
     addOrUpdateRoleFromDraft,
     deleteRole,
+    moveRole,
     setDefaultRole,
     editRoleIntoDraft,
     applyInitialSnapshot,

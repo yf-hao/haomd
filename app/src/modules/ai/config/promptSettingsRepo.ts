@@ -25,14 +25,19 @@ export function fromCfg(cfg: PromptSettingsCfg | null | undefined): PromptSettin
       name: r.name,
       description: r.description ?? undefined,
       prompt: r.prompt,
+      // 从配置文件加载的角色一律视为用户自定义角色
+      builtin: false,
     } as PromptRole)),
     defaultRoleId: cfg.default_role_id ?? undefined,
   }
 }
 
 export function toCfg(state: PromptSettingsState): PromptSettingsCfg {
+  // 只持久化用户自定义角色，忽略内置角色
+  const userRoles = state.roles.filter((r) => !r.builtin)
+
   return {
-    roles: state.roles.map((r) => ({
+    roles: userRoles.map((r) => ({
       id: r.id,
       name: r.name,
       description: r.description ?? null,
