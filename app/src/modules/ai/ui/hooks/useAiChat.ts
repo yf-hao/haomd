@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ChatEntryMode, ConversationState, EntryContext } from '../../domain/chatSession'
 import type { SystemPromptInfo } from '../../application/systemPromptService'
+import type { ProviderType } from '../../domain/types'
 import type { ChatSession, StartChatOptions } from '../../application/chatSessionService'
 import { createChatSession } from '../../application/chatSessionService'
 
@@ -14,6 +15,7 @@ export type UseAiChatResult = {
   loading: boolean
   state: ConversationState | null
   systemPromptInfo: SystemPromptInfo | null
+  providerType: ProviderType | null
   error: Error | null
   send: (content: string) => Promise<void>
   changeRole: (roleId: string) => Promise<void>
@@ -26,6 +28,7 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
   const [loading, setLoading] = useState(false)
   const [state, setState] = useState<ConversationState | null>(null)
   const [systemPromptInfo, setSystemPromptInfo] = useState<SystemPromptInfo | null>(null)
+  const [providerType, setProviderType] = useState<ProviderType | null>(null)
   const [error, setError] = useState<Error | null>(null)
 
   useEffect(() => {
@@ -57,6 +60,7 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
         setSession(created)
         setState(created.getState())
         setSystemPromptInfo(created.getSystemPromptInfo())
+        setProviderType(created.getProviderType())
       } catch (e) {
         if (cancelled) return
         setError(e as Error)
@@ -109,6 +113,7 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
     loading,
     state,
     systemPromptInfo,
+    providerType,
     error,
     send,
     changeRole,

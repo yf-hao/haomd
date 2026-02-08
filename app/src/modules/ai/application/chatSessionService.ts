@@ -1,6 +1,6 @@
 import type { UiProvider } from '../settings'
 import { loadAiSettingsState } from '../settings'
-import type { IStreamingChatClient, ChatMessage } from '../domain/types'
+import type { IStreamingChatClient, ChatMessage, ProviderType } from '../domain/types'
 import {
   type ChatEntryMode,
   type ConversationState,
@@ -25,6 +25,7 @@ export type StartChatOptions = {
 export type ChatSession = {
   getState(): ConversationState
   getSystemPromptInfo(): SystemPromptInfo
+  getProviderType(): ProviderType
   setActiveRole(roleId: string): Promise<void>
   sendUserMessage(content: string): Promise<void>
   dispose(): void
@@ -59,6 +60,8 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
   if (!provider) {
     throw new Error('AI Chat 未配置：请先在 AI Settings 中设置默认 Provider/Model')
   }
+
+  const providerType: ProviderType = provider.providerType ?? 'dify'
 
   const defaultModel = pickDefaultModel(provider)
   const defaultMaxTokens = defaultModel?.maxTokens ?? 2048
@@ -173,6 +176,9 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
     },
     getSystemPromptInfo() {
       return systemPromptInfo
+    },
+    getProviderType() {
+      return providerType
     },
     async setActiveRole(roleId: string): Promise<void> {
       if (disposed) return

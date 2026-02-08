@@ -27,11 +27,19 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     el.style.height = `${next}px`
   }
 
-  const { loading, state, systemPromptInfo, error, send, changeRole, resetError } = useAiChat({
+  const { loading, state, systemPromptInfo, providerType, error, send, changeRole, resetError } = useAiChat({
     entryMode,
     initialContext,
     open,
   })
+
+  useEffect(() => {
+    if (!open) return
+    const el = inputRef.current
+    if (!el) return
+    el.focus()
+    el.setSelectionRange(el.value.length, el.value.length)
+  }, [open])
 
   const doSend = async () => {
     const raw = input
@@ -74,10 +82,81 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
   }
 
   const messages = state?.viewMessages ?? []
+  const [visibleLengths, setVisibleLengths] = useState<Record<string, number>>({})
+
+  const isDifyProvider = providerType === 'dify'
+
+  useEffect(() => {
+    if (!isDifyProvider) {
+      setVisibleLengths({})
+      return
+    }
+
+    let frameId: number | null = null
+    let lastTime = performance.now()
+
+    const stepPerSecond = 60
+
+    const tick = (time: number) => {
+      const deltaMs = time - lastTime
+      lastTime = time
+      const deltaChars = Math.max(1, Math.round((deltaMs / 1000) * stepPerSecond))
+
+      setVisibleLengths((prev) => {
+        let changed = false
+        const next: Record<string, number> = { ...prev }
+
+        for (const msg of messages) {
+          if (msg.role !== 'assistant') continue
+          const fullLen = msg.content.length
+          if (fullLen === 0) continue
+
+          const current = next[msg.id] ?? 0
+          if (current >= fullLen) continue
+
+          const target = Math.min(fullLen, current + deltaChars)
+          if (target !== current) {
+            next[msg.id] = target
+            changed = true
+          }
+        }
+
+        return changed ? next : prev
+      })
+
+      frameId = window.requestAnimationFrame(tick)
+    }
+
+    frameId = window.requestAnimationFrame(tick)
+
+    return () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId)
+      }
+    }
+  }, [isDifyProvider, messages])
+
+  const getDisplayContent = (msgId: string, full: string, streaming?: boolean) => {
+    if (!isDifyProvider || full.length === 0 || !state) return full
+    const visible = visibleLengths[msgId]
+    if (visible === undefined) {
+      return streaming ? '' : full
+    }
+    const length = Math.max(0, Math.min(full.length, visible))
+    return full.slice(0, length)
+  }
   const roles = systemPromptInfo?.roles ?? []
   const activeRoleId = systemPromptInfo?.activeRoleId
   const lastMessage = messages[messages.length - 1]
-  const lastMessageKey = lastMessage ? `${lastMessage.id}:${lastMessage.content.length}` : ''
+
+  const lastMessageDisplayLength =
+    lastMessage && lastMessage.role === 'assistant'
+      ? getDisplayContent(lastMessage.id, lastMessage.content, lastMessage.streaming).length
+      : lastMessage?.content.length ?? 0
+
+  const lastMessageKey = lastMessage
+    ? `${lastMessage.id}:${lastMessageDisplayLength}`
+    : ''
 
   useEffect(() => {
     const el = messagesContainerRef.current
@@ -125,37 +204,44 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
             {messages.length === 0 && !loading && (
               <div className="ai-chat-empty muted small">开始对话，或通过文件/选区入口提问。</div>
             )}
-            {messages.map((msg) => (
-              <div key={msg.id} className={`ai-chat-message ai-chat-message-${msg.role}`}>
-                {msg.role === 'assistant' ? (
-                  <MarkdownViewer value={msg.content} />
-                ) : (
-                  <div className="ai-chat-message-content">{msg.content}</div>
-                )}
-                {msg.role === 'assistant' && !msg.streaming && msg.content.trim() && (
-                  <div className="ai-chat-message-actions">
-                    <button
-                      type="button"
-                      className="icon-button ai-chat-icon-button"
-                      title="复制为 Markdown"
-                      aria-label="复制为 Markdown"
-                      onClick={() => void handleCopy(msg.content)}
-                    >
-                      <span className="ai-chat-icon ai-chat-icon-copy" aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-button ai-chat-icon-button"
-                      title="插入到编辑器"
-                      aria-label="插入到编辑器"
-                      onClick={() => void handleInsert(msg.content)}
-                    >
-                      <span className="ai-chat-icon ai-chat-icon-insert" aria-hidden="true" />
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
+            {messages.map((msg) => {
+              const displayContent =
+                msg.role === 'assistant'
+                  ? getDisplayContent(msg.id, msg.content, msg.streaming)
+                  : msg.content
+
+              return (
+                <div key={msg.id} className={`ai-chat-message ai-chat-message-${msg.role}`}>
+                  {msg.role === 'assistant' ? (
+                    <MarkdownViewer value={displayContent} />
+                  ) : (
+                    <div className="ai-chat-message-content">{displayContent}</div>
+                  )}
+                  {msg.role === 'assistant' && !msg.streaming && msg.content.trim() && (
+                    <div className="ai-chat-message-actions">
+                      <button
+                        type="button"
+                        className="icon-button ai-chat-icon-button"
+                        title="复制为 Markdown"
+                        aria-label="复制为 Markdown"
+                        onClick={() => void handleCopy(msg.content)}
+                      >
+                        <span className="ai-chat-icon ai-chat-icon-copy" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-button ai-chat-icon-button"
+                        title="插入到编辑器"
+                        aria-label="插入到编辑器"
+                        onClick={() => void handleInsert(msg.content)}
+                      >
+                        <span className="ai-chat-icon ai-chat-icon-insert" aria-hidden="true" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
 
           <form className="ai-chat-input" onSubmit={handleSubmit}>

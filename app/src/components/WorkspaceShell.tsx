@@ -507,17 +507,29 @@ export function WorkspaceShell({
       }
 
       const unsavedTabs = getUnsavedTabs()
+
+      // 没有未保存文件：也弹一次确认，防止误触 Cmd+Q
       if (unsavedTabs.length === 0) {
-        if (isTauriEnv()) {
-          void invoke('quit_app').catch((err) => {
-            console.warn('[App] quit_app failed', err)
-          })
-        } else {
-          window.close()
-        }
+        setConfirmDialog({
+          title: 'Quit HaoMD?',
+          message: 'Are you sure you want to quit HaoMD?',
+          confirmText: 'Quit',
+          cancelText: 'Cancel',
+          onConfirm: () => {
+            setConfirmDialog(null)
+            if (isTauriEnv()) {
+              void invoke('quit_app').catch((err) => {
+                console.warn('[App] quit_app failed', err)
+              })
+            } else {
+              window.close()
+            }
+          },
+        })
         return
       }
 
+      // 有未保存文件：使用原有的「Save All / Don't Save」对话框
       setQuitConfirmDialog({
         unsavedCount: unsavedTabs.length,
         onSaveAll: async () => {
