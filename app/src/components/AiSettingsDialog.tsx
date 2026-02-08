@@ -5,6 +5,7 @@ import { onNativePaste, onNativePasteError } from '../modules/platform/clipboard
 import { emptySettings, type UiProvider } from '../modules/ai/settings'
 import { useAiSettingsPersistence } from '../hooks/useAiSettingsPersistence'
 import { useAiSettingsState, type ProviderDraft, parseModelsInput } from '../hooks/useAiSettingsState'
+import { testProviderConnection } from '../modules/ai/testConnection'
 
 export type AiSettingsDialogProps = {
   open: boolean
@@ -13,6 +14,7 @@ export type AiSettingsDialogProps = {
 
 export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) => {
   const [activeField, setActiveField] = useState<keyof ProviderDraft | null>(null)
+  const [testResult, setTestResult] = useState<string | null>(null)
   const { load, save } = useAiSettingsPersistence()
   const {
     settings,
@@ -36,7 +38,14 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
     editProviderIntoDraft,
     applyInitialSnapshot,
     updateInitialSnapshot,
+    updateModelMaxTokens,
   } = useAiSettingsState(emptySettings)
+
+  // 打开对话框时重置展开状态，确保所有提供商默认不展开
+  useEffect(() => {
+    if (!open) return
+    setExpandedId(null)
+  }, [open, setExpandedId])
 
   // 打开对话框时，从后端加载配置
   useEffect(() => {
@@ -112,6 +121,56 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
 
   const handleResetDraft = () => {
     resetDraft()
+    setTestResult(null)
+  }
+
+  const handleTestConnection = async () => {
+    const models = parseModelsInput(draft.modelsInput)
+    if (!draft.baseUrl.trim() || !draft.apiKey.trim()) {
+      setError('请填写 Base URL / API Key')
+      setTestResult(null)
+      return
+    }
+    if (models.length === 0) {
+      setError('请至少填写一个 ModelID')
+      setTestResult(null)
+      return
+    }
+
+    // 清理之前的状态，展示测试中提示
+    setError(null)
+    setTestResult('正在测试连接...')
+
+    try {
+      const baseUrl = draft.baseUrl.trim()
+      const apiKey = draft.apiKey.trim()
+      const providerType = draft.providerType || 'dify'
+      const failed: string[] = []
+
+      for (const modelId of models) {
+        const result = await testProviderConnection({
+          baseUrl,
+          apiKey,
+          modelId,
+          providerType,
+        })
+
+        if (!result.ok) {
+          failed.push(`${modelId}: ${result.message}`)
+        }
+      }
+
+      if (failed.length === 0) {
+        setTestResult(`连接成功：${models.length} 个模型通过测试`)
+      } else {
+        setTestResult(null)
+        setError(`以下模型测试失败：\n${failed.join('\n')}`)
+      }
+    } catch (e) {
+      const err = e as Error
+      setTestResult(null)
+      setError(`连接测试异常：${err.message || '未知错误'}`)
+    }
   }
 
   const handleTestAndAdd = (e: FormEvent) => {
@@ -130,6 +189,19 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
 
   const handleRemoveModel = (providerId: string, modelId: string) => {
     removeModel(providerId, modelId)
+  }
+
+  const handleChangeModelMaxTokens = (providerId: string, modelId: string, value: string) => {
+    const trimmed = value.trim()
+    if (!trimmed) {
+      updateModelMaxTokens(providerId, modelId, undefined)
+      return
+    }
+    const num = Number(trimmed)
+    if (!Number.isFinite(num) || num <= 0) {
+      return
+    }
+    updateModelMaxTokens(providerId, modelId, Math.floor(num))
   }
 
   const handleChangeDefaultModel = (providerId: string, modelId: string) => {
@@ -181,6 +253,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
         models: models.map((m) => ({ id: m })),
         defaultModelId: models[0],
         description: draft.description.trim() || undefined,
+        providerType: (draft.providerType || 'dify') as any,
       }
 
       stateToSave = {
@@ -255,10 +328,23 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
               </div>
 
               <div className="field-group">
+                <label className="field-label">Type</label>
+                <select
+                  className="field-select"
+                  value={draft.providerType || 'openai'}
+                  onChange={(e) => updateDraftField('providerType', e.target.value)}
+                  onFocus={() => setActiveField('providerType')}
+                >
+                  <option value="dify">Dify</option>
+                  <option value="openai">OpenAI Compatible</option>
+                </select>
+              </div>
+
+              <div className="field-group">
                 <label className="field-label">Description</label>
                 <textarea
                   className="field-textarea"
-                  rows={3}
+                  rows={1}
                   value={draft.description}
                   onChange={handleDraftChange('description')}
                   onFocus={() => setActiveField('description')}
@@ -266,16 +352,13 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
               </div>
 
               {error && <div className="form-error">{error}</div>}
+              {testResult && !error && <div className="form-success">{testResult}</div>}
 
               <div className="ai-settings-form-actions">
                 <button type="button" className="ghost" onClick={handleResetDraft}>
                   Reset Form
                 </button>
-                <button type="button" className="ghost" onClick={() => {
-                  // 测试连接
-                  const testEvent = new CustomEvent('testConnection', { detail: { draft } })
-                  document.dispatchEvent(testEvent)
-                }}>
+                <button type="button" className="ghost primary" onClick={handleTestConnection}>
                   Test
                 </button>
                 <button type="submit" className="ghost primary">
@@ -331,6 +414,16 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                             {p.models.map((m) => (
                               <li key={m.id} className="provider-model-row">
                                 <span className="provider-model-id">{m.id}</span>
+                                <input
+                                  className="provider-model-max-tokens-input"
+                                  type="number"
+                                  min={1}
+                                  placeholder="max tokens"
+                                  value={m.maxTokens ?? ''}
+                                  onChange={(e) =>
+                                    handleChangeModelMaxTokens(p.id, m.id, e.target.value)
+                                  }
+                                />
                                 <button
                                   type="button"
                                   className="link-button"
@@ -358,7 +451,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                           </div>
 
                           <div className="provider-actions">
-                            <button type="button" className="ghost" onClick={() => handleEditProvider(p)}>
+                            <button type="button" className="ghost primary" onClick={() => handleEditProvider(p)}>
                               Edit Provider
                             </button>
                             <button

@@ -1,33 +1,7 @@
 import type { DefaultChatConfig } from './settings'
 import { loadDefaultChatConfig } from './settings'
-
-export type AiResponse = {
-  ok: boolean
-  message: string
-  config?: DefaultChatConfig | null
-}
-
-/**
- * 抽象的 AI 客户端接口，命令系统只依赖这个接口而不关心具体实现。
- */
-export interface IAiClient {
-  /**
-   * 打开通用对话入口，例如“AI Chat”。
-   */
-  openChat(): Promise<AiResponse>
-
-  /**
-   * 针对当前文件发起提问。
-   * 未来可以根据文件路径或内容扩展参数。
-   */
-  askAboutFile(): Promise<AiResponse>
-
-  /**
-   * 针对当前选中内容发起提问。
-   * 未来可以携带选中的文本等信息。
-   */
-  askAboutSelection(): Promise<AiResponse>
-}
+import type { AiResponse, IAiClient } from './domain/types'
+export type { AiResponse, IAiClient } from './domain/types'
 
 /**
  * 默认的 AI 客户端实现：
@@ -39,18 +13,29 @@ export function createDefaultAiClient(): IAiClient {
     notConfiguredMessage: string,
     formatMessage: (cfg: DefaultChatConfig) => string,
   ): Promise<AiResponse> {
-    const cfg = await loadDefaultChatConfig()
-    if (!cfg) {
+    try {
+      const cfg = await loadDefaultChatConfig()
+      if (!cfg) {
+        console.warn('[AI] loadDefaultChatConfig returned null')
+        return {
+          ok: false,
+          message: notConfiguredMessage,
+          config: null,
+        }
+      }
+      console.log('[AI] default chat config', cfg)
+      return {
+        ok: true,
+        message: formatMessage(cfg),
+        config: cfg,
+      }
+    } catch (err) {
+      console.error('[AI] loadDefaultChatConfig error', err)
       return {
         ok: false,
         message: notConfiguredMessage,
         config: null,
       }
-    }
-    return {
-      ok: true,
-      message: formatMessage(cfg),
-      config: cfg,
     }
   }
 

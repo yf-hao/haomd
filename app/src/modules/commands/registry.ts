@@ -1,5 +1,6 @@
 import usageDocs from '../../docs/使用说明.md?raw'
 import type { IAiClient } from '../ai/client'
+import type { ChatEntryMode, EntryContext } from '../ai/domain/chatSession'
 
 export type AppCommand = () => void | Promise<void>
 
@@ -68,6 +69,16 @@ export type HelpCommandContext = StatusContext & {
  */
 export type AiCommandContext = StatusContext & {
   aiClient?: IAiClient
+  /**
+   * 打开 AI Chat 对话框的 UI 回调，由 WorkspaceShell 提供。
+   */
+  openAiChatDialog?: (options: { entryMode: ChatEntryMode; initialContext?: EntryContext }) => void
+  /** 获取当前编辑器中的完整 Markdown 文本 */
+  getCurrentMarkdown?: () => string
+  /** 获取当前标签对应的文件名（用于展示给模型） */
+  getCurrentFileName?: () => string | null
+  /** 获取当前编辑器中选中的文本内容 */
+  getCurrentSelectionText?: () => string | null
 }
 
 /**
@@ -236,12 +247,26 @@ function createHelpCommands(ctx: HelpCommandContext): CommandRegistry {
 function createAiCommands(ctx: AiCommandContext): CommandRegistry {
   return {
     ai_chat: async () => {
-      if (!ctx.aiClient) {
-        ctx.setStatusMessage('AI Chat 未配置：AI 客户端未初始化')
-        return
+      try {
+        if (!ctx.aiClient) {
+          ctx.setStatusMessage('AI Chat 未配置：AI 客户端未初始化')
+          return
+        }
+        const resp = await ctx.aiClient.openChat()
+        ctx.setStatusMessage(resp.message)
+        if (!resp.ok) {
+          // 配置不完整时只提示状态栏，不打开对话框
+          return
+        }
+        if (!ctx.openAiChatDialog) {
+          ctx.setStatusMessage('AI Chat UI 未初始化')
+          return
+        }
+        ctx.openAiChatDialog({ entryMode: 'chat' })
+      } catch (err) {
+        console.error('[commands] ai_chat error', err)
+        ctx.setStatusMessage('AI Chat 调用出错，请检查控制台日志')
       }
-      const resp = await ctx.aiClient.openChat()
-      ctx.setStatusMessage(resp.message)
     },
     ai_ask_file: async () => {
       if (!ctx.aiClient) {
@@ -250,6 +275,17 @@ function createAiCommands(ctx: AiCommandContext): CommandRegistry {
       }
       const resp = await ctx.aiClient.askAboutFile()
       ctx.setStatusMessage(resp.message)
+      if (!resp.ok) return
+      if (!ctx.openAiChatDialog || !ctx.getCurrentMarkdown) {
+        ctx.setStatusMessage('当前编辑器状态不可用，无法发起 Ask AI About File')
+        return
+      }
+      const content = ctx.getCurrentMarkdown()
+      const fileName = ctx.getCurrentFileName ? ctx.getCurrentFileName() ?? undefined : undefined
+      ctx.openAiChatDialog({
+        entryMode: 'file',
+        initialContext: { type: 'file', content, fileName },
+      })
     },
     ai_ask_selection: async () => {
       if (!ctx.aiClient) {
@@ -258,6 +294,20 @@ function createAiCommands(ctx: AiCommandContext): CommandRegistry {
       }
       const resp = await ctx.aiClient.askAboutSelection()
       ctx.setStatusMessage(resp.message)
+      if (!resp.ok) return
+      if (!ctx.openAiChatDialog || !ctx.getCurrentSelectionText) {
+        ctx.setStatusMessage('当前编辑器状态不可用，无法发起 Ask AI About Selection')
+        return
+      }
+      const selection = ctx.getCurrentSelectionText()?.trim()
+      if (!selection) {
+        ctx.setStatusMessage('当前没有选中的文本')
+        return
+      }
+      ctx.openAiChatDialog({
+        entryMode: 'selection',
+        initialContext: { type: 'selection', content: selection },
+      })
     },
   }
 }

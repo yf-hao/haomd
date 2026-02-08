@@ -11,6 +11,8 @@ import { Welcome } from './Welcome'
 import { useOutline } from '../hooks/useOutline'
 import type { OutlineItem } from '../modules/outline/parser'
 import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout'
+import { AiChatDialog } from '../modules/ai/ui/AiChatDialog'
+import type { ChatEntryMode, EntryContext } from '../modules/ai/domain/chatSession'
 import { useFilePersistence } from '../hooks/useFilePersistence'
 import { useTabs } from '../hooks/useTabs'
 import { useCommandSystem } from '../hooks/useCommandSystem'
@@ -63,6 +65,14 @@ export function WorkspaceShell({
   const [markdown, setMarkdown] = useState(seed)
   const [previewValue, setPreviewValue] = useState(seed)
   const [activeLine, setActiveLine] = useState(1)
+  const [aiChatState, setAiChatState] = useState<
+    | {
+        open: boolean
+        entryMode: ChatEntryMode
+        initialContext?: EntryContext
+      }
+    | null
+  >(null)
   const [activeOutlineId, setActiveOutlineId] = useState<string | null>(null)
   const [sidebarWidth, setSidebarWidth] = useState(260)
   const [isSidebarResizing, setIsSidebarResizing] = useState(false)
@@ -119,6 +129,34 @@ export function WorkspaceShell({
   const sidebar = useSidebar()
   const previewTimerRef = useRef<number | null>(null)
   const editorViewRef = useRef<EditorView | null>(null)
+
+  const openAiChatDialog = useCallback(
+    (options: { entryMode: ChatEntryMode; initialContext?: EntryContext }) => {
+      setAiChatState({ open: true, ...options })
+    },
+    [],
+  )
+
+  const closeAiChatDialog = useCallback(() => {
+    setAiChatState((prev) => (prev ? { ...prev, open: false } : prev))
+  }, [])
+
+  const getCurrentMarkdown = useCallback(() => markdown, [markdown])
+
+  const getCurrentFileName = useCallback(() => {
+    const path = activeTab?.path
+    if (!path) return null
+    const name = path.split(/[/\\]/).pop() || path
+    return name
+  }, [activeTab])
+
+  const getCurrentSelectionText = useCallback(() => {
+    const view = editorViewRef.current
+    if (!view) return null
+    const { main } = view.state.selection
+    if (main.empty) return null
+    return view.state.doc.sliceString(main.from, main.to)
+  }, [])
 
   const outlineItems = useOutline(markdown)
 
@@ -454,6 +492,10 @@ export function WorkspaceShell({
     updateActiveMeta,
     openFolderInSidebar,
     closeCurrentTab,
+    openAiChatDialog,
+    getCurrentMarkdown,
+    getCurrentFileName,
+    getCurrentSelectionText,
     onRequestCloseCurrentTab: () => {
       if (closeCurrentTabRef.current) {
         closeCurrentTabRef.current()
@@ -916,6 +958,15 @@ export function WorkspaceShell({
           onConfirm={confirmDialog.onConfirm}
           onExtra={confirmDialog.onExtra}
           onCancel={() => setConfirmDialog(null)}
+        />
+      )}
+
+      {aiChatState && (
+        <AiChatDialog
+          open={aiChatState.open}
+          entryMode={aiChatState.entryMode}
+          initialContext={aiChatState.initialContext}
+          onClose={closeAiChatDialog}
         />
       )}
 

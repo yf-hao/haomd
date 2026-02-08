@@ -66,9 +66,11 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
     resetDraft()
   }
 
-  const handleTestAndAdd = (e: FormEvent) => {
+  const handleAddRole = (e: FormEvent) => {
     e.preventDefault()
     void addOrUpdateRoleFromDraft()
+    // 添加后立即重置展开状态，确保新角色不展开
+    setExpandedId(null)
   }
 
   const handleEditRole = (role: PromptRole) => {
@@ -113,7 +115,7 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
         <div className="modal-title">Prompt Settings</div>
         <div className="modal-content prompt-settings-body">
           <div className="prompt-settings-column-left">
-            <form onSubmit={handleTestAndAdd} className="prompt-settings-form">
+            <form onSubmit={handleAddRole} className="prompt-settings-form">
               <div className="field-group">
                 <label className="field-label">Role Name</label>
                 <input
@@ -201,26 +203,42 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
                         </button>
                       </div>
 
-                      {isExpanded && (
-                        <div className="provider-details">
-                          <div className="provider-detail-row">Prompt Preview:</div>
-                          <div className="prompt-preview">
-                            {r.prompt}
-                          </div>
-                          <div className="provider-actions">
-                            <button type="button" className="ghost" onClick={() => handleEditRole(r)}>
-                              Edit Role
-                            </button>
-                            <button
-                              type="button"
-                              className="ghost danger"
-                              onClick={() => handleDeleteRole(r.id)}
-                            >
-                              Delete Role
-                            </button>
-                          </div>
-                        </div>
-                      )}
+{isExpanded && (
+                <div className="provider-details">
+                  <div className="provider-detail-row">Prompt Preview:</div>
+                  <div className="prompt-preview">
+                    {(() => {
+                      const lines = r.prompt.split(/\r?\n/)
+                      const previewLines = lines.slice(0, 5)
+                      let previewText = previewLines.join('\n')
+                      
+                      // 如果内容超过5行或者总字符数超过300，添加省略号
+                      if (lines.length > 5 || previewText.length > 150) {
+                        // 确保最后显示省略号
+if (previewText.length > 150) {
+                        previewText = previewText.substring(0, 147) + '...'
+                      } else {
+                        previewText += '...'
+                      }
+                      }
+                      
+                      return previewText
+                    })()}
+                  </div>
+                  <div className="provider-actions">
+                    <button type="button" className="ghost" onClick={() => handleEditRole(r)}>
+                      Edit Role
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost danger"
+                      onClick={() => handleDeleteRole(r.id)}
+                    >
+                      Delete Role
+                    </button>
+                  </div>
+                </div>
+              )}
                     </div>
                   )
                 })}

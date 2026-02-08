@@ -43,6 +43,10 @@ export function useCommandSystem(params: CommandSystemParams) {
     onRequestCloseCurrentTab,
     onRequestQuit,
     aiClient: aiClientFromParams,
+    openAiChatDialog,
+    getCurrentMarkdown,
+    getCurrentFileName,
+    getCurrentSelectionText,
   } = params
 
   const aiClient = useMemo<IAiClient>(() => {
@@ -74,6 +78,10 @@ export function useCommandSystem(params: CommandSystemParams) {
         onRequestCloseCurrentTab,
         onRequestQuit,
         aiClient,
+        openAiChatDialog,
+        getCurrentMarkdown,
+        getCurrentFileName,
+        getCurrentSelectionText,
       }),
     [
       layout,
@@ -98,6 +106,10 @@ export function useCommandSystem(params: CommandSystemParams) {
       onRequestCloseCurrentTab,
       onRequestQuit,
       aiClient,
+      openAiChatDialog,
+      getCurrentMarkdown,
+      getCurrentFileName,
+      getCurrentSelectionText,
     ],
   )
 

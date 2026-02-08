@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import type { AiSettingsState, UiProvider } from '../modules/ai/settings'
+import type { AiSettingsState, UiProvider, ProviderType } from '../modules/ai/settings'
 
 export type ProviderDraft = {
   name: string
@@ -7,6 +7,7 @@ export type ProviderDraft = {
   apiKey: string
   modelsInput: string
   description: string
+  providerType: ProviderType | ''
 }
 
 const emptyDraft: ProviderDraft = {
@@ -15,6 +16,7 @@ const emptyDraft: ProviderDraft = {
   apiKey: '',
   modelsInput: '',
   description: '',
+  providerType: '',
 }
 
 function normalizeProviderName(name: string): string {
@@ -30,7 +32,7 @@ function parseModelsInput(input: string): string[] {
   return Array.from(
     new Set(
       input
-        .split(/[\s,]+/)
+        .split(/[\s,，]+/)
         .map((s) => s.trim())
         .filter(Boolean),
     ),
@@ -119,6 +121,7 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
       models: models.map((m) => ({ id: m })),
       defaultModelId: models[0],
       description: draft.description.trim() || undefined,
+      providerType: (draft.providerType || 'dify') as ProviderType,
     }
 
     setSettings((prev) => {
@@ -167,6 +170,25 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
     })
   }, [])
 
+  const updateModelMaxTokens = useCallback(
+    (providerId: string, modelId: string, maxTokens: number | undefined) => {
+      setSettings((prev) => ({
+        ...prev,
+        providers: prev.providers.map((p) =>
+          p.id !== providerId
+            ? p
+            : {
+                ...p,
+                models: p.models.map((m) =>
+                  m.id !== modelId ? m : { ...m, maxTokens },
+                ),
+              },
+        ),
+      }))
+    },
+    [],
+  )
+
   const setDefaultModel = useCallback((providerId: string, modelId: string) => {
     setSettings((prev) => ({
       ...prev,
@@ -186,6 +208,7 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
       apiKey: provider.apiKey,
       modelsInput,
       description: provider.description ?? '',
+      providerType: provider.providerType ?? 'dify',
     })
     setExpandedId(provider.id)
   }, [])
@@ -222,6 +245,7 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
     editProviderIntoDraft,
     applyInitialSnapshot,
     updateInitialSnapshot,
+    updateModelMaxTokens,
   }
 }
 

@@ -146,6 +146,8 @@ struct SidebarState {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct AiProviderModelCfg {
   id: String,
+  #[serde(default)]
+  max_tokens: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -159,6 +161,8 @@ struct AiProviderCfg {
   default_model_id: Option<String>,
   #[serde(default)]
   description: Option<String>,
+  #[serde(default)]
+  provider_type: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -185,6 +189,9 @@ struct PromptSettingsCfg {
   #[serde(default)]
   default_role_id: Option<String>,
 }
+
+// 内置默认 AI 配置，来源于 src-tauri/ai_settings.default.json
+static DEFAULT_AI_SETTINGS_JSON: &str = include_str!("../ai_settings.default.json");
 
 fn sidebar_state_path(app: &AppHandle) -> std::io::Result<PathBuf> {
   // 与 recent.json 相同策略：优先使用配置目录
@@ -858,7 +865,7 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
   let ai_menu = SubmenuBuilder::new(app, "AI")
         .item(&MenuItemBuilder::new("Provider Settings").id("ai_settings").accelerator("CmdOrCtrl+,").build(app)?)
         .item(&MenuItemBuilder::new("Prompt Settings").id("ai_prompt_settings").build(app)?)
-        .item(&MenuItemBuilder::new("Open AI Chat").id("ai_chat").build(app)?)
+        .item(&MenuItemBuilder::new("Open AI Chat").id("ai_chat").accelerator("CmdOrCtrl+K").build(app)?)
         .item(&MenuItemBuilder::new("Ask AI About File").id("ai_ask_file").build(app)?)
         .item(&MenuItemBuilder::new("Ask AI About Selection").id("ai_ask_selection").build(app)?)
         .build()?;
@@ -913,13 +920,12 @@ async fn load_ai_settings(app: AppHandle) -> ResultPayload<AiSettingsCfg> {
       ok(cfg, trace)
     }
     Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-      ok(
-        AiSettingsCfg {
-          providers: Vec::new(),
-          default_provider_id: None,
-        },
-        trace,
-      )
+      // 如果用户配置文件不存在，使用内置默认配置
+      let cfg: AiSettingsCfg = serde_json::from_str(DEFAULT_AI_SETTINGS_JSON).unwrap_or(AiSettingsCfg {
+        providers: Vec::new(),
+        default_provider_id: None,
+      });
+      ok(cfg, trace)
     }
     Err(err) => err_payload(
       ErrorCode::IoError,

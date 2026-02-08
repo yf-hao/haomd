@@ -464,7 +464,7 @@ button.ghost.primary {
   font-size: 18px;
   font-weight: 600;
   color: var(--z-color-fg-default);
-  margin-bottom: 16px;
+  /* margin-bottom: 16px; */
 }
 
 .modal-content {
