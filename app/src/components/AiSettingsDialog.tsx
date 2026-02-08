@@ -163,11 +163,19 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
         }
       }
 
-      if (failed.length === 0) {
-        setTestResult(`连接成功：${models.length} 个模型通过测试`)
+      const total = models.length
+      const failedCount = failed.length
+      const successCount = total - failedCount
+
+      if (failedCount === 0) {
+        // 全部通过
+        setTestResult(`连接成功：${total} 个模型通过测试`)
       } else {
+        // 部分或全部失败：提示成功数量 + 失败详情
         setTestResult(null)
-        setError(`以下模型测试失败：\n${failed.join('\n')}`)
+        setError(
+          `共 ${total} 个模型，成功 ${successCount} 个。\n以下模型测试失败：\n${failed.join('\n')}`,
+        )
       }
     } catch (e) {
       const err = e as Error

@@ -393,6 +393,8 @@
   border: 1px solid rgba(248, 113, 113, 0.6);
   font-size: 12px;
   color: #fecaca;
+  /* 让字符串中的换行符（\n）按文本换行显示 */
+  white-space: pre-line;
 }
 
 .form-success {
@@ -403,6 +405,7 @@
   border: 1px solid rgba(52, 211, 153, 0.6);
   font-size: 12px;
   color: #bbf7d0;
+  white-space: pre-line;
 }
 
 .ai-settings-form-actions {
