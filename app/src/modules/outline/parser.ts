@@ -4,6 +4,7 @@ export type OutlineItem = {
   text: string
   line: number
   searchText: string // 用于精确定位的搜索文本
+  children?: OutlineItem[] // 子节点
 }
 
 export function buildOutlineFromMarkdown(source: string): OutlineItem[] {
@@ -49,4 +50,44 @@ export function buildOutlineFromMarkdown(source: string): OutlineItem[] {
   }
 
   return items
+}
+
+/**
+ * 将扁平的 outline 列表转换为树形结构
+ */
+export function buildOutlineTree(items: OutlineItem[]): OutlineItem[] {
+  if (items.length === 0) return []
+
+  const result: OutlineItem[] = []
+  const stack: OutlineItem[] = []
+
+  for (const item of items) {
+    const node = { ...item, children: [] }
+
+    // 如果栈为空，直接添加到结果中
+    if (stack.length === 0) {
+      stack.push(node)
+      result.push(node)
+      continue
+    }
+
+    // 找到父节点（最后一个 level 小于当前 level 的节点）
+    while (stack.length > 0 && stack[stack.length - 1].level >= node.level) {
+      stack.pop()
+    }
+
+    if (stack.length > 0) {
+      // 添加到父节点的 children
+      const parent = stack[stack.length - 1]
+      if (!parent.children) parent.children = []
+      parent.children.push(node)
+      stack.push(node)
+    } else {
+      // 没有父节点，作为根节点
+      stack.push(node)
+      result.push(node)
+    }
+  }
+
+  return result
 }

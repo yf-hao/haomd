@@ -69,13 +69,31 @@ function MarkdownViewerComponent(
         )
       },
 
-      // 图片渲染器：统一控制宽高
-      img: ({ node, ...props }: any) => (
-        <img
-          {...props}
-          style={{ maxWidth: '50%', height: 'auto', width: '300px' }}
-        />
-      ),
+      // 图片渲染器
+      img: ({ node, ...props }: any) => {
+        // 解析 alt 末尾的 (30%) / (300px) / (20rem)
+        const altText = props.alt || ''
+
+        const widthMatch = /\(([\d.]+(?:px|%|rem|vw))\)$/.exec(altText)
+        const maxWidth = widthMatch ? widthMatch[1] : '100%'
+
+        // 从 alt 文本中移除宽度标记
+        const cleanAlt = altText.replace(/\(([\d.]+(?:px|%|rem|vw))\)$/, '').trim()
+
+        return (
+          <img
+            {...props}
+            loading="lazy"
+            alt={cleanAlt}
+            style={{
+              maxWidth,
+              height: 'auto',
+              display: 'block',
+              margin: '0 auto',
+            }}
+          />
+        )
+      },
 
       // pre 渲染器
       pre: ({ node, children, className, ...rest }: any) => {

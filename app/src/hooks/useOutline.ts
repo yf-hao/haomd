@@ -1,6 +1,9 @@
 import { useMemo } from 'react'
-import { buildOutlineFromMarkdown, type OutlineItem } from '../modules/outline/parser'
+import { buildOutlineFromMarkdown, buildOutlineTree, type OutlineItem } from '../modules/outline/parser'
 
 export function useOutline(markdown: string): OutlineItem[] {
-  return useMemo(() => buildOutlineFromMarkdown(markdown), [markdown])
+  return useMemo(() => {
+    const items = buildOutlineFromMarkdown(markdown)
+    return buildOutlineTree(items)
+  }, [markdown])
 }

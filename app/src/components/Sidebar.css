@@ -171,6 +171,142 @@
   background: rgba(148, 163, 184, 0.9);
 }
 
+/* Outline 折叠/展开功能 */
+.outline-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  margin-right: 4px;
+  color: #9ca3af;
+  transition: transform 0.15s ease, color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.outline-toggle:hover {
+  color: #e5e7eb;
+  background: rgba(148, 163, 184, 0.1);
+  border-radius: 4px;
+}
+
+.outline-toggle.collapsed .outline-toggle-icon {
+  transform: rotate(-90deg);
+}
+
+.outline-toggle-icon {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-left: 4px solid currentColor;
+  border-top: 3px solid transparent;
+  border-bottom: 3px solid transparent;
+  margin-right: 2px;
+  transition: transform 0.15s ease;
+}
+
+/* 不同层级的图标大小和颜色 */
+.outline-item.level-1 .outline-toggle-icon {
+  border-left-width: 7px;
+  border-top-width: 5px;
+  border-bottom-width: 5px;
+  border-left-color: #5ad8a6;
+}
+
+.outline-item.level-2 .outline-toggle-icon {
+  border-left-width: 6px;
+  border-top-width: 4px;
+  border-bottom-width: 4px;
+  border-left-color: rgba(148, 163, 184, 0.9);
+}
+
+.outline-item.level-3 .outline-toggle-icon {
+  border-left-width: 5px;
+  border-top-width: 3px;
+  border-bottom-width: 3px;
+  border-left-color: rgba(148, 163, 184, 0.9);
+}
+
+.outline-item.level-4 .outline-toggle-icon {
+  border-left-width: 4px;
+  border-top-width: 2.5px;
+  border-bottom-width: 2.5px;
+  border-left-color: rgba(148, 163, 184, 0.8);
+}
+
+.outline-item.level-5 .outline-toggle-icon,
+.outline-item.level-6 .outline-toggle-icon {
+  border-left-width: 3px;
+  border-top-width: 2px;
+  border-bottom-width: 2px;
+  border-left-color: rgba(148, 163, 184, 0.7);
+}
+
+/* 叶节点（无子节点）样式 - 显示小圆点 */
+.outline-toggle.leaf {
+  cursor: default;
+  pointer-events: none;
+}
+
+.outline-toggle.leaf .outline-toggle-icon {
+  display: none;
+}
+
+.outline-toggle.leaf::before {
+  content: '';
+  display: inline-block;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* 不同层级叶节点的小圆点大小 */
+.outline-item.level-1 .outline-toggle.leaf::before {
+  width: 7px;
+  height: 7px;
+}
+
+.outline-item.level-2 .outline-toggle.leaf::before {
+  width: 6px;
+  height: 6px;
+}
+
+.outline-item.level-3 .outline-toggle.leaf::before {
+  width: 5px;
+  height: 5px;
+}
+
+.outline-item.level-4 .outline-toggle.leaf::before {
+  width: 4px;
+  height: 4px;
+}
+
+.outline-item.level-5 .outline-toggle.leaf::before,
+.outline-item.level-6 .outline-toggle.leaf::before {
+  width: 3px;
+  height: 3px;
+}
+
+.outline-toggle.leaf:hover {
+  background: transparent;
+}
+
+
+/* 子节点列表 */
+.outline-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* 确保折叠功能不影响现有的样式 */
+.outline-node {
+  list-style: none;
+}
+
 .sidebar-header {
   display: flex;
   align-items: center;
