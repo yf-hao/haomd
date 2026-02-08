@@ -18,6 +18,8 @@ export type ChatMessageView = {
   content: string
   /** 是否仍在流式输出中 */
   streaming?: boolean
+  /** 是否在 UI 中隐藏该条消息（仍保留在 engineHistory 中） */
+  hidden?: boolean
 }
 
 export type EntryContext =
@@ -52,15 +54,14 @@ export function applyEntryContext(
   }
 
   if (entryMode === 'file' && context.type === 'file') {
-    const fileNamePart = context.fileName ? `（文件名：${context.fileName}）` : ''
-    const content = `下面是一份文档${fileNamePart}的完整内容，请先理解其意图和结构，然后根据后续我的提问给出分析与建议：\n\n${context.content}`
-    messages.push({ role: 'user', content })
+    // 文件模式下不在这里直接注入用户消息，而是由 UI 在首条用户输入时
+    // 将文件内容与用户问题组合成一条完整的 user 消息。
     return messages
   }
 
   if (entryMode === 'selection' && context.type === 'selection') {
-    const content = `下面是我在文档中选中的一段内容，请先理解其语义，然后根据后续我的提问给出回答：\n\n${context.content}`
-    messages.push({ role: 'user', content })
+    // 选区模式下不在这里直接注入用户消息，而是由 UI 在首条用户输入时
+    // 将选中内容与用户问题组合成一条完整的 user 消息。
     return messages
   }
 
@@ -95,6 +96,7 @@ export function appendUserInput(
   state: ConversationState,
   id: string,
   content: string,
+  options?: { hidden?: boolean },
 ): ConversationState {
   const trimmed = content.trim()
   if (!trimmed) return state
@@ -108,6 +110,7 @@ export function appendUserInput(
         id,
         role: 'user',
         content: trimmed,
+        hidden: options?.hidden ?? false,
       },
     ],
   }

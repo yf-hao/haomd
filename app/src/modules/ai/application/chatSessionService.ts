@@ -27,7 +27,7 @@ export type ChatSession = {
   getSystemPromptInfo(): SystemPromptInfo
   getProviderType(): ProviderType
   setActiveRole(roleId: string): Promise<void>
-  sendUserMessage(content: string): Promise<void>
+  sendUserMessage(content: string, options?: { hideInView?: boolean }): Promise<void>
   dispose(): void
 }
 
@@ -49,8 +49,8 @@ function pickDefaultModel(provider: UiProvider) {
 
 function engineHistoryToChatMessages(history: EngineMessage[]): ChatMessage[] {
   return history
-    .filter((m) => m.role === 'user' || m.role === 'assistant')
-    .map((m) => ({ role: m.role, content: m.content }))
+    .filter((m): m is EngineMessage & { role: 'user' | 'assistant' } => m.role === 'user' || m.role === 'assistant')
+    .map((m): ChatMessage => ({ role: m.role, content: m.content }))
 }
 
 export async function createChatSession(options: StartChatOptions): Promise<ChatSession> {
@@ -196,12 +196,12 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       }
       notifyStateChange()
     },
-    async sendUserMessage(content: string): Promise<void> {
+    async sendUserMessage(content: string, options?: { hideInView?: boolean }): Promise<void> {
       if (disposed) return
       const userId = genId()
       const assistantId = genId()
 
-      state = appendUserInput(state, userId, content)
+      state = appendUserInput(state, userId, content, { hidden: options?.hideInView })
       state = appendAssistantPlaceholder(state, assistantId)
       notifyStateChange()
 

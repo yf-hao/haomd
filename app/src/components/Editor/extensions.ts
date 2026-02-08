@@ -9,7 +9,7 @@ import {
   lineNumbers,
   ViewPlugin,
 } from '@codemirror/view'
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
+import { defaultKeymap, history, historyKeymap, deleteLine } from '@codemirror/commands'
 import { indentOnInput } from '@codemirror/language'
 import { closeBrackets, autocompletion } from '@codemirror/autocomplete'
 import { markdown } from '@codemirror/lang-markdown'
@@ -147,6 +147,15 @@ export function createExtensions(options: EditorOptions = {}): Extension[] {
 
   const language = markdown()
 
+  const filteredDefaultKeymap = defaultKeymap.filter((binding) => binding.run !== deleteLine)
+
+  const customKeymap = [
+    {
+      key: 'Mod-Shift-d',
+      run: deleteLine,
+    },
+  ]
+
   const extensions: Extension[] = [
     oneDark,
     baseTheme,
@@ -154,7 +163,7 @@ export function createExtensions(options: EditorOptions = {}): Extension[] {
     drawSelection(),
     indentOnInput(),
     history(),
-    keymap.of([...defaultKeymap, ...historyKeymap]),
+    keymap.of([...customKeymap, ...filteredDefaultKeymap, ...historyKeymap]),
     EditorView.lineWrapping,
     smartScrollOnInputPlugin(),
     language,

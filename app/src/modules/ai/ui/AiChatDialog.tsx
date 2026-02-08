@@ -1,4 +1,4 @@
-import type { ChangeEvent, FC, FormEvent, KeyboardEvent, MouseEvent, MouseEventHandler } from 'react'
+import type { ChangeEvent, FC, FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, MouseEventHandler } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import type { ChatEntryMode, EntryContext } from '../domain/chatSession'
 import { MarkdownViewer } from '../../../components/MarkdownViewer'
@@ -16,6 +16,9 @@ export type AiChatDialogProps = {
 
 export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialContext, onClose }) => {
   const [input, setInput] = useState('')
+  // 通用上下文前缀：用于 file / selection 入口的首条消息拼接
+  const [contextPrefix, setContextPrefix] = useState<string | null>(null)
+  const [contextPrefixUsed, setContextPrefixUsed] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const messagesContainerRef = useRef<HTMLDivElement | null>(null)
 
@@ -33,6 +36,49 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     initialContext,
     open,
   })
+
+  // 当通过文件/选区入口打开时，准备上下文前缀：
+  // - selection： [选中内容]\n\n根据以上问题回答：
+  // - file：      下面是文件「name」的完整内容：\n\n[全文]\n\n根据以上问题回答：
+  useEffect(() => {
+    if (!open) {
+      setContextPrefix(null)
+      setContextPrefixUsed(false)
+      return
+    }
+
+    if (entryMode === 'selection' && initialContext && initialContext.type === 'selection') {
+      const selection = initialContext.content.trim()
+      if (selection) {
+        setContextPrefix(`${selection}\n\n根据以上问题回答：`)
+        setContextPrefixUsed(false)
+      } else {
+        setContextPrefix(null)
+        setContextPrefixUsed(false)
+      }
+      return
+    }
+
+    if (entryMode === 'file' && initialContext && initialContext.type === 'file') {
+      const content = initialContext.content.trim()
+      if (content) {
+        const fileName = initialContext.fileName?.trim()
+        const header = fileName
+          ? `下面是文件「${fileName}」的完整内容：`
+          : '下面是当前文件的完整内容：'
+        setContextPrefix(`${header}\n\n${content}\n\n根据以上问题回答：`)
+        setContextPrefixUsed(false)
+      } else {
+        setContextPrefix(null)
+        setContextPrefixUsed(false)
+      }
+      return
+    }
+
+    // 其他模式（chat 等）不使用上下文前缀
+    setContextPrefix(null)
+    setContextPrefixUsed(false)
+  }, [open, entryMode, initialContext])
 
   // 监听原生粘贴事件：当焦点在 AI 输入框时，支持 Cmd/Ctrl+V 粘贴
   useEffect(() => {
@@ -74,11 +120,26 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
 
   const doSend = async () => {
     const raw = input
-    const value = raw.trim()
-    if (!value) return
+    const trimmed = raw.trim()
+
+    // 如果既没有用户输入也没有上下文前缀，则不发送
+    if (!trimmed && !contextPrefix) return
+
+    let finalContent = trimmed
+    let hideUserInView = false
+
+    // file / selection 模式下的首条消息：
+    //   [上下文前缀]\n\n[用户输入]
+    if ((entryMode === 'file' || entryMode === 'selection') && contextPrefix && !contextPrefixUsed) {
+      finalContent = trimmed ? `${contextPrefix}\n\n${trimmed}` : contextPrefix
+      setContextPrefixUsed(true)
+      setContextPrefix(null)
+      hideUserInView = true
+    }
+
     setInput('')
     autoResizeInput()
-    await send(value)
+    await send(finalContent, hideUserInView ? { hideUserInView: true } : undefined)
   }
 
   const handleSubmit = async (e: FormEvent) => {
@@ -112,7 +173,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     e.stopPropagation()
   }
 
-  const messages = state?.viewMessages ?? []
+  const messages = (state?.viewMessages ?? []).filter((m) => !m.hidden)
   const [visibleLengths, setVisibleLengths] = useState<Record<string, number>>({})
 
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
@@ -181,7 +242,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     return full.slice(0, length)
   }
 
-  const handleDragStart: MouseEventHandler<HTMLDivElement> = (e) => {
+  const handleDragStart: MouseEventHandler<HTMLDivElement> = (e: ReactMouseEvent<HTMLDivElement>) => {
     if (e.button !== 0) return
 
     // 如果用户在可交互控件上按下（如 select/button/input/textarea），不要触发拖拽
@@ -249,7 +310,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
   useEffect(() => {
     if (!open) return
 
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
       const isMeta = e.metaKey || e.ctrlKey
       if (!isMeta) return
 

@@ -17,7 +17,7 @@ export type UseAiChatResult = {
   systemPromptInfo: SystemPromptInfo | null
   providerType: ProviderType | null
   error: Error | null
-  send: (content: string) => Promise<void>
+  send: (content: string, options?: { hideUserInView?: boolean }) => Promise<void>
   changeRole: (roleId: string) => Promise<void>
   resetError: () => void
 }
@@ -85,10 +85,10 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
   }, [open, entryMode, initialContext])
 
   const send = useCallback(
-    async (content: string) => {
+    async (content: string, options?: { hideUserInView?: boolean }) => {
       if (!session) return
       setError(null)
-      await session.sendUserMessage(content)
+      await session.sendUserMessage(content, { hideInView: options?.hideUserInView })
       setState(session.getState())
       setSystemPromptInfo(session.getSystemPromptInfo())
     },
