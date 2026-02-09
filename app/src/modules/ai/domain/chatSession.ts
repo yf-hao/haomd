@@ -152,9 +152,9 @@ export function appendAssistantChunk(
     viewMessages: state.viewMessages.map((m) =>
       m.id === id
         ? {
-            ...m,
-            content: m.content + chunk,
-          }
+          ...m,
+          content: m.content + chunk,
+        }
         : m,
     ),
   }
@@ -179,9 +179,41 @@ export function completeAssistantMessage(
     viewMessages: state.viewMessages.map((m) =>
       m.id === id
         ? {
-            ...m,
-            streaming: false,
-          }
+          ...m,
+          streaming: false,
+        }
+        : m,
+    ),
+  }
+}
+
+/**
+ * 截断并完成 AI 消息。
+ * 用于用户手动打断时，保留已显示的内容并停止后续输出。
+ */
+export function truncateAssistantMessage(
+  state: ConversationState,
+  id: string,
+  length: number,
+): ConversationState {
+  const msg = state.viewMessages.find((m) => m.id === id && m.role === 'assistant')
+  if (!msg) return state
+
+  const truncatedContent = msg.content.slice(0, length)
+
+  return {
+    ...state,
+    engineHistory:
+      truncatedContent.trim()
+        ? [...state.engineHistory, { role: 'assistant', content: truncatedContent }]
+        : state.engineHistory,
+    viewMessages: state.viewMessages.map((m) =>
+      m.id === id
+        ? {
+          ...m,
+          content: truncatedContent,
+          streaming: false,
+        }
         : m,
     ),
   }

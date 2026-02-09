@@ -65,7 +65,7 @@ export const builtinPromptRoles: PromptRole[] = [
     id: '1770521314585_cr6qeu',
     name: '默认',
     description: '',
-    prompt: '条理清晰，详细地回复用户的提问，不要敷衍。回答的内容应该是Markdown格式.',
+    prompt: '条理清晰，详细地回复用户的提问，不要敷衍。',
     builtin: true
   },
   {
@@ -109,6 +109,7 @@ export type StreamingChatRequest = {
   messages: ChatMessage[]
   temperature?: number
   maxTokens?: number
+  signal?: AbortSignal
 }
 
 export type StreamingChatResult = {

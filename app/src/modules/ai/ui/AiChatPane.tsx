@@ -34,7 +34,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
     el.style.height = `${next}px`
   }
 
-  const { loading, state, systemPromptInfo, providerType, error, send, changeRole, resetError } = useAiChat({
+  const { loading, state, systemPromptInfo, providerType, error, send, stop, stopAndTruncate, changeRole, resetError } = useAiChat({
     entryMode,
     initialContext,
     open: true,
@@ -157,8 +157,6 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
 
   const handleCompositionEnd = () => {
     isComposingRef.current = false
-    // 防止中文输入法回车确认时触发发送
-    // 在 Safari 等浏览器中，compositionEnd 可能在 keydown 之前触发
     lockEnterRef.current = true
     setTimeout(() => {
       lockEnterRef.current = false
@@ -252,11 +250,26 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
     return full.slice(0, length)
   }
 
+  const isStreamingUI = isDifyProvider && messages.some(
+    (msg) => msg.role === 'assistant' && (visibleLengths[msg.id] ?? 0) < msg.content.length
+  )
+  const isProcessing = loading || isStreamingUI
+
+  const handleStop = () => {
+    // 找到当前正在“吐出”的消息（无论是网络流还是打字机流）
+    const activeMsg = messages.find(m => m.role === 'assistant' && (m.streaming || (visibleLengths[m.id] ?? 0) < m.content.length))
+    if (activeMsg) {
+      const currentLen = visibleLengths[activeMsg.id] ?? 0
+      stopAndTruncate(activeMsg.id, currentLen)
+    } else {
+      stop()
+    }
+  }
+
   const roles = systemPromptInfo?.roles ?? []
   const activeRoleId = systemPromptInfo?.activeRoleId
 
   const lastMessage = messages[messages.length - 1]
-
   const lastMessageDisplayLength =
     lastMessage && lastMessage.role === 'assistant'
       ? getDisplayContent(lastMessage.id, lastMessage.content, lastMessage.streaming).length
@@ -270,26 +283,21 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
     el.scrollTop = el.scrollHeight
   }, [lastMessageKey])
 
-  // 当焦点在 Dock 面板内时，拦截 Cmd/Ctrl+W 优先关闭 AI Chat Pane
   useEffect(() => {
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
       const isMeta = e.metaKey || e.ctrlKey
       if (!isMeta) return
-
       const key = e.key.toLowerCase()
       if (key !== 'w') return
-
       if (typeof document === 'undefined') return
       const root = paneRootRef.current
       const active = document.activeElement as HTMLElement | null
       if (!root || !active) return
       if (!root.contains(active)) return
-
       e.preventDefault()
       e.stopPropagation()
       onClose()
     }
-
     window.addEventListener('keydown', handleKeyDown, true)
     return () => {
       window.removeEventListener('keydown', handleKeyDown, true)
@@ -328,7 +336,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
       <div className="ai-chat-pane-body">
         <AiChatBody
           messages={messages}
-          loading={loading}
+          loading={isProcessing}
           error={error}
           input={input}
           onInputChange={(value) => {
@@ -346,6 +354,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
           onInsert={handleInsert}
           onReplace={handleReplace}
           onSave={handleSave}
+          onStop={handleStop}
           resetError={resetError}
         />
       </div>

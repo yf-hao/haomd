@@ -24,6 +24,7 @@ export interface AiChatBodyProps {
   onInsert: (content: string) => void | Promise<void>
   onReplace: (content: string) => void | Promise<void>
   onSave: (content: string) => void | Promise<void>
+  onStop: () => void
   resetError: () => void
 }
 
@@ -44,6 +45,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
   onInsert,
   onReplace,
   onSave,
+  onStop,
   resetError,
 }) => {
   return (
@@ -113,7 +115,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
         })}
       </div>
 
-      <form className="ai-chat-input" onSubmit={onSubmit}>
+      <form className="ai-chat-input" onSubmit={loading ? (e) => e.preventDefault() : onSubmit}>
         <textarea
           id="ai-chat-input"
           className="field-textarea"
@@ -134,8 +136,23 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
               {error.message}
             </div>
           )}
-          <button className="ghost primary" type="submit" disabled={loading}>
-            {loading ? '思考中…' : '发送'}
+          <button
+            className={`ai-chat-send-button ${loading ? 'loading' : ''}`}
+            type={loading ? 'button' : 'submit'}
+            onClick={() => {
+              if (loading) {
+                console.log('[AiChatBody] Stop button clicked')
+                onStop()
+              }
+            }}
+            title={loading ? '停止生成' : '发送'}
+            disabled={!loading && !input.trim()}
+          >
+            {loading ? (
+              <span className="ai-chat-icon-stop" aria-hidden="true" />
+            ) : (
+              <span className="ai-chat-icon-paper-plane" aria-hidden="true" />
+            )}
           </button>
         </div>
       </form>

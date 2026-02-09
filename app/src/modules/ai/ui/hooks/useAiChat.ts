@@ -18,6 +18,8 @@ export type UseAiChatResult = {
   providerType: ProviderType | null
   error: Error | null
   send: (content: string, options?: { hideUserInView?: boolean }) => Promise<void>
+  stop: () => void
+  stopAndTruncate: (messageId: string, length: number) => void
   changeRole: (roleId: string) => Promise<void>
   resetError: () => void
 }
@@ -84,13 +86,20 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
     }
   }, [open, entryMode, initialContext])
 
+  const isGenerating = !!state?.viewMessages.some((m) => m.streaming) || loading
+
   const send = useCallback(
     async (content: string, options?: { hideUserInView?: boolean }) => {
       if (!session) return
       setError(null)
-      await session.sendUserMessage(content, { hideInView: options?.hideUserInView })
-      setState(session.getState())
-      setSystemPromptInfo(session.getSystemPromptInfo())
+      setLoading(true)
+      try {
+        await session.sendUserMessage(content, { hideInView: options?.hideUserInView })
+      } finally {
+        setLoading(false)
+        setState(session.getState())
+        setSystemPromptInfo(session.getSystemPromptInfo())
+      }
     },
     [session],
   )
@@ -105,17 +114,36 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
     [session],
   )
 
+  const stop = useCallback(() => {
+    console.log('[useAiChat] stop called', { hasSession: !!session })
+    if (session) {
+      session.stopRunningStream()
+    }
+  }, [session])
+
+  const stopAndTruncate = useCallback(
+    (messageId: string, length: number) => {
+      console.log('[useAiChat] stopAndTruncate called', { messageId, length, hasSession: !!session })
+      if (session) {
+        session.stopAndTruncate(messageId, length)
+      }
+    },
+    [session],
+  )
+
   const resetError = useCallback(() => {
     setError(null)
   }, [])
 
   return {
-    loading,
+    loading: isGenerating, // Rename derived state to loading for UI compatibility
     state,
     systemPromptInfo,
     providerType,
     error,
     send,
+    stop,
+    stopAndTruncate,
     changeRole,
     resetError,
   }

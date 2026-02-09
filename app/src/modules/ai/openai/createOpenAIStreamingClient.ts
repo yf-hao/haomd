@@ -22,8 +22,6 @@ export function createOpenAIStreamingClient(config: OpenAIChatClientConfig): ISt
 
   return {
     async askStream(request: StreamingChatRequest, handlers): Promise<StreamingChatResult> {
-      const controller = new AbortController()
-
       const body = {
         model: config.modelId,
         messages: [
@@ -44,7 +42,7 @@ export function createOpenAIStreamingClient(config: OpenAIChatClientConfig): ISt
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),
-        signal: controller.signal,
+        signal: request.signal,
       })
 
       if (!response.ok || !response.body) {
@@ -98,10 +96,11 @@ export function createOpenAIStreamingClient(config: OpenAIChatClientConfig): ISt
         return { content: fullContent, tokenCount: fullContent.length, completed: true, error: undefined }
       } catch (e) {
         const error = e as Error
+        if (error.name === 'AbortError') {
+          return { content: fullContent, tokenCount: fullContent.length, completed: false }
+        }
         if (handlers.onError) handlers.onError(error)
         return { content: '', tokenCount: 0, completed: false, error }
-      } finally {
-        controller.abort()
       }
     },
   }

@@ -996,3 +996,58 @@ button.ghost.primary {
 .markdown-body {
   padding: 5px 10px;
 }
+
+/* AI Chat Send/Stop Button */
+.ai-chat-send-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid rgba(92, 124, 250, 0.3);
+  background: linear-gradient(135deg, #5c7cfa, #62c3ff);
+  color: #0a0c12;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.ai-chat-send-button:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 12px rgba(92, 124, 250, 0.4);
+}
+
+.ai-chat-send-button.loading {
+  background: rgba(255, 77, 79, 0.1);
+  border-color: rgba(255, 77, 79, 0.3);
+  color: #ff4d4f;
+  box-shadow: 0 0 8px rgba(255, 77, 79, 0.2);
+}
+
+.ai-chat-send-button.loading:hover {
+  background: rgba(255, 77, 79, 0.2);
+  border-color: #ff4d4f;
+  box-shadow: 0 0 12px rgba(255, 77, 79, 0.4);
+}
+
+/* 纸飞机图标 (CSS Drawing) */
+.ai-chat-icon-paper-plane {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  background-color: #0a0c12;
+  /* Keep plane dark on blue background */
+  clip-path: polygon(0% 0%, 100% 50%, 0% 100%, 25% 50%);
+  transform: rotate(-15deg) translateX(1px);
+}
+
+/* 停止图标 (CSS Drawing) */
+.ai-chat-icon-stop {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  background-color: #ff4d4f;
+  /* Explicitly red */
+  border-radius: 2px;
+}

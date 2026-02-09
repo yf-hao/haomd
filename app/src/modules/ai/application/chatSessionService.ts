@@ -11,6 +11,7 @@ import {
   appendAssistantPlaceholder,
   appendAssistantChunk,
   completeAssistantMessage,
+  truncateAssistantMessage,
 } from '../domain/chatSession'
 import type { SystemPromptInfo } from './systemPromptService'
 import { loadSystemPromptInfo, getSystemPromptByRoleId } from './systemPromptService'
@@ -28,6 +29,8 @@ export type ChatSession = {
   getProviderType(): ProviderType
   setActiveRole(roleId: string): Promise<void>
   sendUserMessage(content: string, options?: { hideInView?: boolean }): Promise<void>
+  stopRunningStream(): void
+  stopAndTruncate(messageId: string, length: number): void
   dispose(): void
 }
 
@@ -79,6 +82,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
     systemPromptInfo.systemPrompt,
   )
   let disposed = false
+  let currentAbortController: AbortController | null = null
 
   const notifyStateChange = () => {
     if (disposed || !options.onStateChange) return
@@ -90,12 +94,15 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
     const messages = engineHistoryToChatMessages(state.engineHistory)
     if (!messages.length) return
 
+    currentAbortController = new AbortController()
+
     try {
-      const result = await client.askStream(
+      await client.askStream(
         {
           messages,
           temperature: 0,
           maxTokens: defaultMaxTokens,
+          signal: currentAbortController.signal,
         },
         {
           onChunk: (chunk) => {
@@ -104,58 +111,30 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
             notifyStateChange()
           },
           onComplete: () => {
+            // 只在 finally 中进行统一的完成处理，避免重复记录
             if (disposed) return
-            state = completeAssistantMessage(state, assistantId)
             notifyStateChange()
           },
           onError: () => {
             if (disposed) return
-            // 出错时仍然标记为完成，但不追加 Engine 侧 assistant
-            state = {
-              ...state,
-              viewMessages: state.viewMessages.map((m) =>
-                m.id === assistantId
-                  ? {
-                      ...m,
-                      streaming: false,
-                    }
-                  : m,
-              ),
-            }
             notifyStateChange()
           },
         },
       )
-
-      if (result.error && !disposed) {
-        // 若 askStream 返回整体错误，同样视为出错完成
-        state = {
-          ...state,
-          viewMessages: state.viewMessages.map((m) =>
-            m.id === assistantId
-              ? {
-                  ...m,
-                  streaming: false,
-                }
-              : m,
-          ),
-        }
+    } catch (e) {
+      if (disposed) return
+      const error = e as Error
+      if (error.name !== 'AbortError') {
+        console.error('[ChatSession] Stream exception:', e)
+      }
+    } finally {
+      if (!disposed) {
+        // 最终兜底：统一在这里将消息标记为完成并存入 history
+        // 这样可以确保无论正常结束、打断还是出错，streaming 状态都能重置
+        state = completeAssistantMessage(state, assistantId)
         notifyStateChange()
       }
-    } catch {
-      if (disposed) return
-      state = {
-        ...state,
-        viewMessages: state.viewMessages.map((m) =>
-          m.id === assistantId
-            ? {
-                ...m,
-                streaming: false,
-              }
-            : m,
-        ),
-      }
-      notifyStateChange()
+      currentAbortController = null
     }
   }
 
@@ -207,8 +186,24 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
 
       await runStreamWithCurrentHistory(assistantId)
     },
+    stopRunningStream() {
+      if (currentAbortController) {
+        currentAbortController.abort()
+      }
+    },
+    stopAndTruncate(messageId: string, length: number) {
+      if (currentAbortController) {
+        currentAbortController.abort()
+      }
+      // 直接按 ID 截断，无论是否在 streaming 状态
+      state = truncateAssistantMessage(state, messageId, length)
+      notifyStateChange()
+    },
     dispose() {
       disposed = true
+      if (currentAbortController) {
+        currentAbortController.abort()
+      }
       client = null
     },
   }

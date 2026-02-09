@@ -36,6 +36,7 @@ export function createDifyStreamingClient(config: DifyChatClientConfig): IStream
           messages: toDifyMessages(request.messages),
           temperature: request.temperature,
           maxTokens: request.maxTokens,
+          signal: request.signal,
         },
         {
           enabled: true,

@@ -2,10 +2,11 @@
 
 import { BrowserLogger } from './BrowserLogger'
 
-export enum MessageRole {
-  User = 'user',
-  Assistant = 'assistant',
-}
+export const MessageRole = {
+  User: 'user',
+  Assistant: 'assistant',
+} as const
+export type MessageRole = typeof MessageRole[keyof typeof MessageRole]
 
 export interface ChatMessage {
   role: MessageRole
@@ -43,15 +44,16 @@ export interface CompletionRequest {
 }
 
 // Dify SSE 事件类型
-enum DifyEventType {
-  Message = 'message',
-  TextChunk = 'text_chunk',
-  MessageEnd = 'message_end',
-  WorkflowFinished = 'workflow_finished',
-}
+const DifyEventType = {
+  Message: 'message',
+  TextChunk: 'text_chunk',
+  MessageEnd: 'message_end',
+  WorkflowFinished: 'workflow_finished',
+} as const
 
 interface DifySSEEvent {
   event: string
+  task_id?: string
   answer?: string
   data?: {
     text?: string
@@ -70,6 +72,7 @@ export class SimpleChat {
   private logger: BrowserLogger
   private config: ChatConfig | null = null
   private conversationId: string | null = null
+  private currentTaskId: string | null = null
 
   constructor() {
     this.logger = new BrowserLogger()
@@ -91,7 +94,10 @@ export class SimpleChat {
   /**
    * 发送流式消息
    */
-  public async askStream(request: CompletionRequest, streamConfig: StreamConfig): Promise<StreamResult> {
+  public async askStream(
+    request: CompletionRequest & { signal?: AbortSignal },
+    streamConfig: StreamConfig,
+  ): Promise<StreamResult> {
     if (!this.config) {
       throw new Error('Config not initialized. Call init() first.')
     }
@@ -100,6 +106,36 @@ export class SimpleChat {
       conversationId: this.conversationId || '(none)',
       messagesCount: request.messages.length,
     })
+
+    const signal = request.signal
+    this.currentTaskId = null
+
+    const onAbort = async () => {
+      const taskIdToStop = this.currentTaskId // 立即捕获，防止被 finally 块抹除
+      this.logger.info('Abort event received in SimpleChat', {
+        hasTaskId: !!taskIdToStop,
+        taskId: taskIdToStop
+      })
+
+      if (taskIdToStop) {
+        this.logger.info('Aborting Dify task on server', { taskId: taskIdToStop })
+        try {
+          await this.stopStream(taskIdToStop)
+        } catch (e) {
+          this.logger.error('Failed to stop Dify stream on server', { error: String(e) })
+        }
+      }
+    }
+
+    if (signal) {
+      if (signal.aborted) {
+        this.logger.warn('Signal already aborted before starting request')
+        void onAbort()
+      } else {
+        signal.addEventListener('abort', onAbort)
+        this.logger.info('Registered abort listener')
+      }
+    }
 
     try {
       const query = this.getLastUserMessage(request)
@@ -112,7 +148,9 @@ export class SimpleChat {
         request.maxTokens,
       )
 
-      const response = await this.fetchWithTimeout(url, body)
+      this.logger.info('Sending fetch request', { url })
+      const response = await this.fetchWithTimeout(url, body, signal)
+      this.logger.info('Fetch response received', { status: response.status, ok: response.ok })
 
       if (!response.ok || !response.body) {
         const errorText = await response.text()
@@ -126,43 +164,85 @@ export class SimpleChat {
       let buffer = ''
 
       // 处理流
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
+      try {
+        this.logger.info('Starting reader loop')
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) {
+            this.logger.info('Stream reader reported done')
+            break
+          }
 
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
+          const decoded = decoder.decode(value, { stream: true })
+          this.logger.info('Raw chunk received', { size: decoded.length })
 
-        for (const line of lines) {
-          const trimmed = line.trim()
-          if (!trimmed || !trimmed.startsWith('data: ')) continue
+          buffer += decoded
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
 
-          const jsonStr = trimmed.slice(6)
-          try {
-            const event: DifySSEEvent = JSON.parse(jsonStr)
+          for (const line of lines) {
+            const trimmed = line.trim()
+            if (!trimmed) continue
 
-            // 提取 Conversation ID
-            if (event.conversation_id && !this.conversationId) {
-              this.conversationId = event.conversation_id
-              this.logger.info('Conversation ID updated', { conversationId: this.conversationId })
+            this.logger.info('Processing line', { line: trimmed.slice(0, 100) + (trimmed.length > 100 ? '...' : '') })
+
+            if (!trimmed.startsWith('data: ')) {
+              this.logger.warn('Non-data line received', { line: trimmed })
+              continue
             }
 
-            const chunk = this.convertToChunk(event)
-            if (chunk?.content) {
-              fullContent += chunk.content
-              if (streamConfig.onChunk) {
-                streamConfig.onChunk(chunk)
+            const jsonStr = trimmed.slice(6)
+            try {
+              const event: DifySSEEvent = JSON.parse(jsonStr)
+              this.logger.info('Event parsed', { event: event.event, taskId: event.task_id })
+
+              // 提取 Conversation ID 和 Task ID
+              if (event.conversation_id && !this.conversationId) {
+                this.conversationId = event.conversation_id
               }
-            }
+              if (event.task_id && !this.currentTaskId) {
+                this.currentTaskId = event.task_id
+                this.logger.info('Current Task ID set', { taskId: this.currentTaskId })
+              }
 
-            if (chunk?.finish_reason) {
-              tokenCount = chunk.finish_reason === 'stop' ? fullContent.length : 0
+              // 处理错误事件
+              if (event.event === 'error') {
+                this.logger.error('Dify stream error event', { data: event.data })
+                throw new Error(`Dify error: ${event.data?.message || 'Unknown error'}`)
+              }
+
+              const chunk = this.convertToChunk(event)
+              if (chunk?.content) {
+                fullContent += chunk.content
+                if (streamConfig.onChunk) {
+                  streamConfig.onChunk(chunk)
+                }
+              }
+
+              if (chunk?.finish_reason) {
+                this.logger.info('Finish reason received', { reason: chunk.finish_reason })
+                tokenCount = chunk.finish_reason === 'stop' ? fullContent.length : 0
+              }
+            } catch (e) {
+              this.logger.error('Failed to parse XML/JSON from line', {
+                line: trimmed.slice(0, 50),
+                error: String(e)
+              })
             }
-          } catch {
-            // 忽略解析错误
           }
         }
+      } catch (e) {
+        const error = e as Error
+        if (error.name === 'AbortError') {
+          this.logger.info('Stream reader loop caught abort')
+          return {
+            content: fullContent,
+            tokenCount: fullContent.length,
+            completed: false,
+          }
+        }
+        this.logger.error('Error during stream reading', { error: error.message })
+        throw e
       }
 
       if (streamConfig.onComplete) {
@@ -190,7 +270,30 @@ export class SimpleChat {
         completed: false,
         error: error as Error,
       }
+    } finally {
+      if (signal) {
+        signal.removeEventListener('abort', onAbort)
+      }
+      this.currentTaskId = null
     }
+  }
+
+  /**
+   * 停止流式传输
+   */
+  public async stopStream(taskId: string): Promise<void> {
+    if (!this.config) return
+    const url = `${this.config.baseURL.replace(/\/+$/, '')}/chat-messages/${taskId}/stop`
+    await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.config.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        user: 'ai-settings-tester',
+      }),
+    })
   }
 
   /** 清除历史 */
@@ -258,15 +361,20 @@ export class SimpleChat {
   }
 
   /** 实际发起 fetch 请求 */
-  // 可根据需要扩展超时控制
-  private async fetchWithTimeout(url: string, body: Record<string, unknown>): Promise<Response> {
+  private async fetchWithTimeout(
+    url: string,
+    body: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<Response> {
     return fetch(url, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.config?.apiKey}`,
         'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
       },
       body: JSON.stringify(body),
+      signal,
     })
   }
 }
