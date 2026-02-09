@@ -168,8 +168,8 @@ export function WorkspaceShell({
       }
 
       let next = state.startWidth + delta
-      const MIN_AI_WIDTH = 260
-      const MAX_AI_WIDTH = 600
+      const MIN_AI_WIDTH = 360
+      const MAX_AI_WIDTH = 800
 
       if (next < MIN_AI_WIDTH) next = MIN_AI_WIDTH
       if (next > MAX_AI_WIDTH) next = MAX_AI_WIDTH

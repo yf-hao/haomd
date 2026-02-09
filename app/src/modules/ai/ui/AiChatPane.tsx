@@ -19,9 +19,11 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
   const [input, setInput] = useState('')
   const [contextPrefix, setContextPrefix] = useState<string | null>(null)
   const [contextPrefixUsed, setContextPrefixUsed] = useState(false)
-  const inputRef = useRef<HTMLTextAreaElement | null>(null)
-  const messagesContainerRef = useRef<HTMLDivElement | null>(null)
-  const paneRootRef = useRef<HTMLElement | null>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const paneRootRef = useRef<HTMLElement>(null)
+  const isComposingRef = useRef(false)
+  const lockEnterRef = useRef(false)
 
   const autoResizeInput = () => {
     const el = inputRef.current
@@ -135,15 +137,32 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    if (isComposingRef.current) return
     await doSend()
   }
 
   const handleInputKeyDown = async (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+    if (isComposingRef.current) return
+    if (e.key === 'Enter' && !e.shiftKey) {
+      if (lockEnterRef.current) return
       e.preventDefault()
       if (loading) return
       await doSend()
     }
+  }
+
+  const handleCompositionStart = () => {
+    isComposingRef.current = true
+  }
+
+  const handleCompositionEnd = () => {
+    isComposingRef.current = false
+    // 防止中文输入法回车确认时触发发送
+    // 在 Safari 等浏览器中，compositionEnd 可能在 keydown 之前触发
+    lockEnterRef.current = true
+    setTimeout(() => {
+      lockEnterRef.current = false
+    }, 100)
   }
 
   const handleCopy = async (content: string) => {
@@ -318,8 +337,10 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
           }}
           onSubmit={handleSubmit}
           onInputKeyDown={handleInputKeyDown}
-          inputRef={inputRef}
-          messagesContainerRef={messagesContainerRef}
+          onCompositionStart={handleCompositionStart}
+          onCompositionEnd={handleCompositionEnd}
+          inputRef={inputRef as React.RefObject<HTMLTextAreaElement>}
+          messagesContainerRef={messagesContainerRef as React.RefObject<HTMLDivElement>}
           getDisplayContent={getDisplayContent}
           onCopy={handleCopy}
           onInsert={handleInsert}
