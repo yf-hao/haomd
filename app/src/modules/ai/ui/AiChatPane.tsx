@@ -21,6 +21,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
   const [contextPrefixUsed, setContextPrefixUsed] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const messagesContainerRef = useRef<HTMLDivElement | null>(null)
+  const paneRootRef = useRef<HTMLElement | null>(null)
 
   const autoResizeInput = () => {
     const el = inputRef.current
@@ -250,8 +251,34 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
     el.scrollTop = el.scrollHeight
   }, [lastMessageKey])
 
+  // 当焦点在 Dock 面板内时，拦截 Cmd/Ctrl+W 优先关闭 AI Chat Pane
+  useEffect(() => {
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+      const isMeta = e.metaKey || e.ctrlKey
+      if (!isMeta) return
+
+      const key = e.key.toLowerCase()
+      if (key !== 'w') return
+
+      if (typeof document === 'undefined') return
+      const root = paneRootRef.current
+      const active = document.activeElement as HTMLElement | null
+      if (!root || !active) return
+      if (!root.contains(active)) return
+
+      e.preventDefault()
+      e.stopPropagation()
+      onClose()
+    }
+
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true)
+    }
+  }, [onClose])
+
   return (
-    <section className="pane ai-chat-pane">
+    <section className="pane ai-chat-pane" ref={paneRootRef}>
       <div className="ai-chat-pane-header">
         <div className="ai-chat-pane-title">AI Chat</div>
         <div className="ai-chat-role">

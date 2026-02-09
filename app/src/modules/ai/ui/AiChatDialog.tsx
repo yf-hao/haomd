@@ -17,10 +17,14 @@ export type AiChatDialogProps = {
 }
 
 export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialContext, onClose }) => {
+  console.log('[DEBUG] AiChatDialog 组件已加载，调试模式开启')
   const [input, setInput] = useState('')
   // 通用上下文前缀：用于 file / selection 入口的首条消息拼接
   const [contextPrefix, setContextPrefix] = useState<string | null>(null)
   const [contextPrefixUsed, setContextPrefixUsed] = useState(false)
+  // 追踪输入法组合状态，用于改进中文输入法的 Enter 键行为
+  const [isComposing, setIsComposing] = useState(false)
+  const [compositionEndTime, setCompositionEndTime] = useState(0)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const messagesContainerRef = useRef<HTMLDivElement | null>(null)
 
@@ -149,8 +153,39 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     await doSend()
   }
 
+  // 组合开始：输入法启动时设置标志
+  const handleCompositionStart = () => {
+    console.log('[DEBUG] compositionstart - isComposing: true')
+    setIsComposing(true)
+  }
+
+  // 组合结束：输入法选词完成后清除标志
+  const handleCompositionEnd = () => {
+    const now = Date.now()
+    console.log('[DEBUG] compositionend - isComposing: false, time:', now)
+    setIsComposing(false)
+    setCompositionEndTime(now)
+  }
+
   const handleInputKeyDown = async (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+    console.log('[DEBUG] keydown:', e.key, 'isComposing:', isComposing, 'nativeEvent.isComposing:', e.nativeEvent.isComposing, 'timeDiff:', Date.now() - compositionEndTime)
+    if (e.key === 'Enter' && !e.shiftKey) {
+      // 如果在输入法组合中（包括正在输入或正在选词），允许默认行为（填入候选词）
+      // 同时检查 isComposing 状态和原生事件的 isComposing 属性
+      if (isComposing || e.nativeEvent.isComposing) {
+        console.log('[DEBUG] 块发送：组合中')
+        return
+      }
+
+      // 如果刚刚结束组合（比如在 50ms 内），说明是用户按 Enter 选择候选词，不发送
+      const now = Date.now()
+      const timeDiff = now - compositionEndTime
+      if (timeDiff < 50) {
+        console.log('[DEBUG] 块发送：刚结束组合，时间差:', timeDiff, 'ms')
+        return
+      }
+
+      console.log('[DEBUG] 发送消息')
       e.preventDefault()
       if (loading) return
       await doSend()
@@ -389,6 +424,8 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
           }}
           onSubmit={handleSubmit}
           onInputKeyDown={handleInputKeyDown}
+          onCompositionStart={handleCompositionStart}
+          onCompositionEnd={handleCompositionEnd}
           inputRef={inputRef}
           messagesContainerRef={messagesContainerRef}
           getDisplayContent={getDisplayContent}

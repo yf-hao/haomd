@@ -286,7 +286,7 @@
   padding-right: 4px;
 }
 
-.sidebar-section + .sidebar-section {
+.sidebar-section+.sidebar-section {
   margin-top: 12px;
 }
 
@@ -626,12 +626,14 @@ button.ghost.primary {
 .workspace {
   flex: 1;
   min-height: 0;
-  position: relative; /* 允许 divider 热区绝对定位覆盖在内部 */
+  position: relative;
+  /* 允许 divider 热区绝对定位覆盖在内部 */
   display: grid;
   column-gap: 0;
   row-gap: 12px;
   align-items: stretch;
-  overflow: auto; /* 仅在工作区内部滚动 */
+  overflow: auto;
+  /* 仅在工作区内部滚动 */
 }
 
 /* 浮在编辑区和预览区交界处的透明热区 */
@@ -639,17 +641,21 @@ button.ghost.primary {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 10px; /* 热区宽度，鼠标可命中区域 */
-  transform: translateX(-50%); /* 让 left 落在热区中央，即真实交界线上 */
+  width: 10px;
+  /* 热区宽度，鼠标可命中区域 */
+  transform: translateX(-50%);
+  /* 让 left 落在热区中央，即真实交界线上 */
   cursor: col-resize;
   pointer-events: auto;
   background: transparent;
-  opacity: 0; /* 默认透明 */
+  opacity: 0;
+  /* 默认透明 */
   display: flex;
   align-items: center;
   justify-content: center;
   transition: opacity 0.2s ease;
-  z-index: 20; /* 保证拖拽热区始终在最上层，可点击 */
+  z-index: 20;
+  /* 保证拖拽热区始终在最上层，可点击 */
 }
 
 /* 内部实际显示的轨道和 handle */
@@ -667,7 +673,8 @@ button.ghost.primary {
   width: 2px;
   height: 100%;
   border-radius: 999px;
-  background: #5ad8a6; /* 与当前激活标签顶部的绿色保持一致 */
+  background: #5ad8a6;
+  /* 与当前激活标签顶部的绿色保持一致 */
   box-shadow: 0 0 10px rgba(90, 216, 166, 0.7);
 }
 
@@ -679,11 +686,9 @@ button.ghost.primary {
 
 .divider-hotzone:hover .divider-rail,
 .divider-hotzone.active .divider-rail {
-  background: linear-gradient(
-    180deg,
-    rgba(92, 124, 250, 0.35),
-    rgba(98, 195, 255, 0.35)
-  );
+  background: linear-gradient(180deg,
+      rgba(92, 124, 250, 0.35),
+      rgba(98, 195, 255, 0.35));
 }
 
 .pane {
@@ -708,8 +713,9 @@ button.ghost.primary {
 }
 
 .ai-chat-pane {
-  min-width: 260px;
-  max-width: 360px;
+  /* Width controlled by grid */
+  width: 100%;
+  height: 100%;
 }
 
 .ai-chat-pane-header {
@@ -747,12 +753,18 @@ button.ghost.primary {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  max-height: none; /* Dock 模式下不限制高度，由 pane 自己决定 */
+  max-height: none;
+  /* Dock 模式下不限制高度，由 pane 自己决定 */
 }
 
 /* Dock 模式下去掉模态内容默认底部外边距，避免发送按钮下方空隙过大 */
 .ai-chat-pane-body .modal-content {
   margin-bottom: 0;
+}
+
+/* Dock 模式下的关闭按钮使用内联定位，避免被 pane 的 overflow 裁切 */
+.ai-chat-pane-header .ai-chat-close-button {
+  position: static;
 }
 
 .floating-toggle {
@@ -864,6 +876,7 @@ button.ghost.primary {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -907,6 +920,7 @@ button.ghost.primary {
     transform: translateY(-20px) scale(0.95);
     opacity: 0;
   }
+
   to {
     transform: translateY(0) scale(1);
     opacity: 1;

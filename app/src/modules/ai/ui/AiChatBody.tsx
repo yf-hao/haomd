@@ -15,6 +15,8 @@ export interface AiChatBodyProps {
   onInputChange: (value: string) => void
   onSubmit: (e: FormEvent<HTMLFormElement>) => void
   onInputKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => void
+  onCompositionStart?: () => void
+  onCompositionEnd?: () => void
   inputRef?: RefObject<HTMLTextAreaElement>
   messagesContainerRef: RefObject<HTMLDivElement>
   getDisplayContent: (msgId: string, full: string, streaming?: boolean) => string
@@ -33,6 +35,8 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
   onInputChange,
   onSubmit,
   onInputKeyDown,
+  onCompositionStart,
+  onCompositionEnd,
   inputRef,
   messagesContainerRef,
   getDisplayContent,
@@ -120,6 +124,8 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
             onInputChange(e.target.value)
           }}
           onKeyDown={onInputKeyDown}
+          onCompositionStart={onCompositionStart}
+          onCompositionEnd={onCompositionEnd}
           placeholder="向 AI 提问，或继续就当前话题追问…"
         />
         <div className="ai-chat-input-actions">

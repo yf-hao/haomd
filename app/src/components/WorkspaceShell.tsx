@@ -67,10 +67,10 @@ export function WorkspaceShell({
   const [activeLine, setActiveLine] = useState(1)
   const [aiChatState, setAiChatState] = useState<
     | {
-        open: boolean
-        entryMode: ChatEntryMode
-        initialContext?: EntryContext
-      }
+      open: boolean
+      entryMode: ChatEntryMode
+      initialContext?: EntryContext
+    }
     | null
   >(null)
   const [aiChatMode, setAiChatMode] = useState<'floating' | 'docked'>('floating')
@@ -132,8 +132,12 @@ export function WorkspaceShell({
   const previewTimerRef = useRef<number | null>(null)
   const editorViewRef = useRef<EditorView | null>(null)
 
+  const [aiChatWidth, setAiChatWidth] = useState(360)
+  const [isAiChatResizing, setIsAiChatResizing] = useState(false)
+  const aiChatResizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
+
   const outerGridTemplateColumns = useMemo(() => {
-    const aiChatCol = 'minmax(260px, 360px)'
+    const aiChatCol = `${aiChatWidth}px`
     if (aiChatMode === 'docked' && aiChatOpen) {
       if (aiChatDockSide === 'left') {
         return `${aiChatCol} 1fr`
@@ -141,7 +145,50 @@ export function WorkspaceShell({
       return `1fr ${aiChatCol}`
     }
     return '1fr'
-  }, [aiChatMode, aiChatOpen, aiChatDockSide])
+  }, [aiChatMode, aiChatOpen, aiChatDockSide, aiChatWidth])
+
+  const handleAiChatResizeStart = useCallback((event: any) => {
+    aiChatResizeStateRef.current = { startX: event.clientX, startWidth: aiChatWidth }
+    setIsAiChatResizing(true)
+    event.preventDefault()
+    event.stopPropagation()
+  }, [aiChatWidth])
+
+  useEffect(() => {
+    if (!isAiChatResizing) return
+
+    const handleMove = (e: MouseEvent) => {
+      const state = aiChatResizeStateRef.current
+      if (!state) return
+
+      let delta = e.clientX - state.startX
+      // 如果是在右侧 Dock，鼠标向左移动（delta < 0）应该是增加宽度
+      if (aiChatDockSide === 'right') {
+        delta = -delta
+      }
+
+      let next = state.startWidth + delta
+      const MIN_AI_WIDTH = 260
+      const MAX_AI_WIDTH = 600
+
+      if (next < MIN_AI_WIDTH) next = MIN_AI_WIDTH
+      if (next > MAX_AI_WIDTH) next = MAX_AI_WIDTH
+      setAiChatWidth(next)
+    }
+
+    const handleUp = () => {
+      setIsAiChatResizing(false)
+      aiChatResizeStateRef.current = null
+    }
+
+    window.addEventListener('mousemove', handleMove)
+    window.addEventListener('mouseup', handleUp)
+
+    return () => {
+      window.removeEventListener('mousemove', handleMove)
+      window.removeEventListener('mouseup', handleUp)
+    }
+  }, [isAiChatResizing, aiChatDockSide])
 
   // 注册"AI 插入到编辑器"实现：在当前光标所在行的下一行插入 Markdown 文本
   useEffect(() => {
@@ -1058,11 +1105,28 @@ export function WorkspaceShell({
               style={{ gridTemplateColumns: outerGridTemplateColumns }}
             >
               {aiChatMode === 'docked' && aiChatOpen && aiChatDockSide === 'left' && aiChatState && (
-                <AiChatPane
-                  entryMode={aiChatState.entryMode}
-                  initialContext={aiChatState.initialContext}
-                  onClose={closeAiChatDialog}
-                />
+                <>
+                  <AiChatPane
+                    entryMode={aiChatState.entryMode}
+                    initialContext={aiChatState.initialContext}
+                    onClose={closeAiChatDialog}
+                  />
+                  <div
+                    className="divider-hotzone vertical"
+                    style={{
+                      position: 'absolute',
+                      left: aiChatWidth,
+                      height: '100%',
+                      zIndex: 10,
+                      cursor: 'col-resize',
+                    }}
+                    onMouseDown={handleAiChatResizeStart}
+                  >
+                    <div className="divider-rail">
+                      <span className="divider-handle" />
+                    </div>
+                  </div>
+                </>
               )}
 
               <section
@@ -1128,11 +1192,29 @@ export function WorkspaceShell({
               </section>
 
               {aiChatMode === 'docked' && aiChatOpen && aiChatDockSide === 'right' && aiChatState && (
-                <AiChatPane
-                  entryMode={aiChatState.entryMode}
-                  initialContext={aiChatState.initialContext}
-                  onClose={closeAiChatDialog}
-                />
+                <>
+                  <div
+                    className="divider-hotzone vertical"
+                    style={{
+                      position: 'absolute',
+                      right: aiChatWidth,
+                      height: '100%',
+                      zIndex: 10,
+                      cursor: 'col-resize',
+                      transform: 'translateX(50%)',
+                    }}
+                    onMouseDown={handleAiChatResizeStart}
+                  >
+                    <div className="divider-rail">
+                      <span className="divider-handle" />
+                    </div>
+                  </div>
+                  <AiChatPane
+                    entryMode={aiChatState.entryMode}
+                    initialContext={aiChatState.initialContext}
+                    onClose={closeAiChatDialog}
+                  />
+                </>
               )}
             </main>
           </>
