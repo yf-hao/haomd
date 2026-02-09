@@ -5,24 +5,19 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { ConflictModal } from './ConflictModal'
 import { ConfirmDialog } from './ConfirmDialog'
 import { TabBar } from './TabBar'
-import { Sidebar } from './Sidebar'
+import { Sidebar, type SidebarContextActionPayload } from './Sidebar'
 import { OutlinePanel } from './OutlinePanel'
 import { Welcome } from './Welcome'
 import { useOutline } from '../hooks/useOutline'
 import type { OutlineItem } from '../modules/outline/parser'
 import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout'
-import { AiChatDialog } from '../modules/ai/ui/AiChatDialog'
-import type { ChatEntryMode, EntryContext } from '../modules/ai/domain/chatSession'
 import { useFilePersistence } from '../hooks/useFilePersistence'
 import { useTabs } from '../hooks/useTabs'
 import { useCommandSystem } from '../hooks/useCommandSystem'
 import { useSidebar } from '../hooks/useSidebar'
-import { useSidebarActions } from '../hooks/useSidebarActions'
-import { useConfirmDialog } from '../hooks/useConfirmDialogs'
 import { onOpenRecentFile } from '../modules/platform/menuEvents'
 import { deleteFsEntry } from '../modules/files/service'
 import { useNativePaste } from '../hooks/useNativePaste'
-import { registerEditorInsertBelow } from '../modules/ai/platform/editorInsertService'
 import type { EditorTab } from '../types/tabs'
 
 const EditorPaneLazy = lazy(() =>
@@ -66,14 +61,6 @@ export function WorkspaceShell({
   const [markdown, setMarkdown] = useState(seed)
   const [previewValue, setPreviewValue] = useState(seed)
   const [activeLine, setActiveLine] = useState(1)
-  const [aiChatState, setAiChatState] = useState<
-    | {
-        open: boolean
-        entryMode: ChatEntryMode
-        initialContext?: EntryContext
-      }
-    | null
-  >(null)
   const [activeOutlineId, setActiveOutlineId] = useState<string | null>(null)
   const [sidebarWidth, setSidebarWidth] = useState(260)
   const [isSidebarResizing, setIsSidebarResizing] = useState(false)
@@ -97,8 +84,6 @@ export function WorkspaceShell({
 
   // 使用 ref 存储关闭当前标签的回调，避免循环依赖
   const closeCurrentTabRef = useRef<(() => void) | null>(null)
-  // 记录上一次激活的标签 id，用于避免在每次内容变更时重置 activeLine
-  const prevActiveIdRef = useRef<string | null>(null)
 
   const handleSidebarResizeStart = useCallback((event: any) => {
     if (!activeLeftPanel) return
@@ -130,74 +115,6 @@ export function WorkspaceShell({
   const sidebar = useSidebar()
   const previewTimerRef = useRef<number | null>(null)
   const editorViewRef = useRef<EditorView | null>(null)
-
-  // 注册“AI 插入到编辑器”实现：在当前光标所在行的下一行插入 Markdown 文本
-  useEffect(() => {
-    registerEditorInsertBelow(async (text: string) => {
-      const view = editorViewRef.current
-      if (!view) {
-        console.warn('[editorInsertService] editorView not available, skip insertMarkdownAtCursorBelow')
-        return
-      }
-      if (!text) return
-
-      const { state } = view
-      const { main } = state.selection
-      const pos = main.head
-      const doc = state.doc
-      const line = doc.lineAt(pos)
-      const lineText = doc.sliceString(line.from, line.to)
-      const isEmptyLine = lineText.trim().length === 0
-
-      let insertText = text
-      let from = line.to
-      let to = line.to
-
-      if (isEmptyLine) {
-        from = line.from
-        to = line.to
-        insertText = text
-      } else {
-        insertText = '\n' + text
-      }
-
-      const tr = state.update({
-        changes: { from, to, insert: insertText },
-        selection: { anchor: from + insertText.length },
-        scrollIntoView: true,
-      })
-
-      view.dispatch(tr)
-    })
-  }, [])
-
-  const openAiChatDialog = useCallback(
-    (options: { entryMode: ChatEntryMode; initialContext?: EntryContext }) => {
-      setAiChatState({ open: true, ...options })
-    },
-    [],
-  )
-
-  const closeAiChatDialog = useCallback(() => {
-    setAiChatState((prev) => (prev ? { ...prev, open: false } : prev))
-  }, [])
-
-  const getCurrentMarkdown = useCallback(() => markdown, [markdown])
-
-  const getCurrentFileName = useCallback(() => {
-    const path = activeTab?.path
-    if (!path) return null
-    const name = path.split(/[/\\]/).pop() || path
-    return name
-  }, [activeTab])
-
-  const getCurrentSelectionText = useCallback(() => {
-    const view = editorViewRef.current
-    if (!view) return null
-    const { main } = view.state.selection
-    if (main.empty) return null
-    return view.state.doc.sliceString(main.from, main.to)
-  }, [])
 
   const outlineItems = useOutline(markdown)
 
@@ -235,16 +152,32 @@ export function WorkspaceShell({
     }
   }, [isSidebarResizing, MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH])
 
+  // Confirm Dialog State
+  type ConfirmState = {
+    title: string
+    message: string
+    confirmText?: string
+    cancelText?: string
+    extraText?: string
+    variant?: 'default' | 'stacked'
+    onConfirm: () => void
+    onExtra?: () => void
+  } | null
+
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmState>(null)
+
+  // Quit Confirm Dialog State
+  type QuitConfirmState = {
+    unsavedCount: number
+    onSaveAll: () => void
+    onQuitWithoutSaving: () => void
+  } | null
+
+  const [quitConfirmDialog, setQuitConfirmDialog] = useState<QuitConfirmState>(null)
 
   // 切换标签时，同步编辑内容和预览内容到当前标签
   useEffect(() => {
     if (!activeId) return
-
-    // 仅在激活标签真正发生变更时才重置内容和 activeLine，
-    // 避免因为 tabs 内容更新（打字）导致 activeLine 每次被重置为 1
-    if (prevActiveIdRef.current === activeId) return
-    prevActiveIdRef.current = activeId
-
     const tab = tabs.find((t) => t.id === activeId) || null
     if (!tab) return
     setMarkdown(tab.content)
@@ -260,6 +193,12 @@ export function WorkspaceShell({
       console.warn('set_title failed', err)
     })
   }, [activeTab, isTauriEnv])
+
+  // 调试：观察当前 activeLine 行号（仅开发环境）
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    console.log('[App] activeLine =', activeLine)
+  }, [activeLine])
 
   const persistenceOptions = {
     onSaved: (path: string) => {
@@ -350,6 +289,86 @@ export function WorkspaceShell({
     closeTab(activeId)
   }, [activeId, tabs, closeTab, save, setStatusMessage])
 
+  const handleQuit = useCallback(() => {
+    if (import.meta.env.DEV) {
+      console.log('[App] handleQuit called')
+    }
+    const unsavedTabs = getUnsavedTabs()
+    if (import.meta.env.DEV) {
+      console.log('[App] 检测未保存标签', { count: unsavedTabs.length })
+    }
+
+    if (unsavedTabs.length === 0) {
+      // 没有未保存变更，直接退出
+      if (import.meta.env.DEV) {
+        console.log('[App] 没有未保存变更，直接退出')
+      }
+      if (isTauriEnv()) {
+        void invoke('quit_app').catch((err) => {
+          console.warn('[App] quit_app failed', err)
+        })
+      } else {
+        window.close()
+      }
+      return
+    }
+
+    // 有未保存变更，显示确认对话框
+    setQuitConfirmDialog({
+      unsavedCount: unsavedTabs.length,
+      onSaveAll: async () => {
+        if (import.meta.env.DEV) {
+          console.log('[App] 用户选择保存所有标签')
+        }
+        setQuitConfirmDialog(null)
+
+        // 切换到每个未保存的标签并保存
+        for (const tab of unsavedTabs) {
+          if (import.meta.env.DEV) {
+            console.log('[App] 切换到标签并保存', { tabId: tab.id, title: tab.title })
+          }
+          setActiveTab(tab.id)
+          // 等待状态更新
+          await new Promise((resolve) => setTimeout(resolve, 10))
+          const result = await save()
+          if ((result as any)?.ok === false) {
+            setStatusMessage(`保存 ${tab.title} 失败: ${(result as any)?.error?.message ?? '未知错误'}`)
+            if (import.meta.env.DEV) {
+              console.warn('[App] 保存失败，取消退出', { tabId: tab.id })
+            }
+            return
+          }
+          if (import.meta.env.DEV) {
+            console.log('[App] 标签保存成功', { tabId: tab.id })
+          }
+        }
+
+        if (import.meta.env.DEV) {
+          console.log('[App] 所有文件保存成功，退出')
+        }
+        if (isTauriEnv()) {
+          void invoke('quit_app').catch((err) => {
+            console.warn('[App] quit_app failed', err)
+          })
+        } else {
+          window.close()
+        }
+      },
+      onQuitWithoutSaving: () => {
+        if (import.meta.env.DEV) {
+          console.log('[App] 用户选择不保存直接退出')
+        }
+        setQuitConfirmDialog(null)
+        if (isTauriEnv()) {
+          void invoke('quit_app').catch((err) => {
+            console.warn('[App] quit_app failed', err)
+          })
+        } else {
+          window.close()
+        }
+      },
+    })
+  }, [getUnsavedTabs, isTauriEnv, save, setActiveTab, setStatusMessage])
 
   // 更新 ref，使 useTabs 中的回调能够访问最新的 handleCurrentTabClose
   closeCurrentTabRef.current = handleCurrentTabClose
@@ -365,40 +384,13 @@ export function WorkspaceShell({
 
   useEffect(() => {
     if (markdown === previewValue) return
-
-    // 计算当前和之前的换行数
-    const currentLineCount = (markdown.match(/\\n/g) || []).length
-    const previousLineCount = (previewValue.match(/\\n/g) || []).length
-
-    // 调试输出
-    console.log('[PreviewUpdate]', {
-      activeLine: activeLine,
-      markdownLineCount: currentLineCount,
-      previewLineCount: previousLineCount,
-      markdownLength: markdown.length,
-      previewLength: previewValue.length,
-      hasCodeBlock: markdown.includes('```'),
-      hasMath: markdown.includes('$'),
-      hasHeading: markdown.startsWith('# '),
-    })
-
-    // 智能检测：判断是否需要渲染预览（暂时放宽为：只要内容变化就渲染）
-    const shouldRender = true
-
-    console.log('[PreviewUpdate] shouldRender:', shouldRender)
-
-    if (shouldRender && previewTimerRef.current) {
+    if (previewTimerRef.current) {
       window.clearTimeout(previewTimerRef.current)
     }
-
-    if (shouldRender) {
-      // 换行或其他重大变化时，稍微延迟渲染
-      previewTimerRef.current = window.setTimeout(() => {
-        setPreviewValue(markdown)
-        previewTimerRef.current = null
-        console.log('[PreviewUpdate] Rendering preview...')
-      }, 100)
-    }
+    previewTimerRef.current = window.setTimeout(() => {
+      setPreviewValue(markdown)
+      previewTimerRef.current = null
+    }, 320)
 
     return () => {
       if (previewTimerRef.current) {
@@ -406,7 +398,7 @@ export function WorkspaceShell({
         previewTimerRef.current = null
       }
     }
-  }, [markdown, previewValue, activeLine])
+  }, [markdown, previewValue])
 
   const handleManualSave = async () => {
     // 冲突重试时，已命名文件应直接保存到原路径；未命名则走保存对话框
@@ -449,6 +441,33 @@ export function WorkspaceShell({
     [createTab, openFromPath],
   )
 
+  // 从 Sidebar 打开文件：若已有对应标签则只激活，否则创建新标签
+  const openFileFromSidebar = useCallback(
+    async (path: string) => {
+      // 先检查是否已经有该路径的标签
+      const existing = tabs.find((t) => t.path === path)
+      if (existing) {
+        setActiveTab(existing.id)
+        return { ok: true, data: { path: existing.path } } as any
+      }
+
+      // 没有标签时，走统一的新标签打开逻辑
+      return await openFileInNewTab(path)
+    },
+    [tabs, setActiveTab, openFileInNewTab],
+  )
+
+  // Open Recent 专用：仅将文件加入 Sidebar 的单文件列表，不加载整个目录树
+  const openRecentFileInNewTab = useCallback(
+    async (path: string) => {
+      const resp = await openFileInNewTab(path)
+      if (!resp || !resp.ok) return resp
+
+      sidebar.addStandaloneFile(resp.data.path)
+      return resp
+    },
+    [openFileInNewTab, sidebar],
+  )
 
   const openFolderInSidebar = useCallback(async () => {
     if (!isTauriEnv()) {
@@ -473,40 +492,69 @@ export function WorkspaceShell({
     setStatusMessage(`已打开文件夹：${path}`)
   }, [isTauriEnv, sidebar, setStatusMessage])
 
+  const closeTabsByPath = useCallback(
+    (targetPath: string) => {
+      const norm = targetPath
+      tabs.forEach((tab) => {
+        if (tab.path === norm) {
+          closeTab(tab.id)
+        }
+      })
+    },
+    [tabs, closeTab],
+  )
 
-  const { confirmDialog, setConfirmDialog } = useConfirmDialog()
+  const handleSidebarContextAction = useCallback(
+    async (payload: SidebarContextActionPayload) => {
+      const { path, kind, action } = payload
 
-  // 退出确认对话框状态
-  type QuitConfirmState = {
-    unsavedCount: number
-    onSaveAll: () => void
-    onQuitWithoutSaving: () => void
-  } | null
+      if (action === 'open') {
+        await openFileFromSidebar(path)
+        return
+      }
 
-  const [quitConfirmDialog, setQuitConfirmDialog] = useState<QuitConfirmState>(null)
+      if (action === 'remove') {
+        if (kind === 'standalone-file') {
+          sidebar.removeStandaloneFile(path)
+        } else if (kind === 'folder-root') {
+          sidebar.removeFolderRoot(path)
+        }
+        return
+      }
 
-  const sidebarActions = useSidebarActions({
-    tabs,
-    setActiveTab,
-    openFileInNewTab,
-    sidebar,
-    deleteFsEntry,
-    setStatusMessage,
-    closeTab,
-    setConfirmDialog,
-  })
+      if (action === 'delete') {
+        setConfirmDialog({
+          title: '确认删除',
+          message: `确认删除该文件？此操作不可撤销。\n\n${path}`,
+          confirmText: '删除',
+          onConfirm: async () => {
+            setConfirmDialog(null)
+            const resp = await deleteFsEntry(path)
+            if (!resp.ok) {
+              setStatusMessage(resp.error.message)
+              return
+            }
+            sidebar.removeStandaloneFile(path)
+            closeTabsByPath(path)
+          },
+        })
+        return
+      }
+    },
+    [openFileFromSidebar, sidebar, setStatusMessage, closeTabsByPath],
+  )
 
   // 监听 Tauri 原生菜单中 File → Open Recent 子菜单点击事件
   // 行为：新建标签页并把文件加入 Sidebar 的单文件列表，不展开整个文件夹
   useEffect(() => {
     const unlisten = onOpenRecentFile(async (path) => {
-      await sidebarActions.openRecentFileInNewTab(path)
+      await openRecentFileInNewTab(path)
     })
 
     return () => {
       unlisten()
     }
-  }, [sidebarActions])
+  }, [openRecentFileInNewTab])
 
   useCommandSystem({
     layout,
@@ -527,108 +575,34 @@ export function WorkspaceShell({
     updateActiveMeta,
     openFolderInSidebar,
     closeCurrentTab,
-    openAiChatDialog,
-    getCurrentMarkdown,
-    getCurrentFileName,
-    getCurrentSelectionText,
     onRequestCloseCurrentTab: () => {
       if (closeCurrentTabRef.current) {
         closeCurrentTabRef.current()
       }
     },
-    onRequestQuit: () => {
-      if (import.meta.env.DEV) {
-        console.log('[App] handleQuit called')
-      }
-
-      const unsavedTabs = getUnsavedTabs()
-
-      // 没有未保存文件：也弹一次确认，防止误触 Cmd+Q
-      if (unsavedTabs.length === 0) {
-        setConfirmDialog({
-          title: 'Quit HaoMD?',
-          message: 'Are you sure you want to quit HaoMD?',
-          confirmText: 'Quit',
-          cancelText: 'Cancel',
-          onConfirm: () => {
-            setConfirmDialog(null)
-            if (isTauriEnv()) {
-              void invoke('quit_app').catch((err) => {
-                console.warn('[App] quit_app failed', err)
-              })
-            } else {
-              window.close()
-            }
-          },
-        })
-        return
-      }
-
-      // 有未保存文件：使用原有的「Save All / Don't Save」对话框
-      setQuitConfirmDialog({
-        unsavedCount: unsavedTabs.length,
-        onSaveAll: async () => {
-          setQuitConfirmDialog(null)
-
-          for (const tab of unsavedTabs) {
-            setActiveTab(tab.id)
-            await new Promise((resolve) => setTimeout(resolve, 10))
-            const result = await save()
-            if ((result as any)?.ok === false) {
-              setStatusMessage(`保存 ${tab.title} 失败: ${(result as any)?.error?.message ?? '未知错误'}`)
-              return
-            }
-          }
-
-          if (isTauriEnv()) {
-            void invoke('quit_app').catch((err) => {
-              console.warn('[App] quit_app failed', err)
-            })
-          } else {
-            window.close()
-          }
-        },
-        onQuitWithoutSaving: () => {
-          setQuitConfirmDialog(null)
-          if (isTauriEnv()) {
-            void invoke('quit_app').catch((err) => {
-              console.warn('[App] quit_app failed', err)
-            })
-          } else {
-            window.close()
-          }
-        },
-      })
-    },
+    onRequestQuit: handleQuit,
     isTauriEnv,
   })
 
   // 监听来自原生剪贴板的粘贴事件（通过 Hook 封装）
   useNativePaste(editorViewRef, setStatusMessage)
 
-  // 全局支持在输入框中使用 Cmd/Ctrl+A 全选，仅作用于 input/textarea
+  // Global click logger for debugging tab-close issues（仅开发环境启用）
   useEffect(() => {
-    const handleSelectAll = (e: KeyboardEvent) => {
-      const isMeta = e.metaKey || e.ctrlKey
-      if (!isMeta) return
+    if (!import.meta.env.DEV) return
+    const handler = (e: MouseEvent) => {
+      const node = e.target as Node
+      const element = node instanceof Element ? node : node.parentElement
+      const isTabClose = element ? element.closest('.tab-close') !== null : false
 
-      const key = e.key.toLowerCase()
-      if (key !== 'a') return
-
-      const active = document.activeElement as HTMLElement | null
-      if (!active) return
-
-      if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
-        e.preventDefault()
-        e.stopPropagation()
-        active.select()
-      }
+      console.log('[GLOBAL CLICK]', {
+        target: (element as HTMLElement | null)?.outerHTML?.slice(0, 160) ?? String(e.target),
+        isTabClose,
+      })
     }
-
-    // 使用 capture 阶段，优先于其他监听器处理
-    window.addEventListener('keydown', handleSelectAll, true)
+    window.addEventListener('click', handler, true)
     return () => {
-      window.removeEventListener('keydown', handleSelectAll, true)
+      window.removeEventListener('click', handler, true)
     }
   }, [])
 
@@ -672,8 +646,7 @@ export function WorkspaceShell({
             }
           }
         }
-        // 搜索文本未找到是正常情况（防抖期间编辑器内容可能已变化），使用行号定位即可
-        console.log('[scrollEditorToLineCenter] 搜索文本未找到，使用行号定位:', searchText)
+        console.warn('[scrollEditorToLineCenter] 未找到匹配的文本:', searchText)
       }
 
       // 方案1：回退到行号定位（改进后的行号计算）
@@ -719,21 +692,8 @@ export function WorkspaceShell({
       // 使用编辑器内坐标 + DOM 计算，将目标行尽量滚动到编辑区中间
       const rect = view.coordsAtPos(lineInfo.from)
       const scrollDOM = view.scrollDOM
-
-      // 至少设置光标位置
-      view.dispatch({
-        selection: { anchor: lineInfo.from },
-      })
-
       if (!rect) {
-        // 如果无法获取坐标（可能视图未渲染），使用估算的行高滚动
-        const estimatedLineHeight = 24 // CodeMirror 默认行高
-        const estimatedPos = (targetLine - 1) * estimatedLineHeight
-        const scrollRect = scrollDOM.getBoundingClientRect()
-        const centerOffset = scrollRect.height / 2 - estimatedLineHeight / 2
-
-        scrollDOM.scrollTo({ top: Math.max(0, estimatedPos - centerOffset) })
-        console.log('[scrollEditorToLineCenter] 使用估算行高滚动，line:', targetLine)
+        console.warn('[scrollEditorToLineCenter] 无法获取行坐标，line:', targetLine)
         return
       }
 
@@ -742,6 +702,10 @@ export function WorkspaceShell({
       const delta = lineCenter - (scrollRect.top + scrollRect.height / 2)
 
       scrollDOM.scrollTo({ top: scrollDOM.scrollTop + delta })
+
+      view.dispatch({
+        selection: { anchor: lineInfo.from },
+      })
     },
     [editorViewRef],
   )
@@ -826,14 +790,14 @@ export function WorkspaceShell({
     } else if (initialAction === 'open_folder') {
       void openFolderInSidebar()
     } else if (initialAction === 'open_recent' && initialOpenRecentPath) {
-      void sidebarActions.openRecentFileInNewTab(initialOpenRecentPath)
+      void openRecentFileInNewTab(initialOpenRecentPath)
     } else {
       return
     }
 
     initialActionHandledRef.current = true
     onInitialActionHandled?.()
-  }, [initialAction, initialOpenRecentPath, createTab, openFile, openFolderInSidebar, sidebarActions, onInitialActionHandled])
+  }, [initialAction, initialOpenRecentPath, createTab, openFile, openFolderInSidebar, openRecentFileInNewTab, onInitialActionHandled])
 
   return (
     <>
@@ -844,8 +808,8 @@ export function WorkspaceShell({
           treesByRoot={sidebar.treesByRoot}
           expanded={sidebar.expanded}
           onToggle={sidebar.toggleNode}
-          onFileClick={sidebarActions.openFileFromSidebar}
-          onContextAction={sidebarActions.handleSidebarContextAction}
+          onFileClick={openFileFromSidebar}
+          onContextAction={handleSidebarContextAction}
           activePath={activeTab?.path ?? null}
           panelWidth={sidebarWidth}
         />
@@ -890,65 +854,44 @@ export function WorkspaceShell({
               style={{ gridTemplateColumns }}
               ref={workspaceRef}
             >
-              {effectiveLayout === 'preview-left' && (
-                <>
-                  <Suspense
-                    fallback={
-                      <section className="pane preview">
-                        <div className="preview-body" />
-                      </section>
-                    }
-                  >
-                    <PreviewPaneLazy
-                      value={previewValue}
-                      activeLine={activeLine}
-                      previewWidth={previewWidthForRender}
-                    />
-                  </Suspense>
-                  <section className="pane">
-                    <Suspense fallback={<div className="code-editor" />}>
-                      <EditorPaneLazy
-                        markdown={markdown}
-                        onChange={handleMarkdownChange}
-                        onCursorChange={setActiveLine}
-                        showPreview={showPreview}
-                        setShowPreview={setShowPreview}
-                        editorViewRef={editorViewRef}
-                      />
-                    </Suspense>
-                  </section>
-                </>
-              )}
+              <section
+                className="pane"
+                style={
+                  effectiveLayout === 'preview-only'
+                    ? { display: 'none' }
+                    : effectiveLayout === 'preview-left'
+                      ? { gridColumn: '2 / 3', gridRow: '1 / 2' }
+                      : effectiveLayout === 'preview-right'
+                        ? { gridColumn: '1 / 2', gridRow: '1 / 2' }
+                        : { gridColumn: '1 / -1', gridRow: '1 / 2' }
+                }
+              >
+                <Suspense fallback={<div className="code-editor" />}>
+                  <EditorPaneLazy
+                    markdown={markdown}
+                    onChange={handleMarkdownChange}
+                    onCursorChange={setActiveLine}
+                    showPreview={showPreview}
+                    setShowPreview={setShowPreview}
+                    editorViewRef={editorViewRef}
+                  />
+                </Suspense>
+              </section>
 
-              {effectiveLayout === 'preview-right' && (
-                <>
-                  <section className="pane">
-                    <Suspense fallback={<div className="code-editor" />}>
-                      <EditorPaneLazy
-                        markdown={markdown}
-                        onChange={handleMarkdownChange}
-                        onCursorChange={setActiveLine}
-                        showPreview={showPreview}
-                        setShowPreview={setShowPreview}
-                        editorViewRef={editorViewRef}
-                      />
-                    </Suspense>
+              <Suspense
+                fallback={
+                  <section className="pane preview">
+                    <div className="preview-body" />
                   </section>
-                  <Suspense
-                    fallback={
-                      <section className="pane preview">
-                        <div className="preview-body" />
-                      </section>
-                    }
-                  >
-                    <PreviewPaneLazy
-                      value={previewValue}
-                      activeLine={activeLine}
-                      previewWidth={previewWidthForRender}
-                    />
-                  </Suspense>
-                </>
-              )}
+                }
+              >
+                <PreviewPaneLazy
+                  value={previewValue}
+                  activeLine={activeLine}
+                  previewWidth={previewWidthForRender}
+                  effectiveLayout={effectiveLayout}
+                />
+              </Suspense>
 
               {(effectiveLayout === 'preview-left' || effectiveLayout === 'preview-right') && (
                 <div
@@ -965,38 +908,6 @@ export function WorkspaceShell({
                     <span className="divider-handle" />
                   </div>
                 </div>
-              )}
-
-              {effectiveLayout === 'preview-only' && (
-                <Suspense
-                  fallback={
-                    <section className="pane preview" style={{ gridColumn: '1 / -1' }}>
-                      <div className="preview-body" />
-                    </section>
-                  }
-                >
-                  <PreviewPaneLazy
-                    value={previewValue}
-                    activeLine={activeLine}
-                    previewWidth={previewWidthForRender}
-                    fullWidth
-                  />
-                </Suspense>
-              )}
-
-              {effectiveLayout === 'editor-only' && (
-                <section className="pane" style={{ gridColumn: '1 / -1' }}>
-                  <Suspense fallback={<div className="code-editor" />}>
-                    <EditorPaneLazy
-                      markdown={markdown}
-                      onChange={handleMarkdownChange}
-                      onCursorChange={setActiveLine}
-                      showPreview={showPreview}
-                      setShowPreview={setShowPreview}
-                      editorViewRef={editorViewRef}
-                    />
-                  </Suspense>
-                </section>
               )}
             </main>
           </>
@@ -1022,15 +933,6 @@ export function WorkspaceShell({
           onConfirm={confirmDialog.onConfirm}
           onExtra={confirmDialog.onExtra}
           onCancel={() => setConfirmDialog(null)}
-        />
-      )}
-
-      {aiChatState && (
-        <AiChatDialog
-          open={aiChatState.open}
-          entryMode={aiChatState.entryMode}
-          initialContext={aiChatState.initialContext}
-          onClose={closeAiChatDialog}
         />
       )}
 

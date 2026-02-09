@@ -56,14 +56,14 @@ export function useWorkspaceLayout() {
   )
 
   const gridTemplateColumns = useMemo(() => {
-    if (effectiveLayout === 'editor-only') return '1fr'
-    if (effectiveLayout === 'preview-only') return '1fr'
     const previewCol = `minmax(0, ${clampedPreviewWidth}%)`
     const editorCol = `minmax(0, ${clampedEditorWidth}%)`
-    // 仅保留左右两列，由浮动的 divider 热区覆盖在交界处
-    return effectiveLayout === 'preview-left'
-      ? `${previewCol} ${editorCol}`
-      : `${editorCol} ${previewCol}`
+
+    if (effectiveLayout === 'preview-left') return `${previewCol} ${editorCol}`
+    if (effectiveLayout === 'preview-right') return `${editorCol} ${previewCol}`
+    if (effectiveLayout === 'preview-only') return '1fr 0'
+    // editor-only
+    return '0 1fr'
   }, [clampedEditorWidth, clampedPreviewWidth, effectiveLayout])
 
   useEffect(() => {
