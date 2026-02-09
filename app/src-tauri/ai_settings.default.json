@@ -4,37 +4,87 @@
       "id": "1770434252163_bg8e4j",
       "name": "Dify-SIAS",
       "base_url": "https://aigc.sias.edu.cn/v1",
-      "api_key": "app-komLx9RsMdpuC1uRyIPpJSaC",
+      "api_key": "",
       "models": [
         {
-          "id": "GPT-5.2-chat"
+          "id": "GPT-5.2-chat",
+          "max_tokens": null
         },
         {
-          "id": "GPT-5.1-chat"
+          "id": "GPT-5.1-chat",
+          "max_tokens": null
         },
         {
-          "id": "GPT-5-mini-2"
+          "id": "GPT-5-mini-2",
+          "max_tokens": null
         },
         {
-          "id": "GPT-4.1"
+          "id": "GPT-4.1",
+          "max_tokens": null
         },
         {
-          "id": "GPT-4o-mini"
+          "id": "GPT-4o-mini",
+          "max_tokens": null
         },
         {
-          "id": "qwen3-32b-awq"
+          "id": "qwen3-32b-awq",
+          "max_tokens": null
         },
         {
-          "id": "DeepSeek-V3.2"
+          "id": "DeepSeek-V3.2",
+          "max_tokens": null
         },
         {
-          "id": "Kimi-K2-lnstruct"
+          "id": "Kimi-K2-lnstruct",
+          "max_tokens": null
         }
       ],
-      "default_model_id": "GPT-5.2-chat",
+      "default_model_id": "GPT-5.1-chat",
       "description": "不支持图片解析",
       "provider_type": "dify"
+    },
+    {
+      "id": "1770468355767_t8c2rt",
+      "name": "ModelScope",
+      "base_url": "https://api-inference.modelscope.cn/v1",
+      "api_key": "",
+      "models": [
+        {
+          "id": "ZhipuAI/GLM-4.7",
+          "max_tokens": null
+        }
+      ],
+      "default_model_id": "ZhipuAI/GLM-4.7",
+      "description": null,
+      "provider_type": "openai"
+    },
+    {
+      "id": "1770483877998_pqac6g",
+      "name": "Iflow",
+      "base_url": "https://apis.iflow.cn/v1",
+      "api_key": "",
+      "models": [
+        {
+          "id": "qwen3-max",
+          "max_tokens": null
+        },
+        {
+          "id": "qwen3-vl-plus",
+          "max_tokens": null
+        },
+        {
+          "id": "kimi-k2",
+          "max_tokens": null
+        },
+        {
+          "id": "qwen3-coder-plus",
+          "max_tokens": null
+        }
+      ],
+      "default_model_id": "qwen3-max",
+      "description": null,
+      "provider_type": "openai"
     }
   ],
-  "default_provider_id": "1770434252163_bg8e4j"
+  "default_provider_id": "1770483877998_pqac6g"
 }

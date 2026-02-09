@@ -1,5 +1,5 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import type { EditorView } from '@codemirror/view'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { EditorView } from '@codemirror/view'
 import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { ConflictModal } from './ConflictModal'
@@ -12,6 +12,7 @@ import { useOutline } from '../hooks/useOutline'
 import type { OutlineItem } from '../modules/outline/parser'
 import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout'
 import { AiChatDialog } from '../modules/ai/ui/AiChatDialog'
+import { AiChatPane } from '../modules/ai/ui/AiChatPane'
 import type { ChatEntryMode, EntryContext } from '../modules/ai/domain/chatSession'
 import { registerEditorInsertBelow, registerEditorReplaceSelection, registerEditorCreateAndInsert } from '../modules/ai/platform/editorInsertService'
 import { useFilePersistence } from '../hooks/useFilePersistence'
@@ -72,6 +73,9 @@ export function WorkspaceShell({
       }
     | null
   >(null)
+  const [aiChatMode, setAiChatMode] = useState<'floating' | 'docked'>('floating')
+  const [aiChatOpen, setAiChatOpen] = useState(false)
+  const [aiChatDockSide, setAiChatDockSide] = useState<'left' | 'right'>('right')
   const [activeOutlineId, setActiveOutlineId] = useState<string | null>(null)
   const [sidebarWidth, setSidebarWidth] = useState(260)
   const [isSidebarResizing, setIsSidebarResizing] = useState(false)
@@ -127,6 +131,17 @@ export function WorkspaceShell({
   const sidebar = useSidebar()
   const previewTimerRef = useRef<number | null>(null)
   const editorViewRef = useRef<EditorView | null>(null)
+
+  const outerGridTemplateColumns = useMemo(() => {
+    const aiChatCol = 'minmax(260px, 360px)'
+    if (aiChatMode === 'docked' && aiChatOpen) {
+      if (aiChatDockSide === 'left') {
+        return `${aiChatCol} 1fr`
+      }
+      return `1fr ${aiChatCol}`
+    }
+    return '1fr'
+  }, [aiChatMode, aiChatOpen, aiChatDockSide])
 
   // 注册"AI 插入到编辑器"实现：在当前光标所在行的下一行插入 Markdown 文本
   useEffect(() => {
@@ -198,12 +213,14 @@ export function WorkspaceShell({
 
   const openAiChatDialog = useCallback(
     (options: { entryMode: ChatEntryMode; initialContext?: EntryContext }) => {
+      setAiChatOpen(true)
       setAiChatState({ open: true, ...options })
     },
     [],
   )
 
   const closeAiChatDialog = useCallback(() => {
+    setAiChatOpen(false)
     // 关闭时直接卸载 AiChatDialog，避免保留拖拽偏移等 UI 状态
     setAiChatState(null)
   }, [])
@@ -720,6 +737,11 @@ export function WorkspaceShell({
     setLayout: setLayout as unknown as (layout: string) => void,
     setShowPreview,
     setStatusMessage,
+    aiChatMode,
+    setAiChatMode,
+    aiChatDockSide,
+    setAiChatDockSide,
+    aiChatOpen,
     confirmLoseChanges,
     hasUnsavedChanges,
     newDocument,
@@ -791,31 +813,20 @@ export function WorkspaceShell({
 
           if (cleanContent === searchText) {
             console.log('[scrollEditorToLineCenter] 通过文本找到匹配行:', searchLine, cleanContent)
-            const rect = view.coordsAtPos(lineInfo.from)
-            const scrollDOM = view.scrollDOM
 
-            if (rect) {
-              // 滚动到该行
-              const scrollRect = scrollDOM.getBoundingClientRect()
-              const lineCenter = rect.top + (rect.bottom - rect.top) / 2
-              const delta = lineCenter - (scrollRect.top + scrollRect.height / 2)
-              scrollDOM.scrollTo({ top: scrollDOM.scrollTop + delta })
-
-              // 设置光标位置
-              view.dispatch({
-                selection: { anchor: lineInfo.from },
-              })
-              return
-            }
+            view.dispatch({
+              selection: { anchor: lineInfo.from },
+              effects: EditorView.scrollIntoView(lineInfo.from, { y: 'center' }),
+              scrollIntoView: true,
+            })
+            return
           }
         }
         console.warn('[scrollEditorToLineCenter] 未找到匹配的文本:', searchText)
       }
 
-      // 方案1：回退到行号定位（改进后的行号计算）
+      // 方案1：回退到行号定位
       const lineInfo = view.state.doc.line(targetLine)
-
-      // 校验：检查目标行是否真的是标题行
       const lineContent = view.state.doc.sliceString(lineInfo.from, lineInfo.to)
       const isHeading = /^(#{1,6})\s/.test(lineContent)
 
@@ -835,50 +846,56 @@ export function WorkspaceShell({
           const prevClean = prevContent.replace(/^#{1,6}\s+/, '').trim()
           if (prevClean === searchText) {
             console.log('[scrollEditorToLineCenter] 向前找到匹配标题:', prevLine)
-            const rect = view.coordsAtPos(prevLineInfo.from)
-            if (rect) {
-              const scrollDOM = view.scrollDOM
-              const scrollRect = scrollDOM.getBoundingClientRect()
-              const lineCenter = rect.top + (rect.bottom - rect.top) / 2
-              const delta = lineCenter - (scrollRect.top + scrollRect.height / 2)
-              scrollDOM.scrollTo({ top: scrollDOM.scrollTop + delta })
-
-              view.dispatch({
-                selection: { anchor: prevLineInfo.from },
-              })
-              return
-            }
+            view.dispatch({
+              selection: { anchor: prevLineInfo.from },
+              effects: EditorView.scrollIntoView(prevLineInfo.from, { y: 'center' }),
+              scrollIntoView: true,
+            })
+            return
           }
         }
       }
 
-      // 使用编辑器内坐标 + DOM 计算，将目标行尽量滚动到编辑区中间
-      const rect = view.coordsAtPos(lineInfo.from)
-      const scrollDOM = view.scrollDOM
-      if (!rect) {
-        console.warn('[scrollEditorToLineCenter] 无法获取行坐标，line:', targetLine)
-        return
-      }
-
-      const scrollRect = scrollDOM.getBoundingClientRect()
-      const lineCenter = rect.top + (rect.bottom - rect.top) / 2
-      const delta = lineCenter - (scrollRect.top + scrollRect.height / 2)
-
-      scrollDOM.scrollTo({ top: scrollDOM.scrollTop + delta })
-
+      // 使用 CodeMirror 内置的 scrollIntoView 实现
+      // 它能够处理可视区域之外的行（尚未渲染 DOM 的行）
       view.dispatch({
         selection: { anchor: lineInfo.from },
+        effects: EditorView.scrollIntoView(lineInfo.from, { y: 'center' }),
+        scrollIntoView: true,
       })
     },
     [editorViewRef],
   )
 
+  // 用于在布局切换（如 preview-only -> preview-left）后延迟执行滚动
+  const pendingScrollRef = useRef<{ line: number; searchText?: string } | null>(null)
+
+  // 处理延迟滚动：当布局变化或编辑器可见时尝试执行
+  useEffect(() => {
+    if (pendingScrollRef.current && effectiveLayout !== 'preview-only') {
+      const { line, searchText } = pendingScrollRef.current
+      // 稍微延迟以确保 CodeMirror 完成布局测量
+      setTimeout(() => {
+        scrollEditorToLineCenter(line, searchText)
+        pendingScrollRef.current = null
+      }, 50)
+    }
+  }, [effectiveLayout, scrollEditorToLineCenter])
+
   const handleOutlineSelect = useCallback(
     (item: OutlineItem) => {
       setActiveOutlineId(item.id)
-      scrollEditorToLineCenter(item.line, item.searchText)
+
+      if (effectiveLayout === 'preview-only') {
+        // 如果当前是纯预览模式，切换到双栏模式以便显示编辑器
+        setLayout('preview-left')
+        // 记录目标行，待布局切换完成后执行滚动
+        pendingScrollRef.current = { line: item.line, searchText: item.searchText }
+      } else {
+        scrollEditorToLineCenter(item.line, item.searchText)
+      }
     },
-    [scrollEditorToLineCenter],
+    [effectiveLayout, setLayout, scrollEditorToLineCenter],
   )
 
   const handleTabClose = useCallback(
@@ -1038,63 +1055,84 @@ export function WorkspaceShell({
             />
             <main
               className={`workspace ${dragging ? 'dragging' : ''}`}
-              style={{ gridTemplateColumns }}
-              ref={workspaceRef}
+              style={{ gridTemplateColumns: outerGridTemplateColumns }}
             >
+              {aiChatMode === 'docked' && aiChatOpen && aiChatDockSide === 'left' && aiChatState && (
+                <AiChatPane
+                  entryMode={aiChatState.entryMode}
+                  initialContext={aiChatState.initialContext}
+                  onClose={closeAiChatDialog}
+                />
+              )}
+
               <section
-                className="pane"
-                style={
-                  effectiveLayout === 'preview-only'
-                    ? { display: 'none' }
-                    : effectiveLayout === 'preview-left'
-                      ? { gridColumn: '2 / 3', gridRow: '1 / 2' }
-                      : effectiveLayout === 'preview-right'
-                        ? { gridColumn: '1 / 2', gridRow: '1 / 2' }
-                        : { gridColumn: '1 / -1', gridRow: '1 / 2' }
-                }
+                className="pane-group editor-preview-group"
+                style={{ gridTemplateColumns }}
+                ref={workspaceRef}
               >
-                <Suspense fallback={<div className="code-editor" />}>
-                  <EditorPaneLazy
-                    markdown={markdown}
-                    onChange={handleMarkdownChange}
-                    onCursorChange={setActiveLine}
-                    showPreview={showPreview}
-                    setShowPreview={setShowPreview}
-                    editorViewRef={editorViewRef}
+                <section
+                  className="pane"
+                  style={
+                    effectiveLayout === 'preview-only'
+                      ? { display: 'none' }
+                      : effectiveLayout === 'preview-left'
+                        ? { gridColumn: '2 / 3', gridRow: '1 / 2' }
+                        : effectiveLayout === 'preview-right'
+                          ? { gridColumn: '1 / 2', gridRow: '1 / 2' }
+                          : { gridColumn: '1 / -1', gridRow: '1 / 2' }
+                  }
+                >
+                  <Suspense fallback={<div className="code-editor" />}>
+                    <EditorPaneLazy
+                      markdown={markdown}
+                      onChange={handleMarkdownChange}
+                      onCursorChange={setActiveLine}
+                      showPreview={showPreview}
+                      setShowPreview={setShowPreview}
+                      editorViewRef={editorViewRef}
+                    />
+                  </Suspense>
+                </section>
+
+                <Suspense
+                  fallback={
+                    <section className="pane preview">
+                      <div className="preview-body" />
+                    </section>
+                  }
+                >
+                  <PreviewPaneLazy
+                    value={previewValue}
+                    activeLine={activeLine}
+                    previewWidth={previewWidthForRender}
+                    effectiveLayout={effectiveLayout}
                   />
                 </Suspense>
+
+                {(effectiveLayout === 'preview-left' || effectiveLayout === 'preview-right') && (
+                  <div
+                    className={`divider-hotzone ${dragging ? 'active' : ''}`}
+                    style={{
+                      left:
+                        effectiveLayout === 'preview-left'
+                          ? `${previewWidthForRender}%`
+                          : `${100 - previewWidthForRender}%`,
+                    }}
+                    onMouseDown={startDragging}
+                  >
+                    <div className="divider-rail">
+                      <span className="divider-handle" />
+                    </div>
+                  </div>
+                )}
               </section>
 
-              <Suspense
-                fallback={
-                  <section className="pane preview">
-                    <div className="preview-body" />
-                  </section>
-                }
-              >
-                <PreviewPaneLazy
-                  value={previewValue}
-                  activeLine={activeLine}
-                  previewWidth={previewWidthForRender}
-                  effectiveLayout={effectiveLayout}
+              {aiChatMode === 'docked' && aiChatOpen && aiChatDockSide === 'right' && aiChatState && (
+                <AiChatPane
+                  entryMode={aiChatState.entryMode}
+                  initialContext={aiChatState.initialContext}
+                  onClose={closeAiChatDialog}
                 />
-              </Suspense>
-
-              {(effectiveLayout === 'preview-left' || effectiveLayout === 'preview-right') && (
-                <div
-                  className={`divider-hotzone ${dragging ? 'active' : ''}`}
-                  style={{
-                    left:
-                      effectiveLayout === 'preview-left'
-                        ? `${previewWidthForRender}%`
-                        : `${100 - previewWidthForRender}%`,
-                  }}
-                  onMouseDown={startDragging}
-                >
-                  <div className="divider-rail">
-                    <span className="divider-handle" />
-                  </div>
-                </div>
               )}
             </main>
           </>
@@ -1141,7 +1179,7 @@ export function WorkspaceShell({
         />
       )}
 
-      {aiChatState?.open && (
+      {aiChatMode === 'floating' && aiChatOpen && aiChatState?.open && (
         <AiChatDialog
           open={aiChatState.open}
           entryMode={aiChatState.entryMode}

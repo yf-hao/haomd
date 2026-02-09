@@ -19,6 +19,11 @@ export type LayoutCommandContext = StatusContext & {
   layout: string
   setLayout: (layout: string) => void
   setShowPreview: (value: boolean | ((prev: boolean) => boolean)) => void
+  aiChatMode: 'floating' | 'docked'
+  setAiChatMode: (mode: 'floating' | 'docked') => void
+  aiChatDockSide: 'left' | 'right'
+  setAiChatDockSide: (side: 'left' | 'right') => void
+  aiChatOpen: boolean
 }
 
 /**
@@ -114,6 +119,20 @@ function createLayoutCommands(ctx: LayoutCommandContext): CommandRegistry {
       ctx.setLayout('preview-only')
       ctx.setShowPreview(true)
       ctx.setStatusMessage('布局：仅预览')
+    },
+    view_ai_chat_floating: () => {
+      ctx.setAiChatMode('floating')
+      ctx.setStatusMessage('AI Chat：浮动模式')
+    },
+    view_ai_chat_dock_left: () => {
+      ctx.setAiChatMode('docked')
+      ctx.setAiChatDockSide('left')
+      ctx.setStatusMessage('AI Chat：Dock 在左侧')
+    },
+    view_ai_chat_dock_right: () => {
+      ctx.setAiChatMode('docked')
+      ctx.setAiChatDockSide('right')
+      ctx.setStatusMessage('AI Chat：Dock 在右侧')
     },
     toggle_preview: () => {
       ctx.setShowPreview((v) => {

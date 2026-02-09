@@ -840,6 +840,12 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .item(&MenuItemBuilder::new("Preview Only").id("layout_preview_only").build(app)?)
         .build()?;
 
+  let dock_ai_chat_menu = SubmenuBuilder::new(app, "Dock AI Chat")
+        .item(&MenuItemBuilder::new("Floating").id("view_ai_chat_floating").accelerator("CmdOrCtrl+Shift+F").build(app)?)
+        .item(&MenuItemBuilder::new("Dock Left").id("view_ai_chat_dock_left").accelerator("CmdOrCtrl+Shift+L").build(app)?)
+        .item(&MenuItemBuilder::new("Dock Right").id("view_ai_chat_dock_right").accelerator("CmdOrCtrl+Shift+R").build(app)?)
+        .build()?;
+
   let view_menu = SubmenuBuilder::new(app, "View")
         .item(&MenuItemBuilder::new("Toggle Preview (⌘P)").id("toggle_preview").accelerator("CmdOrCtrl+P").build(app)?)
         .item(&MenuItemBuilder::new("Split View").id("split_view").build(app)?)
@@ -850,6 +856,7 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .item(&MenuItemBuilder::new("Reset Zoom").id("zoom_reset").accelerator("CmdOrCtrl+0").build(app)?)
         .item(&MenuItemBuilder::new("Word Wrap").id("word_wrap").build(app)?)
         .item(&MenuItemBuilder::new("Developer Tools").id("devtools").accelerator("CmdOrCtrl+Shift+I").build(app)?)
+        .item(&dock_ai_chat_menu)
         .item(&layout_menu)
         .build()?;
 
@@ -865,9 +872,9 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
   let ai_menu = SubmenuBuilder::new(app, "AI")
         .item(&MenuItemBuilder::new("Provider Settings").id("ai_settings").accelerator("CmdOrCtrl+,").build(app)?)
         .item(&MenuItemBuilder::new("Prompt Settings").id("ai_prompt_settings").build(app)?)
-        .item(&MenuItemBuilder::new("Open AI Chat").id("ai_chat").accelerator("CmdOrCtrl+Shift+J").build(app)?)
-        .item(&MenuItemBuilder::new("Ask AI About File").id("ai_ask_file").accelerator("CmdOrCtrl+Shift+K").build(app)?)
-        .item(&MenuItemBuilder::new("Ask AI About Selection").id("ai_ask_selection").accelerator("CmdOrCtrl+Shift+L").build(app)?)
+        .item(&MenuItemBuilder::new("Open AI Chat").id("ai_chat").accelerator("CmdOrCtrl+Shift+C").build(app)?)
+        .item(&MenuItemBuilder::new("Ask AI About File").id("ai_ask_file").accelerator("CmdOrCtrl+Shift+A").build(app)?)
+        .item(&MenuItemBuilder::new("Ask AI About Selection").id("ai_ask_selection").accelerator("CmdOrCtrl+Shift+S").build(app)?)
         .build()?;
 
   let help_menu = SubmenuBuilder::new(app, "Help")
