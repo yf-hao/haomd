@@ -13,7 +13,7 @@ import type { OutlineItem } from '../modules/outline/parser'
 import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout'
 import { AiChatDialog } from '../modules/ai/ui/AiChatDialog'
 import type { ChatEntryMode, EntryContext } from '../modules/ai/domain/chatSession'
-import { registerEditorInsertBelow } from '../modules/ai/platform/editorInsertService'
+import { registerEditorInsertBelow, registerEditorReplaceSelection, registerEditorCreateAndInsert } from '../modules/ai/platform/editorInsertService'
 import { useFilePersistence } from '../hooks/useFilePersistence'
 import { useTabs } from '../hooks/useTabs'
 import { useCommandSystem } from '../hooks/useCommandSystem'
@@ -75,6 +75,7 @@ export function WorkspaceShell({
   const [activeOutlineId, setActiveOutlineId] = useState<string | null>(null)
   const [sidebarWidth, setSidebarWidth] = useState(260)
   const [isSidebarResizing, setIsSidebarResizing] = useState(false)
+  const [isCreatingTab, setIsCreatingTab] = useState(false)
   const sidebarResizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
 
   const {
@@ -127,7 +128,7 @@ export function WorkspaceShell({
   const previewTimerRef = useRef<number | null>(null)
   const editorViewRef = useRef<EditorView | null>(null)
 
-  // 注册“AI 插入到编辑器”实现：在当前光标所在行的下一行插入 Markdown 文本
+  // 注册"AI 插入到编辑器"实现：在当前光标所在行的下一行插入 Markdown 文本
   useEffect(() => {
     registerEditorInsertBelow(async (text: string) => {
       const view = editorViewRef.current
@@ -167,6 +168,34 @@ export function WorkspaceShell({
     })
   }, [])
 
+  // 注册"AI 替换选区"实现：替换编辑器中当前选择的文本（或在光标位置插入）
+  useEffect(() => {
+    registerEditorReplaceSelection(async (text: string) => {
+      const view = editorViewRef.current
+      if (!view) {
+        console.warn('[editorInsertService] editorView not available, skip replaceSelectionWithText')
+        return
+      }
+      if (!text) return
+
+      const { state } = view
+      const { main } = state.selection
+
+      const from = main.from
+      const to = main.to
+
+      // 如果没有选区（from === to），则在光标位置插入文本
+      // 如果有选区（from < to），则替换选区内容
+      const tr = state.update({
+        changes: { from, to, insert: text },
+        selection: { anchor: from + text.length },
+        scrollIntoView: true,
+      })
+
+      view.dispatch(tr)
+    })
+  }, [])
+
   const openAiChatDialog = useCallback(
     (options: { entryMode: ChatEntryMode; initialContext?: EntryContext }) => {
       setAiChatState({ open: true, ...options })
@@ -175,7 +204,8 @@ export function WorkspaceShell({
   )
 
   const closeAiChatDialog = useCallback(() => {
-    setAiChatState((prev) => (prev ? { ...prev, open: false } : prev))
+    // 关闭时直接卸载 AiChatDialog，避免保留拖拽偏移等 UI 状态
+    setAiChatState(null)
   }, [])
 
   const getCurrentMarkdown = useCallback(() => markdown, [markdown])
@@ -311,6 +341,13 @@ export function WorkspaceShell({
   }, [activeTab, setFilePath])
 
   const handleCurrentTabClose = useCallback(() => {
+    if (isCreatingTab) {
+      if (import.meta.env.DEV) {
+        console.log('[App] 正在创建标签，阻止关闭当前标签')
+      }
+      return
+    }
+
     if (import.meta.env.DEV) {
       console.log('[App] handleCurrentTabClose called', { activeId })
     }
@@ -366,9 +403,17 @@ export function WorkspaceShell({
       console.log('[App] 当前标签无未保存变更，直接关闭', { tabId: tab.id, title: tab.title })
     }
     closeTab(activeId)
-  }, [activeId, tabs, closeTab, save, setStatusMessage])
+  }, [isCreatingTab, activeId, tabs, closeTab, save, setStatusMessage])
 
   const handleQuit = useCallback(() => {
+    // 如果正在创建标签，阻止退出
+    if (isCreatingTab) {
+      if (import.meta.env.DEV) {
+        console.log('[App] 正在创建标签，阻止退出')
+      }
+      return
+    }
+
     if (import.meta.env.DEV) {
       console.log('[App] handleQuit called')
     }
@@ -447,7 +492,7 @@ export function WorkspaceShell({
         }
       },
     })
-  }, [getUnsavedTabs, isTauriEnv, save, setActiveTab, setStatusMessage])
+  }, [isCreatingTab, getUnsavedTabs, isTauriEnv, save, setActiveTab, setStatusMessage])
 
   // 更新 ref，使 useTabs 中的回调能够访问最新的 handleCurrentTabClose
   closeCurrentTabRef.current = handleCurrentTabClose
@@ -460,6 +505,25 @@ export function WorkspaceShell({
     },
     [markDirty, updateActiveContent],
   )
+
+  // 注册"AI 新建标签并插入"实现：新建标签页并将内容写入文档
+  useEffect(() => {
+    registerEditorCreateAndInsert(async (text: string) => {
+      if (!text || isCreatingTab) return
+
+      setIsCreatingTab(true)
+      try {
+        // 创建新标签时直接传入 content，这样标签创建时就会包含内容
+        createTab({ content: text })
+
+        // 等待标签创建和状态同步完成
+        // 给 React 足够的时间完成批量更新和 useEffect
+        await new Promise(resolve => setTimeout(resolve, 50))
+      } finally {
+        setIsCreatingTab(false)
+      }
+    })
+  }, [createTab, isCreatingTab])
 
   useEffect(() => {
     if (markdown === previewValue) return
@@ -502,6 +566,14 @@ export function WorkspaceShell({
   // 在新标签中打开指定路径的文件：先通过持久化层读取，再创建带 path+content 的标签
   const openFileInNewTab = useCallback(
     async (path: string) => {
+      // 如果正在创建标签，阻止操作
+      if (isCreatingTab) {
+        if (import.meta.env.DEV) {
+          console.log('[App] 正在创建标签，阻止打开文件')
+        }
+        return { ok: false } as any
+      }
+
       const resp = await openFromPath(path)
       if (!resp.ok) return resp
 
@@ -517,12 +589,20 @@ export function WorkspaceShell({
 
       return resp
     },
-    [createTab, openFromPath],
+    [isCreatingTab, createTab, openFromPath],
   )
 
   // 从 Sidebar 打开文件：若已有对应标签则只激活，否则创建新标签
   const openFileFromSidebar = useCallback(
     async (path: string) => {
+      // 如果正在创建标签，阻止操作
+      if (isCreatingTab) {
+        if (import.meta.env.DEV) {
+          console.log('[App] 正在创建标签，阻止打开文件')
+        }
+        return { ok: false } as any
+      }
+
       // 先检查是否已经有该路径的标签
       const existing = tabs.find((t) => t.path === path)
       if (existing) {
@@ -533,7 +613,7 @@ export function WorkspaceShell({
       // 没有标签时，走统一的新标签打开逻辑
       return await openFileInNewTab(path)
     },
-    [tabs, setActiveTab, openFileInNewTab],
+    [isCreatingTab, tabs, setActiveTab, openFileInNewTab],
   )
 
   // Open Recent 专用：仅将文件加入 Sidebar 的单文件列表，不加载整个目录树
@@ -808,6 +888,30 @@ export function WorkspaceShell({
     [closeTab],
   )
 
+  // 安全的标签点击处理：如果正在创建标签，阻止切换
+  const handleSafeTabClick = useCallback(
+    (id: string) => {
+      if (isCreatingTab) {
+        console.log('[App] 正在创建标签，阻止标签切换')
+        return
+      }
+      setActiveTab(id)
+    },
+    [isCreatingTab, setActiveTab],
+  )
+
+  // 安全的标签关闭处理：如果正在创建标签，阻止关闭
+  const handleSafeTabClose = useCallback(
+    (id: string) => {
+      if (isCreatingTab) {
+        console.log('[App] 正在创建标签，阻止标签关闭')
+        return
+      }
+      handleTabClose(id)
+    },
+    [isCreatingTab, handleTabClose],
+  )
+
   const handleTabSaveAndClose = useCallback(
     async (id: string) => {
       console.log('[App] handleTabSaveAndClose called', { id, activeId, tabsCount: tabs.length })
@@ -928,8 +1032,8 @@ export function WorkspaceShell({
             <TabBar
               tabs={tabs}
               activeId={activeId}
-              onTabClick={setActiveTab}
-              onTabClose={handleTabClose}
+              onTabClick={handleSafeTabClick}
+              onTabClose={handleSafeTabClose}
               onRequestSaveAndClose={handleTabSaveAndClose}
             />
             <main
@@ -1037,7 +1141,7 @@ export function WorkspaceShell({
         />
       )}
 
-      {aiChatState && (
+      {aiChatState?.open && (
         <AiChatDialog
           open={aiChatState.open}
           entryMode={aiChatState.entryMode}

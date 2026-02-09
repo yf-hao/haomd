@@ -292,6 +292,104 @@
   height: 1.5px;
 }
 
+/* 替换选区：替换图标，用循环箭头体现"替换"的概念 */
+.ai-chat-icon-replace {
+  width: 16px;
+  height: 16px;
+  position: relative;
+}
+
+/* 外圈箭头 - 亮色，深色主题下更突出 */
+.ai-chat-icon-replace::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 12px;
+  border: 2px solid transparent;
+  border-top-color: rgba(226, 232, 240, 0.95);
+  border-right-color: rgba(226, 232, 240, 0.95);
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* 内圈箭头（反向旋转）- 中灰色 */
+.ai-chat-icon-replace::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 7px;
+  height: 7px;
+  border: 2px solid transparent;
+  border-bottom-color: rgba(148, 163, 184, 0.7);
+  border-left-color: rgba(148, 163, 184, 0.7);
+  border-radius: 50%;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.15));
+}
+
+/* 点击时的动画效果 - 外圈旋转 */
+.ai-chat-icon-button:active .ai-chat-icon-replace::before {
+  transform: translate(-50%, -50%) rotate(90deg);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4);
+  transition: transform 0.15s ease-out;
+}
+
+/* 点击时的动画效果 - 内圈反向旋转 */
+.ai-chat-icon-button:active .ai-chat-icon-replace::after {
+  transform: translate(-50%, -50%) rotate(-90deg);
+  transition: transform 0.15s ease-out;
+}
+
+/* 保存为新文档：保存图标，体现"新建文档并保存"的概念 */
+.ai-chat-icon-save {
+  width: 16px;
+  height: 16px;
+  position: relative;
+}
+
+/* 文档图标主体 */
+.ai-chat-icon-save::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 1px;
+  width: 10px;
+  height: 12px;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1.5px solid rgba(226, 232, 240, 0.9);
+  border-radius: 2px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* 保存符号（对勾） */
+.ai-chat-icon-save::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 4px;
+  width: 6px;
+  height: 3px;
+  border-left: 2px solid rgba(226, 232, 240, 0.95);
+  border-bottom: 2px solid rgba(226, 232, 240, 0.95);
+  transform: rotate(-45deg);
+  border-radius: 1px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* 点击时的动画效果 */
+.ai-chat-icon-button:active .ai-chat-icon-save::before {
+  transform: scale(0.95);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.ai-chat-icon-button:active .ai-chat-icon-save::after {
+  transform: rotate(-45deg) scale(0.95);
+}
+
 .ai-chat-empty {
   padding: 4px 0;
 }

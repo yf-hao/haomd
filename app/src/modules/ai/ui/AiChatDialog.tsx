@@ -4,7 +4,7 @@ import type { ChatEntryMode, ChatMessageView, EntryContext } from '../domain/cha
 import { MarkdownViewer } from '../../../components/MarkdownViewer'
 import { useAiChat } from './hooks/useAiChat'
 import { copyTextToClipboard } from '../platform/clipboardService'
-import { insertMarkdownAtCursorBelow } from '../platform/editorInsertService'
+import { insertMarkdownAtCursorBelow, replaceSelectionWithText, createTabAndInsertContent } from '../platform/editorInsertService'
 import { onNativePaste } from '../../platform/clipboardEvents'
 
 const EMPTY_MESSAGES: ChatMessageView[] = []
@@ -163,6 +163,14 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
 
   const handleInsert = async (content: string) => {
     await insertMarkdownAtCursorBelow(content)
+  }
+
+  const handleReplace = async (content: string) => {
+    await replaceSelectionWithText(content)
+  }
+
+  const handleSave = async (content: string) => {
+    await createTabAndInsertContent(content)
   }
 
   const handleChangeRole = async (e: ChangeEvent<HTMLSelectElement>) => {
@@ -410,6 +418,24 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
                         onClick={() => void handleInsert(msg.content)}
                       >
                         <span className="ai-chat-icon ai-chat-icon-insert" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-button ai-chat-icon-button"
+                        title="替换选区"
+                        aria-label="替换选区"
+                        onClick={() => void handleReplace(msg.content)}
+                      >
+                        <span className="ai-chat-icon ai-chat-icon-replace" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-button ai-chat-icon-button"
+                        title="保存为新文档"
+                        aria-label="保存为新文档"
+                        onClick={() => void handleSave(msg.content)}
+                      >
+                        <span className="ai-chat-icon ai-chat-icon-save" aria-hidden="true" />
                       </button>
                     </div>
                   )}
