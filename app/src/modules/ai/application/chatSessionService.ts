@@ -27,7 +27,9 @@ export type ChatSession = {
   getState(): ConversationState
   getSystemPromptInfo(): SystemPromptInfo
   getProviderType(): ProviderType
+  getActiveModelId(): string
   setActiveRole(roleId: string): Promise<void>
+  setActiveModel(modelId: string): Promise<void>
   sendUserMessage(content: string, options?: { hideInView?: boolean }): Promise<void>
   stopRunningStream(): void
   stopAndTruncate(messageId: string, length: number): void
@@ -44,12 +46,6 @@ function genId(): string {
   return `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 }
 
-function pickDefaultModel(provider: UiProvider) {
-  const id = provider.defaultModelId ?? provider.models[0]?.id
-  if (!id) return null
-  return provider.models.find((m) => m.id === id) ?? null
-}
-
 function engineHistoryToChatMessages(history: EngineMessage[]): ChatMessage[] {
   return history
     .filter((m): m is EngineMessage & { role: 'user' | 'assistant' } => m.role === 'user' || m.role === 'assistant')
@@ -58,16 +54,14 @@ function engineHistoryToChatMessages(history: EngineMessage[]): ChatMessage[] {
 
 export async function createChatSession(options: StartChatOptions): Promise<ChatSession> {
   const [aiState, systemInfo] = await Promise.all([loadAiSettingsState(), loadSystemPromptInfo()])
-  const provider = pickDefaultProvider(aiState)
-
+  let provider = pickDefaultProvider(aiState)
   if (!provider) {
     throw new Error('AI Chat 未配置：请先在 AI Settings 中设置默认 Provider/Model')
   }
 
-  const providerType: ProviderType = provider.providerType ?? 'dify'
-
-  const defaultModel = pickDefaultModel(provider)
-  const defaultMaxTokens = defaultModel?.maxTokens ?? 2048
+  let currentModelId = provider.defaultModelId ?? provider.models[0]?.id
+  let providerType: ProviderType = provider.providerType ?? 'dify'
+  let defaultMaxTokens = provider.models.find((m) => m.id === currentModelId)?.maxTokens ?? 2048
 
   let systemPromptInfo: SystemPromptInfo = systemInfo
   let state: ConversationState = createInitialConversationState(
@@ -80,6 +74,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
   let client: IStreamingChatClient | null = createStreamingClientFromSettings(
     provider,
     systemPromptInfo.systemPrompt,
+    currentModelId,
   )
   let disposed = false
   let currentAbortController: AbortController | null = null
@@ -159,6 +154,9 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
     getProviderType() {
       return providerType
     },
+    getActiveModelId() {
+      return currentModelId || ''
+    },
     async setActiveRole(roleId: string): Promise<void> {
       if (disposed) return
       const { activeRoleId, systemPrompt } = getSystemPromptByRoleId(systemPromptInfo.roles, roleId)
@@ -168,11 +166,31 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
         systemPrompt,
       }
       // 重新创建客户端以应用新的 system prompt
-      client = createStreamingClientFromSettings(provider, systemPromptInfo.systemPrompt)
+      if (provider) {
+        client = createStreamingClientFromSettings(provider, systemPromptInfo.systemPrompt, currentModelId)
+      }
       state = {
         ...state,
         activeRoleId,
       }
+      notifyStateChange()
+    },
+    async setActiveModel(modelId: string): Promise<void> {
+      if (disposed) return
+      const nextSettings = await loadAiSettingsState()
+      const nextProvider = nextSettings.providers.find((p) => p.models.some((m) => m.id === modelId))
+      if (!nextProvider) {
+        throw new Error(`找不到模型 ID 为 ${modelId} 的 Provider`)
+      }
+
+      provider = nextProvider
+      currentModelId = modelId
+      providerType = provider.providerType ?? 'dify'
+      defaultMaxTokens = provider.models.find((m) => m.id === modelId)?.maxTokens ?? 2048
+
+      // 重新创建客户端以应用新的模型配置
+      client = createStreamingClientFromSettings(provider, systemPromptInfo.systemPrompt, modelId)
+
       notifyStateChange()
     },
     async sendUserMessage(content: string, options?: { hideInView?: boolean }): Promise<void> {

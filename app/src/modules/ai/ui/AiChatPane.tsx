@@ -1,4 +1,4 @@
-import type { ChangeEvent, FC, FormEvent, KeyboardEvent } from 'react'
+import type { FC, FormEvent, KeyboardEvent } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import type { ChatEntryMode, EntryContext } from '../domain/chatSession'
 import { useAiChat } from './hooks/useAiChat'
@@ -34,7 +34,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
     el.style.height = `${next}px`
   }
 
-  const { loading, state, systemPromptInfo, providerType, error, send, stop, stopAndTruncate, changeRole, resetError } = useAiChat({
+  const { loading, state, systemPromptInfo, providerType, error, send, stop, stopAndTruncate, changeRole, changeModel, resetError, availableModels, activeModelId } = useAiChat({
     entryMode,
     initialContext,
     open: true,
@@ -179,10 +179,14 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
     await createTabAndInsertContent(content)
   }
 
-  const handleChangeRole = async (e: ChangeEvent<HTMLSelectElement>) => {
-    const roleId = e.target.value
+  const handleChangeRole = async (roleId: string) => {
     if (!roleId) return
     await changeRole(roleId)
+  }
+
+  const handleModelChange = async (modelId: string) => {
+    if (!modelId) return
+    await changeModel(modelId)
   }
 
   const messageSource = state?.viewMessages ?? EMPTY_MESSAGES
@@ -307,21 +311,17 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
   return (
     <section className="pane ai-chat-pane" ref={paneRootRef}>
       <div className="ai-chat-pane-header">
-        <div className="ai-chat-pane-title">AI Chat</div>
-        <div className="ai-chat-role">
-          <select
-            id="ai-chat-role-select-pane"
-            className="field-select"
-            value={activeRoleId ?? ''}
-            onChange={handleChangeRole}
-          >
-            {roles.length === 0 && <option value="">No roles configured</option>}
-            {roles.map((role) => (
-              <option key={role.id} value={role.id}>
-                {role.name}
-              </option>
-            ))}
-          </select>
+        <div className="ai-chat-pane-title">
+          {(() => {
+            switch (entryMode) {
+              case 'selection':
+                return 'AI Chat -- About Selection';
+              case 'file':
+                return 'AI Chat -- About File';
+              default:
+                return 'AI Chat';
+            }
+          })()}
         </div>
         <button
           type="button"
@@ -356,6 +356,12 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
           onSave={handleSave}
           onStop={handleStop}
           resetError={resetError}
+          roles={roles}
+          activeRoleId={activeRoleId}
+          onChangeRole={handleChangeRole}
+          models={availableModels}
+          activeModelId={activeModelId}
+          onChangeModel={handleModelChange}
         />
       </div>
     </section>

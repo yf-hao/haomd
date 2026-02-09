@@ -1,4 +1,4 @@
-import type { ChangeEvent, FC, FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, MouseEventHandler } from 'react'
+import type { FC, FormEvent, KeyboardEvent, MouseEventHandler, MouseEvent as ReactMouseEvent } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import type { ChatEntryMode, ChatMessageView, EntryContext } from '../domain/chatSession'
 import { AiChatBody } from './AiChatBody'
@@ -34,7 +34,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     el.style.height = `${next}px`
   }
 
-  const { loading, state, systemPromptInfo, providerType, error, send, stop, stopAndTruncate, changeRole, resetError } = useAiChat({
+  const { loading, state, systemPromptInfo, providerType, error, send, stop, stopAndTruncate, changeRole, changeModel, resetError, availableModels, activeModelId } = useAiChat({
     entryMode,
     initialContext,
     open,
@@ -170,10 +170,14 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     await createTabAndInsertContent(content)
   }
 
-  const handleChangeRole = async (e: ChangeEvent<HTMLSelectElement>) => {
-    const roleId = e.target.value
+  const handleChangeRole = async (roleId: string) => {
     if (!roleId) return
     await changeRole(roleId)
+  }
+
+  const handleModelChange = async (modelId: string) => {
+    if (!modelId) return
+    await changeModel(modelId)
   }
 
   const handleDialogClick: MouseEventHandler<HTMLDivElement> = (e) => {
@@ -339,22 +343,18 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
           >
             <span className="ai-chat-close-icon" aria-hidden="true" />
           </button>
-          <div className="modal-title-text">AI Chat</div>
-          <div className="ai-chat-role">
-            <select
-              id="ai-chat-role-select"
-              className="field-select"
-              value={activeRoleId ?? ''}
-              onChange={handleChangeRole}
-            >
-              {roles.length === 0 && <option value="">No roles configured</option>}
-              {roles.map((role) => (
-                <option key={role.id} value={role.id}>
-                  {role.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <div className="modal-title-text">
+          {(() => {
+            switch (entryMode) {
+              case 'selection':
+                return 'AI Chat -- About Selection';
+              case 'file':
+                return 'AI Chat -- About File';
+              default:
+                return 'AI Chat';
+            }
+          })()}
+        </div>
         </div>
 
         <AiChatBody
@@ -379,6 +379,12 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
           onSave={handleSave}
           onStop={handleStop}
           resetError={resetError}
+          roles={roles}
+          activeRoleId={activeRoleId}
+          onChangeRole={handleChangeRole}
+          models={availableModels}
+          activeModelId={activeModelId}
+          onChangeModel={handleModelChange}
         />
 
         <div className="ai-chat-drag-handle ai-chat-drag-bottom" onMouseDown={handleDragStart} />

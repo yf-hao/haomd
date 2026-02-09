@@ -11,10 +11,11 @@ import { createOpenAIStreamingClient } from './openai/createOpenAIStreamingClien
 export function createStreamingClientFromSettings(
   provider: UiProvider,
   systemPrompt?: string,
+  overrideModelId?: string,
 ): IStreamingChatClient {
   const baseUrl = provider.baseUrl.trim()
   const apiKey = provider.apiKey.trim()
-  const modelId = provider.defaultModelId ?? provider.models[0]?.id ?? ''
+  const modelId = overrideModelId || provider.defaultModelId || provider.models[0]?.id || ''
   const providerType = provider.providerType ?? 'dify'
 
   if (!baseUrl || !apiKey || !modelId) {

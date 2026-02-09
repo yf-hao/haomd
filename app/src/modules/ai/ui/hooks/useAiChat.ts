@@ -21,7 +21,10 @@ export type UseAiChatResult = {
   stop: () => void
   stopAndTruncate: (messageId: string, length: number) => void
   changeRole: (roleId: string) => Promise<void>
+  changeModel: (modelId: string) => Promise<void>
   resetError: () => void
+  availableModels: { id: string; providerName: string }[]
+  activeModelId: string | null
 }
 
 export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
@@ -32,6 +35,8 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
   const [systemPromptInfo, setSystemPromptInfo] = useState<SystemPromptInfo | null>(null)
   const [providerType, setProviderType] = useState<ProviderType | null>(null)
   const [error, setError] = useState<Error | null>(null)
+  const [activeModelId, setActiveModelId] = useState<string | null>(null)
+  const [rawModels, setRawModels] = useState<{ id: string; providerName: string }[]>([])
 
   useEffect(() => {
     if (!open) {
@@ -63,6 +68,7 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
         setState(created.getState())
         setSystemPromptInfo(created.getSystemPromptInfo())
         setProviderType(created.getProviderType())
+        setActiveModelId(created.getActiveModelId())
       } catch (e) {
         if (cancelled) return
         setError(e as Error)
@@ -85,6 +91,23 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
       })
     }
   }, [open, entryMode, initialContext])
+
+  // Load available models
+  useEffect(() => {
+    if (!open) return
+    const loadModels = async () => {
+      const { loadAiSettingsState } = await import('../../config/aiSettingsRepo')
+      const settings = await loadAiSettingsState()
+      const models = settings.providers.flatMap((p) =>
+        p.models.map((m) => ({
+          id: m.id,
+          providerName: p.name,
+        })),
+      )
+      setRawModels(models)
+    }
+    void loadModels()
+  }, [open])
 
   const isGenerating = !!state?.viewMessages.some((m) => m.streaming) || loading
 
@@ -110,6 +133,21 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
       setError(null)
       await session.setActiveRole(roleId)
       setSystemPromptInfo(session.getSystemPromptInfo())
+    },
+    [session],
+  )
+
+  const changeModel = useCallback(
+    async (modelId: string) => {
+      if (!session) return
+      setError(null)
+      try {
+        await session.setActiveModel?.(modelId)
+        setActiveModelId(session.getActiveModelId?.() ?? modelId)
+        setProviderType(session.getProviderType())
+      } catch (e) {
+        setError(e as Error)
+      }
     },
     [session],
   )
@@ -145,6 +183,9 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
     stop,
     stopAndTruncate,
     changeRole,
+    changeModel,
     resetError,
+    availableModels: rawModels,
+    activeModelId,
   }
 }

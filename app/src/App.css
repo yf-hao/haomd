@@ -765,6 +765,8 @@ button.ghost.primary {
 /* Dock 模式下的关闭按钮使用内联定位，避免被 pane 的 overflow 裁切 */
 .ai-chat-pane-header .ai-chat-close-button {
   position: static;
+  transform: none;      /* 去掉浮动窗口里的垂直位移 */
+  margin-left: auto;    /* 在 Dock 头部里靠右排列 */
 }
 
 .floating-toggle {
@@ -931,7 +933,7 @@ button.ghost.primary {
   font-size: 18px;
   font-weight: 600;
   color: #e8ecf5;
-  margin-bottom: 16px;
+  margin-bottom: 6px;
 }
 
 .modal-content {
@@ -1019,16 +1021,16 @@ button.ghost.primary {
 }
 
 .ai-chat-send-button.loading {
-  background: rgba(255, 77, 79, 0.1);
-  border-color: rgba(255, 77, 79, 0.3);
-  color: #ff4d4f;
-  box-shadow: 0 0 8px rgba(255, 77, 79, 0.2);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.2);
 }
 
 .ai-chat-send-button.loading:hover {
-  background: rgba(255, 77, 79, 0.2);
-  border-color: #ff4d4f;
-  box-shadow: 0 0 12px rgba(255, 77, 79, 0.4);
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.4);
 }
 
 /* 纸飞机图标 (CSS Drawing) */
@@ -1047,7 +1049,7 @@ button.ghost.primary {
   display: inline-block;
   width: 12px;
   height: 12px;
-  background-color: #ff4d4f;
-  /* Explicitly red */
+  background-color: #ffffff;
+  /* 白色停止图标 */
   border-radius: 2px;
 }

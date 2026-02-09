@@ -26,6 +26,12 @@ export interface AiChatBodyProps {
   onSave: (content: string) => void | Promise<void>
   onStop: () => void
   resetError: () => void
+  roles?: { id: string; name: string }[]
+  activeRoleId?: string
+  onChangeRole?: (roleId: string) => void
+  models?: { id: string; providerName: string }[]
+  activeModelId?: string | null
+  onChangeModel?: (modelId: string) => void
 }
 
 export const AiChatBody: FC<AiChatBodyProps> = ({
@@ -47,6 +53,12 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
   onSave,
   onStop,
   resetError,
+  roles,
+  activeRoleId,
+  onChangeRole,
+  models,
+  activeModelId,
+  onChangeModel,
 }) => {
   return (
     <div className="modal-content ai-chat-body">
@@ -55,7 +67,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
         ref={messagesContainerRef}
       >
         {messages.length === 0 && !loading && (
-          <div className="ai-chat-empty muted small">开始对话，或通过文件/选区入口提问。</div>
+          <div className="ai-chat-empty muted small"></div>
         )}
         {messages.map((msg) => {
           const displayContent =
@@ -116,45 +128,82 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
       </div>
 
       <form className="ai-chat-input" onSubmit={loading ? (e) => e.preventDefault() : onSubmit}>
-        <textarea
-          id="ai-chat-input"
-          className="field-textarea"
-          rows={1}
-          ref={inputRef}
-          value={input}
-          onChange={(e) => {
-            onInputChange(e.target.value)
-          }}
-          onKeyDown={onInputKeyDown}
-          onCompositionStart={onCompositionStart}
-          onCompositionEnd={onCompositionEnd}
-          placeholder="向 AI 提问，或继续就当前话题追问…"
-        />
-        <div className="ai-chat-input-actions">
-          {error && (
-            <div className="form-error" onClick={resetError}>
-              {error.message}
-            </div>
-          )}
-          <button
-            className={`ai-chat-send-button ${loading ? 'loading' : ''}`}
-            type={loading ? 'button' : 'submit'}
-            onClick={() => {
-              if (loading) {
-                console.log('[AiChatBody] Stop button clicked')
-                onStop()
-              }
+        <div className="ai-chat-input-container">
+          <textarea
+            id="ai-chat-input"
+            className="field-textarea"
+            rows={1}
+            ref={inputRef}
+            value={input}
+            onChange={(e) => {
+              onInputChange(e.target.value)
             }}
-            title={loading ? '停止生成' : '发送'}
-            disabled={!loading && !input.trim()}
-          >
-            {loading ? (
-              <span className="ai-chat-icon-stop" aria-hidden="true" />
-            ) : (
-              <span className="ai-chat-icon-paper-plane" aria-hidden="true" />
-            )}
-          </button>
+            onKeyDown={onInputKeyDown}
+            onCompositionStart={onCompositionStart}
+            onCompositionEnd={onCompositionEnd}
+            placeholder="Ask anything to AI"
+          />
+          <div className="ai-chat-input-footer">
+            <div className="ai-chat-input-tools-left">
+              <button type="button" className="ai-chat-tool-btn" title="更多">
+                <span className="ai-chat-icon-plus" aria-hidden="true" />
+              </button>
+              <div className="ai-chat-input-badge ai-chat-role-badge">
+                <span className="ai-chat-icon-chevron-up" aria-hidden="true" />
+                <select
+                  className="ai-chat-role-select-inline"
+                  value={activeModelId ?? ''}
+                  onChange={(e) => onChangeModel?.(e.target.value)}
+                >
+                  {models?.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.id} ({m.providerName})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="ai-chat-input-badge ai-chat-role-badge">
+                <span className="ai-chat-icon-chevron-up" aria-hidden="true" />
+                <select
+                  className="ai-chat-role-select-inline"
+                  value={activeRoleId ?? ''}
+                  onChange={(e) => onChangeRole?.(e.target.value)}
+                >
+                  {roles?.map((role) => (
+                    <option key={role.id} value={role.id}>
+                      {role.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="ai-chat-input-tools-right">
+              <button
+                className={`ai-chat-send-button ${loading ? 'loading' : ''}`}
+                type={loading ? 'button' : 'submit'}
+                onClick={() => {
+                  if (loading) {
+                    console.log('[AiChatBody] Stop button clicked')
+                    onStop()
+                  }
+                }}
+                title={loading ? '停止生成' : '发送'}
+                disabled={!loading && !input.trim()}
+              >
+                {loading ? (
+                  <span className="ai-chat-icon-stop" aria-hidden="true" />
+                ) : (
+                  <span className="ai-chat-icon-arrow-right" aria-hidden="true" />
+                )}
+              </button>
+            </div>
+          </div>
         </div>
+        {error && (
+          <div className="form-error" onClick={resetError}>
+            {error.message}
+          </div>
+        )}
       </form>
     </div>
   )
