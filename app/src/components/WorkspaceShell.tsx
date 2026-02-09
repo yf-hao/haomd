@@ -11,6 +11,9 @@ import { Welcome } from './Welcome'
 import { useOutline } from '../hooks/useOutline'
 import type { OutlineItem } from '../modules/outline/parser'
 import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout'
+import { AiChatDialog } from '../modules/ai/ui/AiChatDialog'
+import type { ChatEntryMode, EntryContext } from '../modules/ai/domain/chatSession'
+import { registerEditorInsertBelow } from '../modules/ai/platform/editorInsertService'
 import { useFilePersistence } from '../hooks/useFilePersistence'
 import { useTabs } from '../hooks/useTabs'
 import { useCommandSystem } from '../hooks/useCommandSystem'
@@ -61,6 +64,14 @@ export function WorkspaceShell({
   const [markdown, setMarkdown] = useState(seed)
   const [previewValue, setPreviewValue] = useState(seed)
   const [activeLine, setActiveLine] = useState(1)
+  const [aiChatState, setAiChatState] = useState<
+    | {
+        open: boolean
+        entryMode: ChatEntryMode
+        initialContext?: EntryContext
+      }
+    | null
+  >(null)
   const [activeOutlineId, setActiveOutlineId] = useState<string | null>(null)
   const [sidebarWidth, setSidebarWidth] = useState(260)
   const [isSidebarResizing, setIsSidebarResizing] = useState(false)
@@ -115,6 +126,74 @@ export function WorkspaceShell({
   const sidebar = useSidebar()
   const previewTimerRef = useRef<number | null>(null)
   const editorViewRef = useRef<EditorView | null>(null)
+
+  // 注册“AI 插入到编辑器”实现：在当前光标所在行的下一行插入 Markdown 文本
+  useEffect(() => {
+    registerEditorInsertBelow(async (text: string) => {
+      const view = editorViewRef.current
+      if (!view) {
+        console.warn('[editorInsertService] editorView not available, skip insertMarkdownAtCursorBelow')
+        return
+      }
+      if (!text) return
+
+      const { state } = view
+      const { main } = state.selection
+      const pos = main.head
+      const doc = state.doc
+      const line = doc.lineAt(pos)
+      const lineText = doc.sliceString(line.from, line.to)
+      const isEmptyLine = lineText.trim().length === 0
+
+      let insertText = text
+      let from = line.to
+      let to = line.to
+
+      if (isEmptyLine) {
+        from = line.from
+        to = line.to
+        insertText = text
+      } else {
+        insertText = '\n' + text
+      }
+
+      const tr = state.update({
+        changes: { from, to, insert: insertText },
+        selection: { anchor: from + insertText.length },
+        scrollIntoView: true,
+      })
+
+      view.dispatch(tr)
+    })
+  }, [])
+
+  const openAiChatDialog = useCallback(
+    (options: { entryMode: ChatEntryMode; initialContext?: EntryContext }) => {
+      setAiChatState({ open: true, ...options })
+    },
+    [],
+  )
+
+  const closeAiChatDialog = useCallback(() => {
+    setAiChatState((prev) => (prev ? { ...prev, open: false } : prev))
+  }, [])
+
+  const getCurrentMarkdown = useCallback(() => markdown, [markdown])
+
+  const getCurrentFileName = useCallback(() => {
+    const path = activeTab?.path
+    if (!path) return null
+    const name = path.split(/[/\\]/).pop() || path
+    return name
+  }, [activeTab])
+
+  const getCurrentSelectionText = useCallback(() => {
+    const view = editorViewRef.current
+    if (!view) return null
+    const { main } = view.state.selection
+    if (main.empty) return null
+    return view.state.doc.sliceString(main.from, main.to)
+  }, [])
 
   const outlineItems = useOutline(markdown)
 
@@ -575,6 +654,10 @@ export function WorkspaceShell({
     updateActiveMeta,
     openFolderInSidebar,
     closeCurrentTab,
+    openAiChatDialog,
+    getCurrentMarkdown,
+    getCurrentFileName,
+    getCurrentSelectionText,
     onRequestCloseCurrentTab: () => {
       if (closeCurrentTabRef.current) {
         closeCurrentTabRef.current()
@@ -951,6 +1034,15 @@ export function WorkspaceShell({
           onConfirm={quitConfirmDialog.onSaveAll}
           onExtra={quitConfirmDialog.onQuitWithoutSaving}
           onCancel={() => setQuitConfirmDialog(null)}
+        />
+      )}
+
+      {aiChatState && (
+        <AiChatDialog
+          open={aiChatState.open}
+          entryMode={aiChatState.entryMode}
+          initialContext={aiChatState.initialContext}
+          onClose={closeAiChatDialog}
         />
       )}
     </>

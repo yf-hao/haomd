@@ -1,11 +1,13 @@
 import type { ChangeEvent, FC, FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, MouseEventHandler } from 'react'
 import { useEffect, useRef, useState } from 'react'
-import type { ChatEntryMode, EntryContext } from '../domain/chatSession'
+import type { ChatEntryMode, ChatMessageView, EntryContext } from '../domain/chatSession'
 import { MarkdownViewer } from '../../../components/MarkdownViewer'
 import { useAiChat } from './hooks/useAiChat'
 import { copyTextToClipboard } from '../platform/clipboardService'
 import { insertMarkdownAtCursorBelow } from '../platform/editorInsertService'
 import { onNativePaste } from '../../platform/clipboardEvents'
+
+const EMPTY_MESSAGES: ChatMessageView[] = []
 
 export type AiChatDialogProps = {
   open: boolean
@@ -173,7 +175,10 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     e.stopPropagation()
   }
 
-  const messages = (state?.viewMessages ?? []).filter((m) => !m.hidden)
+  // 原始消息列表（稳定引用），用于作为动画和依赖的来源
+  const messageSource = state?.viewMessages ?? EMPTY_MESSAGES
+  // 实际渲染时过滤掉 hidden 消息
+  const messages = messageSource.filter((m) => !m.hidden)
   const [visibleLengths, setVisibleLengths] = useState<Record<string, number>>({})
 
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
@@ -202,6 +207,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
         let changed = false
         const next: Record<string, number> = { ...prev }
 
+        // 使用过滤后的 messages 做打字机动画
         for (const msg of messages) {
           if (msg.role !== 'assistant') continue
           const fullLen = msg.content.length
@@ -230,7 +236,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
         window.cancelAnimationFrame(frameId)
       }
     }
-  }, [isDifyProvider, messages])
+  }, [isDifyProvider, messageSource])
 
   const getDisplayContent = (msgId: string, full: string, streaming?: boolean) => {
     if (!isDifyProvider || full.length === 0 || !state) return full
