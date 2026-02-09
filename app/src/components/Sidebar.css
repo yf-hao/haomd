@@ -164,11 +164,20 @@
 }
 
 .outline-item.level-2 .outline-bullet {
-  background: rgba(96, 165, 250, 0.9);
+  background: rgba(96, 165, 250, 1);
 }
 
 .outline-item.level-3 .outline-bullet {
-  background: rgba(148, 163, 184, 0.9);
+  background: rgba(167, 139, 250, 0.95);
+}
+
+.outline-item.level-4 .outline-bullet {
+  background: rgba(251, 191, 36, 0.9);
+}
+
+.outline-item.level-5 .outline-bullet,
+.outline-item.level-6 .outline-bullet {
+  background: rgba(148, 163, 184, 0.85);
 }
 
 /* Outline 折叠/展开功能 */
@@ -221,21 +230,21 @@
   border-left-width: 6px;
   border-top-width: 4px;
   border-bottom-width: 4px;
-  border-left-color: rgba(148, 163, 184, 0.9);
+  border-left-color: #60a5fa;
 }
 
 .outline-item.level-3 .outline-toggle-icon {
   border-left-width: 5px;
   border-top-width: 3px;
   border-bottom-width: 3px;
-  border-left-color: rgba(148, 163, 184, 0.9);
+  border-left-color: #a78bfa;
 }
 
 .outline-item.level-4 .outline-toggle-icon {
   border-left-width: 4px;
   border-top-width: 2.5px;
   border-bottom-width: 2.5px;
-  border-left-color: rgba(148, 163, 184, 0.8);
+  border-left-color: #fbbf24;
 }
 
 .outline-item.level-5 .outline-toggle-icon,
@@ -243,7 +252,7 @@
   border-left-width: 3px;
   border-top-width: 2px;
   border-bottom-width: 2px;
-  border-left-color: rgba(148, 163, 184, 0.7);
+  border-left-color: #94a3b8;
 }
 
 /* 叶节点（无子节点）样式 - 显示小圆点 */
@@ -263,31 +272,36 @@
   background: currentColor;
 }
 
-/* 不同层级叶节点的小圆点大小 */
+/* 不同层级叶节点的小圆点大小和颜色 */
 .outline-item.level-1 .outline-toggle.leaf::before {
   width: 7px;
   height: 7px;
+  background: #5ad8a6;
 }
 
 .outline-item.level-2 .outline-toggle.leaf::before {
   width: 6px;
   height: 6px;
+  background: #60a5fa;
 }
 
 .outline-item.level-3 .outline-toggle.leaf::before {
   width: 5px;
   height: 5px;
+  background: #a78bfa;
 }
 
 .outline-item.level-4 .outline-toggle.leaf::before {
   width: 4px;
   height: 4px;
+  background: #fbbf24;
 }
 
 .outline-item.level-5 .outline-toggle.leaf::before,
 .outline-item.level-6 .outline-toggle.leaf::before {
   width: 3px;
   height: 3px;
+  background: #94a3b8;
 }
 
 .outline-toggle.leaf:hover {

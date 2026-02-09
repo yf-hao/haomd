@@ -1,5 +1,5 @@
 import type { OutlineItem } from '../modules/outline/parser'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 
 export type OutlinePanelProps = {
   items: OutlineItem[]
@@ -11,7 +11,9 @@ export type OutlinePanelProps = {
 export function OutlinePanel({ items, activeId, onSelect, panelWidth }: OutlinePanelProps) {
   const hasItems = items.length > 0
   const style = panelWidth ? { width: panelWidth } : undefined
-  const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set())
+  
+  // ✅ 使用函数式初始化，只在首次渲染时执行一次
+  const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(() => new Set())
 
   const toggleCollapse = (e: React.MouseEvent, nodeId: string) => {
     e.stopPropagation()

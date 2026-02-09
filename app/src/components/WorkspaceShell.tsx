@@ -261,12 +261,6 @@ export function WorkspaceShell({
     })
   }, [activeTab, isTauriEnv])
 
-  // 调试：观察当前 activeLine 行号（仅开发环境）
-  useEffect(() => {
-    if (!import.meta.env.DEV) return
-    console.log('[App] activeLine =', activeLine)
-  }, [activeLine])
-
   const persistenceOptions = {
     onSaved: (path: string) => {
       updateActiveMeta(path, false)
@@ -638,25 +632,6 @@ export function WorkspaceShell({
     }
   }, [])
 
-  // Global click logger for debugging tab-close issues（仅开发环境启用）
-  useEffect(() => {
-    if (!import.meta.env.DEV) return
-    const handler = (e: MouseEvent) => {
-      const node = e.target as Node
-      const element = node instanceof Element ? node : node.parentElement
-      const isTabClose = element ? element.closest('.tab-close') !== null : false
-
-      console.log('[GLOBAL CLICK]', {
-        target: (element as HTMLElement | null)?.outerHTML?.slice(0, 160) ?? String(e.target),
-        isTabClose,
-      })
-    }
-    window.addEventListener('click', handler, true)
-    return () => {
-      window.removeEventListener('click', handler, true)
-    }
-  }, [])
-
   const scrollEditorToLineCenter = useCallback(
     (line: number, searchText?: string) => {
       const view = editorViewRef.current
@@ -697,7 +672,8 @@ export function WorkspaceShell({
             }
           }
         }
-        console.warn('[scrollEditorToLineCenter] 未找到匹配的文本:', searchText)
+        // 搜索文本未找到是正常情况（防抖期间编辑器内容可能已变化），使用行号定位即可
+        console.log('[scrollEditorToLineCenter] 搜索文本未找到，使用行号定位:', searchText)
       }
 
       // 方案1：回退到行号定位（改进后的行号计算）
@@ -743,8 +719,21 @@ export function WorkspaceShell({
       // 使用编辑器内坐标 + DOM 计算，将目标行尽量滚动到编辑区中间
       const rect = view.coordsAtPos(lineInfo.from)
       const scrollDOM = view.scrollDOM
+
+      // 至少设置光标位置
+      view.dispatch({
+        selection: { anchor: lineInfo.from },
+      })
+
       if (!rect) {
-        console.warn('[scrollEditorToLineCenter] 无法获取行坐标，line:', targetLine)
+        // 如果无法获取坐标（可能视图未渲染），使用估算的行高滚动
+        const estimatedLineHeight = 24 // CodeMirror 默认行高
+        const estimatedPos = (targetLine - 1) * estimatedLineHeight
+        const scrollRect = scrollDOM.getBoundingClientRect()
+        const centerOffset = scrollRect.height / 2 - estimatedLineHeight / 2
+
+        scrollDOM.scrollTo({ top: Math.max(0, estimatedPos - centerOffset) })
+        console.log('[scrollEditorToLineCenter] 使用估算行高滚动，line:', targetLine)
         return
       }
 
@@ -753,10 +742,6 @@ export function WorkspaceShell({
       const delta = lineCenter - (scrollRect.top + scrollRect.height / 2)
 
       scrollDOM.scrollTo({ top: scrollDOM.scrollTop + delta })
-
-      view.dispatch({
-        selection: { anchor: lineInfo.from },
-      })
     },
     [editorViewRef],
   )
