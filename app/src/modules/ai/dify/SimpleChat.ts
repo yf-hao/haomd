@@ -1,6 +1,7 @@
 // Dify 专用简化 Chat 类，基于 web-chat/src/web/simple-chat.ts 复制并适配
 
 import { BrowserLogger } from './BrowserLogger'
+import type { ChatAttachment } from '../domain/types'
 
 export const MessageRole = {
   User: 'user',
@@ -41,6 +42,7 @@ export interface CompletionRequest {
   conversationId?: string
   temperature?: number
   maxTokens?: number
+  attachments?: ChatAttachment[]
 }
 
 // Dify SSE 事件类型
@@ -146,6 +148,7 @@ export class SimpleChat {
         this.conversationId || undefined,
         request.temperature,
         request.maxTokens,
+        request.attachments,
       )
 
       this.logger.info('Sending fetch request', { url })
@@ -323,6 +326,7 @@ export class SimpleChat {
     conversationId?: string,
     temperature?: number,
     maxTokens?: number,
+    attachments?: ChatAttachment[],
   ) {
     const body: Record<string, unknown> = {
       inputs: {
@@ -333,6 +337,22 @@ export class SimpleChat {
       response_mode: mode,
       user: 'ai-settings-tester',
       conversation_id: conversationId || '',
+    }
+
+    if (attachments && attachments.length > 0) {
+      body.files = attachments.map((a) => {
+        const file: Record<string, unknown> = {
+          type: a.kind,
+          transfer_method: 'local_file',
+          url: '',
+        }
+        if (a.source.kind === 'uploaded') {
+          file.upload_file_id = a.source.fileId
+        } else if (a.source.kind === 'url') {
+          file.url = a.source.url
+        }
+        return file
+      })
     }
 
     if (temperature !== undefined) {

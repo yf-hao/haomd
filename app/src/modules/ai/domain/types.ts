@@ -16,7 +16,7 @@ export type VisionMode =
   | 'none'             // 不支持图像
   | 'openai_image_url' // OpenAI / ModelScope 这类 image_url 模式
   | 'auto'             // 运行时自动检测（根据模型名/Provider 推断）
-  // 后续可扩展: 'upload_then_id' 等
+// 后续可扩展: 'upload_then_id' 等
 
 export type UiProvider = {
   id: string
@@ -127,11 +127,33 @@ export type ChatMessage = {
   content: string
 }
 
+// 附件类型（目前实现 image，未来可以扩展 audio 等）
+export type AttachmentKind = 'image' | 'audio'
+
+// 已上传到远端后的文件引用（例如 Dify /files/upload 的返回）
+export type UploadedFileRef = {
+  id: string
+  name: string
+  size: number
+  mimeType: string
+  kind: AttachmentKind
+  sourceUrl?: string
+}
+
+// 聊天请求中使用的附件抽象
+export type ChatAttachment = {
+  kind: AttachmentKind
+  source:
+  | { kind: 'uploaded'; fileId: string }
+  | { kind: 'url'; url: string }
+}
+
 export type StreamingChatRequest = {
   messages: ChatMessage[]
   temperature?: number
   maxTokens?: number
   signal?: AbortSignal
+  attachments?: ChatAttachment[]
 }
 
 export type StreamingChatResult = {

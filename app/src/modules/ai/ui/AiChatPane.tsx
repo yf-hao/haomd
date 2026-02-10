@@ -36,7 +36,26 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
     el.style.height = `${next}px`
   }
 
-  const { loading, state, systemPromptInfo, providerType, error, send, sendVisionTask, stop, stopAndTruncate, changeRole, changeModel, resetError, availableModels, activeModelId } = useAiChat({
+  const {
+    loading,
+    state,
+    systemPromptInfo,
+    providerType,
+    error,
+    send,
+    sendVisionTask,
+    stop,
+    stopAndTruncate,
+    changeRole,
+    changeModel,
+    resetError,
+    availableModels,
+    activeModelId,
+    pendingAttachments,
+    uploadFiles,
+    removeAttachment,
+    isUploading,
+  } = useAiChat({
     entryMode,
     initialContext,
     open: true,
@@ -116,16 +135,18 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
     }
   }, [])
 
-  const DEFAULT_VISION_PROMPT = '根据上下文解析图片'
+  const DEFAULT_VISION_PROMPT = '解析图片并根据上下文回复图片中内容的含义，回复时不要包含无用的额外文字，直接给出答案'
 
   const doSend = async () => {
     const raw = input
     const trimmed = raw.trim()
+    const isDify = providerType === 'dify'
+    const hasAttachments = isDify ? pendingAttachments.length > 0 : !!attachedImageDataUrl
 
-    if (!trimmed && !contextPrefix && !attachedImageDataUrl) return
+    if (!trimmed && !contextPrefix && !hasAttachments) return
 
     const basePrompt =
-      trimmed || (!trimmed && attachedImageDataUrl ? DEFAULT_VISION_PROMPT : '')
+      trimmed || (!trimmed && hasAttachments ? DEFAULT_VISION_PROMPT : '')
 
     let finalContent = basePrompt
     let hideUserInView = false
@@ -140,7 +161,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
     setInput('')
     autoResizeInput()
 
-    if (attachedImageDataUrl) {
+    if (attachedImageDataUrl && !isDify) {
       const visionTask: VisionTask = {
         prompt: finalContent,
         images: [
@@ -151,7 +172,10 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
     } else {
       await send(finalContent, hideUserInView ? { hideUserInView: true } : undefined)
     }
-    setAttachedImageDataUrl(null)
+
+    if (!isDify) {
+      setAttachedImageDataUrl(null)
+    }
   }
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -159,6 +183,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
     if (isComposingRef.current) return
     await doSend()
   }
+
 
   const handleInputKeyDown = async (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (isComposingRef.current) return
@@ -424,8 +449,20 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
           activeModelId={activeModelId}
           onChangeModel={handleModelChange}
           attachedImageDataUrl={attachedImageDataUrl}
-          onAttachImage={(dataUrl) => setAttachedImageDataUrl(dataUrl)}
+          onAttachImage={(dataUrl) => {
+            if (providerType !== 'dify') {
+              setAttachedImageDataUrl(dataUrl)
+            }
+          }}
           onClearImage={() => setAttachedImageDataUrl(null)}
+          pendingAttachments={pendingAttachments}
+          onRemoveAttachment={removeAttachment}
+          isUploading={isUploading}
+          onUploadFiles={(() => {
+            const canUpload = !providerType || providerType === 'dify';
+            console.warn('[AiChatPane] Render AiChatBody', { providerType, canUpload });
+            return canUpload ? uploadFiles : undefined;
+          })()}
         />
       </div>
     </section>

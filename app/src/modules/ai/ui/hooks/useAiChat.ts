@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ChatEntryMode, ConversationState, EntryContext } from '../../domain/chatSession'
 import type { SystemPromptInfo } from '../../application/systemPromptService'
-import type { ProviderType, VisionTask } from '../../domain/types'
+import type { ProviderType, VisionTask, UploadedFileRef } from '../../domain/types'
 import type { ChatSession, StartChatOptions } from '../../application/chatSessionService'
 import { createChatSession } from '../../application/chatSessionService'
 
@@ -26,6 +26,10 @@ export type UseAiChatResult = {
   resetError: () => void
   availableModels: { id: string; providerName: string }[]
   activeModelId: string | null
+  pendingAttachments: UploadedFileRef[]
+  uploadFiles: (files: File[]) => Promise<void>
+  removeAttachment: (id: string) => void
+  isUploading: boolean
 }
 
 export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
@@ -38,6 +42,8 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
   const [error, setError] = useState<Error | null>(null)
   const [activeModelId, setActiveModelId] = useState<string | null>(null)
   const [rawModels, setRawModels] = useState<{ id: string; providerName: string }[]>([])
+  const [pendingAttachments, setPendingAttachments] = useState<UploadedFileRef[]>([])
+  const [uploadingCount, setUploadingCount] = useState(0)
 
   useEffect(() => {
     if (!open) {
@@ -118,15 +124,45 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
       setError(null)
       setLoading(true)
       try {
-        await session.sendUserMessage(content, { hideInView: options?.hideUserInView })
+        await session.sendUserMessage(content, {
+          hideInView: options?.hideUserInView,
+          attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined
+        })
+        setPendingAttachments([]) // Clear after sending
       } finally {
         setLoading(false)
         setState(session.getState())
         setSystemPromptInfo(session.getSystemPromptInfo())
       }
     },
-    [session],
+    [session, pendingAttachments],
   )
+
+  const uploadFiles = useCallback(async (files: File[]) => {
+    if (!session) {
+      console.warn('[useAiChat] uploadFiles ignored: no session')
+      return
+    }
+    console.warn('[useAiChat] uploadFiles starting for:', files.map(f => f.name))
+    setUploadingCount(prev => prev + files.length)
+    try {
+      const results = await Promise.all(
+        files.map(file => session.uploadAttachment(file))
+      )
+      console.warn('[useAiChat] uploadFiles success:', results)
+      setPendingAttachments(prev => [...prev, ...results])
+    } catch (e) {
+      console.warn('[useAiChat] uploadFiles error:', e)
+      setError(e as Error)
+    } finally {
+      setUploadingCount(prev => Math.max(0, prev - files.length))
+    }
+  }, [session])
+
+  const removeAttachment = useCallback((id: string) => {
+    console.warn('[useAiChat] removeAttachment:', id)
+    setPendingAttachments(prev => prev.filter(a => a.id !== id))
+  }, [])
 
   const sendVisionTask = useCallback(
     async (task: VisionTask, options?: { hideUserInView?: boolean }) => {
@@ -159,10 +195,17 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
       if (!session) return
       setError(null)
       try {
+        console.warn('[useAiChat] changing model to:', modelId)
         await session.setActiveModel?.(modelId)
+
+        // 关键点：切换后立即重新获取 providerType 并更新 UI 状态
+        const nextProviderType = session.getProviderType()
+        console.warn('[useAiChat] model change complete. nextProviderType:', nextProviderType)
+
         setActiveModelId(session.getActiveModelId?.() ?? modelId)
-        setProviderType(session.getProviderType())
+        setProviderType(nextProviderType)
       } catch (e) {
+        console.error('[useAiChat] changeModel error:', e)
         setError(e as Error)
       }
     },
@@ -205,5 +248,9 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
     resetError,
     availableModels: rawModels,
     activeModelId,
+    pendingAttachments,
+    uploadFiles,
+    removeAttachment,
+    isUploading: uploadingCount > 0,
   }
 }

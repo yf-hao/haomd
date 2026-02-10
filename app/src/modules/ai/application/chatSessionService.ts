@@ -1,6 +1,14 @@
 import type { UiProvider } from '../settings'
 import { loadAiSettingsState } from '../settings'
-import type { IStreamingChatClient, ChatMessage, ProviderType, VisionTask } from '../domain/types'
+import type {
+  IStreamingChatClient,
+  ChatMessage,
+  ProviderType,
+  VisionTask,
+  AttachmentKind,
+  ChatAttachment,
+  UploadedFileRef,
+} from '../domain/types'
 import { createVisionClientFromProvider } from '../vision/visionClientFactory'
 import {
   type ChatEntryMode,
@@ -17,6 +25,7 @@ import {
 import type { SystemPromptInfo } from './systemPromptService'
 import { loadSystemPromptInfo, getSystemPromptByRoleId } from './systemPromptService'
 import { createStreamingClientFromSettings } from '../streamingClientFactory'
+import { createAttachmentUploadService } from './attachmentUploadService'
 
 export type StartChatOptions = {
   entryMode: ChatEntryMode
@@ -31,7 +40,18 @@ export type ChatSession = {
   getActiveModelId(): string
   setActiveRole(roleId: string): Promise<void>
   setActiveModel(modelId: string): Promise<void>
-  sendUserMessage(content: string, options?: { hideInView?: boolean }): Promise<void>
+  sendUserMessage(
+    content: string,
+    options?: { hideInView?: boolean; attachments?: UploadedFileRef[] },
+  ): Promise<void>
+  /** 上传附件并返回引用，供 UI 预览及后续发送 */
+  uploadAttachment(file: File, kind?: AttachmentKind): Promise<UploadedFileRef>
+  /** 带附件发送消息（目前用于 Dify 图片），供未来 UI 按需调用 */
+  sendUserMessageWithAttachments?(
+    content: string,
+    attachments: LocalAttachment[],
+    options?: { hideInView?: boolean },
+  ): Promise<void>
   /** 发送 VisionTask（图 + 文），由底层决定是否使用 Vision Provider 或退回文本流 */
   sendVisionTask(task: VisionTask, options?: { hideInView?: boolean }): Promise<void>
   stopRunningStream(): void
@@ -39,10 +59,18 @@ export type ChatSession = {
   dispose(): void
 }
 
-function pickDefaultProvider(state: Awaited<ReturnType<typeof loadAiSettingsState>>): UiProvider | null {
-  if (!state.providers.length) return null
+export type LocalAttachment = {
+  kind: AttachmentKind
+  file: File | Blob
+  fileName: string
+}
+
+function pickDefaultProvider(state: Awaited<ReturnType<typeof loadAiSettingsState>>): UiProvider {
+  if (!state.providers.length) {
+    throw new Error('AI Chat 未配置：请先在 AI Settings 中设置默认 Provider/Model')
+  }
   const byDefaultId = state.providers.find((p) => p.id === state.defaultProviderId)
-  return byDefaultId ?? state.providers[0] ?? null
+  return byDefaultId ?? state.providers[0]!
 }
 
 function genId(): string {
@@ -57,13 +85,12 @@ function engineHistoryToChatMessages(history: EngineMessage[]): ChatMessage[] {
 
 export async function createChatSession(options: StartChatOptions): Promise<ChatSession> {
   const [aiState, systemInfo] = await Promise.all([loadAiSettingsState(), loadSystemPromptInfo()])
+  const attachmentUploadService = createAttachmentUploadService()
   let provider = pickDefaultProvider(aiState)
-  if (!provider) {
-    throw new Error('AI Chat 未配置：请先在 AI Settings 中设置默认 Provider/Model')
-  }
 
   let currentModelId = provider.defaultModelId ?? provider.models[0]?.id
   let providerType: ProviderType = provider.providerType ?? 'dify'
+  console.warn('[ChatSession] createChatSession', { providerName: provider.name, providerType, currentModelId })
   let defaultMaxTokens = provider.models.find((m) => m.id === currentModelId)?.maxTokens ?? 2048
 
   let systemPromptInfo: SystemPromptInfo = systemInfo
@@ -82,12 +109,39 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
   let disposed = false
   let currentAbortController: AbortController | null = null
 
+  async function uploadLocalAttachments(local: LocalAttachment[]): Promise<ChatAttachment[]> {
+    if (!local.length) return []
+    if (!provider) {
+      throw new Error('AI Chat 未配置 Provider，无法上传附件')
+    }
+
+    const uploaded = await Promise.all(
+      local.map((att) =>
+        attachmentUploadService.uploadAttachment({
+          provider,
+          kind: att.kind,
+          file: att.file,
+          fileName: att.fileName,
+          userId: 'ai-chat-user',
+        }),
+      ),
+    )
+
+    return uploaded.map((u) => ({
+      kind: u.kind,
+      source: { kind: 'uploaded', fileId: u.id },
+    }))
+  }
+
   const notifyStateChange = () => {
     if (disposed || !options.onStateChange) return
     options.onStateChange(state)
   }
 
-  async function runStreamWithCurrentHistory(assistantId: string): Promise<void> {
+  async function runStreamWithCurrentHistory(
+    assistantId: string,
+    attachments?: ChatAttachment[],
+  ): Promise<void> {
     if (!client) return
     const messages = engineHistoryToChatMessages(state.engineHistory)
     if (!messages.length) return
@@ -101,6 +155,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
           temperature: 0,
           maxTokens: defaultMaxTokens,
           signal: currentAbortController.signal,
+          attachments,
         },
         {
           onChunk: (chunk) => {
@@ -237,7 +292,10 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
 
       notifyStateChange()
     },
-    async sendUserMessage(content: string, options?: { hideInView?: boolean }): Promise<void> {
+    async sendUserMessage(
+      content: string,
+      options?: { hideInView?: boolean; attachments?: UploadedFileRef[] },
+    ): Promise<void> {
       if (disposed) return
       const userId = genId()
       const assistantId = genId()
@@ -246,7 +304,40 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       state = appendAssistantPlaceholder(state, assistantId)
       notifyStateChange()
 
-      await runStreamWithCurrentHistory(assistantId)
+      const chatAttachments: ChatAttachment[] | undefined = options?.attachments?.map((u) => ({
+        kind: u.kind,
+        source: { kind: 'uploaded', fileId: u.id },
+      }))
+
+      await runStreamWithCurrentHistory(assistantId, chatAttachments)
+    },
+    async uploadAttachment(file: File, kind: AttachmentKind = 'image'): Promise<UploadedFileRef> {
+      if (disposed) throw new Error('Session disposed')
+      if (!provider) throw new Error('AI Chat 未配置 Provider')
+
+      return attachmentUploadService.uploadAttachment({
+        provider,
+        kind,
+        file,
+        fileName: file.name,
+        userId: 'ai-chat-user',
+      })
+    },
+    async sendUserMessageWithAttachments(
+      content: string,
+      attachments: LocalAttachment[],
+      options?: { hideInView?: boolean },
+    ): Promise<void> {
+      if (disposed) return
+      const userId = genId()
+      const assistantId = genId()
+
+      state = appendUserInput(state, userId, content, { hidden: options?.hideInView })
+      state = appendAssistantPlaceholder(state, assistantId)
+      notifyStateChange()
+
+      const chatAttachments = await uploadLocalAttachments(attachments)
+      await runStreamWithCurrentHistory(assistantId, chatAttachments)
     },
     async sendVisionTask(task: VisionTask, options?: { hideInView?: boolean }): Promise<void> {
       if (disposed) return

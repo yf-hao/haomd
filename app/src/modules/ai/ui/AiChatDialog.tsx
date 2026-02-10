@@ -36,7 +36,26 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     el.style.height = `${next}px`
   }
 
-  const { loading, state, systemPromptInfo, providerType, error, send, sendVisionTask, stop, stopAndTruncate, changeRole, changeModel, resetError, availableModels, activeModelId } = useAiChat({
+  const {
+    loading,
+    state,
+    systemPromptInfo,
+    providerType,
+    error,
+    send,
+    sendVisionTask,
+    stop,
+    stopAndTruncate,
+    changeRole,
+    changeModel,
+    resetError,
+    availableModels,
+    activeModelId,
+    pendingAttachments,
+    uploadFiles,
+    removeAttachment,
+    isUploading,
+  } = useAiChat({
     entryMode,
     initialContext,
     open,
@@ -106,23 +125,28 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
 
   useEffect(() => {
     if (!open) return
+    console.warn('[AiChatDialog] open, providerType:', providerType)
     const el = inputRef.current
     if (!el) return
     el.focus()
     el.setSelectionRange(el.value.length, el.value.length)
-  }, [open])
+  }, [open, providerType])
 
-  const DEFAULT_VISION_PROMPT = '根据上下文解析图片'
+  const DEFAULT_VISION_PROMPT = '解析图片并根据上下文回复'
 
   const doSend = async () => {
     const raw = input
     const trimmed = raw.trim()
+    const isDify = providerType === 'dify'
+    const hasAttachments = isDify ? pendingAttachments.length > 0 : !!attachedImageDataUrl
+
+    console.warn('[AiChatDialog] doSend', { providerType, isDify, hasAttachments, pendingCount: pendingAttachments.length })
 
     // 没有文字、没有上下文、也没有图片时不发送
-    if (!trimmed && !contextPrefix && !attachedImageDataUrl) return
+    if (!trimmed && !contextPrefix && !hasAttachments) return
 
     const basePrompt =
-      trimmed || (!trimmed && attachedImageDataUrl ? DEFAULT_VISION_PROMPT : '')
+      trimmed || (!trimmed && hasAttachments ? DEFAULT_VISION_PROMPT : '')
 
     let finalContent = basePrompt
     let hideUserInView = false
@@ -136,7 +160,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     setInput('')
     autoResizeInput()
 
-    if (attachedImageDataUrl) {
+    if (attachedImageDataUrl && !isDify) {
       const visionTask: VisionTask = {
         prompt: finalContent,
         images: [
@@ -145,11 +169,14 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
       }
       await sendVisionTask(visionTask, hideUserInView ? { hideUserInView: true } : undefined)
     } else {
+      // 这里的 send 在 useAiChat 中已经被增强，会自动带上 pendingAttachments
       await send(finalContent, hideUserInView ? { hideUserInView: true } : undefined)
     }
 
-    // 发送后清空已附加图片
-    setAttachedImageDataUrl(null)
+    // 发送后清空已附加图片 (传统方案)
+    if (!isDify) {
+      setAttachedImageDataUrl(null)
+    }
   }
 
   const handleSubmit = async (e: FormEvent) => {
@@ -369,51 +396,66 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
             <span className="ai-chat-close-icon" aria-hidden="true" />
           </button>
           <div className="modal-title-text">
-          {(() => {
-            switch (entryMode) {
-              case 'selection':
-                return 'AI Chat -- About Selection';
-              case 'file':
-                return 'AI Chat -- About File';
-              default:
-                return 'AI Chat';
-            }
-          })()}
-        </div>
+            {(() => {
+              switch (entryMode) {
+                case 'selection':
+                  return 'AI Chat -- About Selection';
+                case 'file':
+                  return 'AI Chat -- About File';
+                default:
+                  return 'AI Chat';
+              }
+            })()}
+          </div>
         </div>
 
-          <AiChatBody
-            messages={messages}
-            loading={isProcessing}
-            error={error}
-            input={input}
-            onInputChange={(value) => {
-              setInput(value)
-              autoResizeInput()
-            }}
-            onSubmit={handleSubmit}
-            onInputKeyDown={handleInputKeyDown}
-            onCompositionStart={handleCompositionStart}
-            onCompositionEnd={handleCompositionEnd}
-            inputRef={inputRef as React.RefObject<HTMLTextAreaElement>}
-            messagesContainerRef={messagesContainerRef as React.RefObject<HTMLDivElement>}
-            getDisplayContent={getDisplayContent}
-            onCopy={handleCopy}
-            onInsert={handleInsert}
-            onReplace={handleReplace}
-            onSave={handleSave}
-            onStop={handleStop}
-            resetError={resetError}
-            roles={roles}
-            activeRoleId={activeRoleId}
-            onChangeRole={handleChangeRole}
-            models={availableModels}
-            activeModelId={activeModelId}
-            onChangeModel={handleModelChange}
-            attachedImageDataUrl={attachedImageDataUrl}
-            onAttachImage={(dataUrl) => setAttachedImageDataUrl(dataUrl)}
-            onClearImage={() => setAttachedImageDataUrl(null)}
-          />
+        <AiChatBody
+          messages={messages}
+          loading={isProcessing}
+          error={error}
+          input={input}
+          onInputChange={(value) => {
+            setInput(value)
+            autoResizeInput()
+          }}
+          onSubmit={handleSubmit}
+          onInputKeyDown={handleInputKeyDown}
+          onCompositionStart={handleCompositionStart}
+          onCompositionEnd={handleCompositionEnd}
+          inputRef={inputRef as React.RefObject<HTMLTextAreaElement>}
+          messagesContainerRef={messagesContainerRef as React.RefObject<HTMLDivElement>}
+          getDisplayContent={getDisplayContent}
+          onCopy={handleCopy}
+          onInsert={handleInsert}
+          onReplace={handleReplace}
+          onSave={handleSave}
+          onStop={handleStop}
+          resetError={resetError}
+          roles={roles}
+          activeRoleId={activeRoleId}
+          onChangeRole={handleChangeRole}
+          models={availableModels}
+          activeModelId={activeModelId}
+          onChangeModel={handleModelChange}
+          attachedImageDataUrl={attachedImageDataUrl}
+          onAttachImage={(dataUrl) => {
+            console.warn('[AiChatDialog] onAttachImage callback', { providerType })
+            if (providerType !== 'dify') {
+              setAttachedImageDataUrl(dataUrl)
+            }
+          }}
+          onClearImage={() => setAttachedImageDataUrl(null)}
+          pendingAttachments={pendingAttachments}
+          onRemoveAttachment={removeAttachment}
+          isUploading={isUploading}
+          onUploadFiles={(() => {
+            const canUpload = !providerType || providerType === 'dify';
+            if (open) {
+              console.warn('[AiChatDialog] Render AiChatBody', { providerType, canUpload });
+            }
+            return canUpload ? uploadFiles : undefined;
+          })()}
+        />
 
 
         <div className="ai-chat-drag-handle ai-chat-drag-bottom" onMouseDown={handleDragStart} />

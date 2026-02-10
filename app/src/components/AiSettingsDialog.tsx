@@ -6,6 +6,7 @@ import { emptySettings, type UiProvider } from '../modules/ai/settings'
 import { useAiSettingsPersistence } from '../hooks/useAiSettingsPersistence'
 import { useAiSettingsState, type ProviderDraft, parseModelsInput } from '../hooks/useAiSettingsState'
 import { testProviderConnection } from '../modules/ai/testConnection'
+import { FieldGroup } from './FieldGroup'
 
 export type AiSettingsDialogProps = {
   open: boolean
@@ -44,6 +45,14 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
     updateModelMaxTokens,
     updateModelVisionMode,
   } = useAiSettingsState(emptySettings)
+
+  const AI_FORM_FIELDS: { key: keyof ProviderDraft; label: string; type: 'text' | 'password' | 'textarea'; placeholder?: string }[] = [
+    { key: 'name', label: 'Provider Name', type: 'text' },
+    { key: 'baseUrl', label: 'Base URL', type: 'text' },
+    { key: 'apiKey', label: 'API Key', type: 'password' },
+    { key: 'modelsInput', label: 'Models', type: 'text', placeholder: 'gpt-4.1, gpt-4o-mini' },
+    { key: 'description', label: 'Description', type: 'textarea' },
+  ]
 
   // 打开对话框时重置展开状态，确保所有提供商默认不展开
   useEffect(() => {
@@ -336,54 +345,30 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
         <div className="modal-content ai-settings-body">
           <div className="ai-settings-column-left">
             <form onSubmit={handleTestAndAdd} className="ai-settings-form">
-              {/* 左侧表单内容保持不变 */}
-              <div className="field-group">
-                <label className="field-label">Provider Name</label>
-                <input
-                  className="field-input"
-                  type="text"
-                  value={draft.name}
-                  onChange={handleDraftChange('name')}
-                  onFocus={() => setActiveField('name')}
-                />
-              </div>
+              {AI_FORM_FIELDS.map((field) => (
+                <FieldGroup key={field.key} label={field.label}>
+                  {field.type === 'textarea' ? (
+                    <textarea
+                      className="field-textarea"
+                      rows={1}
+                      value={draft[field.key]}
+                      onChange={handleDraftChange(field.key)}
+                      onFocus={() => setActiveField(field.key)}
+                    />
+                  ) : (
+                    <input
+                      className="field-input"
+                      type={field.type}
+                      placeholder={field.placeholder}
+                      value={draft[field.key]}
+                      onChange={handleDraftChange(field.key)}
+                      onFocus={() => setActiveField(field.key)}
+                    />
+                  )}
+                </FieldGroup>
+              ))}
 
-              <div className="field-group">
-                <label className="field-label">Base URL</label>
-                <input
-                  className="field-input"
-                  type="text"
-                  value={draft.baseUrl}
-                  onChange={handleDraftChange('baseUrl')}
-                  onFocus={() => setActiveField('baseUrl')}
-                />
-              </div>
-
-              <div className="field-group">
-                <label className="field-label">API Key</label>
-                <input
-                  className="field-input"
-                  type="password"
-                  value={draft.apiKey}
-                  onChange={handleDraftChange('apiKey')}
-                  onFocus={() => setActiveField('apiKey')}
-                />
-              </div>
-
-              <div className="field-group">
-                <label className="field-label">Models</label>
-                <input
-                  className="field-input"
-                  type="text"
-                  placeholder="gpt-4.1, gpt-4o-mini"
-                  value={draft.modelsInput}
-                  onChange={handleDraftChange('modelsInput')}
-                  onFocus={() => setActiveField('modelsInput')}
-                />
-              </div>
-
-              <div className="field-group">
-                <label className="field-label">Type</label>
+              <FieldGroup label="Type">
                 <select
                   className="field-select"
                   value={draft.providerType || 'openai'}
@@ -393,10 +378,9 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                   <option value="dify">Dify</option>
                   <option value="openai">OpenAI Compatible</option>
                 </select>
-              </div>
+              </FieldGroup>
 
-              <div className="field-group">
-                <label className="field-label">Vision Mode</label>
+              <FieldGroup label="Vision Mode">
                 <select
                   className="field-select"
                   value={draft.visionMode || ''}
@@ -407,18 +391,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                   <option value="openai_image_url">OpenAI image_url compatible</option>
                   <option value="none">Disabled (text only)</option>
                 </select>
-              </div>
-
-              <div className="field-group">
-                <label className="field-label">Description</label>
-                <textarea
-                  className="field-textarea"
-                  rows={1}
-                  value={draft.description}
-                  onChange={handleDraftChange('description')}
-                  onFocus={() => setActiveField('description')}
-                />
-              </div>
+              </FieldGroup>
 
               {error && <div className="form-error">{error}</div>}
               {testResult && !error && <div className="form-success">{testResult}</div>}
@@ -437,7 +410,6 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
             </form>
           </div>
 
-          {/* 右侧 Provider 列表保持原有渲染 */}
           <div className="ai-settings-column-right">
             <div className="providers-header">Configured Providers</div>
             {settings.providers.length === 0 ? (
@@ -484,8 +456,8 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                             {p.visionMode === 'openai_image_url'
                               ? 'OpenAI image_url (images supported)'
                               : p.visionMode === 'none'
-                              ? 'Disabled (text only)'
-                              : 'Auto detect'}
+                                ? 'Disabled (text only)'
+                                : 'Auto detect'}
                           </div>
                           <div className="provider-detail-row">Models:</div>
                           <ul className="provider-models">
@@ -528,8 +500,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                             ))}
                           </ul>
 
-                          <div className="field-group inline">
-                            <label className="field-label">Default Model</label>
+                          <FieldGroup label="Default Model" inline>
                             <select
                               className="field-select"
                               value={p.defaultModelId ?? ''}
@@ -541,7 +512,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                                 </option>
                               ))}
                             </select>
-                          </div>
+                          </FieldGroup>
 
                           <div className="provider-actions">
                             <button

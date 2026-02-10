@@ -8,6 +8,7 @@ import type {
 import { useRef } from 'react'
 import { MarkdownViewer } from '../../../components/MarkdownViewer'
 import type { ChatMessageView } from '../domain/chatSession'
+import type { VisionMode, UploadedFileRef } from '../domain/types'
 
 export interface AiChatBodyProps {
   messages: ChatMessageView[]
@@ -31,7 +32,7 @@ export interface AiChatBodyProps {
   roles?: { id: string; name: string }[]
   activeRoleId?: string
   onChangeRole?: (roleId: string) => void
-  models?: { id: string; providerName: string }[]
+  models?: { id: string; providerName: string; visionMode?: VisionMode }[]
   activeModelId?: string | null
   onChangeModel?: (modelId: string) => void
   /** 当前输入区已附加的图片（data URL），用于控制发送按钮状态与提示 */
@@ -40,6 +41,14 @@ export interface AiChatBodyProps {
   onAttachImage?: (dataUrl: string) => void
   /** 清除已附加图片 */
   onClearImage?: () => void
+  /** Dify 方案：已上传成功的附件列表（含预览图 URL） */
+  pendingAttachments?: UploadedFileRef[]
+  /** 移除特定附件 */
+  onRemoveAttachment?: (id: string) => void
+  /** 是否正在上传中 */
+  isUploading?: boolean
+  /** 批量上传文件回调 */
+  onUploadFiles?: (files: File[]) => void
 }
 
 export const AiChatBody: FC<AiChatBodyProps> = ({
@@ -70,18 +79,42 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
   attachedImageDataUrl,
   onAttachImage,
   onClearImage,
+  pendingAttachments,
+  onRemoveAttachment,
+  isUploading,
+  onUploadFiles,
 }) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const handleToolClick = () => {
+    console.warn('[AiChatBody] Upload button clicked')
     fileInputRef.current?.click()
   }
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (!file.type.startsWith('image/')) return
+    const files = Array.from(e.target.files || [])
+    console.warn('[AiChatBody] handleFileChange', { filesCount: files.length, hasOnUploadFiles: !!onUploadFiles })
 
+    if (files.length === 0) return
+
+    const images = files.filter(f => f.type.startsWith('image/'))
+    if (images.length === 0) {
+      console.warn('[AiChatBody] No image files selected')
+      return
+    }
+
+    // 如果提供了批量上传回调，优先使用（Dify 方案）
+    if (onUploadFiles) {
+      console.warn('[AiChatBody] Using onUploadFiles (Dify path)')
+      onUploadFiles(images)
+      e.target.value = ''
+      return
+    }
+
+    console.warn('[AiChatBody] Fast-track to onAttachImage (Legacy path)')
+    // 传统方案：仅取第一张
+    const file = images[0]
+    if (!file) return
     const reader = new FileReader()
     reader.onload = () => {
       const result = reader.result
@@ -90,6 +123,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
       }
     }
     reader.readAsDataURL(file)
+    e.target.value = ''
   }
 
   return (
@@ -161,6 +195,30 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
 
       <form className="ai-chat-input" onSubmit={loading ? (e) => e.preventDefault() : onSubmit}>
         <div className="ai-chat-input-container">
+          {((pendingAttachments && pendingAttachments.length > 0) || isUploading) && (
+            <div className="ai-chat-attachment-preview-bar">
+              {pendingAttachments && pendingAttachments.map((att) => (
+                <div key={att.id} className="ai-chat-attachment-item">
+                  {att.sourceUrl && (
+                    <img src={att.sourceUrl} alt={att.name} className="ai-chat-attachment-thumb" />
+                  )}
+                  <button
+                    type="button"
+                    className="ai-chat-attachment-remove"
+                    onClick={() => onRemoveAttachment?.(att.id)}
+                    title="移除图片"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              {isUploading && (
+                <div className="ai-chat-attachment-item uploading">
+                  <div className="ai-chat-attachment-loading-spinner" />
+                </div>
+              )}
+            </div>
+          )}
           <textarea
             id="ai-chat-input"
             className="field-textarea"
@@ -209,6 +267,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
                 >
                   {models?.map((m) => (
                     <option key={m.id} value={m.id}>
+                      {m.visionMode !== 'none' && m.visionMode !== undefined ? '👁️ ' : ''}
                       {m.id} ({m.providerName})
                     </option>
                   ))}
@@ -240,7 +299,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
                   }
                 }}
                 title={loading ? '停止生成' : '发送'}
-                disabled={!loading && !input.trim() && !attachedImageDataUrl}
+                disabled={!loading && !input.trim() && !attachedImageDataUrl && (pendingAttachments?.length ?? 0) === 0}
               >
                 {loading ? (
                   <span className="ai-chat-icon-stop" aria-hidden="true" />

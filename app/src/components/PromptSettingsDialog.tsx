@@ -5,6 +5,7 @@ import { emptyPromptSettings, type PromptRole } from '../modules/ai/promptSettin
 import { usePromptSettingsPersistence } from '../hooks/usePromptSettingsPersistence'
 import { usePromptSettingsState, type PromptRoleDraft } from '../hooks/usePromptSettingsState'
 import { onNativePaste } from '../modules/platform/clipboardEvents'
+import { FieldGroup } from './FieldGroup'
 
 export type PromptSettingsDialogProps = {
   open: boolean
@@ -257,6 +258,12 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
     onClose()
   }
 
+  const ROLE_FORM_FIELDS: { key: keyof PromptRoleDraft; label: string; type: 'text' | 'textarea'; placeholder: string; ref: any }[] = [
+    { key: 'name', label: 'Role Name', type: 'text', placeholder: 'e.g. Expert Markdown Editor', ref: nameInputRef },
+    { key: 'description', label: 'Description (optional)', type: 'text', placeholder: 'Short description shown in the list', ref: descInputRef },
+    { key: 'prompt', label: 'Prompt', type: 'textarea', placeholder: 'You are an expert Markdown editor...', ref: promptTextareaRef },
+  ]
+
   return (
     <div className="modal-backdrop">
       <div className="modal modal-prompt-settings">
@@ -264,41 +271,29 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
         <div className="modal-content prompt-settings-body">
           <div className="prompt-settings-column-left">
             <form onSubmit={handleAddRole} className="prompt-settings-form">
-              <div className="field-group">
-                <label className="field-label">Role Name</label>
-                <input
-                  className="field-input"
-                  type="text"
-                  value={draft.name}
-                  onChange={handleDraftChange('name')}
-                  placeholder="e.g. Expert Markdown Editor"
-                  ref={nameInputRef}
-                />
-              </div>
-
-              <div className="field-group">
-                <label className="field-label">Description (optional)</label>
-                <input
-                  className="field-input"
-                  type="text"
-                  value={draft.description}
-                  onChange={handleDraftChange('description')}
-                  placeholder="Short description shown in the list"
-                  ref={descInputRef}
-                />
-              </div>
-
-              <div className="field-group">
-                <label className="field-label">Prompt</label>
-                <textarea
-                  className="field-textarea"
-                  rows={6}
-                  value={draft.prompt}
-                  onChange={handleDraftChange('prompt')}
-                  placeholder="You are an expert Markdown editor..."
-                  ref={promptTextareaRef}
-                />
-              </div>
+              {ROLE_FORM_FIELDS.map((field) => (
+                <FieldGroup key={field.key} label={field.label}>
+                  {field.type === 'textarea' ? (
+                    <textarea
+                      className="field-textarea"
+                      rows={1}
+                      value={draft[field.key]}
+                      onChange={handleDraftChange(field.key)}
+                      placeholder={field.placeholder}
+                      ref={field.ref}
+                    />
+                  ) : (
+                    <input
+                      className="field-input"
+                      type="text"
+                      value={draft[field.key]}
+                      onChange={handleDraftChange(field.key)}
+                      placeholder={field.placeholder}
+                      ref={field.ref}
+                    />
+                  )}
+                </FieldGroup>
+              ))}
 
               {error && <div className="form-error">{error}</div>}
 
@@ -307,7 +302,7 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
                   Reset Draft
                 </button>
                 <button type="submit" className="ghost primary">
-                  Add 
+                  Add
                 </button>
               </div>
             </form>
@@ -328,11 +323,9 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
                   const isDragging = draggingRoleId === r.id
                   const isInsertPreview = previewTargetId === r.id
                   const isBuiltin = r.builtin
-                  const itemClassName = `provider-item prompt-role-item${
-                    isDragging ? ' prompt-role-item-dragging' : ''
-                  }${isInsertPreview ? ' prompt-role-item-insert-target' : ''}${
-                    isBuiltin ? ' prompt-role-item-builtin' : ''
-                  }`
+                  const itemClassName = `provider-item prompt-role-item${isDragging ? ' prompt-role-item-dragging' : ''
+                    }${isInsertPreview ? ' prompt-role-item-insert-target' : ''}${isBuiltin ? ' prompt-role-item-builtin' : ''
+                    }`
 
                   return (
                     <div
@@ -386,44 +379,44 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
                       {isExpanded && !isBuiltin && (
                         <div className="provider-details">
 
-                  <div className="provider-detail-row">Prompt Preview:</div>
-                  <div className="prompt-preview">
-                    {(() => {
-                      const lines = r.prompt.split(/\r?\n/)
-                      const previewLines = lines.slice(0, 5)
-                      let previewText = previewLines.join('\n')
-                      
-                      // 如果内容超过5行或者总字符数超过300，添加省略号
-                      if (lines.length > 5 || previewText.length > 150) {
-                        // 确保最后显示省略号
-if (previewText.length > 150) {
-                        previewText = previewText.substring(0, 147) + '...'
-                      } else {
-                        previewText += '...'
-                      }
-                      }
-                      
-                      return previewText
-                    })()}
-                  </div>
-                  <div className="provider-actions">
-                    {!isBuiltin && (
-                      <>
-                        <button type="button" className="ghost" onClick={() => handleEditRole(r)}>
-                          Edit Role
-                        </button>
-                        <button
-                          type="button"
-                          className="ghost danger"
-                          onClick={() => handleDeleteRole(r.id)}
-                        >
-                          Delete Role
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
+                          <div className="provider-detail-row">Prompt Preview:</div>
+                          <div className="prompt-preview">
+                            {(() => {
+                              const lines = r.prompt.split(/\r?\n/)
+                              const previewLines = lines.slice(0, 5)
+                              let previewText = previewLines.join('\n')
+
+                              // 如果内容超过5行或者总字符数超过300，添加省略号
+                              if (lines.length > 5 || previewText.length > 150) {
+                                // 确保最后显示省略号
+                                if (previewText.length > 150) {
+                                  previewText = previewText.substring(0, 147) + '...'
+                                } else {
+                                  previewText += '...'
+                                }
+                              }
+
+                              return previewText
+                            })()}
+                          </div>
+                          <div className="provider-actions">
+                            {!isBuiltin && (
+                              <>
+                                <button type="button" className="ghost" onClick={() => handleEditRole(r)}>
+                                  Edit Role
+                                </button>
+                                <button
+                                  type="button"
+                                  className="ghost danger"
+                                  onClick={() => handleDeleteRole(r.id)}
+                                >
+                                  Delete Role
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
