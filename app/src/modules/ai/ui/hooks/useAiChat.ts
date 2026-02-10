@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ChatEntryMode, ConversationState, EntryContext } from '../../domain/chatSession'
 import type { SystemPromptInfo } from '../../application/systemPromptService'
-import type { ProviderType } from '../../domain/types'
+import type { ProviderType, VisionTask } from '../../domain/types'
 import type { ChatSession, StartChatOptions } from '../../application/chatSessionService'
 import { createChatSession } from '../../application/chatSessionService'
 
@@ -18,6 +18,7 @@ export type UseAiChatResult = {
   providerType: ProviderType | null
   error: Error | null
   send: (content: string, options?: { hideUserInView?: boolean }) => Promise<void>
+  sendVisionTask: (task: VisionTask, options?: { hideUserInView?: boolean }) => Promise<void>
   stop: () => void
   stopAndTruncate: (messageId: string, length: number) => void
   changeRole: (roleId: string) => Promise<void>
@@ -127,6 +128,22 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
     [session],
   )
 
+  const sendVisionTask = useCallback(
+    async (task: VisionTask, options?: { hideUserInView?: boolean }) => {
+      if (!session) return
+      setError(null)
+      setLoading(true)
+      try {
+        await session.sendVisionTask(task, { hideInView: options?.hideUserInView })
+      } finally {
+        setLoading(false)
+        setState(session.getState())
+        setSystemPromptInfo(session.getSystemPromptInfo())
+      }
+    },
+    [session],
+  )
+
   const changeRole = useCallback(
     async (roleId: string) => {
       if (!session) return
@@ -180,6 +197,7 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
     providerType,
     error,
     send,
+    sendVisionTask,
     stop,
     stopAndTruncate,
     changeRole,

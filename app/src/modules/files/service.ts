@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { filesConfig } from '../../config/files'
 import type { ErrorCode, FileEntry, FilePayload, RecentFile, Result, ServiceError, WriteResult } from './types'
-import type { BackendCode, BackendError, BackendOk, BackendResult } from '../platform/backendTypes'
+import type { BackendCode, BackendError, BackendResult } from '../platform/backendTypes'
 import { isTauriEnv } from '../platform/runtime'
 
 const isTauri = isTauriEnv

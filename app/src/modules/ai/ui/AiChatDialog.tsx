@@ -1,6 +1,7 @@
 import type { FC, FormEvent, KeyboardEvent, MouseEventHandler, MouseEvent as ReactMouseEvent } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import type { ChatEntryMode, ChatMessageView, EntryContext } from '../domain/chatSession'
+import type { VisionTask } from '../domain/types'
 import { AiChatBody } from './AiChatBody'
 import { useAiChat } from './hooks/useAiChat'
 import { copyTextToClipboard } from '../platform/clipboardService'
@@ -20,6 +21,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
   const [input, setInput] = useState('')
   const [contextPrefix, setContextPrefix] = useState<string | null>(null)
   const [contextPrefixUsed, setContextPrefixUsed] = useState(false)
+  const [attachedImageDataUrl, setAttachedImageDataUrl] = useState<string | null>(null)
   const [isComposing, setIsComposing] = useState(false)
   const [compositionEndTime, setCompositionEndTime] = useState(0)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
@@ -34,7 +36,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     el.style.height = `${next}px`
   }
 
-  const { loading, state, systemPromptInfo, providerType, error, send, stop, stopAndTruncate, changeRole, changeModel, resetError, availableModels, activeModelId } = useAiChat({
+  const { loading, state, systemPromptInfo, providerType, error, send, sendVisionTask, stop, stopAndTruncate, changeRole, changeModel, resetError, availableModels, activeModelId } = useAiChat({
     entryMode,
     initialContext,
     open,
@@ -110,21 +112,44 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     el.setSelectionRange(el.value.length, el.value.length)
   }, [open])
 
+  const DEFAULT_VISION_PROMPT = '根据上下文解析图片'
+
   const doSend = async () => {
     const raw = input
     const trimmed = raw.trim()
-    if (!trimmed && !contextPrefix) return
-    let finalContent = trimmed
+
+    // 没有文字、没有上下文、也没有图片时不发送
+    if (!trimmed && !contextPrefix && !attachedImageDataUrl) return
+
+    const basePrompt =
+      trimmed || (!trimmed && attachedImageDataUrl ? DEFAULT_VISION_PROMPT : '')
+
+    let finalContent = basePrompt
     let hideUserInView = false
+
     if ((entryMode === 'file' || entryMode === 'selection') && contextPrefix && !contextPrefixUsed) {
-      finalContent = trimmed ? `${contextPrefix}\n\n${trimmed}` : contextPrefix
+      finalContent = basePrompt ? `${contextPrefix}\n\n${basePrompt}` : contextPrefix
       setContextPrefixUsed(true)
       setContextPrefix(null)
       hideUserInView = true
     }
     setInput('')
     autoResizeInput()
-    await send(finalContent, hideUserInView ? { hideUserInView: true } : undefined)
+
+    if (attachedImageDataUrl) {
+      const visionTask: VisionTask = {
+        prompt: finalContent,
+        images: [
+          { kind: 'data_url', dataUrl: attachedImageDataUrl },
+        ],
+      }
+      await sendVisionTask(visionTask, hideUserInView ? { hideUserInView: true } : undefined)
+    } else {
+      await send(finalContent, hideUserInView ? { hideUserInView: true } : undefined)
+    }
+
+    // 发送后清空已附加图片
+    setAttachedImageDataUrl(null)
   }
 
   const handleSubmit = async (e: FormEvent) => {
@@ -357,35 +382,39 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
         </div>
         </div>
 
-        <AiChatBody
-          messages={messages}
-          loading={isProcessing}
-          error={error}
-          input={input}
-          onInputChange={(value) => {
-            setInput(value)
-            autoResizeInput()
-          }}
-          onSubmit={handleSubmit}
-          onInputKeyDown={handleInputKeyDown}
-          onCompositionStart={handleCompositionStart}
-          onCompositionEnd={handleCompositionEnd}
-          inputRef={inputRef as React.RefObject<HTMLTextAreaElement>}
-          messagesContainerRef={messagesContainerRef as React.RefObject<HTMLDivElement>}
-          getDisplayContent={getDisplayContent}
-          onCopy={handleCopy}
-          onInsert={handleInsert}
-          onReplace={handleReplace}
-          onSave={handleSave}
-          onStop={handleStop}
-          resetError={resetError}
-          roles={roles}
-          activeRoleId={activeRoleId}
-          onChangeRole={handleChangeRole}
-          models={availableModels}
-          activeModelId={activeModelId}
-          onChangeModel={handleModelChange}
-        />
+          <AiChatBody
+            messages={messages}
+            loading={isProcessing}
+            error={error}
+            input={input}
+            onInputChange={(value) => {
+              setInput(value)
+              autoResizeInput()
+            }}
+            onSubmit={handleSubmit}
+            onInputKeyDown={handleInputKeyDown}
+            onCompositionStart={handleCompositionStart}
+            onCompositionEnd={handleCompositionEnd}
+            inputRef={inputRef as React.RefObject<HTMLTextAreaElement>}
+            messagesContainerRef={messagesContainerRef as React.RefObject<HTMLDivElement>}
+            getDisplayContent={getDisplayContent}
+            onCopy={handleCopy}
+            onInsert={handleInsert}
+            onReplace={handleReplace}
+            onSave={handleSave}
+            onStop={handleStop}
+            resetError={resetError}
+            roles={roles}
+            activeRoleId={activeRoleId}
+            onChangeRole={handleChangeRole}
+            models={availableModels}
+            activeModelId={activeModelId}
+            onChangeModel={handleModelChange}
+            attachedImageDataUrl={attachedImageDataUrl}
+            onAttachImage={(dataUrl) => setAttachedImageDataUrl(dataUrl)}
+            onClearImage={() => setAttachedImageDataUrl(null)}
+          />
+
 
         <div className="ai-chat-drag-handle ai-chat-drag-bottom" onMouseDown={handleDragStart} />
         <div className="ai-chat-drag-handle ai-chat-drag-left" onMouseDown={handleDragStart} />

@@ -1,5 +1,5 @@
 import type { BackendCode } from '../platform/backendTypes'
-import type { Result } from './types'
+import type { Result, ServiceError } from './types'
 import { mergeRecent } from './service'
 
 // 为了避免破坏 service.ts 的封装，这里提供辅助函数给测试使用，
@@ -10,7 +10,7 @@ import { mergeRecent } from './service'
 export { mergeRecent }
 
 // 复制 mapCode 的逻辑用于测试验证映射是否稳定
-export const mapCodeForTest = (code: BackendCode): Result<never>['error']['code'] => {
+export const mapCodeForTest = (code: BackendCode): ServiceError['code'] => {
   switch (code) {
     case 'OK':
       return 'OK'

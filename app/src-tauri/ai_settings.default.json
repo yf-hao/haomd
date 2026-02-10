@@ -41,7 +41,8 @@
       ],
       "default_model_id": "GPT-5.1-chat",
       "description": "不支持图片解析",
-      "provider_type": "dify"
+      "provider_type": "dify",
+      "vision_mode": "none"
     },
     {
       "id": "1770468355767_t8c2rt",
@@ -83,7 +84,8 @@
       ],
       "default_model_id": "qwen3-max",
       "description": null,
-      "provider_type": "openai"
+      "provider_type": "openai",
+      "vision_mode": "openai_image_url"
     }
   ],
   "default_provider_id": "1770483877998_pqac6g"

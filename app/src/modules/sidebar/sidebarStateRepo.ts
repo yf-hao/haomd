@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { BackendCode, BackendError, BackendOk, BackendResult } from '../platform/backendTypes'
+import type { BackendResult } from '../platform/backendTypes'
 import { isTauriEnv } from '../platform/runtime'
 
 export type SidebarState = {

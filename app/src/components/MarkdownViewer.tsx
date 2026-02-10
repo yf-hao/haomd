@@ -112,7 +112,7 @@ function MarkdownViewerComponent(
           // macOS/Linux: haomd://localhost/绝对路径
           // 使用 encodeURIComponent 对每个路径组件进行编码，以支持中文文件名
           const pathParts = absPath.split(/([/\\])/)
-          const encodedParts = pathParts.map((part, index) => {
+          const encodedParts = pathParts.map((part: string) => {
             // 保留分隔符不编码
             if (part === '/' || part === '\\') return part
             // 对路径组件进行编码

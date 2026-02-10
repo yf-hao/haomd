@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { BackendError, BackendResult } from '../platform/backendTypes'
+import type { BackendError } from '../platform/backendTypes'
 import type { RecentFile } from './types'
 import { mergeRecent } from './service'
 

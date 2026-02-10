@@ -1,6 +1,7 @@
 import type { UiProvider } from '../settings'
 import { loadAiSettingsState } from '../settings'
-import type { IStreamingChatClient, ChatMessage, ProviderType } from '../domain/types'
+import type { IStreamingChatClient, ChatMessage, ProviderType, VisionTask } from '../domain/types'
+import { createVisionClientFromProvider } from '../vision/visionClientFactory'
 import {
   type ChatEntryMode,
   type ConversationState,
@@ -31,6 +32,8 @@ export type ChatSession = {
   setActiveRole(roleId: string): Promise<void>
   setActiveModel(modelId: string): Promise<void>
   sendUserMessage(content: string, options?: { hideInView?: boolean }): Promise<void>
+  /** 发送 VisionTask（图 + 文），由底层决定是否使用 Vision Provider 或退回文本流 */
+  sendVisionTask(task: VisionTask, options?: { hideInView?: boolean }): Promise<void>
   stopRunningStream(): void
   stopAndTruncate(messageId: string, length: number): void
   dispose(): void
@@ -133,6 +136,47 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
     }
   }
 
+  async function runVisionStream(assistantId: string, task: VisionTask): Promise<void> {
+    const visionClient = provider ? createVisionClientFromProvider(provider, currentModelId) : null
+    if (!visionClient) {
+      // 当前 Provider 未开启视觉模式：先给出明确提示，再退回到纯文本流（仅使用 prompt）
+      state = appendAssistantChunk(
+        state,
+        assistantId,
+        '当前模型未开启视觉模式，图片内容不会被解析，本次仅按文本问题进行回答。\n\n',
+      )
+      notifyStateChange()
+      await runStreamWithCurrentHistory(assistantId)
+      return
+    }
+
+    try {
+      await visionClient.ask(task, {
+        onChunk: (chunk) => {
+          if (disposed || !chunk.content) return
+          state = appendAssistantChunk(state, assistantId, chunk.content)
+          notifyStateChange()
+        },
+        onComplete: () => {
+          if (disposed) return
+          notifyStateChange()
+        },
+        onError: () => {
+          if (disposed) return
+          notifyStateChange()
+        },
+      })
+    } catch (e) {
+      if (disposed) return
+      console.error('[ChatSession] Vision stream exception:', e)
+    } finally {
+      if (!disposed) {
+        state = completeAssistantMessage(state, assistantId)
+        notifyStateChange()
+      }
+    }
+  }
+
   // 对于 file/selection 入口，若 engineHistory 中已经包含首轮 user 上下文，则立即发起首轮请求
   if (options.entryMode !== 'chat' && state.engineHistory.some((m) => m.role === 'user')) {
     const assistantId = genId()
@@ -203,6 +247,18 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       notifyStateChange()
 
       await runStreamWithCurrentHistory(assistantId)
+    },
+    async sendVisionTask(task: VisionTask, options?: { hideInView?: boolean }): Promise<void> {
+      if (disposed) return
+      const userId = genId()
+      const assistantId = genId()
+
+      // 在 engineHistory/view 中仍然记录文本 prompt，以保持对话上下文
+      state = appendUserInput(state, userId, task.prompt, { hidden: options?.hideInView })
+      state = appendAssistantPlaceholder(state, assistantId)
+      notifyStateChange()
+
+      await runVisionStream(assistantId, task)
     },
     stopRunningStream() {
       if (currentAbortController) {

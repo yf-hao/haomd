@@ -1,6 +1,7 @@
 import type { FC, FormEvent, KeyboardEvent } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import type { ChatEntryMode, EntryContext } from '../domain/chatSession'
+import type { VisionTask } from '../domain/types'
 import { useAiChat } from './hooks/useAiChat'
 import { copyTextToClipboard } from '../platform/clipboardService'
 import { insertMarkdownAtCursorBelow, replaceSelectionWithText, createTabAndInsertContent } from '../platform/editorInsertService'
@@ -19,6 +20,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
   const [input, setInput] = useState('')
   const [contextPrefix, setContextPrefix] = useState<string | null>(null)
   const [contextPrefixUsed, setContextPrefixUsed] = useState(false)
+  const [attachedImageDataUrl, setAttachedImageDataUrl] = useState<string | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const paneRootRef = useRef<HTMLElement>(null)
@@ -34,7 +36,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
     el.style.height = `${next}px`
   }
 
-  const { loading, state, systemPromptInfo, providerType, error, send, stop, stopAndTruncate, changeRole, changeModel, resetError, availableModels, activeModelId } = useAiChat({
+  const { loading, state, systemPromptInfo, providerType, error, send, sendVisionTask, stop, stopAndTruncate, changeRole, changeModel, resetError, availableModels, activeModelId } = useAiChat({
     entryMode,
     initialContext,
     open: true,
@@ -114,17 +116,22 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
     }
   }, [])
 
+  const DEFAULT_VISION_PROMPT = '根据上下文解析图片'
+
   const doSend = async () => {
     const raw = input
     const trimmed = raw.trim()
 
-    if (!trimmed && !contextPrefix) return
+    if (!trimmed && !contextPrefix && !attachedImageDataUrl) return
 
-    let finalContent = trimmed
+    const basePrompt =
+      trimmed || (!trimmed && attachedImageDataUrl ? DEFAULT_VISION_PROMPT : '')
+
+    let finalContent = basePrompt
     let hideUserInView = false
 
     if ((entryMode === 'file' || entryMode === 'selection') && contextPrefix && !contextPrefixUsed) {
-      finalContent = trimmed ? `${contextPrefix}\n\n${trimmed}` : contextPrefix
+      finalContent = basePrompt ? `${contextPrefix}\n\n${basePrompt}` : contextPrefix
       setContextPrefixUsed(true)
       setContextPrefix(null)
       hideUserInView = true
@@ -132,7 +139,19 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
 
     setInput('')
     autoResizeInput()
-    await send(finalContent, hideUserInView ? { hideUserInView: true } : undefined)
+
+    if (attachedImageDataUrl) {
+      const visionTask: VisionTask = {
+        prompt: finalContent,
+        images: [
+          { kind: 'data_url', dataUrl: attachedImageDataUrl },
+        ],
+      }
+      await sendVisionTask(visionTask, hideUserInView ? { hideUserInView: true } : undefined)
+    } else {
+      await send(finalContent, hideUserInView ? { hideUserInView: true } : undefined)
+    }
+    setAttachedImageDataUrl(null)
   }
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -404,6 +423,9 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
           models={availableModels}
           activeModelId={activeModelId}
           onChangeModel={handleModelChange}
+          attachedImageDataUrl={attachedImageDataUrl}
+          onAttachImage={(dataUrl) => setAttachedImageDataUrl(dataUrl)}
+          onClearImage={() => setAttachedImageDataUrl(null)}
         />
       </div>
     </section>

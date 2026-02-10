@@ -8,6 +8,8 @@ export type ProviderDraft = {
   modelsInput: string
   description: string
   providerType: ProviderType | ''
+  /** Vision 模式选择："" 表示自动检测（不写入配置） */
+  visionMode: '' | 'none' | 'openai_image_url'
 }
 
 const emptyDraft: ProviderDraft = {
@@ -17,6 +19,7 @@ const emptyDraft: ProviderDraft = {
   modelsInput: '',
   description: '',
   providerType: '',
+  visionMode: '',
 }
 
 function normalizeProviderName(name: string): string {
@@ -114,7 +117,10 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
 
           if (reallyNewIds.length === 0 && !shouldUpdateApiKeyForThis) return p
 
-          const newModels = reallyNewIds.map((id) => ({ id }))
+          const newModels = reallyNewIds.map((id) => ({
+            id,
+            visionMode: draft.visionMode || undefined,
+          }))
           return {
             ...p,
             apiKey: shouldUpdateApiKeyForThis ? newApiKeyCandidate : p.apiKey,
@@ -139,10 +145,11 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
       name: draft.name.trim(),
       baseUrl: draft.baseUrl.trim(),
       apiKey: draft.apiKey.trim(),
-      models: models.map((m) => ({ id: m })),
+      models: models.map((m) => ({ id: m, visionMode: draft.visionMode || undefined })),
       defaultModelId: models[0],
       description: draft.description.trim() || undefined,
       providerType: (draft.providerType || 'dify') as ProviderType,
+      visionMode: draft.visionMode || undefined,
     }
 
     setSettings((prev) => {
@@ -213,6 +220,25 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
     [],
   )
 
+  const updateModelVisionMode = useCallback(
+    (providerId: string, modelId: string, visionMode: '' | 'none' | 'openai_image_url') => {
+      setSettings((prev) => ({
+        ...prev,
+        providers: prev.providers.map((p) =>
+          p.id !== providerId
+            ? p
+            : {
+                ...p,
+                models: p.models.map((m) =>
+                  m.id !== modelId ? m : { ...m, visionMode: visionMode || undefined },
+                ),
+              },
+        ),
+      }))
+    },
+    [],
+  )
+
   const setDefaultModel = useCallback((providerId: string, modelId: string) => {
     setSettings((prev) => ({
       ...prev,
@@ -233,6 +259,7 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
       modelsInput,
       description: provider.description ?? '',
       providerType: provider.providerType ?? 'dify',
+      visionMode: provider.visionMode && provider.visionMode !== 'auto' ? provider.visionMode : '',
     })
     setExpandedId(provider.id)
     setEditingProviderId(provider.id)
@@ -273,6 +300,7 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
     applyInitialSnapshot,
     updateInitialSnapshot,
     updateModelMaxTokens,
+    updateModelVisionMode,
   }
 }
 

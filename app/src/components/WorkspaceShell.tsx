@@ -147,7 +147,6 @@ export function WorkspaceShell({
   })
 
   const sidebar = useSidebar()
-  const previewTimerRef = useRef<number | null>(null)
   const editorViewRef = useRef<EditorView | null>(null)
 
   const outerGridTemplateColumns = useMemo(() => {
@@ -362,7 +361,6 @@ export function WorkspaceShell({
   }, [activeTab, isTauriEnv])
 
   const {
-    DEFAULT_PATH,
     filePath,
     setFilePath,
     setStatusMessage,
@@ -370,7 +368,6 @@ export function WorkspaceShell({
     setConflictError,
     clearRecentAll,
     save,
-    saveToPath,
     saveAs,
     openFile,
     openFromPath,
@@ -776,7 +773,15 @@ export function WorkspaceShell({
         )}
       </div>
 
-      {conflictError && <ConflictModal error={conflictError} onRetrySave={save} onCancel={() => setConflictError(null)} />}
+      {conflictError && (
+        <ConflictModal
+          error={conflictError}
+          onRetrySave={async () => {
+            await save()
+          }}
+          onCancel={() => setConflictError(null)}
+        />
+      )}
       {confirmDialog && <ConfirmDialog title={confirmDialog.title} message={confirmDialog.message} confirmText={confirmDialog.confirmText} cancelText={confirmDialog.cancelText} extraText={confirmDialog.extraText} variant={confirmDialog.variant} onConfirm={confirmDialog.onConfirm} onExtra={confirmDialog.onExtra} onCancel={() => setConfirmDialog(null)} />}
       {quitConfirmDialog && <ConfirmDialog title={quitConfirmDialog.unsavedCount === 1 ? 'Save changes?' : `Save ${quitConfirmDialog.unsavedCount} files?`} message="Your changes will be lost." confirmText="Save All" cancelText="Cancel" extraText="Don't Save" variant="stacked" onConfirm={quitConfirmDialog.onSaveAll} onExtra={quitConfirmDialog.onQuitWithoutSaving} onCancel={() => setQuitConfirmDialog(null)} />}
       {aiChatMode === 'floating' && aiChatOpen && aiChatState?.open && <AiChatDialog open={aiChatOpen} entryMode={aiChatState.entryMode} initialContext={aiChatState.initialContext} onClose={closeAiChatDialog} />}

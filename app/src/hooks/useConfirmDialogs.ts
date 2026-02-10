@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import type { Result } from '../modules/files/service'
+import type { Result } from '../modules/files/types'
 
 export type ConfirmState = {
   title: string
@@ -48,7 +48,7 @@ export function useQuitConfirmDialog(options: {
 
     if (unsavedTabs.length === 0) {
       if (isTauriEnv()) {
-        window.__TAURI__?.core.invoke('quit_app').catch((err: unknown) => {
+        ;(window as any).__TAURI__?.core.invoke('quit_app').catch((err: unknown) => {
           console.warn('[App] quit_app failed', err)
         })
       } else {
@@ -73,7 +73,7 @@ export function useQuitConfirmDialog(options: {
         }
 
         if (isTauriEnv()) {
-          window.__TAURI__?.core.invoke('quit_app').catch((err: unknown) => {
+          ;(window as any).__TAURI__?.core.invoke('quit_app').catch((err: unknown) => {
             console.warn('[App] quit_app failed', err)
           })
         } else {
@@ -83,7 +83,7 @@ export function useQuitConfirmDialog(options: {
       onQuitWithoutSaving: () => {
         setQuitConfirmDialog(null)
         if (isTauriEnv()) {
-          window.__TAURI__?.core.invoke('quit_app').catch((err: unknown) => {
+          ;(window as any).__TAURI__?.core.invoke('quit_app').catch((err: unknown) => {
             console.warn('[App] quit_app failed', err)
           })
         } else {

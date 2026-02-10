@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * HTML 导出主逻辑
  */

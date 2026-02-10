@@ -5,10 +5,18 @@ export type UiProviderModel = {
   id: string
   /** 每个模型单独可配置的最大回复 token 数 */
   maxTokens?: number
+  /** 模型级 Vision 配置；缺省时继承 Provider / 自动检测 */
+  visionMode?: VisionMode
 }
 
 /** Provider 协议类型，目前支持 Dify 与 OpenAI 兼容接口 */
 export type ProviderType = 'dify' | 'openai'
+
+export type VisionMode =
+  | 'none'             // 不支持图像
+  | 'openai_image_url' // OpenAI / ModelScope 这类 image_url 模式
+  | 'auto'             // 运行时自动检测（根据模型名/Provider 推断）
+  // 后续可扩展: 'upload_then_id' 等
 
 export type UiProvider = {
   id: string
@@ -20,6 +28,8 @@ export type UiProvider = {
   description?: string
   /** Provider 类型，例如 'dify' | 'openai' 等，缺省视为 'dify' */
   providerType?: ProviderType
+  /** Vision 能力模式；缺省或 'auto' 表示自动检测 */
+  visionMode?: VisionMode
 }
 
 export type AiSettingsState = {
@@ -36,6 +46,18 @@ export type DefaultChatConfig = {
   baseUrl: string
   apiKey: string
   model: string
+}
+
+export type ImageSource =
+  | { kind: 'url'; url: string }
+  | { kind: 'data_url'; dataUrl: string }
+  | { kind: 'path'; path: string }
+
+export type VisionTask = {
+  /** 提示词：用户输入或默认 "根据上下文解析图片" */
+  prompt: string
+  /** 支持多张图片，单图场景下长度为 1 */
+  images: ImageSource[]
 }
 
 // Prompt Settings

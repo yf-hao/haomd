@@ -3,7 +3,9 @@ import type {
   FormEvent,
   KeyboardEvent,
   RefObject,
+  ChangeEvent,
 } from 'react'
+import { useRef } from 'react'
 import { MarkdownViewer } from '../../../components/MarkdownViewer'
 import type { ChatMessageView } from '../domain/chatSession'
 
@@ -32,6 +34,12 @@ export interface AiChatBodyProps {
   models?: { id: string; providerName: string }[]
   activeModelId?: string | null
   onChangeModel?: (modelId: string) => void
+  /** 当前输入区已附加的图片（data URL），用于控制发送按钮状态与提示 */
+  attachedImageDataUrl?: string | null
+  /** 选择图片并转换为 data URL 后的回调 */
+  onAttachImage?: (dataUrl: string) => void
+  /** 清除已附加图片 */
+  onClearImage?: () => void
 }
 
 export const AiChatBody: FC<AiChatBodyProps> = ({
@@ -59,7 +67,31 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
   models,
   activeModelId,
   onChangeModel,
+  attachedImageDataUrl,
+  onAttachImage,
+  onClearImage,
 }) => {
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  const handleToolClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) return
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result
+      if (typeof result === 'string') {
+        onAttachImage?.(result)
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
   return (
     <div className="modal-content ai-chat-body">
       <div
@@ -145,9 +177,29 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
           />
           <div className="ai-chat-input-footer">
             <div className="ai-chat-input-tools-left">
-              <button type="button" className="ai-chat-tool-btn" title="更多">
+              <input
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                ref={fileInputRef}
+                onChange={handleFileChange}
+              />
+              <button
+                type="button"
+                className="ai-chat-tool-btn"
+                title="上传图片"
+                onClick={handleToolClick}
+              >
                 <span className="ai-chat-icon-plus" aria-hidden="true" />
               </button>
+              {attachedImageDataUrl && (
+                <span className="ai-chat-input-badge small">
+                  已附加图片
+                  <button type="button" onClick={() => onClearImage?.()}>
+                    清除
+                  </button>
+                </span>
+              )}
               <div className="ai-chat-input-badge ai-chat-role-badge">
                 <span className="ai-chat-icon-chevron-up" aria-hidden="true" />
                 <select
@@ -188,7 +240,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
                   }
                 }}
                 title={loading ? '停止生成' : '发送'}
-                disabled={!loading && !input.trim()}
+                disabled={!loading && !input.trim() && !attachedImageDataUrl}
               >
                 {loading ? (
                   <span className="ai-chat-icon-stop" aria-hidden="true" />

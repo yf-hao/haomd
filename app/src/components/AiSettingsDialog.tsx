@@ -42,6 +42,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
     applyInitialSnapshot,
     updateInitialSnapshot,
     updateModelMaxTokens,
+    updateModelVisionMode,
   } = useAiSettingsState(emptySettings)
 
   // 打开对话框时重置展开状态，确保所有提供商默认不展开
@@ -219,6 +220,14 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
     updateModelMaxTokens(providerId, modelId, Math.floor(num))
   }
 
+  const handleChangeModelVisionMode = (
+    providerId: string,
+    modelId: string,
+    value: '' | 'none' | 'openai_image_url',
+  ) => {
+    updateModelVisionMode(providerId, modelId, value)
+  }
+
   const handleChangeDefaultModel = (providerId: string, modelId: string) => {
     setDefaultModel(providerId, modelId)
   }
@@ -269,6 +278,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
         defaultModelId: models[0],
         description: draft.description.trim() || undefined,
         providerType: (draft.providerType || 'dify') as any,
+        visionMode: draft.visionMode || undefined,
       }
 
       stateToSave = {
@@ -277,7 +287,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
       }
     }
 
-    // 情况 2：已有 Provider，支持在 Save 时根据草稿覆盖 API Key
+    // 情况 2：已有 Provider，支持在 Save 时根据草稿覆盖 API Key / Vision / Type
     if (settings.providers.length && editingProviderId && initialSnapshot) {
       const providerIndex = stateToSave.providers.findIndex((p) => p.id === editingProviderId)
       if (providerIndex !== -1) {
@@ -287,19 +297,21 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
         const oldApiKey = originalProvider.apiKey
         const newApiKeyCandidate = draft.apiKey.trim()
 
-        // 只有当草稿中填写了非空且与旧值不同的 API Key 时才覆盖
-        if (newApiKeyCandidate && newApiKeyCandidate !== oldApiKey) {
-          const updatedProvider: UiProvider = {
-            ...currentProvider,
-            apiKey: newApiKeyCandidate,
-          }
+        const shouldUpdateApiKey = !!newApiKeyCandidate && newApiKeyCandidate !== oldApiKey
 
-          const nextProviders = [...stateToSave.providers]
-          nextProviders[providerIndex] = updatedProvider
-          stateToSave = {
-            ...stateToSave,
-            providers: nextProviders,
-          }
+        const updatedProvider: UiProvider = {
+          ...currentProvider,
+          apiKey: shouldUpdateApiKey ? newApiKeyCandidate : currentProvider.apiKey,
+          // Type 与 Vision 都从草稿同步；空字符串表示“自动/默认”
+          providerType: (draft.providerType || 'dify') as any,
+          visionMode: draft.visionMode || undefined,
+        }
+
+        const nextProviders = [...stateToSave.providers]
+        nextProviders[providerIndex] = updatedProvider
+        stateToSave = {
+          ...stateToSave,
+          providers: nextProviders,
         }
       }
     }
@@ -384,6 +396,20 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
               </div>
 
               <div className="field-group">
+                <label className="field-label">Vision Mode</label>
+                <select
+                  className="field-select"
+                  value={draft.visionMode || ''}
+                  onChange={(e) => updateDraftField('visionMode', e.target.value)}
+                  onFocus={() => setActiveField('visionMode')}
+                >
+                  <option value="">Auto detect (recommended)</option>
+                  <option value="openai_image_url">OpenAI image_url compatible</option>
+                  <option value="none">Disabled (text only)</option>
+                </select>
+              </div>
+
+              <div className="field-group">
                 <label className="field-label">Description</label>
                 <textarea
                   className="field-textarea"
@@ -453,13 +479,21 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                       {isExpanded && (
                         <div className="provider-details">
                           <div className="provider-detail-row">Base URL: {p.baseUrl}</div>
+                          <div className="provider-detail-row">
+                            Vision Mode:{' '}
+                            {p.visionMode === 'openai_image_url'
+                              ? 'OpenAI image_url (images supported)'
+                              : p.visionMode === 'none'
+                              ? 'Disabled (text only)'
+                              : 'Auto detect'}
+                          </div>
                           <div className="provider-detail-row">Models:</div>
                           <ul className="provider-models">
                             {p.models.map((m) => (
                               <li key={m.id} className="provider-model-row">
                                 <span className="provider-model-id">{m.id}</span>
                                 <input
-                                  className="provider-model-max-tokens-input"
+                                  className="field-input provider-model-max-tokens-input"
                                   type="number"
                                   min={1}
                                   placeholder="max tokens"
@@ -468,9 +502,24 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                                     handleChangeModelMaxTokens(p.id, m.id, e.target.value)
                                   }
                                 />
+                                <select
+                                  className="field-select provider-model-vision-select"
+                                  value={m.visionMode || ''}
+                                  onChange={(e) =>
+                                    handleChangeModelVisionMode(
+                                      p.id,
+                                      m.id,
+                                      e.target.value as '' | 'none' | 'openai_image_url',
+                                    )
+                                  }
+                                >
+                                  <option value="">Vision: auto </option>
+                                  <option value="openai_image_url">Vision: image_url</option>
+                                  <option value="none">Vision: disabled</option>
+                                </select>
                                 <button
                                   type="button"
-                                  className="link-button"
+                                  className="ghost tiny ghost-subtle"
                                   onClick={() => handleRemoveModel(p.id, m.id)}
                                 >
                                   Remove

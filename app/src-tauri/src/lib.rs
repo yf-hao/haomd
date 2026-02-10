@@ -155,6 +155,8 @@ struct AiProviderModelCfg {
   id: String,
   #[serde(default)]
   max_tokens: Option<u32>,
+  #[serde(default)]
+  vision_mode: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -170,6 +172,8 @@ struct AiProviderCfg {
   description: Option<String>,
   #[serde(default)]
   provider_type: Option<String>,
+  #[serde(default)]
+  vision_mode: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

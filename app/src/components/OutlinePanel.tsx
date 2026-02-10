@@ -1,5 +1,5 @@
 import type { OutlineItem } from '../modules/outline/parser'
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 
 export type OutlinePanelProps = {
   items: OutlineItem[]

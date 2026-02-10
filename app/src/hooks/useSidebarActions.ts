@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import type { SidebarContextActionPayload } from '../components/Sidebar'
-import type { Result } from '../modules/files/service'
+import type { Result } from '../modules/files/types'
 
 export function useSidebarActions(options: {
   tabs: { id: string; path?: string | null }[]

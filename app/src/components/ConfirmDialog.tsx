@@ -32,7 +32,7 @@ export function ConfirmDialog({
   const [activeIndex, setActiveIndex] = useState<number>(-1)
 
   type ButtonConfig = {
-    ref: React.RefObject<HTMLButtonElement>
+    ref: React.RefObject<HTMLButtonElement | null>
     action: 'confirm' | 'cancel' | 'extra'
   }
 

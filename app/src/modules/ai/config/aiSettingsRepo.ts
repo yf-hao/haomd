@@ -1,11 +1,12 @@
 import { invoke } from '@tauri-apps/api/core'
 import type { BackendResult } from '../../platform/backendTypes'
-import { emptySettings, type AiSettingsState, type DefaultChatConfig, type ProviderType } from '../domain/types'
+import { emptySettings, type AiSettingsState, type DefaultChatConfig, type ProviderType, type VisionMode } from '../domain/types'
 
 // 后端配置类型（与 Rust 侧 AiSettingsCfg 对应）
 export type AiProviderModelCfg = {
   id: string
   max_tokens?: number | null
+  vision_mode?: string | null
 }
 
 export type AiProviderCfg = {
@@ -17,6 +18,7 @@ export type AiProviderCfg = {
   default_model_id?: string | null
   description?: string | null
   provider_type?: string | null
+  vision_mode?: string | null
 }
 
 export type AiSettingsCfg = {
@@ -34,18 +36,31 @@ export function fromCfg(cfg: AiSettingsCfg | null | undefined): AiSettingsState 
         providerType = p.provider_type
       }
 
+      let visionMode: VisionMode | undefined
+      if (p.vision_mode === 'none' || p.vision_mode === 'openai_image_url') {
+        visionMode = p.vision_mode
+      }
+
       return {
         id: p.id,
         name: p.name,
         baseUrl: p.base_url,
         apiKey: p.api_key,
-        models: (p.models ?? []).map((m) => ({
-          id: m.id,
-          maxTokens: m.max_tokens ?? undefined,
-        })),
+        models: (p.models ?? []).map((m) => {
+          let modelVisionMode: VisionMode | undefined
+          if (m.vision_mode === 'none' || m.vision_mode === 'openai_image_url') {
+            modelVisionMode = m.vision_mode
+          }
+          return {
+            id: m.id,
+            maxTokens: m.max_tokens ?? undefined,
+            visionMode: modelVisionMode,
+          }
+        }),
         defaultModelId: p.default_model_id ?? undefined,
         description: p.description ?? undefined,
         providerType,
+        visionMode,
       }
     }),
     defaultProviderId: cfg.default_provider_id ?? undefined,
@@ -62,10 +77,12 @@ export function toCfg(state: AiSettingsState): AiSettingsCfg {
       models: p.models.map((m) => ({
         id: m.id,
         max_tokens: m.maxTokens ?? null,
+        vision_mode: !m.visionMode || m.visionMode === 'auto' ? null : m.visionMode,
       })),
       default_model_id: p.defaultModelId ?? null,
       description: p.description ?? null,
       provider_type: p.providerType ?? null,
+      vision_mode: !p.visionMode || p.visionMode === 'auto' ? null : p.visionMode,
     })),
     default_provider_id: state.defaultProviderId ?? null,
   }
