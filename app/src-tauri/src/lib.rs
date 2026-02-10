@@ -12,8 +12,14 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 use sha2::{Digest, Sha256};
 use arboard::Clipboard;
+use image::{ImageBuffer, Rgba};
+use rand::{distributions::Alphanumeric, Rng};
+use chrono::Local;
+use mime_guess;
+use percent_encoding::percent_decode_str;
+use tauri::http::{Request, Response};
 use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, UriSchemeContext};
 use tokio::fs;
 use tokio::sync::Mutex;
 
@@ -189,6 +195,11 @@ struct PromptSettingsCfg {
   roles: Vec<PromptRoleCfg>,
   #[serde(default)]
   default_role_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct ClipboardImageResult {
+  file_name: String,
 }
 
 // 内置默认 AI 配置，来源于 src-tauri/ai_settings.default.json
@@ -1099,9 +1110,183 @@ async fn open_terminal(cwd: String) -> Result<(), String> {
   Ok(())
 }
 
+#[tauri::command]
+async fn save_clipboard_image_to_dir(
+  target_dir: String,
+  suggested_name: Option<String>,
+) -> ResultPayload<ClipboardImageResult> {
+  let trace = new_trace_id();
+  log::info!("[tauri] save_clipboard_image_to_dir: target_dir={}, suggested_name={:?}", target_dir, suggested_name);
+
+  let normalized_dir = match normalize_path(&target_dir) {
+    Ok(p) => p,
+    Err(e) => return ResultPayload::Err { error: e },
+  };
+
+  if let Err(err) = std::fs::create_dir_all(&normalized_dir) {
+    return err_payload(
+      ErrorCode::IoError,
+      format!("创建图片目录失败: {err}"),
+      trace,
+    );
+  }
+
+  let mut cb = match Clipboard::new() {
+    Ok(c) => c,
+    Err(err) => {
+      return err_payload(
+        ErrorCode::IoError,
+        format!("访问剪贴板失败: {err}"),
+        trace,
+      );
+    }
+  };
+
+  let img = match cb.get_image() {
+    Ok(img) => {
+      log::info!("[tauri] save_clipboard_image_to_dir: got image {}x{}", img.width, img.height);
+      img
+    }
+    Err(err) => {
+      log::error!("[tauri] save_clipboard_image_to_dir: get_image failed: {}", err);
+      return err_payload(
+        ErrorCode::UNSUPPORTED,
+        format!("剪贴板中没有图片或格式不支持: {err}"),
+        trace,
+      );
+    }
+  };
+
+  let width = img.width as u32;
+  let height = img.height as u32;
+
+  let buffer: ImageBuffer<Rgba<u8>, _> = match ImageBuffer::from_raw(width, height, img.bytes.into_owned()) {
+    Some(buf) => buf,
+    None => {
+      return err_payload(
+        ErrorCode::UNSUPPORTED,
+        "图片数据无效",
+        trace,
+      );
+    }
+  };
+
+  // 文件命名规则：image_当前文件名_编号
+  // 这里的 suggested_name 由前端根据当前文件名构造，例如 "image_提示词技巧"
+  let base_name = suggested_name.unwrap_or_else(|| "image".to_string());
+
+  // 依次尝试 base_name_1.png, base_name_2.png ...，直到找到一个不存在的文件名
+  let mut index: u32 = 1;
+  let file_name = loop {
+    let candidate = format!("{}_{}.png", base_name, index);
+    let candidate_path = normalized_dir.join(&candidate);
+    if !candidate_path.exists() {
+      break candidate;
+    }
+    index += 1;
+    if index > 9999 {
+      // 防御性兜底：如果编号过大仍然冲突， fallback 到随机命名
+      let rand_suffix: String = rand::thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(6)
+        .map(char::from)
+        .collect();
+      let timestamp = Local::now().format("%Y%m%d-%H%M%S-%3f");
+      break format!("{}_{}_{}.png", base_name, timestamp, rand_suffix);
+    }
+  };
+
+  let full_path = normalized_dir.join(&file_name);
+  log::info!("[tauri] save_clipboard_image_to_dir: saving to {:?}", full_path);
+  if let Err(err) = buffer.save(&full_path) {
+    log::error!("[tauri] save_clipboard_image_to_dir: save failed: {}", err);
+    return err_payload(
+      ErrorCode::IoError,
+      format!("写入图片失败: {err}"),
+      trace,
+    );
+  }
+
+  log::info!("[tauri] save_clipboard_image_to_dir: ok, file_name={}", file_name);
+  ok(ClipboardImageResult { file_name }, trace)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
+    // 自定义协议 haomd:// 用于访问本地 markdown 图片等用户文件
+    .register_uri_scheme_protocol("haomd", move |_context: UriSchemeContext<tauri::Wry>, _request: Request<Vec<u8>>| {
+      // 从 request 中获取 uri
+      let uri = _request.uri();
+      // uri 可能形如:
+      // - haomd://localhost/Users/xxx/xxx.png (macOS/Linux)
+      // - https://haomd.localhost/Users/xxx/xxx.png (Windows)
+      let raw_path = uri.path();
+      log::info!("[tauri] haomd protocol: raw uri={}, raw_path={}", uri, raw_path);
+
+      // 解码 URL，处理可能的重复编码
+      // 循环解码直到没有 %XX 格式的编码（%25 除外，因为它就是百分号本身）
+      let mut decoded = raw_path.to_string();
+      loop {
+        let new_decoded = percent_decode_str(&decoded)
+          .decode_utf8_lossy()
+          .to_string();
+        if new_decoded == decoded {
+          // 没有变化，解码完成
+          break;
+        }
+        decoded = new_decoded;
+      }
+      log::info!("[tauri] haomd protocol: fully decoded path={}", decoded);
+
+      // raw_path 已经是正确的绝对路径（以 / 开头）
+      let path = std::path::PathBuf::from(&decoded);
+      log::info!("[tauri] haomd protocol: final path={:?}, exists={}", path, path.exists());
+      
+      // 如果文件不存在，尝试列出父目录的内容来调试
+      if !path.exists() {
+        if let Some(parent) = path.parent() {
+          log::info!("[tauri] haomd protocol: listing parent dir {:?}", parent);
+          if let Ok(entries) = std::fs::read_dir(parent) {
+            for entry in entries.flatten() {
+              log::info!("[tauri] haomd protocol: dir entry {:?}", entry.file_name());
+            }
+          }
+        }
+      }
+
+      // 读取文件内容
+      match std::fs::read(&path) {
+        Ok(data) => {
+          log::info!("[tauri] haomd protocol: successfully read file, size={} bytes", data.len());
+          let mime = mime_guess::from_path(&path)
+            .first_or_octet_stream()
+            .to_string();
+
+          match Response::builder()
+            .status(200)
+            .header("Content-Type", mime.as_str())
+            .body(data)
+          {
+            Ok(response) => response,
+            Err(e) => {
+              log::error!("[tauri] haomd protocol: failed to build response: {}", e);
+              Response::builder()
+                .status(500)
+                .body(Vec::new())
+                .unwrap()
+            }
+          }
+        }
+        Err(e) => {
+          log::error!("[tauri] haomd protocol: failed to read file {:?}: {}", path, e);
+          Response::builder()
+            .status(404)
+            .body(Vec::new())
+            .unwrap()
+        }
+      }
+    })
     .setup(|app| {
       let handle = app.handle();
       let log_plugin = tauri_plugin_log::Builder::default()
@@ -1170,15 +1355,36 @@ pub fn run() {
           return;
         }
 
-        // 原生剪贴板粘贴：避免 WebView 的 execCommand 安全限制
+        // 原生剪贴板粘贴：只读取一次剪贴板，同时检查文本和图片
         if action == "paste" {
-          match Clipboard::new().and_then(|mut cb| cb.get_text()) {
-            Ok(text) => {
-              //log::info!("clipboard text length = {}", text.len());
-              let _ = app.emit("native://paste", text);
+          log::info!("[tauri] menu paste triggered");
+          match Clipboard::new() {
+            Ok(mut cb) => {
+              // 先检查文本，如果有文本就走文本粘贴流程
+              match cb.get_text() {
+                Ok(text) if !text.is_empty() => {
+                  log::info!("[tauri] paste: clipboard has text, len={}", text.len());
+                  let _ = app.emit("native://paste", text);
+                }
+                _ => {
+                  // 没有可用文本，再检查图片（只读取一次剪贴板）
+                  log::info!("[tauri] paste: no text, check image");
+                  match cb.get_image() {
+                    Ok(img) => {
+                      log::info!("[tauri] paste: clipboard image detected, size={}x{}", img.width, img.height);
+                      // 发送图片粘贴信号，前端会调用 save_clipboard_image_to_dir 保存图片
+                      let _ = app.emit("native://paste_image", "");
+                    }
+                    Err(err) => {
+                      log::error!("[tauri] paste: clipboard has no usable text or image: {}", err);
+                      let _ = app.emit("native://paste_error", format!("读取剪贴板失败: {err}"));
+                    }
+                  }
+                }
+              }
             }
             Err(err) => {
-             //log::error!("clipboard read error: {err}");
+              log::error!("[tauri] paste: Clipboard::new() failed: {}", err);
               let _ = app.emit("native://paste_error", format!("读取剪贴板失败: {err}"));
             }
           }
@@ -1210,6 +1416,7 @@ pub fn run() {
       load_prompt_settings,
       save_prompt_settings,
       open_terminal,
+      save_clipboard_image_to_dir,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

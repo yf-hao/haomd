@@ -12,7 +12,7 @@ export function useNativePaste(
   useEffect(() => {
     const unPaste = onNativePaste((text) => {
       const view = editorViewRef.current
-      console.log('[native://paste] handler fired, view =', view)
+      console.log('[useNativePaste] native://paste handler fired, view =', view, 'len=', text?.length)
       if (!view || !text) return
 
       // 仅当当前焦点在编辑器内部时，才处理粘贴，避免与其他输入区域（如对话框）冲突

@@ -8,9 +8,10 @@ export type PreviewPaneProps = {
   activeLine: number
   previewWidth: number
   effectiveLayout: LayoutType
+  filePath?: string | null
 }
 
-export function PreviewPane({ value, activeLine, previewWidth, effectiveLayout }: PreviewPaneProps) {
+export function PreviewPane({ value, activeLine, previewWidth, effectiveLayout, filePath }: PreviewPaneProps) {
   const style: CSSProperties = {}
 
   if (effectiveLayout === 'preview-only') {
@@ -31,7 +32,7 @@ export function PreviewPane({ value, activeLine, previewWidth, effectiveLayout }
   return (
     <section className="pane preview" style={style}>
       <div className="preview-body">
-        <MarkdownViewer value={value} activeLine={activeLine} previewWidth={previewWidth} />
+        <MarkdownViewer value={value} activeLine={activeLine} previewWidth={previewWidth} filePath={filePath} />
       </div>
     </section>
   )

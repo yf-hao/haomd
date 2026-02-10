@@ -11,6 +11,7 @@ export function onNativePaste(handler: (text: string) => void): Unlisten {
 
   const setup = async () => {
     const un = await listen<string>('native://paste', (event) => {
+      console.log('[clipboardEvents] native://paste event received, len=', event.payload?.length)
       handler(event.payload)
     })
     if (disposed) {
@@ -39,7 +40,38 @@ export function onNativePasteError(handler: (message: string) => void): Unlisten
 
   const setup = async () => {
     const un = await listen<string>('native://paste_error', (event) => {
+      console.error('[clipboardEvents] native://paste_error:', event.payload)
       handler(event.payload)
+    })
+    if (disposed) {
+      un()
+    } else {
+      unlisten = un
+    }
+  }
+
+  void setup()
+
+  return () => {
+    disposed = true
+    if (unlisten) {
+      unlisten()
+    }
+  }
+}
+
+/**
+ * 监听原生粘贴图片事件（native://paste_image）。
+ * 后端只负责检测剪贴板中是否有图片并发出事件，真正的保存路径由前端决定。
+ */
+export function onNativePasteImage(handler: () => void): Unlisten {
+  let unlisten: Unlisten | undefined
+  let disposed = false
+
+  const setup = async () => {
+    const un = await listen<unknown>('native://paste_image', () => {
+      console.log('[clipboardEvents] native://paste_image event received')
+      handler()
     })
     if (disposed) {
       un()

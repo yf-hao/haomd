@@ -20,10 +20,10 @@ const DiagramsLazy = React.lazy(() => import('./diagrams'))
 
 
 function MarkdownViewerComponent(
-  props: Readonly<{ value: string; activeLine?: number; previewWidth?: number }>
+  props: Readonly<{ value: string; activeLine?: number; previewWidth?: number; filePath?: string | null }>
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const { value, activeLine, previewWidth } = props
+  const { value, activeLine, previewWidth, filePath } = props
 
   const components = useMemo(() => {
     const blockWithAnchor = (Tag: keyof React.JSX.IntrinsicElements) => {
@@ -80,9 +80,57 @@ function MarkdownViewerComponent(
         // 从 alt 文本中移除宽度标记
         const cleanAlt = altText.replace(/\(([\d.]+(?:px|%|rem|vw))\)$/, '').trim()
 
+        // 处理相对路径：如果 src 是相对路径且知道当前文件路径，则转换为 haomd:// 协议的绝对地址
+        const src = props.src || ''
+        let finalSrc = src
+
+        if (filePath && src && !src.startsWith('http://') && !src.startsWith('https://') && !src.startsWith('data:')) {
+          const fileDir = filePath.replace(/[/\\][^/\\]+$/, '')
+          const sep = filePath.includes('\\') ? '\\' : '/'
+
+          // 先算出图片的绝对路径
+          let absPath = src
+          if (src.startsWith('.')) {
+            // 处理 ./ ../ 等相对路径
+            const parts = src.split(/[\/\\]/)
+            let dir = fileDir
+            for (const part of parts) {
+              if (part === '..') {
+                dir = dir.replace(/[/\\][^/\\]+$/, '')
+              } else if (part !== '.') {
+                dir = dir + sep + part
+              }
+            }
+            absPath = dir
+          } else if (!src.match(/^[a-zA-Z]:/)) {
+            // 不是绝对路径，拼接当前文件目录
+            absPath = fileDir + sep + src
+          }
+
+          // 根据平台生成正确的自定义协议 URL
+          // Windows: https://haomd.localhost/绝对路径
+          // macOS/Linux: haomd://localhost/绝对路径
+          // 使用 encodeURIComponent 对每个路径组件进行编码，以支持中文文件名
+          const pathParts = absPath.split(/([/\\])/)
+          const encodedParts = pathParts.map((part, index) => {
+            // 保留分隔符不编码
+            if (part === '/' || part === '\\') return part
+            // 对路径组件进行编码
+            return encodeURIComponent(part)
+          })
+          const encoded = encodedParts.join('')
+          const isWindows = filePath.includes('\\') || navigator.userAgent.includes('Windows')
+          if (isWindows) {
+            finalSrc = `https://haomd.localhost${encoded}`
+          } else {
+            finalSrc = `haomd://localhost${encoded}`
+          }
+        }
+
         return (
           <img
             {...props}
+            src={finalSrc}
             loading="lazy"
             alt={cleanAlt}
             style={{

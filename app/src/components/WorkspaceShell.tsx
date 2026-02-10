@@ -23,8 +23,10 @@ import { useSidebar } from '../hooks/useSidebar'
 import { onOpenRecentFile } from '../modules/platform/menuEvents'
 import { deleteFsEntry } from '../modules/files/service'
 import { useNativePaste } from '../hooks/useNativePaste'
+import { onNativePasteImage } from '../modules/platform/clipboardEvents'
 import type { EditorTab } from '../types/tabs'
 import { openTerminalAt } from '../modules/platform/terminalService'
+import { loadDefaultImagePathStrategyConfig, resolveImageTarget } from '../modules/images/imagePasteStrategy'
 
 // AI Chat persisted settings type
 interface AiChatPersistedSettings {
@@ -581,6 +583,92 @@ export function WorkspaceShell({
 
   useNativePaste(editorViewRef, setStatusMessage)
 
+  // 粘贴图片：通过 native://paste_image 事件桥接（Cmd/Ctrl+V），保存到 images 目录并插入 Markdown 链接
+  useEffect(() => {
+    console.log('[WorkspaceShell] image paste effect mounted')
+    const unlisten = onNativePasteImage(async () => {
+      console.log('[WorkspaceShell] onNativePasteImage fired')
+      const view = editorViewRef.current
+      if (!view) {
+        console.warn('[WorkspaceShell] onNativePasteImage: no editor view')
+        return
+      }
+
+      // 仅当焦点在编辑器内部时才处理粘贴，避免与其他输入框冲突
+      if (typeof document !== 'undefined') {
+        const active = document.activeElement
+        const contains = active ? view.dom.contains(active) : false
+        console.log('[WorkspaceShell] onNativePasteImage: active in editor =', contains)
+        if (active && !contains) {
+          return
+        }
+      }
+
+      if (!filePath) {
+        console.warn('[WorkspaceShell] onNativePasteImage: no filePath, cannot determine images dir')
+        setStatusMessage('当前文件尚未保存，无法确定图片存放目录')
+        return
+      }
+
+      const cfg = loadDefaultImagePathStrategyConfig()
+      const { targetDir, relDir } = resolveImageTarget(filePath, null, cfg)
+      console.log('[WorkspaceShell] onNativePasteImage: resolved targetDir=', targetDir, 'relDir=', relDir)
+
+      // 根据当前文件名构造图片命名前缀：image_当前文件名（去掉扩展名）
+      const fileBaseName = (() => {
+        const pathPart = filePath.split(/[/\\]/).pop() || ''
+        const withoutExt = pathPart.replace(/\.[^./\\]+$/, '')
+        return withoutExt || 'untitled'
+      })()
+      const suggestedName = `image_${fileBaseName}`
+      console.log('[WorkspaceShell] onNativePasteImage: suggestedName =', suggestedName)
+
+      try {
+        const result = await invoke('save_clipboard_image_to_dir', {
+          targetDir,
+          suggestedName,
+        }) as any
+        console.log('[WorkspaceShell] onNativePasteImage: invoke result =', result)
+
+        // 后端返回的是 ResultPayload<T>，形如 { Ok: { data: { file_name }, trace_id }, Err: { error } }
+        const okPart = result && 'Ok' in result ? result.Ok : null
+        if (!okPart) {
+          console.error('[WorkspaceShell] onNativePasteImage: backend returned Err', result?.Err)
+          setStatusMessage(result?.Err?.error?.message || '粘贴图片失败：后端错误')
+          return
+        }
+
+        const fileName = okPart?.data?.file_name as string | undefined
+        if (!fileName) {
+          console.error('[WorkspaceShell] onNativePasteImage: missing file_name in Ok.data')
+          setStatusMessage('粘贴图片失败：后端未返回文件名')
+          return
+        }
+
+        const relPath = `${relDir}/${fileName}`
+        const snippet = `
+![图片](${relPath})
+`
+        console.log('[WorkspaceShell] onNativePasteImage: inserting snippet', snippet)
+
+        const { state } = view
+        const { from, to } = state.selection.main
+        view.dispatch(state.update({
+          changes: { from, to, insert: snippet },
+          selection: { anchor: from + snippet.length },
+          scrollIntoView: true,
+        }))
+      } catch (err) {
+        console.error('[WorkspaceShell] onNativePasteImage: invoke failed', err)
+        setStatusMessage(`粘贴图片失败：${String(err)}`)
+      }
+    })
+
+    return () => {
+      unlisten()
+    }
+  }, [editorViewRef, filePath, setStatusMessage])
+
   const scrollEditorToLineCenter = useCallback((line: number, searchText?: string) => {
     const view = editorViewRef.current
     if (!view) return
@@ -669,7 +757,7 @@ export function WorkspaceShell({
                 <section className="pane" style={effectiveLayout === 'preview-only' ? { display: 'none' } : effectiveLayout === 'preview-left' ? { gridColumn: '2/3' } : effectiveLayout === 'preview-right' ? { gridColumn: '1/2' } : { gridColumn: '1/-1' }}>
                   <Suspense fallback={<div className="code-editor" />}><EditorPaneLazy markdown={markdown} onChange={handleMarkdownChange} onCursorChange={setActiveLine} showPreview={showPreview} setShowPreview={setShowPreview} editorViewRef={editorViewRef} /></Suspense>
                 </section>
-                <Suspense fallback={<section className="pane preview"><div className="preview-body" /></section>}><PreviewPaneLazy value={previewValue} activeLine={activeLine} previewWidth={previewWidthForRender} effectiveLayout={effectiveLayout} /></Suspense>
+                <Suspense fallback={<section className="pane preview"><div className="preview-body" /></section>}><PreviewPaneLazy value={previewValue} activeLine={activeLine} previewWidth={previewWidthForRender} effectiveLayout={effectiveLayout} filePath={filePath} /></Suspense>
                 {(effectiveLayout === 'preview-left' || effectiveLayout === 'preview-right') && (
                   <div className={`divider-hotzone ${dragging ? 'active' : ''}`} style={{ left: effectiveLayout === 'preview-left' ? `${previewWidthForRender}%` : `${100 - previewWidthForRender}%` }} onMouseDown={startDragging}>
                     <div className="divider-rail"><span className="divider-handle" /></div>
