@@ -415,14 +415,46 @@
   background: rgba(255, 255, 255, 0.06);
 }
 
-.tree-row.dir .tree-icon {
-  width: 14px;
+.tree-row.dir .tree-icon,
+.sidebar-folder-row .tree-icon {
+  width: 16px;
   text-align: center;
 }
 
 .tree-row.file .tree-icon {
   width: 14px;
   text-align: center;
+}
+
+/* File Browser 文件夹三角形（CSS 绘制），便于统一控制大小 */
+.tree-row.dir .tree-icon-chevron,
+.sidebar-folder-row .tree-icon-chevron {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+
+.tree-row.dir .tree-icon-chevron::before,
+.sidebar-folder-row .tree-icon-chevron::before {
+  content: '';
+  display: block;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  /* 加粗一点：高约 10px、宽约 7px，更醒目 */
+  border-width: 5px 0 5px 7px;
+  /* 使用固定的高亮颜色，而不是跟随文字颜色，增强对比度 */
+  border-color: transparent transparent transparent #e5e7eb; /* 向右的三角 */
+  transform-origin: 50% 50%;
+  transition: transform 0.12s ease-out;
+}
+
+.tree-row.dir .tree-icon-chevron.expanded::before,
+.sidebar-folder-row .tree-icon-chevron.expanded::before {
+  transform: rotate(90deg); /* 展开时向下 */
 }
 
 .tree-row.file.active {

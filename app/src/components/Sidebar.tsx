@@ -53,7 +53,10 @@ function TreeNode({ node, level, expanded, onToggle, onFileClick, activePath, on
           style={{ paddingLeft }}
           onClick={() => onToggle(node.path)}
         >
-          <span className="tree-icon">{isExpanded ? '▾' : '▸'}</span>
+          <span
+            className={`tree-icon tree-icon-chevron ${isExpanded ? 'expanded' : 'collapsed'}`}
+            aria-hidden="true"
+          />
           <span className="tree-name">{node.name}</span>
         </div>
         {isExpanded &&
@@ -329,7 +332,10 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                         }}
                         title={rootPath}
                       >
-                        <span className="tree-icon">{isExpandedRoot ? '▾' : '▸'}</span>
+                        <span
+                          className={`tree-icon tree-icon-chevron ${isExpandedRoot ? 'expanded' : 'collapsed'}`}
+                          aria-hidden="true"
+                        />
                         <span className="tree-name">{name}</span>
                       </div>
                       {isExpandedRoot && children.length > 0 && (
