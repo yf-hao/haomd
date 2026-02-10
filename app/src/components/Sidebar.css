@@ -425,9 +425,14 @@
   text-align: center;
 }
 
-.tree-row.active {
+.tree-row.file.active {
   background: rgba(90, 216, 166, 0.12);
   color: #e8ecf5;
+}
+
+.tree-row.dir.active {
+  background: transparent;
+  color: #c4ccee;
 }
 
 .tree-name {

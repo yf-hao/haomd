@@ -345,10 +345,7 @@
   background: rgba(255, 255, 255, 0.06);
 }
 
-.sidebar-folder-row.active {
-  background: rgba(90, 216, 166, 0.12);
-  color: #e8ecf5;
-}
+
 
 .tree-row {
   display: flex;
@@ -858,6 +855,55 @@ button.ghost.primary {
   outline: none;
 }
 
+/* Modal button styles */
+.modal-btn {
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 80px;
+}
+
+.modal-btn:focus-visible,
+.modal-btn:focus {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.5);
+}
+
+.modal-btn.primary {
+  border: 1px solid #5c7cfa;
+  background: linear-gradient(135deg, #5c7cfa, #62c3ff);
+  color: #0a0c12;
+}
+
+.modal-btn.secondary {
+  background: rgba(148, 163, 184, 0.24);
+  color: #e5e7eb;
+}
+
+.modal-btn.tertiary {
+  background: transparent;
+  color: #e5e7eb;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.modal-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.modal-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
 /* Modal Styles */
 .modal-backdrop {
   position: fixed;
@@ -977,7 +1023,7 @@ button.ghost.primary {
 }
 
 .modal-actions-stacked .modal-btn.tertiary {
-  background: transparent;
+  background: #fff2;
   color: #e5e7eb;
 }
 

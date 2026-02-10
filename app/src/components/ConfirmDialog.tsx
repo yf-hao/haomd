@@ -25,6 +25,7 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const isStacked = variant === 'stacked' || Boolean(extraText)
 
+  const modalRef = useRef<HTMLDivElement | null>(null)
   const confirmRef = useRef<HTMLButtonElement | null>(null)
   const cancelRef = useRef<HTMLButtonElement | null>(null)
   const extraRef = useRef<HTMLButtonElement | null>(null)
@@ -117,9 +118,10 @@ export function ConfirmDialog({
   return (
     <div className="modal-backdrop" onClick={onCancel}>
       <div
+        ref={modalRef}
         className={`modal modal-confirm ${isStacked ? 'modal-stacked' : ''}`}
         onClick={(e) => e.stopPropagation()}
-        tabIndex={-1}
+        tabIndex={0}
         onKeyDown={handleKeyDown}
       >
         <div className="modal-title">{title}</div>
@@ -155,22 +157,22 @@ export function ConfirmDialog({
               </button>
             </>
           ) : (
-            <>
-              <button
-                ref={cancelRef}
-                className="ghost"
-                onClick={onCancel}
-              >
-                {cancelText}
-              </button>
-              <button
-                ref={confirmRef}
-                className="ghost primary"
-                onClick={onConfirm}
-              >
-                {confirmText}
-              </button>
-            </>
+<>
+            <button
+              ref={cancelRef}
+              className="modal-btn tertiary"
+              onClick={onCancel}
+            >
+              {cancelText}
+            </button>
+            <button
+              ref={confirmRef}
+              className="modal-btn primary"
+              onClick={onConfirm}
+            >
+              {confirmText}
+            </button>
+          </>
           )}
         </div>
       </div>

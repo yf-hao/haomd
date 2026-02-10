@@ -456,7 +456,7 @@ export function WorkspaceShell({
     setMarkdown(content)
     setPreviewValue(content)
     setActiveLine(1)
-    updateActiveContent(content)
+    updateActiveContent(content, { markDirty: false })
   }, [updateActiveContent])
 
   const openFileInNewTab = useCallback(async (path: string) => {
@@ -464,7 +464,7 @@ export function WorkspaceShell({
     const resp = await openFromPath(path)
     if (resp.ok) {
       const tab = createTab({ path: resp.data.path, content: '' })
-      updateTabContent(tab.id, resp.data.content)
+      updateTabContent(tab.id, resp.data.content, { markDirty: false })
       setMarkdown(resp.data.content)
       setPreviewValue(resp.data.content)
       setActiveLine(1)

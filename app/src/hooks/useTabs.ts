@@ -97,14 +97,15 @@ export function useTabs(options?: UseTabsOptions) {
   )
 
   const updateTabContent = useCallback(
-    (id: string, content: string) => {
+    (id: string, content: string, options?: { markDirty?: boolean }) => {
+      const shouldMarkDirty = options?.markDirty ?? true
       setTabs((prev) =>
         prev.map((t) =>
           t.id === id
             ? {
                 ...t,
                 content,
-                dirty: true,
+                dirty: shouldMarkDirty ? true : t.dirty,
               }
             : t,
         ),
@@ -114,9 +115,9 @@ export function useTabs(options?: UseTabsOptions) {
   )
 
   const updateActiveContent = useCallback(
-    (content: string) => {
+    (content: string, options?: { markDirty?: boolean }) => {
       if (!activeId) return
-      updateTabContent(activeId, content)
+      updateTabContent(activeId, content, options)
     },
     [activeId, updateTabContent],
   )
