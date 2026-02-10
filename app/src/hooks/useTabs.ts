@@ -96,12 +96,11 @@ export function useTabs(options?: UseTabsOptions) {
     [activeId],
   )
 
-  const updateActiveContent = useCallback(
-    (content: string) => {
-      if (!activeId) return
+  const updateTabContent = useCallback(
+    (id: string, content: string) => {
       setTabs((prev) =>
         prev.map((t) =>
-          t.id === activeId
+          t.id === id
             ? {
                 ...t,
                 content,
@@ -111,7 +110,15 @@ export function useTabs(options?: UseTabsOptions) {
         ),
       )
     },
-    [activeId],
+    [],
+  )
+
+  const updateActiveContent = useCallback(
+    (content: string) => {
+      if (!activeId) return
+      updateTabContent(activeId, content)
+    },
+    [activeId, updateTabContent],
   )
 
   const updateActiveMeta = useCallback(
@@ -207,6 +214,7 @@ export function useTabs(options?: UseTabsOptions) {
     closeTab,
     closeCurrentTab,
     getUnsavedTabs,
+    updateTabContent,
     updateActiveContent,
     updateActiveMeta,
   }

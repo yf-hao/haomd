@@ -132,6 +132,7 @@ export function WorkspaceShell({
     closeTab,
     closeCurrentTab,
     getUnsavedTabs,
+    updateTabContent,
     updateActiveContent,
     updateActiveMeta,
   } = useTabs({
@@ -462,11 +463,14 @@ export function WorkspaceShell({
     if (isCreatingTab) return { ok: false } as any
     const resp = await openFromPath(path)
     if (resp.ok) {
-      createTab({ path: resp.data.path, content: resp.data.content })
-      applyOpenedContent(resp.data.content)
+      const tab = createTab({ path: resp.data.path, content: '' })
+      updateTabContent(tab.id, resp.data.content)
+      setMarkdown(resp.data.content)
+      setPreviewValue(resp.data.content)
+      setActiveLine(1)
     }
     return resp
-  }, [isCreatingTab, createTab, openFromPath, applyOpenedContent])
+  }, [isCreatingTab, openFromPath, createTab, updateTabContent, setMarkdown, setPreviewValue, setActiveLine])
 
   const openFileFromSidebar = useCallback(async (path: string) => {
     if (isCreatingTab) return { ok: false } as any
