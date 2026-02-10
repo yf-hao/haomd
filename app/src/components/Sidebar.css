@@ -395,7 +395,7 @@
 }
 
 .sidebar-folder-row.active {
-  background: rgba(90, 216, 166, 0.12);
+  background: transparent;
   color: #e8ecf5;
 }
 

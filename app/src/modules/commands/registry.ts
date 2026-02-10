@@ -235,6 +235,19 @@ function createClipboardCommands(ctx: StatusContext): CommandRegistry {
         ctx.setStatusMessage('复制未生效')
       }
     },
+    cut: () => {
+      if (typeof document !== 'undefined') {
+        try {
+          const ok = document.execCommand('cut')
+          if (!ok) ctx.setStatusMessage('剪切未生效')
+        } catch (err) {
+          console.warn('execCommand cut failed', err)
+          ctx.setStatusMessage('剪切未生效')
+        }
+      } else {
+        ctx.setStatusMessage('剪切未生效')
+      }
+    },
   }
 }
 

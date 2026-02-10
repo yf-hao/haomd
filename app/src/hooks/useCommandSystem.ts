@@ -177,6 +177,9 @@ export function useCommandSystem(params: CommandSystemParams) {
       } else if (key === 'c') {
         // 额外兜底一次复制命令，避免某些环境下系统菜单未生效
         void dispatchAction('copy')
+      } else if (key === 'x') {
+        // 额外兜底一次剪切命令，避免某些环境下系统菜单未生效
+        void dispatchAction('cut')
       } else if (key === 'h') {
         if (e.altKey) {
           e.preventDefault()
