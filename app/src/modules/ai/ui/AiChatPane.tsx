@@ -194,10 +194,38 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
 
   const [visibleLengths, setVisibleLengths] = useState<Record<string, number>>({})
   const isDifyProvider = providerType === 'dify'
+  const streamingAssistantIds = messages
+    .filter((m) => m.role === 'assistant' && m.streaming)
+    .map((m) => m.id)
+    .join(',')
+  const animationKey = !isDifyProvider ? 'off' : streamingAssistantIds || 'idle'
 
   useEffect(() => {
     if (!isDifyProvider) {
       setVisibleLengths({})
+      return
+    }
+
+    // 先确保所有已完成的助手消息在打字机模式下也是“全量显示”的，
+    // 避免在切换模型时对历史消息重新做打字动画。
+    setVisibleLengths((prev) => {
+      const next: Record<string, number> = { ...prev }
+      for (const msg of messages) {
+        if (msg.role !== 'assistant') continue
+        if (msg.streaming) continue
+        const fullLen = msg.content.length
+        if (fullLen === 0) continue
+        const current = next[msg.id]
+        if (current === undefined || current < fullLen) {
+          next[msg.id] = fullLen
+        }
+      }
+      return next
+    })
+
+    // 当前没有需要打字机动画的消息（没有 streaming 的助手消息），
+    // 直接退出，不启动 requestAnimationFrame 循环。
+    if (animationKey === 'idle') {
       return
     }
 
@@ -210,6 +238,8 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
       lastTime = time
       const deltaChars = Math.max(1, Math.round((deltaMs / 1000) * stepPerSecond))
 
+      let hasNextFrame = false
+
       setVisibleLengths((prev) => {
         let changed = false
         const next: Record<string, number> = { ...prev }
@@ -219,20 +249,32 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
           const fullLen = msg.content.length
           if (fullLen === 0) continue
 
-          const current = next[msg.id] ?? 0
-          if (current >= fullLen) continue
+          const base = msg.streaming ? next[msg.id] ?? 0 : next[msg.id] ?? fullLen
+          if (base >= fullLen) continue
 
-          const target = Math.min(fullLen, current + deltaChars)
-          if (target !== current) {
+          const target = Math.min(fullLen, base + deltaChars)
+          if (target !== base) {
             next[msg.id] = target
             changed = true
           }
+
+          if (target < fullLen) {
+            hasNextFrame = true
+          }
         }
 
-        return changed ? next : prev
+        // 如果本轮没有任何变化，也不再继续调度下一帧
+        if (!changed) {
+          hasNextFrame = false
+          return prev
+        }
+
+        return next
       })
 
-      frameId = window.requestAnimationFrame(tick)
+      if (hasNextFrame) {
+        frameId = window.requestAnimationFrame(tick)
+      }
     }
 
     frameId = window.requestAnimationFrame(tick)
@@ -242,7 +284,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
         window.cancelAnimationFrame(frameId)
       }
     }
-  }, [isDifyProvider, messageSource])
+  }, [animationKey, messageSource])
 
   const getDisplayContent = (msgId: string, full: string, streaming?: boolean) => {
     if (!isDifyProvider || full.length === 0 || !state) return full
