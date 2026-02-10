@@ -340,8 +340,7 @@
   height: 6px;
   border-left: 1.2px solid currentColor;
   border-top: 1.2px solid currentColor;
-  transform: rotate(45deg);
-  margin-top: 2px;
+  transform: rotate(-135deg);
 }
 
 

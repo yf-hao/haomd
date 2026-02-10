@@ -9,7 +9,7 @@ export type StandaloneFileItem = {
 
 export type SidebarContextTargetKind = 'standalone-file' | 'folder-root' | 'tree-file' | 'tree-dir'
 
-export type SidebarContextAction = 'open' | 'remove' | 'delete'
+export type SidebarContextAction = 'open' | 'remove' | 'delete' | 'open-terminal'
 
 export type SidebarContextActionPayload = {
   path: string
@@ -36,9 +36,10 @@ type TreeNodeProps = {
   onToggle: (path: string) => void
   onFileClick: (path: string) => void
   activePath?: string | null
+  onContextMenu?: (event: any, target: { path: string; kind: SidebarContextTargetKind }) => void
 }
 
-function TreeNode({ node, level, expanded, onToggle, onFileClick, activePath }: TreeNodeProps) {
+function TreeNode({ node, level, expanded, onToggle, onFileClick, activePath, onContextMenu }: TreeNodeProps) {
   const isExpanded = !!expanded[node.path]
   const isActive = activePath === node.path
 
@@ -65,6 +66,7 @@ function TreeNode({ node, level, expanded, onToggle, onFileClick, activePath }: 
               onToggle={onToggle}
               onFileClick={onFileClick}
               activePath={activePath}
+              onContextMenu={onContextMenu}
             />
           ))}
       </div>
@@ -76,6 +78,12 @@ function TreeNode({ node, level, expanded, onToggle, onFileClick, activePath }: 
       className={`tree-row file ${isActive ? 'active' : ''}`}
       style={{ paddingLeft }}
       onClick={() => onFileClick(node.path)}
+      onContextMenu={(e) => {
+        if (!onContextMenu) return
+        e.preventDefault()
+        e.stopPropagation()
+        onContextMenu(e, { path: node.path, kind: 'tree-file' })
+      }}
     >
       <span className="tree-icon">📝</span>
       <span className="tree-name">{node.name}</span>
@@ -97,7 +105,19 @@ function SidebarContextMenu({ x, y, target, onAction, onRequestClose }: SidebarC
 
   useEffect(() => {
     const menuWidth = 200
-    const itemCount = target.kind === 'standalone-file' ? 3 : 2
+    const isStandaloneFile = target.kind === 'standalone-file'
+    const isFileTarget = target.kind === 'standalone-file' || target.kind === 'tree-file'
+    const isFolderRoot = target.kind === 'folder-root'
+
+    // 基础项：Open + Open in Terminal
+    let itemCount = 2
+    // 文件类型：增加 Delete…
+    if (isFileTarget) itemCount += 1
+    // 独立文件：增加 Remove from File List
+    if (isStandaloneFile) itemCount += 1
+    // 根文件夹：增加 Remove Folder
+    if (isFolderRoot) itemCount += 1
+
     const menuHeight = itemCount * 28 + 8
 
     let left = x
@@ -152,32 +172,36 @@ function SidebarContextMenu({ x, y, target, onAction, onRequestClose }: SidebarC
   }
 
   return (
-    <div
-      ref={menuRef}
-      className="sidebar-context-menu"
-      style={{ left: position.left, top: position.top }}
-      role="menu"
-      onClick={(e) => e.stopPropagation()}
-    >
-      <button type="button" role="menuitem" onClick={() => handleClickItem('open')}>
-        Open
-      </button>
-      {target.kind === 'standalone-file' && (
-        <>
-          <button type="button" role="menuitem" onClick={() => handleClickItem('remove')}>
-            Remove from File List
-          </button>
+      <div
+        ref={menuRef}
+        className="sidebar-context-menu"
+        style={{ left: position.left, top: position.top }}
+        role="menu"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button type="button" role="menuitem" onClick={() => handleClickItem('open')}>
+          Open
+        </button>
+        <button type="button" role="menuitem" onClick={() => handleClickItem('open-terminal')}>
+          Open in Terminal
+        </button>
+        {(target.kind === 'standalone-file' || target.kind === 'tree-file') && (
           <button type="button" role="menuitem" onClick={() => handleClickItem('delete')}>
             Delete…
           </button>
-        </>
-      )}
-      {target.kind === 'folder-root' && (
-        <button type="button" role="menuitem" onClick={() => handleClickItem('remove')}>
-          Remove Folder
-        </button>
-      )}
-    </div>
+        )}
+        {target.kind === 'standalone-file' && (
+          <button type="button" role="menuitem" onClick={() => handleClickItem('remove')}>
+            Remove from File List
+          </button>
+        )}
+        {target.kind === 'folder-root' && (
+          <button type="button" role="menuitem" onClick={() => handleClickItem('remove')}>
+            Remove Folder
+          </button>
+        )}
+      </div>
+
   )
 }
 
@@ -204,11 +228,30 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
     closeMenu()
   }
 
+  const handleTreeNodeContextMenu = (event: any, target: { path: string; kind: SidebarContextTargetKind }) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setMenuState({
+      visible: true,
+      x: event.clientX,
+      y: event.clientY,
+      target,
+    })
+  }
+
   const asideStyle = panelWidth ? { width: panelWidth } : undefined
 
   if (!hasTree && !hasStandalone) {
     return (
-      <aside className="sidebar" style={asideStyle} onClick={closeMenu} onContextMenu={closeMenu}>
+      <aside
+        className="sidebar"
+        style={asideStyle}
+        onClick={closeMenu}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          closeMenu()
+        }}
+      >
         <div className="sidebar-header">
           <div className="pane-title">File Browser</div>
         </div>
@@ -218,7 +261,15 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
   }
 
   return (
-    <aside className="sidebar" style={asideStyle} onClick={closeMenu} onContextMenu={closeMenu}>
+    <aside
+      className="sidebar"
+      style={asideStyle}
+      onClick={closeMenu}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        closeMenu()
+      }}
+    >
       <div className="sidebar-header">
         <div className="pane-title">File Browser</div>
       </div>
@@ -292,6 +343,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                               onToggle={onToggle}
                               onFileClick={onFileClick}
                               activePath={activePath}
+                              onContextMenu={handleTreeNodeContextMenu}
                             />
                           ))}
                         </div>

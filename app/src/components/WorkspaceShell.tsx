@@ -24,6 +24,7 @@ import { onOpenRecentFile } from '../modules/platform/menuEvents'
 import { deleteFsEntry } from '../modules/files/service'
 import { useNativePaste } from '../hooks/useNativePaste'
 import type { EditorTab } from '../types/tabs'
+import { openTerminalAt } from '../modules/platform/terminalService'
 
 // AI Chat persisted settings type
 interface AiChatPersistedSettings {
@@ -503,8 +504,9 @@ export function WorkspaceShell({
 
   const handleSidebarContextAction = useCallback(async (payload: SidebarContextActionPayload) => {
     const { path, kind, action } = payload
-    if (action === 'open') await openFileFromSidebar(path)
-    else if (action === 'remove') {
+    if (action === 'open') {
+      await openFileFromSidebar(path)
+    } else if (action === 'remove') {
       if (kind === 'standalone-file') sidebar.removeStandaloneFile(path)
       else sidebar.removeFolderRoot(path)
     } else if (action === 'delete') {
@@ -521,8 +523,44 @@ export function WorkspaceShell({
           }
         }
       })
+    } else if (action === 'open-terminal') {
+      // 对文件：取所在目录；对文件夹：直接使用其自身路径
+      const computeDirFromPath = (targetPath: string): string => {
+        if (!targetPath) return targetPath
+
+        // 记住原始分隔符风格（Windows: \\，POSIX: /）
+        const hasBackslash = targetPath.includes('\\')
+
+        // 统一成 POSIX 风格便于处理
+        const normalized = targetPath.replace(/[\\/]/g, '/')
+        const lastSlash = normalized.lastIndexOf('/')
+
+        // 没有分隔符，或者只有根（比如 "/"），直接返回原路径
+        if (lastSlash <= 0) {
+          return targetPath
+        }
+
+        // 取目录部分（会保留开头的 "/" 或盘符前缀中的 "/"）
+        let dir = normalized.slice(0, lastSlash)
+
+        // 如果原路径是 Windows 风格，用 "\\" 还原
+        if (hasBackslash) {
+          dir = dir.replace(/\//g, '\\')
+        }
+
+        return dir
+      }
+
+      const cwd = kind === 'standalone-file' || kind === 'tree-file'
+        ? computeDirFromPath(path)
+        : path
+
+      const result = await openTerminalAt(cwd)
+      if (!result.ok && result.message) {
+        setStatusMessage(result.message)
+      }
     }
-  }, [openFileFromSidebar, sidebar, closeTabsByPath])
+  }, [openFileFromSidebar, sidebar, closeTabsByPath, setStatusMessage])
 
   useEffect(() => {
     const unlisten = onOpenRecentFile(path => openRecentFileInNewTab(path))

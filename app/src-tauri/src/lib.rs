@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
+use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 mod fs_types;
@@ -1051,6 +1052,53 @@ async fn save_prompt_settings(app: AppHandle, cfg: PromptSettingsCfg) -> ResultP
   }
 }
 
+#[tauri::command]
+async fn open_terminal(cwd: String) -> Result<(), String> {
+  use std::path::Path;
+
+  if cwd.trim().is_empty() {
+    return Err("cwd is empty".to_string());
+  }
+
+  let path = Path::new(&cwd);
+  if !path.exists() {
+    return Err(format!("目录不存在: {}", cwd));
+  }
+  if !path.is_dir() {
+    return Err(format!("不是目录: {}", cwd));
+  }
+
+  #[cfg(target_os = "macos")]
+  {
+    // 关键：把目标目录作为参数传给 `open`，让 Terminal 在该目录启动
+    Command::new("open")
+      .arg("-a")
+      .arg("Terminal")
+      .arg(&cwd)
+      .spawn()
+      .map_err(|e| format!("无法启动 Terminal: {e}"))?;
+  }
+
+  #[cfg(target_os = "windows")]
+  {
+    Command::new("cmd")
+      .args(["/C", "start"])
+      .current_dir(path)
+      .spawn()
+      .map_err(|e| format!("无法启动终端: {e}"))?;
+  }
+
+  #[cfg(target_os = "linux")]
+  {
+    Command::new("x-terminal-emulator")
+      .current_dir(path)
+      .spawn()
+      .map_err(|e| format!("无法启动终端: {e}"))?;
+  }
+
+  Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -1161,6 +1209,7 @@ pub fn run() {
       save_ai_settings,
       load_prompt_settings,
       save_prompt_settings,
+      open_terminal,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
