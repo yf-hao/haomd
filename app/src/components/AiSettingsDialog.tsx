@@ -434,9 +434,14 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                           {isDefault ? '●' : '○'}
                         </button>
                         <div className="provider-main">
-                          <div className="provider-name">{p.name}</div>
+                          <div className="provider-name-row">
+                            <div className="provider-name">{p.name}</div>
+                            <div className="provider-default-model">
+                              {p.defaultModelId ? `Default: ${p.defaultModelId}` : ''}
+                            </div>
+                          </div>
                           <div className="provider-sub">
-                            {p.defaultModelId ? `Default Model: ${p.defaultModelId}` : 'No default model'}
+                            Base URL: {p.baseUrl}
                           </div>
                         </div>
                         <button
@@ -450,15 +455,6 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
 
                       {isExpanded && (
                         <div className="provider-details">
-                          <div className="provider-detail-row">Base URL: {p.baseUrl}</div>
-                          <div className="provider-detail-row">
-                            Vision Mode:{' '}
-                            {p.visionMode === 'openai_image_url'
-                              ? 'OpenAI image_url (images supported)'
-                              : p.visionMode === 'none'
-                                ? 'Disabled (text only)'
-                                : 'Auto detect'}
-                          </div>
                           <div className="provider-detail-row">Models:</div>
                           <ul className="provider-models">
                             {p.models.map((m) => (
@@ -485,9 +481,8 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                                     )
                                   }
                                 >
-                                  <option value="">Vision: auto </option>
-                                  <option value="openai_image_url">Vision: image_url</option>
-                                  <option value="none">Vision: disabled</option>
+                                  <option value="">Vision: disabled</option>
+                                  <option value="openai_image_url">Vision: enabled</option>
                                 </select>
                                 <button
                                   type="button"
@@ -500,19 +495,19 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                             ))}
                           </ul>
 
-                          <FieldGroup label="Default Model" inline>
+                          <div className="provider-detail-row default-model-row">
                             <select
-                              className="field-select"
+                              className="field-select provider-model-select"
                               value={p.defaultModelId ?? ''}
                               onChange={(e) => handleChangeDefaultModel(p.id, e.target.value)}
                             >
                               {p.models.map((m) => (
                                 <option key={m.id} value={m.id}>
-                                  {m.id}
+                                  Default Model: {m.id}
                                 </option>
                               ))}
                             </select>
-                          </FieldGroup>
+                          </div>
 
                           <div className="provider-actions">
                             <button

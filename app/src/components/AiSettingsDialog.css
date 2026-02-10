@@ -377,8 +377,29 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 460px;
+  max-height: 560px;
   overflow-y: auto;
+  /* 自定义滚动条样式 */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.5) transparent;
+}
+
+/* Webkit 滚动条样式 */
+.providers-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.providers-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.providers-list::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.5);
+  border-radius: 4px;
+}
+
+.providers-list::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(148, 163, 184, 0.7);
 }
 
 .provider-item {
@@ -402,15 +423,34 @@
   min-width: 0;
 }
 
+.provider-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .provider-name {
   font-size: 13px;
   font-weight: 500;
   color: #e5e7eb;
 }
 
-.provider-sub {
-  font-size: 12px;
+.provider-default-model {
+  font-size: 11px;
   color: #9ca3af;
+  background: rgba(96, 165, 250, 0.15);
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  border-radius: 4px;
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+
+.provider-sub {
+  font-size: 11px;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .provider-default-dot {
@@ -440,7 +480,7 @@
 }
 
 .provider-details {
-  padding: 8px 10px 10px;
+  padding: 6px 10px 8px;
   border-top: 1px solid rgba(15, 23, 42, 0.9);
   background: rgba(15, 23, 42, 0.96);
 }
@@ -448,23 +488,59 @@
 .provider-detail-row {
   font-size: 12px;
   color: #9ca3af;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 
 .provider-models {
   list-style: none;
   margin: 4px 0 0;
-  padding: 0;
+  padding: 8px;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  max-height: 160px;
+  overflow-y: auto;
+  background: rgba(30, 41, 59, 0.6);
+  border-radius: 6px;
+  border: 1px solid rgba(71, 85, 105, 0.4);
+  /* 自定义滚动条样式 */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.5) transparent;
+}
+
+/* Webkit 滚动条样式 */
+.provider-models::-webkit-scrollbar {
+  width: 6px;
+}
+
+.provider-models::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.provider-models::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.5);
+  border-radius: 3px;
+}
+
+.provider-models::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(148, 163, 184, 0.7);
 }
 
 .provider-model-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) auto minmax(0, 1.4fr) auto;
+  grid-template-columns: minmax(0, 1fr) 84px 110px auto;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  padding: 6px 8px;
+  background: rgba(15, 23, 42, 0.4);
+  border-radius: 4px;
+  border: 1px solid rgba(71, 85, 105, 0.2);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.provider-model-row:hover {
+  background: rgba(30, 64, 175, 0.15);
+  border-color: rgba(59, 130, 246, 0.3);
 }
 
 .provider-model-id {
@@ -476,7 +552,7 @@
 }
 
 .provider-model-max-tokens-input {
-  width: 96px;
+  width: 84px;
   padding-inline: 6px;
   -moz-appearance: textfield;
 }
@@ -489,8 +565,22 @@
 }
 
 .provider-model-vision-select {
-  min-width: 170px;
+  min-width: 110px;
   font-size: 12px;
+}
+
+.default-model-row {
+  margin: 6px 0 4px;
+}
+
+.provider-model-select {
+  width: 100%;
+  font-size: 12px;
+  padding: 4px 8px;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(71, 85, 105, 0.4);
+  border-radius: 4px;
+  color: #e5e7eb;
 }
 
 /* 更柔和的删除按钮，和整体 Ghost 风格一致 */
@@ -534,7 +624,7 @@ button.ghost.ghost-subtle:hover {
   padding-top: 10px;
 }
 
-.field-group.inline > .field-select {
+.field-group.inline>.field-select {
   min-width: 140px;
 }
 
