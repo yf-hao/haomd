@@ -1,7 +1,6 @@
 import type { FC, FormEvent, KeyboardEvent, MouseEventHandler, MouseEvent as ReactMouseEvent } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import type { ChatEntryMode, ChatMessageView, EntryContext } from '../domain/chatSession'
-import type { VisionTask } from '../domain/types'
 import { AiChatBody } from './AiChatBody'
 import { useAiChat } from './hooks/useAiChat'
 import { copyTextToClipboard } from '../platform/clipboardService'
@@ -42,8 +41,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     systemPromptInfo,
     providerType,
     error,
-    send,
-    sendVisionTask,
+    sendMessage,
     stop,
     stopAndTruncate,
     changeRole,
@@ -132,51 +130,19 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     el.setSelectionRange(el.value.length, el.value.length)
   }, [open, providerType])
 
-  const DEFAULT_VISION_PROMPT = '解析图片并根据上下文回复'
-
   const doSend = async () => {
-    const raw = input
-    const trimmed = raw.trim()
-    const isDify = providerType === 'dify'
-    const hasAttachments = isDify ? pendingAttachments.length > 0 : !!attachedImageDataUrl
-
-    console.warn('[AiChatDialog] doSend', { providerType, isDify, hasAttachments, pendingCount: pendingAttachments.length })
-
-    // 没有文字、没有上下文、也没有图片时不发送
-    if (!trimmed && !contextPrefix && !hasAttachments) return
-
-    const basePrompt =
-      trimmed || (!trimmed && hasAttachments ? DEFAULT_VISION_PROMPT : '')
-
-    let finalContent = basePrompt
-    let hideUserInView = false
-
-    if ((entryMode === 'file' || entryMode === 'selection') && contextPrefix && !contextPrefixUsed) {
-      finalContent = basePrompt ? `${contextPrefix}\n\n${basePrompt}` : contextPrefix
-      setContextPrefixUsed(true)
-      setContextPrefix(null)
-      hideUserInView = true
-    }
+    await sendMessage(input, {
+      contextPrefix,
+      contextPrefixUsed,
+      onContextUsed: () => {
+        setContextPrefixUsed(true)
+        setContextPrefix(null)
+      },
+      attachedImageDataUrl,
+      onClearAttachedImage: () => setAttachedImageDataUrl(null),
+    })
     setInput('')
     autoResizeInput()
-
-    if (attachedImageDataUrl && !isDify) {
-      const visionTask: VisionTask = {
-        prompt: finalContent,
-        images: [
-          { kind: 'data_url', dataUrl: attachedImageDataUrl },
-        ],
-      }
-      await sendVisionTask(visionTask, hideUserInView ? { hideUserInView: true } : undefined)
-    } else {
-      // 这里的 send 在 useAiChat 中已经被增强，会自动带上 pendingAttachments
-      await send(finalContent, hideUserInView ? { hideUserInView: true } : undefined)
-    }
-
-    // 发送后清空已附加图片 (传统方案)
-    if (!isDify) {
-      setAttachedImageDataUrl(null)
-    }
   }
 
   const handleSubmit = async (e: FormEvent) => {
@@ -246,47 +212,104 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
 
   const isDifyProvider = providerType === 'dify'
 
+  // 核心改进：打字机动画不仅仅取决于“网络是否正在流式传输”，还取决于“打字机是否追上了内容”。
+  // 这样可以确保在网络流结束后的最后一小段文字也能平滑打完，且切换模型时状态更稳定。
+  const isTypewriterRunning = isDifyProvider && messages.some(
+    (msg) => msg.role === 'assistant' && (
+      msg.streaming || (visibleLengths[msg.id] !== undefined && visibleLengths[msg.id] < msg.content.length)
+    )
+  )
+
+  const streamingIds = messages
+    .filter((m) => m.role === 'assistant' && m.streaming)
+    .map((m) => m.id)
+    .join(',')
+
+  const animationKey = !isDifyProvider ? 'off' : (isTypewriterRunning ? `active:${streamingIds}` : 'idle')
+
   useEffect(() => {
     if (!isDifyProvider) {
-      setVisibleLengths({})
       return
     }
+
+    // 先确保所有已完成的助手消息在打字机模式下也是“全量显示”的，
+    // 避免在切换模型时对历史消息重新做打字动画。
+    setVisibleLengths((prev) => {
+      const next: Record<string, number> = { ...prev }
+      for (const msg of messages) {
+        if (msg.role !== 'assistant') continue
+        if (msg.streaming) continue
+        const fullLen = msg.content.length
+        if (fullLen === 0) continue
+        const current = next[msg.id]
+        if (current === undefined || current < fullLen) {
+          next[msg.id] = fullLen
+        }
+      }
+      return next
+    })
+
+    if (animationKey === 'idle') {
+      return
+    }
+
     let frameId: number | null = null
     let lastTime = performance.now()
     const stepPerSecond = 60
+
     const tick = (time: number) => {
       const deltaMs = time - lastTime
       lastTime = time
       const deltaChars = Math.max(1, Math.round((deltaMs / 1000) * stepPerSecond))
+
+      let hasNextFrame = false
+
       setVisibleLengths((prev) => {
         let changed = false
         const next: Record<string, number> = { ...prev }
+
         for (const msg of messages) {
           if (msg.role !== 'assistant') continue
           const fullLen = msg.content.length
           if (fullLen === 0) continue
-          const current = next[msg.id] ?? 0
-          if (current >= fullLen) continue
-          const target = Math.min(fullLen, current + deltaChars)
-          if (target !== current) {
+
+          const base = msg.streaming ? next[msg.id] ?? 0 : next[msg.id] ?? fullLen
+          if (base >= fullLen) continue
+
+          const target = Math.min(fullLen, base + deltaChars)
+          if (target !== base) {
             next[msg.id] = target
             changed = true
           }
+
+          if (target < fullLen) {
+            hasNextFrame = true
+          }
         }
+
         return changed ? next : prev
       })
-      frameId = window.requestAnimationFrame(tick)
+
+      if (hasNextFrame) {
+        frameId = window.requestAnimationFrame(tick)
+      }
     }
+
     frameId = window.requestAnimationFrame(tick)
+
     return () => {
       if (frameId !== null) window.cancelAnimationFrame(frameId)
     }
-  }, [isDifyProvider, messageSource])
+  }, [animationKey, messageSource, isDifyProvider])
 
   const getDisplayContent = (msgId: string, full: string, streaming?: boolean) => {
     if (!isDifyProvider || full.length === 0 || !state) return full
     const visible = visibleLengths[msgId]
-    if (visible === undefined) return streaming ? '' : full
+    if (visible === undefined) {
+      // 关键修复：如果是已经结束的消息（非 streaming），且 visibleLengths 中没有记录，
+      // 说明是刚刚从非 Dify 模式切过来的历史消息，应直接全量显示，不触发打字机。
+      return streaming ? '' : full
+    }
     const length = Math.max(0, Math.min(full.length, visible))
     return full.slice(0, length)
   }
@@ -331,15 +354,20 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
   }, [dragging])
 
   const isStreamingUI = isDifyProvider && messages.some(
-    (msg) => msg.role === 'assistant' && (visibleLengths[msg.id] ?? 0) < msg.content.length
+    (msg) => msg.role === 'assistant' && (msg.streaming || (visibleLengths[msg.id] !== undefined && visibleLengths[msg.id] < msg.content.length))
   )
   const isProcessing = loading || isStreamingUI
 
   const handleStop = () => {
-    const activeMsg = messages.find(m => m.role === 'assistant' && (m.streaming || (visibleLengths[m.id] ?? 0) < m.content.length))
+    // 找到当前正在“吐出”的消息（无论是网络流还是打字机流）
+    const activeMsg = messages.find(m => m.role === 'assistant' && (m.streaming || (visibleLengths[m.id] !== undefined && visibleLengths[m.id] < m.content.length)))
     if (activeMsg) {
-      const currentLen = visibleLengths[activeMsg.id] ?? 0
-      stopAndTruncate(activeMsg.id, currentLen)
+      if (isDifyProvider) {
+        const currentLen = visibleLengths[activeMsg.id] ?? 0
+        stopAndTruncate(activeMsg.id, currentLen)
+      } else {
+        stop()
+      }
     } else {
       stop()
     }

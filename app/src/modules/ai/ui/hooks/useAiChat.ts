@@ -18,6 +18,16 @@ export type UseAiChatResult = {
   providerType: ProviderType | null
   error: Error | null
   send: (content: string, options?: { hideUserInView?: boolean }) => Promise<void>
+  sendMessage: (
+    input: string,
+    options?: {
+      contextPrefix?: string | null
+      contextPrefixUsed?: boolean
+      onContextUsed?: () => void
+      attachedImageDataUrl?: string | null
+      onClearAttachedImage?: () => void
+    },
+  ) => Promise<void>
   sendVisionTask: (task: VisionTask, options?: { hideUserInView?: boolean }) => Promise<void>
   stop: () => void
   stopAndTruncate: (messageId: string, length: number) => void
@@ -212,6 +222,72 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
     [session],
   )
 
+  const DEFAULT_VISION_PROMPT = '解析图片并根据上下文回复图片中内容的含义'
+
+  const sendMessage = useCallback(
+    async (
+      input: string,
+      options?: {
+        contextPrefix?: string | null;
+        contextPrefixUsed?: boolean;
+        onContextUsed?: () => void;
+        attachedImageDataUrl?: string | null;
+        onClearAttachedImage?: () => void;
+      }
+    ) => {
+      if (!session) return
+      setError(null)
+
+      const raw = input
+      const trimmed = raw.trim()
+      const isDify = providerType === 'dify'
+      const hasAttachments = isDify ? pendingAttachments.length > 0 : !!options?.attachedImageDataUrl
+
+      // 没有文字、没有上下文、也没有图片时不发送
+      if (!trimmed && !options?.contextPrefix && !hasAttachments) return
+
+      const basePrompt = trimmed || (hasAttachments ? DEFAULT_VISION_PROMPT : '')
+
+      let finalContent = basePrompt
+      let hideUserInView = false
+
+      if (options?.contextPrefix && !options?.contextPrefixUsed) {
+        finalContent = basePrompt ? `${options.contextPrefix}\n\n${basePrompt}` : options.contextPrefix
+        options.onContextUsed?.()
+        hideUserInView = true
+      }
+
+      setLoading(true)
+      try {
+        if (options?.attachedImageDataUrl && !isDify) {
+          const visionTask: VisionTask = {
+            prompt: finalContent,
+            images: [{ kind: 'data_url', dataUrl: options.attachedImageDataUrl }],
+          }
+          await session.sendVisionTask(visionTask, { hideInView: hideUserInView })
+          options.onClearAttachedImage?.()
+        } else {
+          await session.sendUserMessage(finalContent, {
+            hideInView: hideUserInView,
+            attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined,
+          })
+          setPendingAttachments([])
+        }
+      } catch (e) {
+        const error = e as Error
+        if (error.name !== 'AbortError') {
+          console.error('[useAiChat] sendMessage error:', e)
+          setError(error)
+        }
+      } finally {
+        setLoading(false)
+        setState(session.getState())
+        setSystemPromptInfo(session.getSystemPromptInfo())
+      }
+    },
+    [session, providerType, pendingAttachments],
+  )
+
   const stop = useCallback(() => {
     console.log('[useAiChat] stop called', { hasSession: !!session })
     if (session) {
@@ -240,6 +316,7 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
     providerType,
     error,
     send,
+    sendMessage,
     sendVisionTask,
     stop,
     stopAndTruncate,

@@ -168,9 +168,10 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
             if (disposed) return
             notifyStateChange()
           },
-          onError: () => {
+          onError: (err: Error) => {
             if (disposed) return
             notifyStateChange()
+            throw err
           },
         },
       )
@@ -179,6 +180,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       const error = e as Error
       if (error.name !== 'AbortError') {
         console.error('[ChatSession] Stream exception:', e)
+        throw error
       }
     } finally {
       if (!disposed) {

@@ -1,7 +1,6 @@
 import type { FC, FormEvent, KeyboardEvent } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import type { ChatEntryMode, EntryContext } from '../domain/chatSession'
-import type { VisionTask } from '../domain/types'
 import { useAiChat } from './hooks/useAiChat'
 import { copyTextToClipboard } from '../platform/clipboardService'
 import { insertMarkdownAtCursorBelow, replaceSelectionWithText, createTabAndInsertContent } from '../platform/editorInsertService'
@@ -42,8 +41,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
     systemPromptInfo,
     providerType,
     error,
-    send,
-    sendVisionTask,
+    sendMessage,
     stop,
     stopAndTruncate,
     changeRole,
@@ -135,47 +133,19 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
     }
   }, [])
 
-  const DEFAULT_VISION_PROMPT = '解析图片并根据上下文回复图片中内容的含义，回复时不要包含无用的额外文字，直接给出答案'
-
   const doSend = async () => {
-    const raw = input
-    const trimmed = raw.trim()
-    const isDify = providerType === 'dify'
-    const hasAttachments = isDify ? pendingAttachments.length > 0 : !!attachedImageDataUrl
-
-    if (!trimmed && !contextPrefix && !hasAttachments) return
-
-    const basePrompt =
-      trimmed || (!trimmed && hasAttachments ? DEFAULT_VISION_PROMPT : '')
-
-    let finalContent = basePrompt
-    let hideUserInView = false
-
-    if ((entryMode === 'file' || entryMode === 'selection') && contextPrefix && !contextPrefixUsed) {
-      finalContent = basePrompt ? `${contextPrefix}\n\n${basePrompt}` : contextPrefix
-      setContextPrefixUsed(true)
-      setContextPrefix(null)
-      hideUserInView = true
-    }
-
+    await sendMessage(input, {
+      contextPrefix,
+      contextPrefixUsed,
+      onContextUsed: () => {
+        setContextPrefixUsed(true)
+        setContextPrefix(null)
+      },
+      attachedImageDataUrl,
+      onClearAttachedImage: () => setAttachedImageDataUrl(null),
+    })
     setInput('')
     autoResizeInput()
-
-    if (attachedImageDataUrl && !isDify) {
-      const visionTask: VisionTask = {
-        prompt: finalContent,
-        images: [
-          { kind: 'data_url', dataUrl: attachedImageDataUrl },
-        ],
-      }
-      await sendVisionTask(visionTask, hideUserInView ? { hideUserInView: true } : undefined)
-    } else {
-      await send(finalContent, hideUserInView ? { hideUserInView: true } : undefined)
-    }
-
-    if (!isDify) {
-      setAttachedImageDataUrl(null)
-    }
   }
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -238,15 +208,27 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
 
   const [visibleLengths, setVisibleLengths] = useState<Record<string, number>>({})
   const isDifyProvider = providerType === 'dify'
-  const streamingAssistantIds = messages
+
+  // 核心改进：打字机动画不仅仅取决于“网络是否正在流式传输”，还取决于“打字机是否追上了内容”。
+  // 这样可以确保在网络流结束后的最后一小段文字也能平滑打完，且切换模型时状态更稳定。
+  const isTypewriterRunning = isDifyProvider && messages.some(
+    (msg) => msg.role === 'assistant' && (
+      msg.streaming || (visibleLengths[msg.id] !== undefined && visibleLengths[msg.id] < msg.content.length)
+    )
+  )
+
+  const streamingIds = messages
     .filter((m) => m.role === 'assistant' && m.streaming)
     .map((m) => m.id)
     .join(',')
-  const animationKey = !isDifyProvider ? 'off' : streamingAssistantIds || 'idle'
+
+  const animationKey = !isDifyProvider ? 'off' : (isTypewriterRunning ? `active:${streamingIds}` : 'idle')
 
   useEffect(() => {
     if (!isDifyProvider) {
-      setVisibleLengths({})
+      // 切换到非 Dify 模式时，不再暴力清空 visibleLengths。
+      // 因为 getDisplayContent 已经有 !isDifyProvider 的判断，所以保留缓存是安全的，
+      // 且能防止切回 Dify 时因全量清空导致的“重新输出”。
       return
     }
 
@@ -334,6 +316,8 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
     if (!isDifyProvider || full.length === 0 || !state) return full
     const visible = visibleLengths[msgId]
     if (visible === undefined) {
+      // 关键修复：对于已完成的历史消息，即便 visibleLengths 还未建立，也应直接展示全量，
+      // 避免从 OpenAI 切换回 Dify 时导致历史记录重新“打”一遍。
       return streaming ? '' : full
     }
     const length = Math.max(0, Math.min(full.length, visible))
@@ -341,7 +325,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
   }
 
   const isStreamingUI = isDifyProvider && messages.some(
-    (msg) => msg.role === 'assistant' && (visibleLengths[msg.id] ?? 0) < msg.content.length
+    (msg) => msg.role === 'assistant' && (msg.streaming || (visibleLengths[msg.id] !== undefined && visibleLengths[msg.id] < msg.content.length))
   )
   const isProcessing = loading || isStreamingUI
 
@@ -349,8 +333,12 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
     // 找到当前正在“吐出”的消息（无论是网络流还是打字机流）
     const activeMsg = messages.find(m => m.role === 'assistant' && (m.streaming || (visibleLengths[m.id] ?? 0) < m.content.length))
     if (activeMsg) {
-      const currentLen = visibleLengths[activeMsg.id] ?? 0
-      stopAndTruncate(activeMsg.id, currentLen)
+      if (isDifyProvider) {
+        const currentLen = visibleLengths[activeMsg.id] ?? 0
+        stopAndTruncate(activeMsg.id, currentLen)
+      } else {
+        stop()
+      }
     } else {
       stop()
     }
