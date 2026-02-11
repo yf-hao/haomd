@@ -306,8 +306,6 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
       }
       charBudget -= Math.max(0, deltaChars)
 
-      let hasNextFrame = false
-
       setVisibleLengths((prev) => {
         let changed = false
         const next: Record<string, number> = { ...prev }
@@ -338,12 +336,8 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
               next[msg.id] = target
               changed = true
             }
-            if (target < fullLen) {
-              hasNextFrame = true
-            }
           } else {
             // 虽然本帧由于 speed 限制没产生新字符，但任务未完成，仍需下一帧
-            hasNextFrame = true
           }
         }
 

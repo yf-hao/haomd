@@ -27,19 +27,7 @@ import type { EditorTab } from '../types/tabs'
 import { openTerminalAt } from '../modules/platform/terminalService'
 import { loadDefaultImagePathStrategyConfig, resolveImageTarget } from '../modules/images/imagePasteStrategy'
 
-// AI Chat persisted settings type
-interface AiChatPersistedSettings {
-  mode: 'floating' | 'docked'
-  dockSide: 'left' | 'right'
-  isOpen: boolean
-  /** legacy single-width field, kept for backward compatibility */
-  width?: number
-  /** docked AI Chat width when docked on the left side */
-  widthLeft?: number
-  /** docked AI Chat width when docked on the right side */
-  widthRight?: number
-}
-
+// AI Chat localStorage keys
 const STORAGE_AI_MODE = 'haomd:aiChat:mode'
 const STORAGE_AI_DOCK_SIDE = 'haomd:aiChat:dockSide'
 const STORAGE_AI_OPEN = 'haomd:aiChat:isOpen'
