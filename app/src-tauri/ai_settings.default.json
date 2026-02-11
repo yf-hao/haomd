@@ -85,7 +85,7 @@
       "default_model_id": "qwen3-max",
       "description": null,
       "provider_type": "openai",
-      "vision_mode": "openai_image_url"
+      "vision_mode": "enabled"
     }
   ],
   "default_provider_id": "1770483877998_pqac6g"

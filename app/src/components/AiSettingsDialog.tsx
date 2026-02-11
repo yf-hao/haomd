@@ -232,7 +232,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
   const handleChangeModelVisionMode = (
     providerId: string,
     modelId: string,
-    value: '' | 'none' | 'openai_image_url',
+    value: '' | 'none' | 'enabled',
   ) => {
     updateModelVisionMode(providerId, modelId, value)
   }
@@ -388,7 +388,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                   onFocus={() => setActiveField('visionMode')}
                 >
                   <option value="">Auto detect (recommended)</option>
-                  <option value="openai_image_url">OpenAI image_url compatible</option>
+                  <option value="enabled">OpenAI image_url compatible</option>
                   <option value="none">Disabled (text only)</option>
                 </select>
               </FieldGroup>
@@ -477,12 +477,12 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                                     handleChangeModelVisionMode(
                                       p.id,
                                       m.id,
-                                      e.target.value as '' | 'none' | 'openai_image_url',
+                                      e.target.value as '' | 'none' | 'enabled',
                                     )
                                   }
                                 >
                                   <option value="">Vision: disabled</option>
-                                  <option value="openai_image_url">Vision: enabled</option>
+                                  <option value="enabled">Vision: enabled</option>
                                 </select>
                                 <button
                                   type="button"

@@ -2,7 +2,6 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { EditorView } from '@codemirror/view'
 import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
-import { Store } from '@tauri-apps/plugin-store'
 import { ConflictModal } from './ConflictModal'
 import { ConfirmDialog } from './ConfirmDialog'
 import { TabBar } from './TabBar'
@@ -33,8 +32,19 @@ interface AiChatPersistedSettings {
   mode: 'floating' | 'docked'
   dockSide: 'left' | 'right'
   isOpen: boolean
+  /** legacy single-width field, kept for backward compatibility */
   width?: number
+  /** docked AI Chat width when docked on the left side */
+  widthLeft?: number
+  /** docked AI Chat width when docked on the right side */
+  widthRight?: number
 }
+
+const STORAGE_AI_MODE = 'haomd:aiChat:mode'
+const STORAGE_AI_DOCK_SIDE = 'haomd:aiChat:dockSide'
+const STORAGE_AI_OPEN = 'haomd:aiChat:isOpen'
+const STORAGE_AI_WIDTH_LEFT = 'haomd:aiChat:widthLeft'
+const STORAGE_AI_WIDTH_RIGHT = 'haomd:aiChat:widthRight'
 
 const EditorPaneLazy = lazy(() =>
   import('./EditorPane').then((m) => ({ default: m.EditorPane }))
@@ -86,11 +96,13 @@ export function WorkspaceShell({
   const [aiChatMode, setAiChatMode] = useState<'floating' | 'docked'>('docked')
   const [aiChatOpen, setAiChatOpen] = useState(false)
   const [aiChatDockSide, setAiChatDockSide] = useState<'left' | 'right'>('right')
-  const [aiChatWidth, setAiChatWidth] = useState(380)
+  const [aiChatWidthLeft, setAiChatWidthLeft] = useState(400)
+  const [aiChatWidthRight, setAiChatWidthRight] = useState(400)
   const [isAiChatResizing, setIsAiChatResizing] = useState(false)
 
   const aiChatResizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
-  const aiChatStoreRef = useRef<any>(null)
+  const aiChatFirstSaveRef = useRef(true)
+  const aiChatPrevDockSideRef = useRef<'left' | 'right'>(aiChatDockSide)
 
   // Other States
   const [activeOutlineId, setActiveOutlineId] = useState<string | null>(null)
@@ -149,66 +161,99 @@ export function WorkspaceShell({
   const sidebar = useSidebar()
   const editorViewRef = useRef<EditorView | null>(null)
 
+  const aiChatWidth = aiChatDockSide === 'left' ? aiChatWidthLeft : aiChatWidthRight
+
   const outerGridTemplateColumns = useMemo(() => {
     const aiChatCol = `${aiChatWidth}px`
-    if (aiChatMode === 'docked' && aiChatOpen) {
+    // 只有在 docked + 打开 + 有有效会话状态时，才为 AI Chat 预留布局空间
+    if (aiChatMode === 'docked' && aiChatOpen && aiChatState) {
       if (aiChatDockSide === 'left') {
         return `${aiChatCol} 1fr`
       }
       return `1fr ${aiChatCol}`
     }
     return '1fr'
-  }, [aiChatMode, aiChatOpen, aiChatDockSide, aiChatWidth])
+  }, [aiChatMode, aiChatOpen, aiChatDockSide, aiChatWidth, aiChatState])
 
   const handleAiChatResizeStart = useCallback((event: any) => {
-    aiChatResizeStateRef.current = { startX: event.clientX, startWidth: aiChatWidth }
+    const currentWidth = aiChatDockSide === 'left' ? aiChatWidthLeft : aiChatWidthRight
+    aiChatResizeStateRef.current = { startX: event.clientX, startWidth: currentWidth }
     setIsAiChatResizing(true)
     event.preventDefault()
     event.stopPropagation()
-  }, [aiChatWidth])
+  }, [aiChatDockSide, aiChatWidthLeft, aiChatWidthRight])
 
-  // AI Chat Persistence
+  // AI Chat Persistence：使用 localStorage 记住模式 / 位置 / 打开状态 / 左右宽度
   useEffect(() => {
-    const loadAiStore = async () => {
-      if (typeof window !== 'undefined' && (window as any).__TAURI__) {
-        try {
-          if (!aiChatStoreRef.current) {
-            aiChatStoreRef.current = await (Store as any).load('ai-chat-state.dat')
-          }
-          const state = await aiChatStoreRef.current.get('aiChatState') as AiChatPersistedSettings
-          if (state) {
-            if (state.mode) setAiChatMode(state.mode)
-            if (state.dockSide) setAiChatDockSide(state.dockSide)
-            setAiChatOpen(!!state.isOpen)
-            if (state.width) setAiChatWidth(state.width)
-          }
-        } catch (e) {
-          console.error('Failed to load AI Chat state', e)
-        }
+    try {
+      if (typeof localStorage === 'undefined') return
+
+      const storedMode = localStorage.getItem(STORAGE_AI_MODE)
+      const storedDockSide = localStorage.getItem(STORAGE_AI_DOCK_SIDE)
+      const storedOpen = localStorage.getItem(STORAGE_AI_OPEN)
+      const storedLeft = localStorage.getItem(STORAGE_AI_WIDTH_LEFT)
+      const storedRight = localStorage.getItem(STORAGE_AI_WIDTH_RIGHT)
+
+      if (storedMode === 'floating' || storedMode === 'docked') {
+        setAiChatMode(storedMode)
       }
+      if (storedDockSide === 'left' || storedDockSide === 'right') {
+        setAiChatDockSide(storedDockSide)
+      }
+      if (storedOpen != null) {
+        setAiChatOpen(storedOpen === 'true')
+      }
+      if (storedLeft != null) {
+        const w = Number(storedLeft)
+        if (!Number.isNaN(w)) setAiChatWidthLeft(w)
+      }
+      if (storedRight != null) {
+        const w = Number(storedRight)
+        if (!Number.isNaN(w)) setAiChatWidthRight(w)
+      }
+    } catch (e) {
+      console.error('Failed to load AI Chat state from localStorage', e)
     }
-    loadAiStore()
   }, [])
 
   const saveAiStore = useCallback(async () => {
-    if (typeof window !== 'undefined' && (window as any).__TAURI__ && aiChatStoreRef.current) {
-      try {
-        await aiChatStoreRef.current.set('aiChatState', {
-          mode: aiChatMode,
-          dockSide: aiChatDockSide,
-          isOpen: aiChatOpen,
-          width: aiChatWidth
-        })
-        await aiChatStoreRef.current.save()
-      } catch (e) {
-        console.error('Failed to save AI Chat state', e)
-      }
+    try {
+      if (typeof localStorage === 'undefined') return
+
+      localStorage.setItem(STORAGE_AI_MODE, aiChatMode)
+      localStorage.setItem(STORAGE_AI_DOCK_SIDE, aiChatDockSide)
+      localStorage.setItem(STORAGE_AI_OPEN, String(aiChatOpen))
+      localStorage.setItem(STORAGE_AI_WIDTH_LEFT, String(aiChatWidthLeft))
+      localStorage.setItem(STORAGE_AI_WIDTH_RIGHT, String(aiChatWidthRight))
+    } catch (e) {
+      console.error('Failed to save AI Chat state to localStorage', e)
     }
-  }, [aiChatMode, aiChatDockSide, aiChatOpen, aiChatWidth])
+  }, [aiChatMode, aiChatDockSide, aiChatOpen, aiChatWidthLeft, aiChatWidthRight])
 
   useEffect(() => {
-    saveAiStore()
+    // 首次渲染只作为初始化，不写回 localStorage，避免用默认 400 覆盖已有值
+    if (aiChatFirstSaveRef.current) {
+      aiChatFirstSaveRef.current = false
+      return
+    }
+    void saveAiStore()
   }, [saveAiStore])
+
+  // 切换 dock 侧边时，沿用当前侧的宽度到新侧，避免左右宽度不一致的跳变
+  useEffect(() => {
+    const prevSide = aiChatPrevDockSideRef.current
+    if (prevSide === aiChatDockSide) return
+
+    if (aiChatDockSide === 'left') {
+      // 从右切到左：沿用当前右侧宽度
+      setAiChatWidthLeft(aiChatWidthRight)
+    } else {
+      // 从左切到右：沿用当前左侧宽度
+      setAiChatWidthRight(aiChatWidthLeft)
+    }
+
+    aiChatPrevDockSideRef.current = aiChatDockSide
+  }, [aiChatDockSide, aiChatWidthLeft, aiChatWidthRight])
 
   useEffect(() => {
     if (!isAiChatResizing) return
@@ -228,7 +273,12 @@ export function WorkspaceShell({
 
       if (next < MIN_AI_WIDTH) next = MIN_AI_WIDTH
       if (next > MAX_AI_WIDTH) next = MAX_AI_WIDTH
-      setAiChatWidth(next)
+
+      if (aiChatDockSide === 'left') {
+        setAiChatWidthLeft(next)
+      } else {
+        setAiChatWidthRight(next)
+      }
     }
 
     const handleUp = () => {

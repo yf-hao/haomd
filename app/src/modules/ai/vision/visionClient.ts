@@ -12,5 +12,9 @@ export type StreamingHandlers = {
  * - 输出/回调复用现有流式聊天的结果与 handlers 结构
  */
 export interface IVisionClient {
-  ask(task: VisionTask, handlers: StreamingHandlers): Promise<StreamingChatResult>
+  ask(
+    task: VisionTask,
+    handlers: StreamingHandlers,
+    options?: { signal?: AbortSignal },
+  ): Promise<StreamingChatResult>
 }

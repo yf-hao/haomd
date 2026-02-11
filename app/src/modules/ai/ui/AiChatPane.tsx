@@ -64,6 +64,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
     if (!el) return
     el.focus()
     el.setSelectionRange(el.value.length, el.value.length)
+    autoResizeInput()
   }, [])
 
   useEffect(() => {
@@ -207,14 +208,15 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
   const messages = messageSource.filter((m) => !m.hidden)
 
   const [visibleLengths, setVisibleLengths] = useState<Record<string, number>>({})
+  const [activeTypewriterId, setActiveTypewriterId] = useState<string | null>(null)
   const isDifyProvider = providerType === 'dify'
 
-  // 核心改进：打字机动画不仅仅取决于“网络是否正在流式传输”，还取决于“打字机是否追上了内容”。
-  // 这样可以确保在网络流结束后的最后一小段文字也能平滑打完，且切换模型时状态更稳定。
-  const isTypewriterRunning = isDifyProvider && messages.some(
-    (msg) => msg.role === 'assistant' && (
+  // 核心策略：任何时刻只允许“当前这一条助手回复”参与打字机动画，
+  // 历史消息一律显示全文，避免重复播放。
+  const isTypewriterRunning = isDifyProvider && !!activeTypewriterId && messages.some(
+    (msg) => msg.id === activeTypewriterId && msg.role === 'assistant' && (
       msg.streaming || (visibleLengths[msg.id] !== undefined && visibleLengths[msg.id] < msg.content.length)
-    )
+    ),
   )
 
   const streamingIds = messages
@@ -224,6 +226,50 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
 
   const animationKey = !isDifyProvider ? 'off' : (isTypewriterRunning ? `active:${streamingIds}` : 'idle')
 
+  // 根据最新的 streaming 消息更新当前打字机目标，并锁死旧消息为全文
+  useEffect(() => {
+    if (!isDifyProvider) {
+      setActiveTypewriterId(null)
+      return
+    }
+
+    const assistantMessages = messages.filter(m => m.role === 'assistant')
+    if (assistantMessages.length === 0) {
+      setActiveTypewriterId(null)
+      return
+    }
+
+    const streamingMessages = assistantMessages.filter(m => m.streaming)
+    const latestStreaming = streamingMessages[streamingMessages.length - 1]
+
+    if (!latestStreaming) {
+      return
+    }
+
+    const nextActiveId = latestStreaming.id
+    if (nextActiveId === activeTypewriterId) {
+      return
+    }
+
+    setVisibleLengths((prev) => {
+      const next: Record<string, number> = { ...prev }
+      for (const msg of assistantMessages) {
+        const fullLen = msg.content.length
+        if (fullLen === 0) continue
+        if (msg.id === nextActiveId) {
+          // 新的打字目标，从 0 开始
+          next[msg.id] = 0
+        } else {
+          // 旧消息一律锁死为全文
+          next[msg.id] = fullLen
+        }
+      }
+      return next
+    })
+
+    setActiveTypewriterId(nextActiveId)
+  }, [isDifyProvider, messages, activeTypewriterId])
+
   useEffect(() => {
     if (!isDifyProvider) {
       // 切换到非 Dify 模式时，不再暴力清空 visibleLengths。
@@ -231,23 +277,6 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
       // 且能防止切回 Dify 时因全量清空导致的“重新输出”。
       return
     }
-
-    // 先确保所有已完成的助手消息在打字机模式下也是“全量显示”的，
-    // 避免在切换模型时对历史消息重新做打字动画。
-    setVisibleLengths((prev) => {
-      const next: Record<string, number> = { ...prev }
-      for (const msg of messages) {
-        if (msg.role !== 'assistant') continue
-        if (msg.streaming) continue
-        const fullLen = msg.content.length
-        if (fullLen === 0) continue
-        const current = next[msg.id]
-        if (current === undefined || current < fullLen) {
-          next[msg.id] = fullLen
-        }
-      }
-      return next
-    })
 
     // 当前没有需要打字机动画的消息（没有 streaming 的助手消息），
     // 直接退出，不启动 requestAnimationFrame 循环。
@@ -257,12 +286,25 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
 
     let frameId: number | null = null
     let lastTime = performance.now()
-    const stepPerSecond = 60
+    // 打字机速度：每秒字符数
+    const stepPerSecond = 70
+    // 累积本轮还未消费的“字符额度”，避免过度刷新
+    let charBudget = 0
 
     const tick = (time: number) => {
       const deltaMs = time - lastTime
       lastTime = time
-      const deltaChars = Math.max(1, Math.round((deltaMs / 1000) * stepPerSecond))
+
+      // 根据真实时间累积应该输出的字符数
+      charBudget += (deltaMs / 1000) * stepPerSecond
+      let deltaChars = Math.floor(charBudget)
+
+      // 限制单帧最多输出的字符数，避免浏览器卡顿时一下子跳到全文
+      const maxCharsPerFrame = 20
+      if (deltaChars > maxCharsPerFrame) {
+        deltaChars = maxCharsPerFrame
+      }
+      charBudget -= Math.max(0, deltaChars)
 
       let hasNextFrame = false
 
@@ -275,32 +317,40 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
           const fullLen = msg.content.length
           if (fullLen === 0) continue
 
-          const base = msg.streaming ? next[msg.id] ?? 0 : next[msg.id] ?? fullLen
-          if (base >= fullLen) continue
+          const existing = next[msg.id]
 
-          const target = Math.min(fullLen, base + deltaChars)
-          if (target !== base) {
-            next[msg.id] = target
+          // 关键修复：只要消息正在流式传输，就必须立即在打字机进度表中“挂号” (设置为 0)。
+          // 这样即便网络流在打字机还没产生第 1 个字时就结束了，打字机也能接手后续播放。
+          if (msg.streaming && existing === undefined) {
+            next[msg.id] = 0
             changed = true
           }
 
-          if (target < fullLen) {
+          const base = next[msg.id]
+          // 如果该消息既不在 streaming 也不在打字机流程中，则跳过（处理历史对话）
+          if (base === undefined) continue
+
+          if (base >= fullLen) continue
+
+          if (deltaChars > 0) {
+            const target = Math.min(fullLen, base + deltaChars)
+            if (target !== base) {
+              next[msg.id] = target
+              changed = true
+            }
+            if (target < fullLen) {
+              hasNextFrame = true
+            }
+          } else {
+            // 虽然本帧由于 speed 限制没产生新字符，但任务未完成，仍需下一帧
             hasNextFrame = true
           }
         }
 
-        // 如果本轮没有任何变化，也不再继续调度下一帧
-        if (!changed) {
-          hasNextFrame = false
-          return prev
-        }
-
-        return next
+        return changed ? next : prev
       })
 
-      if (hasNextFrame) {
-        frameId = window.requestAnimationFrame(tick)
-      }
+      frameId = window.requestAnimationFrame(tick)
     }
 
     frameId = window.requestAnimationFrame(tick)
@@ -312,29 +362,50 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
     }
   }, [animationKey, messageSource])
 
-  const getDisplayContent = (msgId: string, full: string, streaming?: boolean) => {
+  useEffect(() => {
+    if (!isDifyProvider) return
+    const assistantMessages = messages.filter((m) => m.role === 'assistant')
+    console.warn('[AiChatPane][typewriter] visibleLengths', {
+      animationKey,
+      items: assistantMessages.map((m) => ({
+        id: m.id,
+        streaming: m.streaming,
+        contentLen: m.content.length,
+        visible: visibleLengths[m.id],
+      })),
+    })
+  }, [isDifyProvider, animationKey, messages, visibleLengths])
+
+  const getDisplayContent = (msgId: string, full: string) => {
     if (!isDifyProvider || full.length === 0 || !state) return full
-    const visible = visibleLengths[msgId]
-    if (visible === undefined) {
-      // 关键修复：对于已完成的历史消息，即便 visibleLengths 还未建立，也应直接展示全量，
-      // 避免从 OpenAI 切换回 Dify 时导致历史记录重新“打”一遍。
-      return streaming ? '' : full
+
+    // 只有当前打字目标参与截断，其他消息一律显示全文，避免重复播放
+    if (msgId !== activeTypewriterId) {
+      return full
     }
+
+    const visible = visibleLengths[msgId] ?? 0
     const length = Math.max(0, Math.min(full.length, visible))
     return full.slice(0, length)
   }
 
-  const isStreamingUI = isDifyProvider && messages.some(
-    (msg) => msg.role === 'assistant' && (msg.streaming || (visibleLengths[msg.id] !== undefined && visibleLengths[msg.id] < msg.content.length))
+  const isStreamingUI = isDifyProvider && !!activeTypewriterId && messages.some(
+    (msg) => msg.id === activeTypewriterId && msg.role === 'assistant' && (
+      msg.streaming || (visibleLengths[msg.id] !== undefined && visibleLengths[msg.id] < msg.content.length)
+    ),
   )
   const isProcessing = loading || isStreamingUI
 
   const handleStop = () => {
-    // 找到当前正在“吐出”的消息（无论是网络流还是打字机流）
-    const activeMsg = messages.find(m => m.role === 'assistant' && (m.streaming || (visibleLengths[m.id] ?? 0) < m.content.length))
+    // 找到当前正在“吐出”的消息（无论是网络流还是打字机补齐阶段）
+    const activeMsg = messages.find((m) =>
+      m.role === 'assistant' && (
+        m.streaming || (visibleLengths[m.id] !== undefined && visibleLengths[m.id] < m.content.length)
+      ),
+    )
     if (activeMsg) {
       if (isDifyProvider) {
-        const currentLen = visibleLengths[activeMsg.id] ?? 0
+        const currentLen = visibleLengths[activeMsg.id] ?? activeMsg.content.length
         stopAndTruncate(activeMsg.id, currentLen)
       } else {
         stop()
@@ -350,7 +421,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
   const lastMessage = messages[messages.length - 1]
   const lastMessageDisplayLength =
     lastMessage && lastMessage.role === 'assistant'
-      ? getDisplayContent(lastMessage.id, lastMessage.content, lastMessage.streaming).length
+      ? getDisplayContent(lastMessage.id, lastMessage.content).length
       : lastMessage?.content.length ?? 0
 
   const lastMessageKey = lastMessage ? `${lastMessage.id}:${lastMessageDisplayLength}` : ''
@@ -448,7 +519,6 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
           isUploading={isUploading}
           onUploadFiles={(() => {
             const canUpload = !providerType || providerType === 'dify';
-            console.warn('[AiChatPane] Render AiChatBody', { providerType, canUpload });
             return canUpload ? uploadFiles : undefined;
           })()}
         />

@@ -15,7 +15,9 @@ export function onNativePaste(handler: (text: string) => void): Unlisten {
       handler(event.payload)
     })
     if (disposed) {
-      un()
+      void un().catch((err) => {
+        console.warn('[clipboardEvents] unlisten native://paste failed', err)
+      })
     } else {
       unlisten = un
     }
@@ -44,7 +46,9 @@ export function onNativePasteError(handler: (message: string) => void): Unlisten
       handler(event.payload)
     })
     if (disposed) {
-      un()
+      void un().catch((err) => {
+        console.warn('[clipboardEvents] unlisten native://paste_error failed', err)
+      })
     } else {
       unlisten = un
     }
@@ -74,7 +78,9 @@ export function onNativePasteImage(handler: () => void): Unlisten {
       handler()
     })
     if (disposed) {
-      un()
+      void un().catch((err) => {
+        console.warn('[clipboardEvents] unlisten native://paste_image failed', err)
+      })
     } else {
       unlisten = un
     }

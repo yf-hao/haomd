@@ -244,7 +244,7 @@ export function createModelScopeVisionClient(
 ```ts
 export type VisionMode =
   | 'none'             // 不支持图像
-  | 'openai_image_url' // OpenAI/ModelScope 这类 image_url 模式
+  | 'enabled' // OpenAI/ModelScope 这类 image_url 模式
   // 后续可扩展: 'upload_then_id' 等
 
 export type UiProvider = {
@@ -267,7 +267,7 @@ export type UiProvider = {
 
 - 在 Provider 表单中新增一个下拉选择或文本输入，用于设置 `VisionMode`：
   - `none`
-  - `openai_image_url`（ModelScope、OpenAI Vision 兼容）
+  - `enabled`（ModelScope、OpenAI Vision 兼容）
 - 当前阶段如仅支持 ModelScope，可先在代码中写死，后续再开放 UI 编辑。
 
 ### 4. Vision Client 工厂函数
@@ -282,7 +282,7 @@ import { createModelScopeVisionClient } from '../modelscope/createModelScopeVisi
 
 export function createVisionClientFromProvider(provider: UiProvider): IVisionClient | null {
   switch (provider.visionMode) {
-    case 'openai_image_url':
+    case 'enabled':
       return createModelScopeVisionClient(provider, defaultImageUrlResolver)
     case 'none':
     default:
@@ -488,7 +488,7 @@ async function sendVisionTask(task: VisionTask, options?: { hideUserInView?: boo
 - **API Key**：`MODELSCOPE_ACCESS_TOKEN`
 - **Models**：`Qwen/QVQ-72B-Preview`
 - **Type**：`OpenAI Compatible`
-- **Vision Mode**：`openai_image_url`
+- **Vision Mode**：`enabled`
 
 保存后，该 Provider 会作为可选模型出现在 AI Chat 的模型列表中。
 

@@ -6,7 +6,7 @@ import { createModelScopeVisionClient } from '../modelscope/createModelScopeVisi
 /**
  * 根据 UiProvider 的配置创建对应的 VisionClient。
  * 当前实现：
- * - visionMode = 'openai_image_url' 时，使用 ModelScope/OpenAI 兼容的 image_url 适配器
+ * - visionMode = 'enabled' 时，使用 ModelScope/OpenAI 兼容的 image_url 适配器
  * - 其他情况返回 null，表示该 Provider 不支持 Vision
  */
 function isLikelyVisionModelId(modelId: string | undefined): boolean {
@@ -39,7 +39,7 @@ export function createVisionClientFromProvider(provider: UiProvider, activeModel
   if (modelVisionMode === 'none') {
     return null
   }
-  if (modelVisionMode === 'openai_image_url') {
+  if (modelVisionMode === 'enabled') {
     return createModelScopeVisionClient(provider, defaultImageUrlResolver, activeModelId)
   }
 
@@ -47,7 +47,7 @@ export function createVisionClientFromProvider(provider: UiProvider, activeModel
   if (provider.visionMode === 'none') {
     return null
   }
-  if (provider.visionMode === 'openai_image_url') {
+  if (provider.visionMode === 'enabled') {
     return createModelScopeVisionClient(provider, defaultImageUrlResolver, activeModelId)
   }
 
@@ -67,7 +67,7 @@ export function createVisionClientFromProvider(provider: UiProvider, activeModel
   const supportsOpenAiImageUrl = Array.from(candidateIds).some((id) => isLikelyVisionModelId(id))
 
   if (supportsOpenAiImageUrl) {
-    // 自动检测命中时，按 openai_image_url 模式创建 VisionClient（不写回配置，只在运行时生效）
+    // 自动检测命中时，按 enabled 模式创建 VisionClient（不写回配置，只在运行时生效）
     return createModelScopeVisionClient(provider, defaultImageUrlResolver, activeModelId)
   }
 

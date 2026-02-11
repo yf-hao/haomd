@@ -37,7 +37,7 @@ export function fromCfg(cfg: AiSettingsCfg | null | undefined): AiSettingsState 
       }
 
       let visionMode: VisionMode | undefined
-      if (p.vision_mode === 'none' || p.vision_mode === 'openai_image_url') {
+      if (p.vision_mode === 'none' || p.vision_mode === 'enabled') {
         visionMode = p.vision_mode
       }
 
@@ -48,7 +48,7 @@ export function fromCfg(cfg: AiSettingsCfg | null | undefined): AiSettingsState 
         apiKey: p.api_key,
         models: (p.models ?? []).map((m) => {
           let modelVisionMode: VisionMode | undefined
-          if (m.vision_mode === 'none' || m.vision_mode === 'openai_image_url') {
+          if (m.vision_mode === 'none' || m.vision_mode === 'enabled') {
             modelVisionMode = m.vision_mode
           }
           return {

@@ -16,7 +16,9 @@ export function onMenuAction(handler: (actionId: string) => void | Promise<void>
     })
     if (disposed) {
       // 如果在监听完成前已经被清理，立刻注销，避免遗留监听
-      un()
+      void un().catch((err) => {
+        console.warn('[menuEvents] unlisten menu://action failed', err)
+      })
     } else {
       unlisten = un
     }
@@ -44,7 +46,9 @@ export function onOpenRecentFile(handler: (path: string) => void | Promise<void>
       void handler(event.payload)
     })
     if (disposed) {
-      un()
+      void un().catch((err) => {
+        console.warn('[menuEvents] unlisten menu://open_recent_file failed', err)
+      })
     } else {
       unlisten = un
     }

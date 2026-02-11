@@ -9,7 +9,7 @@ export type ProviderDraft = {
   description: string
   providerType: ProviderType | ''
   /** Vision 模式选择："" 表示自动检测（不写入配置） */
-  visionMode: '' | 'none' | 'openai_image_url'
+  visionMode: '' | 'none' | 'enabled'
 }
 
 const emptyDraft: ProviderDraft = {
@@ -221,7 +221,7 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
   )
 
   const updateModelVisionMode = useCallback(
-    (providerId: string, modelId: string, visionMode: '' | 'none' | 'openai_image_url') => {
+    (providerId: string, modelId: string, visionMode: '' | 'none' | 'enabled') => {
       setSettings((prev) => ({
         ...prev,
         providers: prev.providers.map((p) =>

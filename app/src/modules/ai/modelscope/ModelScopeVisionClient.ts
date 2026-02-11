@@ -32,7 +32,7 @@ export class ModelScopeVisionClient implements IVisionClient {
     this.imageUrlResolver = imageUrlResolver
   }
 
-  async ask(task: VisionTask, handlers: StreamingHandlers) {
+  async ask(task: VisionTask, handlers: StreamingHandlers, options?: { signal?: AbortSignal }) {
     const imageUrls = await Promise.all(
       task.images.map((img) => this.imageUrlResolver.resolve(img)),
     )
@@ -42,6 +42,7 @@ export class ModelScopeVisionClient implements IVisionClient {
       messages,
       temperature: 0,
       maxTokens: 512,
+      signal: options?.signal,
     }
 
     return this.chatClient.askStream(request, handlers)

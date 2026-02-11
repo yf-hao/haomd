@@ -14,7 +14,7 @@ export type ProviderType = 'dify' | 'openai'
 
 export type VisionMode =
   | 'none'             // 不支持图像
-  | 'openai_image_url' // OpenAI / ModelScope 这类 image_url 模式
+  | 'enabled' // OpenAI / ModelScope 这类 image_url 模式
   | 'auto'             // 运行时自动检测（根据模型名/Provider 推断）
 // 后续可扩展: 'upload_then_id' 等
 

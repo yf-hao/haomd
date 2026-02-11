@@ -86,6 +86,25 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
 }) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
+  // 提取模型显示名称（去掉 provider 前缀）
+  const getModelDisplayName = (modelId: string) => {
+    // 处理形如 "provider/model" 或 "provider/model:version" 的格式
+    const shortName = modelId.split('/').pop() || modelId
+    return shortName
+  }
+
+  // 默认视觉提示词（用于图片-only场景）
+  const DEFAULT_VISION_PROMPT = '解析图片并根据上下文回复图片中内容的含义'
+
+  // 获取用户消息的显示内容（过滤掉默认提示词）
+  const getUserDisplayContent = (content: string) => {
+    // 如果是默认提示词，返回空字符串（只显示图片）
+    if (content.trim() === DEFAULT_VISION_PROMPT) {
+      return ''
+    }
+    return content
+  }
+
   const handleToolClick = () => {
     console.warn('[AiChatBody] Upload button clicked')
     fileInputRef.current?.click()
@@ -139,7 +158,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
           const displayContent =
             msg.role === 'assistant'
               ? getDisplayContent(msg.id, msg.content, msg.streaming)
-              : msg.content
+              : getUserDisplayContent(msg.content)
 
           return (
             <div key={msg.id} className={`ai-chat-message ai-chat-message-${msg.role}`}>
@@ -191,11 +210,21 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
             </div>
           )
         })}
+        {/* 加载指示器：loading 且还没有助手消息返回任何内容时显示 */}
+        {(() => {
+          const hasAssistantContent = messages.some((m) => m.role === 'assistant' && m.content.length > 0)
+          console.log('[AiChatBody] Loading indicator check:', { loading, hasAssistantContent, shouldShow: loading && !hasAssistantContent, messagesCount: messages.length })
+          return loading && !hasAssistantContent ? (
+            <div className="ai-chat-loading-indicator">
+              <span className="ai-chat-spinner" aria-hidden="true" />
+            </div>
+          ) : null
+        })()}
       </div>
 
       <form className="ai-chat-input" onSubmit={loading ? (e) => e.preventDefault() : onSubmit}>
         <div className="ai-chat-input-container">
-          {((pendingAttachments && pendingAttachments.length > 0) || isUploading) && (
+          {((pendingAttachments && pendingAttachments.length > 0) || attachedImageDataUrl || isUploading) && (
             <div className="ai-chat-attachment-preview-bar">
               {pendingAttachments && pendingAttachments.map((att) => (
                 <div key={att.id} className="ai-chat-attachment-item">
@@ -212,6 +241,19 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
                   </button>
                 </div>
               ))}
+              {attachedImageDataUrl && (
+                <div className="ai-chat-attachment-item">
+                  <img src={attachedImageDataUrl} alt="已附加图片" className="ai-chat-attachment-thumb" />
+                  <button
+                    type="button"
+                    className="ai-chat-attachment-remove"
+                    onClick={() => onClearImage?.()}
+                    title="移除图片"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
               {isUploading && (
                 <div className="ai-chat-attachment-item uploading">
                   <div className="ai-chat-attachment-loading-spinner" />
@@ -250,14 +292,6 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
               >
                 <span className="ai-chat-icon-plus" aria-hidden="true" />
               </button>
-              {attachedImageDataUrl && (
-                <span className="ai-chat-input-badge small">
-                  已附加图片
-                  <button type="button" onClick={() => onClearImage?.()}>
-                    清除
-                  </button>
-                </span>
-              )}
               <div className="ai-chat-input-badge ai-chat-role-badge">
                 <span className="ai-chat-icon-chevron-up" aria-hidden="true" />
                 <select
@@ -268,7 +302,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
                   {models?.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.visionMode !== 'none' && m.visionMode !== undefined ? '👁️ ' : ''}
-                      {m.id} ({m.providerName})
+                      {getModelDisplayName(m.id)} ({m.providerName})
                     </option>
                   ))}
                 </select>

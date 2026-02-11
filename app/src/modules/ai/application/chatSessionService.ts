@@ -207,22 +207,28 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       return
     }
 
+    currentAbortController = new AbortController()
+
     try {
-      await visionClient.ask(task, {
-        onChunk: (chunk) => {
-          if (disposed || !chunk.content) return
-          state = appendAssistantChunk(state, assistantId, chunk.content)
-          notifyStateChange()
+      await visionClient.ask(
+        task,
+        {
+          onChunk: (chunk) => {
+            if (disposed || !chunk.content) return
+            state = appendAssistantChunk(state, assistantId, chunk.content)
+            notifyStateChange()
+          },
+          onComplete: () => {
+            if (disposed) return
+            notifyStateChange()
+          },
+          onError: () => {
+            if (disposed) return
+            notifyStateChange()
+          },
         },
-        onComplete: () => {
-          if (disposed) return
-          notifyStateChange()
-        },
-        onError: () => {
-          if (disposed) return
-          notifyStateChange()
-        },
-      })
+        { signal: currentAbortController.signal },
+      )
     } catch (e) {
       if (disposed) return
       console.error('[ChatSession] Vision stream exception:', e)
@@ -231,6 +237,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
         state = completeAssistantMessage(state, assistantId)
         notifyStateChange()
       }
+      currentAbortController = null
     }
   }
 

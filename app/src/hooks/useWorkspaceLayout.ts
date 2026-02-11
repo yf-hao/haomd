@@ -9,27 +9,26 @@ const STORAGE_WIDTH = 'haomd:layout:width'
 const STORAGE_SHOW = 'haomd:layout:show'
 
 export function useWorkspaceLayout() {
-  const [layout, setLayout] = useState<LayoutType>('preview-left')
-  const [showPreview, setShowPreview] = useState(true)
-  const [editorWidth, setEditorWidth] = useState(55)
+  const [layout, setLayout] = useState<LayoutType>(() => {
+    if (typeof localStorage === 'undefined') return 'preview-left'
+    const stored = localStorage.getItem(STORAGE_LAYOUT) as LayoutType | null
+    return stored ?? 'preview-left'
+  })
+  const [showPreview, setShowPreview] = useState<boolean>(() => {
+    if (typeof localStorage === 'undefined') return true
+    const storedShow = localStorage.getItem(STORAGE_SHOW)
+    if (storedShow == null) return true
+    return storedShow !== 'false'
+  })
+  const [editorWidth, setEditorWidth] = useState<number>(() => {
+    if (typeof localStorage === 'undefined') return 55
+    const storedWidth = localStorage.getItem(STORAGE_WIDTH)
+    if (!storedWidth) return 55
+    const w = Number(storedWidth)
+    return Number.isNaN(w) ? 55 : w
+  })
   const [dragging, setDragging] = useState(false)
   const workspaceRef = useRef<HTMLElement | null>(null)
-
-  useEffect(() => {
-    const storedLayout = localStorage.getItem(STORAGE_LAYOUT) as LayoutType | null
-    const storedWidth = localStorage.getItem(STORAGE_WIDTH)
-    const storedShow = localStorage.getItem(STORAGE_SHOW)
-    if (storedLayout) {
-      setLayout(storedLayout)
-    }
-    if (storedWidth) {
-      const w = Number(storedWidth)
-      if (!Number.isNaN(w)) setEditorWidth(w)
-    }
-    if (storedShow != null) {
-      setShowPreview(storedShow !== 'false')
-    }
-  }, [])
 
   useEffect(() => {
     localStorage.setItem(STORAGE_LAYOUT, layout)
