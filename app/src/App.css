@@ -1235,3 +1235,9 @@ button.ghost.primary {
     transform: rotate(360deg);
   }
 }
+
+/* AI Chat vision-enabled model highlight */
+.ai-chat-role-select-inline option[data-vision="enabled"] {
+  color: #5ad8a6;
+  font-weight: 500;
+}

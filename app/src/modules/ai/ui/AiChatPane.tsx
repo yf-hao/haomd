@@ -1,7 +1,8 @@
 import type { FC, FormEvent, KeyboardEvent } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import type { ChatEntryMode, EntryContext } from '../domain/chatSession'
-import { useAiChat } from './hooks/useAiChat'
+import type { AiChatSessionKey } from '../application/aiChatSessionService'
+import { useAiChatSession } from './hooks/useAiChatSession'
 import { copyTextToClipboard } from '../platform/clipboardService'
 import { insertMarkdownAtCursorBelow, replaceSelectionWithText, createTabAndInsertContent } from '../platform/editorInsertService'
 import { onNativePaste } from '../../platform/clipboardEvents'
@@ -10,12 +11,13 @@ import { AiChatBody } from './AiChatBody'
 const EMPTY_MESSAGES = [] as const
 
 export interface AiChatPaneProps {
+  sessionKey: AiChatSessionKey
   entryMode: ChatEntryMode
   initialContext?: EntryContext
   onClose: () => void
 }
 
-export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onClose }) => {
+export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initialContext, onClose }) => {
   const [input, setInput] = useState('')
   const [contextPrefix, setContextPrefix] = useState<string | null>(null)
   const [contextPrefixUsed, setContextPrefixUsed] = useState(false)
@@ -53,7 +55,8 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
     uploadFiles,
     removeAttachment,
     isUploading,
-  } = useAiChat({
+  } = useAiChatSession({
+    sessionKey,
     entryMode,
     initialContext,
     open: true,

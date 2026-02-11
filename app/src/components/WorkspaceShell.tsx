@@ -14,6 +14,7 @@ import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout'
 import { AiChatDialog } from '../modules/ai/ui/AiChatDialog'
 import { AiChatPane } from '../modules/ai/ui/AiChatPane'
 import type { ChatEntryMode, EntryContext } from '../modules/ai/domain/chatSession'
+import type { AiChatSessionKey } from '../modules/ai/application/aiChatSessionService'
 import { registerEditorInsertBelow, registerEditorReplaceSelection, registerEditorCreateAndInsert } from '../modules/ai/platform/editorInsertService'
 import { useFilePersistence } from '../hooks/useFilePersistence'
 import { useTabs } from '../hooks/useTabs'
@@ -89,6 +90,7 @@ export function WorkspaceShell({
   const [aiChatWidthLeft, setAiChatWidthLeft] = useState(400)
   const [aiChatWidthRight, setAiChatWidthRight] = useState(400)
   const [isAiChatResizing, setIsAiChatResizing] = useState(false)
+  const aiChatSessionKey: AiChatSessionKey = 'global'
 
   const aiChatResizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
   const aiChatFirstSaveRef = useRef(true)
@@ -808,7 +810,7 @@ export function WorkspaceShell({
             <main className={`workspace ${dragging ? 'dragging' : ''}`} style={{ gridTemplateColumns: outerGridTemplateColumns }}>
               {aiChatMode === 'docked' && aiChatOpen && aiChatState && (
                 <>
-                  {aiChatDockSide === 'left' && <AiChatPane entryMode={aiChatState.entryMode} initialContext={aiChatState.initialContext} onClose={closeAiChatDialog} />}
+                  {aiChatDockSide === 'left' && <AiChatPane sessionKey={aiChatSessionKey} entryMode={aiChatState.entryMode} initialContext={aiChatState.initialContext} onClose={closeAiChatDialog} />}
                   <div className="divider-hotzone vertical" style={{ position: 'absolute', left: aiChatDockSide === 'left' ? aiChatWidth : `calc(100% - ${aiChatWidth}px)`, height: '100%', zIndex: 10, cursor: 'col-resize' }} onMouseDown={handleAiChatResizeStart}>
                     <div className="divider-rail"><span className="divider-handle" /></div>
                   </div>
@@ -846,6 +848,7 @@ export function WorkspaceShell({
               </section>
               {aiChatMode === 'docked' && aiChatOpen && aiChatState && aiChatDockSide === 'right' && (
                 <AiChatPane
+                  sessionKey={aiChatSessionKey}
                   entryMode={aiChatState.entryMode}
                   initialContext={aiChatState.initialContext}
                   onClose={closeAiChatDialog}
@@ -867,7 +870,7 @@ export function WorkspaceShell({
       )}
       {confirmDialog && <ConfirmDialog title={confirmDialog.title} message={confirmDialog.message} confirmText={confirmDialog.confirmText} cancelText={confirmDialog.cancelText} extraText={confirmDialog.extraText} variant={confirmDialog.variant} onConfirm={confirmDialog.onConfirm} onExtra={confirmDialog.onExtra} onCancel={() => setConfirmDialog(null)} />}
       {quitConfirmDialog && <ConfirmDialog title={quitConfirmDialog.unsavedCount === 1 ? 'Save changes?' : `Save ${quitConfirmDialog.unsavedCount} files?`} message="Your changes will be lost." confirmText="Save All" cancelText="Cancel" extraText="Don't Save" variant="stacked" onConfirm={quitConfirmDialog.onSaveAll} onExtra={quitConfirmDialog.onQuitWithoutSaving} onCancel={() => setQuitConfirmDialog(null)} />}
-      {aiChatMode === 'floating' && aiChatOpen && aiChatState?.open && <AiChatDialog open={aiChatOpen} entryMode={aiChatState.entryMode} initialContext={aiChatState.initialContext} onClose={closeAiChatDialog} />}
+      {aiChatMode === 'floating' && aiChatOpen && aiChatState?.open && <AiChatDialog open={aiChatOpen} sessionKey={aiChatSessionKey} entryMode={aiChatState.entryMode} initialContext={aiChatState.initialContext} onClose={closeAiChatDialog} />}
     </>
   )
 }

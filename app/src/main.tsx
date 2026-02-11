@@ -2,9 +2,12 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { AiChatProvider } from './modules/ai/ui/AiChatProvider'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <AiChatProvider>
+      <App />
+    </AiChatProvider>
   </StrictMode>,
 )

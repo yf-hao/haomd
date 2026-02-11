@@ -2,7 +2,8 @@ import type { FC, FormEvent, KeyboardEvent, MouseEventHandler, MouseEvent as Rea
 import { useEffect, useRef, useState } from 'react'
 import type { ChatEntryMode, ChatMessageView, EntryContext } from '../domain/chatSession'
 import { AiChatBody } from './AiChatBody'
-import { useAiChat } from './hooks/useAiChat'
+import type { AiChatSessionKey } from '../application/aiChatSessionService'
+import { useAiChatSession } from './hooks/useAiChatSession'
 import { copyTextToClipboard } from '../platform/clipboardService'
 import { insertMarkdownAtCursorBelow, replaceSelectionWithText, createTabAndInsertContent } from '../platform/editorInsertService'
 import { onNativePaste } from '../../platform/clipboardEvents'
@@ -11,12 +12,13 @@ const EMPTY_MESSAGES: ChatMessageView[] = []
 
 export type AiChatDialogProps = {
   open: boolean
+  sessionKey: AiChatSessionKey
   entryMode: ChatEntryMode
   initialContext?: EntryContext
   onClose: () => void
 }
 
-export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialContext, onClose }) => {
+export const AiChatDialog: FC<AiChatDialogProps> = ({ open, sessionKey, entryMode, initialContext, onClose }) => {
   const [input, setInput] = useState('')
   const [contextPrefix, setContextPrefix] = useState<string | null>(null)
   const [contextPrefixUsed, setContextPrefixUsed] = useState(false)
@@ -53,7 +55,8 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     uploadFiles,
     removeAttachment,
     isUploading,
-  } = useAiChat({
+  } = useAiChatSession({
+    sessionKey,
     entryMode,
     initialContext,
     open,

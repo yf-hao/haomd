@@ -296,9 +296,12 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
                   onChange={(e) => onChangeModel?.(e.target.value)}
                 >
                   {models?.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.visionMode === 'enabled' ? '👁️ ' : ''}
-                      {getModelDisplayName(m.id)} ({m.providerName})
+                    <option
+                      key={m.id}
+                      value={m.id}
+                      data-vision={m.visionMode === 'enabled' ? 'enabled' : 'disabled'}
+                    >
+                      {getModelDisplayName(m.id)} ({m.providerName}){m.visionMode === 'enabled' ? '   ❂' : ''}
                     </option>
                   ))}
                 </select>
