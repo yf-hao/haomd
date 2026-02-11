@@ -8,7 +8,7 @@ export type ProviderDraft = {
   modelsInput: string
   description: string
   providerType: ProviderType | ''
-  /** Vision 模式选择："" 表示自动检测（不写入配置） */
+  /** Vision 模式选择：仅在 UI 草稿中使用，保存时按 'disabled' | 'enabled' 映射 */
   visionMode: 'disabled' | 'enabled'
 }
 
@@ -19,7 +19,7 @@ const emptyDraft: ProviderDraft = {
   modelsInput: '',
   description: '',
   providerType: '',
-  visionMode: '',
+  visionMode: 'disabled',
 }
 
 function normalizeProviderName(name: string): string {

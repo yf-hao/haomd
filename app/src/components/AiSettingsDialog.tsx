@@ -232,7 +232,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
   const handleChangeModelVisionMode = (
     providerId: string,
     modelId: string,
-    value: '' | 'none' | 'enabled',
+    value: 'disabled' | 'enabled',
   ) => {
     updateModelVisionMode(providerId, modelId, value)
   }

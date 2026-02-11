@@ -10,10 +10,11 @@ export type EditorPaneProps = {
   showPreview: boolean
   setShowPreview: (value: boolean | ((prev: boolean) => boolean)) => void
   editorViewRef: RefObject<EditorView | null>
+  onFoldRegionsChange?: (regions: { fromLine: number; toLine: number }[]) => void
 }
 
 export function EditorPane(props: EditorPaneProps) {
-  const { markdown, onChange, onCursorChange, editorViewRef } = props
+  const { markdown, onChange, onCursorChange, editorViewRef, onFoldRegionsChange } = props
   return (
     <CodeEditor
       value={markdown}
@@ -24,6 +25,7 @@ export function EditorPane(props: EditorPaneProps) {
       onViewReady={(view) => {
         editorViewRef.current = view
       }}
+      onFoldRegionsChange={onFoldRegionsChange}
     />
   )
 }

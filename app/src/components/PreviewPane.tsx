@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import type { LayoutType } from '../hooks/useWorkspaceLayout'
-import { MarkdownViewer } from './MarkdownViewer'
+import { MarkdownViewer, type FoldRegion } from './MarkdownViewer'
 import './PreviewPane.css'
 
 export type PreviewPaneProps = {
@@ -9,9 +9,10 @@ export type PreviewPaneProps = {
   previewWidth: number
   effectiveLayout: LayoutType
   filePath?: string | null
+  foldRegions?: FoldRegion[]
 }
 
-export function PreviewPane({ value, activeLine, previewWidth, effectiveLayout, filePath }: PreviewPaneProps) {
+export function PreviewPane({ value, activeLine, previewWidth, effectiveLayout, filePath, foldRegions }: PreviewPaneProps) {
   const style: CSSProperties = {}
 
   if (effectiveLayout === 'preview-only') {
@@ -32,7 +33,13 @@ export function PreviewPane({ value, activeLine, previewWidth, effectiveLayout, 
   return (
     <section className="pane preview" style={style}>
       <div className="preview-body">
-        <MarkdownViewer value={value} activeLine={activeLine} previewWidth={previewWidth} filePath={filePath} />
+        <MarkdownViewer
+          value={value}
+          activeLine={activeLine}
+          previewWidth={previewWidth}
+          filePath={filePath}
+          foldRegions={foldRegions}
+        />
       </div>
     </section>
   )

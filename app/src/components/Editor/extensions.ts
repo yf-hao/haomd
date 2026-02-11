@@ -10,7 +10,7 @@ import {
   ViewPlugin,
 } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap, deleteLine } from '@codemirror/commands'
-import { indentOnInput } from '@codemirror/language'
+import { indentOnInput, foldGutter, foldKeymap, foldedRanges } from '@codemirror/language'
 import { closeBrackets, autocompletion } from '@codemirror/autocomplete'
 import { markdown } from '@codemirror/lang-markdown'
 import { oneDark } from '@codemirror/theme-one-dark'
@@ -21,6 +21,7 @@ export type EditorOptions = {
   showActiveLine?: boolean
   enableAutocomplete?: boolean
   onCursorChange?: (line: number) => void
+  onFoldRegionsChange?: (regions: { fromLine: number; toLine: number }[]) => void
 }
 
 const baseTheme = EditorView.theme(
@@ -136,6 +137,57 @@ function smartScrollOnInputPlugin(): Extension {
   })
 }
 
+function foldRegionsPlugin(onFoldRegionsChange?: (regions: { fromLine: number; toLine: number }[]) => void): Extension[] {
+  if (!onFoldRegionsChange) return []
+
+  return [
+    ViewPlugin.fromClass(
+      class {
+        private lastRegionsJson = ''
+        private view: EditorView
+
+        constructor(view: EditorView) {
+          this.view = view
+          this.reportRegions()
+        }
+
+        update(update: { view: EditorView; docChanged?: boolean }) {
+          if (update.docChanged) {
+            this.view = update.view
+            this.reportRegions()
+          } else {
+            // 即使文档未变，用户也可能通过 gutter/快捷键折叠，我们尽量在每次 update 时重新计算
+            this.view = update.view
+            this.reportRegions()
+          }
+        }
+
+        private reportRegions() {
+          const state = this.view.state
+          const regions: { fromLine: number; toLine: number }[] = []
+
+          try {
+            const ranges = foldedRanges(state)
+            ranges.between(0, state.doc.length, (from, to) => {
+              const fromLine = state.doc.lineAt(from).number
+              const toLine = state.doc.lineAt(to).number
+              regions.push({ fromLine, toLine })
+            })
+          } catch {
+            // 某些环境下如果 foldedRanges 不可用，就直接跳过，不影响编辑器本身行为
+            return
+          }
+
+          const json = JSON.stringify(regions)
+          if (json === this.lastRegionsJson) return
+          this.lastRegionsJson = json
+          onFoldRegionsChange(regions)
+        }
+      },
+    ),
+  ]
+}
+
 export function createExtensions(options: EditorOptions = {}): Extension[] {
   const {
     readOnly = false,
@@ -143,6 +195,7 @@ export function createExtensions(options: EditorOptions = {}): Extension[] {
     showActiveLine = true,
     enableAutocomplete = true,
     onCursorChange,
+    onFoldRegionsChange,
   } = options
 
   const language = markdown()
@@ -163,17 +216,23 @@ export function createExtensions(options: EditorOptions = {}): Extension[] {
     drawSelection(),
     indentOnInput(),
     history(),
-    keymap.of([...customKeymap, ...filteredDefaultKeymap, ...historyKeymap]),
+    keymap.of([
+      ...customKeymap,
+      ...filteredDefaultKeymap,
+      ...historyKeymap,
+      ...foldKeymap,
+    ]),
     EditorView.lineWrapping,
     smartScrollOnInputPlugin(),
     language,
     EditorView.editable.of(!readOnly),
   ]
 
-  if (showLineNumbers) extensions.unshift(lineNumbers())
+  if (showLineNumbers) extensions.unshift(lineNumbers(), foldGutter())
   if (showActiveLine) extensions.push(highlightActiveLine(), highlightActiveLineGutter())
   if (enableAutocomplete) extensions.push(closeBrackets(), autocompletion())
   extensions.push(...cursorSyncPlugin(onCursorChange))
+  extensions.push(...foldRegionsPlugin(onFoldRegionsChange))
 
   return extensions
 }

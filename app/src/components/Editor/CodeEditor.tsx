@@ -13,15 +13,16 @@ export type CodeEditorProps = {
   className?: string
   placeholder?: string
   onViewReady?: (view: EditorView) => void
+  onFoldRegionsChange?: (regions: { fromLine: number; toLine: number }[]) => void
 }
 
 export function CodeEditor(props: Readonly<CodeEditorProps>) {
-  const { value, onChange, onCursorChange, readOnly, extensions, className, placeholder, onViewReady } = props
+  const { value, onChange, onCursorChange, readOnly, extensions, className, placeholder, onViewReady, onFoldRegionsChange } = props
 
   const mergedExtensions = useMemo(() => {
     if (extensions && extensions.length) return extensions
-    return createExtensions({ onCursorChange, readOnly } as EditorOptions)
-  }, [extensions, onCursorChange, readOnly])
+    return createExtensions({ onCursorChange, readOnly, onFoldRegionsChange } as EditorOptions)
+  }, [extensions, onCursorChange, readOnly, onFoldRegionsChange])
 
   return (
     <CodeMirror

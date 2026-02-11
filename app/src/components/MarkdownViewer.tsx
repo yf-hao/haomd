@@ -2,7 +2,7 @@ import React, { memo, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
-import rehypeKatex from 'rehype-katex'
+import katex from 'katex'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import 'katex/dist/katex.min.css'
@@ -13,40 +13,232 @@ import { invoke } from '@tauri-apps/api/core'
 
 export type Renderer = (code: string) => React.ReactNode
 
-const remarkPlugins = [remarkGfm, remarkMath]
-const rehypePlugins = [rehypeKatex] // 高亮由 SyntaxHighlighter 处理
+export type FoldRegion = { fromLine: number; toLine: number }
+
+type LineRange = {
+  start?: number
+  end?: number
+}
+
+const LineRangeContext = React.createContext<LineRange | undefined>(undefined)
+
+const useLineRange = () => React.useContext(LineRangeContext)
+
+// 为 math / inlineMath 节点打上 data-line-start / data-line-end 属性，便于后续按行号折叠
+function remarkMathLineAnchors() {
+  return (tree: any) => {
+    const walk = (node: any) => {
+      if (!node || typeof node !== 'object') return
+
+      if (node.type === 'math' || node.type === 'inlineMath') {
+        const pos = node.position
+        const startLine = pos?.start?.line
+        const endLine = pos?.end?.line ?? startLine
+
+        // 调试：观察 remark 阶段 math/inlineMath 的位置信息和即将写入的 hProperties
+        if (typeof console !== 'undefined') {
+          // 注意：日志只在开发时使用，生产环境可通过构建配置去除
+          console.log('[remarkMathLineAnchors] node.type=%s pos=%o start=%s end=%s hProps(before)=%o', node.type, pos, startLine, endLine, node.data?.hProperties)
+        }
+
+        if (typeof startLine === 'number') {
+          if (!node.data) node.data = {}
+          if (!node.data.hProperties) node.data.hProperties = {}
+          node.data.hProperties['data-line-start'] = String(startLine)
+          if (endLine != null) node.data.hProperties['data-line-end'] = String(endLine)
+
+          if (typeof console !== 'undefined') {
+            console.log('[remarkMathLineAnchors] hProps(after)=%o', node.data.hProperties)
+          }
+        }
+      }
+
+      if (Array.isArray(node.children)) {
+        for (const child of node.children) walk(child)
+      }
+    }
+
+    walk(tree)
+  }
+}
+
+const remarkPlugins = [remarkGfm, remarkMath, remarkMathLineAnchors]
+
+// remark → rehype 阶段：将 math / inlineMath 映射为自定义标签，携带原始行号
+const remarkRehypeOptions: any = {
+  handlers: {
+    // 在 mdast-util-to-hast 中，handler 形如 (state, node, parent) ⇒ HastNode
+    // 这里我们直接返回一个 plain 对象作为 HAST element，不再依赖 state.h
+    math(_state: any, node: any) {
+      const pos = node.position
+      const startLine = pos?.start?.line
+      const endLine = pos?.end?.line ?? startLine
+      const props: any = { value: node.value }
+      if (typeof startLine === 'number') {
+        props['data-line-start'] = startLine
+        if (endLine != null) props['data-line-end'] = endLine
+      }
+      return {
+        type: 'element',
+        tagName: 'math',
+        properties: props,
+        children: [],
+        position: pos,
+      }
+    },
+    inlineMath(_state: any, node: any) {
+      const pos = node.position
+      const startLine = pos?.start?.line
+      const endLine = pos?.end?.line ?? startLine
+      const props: any = { value: node.value }
+      if (typeof startLine === 'number') {
+        props['data-line-start'] = startLine
+        if (endLine != null) props['data-line-end'] = endLine
+      }
+      return {
+        type: 'element',
+        tagName: 'inlineMath',
+        properties: props,
+        children: [],
+        position: pos,
+      }
+    },
+  },
+}
 
 const DiagramsLazy = React.lazy(() => import('./diagrams'))
 
 
 function MarkdownViewerComponent(
-  props: Readonly<{ value: string; activeLine?: number; previewWidth?: number; filePath?: string | null }>
+  props: Readonly<{ value: string; activeLine?: number; previewWidth?: number; filePath?: string | null; foldRegions?: FoldRegion[] }>
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const { value, activeLine, previewWidth, filePath } = props
+  const { value, activeLine, previewWidth, filePath, foldRegions } = props
 
   const components = useMemo(() => {
-    const blockWithAnchor = (Tag: keyof React.JSX.IntrinsicElements) => {
+    const regions = foldRegions ?? []
+
+    // 判断一个块 [start, end] 是否与任一折叠区间有重叠
+    const isBlockFolded = (start?: number, end?: number): boolean => {
+      if (!regions.length || !start) return false
+      const s = start
+      const e = end ?? start
+      return regions.some((r) => !(e < r.fromLine || s > r.toLine))
+    }
+
+    const blockWithAnchor = (Tag: keyof React.JSX.IntrinsicElements, hideOnFold: boolean) => {
       return ({ node, children, className, ...rest }: any) => {
-        const start = node?.position?.start?.line
-        const end = node?.position?.end?.line ?? start
-        const dataProps = start ? { 'data-line-start': start, 'data-line-end': end } : undefined
-        return React.createElement(Tag, { className, ...dataProps, ...rest }, children)
+        const start = node?.position?.start?.line as number | undefined
+        const end = (node?.position?.end?.line ?? start) as number | undefined
+
+        if (hideOnFold && isBlockFolded(start, end)) {
+          return null
+        }
+
+        const dataProps = start
+          ? { 'data-line-start': start, 'data-line-end': end }
+          : undefined
+
+        const lineRange: LineRange = { start, end }
+
+        return (
+          <LineRangeContext.Provider value={lineRange}>
+            {React.createElement(Tag, { className, ...dataProps, ...rest }, children)}
+          </LineRangeContext.Provider>
+        )
       }
     }
 
     return {
-      p: blockWithAnchor('p'),
-      h1: blockWithAnchor('h1'),
-      h2: blockWithAnchor('h2'),
-      h3: blockWithAnchor('h3'),
-      h4: blockWithAnchor('h4'),
-      h5: blockWithAnchor('h5'),
-      h6: blockWithAnchor('h6'),
-      ul: blockWithAnchor('ul'),
-      ol: blockWithAnchor('ol'),
-      li: blockWithAnchor('li'),
-      blockquote: blockWithAnchor('blockquote'),
+      // 文本块：若起始行位于折叠区间内，则在预览中隐藏
+      p: blockWithAnchor('p', true),
+      // 一级标题：作为折叠入口本身不隐藏（其所在行通常不在折叠区间内）
+      h1: blockWithAnchor('h1', false),
+      // 二级及以下标题：如果所在行在折叠区间内（例如属于某个 H1/H2 的折叠内容），则隐藏
+      h2: blockWithAnchor('h2', true),
+      h3: blockWithAnchor('h3', true),
+      h4: blockWithAnchor('h4', true),
+      h5: blockWithAnchor('h5', true),
+      h6: blockWithAnchor('h6', true),
+      ul: blockWithAnchor('ul', true),
+      ol: blockWithAnchor('ol', true),
+      li: blockWithAnchor('li', true),
+      blockquote: blockWithAnchor('blockquote', true),
+      div: blockWithAnchor('div', true),
+
+      // 通用 span：不再承担 KaTeX 折叠职责，由 math/inlineMath 专门处理
+      span: ({ className, children, ...rest }: any) => (
+        <span className={className} {...rest}>
+          {children}
+        </span>
+      ),
+
+      // 块级 KaTeX 公式：直接在 React 层渲染，并参与折叠与高亮
+      math: ({ node, value, ...rest }: any) => {
+        const start = node?.position?.start?.line as number | undefined
+        const end = (node?.position?.end?.line ?? start) as number | undefined
+
+        if (isBlockFolded(start, end)) {
+          return null
+        }
+
+        const tex = (value ?? (node as any).value ?? '').trim()
+        let html = ''
+        try {
+          html = katex.renderToString(tex, { displayMode: true, throwOnError: false })
+        } catch {
+          html = tex
+        }
+
+        const dataProps = start
+          ? { 'data-line-start': start, 'data-line-end': end }
+          : undefined
+
+        const lineRange: LineRange = { start, end }
+
+        return (
+          <LineRangeContext.Provider value={lineRange}>
+            <div
+              {...rest}
+              {...dataProps}
+              // KaTeX 已经返回完整的 HTML 结构（含 .katex-display/.katex 等），这里仅包一层用于行号锚点
+              dangerouslySetInnerHTML={{ __html: html }}
+            />
+          </LineRangeContext.Provider>
+        )
+      },
+
+      // 行内 KaTeX 公式：使用父块的行号参与折叠
+      inlineMath: ({ node, value, ...rest }: any) => {
+        const lineRange = useLineRange()
+        let start = lineRange?.start
+        let end = lineRange?.end ?? start
+
+        if (start == null) {
+          const pos = node?.position
+          start = pos?.start?.line as number | undefined
+          end = (pos?.end?.line ?? start) as number | undefined
+        }
+
+        if (isBlockFolded(start, end)) {
+          return null
+        }
+
+        const tex = (value ?? (node as any).value ?? '').trim()
+        let html = ''
+        try {
+          html = katex.renderToString(tex, { displayMode: false, throwOnError: false })
+        } catch {
+          html = tex
+        }
+
+        return (
+          <span
+            {...rest}
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        )
+      },
 
       // 自定义链接渲染：在应用内新建浏览器窗口
       a: ({ node, href, children, ...props }: any) => {
@@ -145,8 +337,13 @@ function MarkdownViewerComponent(
 
       // pre 渲染器
       pre: ({ node, children, className, ...rest }: any) => {
-        const start = node?.position?.start?.line
-        const end = node?.position?.end?.line ?? start
+        const start = node?.position?.start?.line as number | undefined
+        const end = (node?.position?.end?.line ?? start) as number | undefined
+
+        if (isBlockFolded(start, end)) {
+          return null
+        }
+
         const dataProps = start
           ? { 'data-line-start': start, 'data-line-end': end }
           : undefined
@@ -158,10 +355,14 @@ function MarkdownViewerComponent(
         const classNames = []
         if (!parentIsPre) classNames.push('code-block')
 
+        const lineRange: LineRange = { start, end }
+
         return (
-          <pre className={classNames.join(' ')} {...dataProps} {...rest}>
-            {children}
-          </pre>
+          <LineRangeContext.Provider value={lineRange}>
+            <pre className={classNames.join(' ')} {...dataProps} {...rest}>
+              {children}
+            </pre>
+          </LineRangeContext.Provider>
         )
       },
 
@@ -170,6 +371,13 @@ function MarkdownViewerComponent(
         const content = String(children).trim()
         const match = /language-([\w]+)/.exec(className || '')
         const lang = match?.[1]
+
+        // 对块级 code，根据行号区间折叠对应内容（行内 code 按父块处理即可）
+        const start = (node as any)?.position?.start?.line as number | undefined
+        const end = (node as any)?.position?.end?.line ?? start
+        if (!inline && isBlockFolded(start, end)) {
+          return null
+        }
 
         // // 行内 code
         // if (inline) {
@@ -227,7 +435,7 @@ function MarkdownViewerComponent(
         )
       },
     }
-  }, [])
+  }, [foldRegions])
 
   // 保存和恢复滚动位置
   useLayoutEffect(() => {
@@ -314,7 +522,7 @@ function MarkdownViewerComponent(
     <div className="markdown-body gh-markdown" ref={containerRef} data-preview-width={previewWidth}>
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
-        rehypePlugins={rehypePlugins}
+        remarkRehypeOptions={remarkRehypeOptions}
         components={components}
       >
         {value}

@@ -99,6 +99,7 @@ export function WorkspaceShell({
   const [sidebarWidth, setSidebarWidth] = useState(260)
   const [isSidebarResizing, setIsSidebarResizing] = useState(false)
   const [isCreatingTab, setIsCreatingTab] = useState(false)
+  const [foldRegions, setFoldRegions] = useState<{ fromLine: number; toLine: number }[]>([])
   const sidebarResizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
 
   const {
@@ -815,9 +816,28 @@ export function WorkspaceShell({
               )}
               <section className="pane-group editor-preview-group" style={{ gridTemplateColumns }} ref={workspaceRef}>
                 <section className="pane" style={effectiveLayout === 'preview-only' ? { display: 'none' } : effectiveLayout === 'preview-left' ? { gridColumn: '2/3' } : effectiveLayout === 'preview-right' ? { gridColumn: '1/2' } : { gridColumn: '1/-1' }}>
-                  <Suspense fallback={<div className="code-editor" />}><EditorPaneLazy markdown={markdown} onChange={handleMarkdownChange} onCursorChange={setActiveLine} showPreview={showPreview} setShowPreview={setShowPreview} editorViewRef={editorViewRef} /></Suspense>
+                  <Suspense fallback={<div className="code-editor" />}>
+                    <EditorPaneLazy
+                      markdown={markdown}
+                      onChange={handleMarkdownChange}
+                      onCursorChange={setActiveLine}
+                      showPreview={showPreview}
+                      setShowPreview={setShowPreview}
+                      editorViewRef={editorViewRef}
+                      onFoldRegionsChange={setFoldRegions}
+                    />
+                  </Suspense>
                 </section>
-                <Suspense fallback={<section className="pane preview"><div className="preview-body" /></section>}><PreviewPaneLazy value={previewValue} activeLine={activeLine} previewWidth={previewWidthForRender} effectiveLayout={effectiveLayout} filePath={filePath} /></Suspense>
+                <Suspense fallback={<section className="pane preview"><div className="preview-body" /></section>}>
+                  <PreviewPaneLazy
+                    value={previewValue}
+                    activeLine={activeLine}
+                    previewWidth={previewWidthForRender}
+                    effectiveLayout={effectiveLayout}
+                    filePath={filePath}
+                    foldRegions={foldRegions}
+                  />
+                </Suspense>
                 {(effectiveLayout === 'preview-left' || effectiveLayout === 'preview-right') && (
                   <div className={`divider-hotzone ${dragging ? 'active' : ''}`} style={{ left: effectiveLayout === 'preview-left' ? `${previewWidthForRender}%` : `${100 - previewWidthForRender}%` }} onMouseDown={startDragging}>
                     <div className="divider-rail"><span className="divider-handle" /></div>
