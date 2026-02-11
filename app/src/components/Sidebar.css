@@ -354,23 +354,7 @@
 }
 
 .sidebar-file-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 4px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-  color: #c4ccee;
-}
-
-.sidebar-file-row:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.sidebar-file-row.active {
-  background: rgba(90, 216, 166, 0.12);
-  color: #e8ecf5;
+  /* standalone 文件分组的条目，仅作为语义标记，视觉样式复用 .tree-row.file */
 }
 
 .sidebar-folder-list {
@@ -458,8 +442,21 @@
 }
 
 .tree-row.file.active {
-  background: rgba(90, 216, 166, 0.12);
+  background: rgba(90, 216, 166, 0.22);
   color: #e8ecf5;
+  box-shadow: inset 2px 0 0 rgba(90, 216, 166, 0.9);
+}
+
+.tree-row.file.highlighted {
+  background: rgba(235, 37, 37, 0.604);
+  color: #bfdbfe;
+  box-shadow: none;
+}
+
+.tree-row.file.active.highlighted {
+  background: rgba(90, 216, 166, 0.22);
+  color: #e8ecf5;
+  box-shadow: inset 2px 0 0 rgba(90, 216, 166, 0.9);
 }
 
 .tree-row.dir.active {
@@ -476,7 +473,7 @@
 
 .sidebar-context-menu {
   position: fixed;
-  z-index: 9999;
+  z-index: 2147483647;
   min-width: 180px;
   padding: 4px 0;
   background: rgba(15, 23, 42, 0.98);

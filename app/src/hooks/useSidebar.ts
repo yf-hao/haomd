@@ -16,6 +16,13 @@ function normalizePath(path: string): string {
   return trimTrailingSlash(normalizeSeparators(path))
 }
 
+function isUnderRoot(root: string, filePath: string): boolean {
+  const rootNorm = normalizePath(root)
+  const fileNorm = normalizePath(filePath)
+  if (fileNorm === rootNorm) return true
+  return fileNorm.startsWith(rootNorm + '/')
+}
+
 function dirname(path: string): string | null {
   const norm = normalizePath(path)
   const idx = norm.lastIndexOf('/')
@@ -34,6 +41,7 @@ export function useSidebar() {
   const [expanded, setExpanded] = useState<ExpandedMap>({})
   const [standaloneFiles, setStandaloneFiles] = useState<StandaloneFileItem[]>([])
   const [folderRoots, setFolderRoots] = useState<string[]>([])
+  const [highlightedFiles, setHighlightedFiles] = useState<string[]>([])
   const [hydrated, setHydrated] = useState(false)
 
   // 启动时加载持久化的侧边栏状态
@@ -80,6 +88,10 @@ export function useSidebar() {
         )
       }
 
+      if (state.highlightedFiles && state.highlightedFiles.length > 0) {
+        setHighlightedFiles(state.highlightedFiles.map((p) => normalizePath(p)))
+      }
+
       setHydrated(true)
     }
 
@@ -90,7 +102,7 @@ export function useSidebar() {
     }
   }, [])
 
-  // root / expanded / standaloneFiles / folderRoots 变化时保存到后端
+  // root / expanded / standaloneFiles / folderRoots / highlightedFiles 变化时保存到后端
   useEffect(() => {
     if (!hydrated) return
     const state = {
@@ -98,9 +110,10 @@ export function useSidebar() {
       expandedPaths: expandedPathsFromMap(expanded),
       standaloneFiles: standaloneFiles.map((f) => f.path),
       folderRoots,
+      highlightedFiles,
     }
     void saveSidebarState(state)
-  }, [root, expanded, standaloneFiles, folderRoots, hydrated])
+  }, [root, expanded, standaloneFiles, folderRoots, highlightedFiles, hydrated])
 
   const toggleNode = useCallback((path: string) => {
     setExpanded((prev) => toggleExpanded(prev, path))
@@ -147,6 +160,31 @@ export function useSidebar() {
       if (prev.includes(normalized)) return prev
       return [...prev, normalized]
     })
+    // 方案 B：当目录作为根打开时，清理其子树中的独立文件条目，并记录高亮
+    setStandaloneFiles((prev) => {
+      const remaining: StandaloneFileItem[] = []
+      const removed: StandaloneFileItem[] = []
+
+      for (const f of prev) {
+        if (isUnderRoot(normalized, f.path)) {
+          removed.push(f)
+        } else {
+          remaining.push(f)
+        }
+      }
+
+      if (removed.length > 0) {
+        setHighlightedFiles((prevHighlighted) => {
+          const set = new Set(prevHighlighted.map((p) => normalizePath(p)))
+          for (const f of removed) {
+            set.add(normalizePath(f.path))
+          }
+          return Array.from(set)
+        })
+      }
+
+      return remaining
+    })
   }, [])
 
   const removeFolderRoot = useCallback((path: string) => {
@@ -163,6 +201,24 @@ export function useSidebar() {
       return remaining.length > 0 ? normalizePath(remaining[0]) : null
     })
   }, [folderRoots])
+
+  const markFileVisited = useCallback((filePath: string) => {
+    const norm = normalizePath(filePath)
+    setHighlightedFiles((prev) => prev.filter((p) => p !== norm))
+  }, [])
+
+  const refreshFolderTree = useCallback(async (folderPath: string) => {
+    const normalized = normalizePath(folderPath)
+    const result = await listFolder(normalized)
+    if (!result.ok) {
+      console.warn('[useSidebar] refreshFolderTree listFolder error:', result.error)
+      return
+    }
+    setTreesByRoot((prev) => ({
+      ...prev,
+      [normalized]: buildFileTree(normalized, result.data),
+    }))
+  }, [])
 
   const ensureFileVisible = useCallback(
     async (filePath: string) => {
@@ -214,11 +270,14 @@ export function useSidebar() {
     expanded,
     standaloneFiles,
     folderRoots,
+    highlightedFiles,
     toggleNode,
     openFolderAsRoot,
     ensureFileVisible,
     addStandaloneFile,
     removeStandaloneFile,
     removeFolderRoot,
+    markFileVisited,
+    refreshFolderTree,
   }
 }

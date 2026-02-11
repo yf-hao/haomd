@@ -5,7 +5,7 @@ import { createAutoSaver, type AutoSaveHandle } from '../modules/files/autoSave'
 import type { RecentFile, Result, ServiceError, WriteResult } from '../modules/files/types'
 import { isTauriEnv } from '../modules/platform/runtime'
 
-const DEFAULT_PATH = '未命名.md'
+const DEFAULT_PATH = 'untitled.md'
 
 const isTauri = isTauriEnv
 

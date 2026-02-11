@@ -7,6 +7,7 @@ export type SidebarState = {
   expandedPaths: string[]
   standaloneFiles: string[]
   folderRoots: string[]
+  highlightedFiles: string[]
 }
 
 type BackendSidebarState = {
@@ -14,6 +15,7 @@ type BackendSidebarState = {
   expanded_paths: string[]
   standalone_files: string[]
   folder_roots: string[]
+  highlighted_files: string[]
 }
 
 
@@ -27,6 +29,7 @@ const DEFAULT_STATE: SidebarState = {
   expandedPaths: [],
   standaloneFiles: [],
   folderRoots: [],
+  highlightedFiles: [],
 }
 
 const toFrontendState = (backend: BackendSidebarState): SidebarState => ({
@@ -34,6 +37,7 @@ const toFrontendState = (backend: BackendSidebarState): SidebarState => ({
   expandedPaths: backend.expanded_paths ?? [],
   standaloneFiles: backend.standalone_files ?? [],
   folderRoots: backend.folder_roots ?? [],
+  highlightedFiles: backend.highlighted_files ?? [],
 })
 
 export async function loadSidebarState(): Promise<SidebarState> {
@@ -66,6 +70,7 @@ export async function saveSidebarState(state: SidebarState): Promise<void> {
     expanded_paths: state.expandedPaths,
     standalone_files: state.standaloneFiles,
     folder_roots: state.folderRoots,
+    highlighted_files: state.highlightedFiles,
   }
 
   try {

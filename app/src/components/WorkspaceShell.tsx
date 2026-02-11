@@ -26,6 +26,7 @@ import { useNativePaste } from '../hooks/useNativePaste'
 import { onNativePasteImage } from '../modules/platform/clipboardEvents'
 import type { EditorTab } from '../types/tabs'
 import { openTerminalAt } from '../modules/platform/terminalService'
+import { openInFileManager } from '../modules/platform/fileExplorerService'
 import { loadDefaultImagePathStrategyConfig, resolveImageTarget } from '../modules/images/imagePasteStrategy'
 
 // AI Chat localStorage keys
@@ -403,6 +404,16 @@ export function WorkspaceShell({
     }
   }, [activeTab, isTauriEnv])
 
+  // 如果当前激活标签对应的文件曾经是“从文件分组收编”的高亮文件，则视为已访问，移除高亮
+  useEffect(() => {
+    const path = activeTab?.path
+    if (!path) return
+    const normalized = path.replace(/\\/g, '/')
+    if (sidebar.highlightedFiles.includes(normalized)) {
+      sidebar.markFileVisited(normalized)
+    }
+  }, [activeTab?.path, sidebar])
+
   const {
     filePath,
     setFilePath,
@@ -419,7 +430,33 @@ export function WorkspaceShell({
     confirmLoseChanges,
     newDocument,
   } = useFilePersistence(markdown, {
-    onSaved: (path: string) => updateActiveMeta(path, false)
+    onSaved: (path: string) => {
+      // 方案2：在父组件处理保存后的逻辑
+
+      // 1. 更新标签元数据（名称和 dirty 状态）
+      updateActiveMeta(path, false)
+
+      // 2. 处理侧边栏文件列表
+      const normalizedPath = path.replace(/\\/g, '/')
+      const isUnderAnyRoot = sidebar.folderRoots.some((root) => {
+        const rootNorm = root.replace(/\\/g, '/')
+        return normalizedPath.startsWith(rootNorm + '/')
+      })
+
+      if (isUnderAnyRoot) {
+        // 如果保存在已打开的文件夹中，刷新该文件夹
+        const parentRoot = sidebar.folderRoots.find((root) => {
+          const rootNorm = root.replace(/\\/g, '/')
+          return normalizedPath.startsWith(rootNorm + '/')
+        })
+        if (parentRoot) {
+          void sidebar.refreshFolderTree(parentRoot)
+        }
+      } else {
+        // 否则添加到独立文件列表
+        sidebar.addStandaloneFile(path)
+      }
+    }
   })
 
   useEffect(() => {
@@ -526,10 +563,11 @@ export function WorkspaceShell({
   }, [isCreatingTab, tabs, setActiveTab, openFileInNewTab])
 
   const openRecentFileInNewTab = useCallback(async (path: string) => {
-    const resp = await openFileInNewTab(path)
+    // 复用 Sidebar 打开逻辑：如果已存在同路径标签，只激活，不新建
+    const resp = await openFileFromSidebar(path)
     if (resp?.ok) sidebar.addStandaloneFile(resp.data.path)
     return resp
-  }, [openFileInNewTab, sidebar])
+  }, [openFileFromSidebar, sidebar])
 
   const openFolderInSidebar = useCallback(async () => {
     if (!isTauriEnv()) return
@@ -543,6 +581,25 @@ export function WorkspaceShell({
   const closeTabsByPath = useCallback((path: string) => {
     tabs.forEach(t => { if (t.path === path) closeTab(t.id) })
   }, [tabs, closeTab])
+
+  const computeDirFromPath = (targetPath: string): string => {
+    if (!targetPath) return targetPath
+
+    const hasBackslash = targetPath.includes('\\')
+    const normalized = targetPath.replace(/[\\/]/g, '/')
+    const lastSlash = normalized.lastIndexOf('/')
+
+    if (lastSlash <= 0) {
+      return targetPath
+    }
+
+    let dir = normalized.slice(0, lastSlash)
+    if (hasBackslash) {
+      dir = dir.replace(/\//g, '\\')
+    }
+
+    return dir
+  }
 
   const handleSidebarContextAction = useCallback(async (payload: SidebarContextActionPayload) => {
     const { path, kind, action } = payload
@@ -567,37 +624,20 @@ export function WorkspaceShell({
       })
     } else if (action === 'open-terminal') {
       // 对文件：取所在目录；对文件夹：直接使用其自身路径
-      const computeDirFromPath = (targetPath: string): string => {
-        if (!targetPath) return targetPath
-
-        // 记住原始分隔符风格（Windows: \\，POSIX: /）
-        const hasBackslash = targetPath.includes('\\')
-
-        // 统一成 POSIX 风格便于处理
-        const normalized = targetPath.replace(/[\\/]/g, '/')
-        const lastSlash = normalized.lastIndexOf('/')
-
-        // 没有分隔符，或者只有根（比如 "/"），直接返回原路径
-        if (lastSlash <= 0) {
-          return targetPath
-        }
-
-        // 取目录部分（会保留开头的 "/" 或盘符前缀中的 "/"）
-        let dir = normalized.slice(0, lastSlash)
-
-        // 如果原路径是 Windows 风格，用 "\\" 还原
-        if (hasBackslash) {
-          dir = dir.replace(/\//g, '\\')
-        }
-
-        return dir
-      }
-
       const cwd = kind === 'standalone-file' || kind === 'tree-file'
         ? computeDirFromPath(path)
         : path
 
       const result = await openTerminalAt(cwd)
+      if (!result.ok && result.message) {
+        setStatusMessage(result.message)
+      }
+    } else if (action === 'open-in-file-manager') {
+      const targetPath = kind === 'standalone-file' || kind === 'tree-file'
+        ? computeDirFromPath(path)
+        : path
+
+      const result = await openInFileManager(targetPath)
       if (!result.ok && result.message) {
         setStatusMessage(result.message)
       }
@@ -792,6 +832,8 @@ export function WorkspaceShell({
           onToggle={sidebar.toggleNode} onFileClick={openFileFromSidebar}
           onContextAction={handleSidebarContextAction} activePath={activeTab?.path ?? null}
           panelWidth={sidebarWidth}
+          highlightedPaths={sidebar.highlightedFiles}
+          onFileVisited={sidebar.markFileVisited}
         />
       )}
       {activeLeftPanel === 'outline' && (

@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import type { SidebarContextActionPayload } from '../components/Sidebar'
 import type { Result } from '../modules/files/types'
+import { openInFileManager } from '../modules/platform/fileExplorerService'
 
 export function useSidebarActions(options: {
   tabs: { id: string; path?: string | null }[]
@@ -86,6 +87,32 @@ export function useSidebarActions(options: {
             closeTabsByPath(path)
           },
         })
+        return
+      }
+
+      if (action === 'open-in-file-manager') {
+        const computeDirFromPath = (targetPath: string): string => {
+          if (!targetPath) return targetPath
+
+          const hasBackslash = targetPath.includes('\\')
+          const normalized = targetPath.replace(/[\\/]/g, '/')
+          const lastSlash = normalized.lastIndexOf('/')
+          if (lastSlash <= 0) {
+            return targetPath
+          }
+          let dir = normalized.slice(0, lastSlash)
+          if (hasBackslash) {
+            dir = dir.replace(/\//g, '\\')
+          }
+          return dir
+        }
+
+        const isFile = kind === 'standalone-file' || kind === 'tree-file'
+        const targetPath = isFile ? computeDirFromPath(path) : path
+        const result = await openInFileManager(targetPath)
+        if (!result.ok && result.message) {
+          setStatusMessage(result.message)
+        }
         return
       }
     },

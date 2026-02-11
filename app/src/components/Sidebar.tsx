@@ -9,7 +9,7 @@ export type StandaloneFileItem = {
 
 export type SidebarContextTargetKind = 'standalone-file' | 'folder-root' | 'tree-file' | 'tree-dir'
 
-export type SidebarContextAction = 'open' | 'remove' | 'delete' | 'open-terminal'
+export type SidebarContextAction = 'open' | 'remove' | 'delete' | 'open-terminal' | 'open-in-file-manager'
 
 export type SidebarContextActionPayload = {
   path: string
@@ -27,6 +27,8 @@ export type SidebarProps = {
   onContextAction?: (payload: SidebarContextActionPayload) => void
   activePath?: string | null
   panelWidth?: number
+  highlightedPaths?: string[]
+  onFileVisited?: (path: string) => void
 }
 
 type TreeNodeProps = {
@@ -36,12 +38,15 @@ type TreeNodeProps = {
   onToggle: (path: string) => void
   onFileClick: (path: string) => void
   activePath?: string | null
+  highlightedPaths?: string[]
+  onFileVisited?: (path: string) => void
   onContextMenu?: (event: any, target: { path: string; kind: SidebarContextTargetKind }) => void
 }
 
-function TreeNode({ node, level, expanded, onToggle, onFileClick, activePath, onContextMenu }: TreeNodeProps) {
+function TreeNode({ node, level, expanded, onToggle, onFileClick, activePath, highlightedPaths, onFileVisited, onContextMenu }: TreeNodeProps) {
   const isExpanded = !!expanded[node.path]
   const isActive = activePath === node.path
+  const isHighlighted = highlightedPaths?.includes(node.path.replace(/\\/g, '/')) ?? false
 
   const paddingLeft = 8 + level * 12
 
@@ -76,11 +81,18 @@ function TreeNode({ node, level, expanded, onToggle, onFileClick, activePath, on
     )
   }
 
+  const className = `tree-row file ${isActive ? 'active' : ''} ${isHighlighted ? 'highlighted' : ''}`.trim()
+
   return (
     <div
-      className={`tree-row file ${isActive ? 'active' : ''}`}
+      className={className}
       style={{ paddingLeft }}
-      onClick={() => onFileClick(node.path)}
+      onClick={() => {
+        onFileClick(node.path)
+        if (isHighlighted && onFileVisited) {
+          onFileVisited(node.path)
+        }
+      }}
       onContextMenu={(e) => {
         if (!onContextMenu) return
         e.preventDefault()
@@ -112,8 +124,8 @@ function SidebarContextMenu({ x, y, target, onAction, onRequestClose }: SidebarC
     const isFileTarget = target.kind === 'standalone-file' || target.kind === 'tree-file'
     const isFolderRoot = target.kind === 'folder-root'
 
-    // 基础项：Open + Open in Terminal
-    let itemCount = 2
+    // 基础项：Open + Open in File Manager + Open in Terminal
+    let itemCount = 3
     // 文件类型：增加 Delete…
     if (isFileTarget) itemCount += 1
     // 独立文件：增加 Remove from File List
@@ -185,6 +197,9 @@ function SidebarContextMenu({ x, y, target, onAction, onRequestClose }: SidebarC
         <button type="button" role="menuitem" onClick={() => handleClickItem('open')}>
           Open
         </button>
+        <button type="button" role="menuitem" onClick={() => handleClickItem('open-in-file-manager')}>
+          Open in File Manager
+        </button>
         <button type="button" role="menuitem" onClick={() => handleClickItem('open-terminal')}>
           Open in Terminal
         </button>
@@ -208,7 +223,7 @@ function SidebarContextMenu({ x, y, target, onAction, onRequestClose }: SidebarC
   )
 }
 
-export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, onToggle, onFileClick, onContextAction, activePath, panelWidth }: SidebarProps) {
+export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, onToggle, onFileClick, onContextAction, activePath, panelWidth, highlightedPaths, onFileVisited }: SidebarProps) {
   const hasStandalone = standaloneFiles.length > 0
   const hasTree = folderRoots.some((rootPath) => (treesByRoot[rootPath]?.length ?? 0) > 0)
 
@@ -284,7 +299,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
               {standaloneFiles.map((file) => (
                 <li
                   key={file.path}
-                  className={`sidebar-file-row ${activePath === file.path ? 'active' : ''}`}
+                  className={`sidebar-file-row tree-row file ${activePath === file.path ? 'active' : ''}`}
                   onClick={() => onFileClick(file.path)}
                   onContextMenu={(e) => {
                     e.preventDefault()
@@ -349,6 +364,8 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                               onToggle={onToggle}
                               onFileClick={onFileClick}
                               activePath={activePath}
+                              highlightedPaths={highlightedPaths}
+                              onFileVisited={onFileVisited}
                               onContextMenu={handleTreeNodeContextMenu}
                             />
                           ))}

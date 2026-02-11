@@ -148,6 +148,8 @@ struct SidebarState {
   standalone_files: Vec<String>,
   #[serde(default)]
   folder_roots: Vec<String>,
+  #[serde(default)]
+  highlighted_files: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -249,10 +251,10 @@ async fn read_sidebar_state(app: &AppHandle) -> std::io::Result<SidebarState> {
   match fs::read(&path).await {
     Ok(bytes) => {
       let state: SidebarState = serde_json::from_slice(&bytes)
-        .unwrap_or(SidebarState { root: None, expanded_paths: Vec::new(), standalone_files: Vec::new(), folder_roots: Vec::new() });
+        .unwrap_or(SidebarState { root: None, expanded_paths: Vec::new(), standalone_files: Vec::new(), folder_roots: Vec::new(), highlighted_files: Vec::new() });
       Ok(state)
     }
-    Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(SidebarState { root: None, expanded_paths: Vec::new(), standalone_files: Vec::new(), folder_roots: Vec::new() }),
+    Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(SidebarState { root: None, expanded_paths: Vec::new(), standalone_files: Vec::new(), folder_roots: Vec::new(), highlighted_files: Vec::new() }),
     Err(err) => Err(err),
   }
 }
@@ -716,6 +718,7 @@ async fn quit_app() {
 }
 
 #[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 struct RecentMenuPayload {
   path: String,
   is_folder: bool,
@@ -1080,6 +1083,46 @@ async fn save_prompt_settings(app: AppHandle, cfg: PromptSettingsCfg) -> ResultP
 }
 
 #[tauri::command]
+async fn open_in_file_explorer(target_path: String) -> Result<(), String> {
+  use std::path::Path;
+
+  if target_path.trim().is_empty() {
+    return Err("target_path is empty".to_string());
+  }
+
+  let path = Path::new(&target_path);
+  if !path.exists() {
+    return Err(format!("路径不存在: {}", target_path));
+  }
+
+  #[cfg(target_os = "macos")]
+  {
+    Command::new("open")
+      .arg(&target_path)
+      .spawn()
+      .map_err(|e| format!("无法打开 Finder: {e}"))?;
+  }
+
+  #[cfg(target_os = "windows")]
+  {
+    Command::new("explorer")
+      .arg(&target_path)
+      .spawn()
+      .map_err(|e| format!("无法打开文件管理器: {e}"))?;
+  }
+
+  #[cfg(target_os = "linux")]
+  {
+    Command::new("xdg-open")
+      .arg(&target_path)
+      .spawn()
+      .map_err(|e| format!("无法打开文件管理器: {e}"))?;
+  }
+
+  Ok(())
+}
+
+#[tauri::command]
 async fn open_terminal(cwd: String) -> Result<(), String> {
   use std::path::Path;
 
@@ -1432,6 +1475,7 @@ pub fn run() {
       load_prompt_settings,
       save_prompt_settings,
       open_terminal,
+      open_in_file_explorer,
       save_clipboard_image_to_dir,
     ])
     .run(tauri::generate_context!())
