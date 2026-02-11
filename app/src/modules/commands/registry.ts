@@ -46,6 +46,8 @@ export type FileCommandContext = StatusContext & {
   createTab: () => void
   updateActiveMeta: (path: string, dirty: boolean) => void
   openFolderInSidebar?: () => Promise<void>
+  /** 打开文件后，向 Sidebar 注入一个独立文件条目 */
+  addStandaloneFile?: (path: string) => void
 }
 
 /**
@@ -165,8 +167,13 @@ function createFileCommands(ctx: FileCommandContext): CommandRegistry {
       if (resp && resp.ok) {
         ctx.applyOpenedContent(resp.data.content)
         // 更新当前标签的路径和标题，并标记为未脏
-        ctx.setFilePath(resp.data.path)
-        ctx.updateActiveMeta(resp.data.path, false)
+        const path = resp.data.path
+        ctx.setFilePath(path)
+        ctx.updateActiveMeta(path, false)
+        // 同步到 Sidebar：将通过 Open 打开的文件展示在 File Browser 中
+        if (ctx.addStandaloneFile) {
+          ctx.addStandaloneFile(path)
+        }
       }
     },
     open_folder: async () => {

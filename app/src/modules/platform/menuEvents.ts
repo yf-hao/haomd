@@ -2,6 +2,11 @@ import { listen } from '@tauri-apps/api/event'
 
 export type Unlisten = () => void
 
+export type RecentMenuPayload = {
+  path: string
+  isFolder: boolean
+}
+
 /**
  * 监听 Tauri 原生菜单命令（menu://action）。
  * 内部处理 React StrictMode 下 effect 双执行导致的重复监听问题。
@@ -39,12 +44,12 @@ export function onMenuAction(handler: (actionId: string) => void | Promise<void>
 /**
  * 监听 File → Open Recent 子菜单点击（menu://open_recent_file）。
  */
-export function onOpenRecentFile(handler: (path: string) => void | Promise<void>): Unlisten {
+export function onOpenRecentFile(handler: (payload: RecentMenuPayload) => void | Promise<void>): Unlisten {
   let unlisten: Unlisten | undefined
   let disposed = false
 
   const setup = async () => {
-    const un = await listen<string>('menu://open_recent_file', (event) => {
+    const un = await listen<RecentMenuPayload>('menu://open_recent_file', (event) => {
       void handler(event.payload)
     })
     if (disposed) {

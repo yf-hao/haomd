@@ -36,15 +36,15 @@ export function createVisionClientFromProvider(provider: UiProvider, activeModel
   const modelVisionMode = activeModel?.visionMode
 
   // 0. 模型级配置优先：显式声明的 visionMode 覆盖 Provider 默认和自动检测
-  if (modelVisionMode === 'none') {
+  if (modelVisionMode === 'disabled') {
     return null
   }
   if (modelVisionMode === 'enabled') {
     return createModelScopeVisionClient(provider, defaultImageUrlResolver, activeModelId)
   }
 
-  // 1. Provider 级显式配置：只要不是 'auto' / undefined，就按配置走
-  if (provider.visionMode === 'none') {
+  // 1. Provider 级显式配置
+  if (provider.visionMode === 'disabled') {
     return null
   }
   if (provider.visionMode === 'enabled') {

@@ -50,6 +50,7 @@ export interface WorkspaceShellProps {
   isTauriEnv: () => boolean
   initialAction: InitialWorkspaceAction
   initialOpenRecentPath?: string | null
+  initialOpenRecentIsFolder?: boolean | null
   onInitialActionHandled?: () => void
 }
 
@@ -69,6 +70,7 @@ export function WorkspaceShell({
   isTauriEnv,
   initialAction,
   initialOpenRecentPath,
+  initialOpenRecentIsFolder,
   onInitialActionHandled,
 }: WorkspaceShellProps) {
   const [markdown, setMarkdown] = useState(seed)
@@ -600,9 +602,15 @@ export function WorkspaceShell({
   }, [openFileFromSidebar, sidebar, closeTabsByPath, setStatusMessage])
 
   useEffect(() => {
-    const unlisten = onOpenRecentFile(path => openRecentFileInNewTab(path))
+    const unlisten = onOpenRecentFile(({ path, isFolder }) => {
+      if (isFolder) {
+        void sidebar.openFolderAsRoot(path)
+      } else {
+        void openRecentFileInNewTab(path)
+      }
+    })
     return () => unlisten()
-  }, [openRecentFileInNewTab])
+  }, [openRecentFileInNewTab, sidebar])
 
   useCommandSystem({
     layout, setLayout: setLayout as any, setShowPreview, setStatusMessage,
@@ -613,7 +621,8 @@ export function WorkspaceShell({
     openAiChatDialog: options => openAiChatDialog(options as any),
     getCurrentMarkdown, getCurrentFileName, getCurrentSelectionText,
     onRequestCloseCurrentTab: () => closeCurrentTabRef.current?.(),
-    onRequestQuit: handleQuit, isTauriEnv
+    onRequestQuit: handleQuit, isTauriEnv,
+    addStandaloneFile: sidebar.addStandaloneFile,
   })
 
   useNativePaste(editorViewRef, setStatusMessage)
@@ -750,10 +759,26 @@ export function WorkspaceShell({
     if (initialAction === 'new') createTab()
     else if (initialAction === 'open') openFile()
     else if (initialAction === 'open_folder') openFolderInSidebar()
-    else if (initialAction === 'open_recent' && initialOpenRecentPath) openRecentFileInNewTab(initialOpenRecentPath)
+    else if (initialAction === 'open_recent' && initialOpenRecentPath) {
+      if (initialOpenRecentIsFolder) {
+        void sidebar.openFolderAsRoot(initialOpenRecentPath)
+      } else {
+        void openRecentFileInNewTab(initialOpenRecentPath)
+      }
+    }
     initialActionHandledRef.current = true
     onInitialActionHandled?.()
-  }, [initialAction, initialOpenRecentPath, createTab, openFile, openFolderInSidebar, openRecentFileInNewTab, onInitialActionHandled])
+  }, [
+    initialAction,
+    initialOpenRecentPath,
+    initialOpenRecentIsFolder,
+    createTab,
+    openFile,
+    openFolderInSidebar,
+    openRecentFileInNewTab,
+    sidebar,
+    onInitialActionHandled,
+  ])
 
   return (
     <>

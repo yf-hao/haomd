@@ -228,9 +228,14 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
       lastHashRef.current = codeHash
 
       try {
-        // 自动缩放以适配当前画布尺寸，然后居中
-        mind.scaleFit()
-        mind.toCenter()
+        // 仅在容器宽度 > 0 时才进行自适应缩放，避免 NaN 路径
+        const width = el.clientWidth
+        if (width > 0) {
+          mind.scaleFit()
+          mind.toCenter()
+        } else {
+          console.warn('Mind-elixir scaleFit skipped: container width is 0')
+        }
       } catch (e) {
         console.warn('Mind-elixir scaleFit failed', e)
       }
@@ -241,9 +246,14 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
     const resizeHandler = () => {
       if (!mindRef.current) return
       try {
-        // 视图尺寸变化时重新自适应缩放并居中
-        mindRef.current.scaleFit()
-        mindRef.current.toCenter()
+        // 仅在容器宽度 > 0 时重新自适应缩放并居中
+        const width = el.clientWidth
+        if (width > 0) {
+          mindRef.current.scaleFit()
+          mindRef.current.toCenter()
+        } else {
+          console.warn('Mind-elixir scaleFit on resize skipped: container width is 0')
+        }
       } catch (e) {
         console.warn('Mind-elixir scaleFit on resize failed', e)
       }

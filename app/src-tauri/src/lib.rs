@@ -31,7 +31,7 @@ static FILE_LOCKS: Lazy<Mutex<HashMap<String, std::sync::Arc<Mutex<()>>>>> =
   Lazy::new(|| Mutex::new(HashMap::new()));
 
 // 最近文件原生菜单映射：菜单项 id -> 文件路径
-static RECENT_MENU_MAP: Lazy<std::sync::Mutex<HashMap<String, String>>> =
+static RECENT_MENU_MAP: Lazy<std::sync::Mutex<HashMap<String, RecentMenuPayload>>> =
   Lazy::new(|| std::sync::Mutex::new(HashMap::new()));
 
 // 最近文件分页状态：当前页（从 0 开始）
@@ -715,6 +715,12 @@ async fn quit_app() {
   std::process::exit(0);
 }
 
+#[derive(Debug, Serialize, Clone)]
+struct RecentMenuPayload {
+  path: String,
+  is_folder: bool,
+}
+
 fn abbreviate_path_for_menu(path: &str) -> String {
   // 将用户主目录替换为 ~，让路径更短更易读
   if let Ok(home) = std::env::var("HOME") {
@@ -727,8 +733,8 @@ fn abbreviate_path_for_menu(path: &str) -> String {
 }
 
 fn format_recent_menu_label(item: &RecentFile) -> String {
-  // 仅显示完整路径（带 ~ 缩写），避免重复信息
-  abbreviate_path_for_menu(&item.path)
+  let icon = if item.is_folder { "📁 " } else { "📄 " };
+  format!("{}{}", icon, abbreviate_path_for_menu(&item.path))
 }
 
 async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
@@ -782,7 +788,13 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 
     for (idx, item) in slice.iter().enumerate() {
       let id = format!("{RECENT_MENU_PREFIX}{idx}");
-      map.insert(id.clone(), item.path.clone());
+      map.insert(
+        id.clone(),
+        RecentMenuPayload {
+          path: item.path.clone(),
+          is_folder: item.is_folder,
+        },
+      );
 
       let label = format_recent_menu_label(item);
       open_recent_builder = open_recent_builder.item(
@@ -1311,12 +1323,12 @@ pub fn run() {
 
         // 最近文件原生子菜单：菜单项 id -> 文件路径
         if action.starts_with(RECENT_MENU_PREFIX) {
-          let path_opt = {
+          let payload_opt = {
             let map = RECENT_MENU_MAP.lock().unwrap();
             map.get(action).cloned()
           };
-          if let Some(path) = path_opt {
-            let _ = app.emit("menu://open_recent_file", path);
+          if let Some(payload) = payload_opt {
+            let _ = app.emit("menu://open_recent_file", payload);
           }
           return;
         }

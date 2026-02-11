@@ -15,6 +15,7 @@ function App() {
   const [hasWorkspace, setHasWorkspace] = useState(false)
   const [initialWorkspaceAction, setInitialWorkspaceAction] = useState<InitialWorkspaceAction>(null)
   const [initialOpenRecentPath, setInitialOpenRecentPath] = useState<string | null>(null)
+  const [initialOpenRecentIsFolder, setInitialOpenRecentIsFolder] = useState<boolean | null>(null)
   const [isAiSettingsOpen, setAiSettingsOpen] = useState(false)
   const [isPromptSettingsOpen, setPromptSettingsOpen] = useState(false)
 
@@ -43,6 +44,7 @@ function App() {
   const handleInitialActionHandled = useCallback(() => {
     setInitialWorkspaceAction(null)
     setInitialOpenRecentPath(null)
+    setInitialOpenRecentIsFolder(null)
   }, [])
 
   // 轻量监听 Tauri 菜单：仅在尚未进入工作区时拦截 File 菜单的新建/打开/打开文件夹/打开最近/退出
@@ -75,9 +77,10 @@ function App() {
       }
     })
 
-    const unlistenRecent = onOpenRecentFile((path) => {
+    const unlistenRecent = onOpenRecentFile(({ path, isFolder }) => {
       if (hasWorkspace) return
       setInitialOpenRecentPath(path)
+      setInitialOpenRecentIsFolder(isFolder)
       setHasWorkspace(true)
       setInitialWorkspaceAction('open_recent')
     })
@@ -127,6 +130,7 @@ function App() {
             isTauriEnv={isTauriEnv}
             initialAction={initialWorkspaceAction}
             initialOpenRecentPath={initialOpenRecentPath}
+            initialOpenRecentIsFolder={initialOpenRecentIsFolder}
             onInitialActionHandled={handleInitialActionHandled}
           />
         )}

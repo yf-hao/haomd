@@ -383,13 +383,12 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
               <FieldGroup label="Vision Mode">
                 <select
                   className="field-select"
-                  value={draft.visionMode || ''}
+                  value={draft.visionMode || 'disabled'}
                   onChange={(e) => updateDraftField('visionMode', e.target.value)}
                   onFocus={() => setActiveField('visionMode')}
                 >
-                  <option value="">Auto detect (recommended)</option>
-                  <option value="enabled">OpenAI image_url compatible</option>
-                  <option value="none">Disabled (text only)</option>
+                  <option value="disabled">disabled</option>
+                  <option value="enabled">enabled</option>
                 </select>
               </FieldGroup>
 
@@ -472,16 +471,16 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                                 />
                                 <select
                                   className="field-select provider-model-vision-select"
-                                  value={m.visionMode || ''}
+                                  value={m.visionMode || 'disabled'}
                                   onChange={(e) =>
                                     handleChangeModelVisionMode(
                                       p.id,
                                       m.id,
-                                      e.target.value as '' | 'none' | 'enabled',
+                                      e.target.value as 'disabled' | 'enabled',
                                     )
                                   }
                                 >
-                                  <option value="">Vision: disabled</option>
+                                  <option value="disabled">Vision: disabled</option>
                                   <option value="enabled">Vision: enabled</option>
                                 </select>
                                 <button

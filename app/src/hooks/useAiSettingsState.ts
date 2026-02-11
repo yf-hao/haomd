@@ -9,7 +9,7 @@ export type ProviderDraft = {
   description: string
   providerType: ProviderType | ''
   /** Vision 模式选择："" 表示自动检测（不写入配置） */
-  visionMode: '' | 'none' | 'enabled'
+  visionMode: 'disabled' | 'enabled'
 }
 
 const emptyDraft: ProviderDraft = {
@@ -119,7 +119,7 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
 
           const newModels = reallyNewIds.map((id) => ({
             id,
-            visionMode: draft.visionMode || undefined,
+            visionMode: draft.visionMode || 'disabled',
           }))
           return {
             ...p,
@@ -145,11 +145,11 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
       name: draft.name.trim(),
       baseUrl: draft.baseUrl.trim(),
       apiKey: draft.apiKey.trim(),
-      models: models.map((m) => ({ id: m, visionMode: draft.visionMode || undefined })),
+      models: models.map((m) => ({ id: m, visionMode: draft.visionMode || 'disabled' })),
       defaultModelId: models[0],
       description: draft.description.trim() || undefined,
       providerType: (draft.providerType || 'dify') as ProviderType,
-      visionMode: draft.visionMode || undefined,
+      visionMode: draft.visionMode || 'disabled',
     }
 
     setSettings((prev) => {
@@ -221,7 +221,7 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
   )
 
   const updateModelVisionMode = useCallback(
-    (providerId: string, modelId: string, visionMode: '' | 'none' | 'enabled') => {
+    (providerId: string, modelId: string, visionMode: 'disabled' | 'enabled') => {
       setSettings((prev) => ({
         ...prev,
         providers: prev.providers.map((p) =>
@@ -230,7 +230,7 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
             : {
                 ...p,
                 models: p.models.map((m) =>
-                  m.id !== modelId ? m : { ...m, visionMode: visionMode || undefined },
+                  m.id !== modelId ? m : { ...m, visionMode: visionMode || 'disabled' },
                 ),
               },
         ),
@@ -259,7 +259,7 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
       modelsInput,
       description: provider.description ?? '',
       providerType: provider.providerType ?? 'dify',
-      visionMode: provider.visionMode && provider.visionMode !== 'auto' ? provider.visionMode : '',
+      visionMode: provider.visionMode === 'enabled' ? 'enabled' : 'disabled',
     })
     setExpandedId(provider.id)
     setEditingProviderId(provider.id)

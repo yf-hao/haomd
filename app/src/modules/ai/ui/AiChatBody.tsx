@@ -301,7 +301,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
                 >
                   {models?.map((m) => (
                     <option key={m.id} value={m.id}>
-                      {m.visionMode !== 'none' && m.visionMode !== undefined ? '👁️ ' : ''}
+                      {m.visionMode === 'enabled' ? '👁️ ' : ''}
                       {getModelDisplayName(m.id)} ({m.providerName})
                     </option>
                   ))}

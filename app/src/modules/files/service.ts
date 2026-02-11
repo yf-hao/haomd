@@ -192,7 +192,8 @@ export async function listRecentPage(
 export async function logRecentFile(path: string, isFolder: boolean, traceId = makeTraceId()): Promise<Result<null>> {
   if (!isTauri()) return notAvailable(traceId)
   try {
-    const resp = await invoke<BackendResult<unknown>>('log_recent_file', { path, is_folder: isFolder, trace_id: traceId })
+    // 注意：Tauri 对 command 参数名较为严格，这里使用 isFolder 与后端命令签名保持一致
+    const resp = await invoke<BackendResult<unknown>>('log_recent_file', { path, isFolder, trace_id: traceId })
     // 后端数据为空，直接返回 ok
     if ('Ok' in resp) {
       return { ok: true, data: null, traceId: resp.Ok.trace_id }

@@ -52,6 +52,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     getCurrentMarkdown,
     getCurrentFileName,
     getCurrentSelectionText,
+    addStandaloneFile,
   } = params
 
   const aiClient = useMemo<IAiClient>(() => {
@@ -92,6 +93,7 @@ export function useCommandSystem(params: CommandSystemParams) {
         getCurrentMarkdown,
         getCurrentFileName,
         getCurrentSelectionText,
+        addStandaloneFile,
       }),
     [
       layout,
@@ -125,6 +127,7 @@ export function useCommandSystem(params: CommandSystemParams) {
       getCurrentMarkdown,
       getCurrentFileName,
       getCurrentSelectionText,
+      addStandaloneFile,
     ],
   )
 

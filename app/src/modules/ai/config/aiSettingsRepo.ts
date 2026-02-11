@@ -36,9 +36,10 @@ export function fromCfg(cfg: AiSettingsCfg | null | undefined): AiSettingsState 
         providerType = p.provider_type
       }
 
-      let visionMode: VisionMode | undefined
-      if (p.vision_mode === 'none' || p.vision_mode === 'enabled') {
-        visionMode = p.vision_mode
+      // 兼容旧数据：'none' 和 undefined 都视为 'disabled'
+      let visionMode: VisionMode = 'disabled'
+      if (p.vision_mode === 'enabled') {
+        visionMode = 'enabled'
       }
 
       return {
@@ -47,9 +48,10 @@ export function fromCfg(cfg: AiSettingsCfg | null | undefined): AiSettingsState 
         baseUrl: p.base_url,
         apiKey: p.api_key,
         models: (p.models ?? []).map((m) => {
-          let modelVisionMode: VisionMode | undefined
-          if (m.vision_mode === 'none' || m.vision_mode === 'enabled') {
-            modelVisionMode = m.vision_mode
+          // 兼容旧数据：'none' 和 undefined 都视为 'disabled'
+          let modelVisionMode: VisionMode = 'disabled'
+          if (m.vision_mode === 'enabled') {
+            modelVisionMode = 'enabled'
           }
           return {
             id: m.id,
@@ -77,12 +79,12 @@ export function toCfg(state: AiSettingsState): AiSettingsCfg {
       models: p.models.map((m) => ({
         id: m.id,
         max_tokens: m.maxTokens ?? null,
-        vision_mode: !m.visionMode || m.visionMode === 'auto' ? null : m.visionMode,
+        vision_mode: m.visionMode === 'enabled' ? 'enabled' : 'disabled',
       })),
       default_model_id: p.defaultModelId ?? null,
       description: p.description ?? null,
       provider_type: p.providerType ?? null,
-      vision_mode: !p.visionMode || p.visionMode === 'auto' ? null : p.visionMode,
+      vision_mode: p.visionMode === 'enabled' ? 'enabled' : 'disabled',
     })),
     default_provider_id: state.defaultProviderId ?? null,
   }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { buildFileTree, computeParentsToExpand, expandedMapFromPaths, expandedPathsFromMap, toggleExpanded } from '../domain/sidebarTree'
 import type { ExpandedMap, FileTreeNode } from '../domain/sidebarTree'
-import { listFolder } from '../modules/files/service'
+import { listFolder, logRecentFile } from '../modules/files/service'
 import { loadSidebarState, saveSidebarState } from '../modules/sidebar/sidebarStateRepo'
 
 function normalizeSeparators(path: string): string {
@@ -126,6 +126,12 @@ export function useSidebar() {
     if (!result.ok) {
       console.warn('[useSidebar] openFolderAsRoot listFolder error:', result.error)
       return
+    }
+
+    // 成功读取目录后，将该目录写入最近列表（作为最近文件夹）
+    const recentResult = await logRecentFile(normalized, true)
+    if (!recentResult.ok) {
+      console.warn('[useSidebar] logRecentFile for folder failed:', recentResult.error)
     }
 
     setRoot((prev) => prev ?? normalized)
