@@ -135,7 +135,10 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
   }, [])
 
   const doSend = async () => {
-    await sendMessage(input, {
+    const contentToSend = input
+    setInput('')
+    autoResizeInput()
+    await sendMessage(contentToSend, {
       contextPrefix,
       contextPrefixUsed,
       onContextUsed: () => {
@@ -145,8 +148,6 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ entryMode, initialContext, onC
       attachedImageDataUrl,
       onClearAttachedImage: () => setAttachedImageDataUrl(null),
     })
-    setInput('')
-    autoResizeInput()
   }
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {

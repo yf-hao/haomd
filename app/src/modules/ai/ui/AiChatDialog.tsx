@@ -131,7 +131,10 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
   }, [open, providerType])
 
   const doSend = async () => {
-    await sendMessage(input, {
+    const contentToSend = input
+    setInput('')
+    autoResizeInput()
+    await sendMessage(contentToSend, {
       contextPrefix,
       contextPrefixUsed,
       onContextUsed: () => {
@@ -141,8 +144,6 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
       attachedImageDataUrl,
       onClearAttachedImage: () => setAttachedImageDataUrl(null),
     })
-    setInput('')
-    autoResizeInput()
   }
 
   const handleSubmit = async (e: FormEvent) => {

@@ -114,6 +114,7 @@
   /* 起始固定高度，避免只有一条空提示时塌缩 */
   max-height: 720px;
   overflow-y: auto;
+  padding-bottom: 30px;
 }
 
 /* AI Chat 额外拖拽 handle：底部 + 左右两侧 */

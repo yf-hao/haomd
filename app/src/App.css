@@ -751,6 +751,7 @@ button.ghost.primary {
   min-height: 0;
   overflow-y: auto;
   max-height: none;
+  padding-bottom: 30px;
   /* Dock 模式下不限制高度，由 pane 自己决定 */
 }
 

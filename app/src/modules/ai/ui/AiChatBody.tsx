@@ -210,16 +210,12 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
             </div>
           )
         })}
-        {/* 加载指示器：loading 且还没有助手消息返回任何内容时显示 */}
-        {(() => {
-          const hasAssistantContent = messages.some((m) => m.role === 'assistant' && m.content.length > 0)
-          console.log('[AiChatBody] Loading indicator check:', { loading, hasAssistantContent, shouldShow: loading && !hasAssistantContent, messagesCount: messages.length })
-          return loading && !hasAssistantContent ? (
-            <div className="ai-chat-loading-indicator">
-              <span className="ai-chat-spinner" aria-hidden="true" />
-            </div>
-          ) : null
-        })()}
+        {/* 加载指示器：loading 且当前正在流式传输的助手消息还没有内容时显示 */}
+        {loading && messages.some((m) => m.role === 'assistant' && m.streaming && m.content.length === 0) && (
+          <div className="ai-chat-loading-indicator">
+            <span className="ai-chat-spinner" aria-hidden="true" />
+          </div>
+        )}
       </div>
 
       <form className="ai-chat-input" onSubmit={loading ? (e) => e.preventDefault() : onSubmit}>
