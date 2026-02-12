@@ -328,6 +328,32 @@
   padding: 4px 0 8px;
 }
 
+.sidebar-header-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sidebar-header-toolbar .toolbar-btn {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #8fa1c7;
+  cursor: pointer;
+  padding: 0;
+  font-size: 11px;
+}
+
+.sidebar-header-toolbar .toolbar-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #c4ccee;
+}
+
 .sidebar-body {
   flex: 1;
   min-height: 0;
@@ -339,12 +365,121 @@
   margin-top: 12px;
 }
 
+.sidebar-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
 .sidebar-section-title {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: #8fa1c7;
-  margin-bottom: 4px;
+}
+
+.folder-section-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.folder-action-btn {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  border: none;
+  padding: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+  transition: background 0.12s ease-out, color 0.12s ease-out, box-shadow 0.12s ease-out, transform 0.12s ease-out;
+}
+
+.folder-action-btn.icon-refresh {
+}
+
+.folder-action-btn:hover {
+  background: rgba(59, 130, 246, 0.16);
+  color: #e5ecff;
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.4);
+}
+
+/* New File 图标：文档 + 右下角加号 */
+.folder-action-btn.icon-new-file::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 2px;
+  width: 10px;
+  height: 12px;
+  border-radius: 2px;
+  border: 1px solid currentColor;
+}
+
+.folder-action-btn.icon-new-file::after {
+  content: '+';
+  position: absolute;
+  right: -1px;
+  bottom: -2px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* New Folder 图标：简单文件夹轮廓 + 加号 */
+.folder-action-btn.icon-new-folder::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 4px;
+  width: 12px;
+  height: 8px;
+  border-radius: 1px;
+  border: 1px solid currentColor;
+  border-top-width: 2px;
+}
+
+.folder-action-btn.icon-new-folder::after {
+  content: '+';
+  position: absolute;
+  right: -1px;
+  bottom: -2px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Refresh 图标：3/4 圆弧（上方有缺口，偏左上）+ 左上箭头 */
+.folder-action-btn.icon-refresh::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  /* 去掉上边一段，让圆在上方形成缺口 */
+  border-top-color: transparent;
+}
+
+.folder-action-btn.icon-refresh::after {
+  content: '';
+  position: absolute;
+  /* 箭头放在缺口左侧，朝右上 */
+  left: 5px;
+  top: 1px;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  /* 先画一个向右的小三角，再轻微旋转成右上方向 */
+  border-width: 4px 0 4px 6px;
+  border-color: transparent transparent transparent currentColor;
+  transform: rotate(-40deg);
+  transform-origin: center;
 }
 
 .sidebar-file-list {
@@ -445,6 +580,30 @@
   background: rgba(90, 216, 166, 0.22);
   color: #e8ecf5;
   box-shadow: inset 2px 0 0 rgba(90, 216, 166, 0.9);
+}
+
+.tree-row.new-file-editing {
+  background: rgba(59, 130, 246, 0.18);
+  color: #e5ecff;
+}
+
+.tree-row.new-file-editing:hover {
+  background: rgba(59, 130, 246, 0.18);
+}
+
+.tree-name-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #e5ecff;
+  font-size: 13px;
+  padding: 0;
+}
+
+.tree-name-input::placeholder {
+  color: #6b7280;
 }
 
 .tree-row.file.highlighted {

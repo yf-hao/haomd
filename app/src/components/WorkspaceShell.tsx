@@ -21,7 +21,7 @@ import { useTabs } from '../hooks/useTabs'
 import { useCommandSystem } from '../hooks/useCommandSystem'
 import { useSidebar } from '../hooks/useSidebar'
 import { onOpenRecentFile } from '../modules/platform/menuEvents'
-import { deleteFsEntry } from '../modules/files/service'
+import { deleteFsEntry, listFolder, writeFile } from '../modules/files/service'
 import { useNativePaste } from '../hooks/useNativePaste'
 import { onNativePasteImage } from '../modules/platform/clipboardEvents'
 import type { EditorTab } from '../types/tabs'
@@ -103,6 +103,7 @@ export function WorkspaceShell({
   const [isSidebarResizing, setIsSidebarResizing] = useState(false)
   const [isCreatingTab, setIsCreatingTab] = useState(false)
   const [foldRegions, setFoldRegions] = useState<{ fromLine: number; toLine: number }[]>([])
+  const [inlineNewFileDir, setInlineNewFileDir] = useState<string | null>(null)
   const sidebarResizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
 
   const {
@@ -582,6 +583,43 @@ export function WorkspaceShell({
     tabs.forEach(t => { if (t.path === path) closeTab(t.id) })
   }, [tabs, closeTab])
 
+  const normalizeDirPath = (dir: string): string => {
+    if (!dir) return dir
+    return dir.replace(/\\/g, '/').replace(/[\\/]+$/, '')
+  }
+
+  const generateUniqueMarkdownPath = async (baseFolder: string, rawName: string): Promise<string | null> => {
+    const trimmed = rawName.trim()
+    if (!trimmed) return null
+
+    if (/[\\/]/.test(trimmed)) {
+      setStatusMessage('文件名中不能包含路径分隔符')
+      return null
+    }
+
+    const hasMdExt = /\.md$/i.test(trimmed)
+    const baseName = hasMdExt ? trimmed.replace(/\.md$/i, '') : trimmed
+    const normalizedFolder = normalizeDirPath(baseFolder)
+
+    const resp = await listFolder(normalizedFolder)
+    if (!resp.ok) {
+      setStatusMessage(resp.error.message)
+      return null
+    }
+
+    const usedNames = new Set(resp.data.map((e) => e.name.toLowerCase()))
+
+    let index = 1
+    let candidateName = ''
+    while (true) {
+      candidateName = index === 1 ? `${baseName}.md` : `${baseName}${index}.md`
+      if (!usedNames.has(candidateName.toLowerCase())) break
+      index += 1
+    }
+
+    return `${normalizedFolder}/${candidateName}`
+  }
+
   const computeDirFromPath = (targetPath: string): string => {
     if (!targetPath) return targetPath
 
@@ -600,6 +638,90 @@ export function WorkspaceShell({
 
     return dir
   }
+
+  const getCurrentFolderForNewFile = (): string | null => {
+    if (activeTab?.path) {
+      return computeDirFromPath(activeTab.path)
+    }
+    if (sidebar.folderRoots.length > 0) {
+      return sidebar.folderRoots[0]
+    }
+    setStatusMessage('请先打开一个文件或文件夹')
+    return null
+  }
+
+  const handleToolbarNewFileInCurrentFolder = useCallback(() => {
+    if (isCreatingTab) {
+      setStatusMessage('正在创建新标签，请稍候…')
+      return
+    }
+
+    const baseFolder = getCurrentFolderForNewFile()
+    if (!baseFolder) return
+
+    setInlineNewFileDir(baseFolder)
+  }, [isCreatingTab, getCurrentFolderForNewFile, setStatusMessage])
+
+  const handleInlineNewFileConfirm = useCallback((rawName: string) => {
+    if (!inlineNewFileDir) return
+
+    void (async () => {
+      const fullPath = await generateUniqueMarkdownPath(inlineNewFileDir, rawName)
+      if (!fullPath) {
+        setInlineNewFileDir(null)
+        return
+      }
+
+      const writeResp = await writeFile({ path: fullPath, content: '' })
+      if (!writeResp.ok) {
+        setStatusMessage(writeResp.error.message)
+        return
+      }
+
+      const existingTab = tabs.find((t) => t.path === fullPath)
+      if (existingTab) {
+        setActiveTab(existingTab.id)
+      } else {
+        const tab = createTab({ path: fullPath, content: '' })
+        setActiveTab(tab.id)
+      }
+
+      const normalized = fullPath.replace(/\\/g, '/')
+      const root = sidebar.folderRoots.find((rootPath) => {
+        const rootNorm = rootPath.replace(/\\/g, '/')
+        return normalized === rootNorm || normalized.startsWith(rootNorm + '/')
+      }) ?? sidebar.folderRoots[0]
+
+      if (root) {
+        void sidebar.refreshFolderTree(root)
+      }
+
+      setInlineNewFileDir(null)
+    })()
+  }, [inlineNewFileDir, tabs, setActiveTab, createTab, setStatusMessage, sidebar.folderRoots, sidebar])
+
+  const handleInlineNewFileCancel = useCallback(() => {
+    setInlineNewFileDir(null)
+  }, [])
+
+  const handleToolbarNewFolderInCurrentFolder = useCallback(() => {
+    setStatusMessage('新建文件夹功能暂未实现')
+  }, [setStatusMessage])
+
+  const handleToolbarRefreshCurrentFolder = useCallback(() => {
+    const baseFolder = getCurrentFolderForNewFile()
+    if (!baseFolder) return
+
+    const normalizedBase = baseFolder.replace(/\\/g, '/')
+    const root = sidebar.folderRoots.find((rootPath) => {
+      const rootNorm = rootPath.replace(/\\/g, '/')
+      return normalizedBase === rootNorm || normalizedBase.startsWith(rootNorm + '/')
+    }) ?? sidebar.folderRoots[0]
+
+    if (root) {
+      void sidebar.refreshFolderTree(root)
+    }
+  }, [getCurrentFolderForNewFile, sidebar.folderRoots, sidebar])
 
   const handleSidebarContextAction = useCallback(async (payload: SidebarContextActionPayload) => {
     const { path, kind, action } = payload
@@ -834,6 +956,12 @@ export function WorkspaceShell({
           panelWidth={sidebarWidth}
           highlightedPaths={sidebar.highlightedFiles}
           onFileVisited={sidebar.markFileVisited}
+          onToolbarNewFileInCurrentFolder={handleToolbarNewFileInCurrentFolder}
+          onToolbarNewFolderInCurrentFolder={handleToolbarNewFolderInCurrentFolder}
+          onToolbarRefreshCurrentFolder={handleToolbarRefreshCurrentFolder}
+          inlineNewFileDir={inlineNewFileDir}
+          onInlineNewFileConfirm={handleInlineNewFileConfirm}
+          onInlineNewFileCancel={handleInlineNewFileCancel}
         />
       )}
       {activeLeftPanel === 'outline' && (

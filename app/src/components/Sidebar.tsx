@@ -25,6 +25,18 @@ export type SidebarProps = {
   onToggle: (path: string) => void
   onFileClick: (path: string) => void
   onContextAction?: (payload: SidebarContextActionPayload) => void
+  /** 顶部工具栏：在当前文件夹中新建文件 */
+  onToolbarNewFileInCurrentFolder?: () => void
+  /** 顶部工具栏：在当前文件夹中新建子文件夹 */
+  onToolbarNewFolderInCurrentFolder?: () => void
+  /** 顶部工具栏：刷新当前文件夹 */
+  onToolbarRefreshCurrentFolder?: () => void
+  /** 行内新建文件：当前处于命名状态的目录 */
+  inlineNewFileDir?: string | null
+  /** 行内新建文件：确认命名 */
+  onInlineNewFileConfirm?: (name: string) => void
+  /** 行内新建文件：取消命名 */
+  onInlineNewFileCancel?: () => void
   activePath?: string | null
   panelWidth?: number
   highlightedPaths?: string[]
@@ -41,9 +53,12 @@ type TreeNodeProps = {
   highlightedPaths?: string[]
   onFileVisited?: (path: string) => void
   onContextMenu?: (event: any, target: { path: string; kind: SidebarContextTargetKind }) => void
+  inlineNewFileDir?: string | null
+  onInlineNewFileConfirm?: (name: string) => void
+  onInlineNewFileCancel?: () => void
 }
 
-function TreeNode({ node, level, expanded, onToggle, onFileClick, activePath, highlightedPaths, onFileVisited, onContextMenu }: TreeNodeProps) {
+function TreeNode({ node, level, expanded, onToggle, onFileClick, activePath, highlightedPaths, onFileVisited, onContextMenu, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel }: TreeNodeProps) {
   const isExpanded = !!expanded[node.path]
   const isActive = activePath === node.path
   const isHighlighted = highlightedPaths?.includes(node.path.replace(/\\/g, '/')) ?? false
@@ -64,19 +79,34 @@ function TreeNode({ node, level, expanded, onToggle, onFileClick, activePath, hi
           />
           <span className="tree-name">{node.name}</span>
         </div>
-        {isExpanded &&
-          node.children?.map((child) => (
-            <TreeNode
-              key={child.id}
-              node={child}
-              level={level + 1}
-              expanded={expanded}
-              onToggle={onToggle}
-              onFileClick={onFileClick}
-              activePath={activePath}
-              onContextMenu={onContextMenu}
-            />
-          ))}
+        {isExpanded && (
+          <>
+            {inlineNewFileDir === node.path && (
+              <InlineNewFileRow
+                level={level + 1}
+                onConfirm={onInlineNewFileConfirm}
+                onCancel={onInlineNewFileCancel}
+              />
+            )}
+            {node.children?.map((child) => (
+              <TreeNode
+                key={child.id}
+                node={child}
+                level={level + 1}
+                expanded={expanded}
+                onToggle={onToggle}
+                onFileClick={onFileClick}
+                activePath={activePath}
+                highlightedPaths={highlightedPaths}
+                onFileVisited={onFileVisited}
+                onContextMenu={onContextMenu}
+                inlineNewFileDir={inlineNewFileDir}
+                onInlineNewFileConfirm={onInlineNewFileConfirm}
+                onInlineNewFileCancel={onInlineNewFileCancel}
+              />
+            ))}
+          </>
+        )}
       </div>
     )
   }
@@ -102,6 +132,58 @@ function TreeNode({ node, level, expanded, onToggle, onFileClick, activePath, hi
     >
       <span className="tree-icon">📝</span>
       <span className="tree-name">{node.name}</span>
+    </div>
+  )
+}
+
+type InlineNewFileRowProps = {
+  level: number
+  onConfirm?: (name: string) => void
+  onCancel?: () => void
+}
+
+function InlineNewFileRow({ level, onConfirm, onCancel }: InlineNewFileRowProps) {
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  const paddingLeft = 8 + level * 12
+
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.focus()
+      inputRef.current.select()
+    }
+  }, [])
+
+  const finish = (commit: boolean, value: string) => {
+    const name = value.trim()
+    if (!commit || !name) {
+      onCancel?.()
+      return
+    }
+    onConfirm?.(name)
+  }
+
+  return (
+    <div
+      className="tree-row file new-file-editing"
+      style={{ paddingLeft }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <span className="tree-icon">📝</span>
+      <input
+        ref={inputRef}
+        className="tree-name-input"
+        placeholder="新建文稿.md"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            finish(true, e.currentTarget.value)
+          } else if (e.key === 'Escape') {
+            finish(false, e.currentTarget.value)
+          }
+        }}
+        onBlur={(e) => {
+          finish(true, e.currentTarget.value)
+        }}
+      />
     </div>
   )
 }
@@ -223,7 +305,7 @@ function SidebarContextMenu({ x, y, target, onAction, onRequestClose }: SidebarC
   )
 }
 
-export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, onToggle, onFileClick, onContextAction, activePath, panelWidth, highlightedPaths, onFileVisited }: SidebarProps) {
+export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, onToggle, onFileClick, onContextAction, onToolbarNewFileInCurrentFolder, onToolbarNewFolderInCurrentFolder, onToolbarRefreshCurrentFolder, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel, activePath, panelWidth, highlightedPaths, onFileVisited }: SidebarProps) {
   const hasStandalone = standaloneFiles.length > 0
   const hasTree = folderRoots.some((rootPath) => (treesByRoot[rootPath]?.length ?? 0) > 0)
 
@@ -323,7 +405,41 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
 
         {hasTree && (
           <section className="sidebar-section">
-            <div className="sidebar-section-title">文件夹</div>
+            <div className="sidebar-section-header">
+              <div className="sidebar-section-title">文件夹</div>
+              <div className="folder-section-actions">
+                <button
+                  type="button"
+                  className="folder-action-btn icon-new-file"
+                  title="在当前文件夹中新建文件"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    e.preventDefault()
+                    onToolbarNewFileInCurrentFolder?.()
+                  }}
+                />
+                <button
+                  type="button"
+                  className="folder-action-btn icon-new-folder"
+                  title="在当前文件夹中新建子文件夹"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    e.preventDefault()
+                    onToolbarNewFolderInCurrentFolder?.()
+                  }}
+                />
+                <button
+                  type="button"
+                  className="folder-action-btn icon-refresh"
+                  title="刷新当前文件夹"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    e.preventDefault()
+                    onToolbarRefreshCurrentFolder?.()
+                  }}
+                />
+              </div>
+            </div>
             {folderRoots.length > 0 && (
               <ul className="sidebar-folder-list">
                 {folderRoots.map((rootPath) => {
@@ -353,8 +469,15 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                         />
                         <span className="tree-name">{name}</span>
                       </div>
-                      {isExpandedRoot && children.length > 0 && (
+                      {isExpandedRoot && (
                         <div className="sidebar-folder-children">
+                          {inlineNewFileDir === rootPath && (
+                            <InlineNewFileRow
+                              level={1}
+                              onConfirm={onInlineNewFileConfirm}
+                              onCancel={onInlineNewFileCancel}
+                            />
+                          )}
                           {children.map((node) => (
                             <TreeNode
                               key={node.id}
@@ -367,6 +490,9 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                               highlightedPaths={highlightedPaths}
                               onFileVisited={onFileVisited}
                               onContextMenu={handleTreeNodeContextMenu}
+                              inlineNewFileDir={inlineNewFileDir}
+                              onInlineNewFileConfirm={onInlineNewFileConfirm}
+                              onInlineNewFileCancel={onInlineNewFileCancel}
                             />
                           ))}
                         </div>
