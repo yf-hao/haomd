@@ -389,6 +389,10 @@ export function WorkspaceShell({
   const [confirmDialog, setConfirmDialog] = useState<any>(null)
   const [quitConfirmDialog, setQuitConfirmDialog] = useState<any>(null)
 
+  // 用于在 useEffect 中访问最新的 setConfirmDialog
+  const setConfirmDialogRef = useRef(setConfirmDialog)
+  setConfirmDialogRef.current = setConfirmDialog
+
   // Sync Content
   useEffect(() => {
     if (!activeId) return
@@ -948,7 +952,12 @@ export function WorkspaceShell({
 
       if (!filePath || filePath === 'untitled.md') {
         console.warn('[WorkspaceShell] onNativePasteImage: no filePath, cannot determine images dir')
-        window.alert('Cannot insert image: please save the file first (Ctrl/Cmd+S)')
+        setConfirmDialogRef.current({
+          title: 'Cannot Insert Image',
+          message: 'Please save the file first (Ctrl/Cmd+S) before inserting images.',
+          confirmText: 'OK',
+          onConfirm: () => setConfirmDialogRef.current(null),
+        })
         return
       }
 

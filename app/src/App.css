@@ -102,6 +102,42 @@
   top: 9px;
 }
 
+/* PDF 图标：文档形状 + 右下角折角 + 中间横线 */
+.activity-icon-pdf {
+  position: relative;
+  width: 16px;
+  height: 20px;
+  border-radius: 3px;
+  border: 1.5px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.9);
+}
+
+.activity-icon-pdf::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: rgba(15, 23, 42, 0.98);
+  border-left: 1.5px solid rgba(226, 232, 240, 0.9);
+  border-bottom: 1.5px solid rgba(226, 232, 240, 0.9);
+  transform: translate(-1px, 1px) rotate(0deg);
+}
+
+/* PDF 标识：文档中间的横线 */
+.activity-icon-pdf::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: 3px;
+  right: 3px;
+  height: 1.5px;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.9);
+}
+
 .workspace-column {
   flex: 1;
   display: flex;
