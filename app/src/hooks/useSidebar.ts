@@ -264,6 +264,13 @@ export function useSidebar() {
     [folderRoots, openFolderAsRoot],
   )
 
+  const expandPath = useCallback((path: string) => {
+    setExpanded((prev) => ({
+      ...prev,
+      [normalizePath(path)]: true,
+    }))
+  }, [])
+
   return {
     root,
     treesByRoot,
@@ -272,6 +279,7 @@ export function useSidebar() {
     folderRoots,
     highlightedFiles,
     toggleNode,
+    expandPath,
     openFolderAsRoot,
     ensureFileVisible,
     addStandaloneFile,

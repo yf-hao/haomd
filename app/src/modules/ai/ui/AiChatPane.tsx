@@ -5,8 +5,9 @@ import type { AiChatSessionKey } from '../application/aiChatSessionService'
 import { useAiChatSession } from './hooks/useAiChatSession'
 import { copyTextToClipboard } from '../platform/clipboardService'
 import { insertMarkdownAtCursorBelow, replaceSelectionWithText, createTabAndInsertContent } from '../platform/editorInsertService'
-import { onNativePaste } from '../../platform/clipboardEvents'
+import { onNativePaste, onNativePasteImage } from '../../platform/clipboardEvents'
 import { AiChatBody } from './AiChatBody'
+import { base64ToImageDataUrl, base64ToImageFile, readClipboardImageBase64 } from '../platform/clipboardImageService'
 
 const EMPTY_MESSAGES = [] as const
 
@@ -15,9 +16,10 @@ export interface AiChatPaneProps {
   entryMode: ChatEntryMode
   initialContext?: EntryContext
   onClose: () => void
+  currentFilePath?: string | null
 }
 
-export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initialContext, onClose }) => {
+export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initialContext, onClose, currentFilePath }) => {
   const [input, setInput] = useState('')
   const [contextPrefix, setContextPrefix] = useState<string | null>(null)
   const [contextPrefixUsed, setContextPrefixUsed] = useState(false)
@@ -136,6 +138,55 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
       unPaste()
     }
   }, [])
+
+  // 处理来自 Tauri 原生菜单的图片粘贴（native://paste_image），仅在 AI Chat 输入框聚焦时生效
+  useEffect(() => {
+    const unlisten = onNativePasteImage(async () => {
+      const el = inputRef.current
+      if (!el) return
+
+      if (typeof document !== 'undefined') {
+        const active = document.activeElement
+        if (active !== el) {
+          // 焦点不在 AI Chat 输入框时，不处理这次图片粘贴（交给编辑器等其它逻辑）
+          return
+        }
+      }
+
+      try {
+        // 直接从剪贴板读取图片为 base64，不再依赖文件路径和 haomd 协议
+        const base64 = await readClipboardImageBase64()
+
+        // 根据当前文件名构造一个友好的文件名，仅用于 Dify 附件展示
+        const fileName = (() => {
+          if (!currentFilePath) return 'clipboard.png'
+          const pathPart = currentFilePath.split(/[/\\]/).pop() || ''
+          const withoutExt = pathPart.replace(/\.[^./\\]+$/, '')
+          const base = withoutExt || 'clipboard'
+          return `image_${base}.png`
+        })()
+
+        // Dify 模式：base64 → File → 走附件上传路径
+        if (!providerType || providerType === 'dify') {
+          const file = base64ToImageFile(base64, fileName, 'image/png')
+          console.log('[AiChatPane] native image paste: uploading file', file.name)
+          await uploadFiles([file])
+          return
+        }
+
+        // 非 Dify 模式：base64 → data URL，通过 Vision 模式发送
+        const dataUrl = base64ToImageDataUrl(base64, 'image/png')
+        console.log('[AiChatPane] native image paste: attachedImageDataUrl set via base64')
+        setAttachedImageDataUrl(dataUrl)
+      } catch (e) {
+        console.error('[AiChatPane] native image paste: error', e)
+      }
+    })
+
+    return () => {
+      unlisten()
+    }
+  }, [currentFilePath, providerType, uploadFiles])
 
   const doSend = async () => {
     const contentToSend = input

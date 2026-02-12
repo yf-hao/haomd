@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::io::Cursor;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -12,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 use sha2::{Digest, Sha256};
 use arboard::Clipboard;
-use image::{ImageBuffer, Rgba};
+use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba};
 use rand::{distributions::Alphanumeric, Rng};
 use chrono::Local;
 use mime_guess;
@@ -1270,6 +1271,71 @@ async fn save_clipboard_image_to_dir(
   ok(ClipboardImageResult { file_name }, trace)
 }
 
+#[tauri::command]
+async fn read_clipboard_image_as_base64() -> ResultPayload<String> {
+  let trace = new_trace_id();
+  log::info!("[tauri] read_clipboard_image_as_base64: start");
+
+  let mut cb = match Clipboard::new() {
+    Ok(c) => c,
+    Err(err) => {
+      return err_payload(
+        ErrorCode::IoError,
+        format!("访问剪贴板失败: {err}"),
+        trace,
+      );
+    }
+  };
+
+  let img = match cb.get_image() {
+    Ok(img) => {
+      log::info!("[tauri] read_clipboard_image_as_base64: got image {}x{}", img.width, img.height);
+      img
+    }
+    Err(err) => {
+      log::error!("[tauri] read_clipboard_image_as_base64: get_image failed: {}", err);
+      return err_payload(
+        ErrorCode::UNSUPPORTED,
+        format!("剪贴板中没有图片或格式不支持: {err}"),
+        trace,
+      );
+    }
+  };
+
+  let width = img.width as u32;
+  let height = img.height as u32;
+
+  let buffer: ImageBuffer<Rgba<u8>, _> = match ImageBuffer::from_raw(width, height, img.bytes.into_owned()) {
+    Some(buf) => buf,
+    None => {
+      return err_payload(
+        ErrorCode::UNSUPPORTED,
+        "图片数据无效",
+        trace,
+      );
+    }
+  };
+
+  let dyn_img = DynamicImage::ImageRgba8(buffer);
+  let mut png_bytes: Vec<u8> = Vec::new();
+  {
+    let mut cursor = Cursor::new(&mut png_bytes);
+    if let Err(err) = dyn_img.write_to(&mut cursor, ImageFormat::Png) {
+      log::error!("[tauri] read_clipboard_image_as_base64: encode png failed: {}", err);
+      return err_payload(
+        ErrorCode::IoError,
+        format!("编码 PNG 失败: {err}"),
+        trace,
+      );
+    }
+  }
+
+  let encoded = base64::encode(&png_bytes);
+  log::info!("[tauri] read_clipboard_image_as_base64: ok, bytes={} encoded_len={}", png_bytes.len(), encoded.len());
+
+  ok(encoded, trace)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -1477,6 +1543,7 @@ pub fn run() {
       open_terminal,
       open_in_file_explorer,
       save_clipboard_image_to_dir,
+      read_clipboard_image_as_base64,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

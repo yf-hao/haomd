@@ -21,7 +21,7 @@ import { useTabs } from '../hooks/useTabs'
 import { useCommandSystem } from '../hooks/useCommandSystem'
 import { useSidebar } from '../hooks/useSidebar'
 import { onOpenRecentFile } from '../modules/platform/menuEvents'
-import { deleteFsEntry, listFolder, writeFile } from '../modules/files/service'
+import { createFolder, deleteFsEntry, listFolder, writeFile } from '../modules/files/service'
 import { useNativePaste } from '../hooks/useNativePaste'
 import { onNativePasteImage } from '../modules/platform/clipboardEvents'
 import type { EditorTab } from '../types/tabs'
@@ -105,6 +105,7 @@ export function WorkspaceShell({
   const [isCreatingTab, setIsCreatingTab] = useState(false)
   const [foldRegions, setFoldRegions] = useState<{ fromLine: number; toLine: number }[]>([])
   const [inlineNewFileDir, setInlineNewFileDir] = useState<string | null>(null)
+  const [inlineNewFolderDir, setInlineNewFolderDir] = useState<string | null>(null)
   const sidebarResizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
 
   const {
@@ -623,6 +624,36 @@ export function WorkspaceShell({
     return `${normalizedFolder}/${candidateName}`
   }
 
+  const generateUniqueFolderPath = async (baseFolder: string, rawName: string): Promise<string | null> => {
+    const trimmed = rawName.trim()
+    if (!trimmed) return null
+
+    if (/[\\/]/.test(trimmed)) {
+      setStatusMessage('文件夹名中不能包含路径分隔符')
+      return null
+    }
+
+    const normalizedFolder = normalizeDirPath(baseFolder)
+
+    const resp = await listFolder(normalizedFolder)
+    if (!resp.ok) {
+      setStatusMessage(resp.error.message)
+      return null
+    }
+
+    const usedNames = new Set(resp.data.map((e) => e.name.toLowerCase()))
+
+    let index = 1
+    let candidateName = ''
+    while (true) {
+      candidateName = index === 1 ? trimmed : `${trimmed} ${index}`
+      if (!usedNames.has(candidateName.toLowerCase())) break
+      index += 1
+    }
+
+    return `${normalizedFolder}/${candidateName}`
+  }
+
   const computeDirFromPath = (targetPath: string): string => {
     if (!targetPath) return targetPath
 
@@ -659,6 +690,23 @@ export function WorkspaceShell({
     return null
   }
 
+  const getTargetFolderForNewFolder = (): string | null => {
+    // 选中文件夹 → 在其内部创建子文件夹
+    if (selectedFolderPath) {
+      return selectedFolderPath
+    }
+    // 选中文件 → 在同级目录创建文件夹
+    if (activeTab?.path) {
+      return computeDirFromPath(activeTab.path)
+    }
+    // 默认使用第一个根文件夹
+    if (sidebar.folderRoots.length > 0) {
+      return sidebar.folderRoots[0]
+    }
+    setStatusMessage('请先打开一个文件或文件夹')
+    return null
+  }
+
   const handleDirClick = useCallback((path: string) => {
     setSelectedFolderPath(path)
   }, [])
@@ -672,8 +720,10 @@ export function WorkspaceShell({
     const baseFolder = getCurrentFolderForNewFile()
     if (!baseFolder) return
 
+    // 确保目标文件夹展开
+    sidebar.expandPath(baseFolder)
     setInlineNewFileDir(baseFolder)
-  }, [isCreatingTab, getCurrentFolderForNewFile, setStatusMessage])
+  }, [isCreatingTab, getCurrentFolderForNewFile, setStatusMessage, sidebar])
 
   const handleInlineNewFileConfirm = useCallback((rawName: string) => {
     if (!inlineNewFileDir) return
@@ -721,8 +771,56 @@ export function WorkspaceShell({
   }, [])
 
   const handleToolbarNewFolderInCurrentFolder = useCallback(() => {
-    setStatusMessage('新建文件夹功能暂未实现')
-  }, [setStatusMessage])
+    if (isCreatingTab) {
+      setStatusMessage('正在创建新标签，请稍候…')
+      return
+    }
+
+    const targetFolder = getTargetFolderForNewFolder()
+    if (!targetFolder) return
+
+    // 确保目标文件夹展开
+    sidebar.expandPath(targetFolder)
+    setInlineNewFolderDir(targetFolder)
+  }, [isCreatingTab, getTargetFolderForNewFolder, setStatusMessage, sidebar])
+
+  const handleInlineNewFolderConfirm = useCallback((rawName: string) => {
+    if (!inlineNewFolderDir) return
+
+    void (async () => {
+      const folderPath = await generateUniqueFolderPath(inlineNewFolderDir, rawName)
+      if (!folderPath) {
+        setInlineNewFolderDir(null)
+        return
+      }
+
+      const resp = await createFolder(folderPath)
+      if (!resp.ok) {
+        setStatusMessage(resp.error.message)
+        return
+      }
+
+      // 选中新建的文件夹
+      setSelectedFolderPath(folderPath)
+
+      // 刷新父文件夹树
+      const normalized = folderPath.replace(/\\/g, '/')
+      const root = sidebar.folderRoots.find((rootPath) => {
+        const rootNorm = rootPath.replace(/\\/g, '/')
+        return normalized.startsWith(rootNorm + '/')
+      }) ?? sidebar.folderRoots[0]
+
+      if (root) {
+        void sidebar.refreshFolderTree(root)
+      }
+
+      setInlineNewFolderDir(null)
+    })()
+  }, [inlineNewFolderDir, setStatusMessage, sidebar.folderRoots, sidebar])
+
+  const handleInlineNewFolderCancel = useCallback(() => {
+    setInlineNewFolderDir(null)
+  }, [])
 
   const handleToolbarRefreshCurrentFolder = useCallback(() => {
     const baseFolder = getCurrentFolderForNewFile()
@@ -848,9 +946,9 @@ export function WorkspaceShell({
         }
       }
 
-      if (!filePath) {
+      if (!filePath || filePath === 'untitled.md') {
         console.warn('[WorkspaceShell] onNativePasteImage: no filePath, cannot determine images dir')
-        setStatusMessage('当前文件尚未保存，无法确定图片存放目录')
+        window.alert('Cannot insert image: please save the file first (Ctrl/Cmd+S)')
         return
       }
 
@@ -998,6 +1096,9 @@ export function WorkspaceShell({
           inlineNewFileDir={inlineNewFileDir}
           onInlineNewFileConfirm={handleInlineNewFileConfirm}
           onInlineNewFileCancel={handleInlineNewFileCancel}
+          inlineNewFolderDir={inlineNewFolderDir}
+          onInlineNewFolderConfirm={handleInlineNewFolderConfirm}
+          onInlineNewFolderCancel={handleInlineNewFolderCancel}
         />
       )}
       {activeLeftPanel === 'outline' && (
@@ -1016,7 +1117,15 @@ export function WorkspaceShell({
             <main className={`workspace ${dragging ? 'dragging' : ''}`} style={{ gridTemplateColumns: outerGridTemplateColumns }}>
               {aiChatMode === 'docked' && aiChatOpen && aiChatState && (
                 <>
-                  {aiChatDockSide === 'left' && <AiChatPane sessionKey={aiChatSessionKey} entryMode={aiChatState.entryMode} initialContext={aiChatState.initialContext} onClose={closeAiChatDialog} />}
+                  {aiChatDockSide === 'left' && (
+                    <AiChatPane
+                      sessionKey={aiChatSessionKey}
+                      entryMode={aiChatState.entryMode}
+                      initialContext={aiChatState.initialContext}
+                      onClose={closeAiChatDialog}
+                      currentFilePath={filePath}
+                    />
+                  )}
                   <div className="divider-hotzone vertical" style={{ position: 'absolute', left: aiChatDockSide === 'left' ? aiChatWidth : `calc(100% - ${aiChatWidth}px)`, height: '100%', zIndex: 10, cursor: 'col-resize' }} onMouseDown={handleAiChatResizeStart}>
                     <div className="divider-rail"><span className="divider-handle" /></div>
                   </div>
@@ -1058,6 +1167,7 @@ export function WorkspaceShell({
                   entryMode={aiChatState.entryMode}
                   initialContext={aiChatState.initialContext}
                   onClose={closeAiChatDialog}
+                  currentFilePath={filePath}
                 />
               )}
             </main>
@@ -1076,7 +1186,16 @@ export function WorkspaceShell({
       )}
       {confirmDialog && <ConfirmDialog title={confirmDialog.title} message={confirmDialog.message} confirmText={confirmDialog.confirmText} cancelText={confirmDialog.cancelText} extraText={confirmDialog.extraText} variant={confirmDialog.variant} onConfirm={confirmDialog.onConfirm} onExtra={confirmDialog.onExtra} onCancel={() => setConfirmDialog(null)} />}
       {quitConfirmDialog && <ConfirmDialog title={quitConfirmDialog.unsavedCount === 1 ? 'Save changes?' : `Save ${quitConfirmDialog.unsavedCount} files?`} message="Your changes will be lost." confirmText="Save All" cancelText="Cancel" extraText="Don't Save" variant="stacked" onConfirm={quitConfirmDialog.onSaveAll} onExtra={quitConfirmDialog.onQuitWithoutSaving} onCancel={() => setQuitConfirmDialog(null)} />}
-      {aiChatMode === 'floating' && aiChatOpen && aiChatState?.open && <AiChatDialog open={aiChatOpen} sessionKey={aiChatSessionKey} entryMode={aiChatState.entryMode} initialContext={aiChatState.initialContext} onClose={closeAiChatDialog} />}
+      {aiChatMode === 'floating' && aiChatOpen && aiChatState?.open && (
+        <AiChatDialog
+          open={aiChatOpen}
+          sessionKey={aiChatSessionKey}
+          entryMode={aiChatState.entryMode}
+          initialContext={aiChatState.initialContext}
+          onClose={closeAiChatDialog}
+          currentFilePath={filePath}
+        />
+      )}
     </>
   )
 }

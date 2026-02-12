@@ -4,6 +4,7 @@ import type {
   KeyboardEvent,
   RefObject,
   ChangeEvent,
+  ClipboardEvent,
 } from 'react'
 import { useRef } from 'react'
 import { MarkdownViewer } from '../../../components/MarkdownViewer'
@@ -145,6 +146,50 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
     e.target.value = ''
   }
 
+  const handlePaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const dt = e.clipboardData
+    if (!dt) return
+
+    const text = dt.getData('text')
+    const items = Array.from(dt.items || [])
+    const imageItems = items.filter((item) => item.type.startsWith('image/'))
+
+    // 没有图片，直接交给浏览器默认粘贴逻辑（文本等）
+    if (imageItems.length === 0) return
+
+    // 如果剪贴板中包含可见文本，则优先保留文本粘贴行为
+    if (text && text.trim().length > 0) {
+      return
+    }
+
+    e.preventDefault()
+
+    const files = imageItems
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => !!file)
+
+    if (files.length === 0) return
+
+    // Dify 方案：直接走批量上传路径（与“上传图片”按钮一致）
+    if (onUploadFiles) {
+      console.warn('[AiChatBody] handlePaste using onUploadFiles (Dify path)')
+      onUploadFiles(files)
+      return
+    }
+
+    // 非 Dify 方案：仅取第一张，转为 data URL
+    const file = files[0]
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result
+      if (typeof result === 'string') {
+        console.warn('[AiChatBody] handlePaste attaching image via data URL (Vision path)')
+        onAttachImage?.(result)
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
   return (
     <div className="modal-content ai-chat-body">
       <div
@@ -269,6 +314,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
             onKeyDown={onInputKeyDown}
             onCompositionStart={onCompositionStart}
             onCompositionEnd={onCompositionEnd}
+            onPaste={handlePaste}
             placeholder="Ask anything to AI"
           />
           <div className="ai-chat-input-footer">

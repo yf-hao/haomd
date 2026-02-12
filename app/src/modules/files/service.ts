@@ -253,6 +253,19 @@ export async function deleteFsEntry(path: string, traceId = makeTraceId()): Prom
   }
 }
 
+export async function createFolder(path: string, traceId = makeTraceId()): Promise<Result<null>> {
+  if (!isTauri()) return notAvailable(traceId)
+  try {
+    const resp = await invoke<BackendResult<unknown>>('create_folder', { path, trace_id: traceId })
+    if ('Ok' in resp) {
+      return { ok: true, data: null, traceId: resp.Ok.trace_id }
+    }
+    return { ok: false, error: toError(resp.Err.error, traceId) }
+  } catch (error) {
+    return normalizeInvokeError(error, traceId)
+  }
+}
+
 const normalizeInvokeError = (err: unknown, traceId?: string): Result<never> => {
   const obj = err as Record<string, unknown> | null
   const msg = obj && typeof obj.message === 'string' ? obj.message : err instanceof Error ? err.message : String(err)

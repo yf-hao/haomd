@@ -38,6 +38,12 @@ export type SidebarProps = {
   onInlineNewFileConfirm?: (name: string) => void
   /** 行内新建文件：取消命名 */
   onInlineNewFileCancel?: () => void
+  /** 行内新建文件夹：当前处于命名状态的目录 */
+  inlineNewFolderDir?: string | null
+  /** 行内新建文件夹：确认命名 */
+  onInlineNewFolderConfirm?: (name: string) => void
+  /** 行内新建文件夹：取消命名 */
+  onInlineNewFolderCancel?: () => void
   activePath?: string | null
   panelWidth?: number
   highlightedPaths?: string[]
@@ -58,9 +64,12 @@ type TreeNodeProps = {
   inlineNewFileDir?: string | null
   onInlineNewFileConfirm?: (name: string) => void
   onInlineNewFileCancel?: () => void
+  inlineNewFolderDir?: string | null
+  onInlineNewFolderConfirm?: (name: string) => void
+  onInlineNewFolderCancel?: () => void
 }
 
-function TreeNode({ node, level, expanded, onToggle, onFileClick, onDirClick, activePath, highlightedPaths, onFileVisited, onContextMenu, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel }: TreeNodeProps) {
+function TreeNode({ node, level, expanded, onToggle, onFileClick, onDirClick, activePath, highlightedPaths, onFileVisited, onContextMenu, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel, inlineNewFolderDir, onInlineNewFolderConfirm, onInlineNewFolderCancel }: TreeNodeProps) {
   const isExpanded = !!expanded[node.path]
   const isActive = activePath === node.path
   const isHighlighted = highlightedPaths?.includes(node.path.replace(/\\/g, '/')) ?? false
@@ -93,6 +102,14 @@ function TreeNode({ node, level, expanded, onToggle, onFileClick, onDirClick, ac
                 onCancel={onInlineNewFileCancel}
               />
             )}
+            {inlineNewFolderDir === node.path && (
+              <InlineNewFileRow
+                level={level + 1}
+                onConfirm={onInlineNewFolderConfirm}
+                onCancel={onInlineNewFolderCancel}
+                isFolder={true}
+              />
+            )}
             {node.children?.map((child) => (
               <TreeNode
                 key={child.id}
@@ -109,6 +126,9 @@ function TreeNode({ node, level, expanded, onToggle, onFileClick, onDirClick, ac
                 inlineNewFileDir={inlineNewFileDir}
                 onInlineNewFileConfirm={onInlineNewFileConfirm}
                 onInlineNewFileCancel={onInlineNewFileCancel}
+                inlineNewFolderDir={inlineNewFolderDir}
+                onInlineNewFolderConfirm={onInlineNewFolderConfirm}
+                onInlineNewFolderCancel={onInlineNewFolderCancel}
               />
             ))}
           </>
@@ -146,9 +166,10 @@ type InlineNewFileRowProps = {
   level: number
   onConfirm?: (name: string) => void
   onCancel?: () => void
+  isFolder?: boolean
 }
 
-function InlineNewFileRow({ level, onConfirm, onCancel }: InlineNewFileRowProps) {
+function InlineNewFileRow({ level, onConfirm, onCancel, isFolder }: InlineNewFileRowProps) {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const paddingLeft = 8 + level * 12
 
@@ -168,17 +189,21 @@ function InlineNewFileRow({ level, onConfirm, onCancel }: InlineNewFileRowProps)
     onConfirm?.(name)
   }
 
+  const placeholder = isFolder ? 'new folder' : 'new file'
+  const icon = isFolder ? '📁' : '📝'
+  const rowClass = isFolder ? 'tree-row dir new-file-editing' : 'tree-row file new-file-editing'
+
   return (
     <div
-      className="tree-row file new-file-editing"
+      className={rowClass}
       style={{ paddingLeft }}
       onClick={(e) => e.stopPropagation()}
     >
-      <span className="tree-icon">📝</span>
+      <span className="tree-icon">{icon}</span>
       <input
         ref={inputRef}
         className="tree-name-input"
-        placeholder="新建文稿.md"
+        placeholder={placeholder}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
             finish(true, e.currentTarget.value)
@@ -311,7 +336,7 @@ function SidebarContextMenu({ x, y, target, onAction, onRequestClose }: SidebarC
   )
 }
 
-export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, onToggle, onFileClick, onDirClick, onContextAction, onToolbarNewFileInCurrentFolder, onToolbarNewFolderInCurrentFolder, onToolbarRefreshCurrentFolder, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel, activePath, panelWidth, highlightedPaths, onFileVisited }: SidebarProps) {
+export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, onToggle, onFileClick, onDirClick, onContextAction, onToolbarNewFileInCurrentFolder, onToolbarNewFolderInCurrentFolder, onToolbarRefreshCurrentFolder, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel, inlineNewFolderDir, onInlineNewFolderConfirm, onInlineNewFolderCancel, activePath, panelWidth, highlightedPaths, onFileVisited }: SidebarProps) {
   const hasStandalone = standaloneFiles.length > 0
   const hasTree = folderRoots.some((rootPath) => (treesByRoot[rootPath]?.length ?? 0) > 0)
 
@@ -488,6 +513,14 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                               onCancel={onInlineNewFileCancel}
                             />
                           )}
+                          {inlineNewFolderDir === rootPath && (
+                            <InlineNewFileRow
+                              level={1}
+                              onConfirm={onInlineNewFolderConfirm}
+                              onCancel={onInlineNewFolderCancel}
+                              isFolder={true}
+                            />
+                          )}
                           {children.map((node) => (
                             <TreeNode
                               key={node.id}
@@ -504,6 +537,9 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                               inlineNewFileDir={inlineNewFileDir}
                               onInlineNewFileConfirm={onInlineNewFileConfirm}
                               onInlineNewFileCancel={onInlineNewFileCancel}
+                              inlineNewFolderDir={inlineNewFolderDir}
+                              onInlineNewFolderConfirm={onInlineNewFolderConfirm}
+                              onInlineNewFolderCancel={onInlineNewFolderCancel}
                             />
                           ))}
                         </div>
