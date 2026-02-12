@@ -514,8 +514,9 @@
 }
 
 .sidebar-folder-row.active {
-  background: transparent;
+  background: rgba(90, 216, 166, 0.22);
   color: #e8ecf5;
+  box-shadow: inset 2px 0 0 rgba(90, 216, 166, 0.9);
 }
 
 .tree-row {
@@ -619,8 +620,9 @@
 }
 
 .tree-row.dir.active {
-  background: transparent;
-  color: #c4ccee;
+  background: rgba(90, 216, 166, 0.22);
+  color: #e8ecf5;
+  box-shadow: inset 2px 0 0 rgba(90, 216, 166, 0.9);
 }
 
 .tree-name {

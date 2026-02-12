@@ -78,6 +78,7 @@ export function WorkspaceShell({
   const [markdown, setMarkdown] = useState(seed)
   const [previewValue, setPreviewValue] = useState(seed)
   const [activeLine, setActiveLine] = useState(1)
+  const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null)
 
   // AI Chat States
   const [aiChatState, setAiChatState] = useState<{
@@ -555,6 +556,8 @@ export function WorkspaceShell({
 
   const openFileFromSidebar = useCallback(async (path: string) => {
     if (isCreatingTab) return { ok: false } as any
+    // 点击文件时，清空文件夹选中状态
+    setSelectedFolderPath(null)
     const existing = tabs.find(t => t.path === path)
     if (existing) {
       setActiveTab(existing.id)
@@ -640,15 +643,25 @@ export function WorkspaceShell({
   }
 
   const getCurrentFolderForNewFile = (): string | null => {
+    // 优先使用选中的文件夹
+    if (selectedFolderPath) {
+      return selectedFolderPath
+    }
+    // 否则使用当前文件的父目录
     if (activeTab?.path) {
       return computeDirFromPath(activeTab.path)
     }
+    // 最后使用第一个根文件夹
     if (sidebar.folderRoots.length > 0) {
       return sidebar.folderRoots[0]
     }
     setStatusMessage('请先打开一个文件或文件夹')
     return null
   }
+
+  const handleDirClick = useCallback((path: string) => {
+    setSelectedFolderPath(path)
+  }, [])
 
   const handleToolbarNewFileInCurrentFolder = useCallback(() => {
     if (isCreatingTab) {
@@ -685,6 +698,9 @@ export function WorkspaceShell({
         const tab = createTab({ path: fullPath, content: '' })
         setActiveTab(tab.id)
       }
+
+      // 清空文件夹选中状态，让侧边栏高亮显示新建的文件
+      setSelectedFolderPath(null)
 
       const normalized = fullPath.replace(/\\/g, '/')
       const root = sidebar.folderRoots.find((rootPath) => {
@@ -739,7 +755,26 @@ export function WorkspaceShell({
           setConfirmDialog(null)
           const resp = await deleteFsEntry(path)
           if (resp.ok) {
-            sidebar.removeStandaloneFile(path)
+            // 根据文件类型执行不同的刷新逻辑
+            if (kind === 'standalone-file') {
+              // 独立文件：从列表中移除
+              sidebar.removeStandaloneFile(path)
+            } else if (kind === 'tree-file' || kind === 'tree-dir') {
+              // 文件夹中的文件/文件夹：找到所属根目录并刷新
+              const normalizedPath = path.replace(/\\/g, '/')
+              const parentRoot = sidebar.folderRoots.find((root) => {
+                const rootNorm = root.replace(/\\/g, '/')
+                return normalizedPath.startsWith(rootNorm + '/')
+              })
+              if (parentRoot) {
+                await sidebar.refreshFolderTree(parentRoot)
+              }
+            } else if (kind === 'folder-root') {
+              // 根文件夹：从 folderRoots 中移除
+              sidebar.removeFolderRoot(path)
+            }
+
+            // 关闭相关标签页
             closeTabsByPath(path)
           }
         }
@@ -952,7 +987,8 @@ export function WorkspaceShell({
           standaloneFiles={sidebar.standaloneFiles} folderRoots={sidebar.folderRoots}
           treesByRoot={sidebar.treesByRoot} expanded={sidebar.expanded}
           onToggle={sidebar.toggleNode} onFileClick={openFileFromSidebar}
-          onContextAction={handleSidebarContextAction} activePath={activeTab?.path ?? null}
+          onDirClick={handleDirClick}
+          onContextAction={handleSidebarContextAction} activePath={selectedFolderPath ?? activeTab?.path ?? null}
           panelWidth={sidebarWidth}
           highlightedPaths={sidebar.highlightedFiles}
           onFileVisited={sidebar.markFileVisited}

@@ -24,6 +24,7 @@ export type SidebarProps = {
   expanded: Record<string, boolean>
   onToggle: (path: string) => void
   onFileClick: (path: string) => void
+  onDirClick?: (path: string) => void  // 文件夹点击回调（用于选中文件夹）
   onContextAction?: (payload: SidebarContextActionPayload) => void
   /** 顶部工具栏：在当前文件夹中新建文件 */
   onToolbarNewFileInCurrentFolder?: () => void
@@ -49,6 +50,7 @@ type TreeNodeProps = {
   expanded: Record<string, boolean>
   onToggle: (path: string) => void
   onFileClick: (path: string) => void
+  onDirClick?: (path: string) => void
   activePath?: string | null
   highlightedPaths?: string[]
   onFileVisited?: (path: string) => void
@@ -58,7 +60,7 @@ type TreeNodeProps = {
   onInlineNewFileCancel?: () => void
 }
 
-function TreeNode({ node, level, expanded, onToggle, onFileClick, activePath, highlightedPaths, onFileVisited, onContextMenu, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel }: TreeNodeProps) {
+function TreeNode({ node, level, expanded, onToggle, onFileClick, onDirClick, activePath, highlightedPaths, onFileVisited, onContextMenu, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel }: TreeNodeProps) {
   const isExpanded = !!expanded[node.path]
   const isActive = activePath === node.path
   const isHighlighted = highlightedPaths?.includes(node.path.replace(/\\/g, '/')) ?? false
@@ -71,7 +73,10 @@ function TreeNode({ node, level, expanded, onToggle, onFileClick, activePath, hi
         <div
           className={`tree-row dir ${isActive ? 'active' : ''}`}
           style={{ paddingLeft }}
-          onClick={() => onToggle(node.path)}
+          onClick={() => {
+            onToggle(node.path)
+            onDirClick?.(node.path)
+          }}
         >
           <span
             className={`tree-icon tree-icon-chevron ${isExpanded ? 'expanded' : 'collapsed'}`}
@@ -96,6 +101,7 @@ function TreeNode({ node, level, expanded, onToggle, onFileClick, activePath, hi
                 expanded={expanded}
                 onToggle={onToggle}
                 onFileClick={onFileClick}
+                onDirClick={onDirClick}
                 activePath={activePath}
                 highlightedPaths={highlightedPaths}
                 onFileVisited={onFileVisited}
@@ -305,7 +311,7 @@ function SidebarContextMenu({ x, y, target, onAction, onRequestClose }: SidebarC
   )
 }
 
-export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, onToggle, onFileClick, onContextAction, onToolbarNewFileInCurrentFolder, onToolbarNewFolderInCurrentFolder, onToolbarRefreshCurrentFolder, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel, activePath, panelWidth, highlightedPaths, onFileVisited }: SidebarProps) {
+export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, onToggle, onFileClick, onDirClick, onContextAction, onToolbarNewFileInCurrentFolder, onToolbarNewFolderInCurrentFolder, onToolbarRefreshCurrentFolder, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel, activePath, panelWidth, highlightedPaths, onFileVisited }: SidebarProps) {
   const hasStandalone = standaloneFiles.length > 0
   const hasTree = folderRoots.some((rootPath) => (treesByRoot[rootPath]?.length ?? 0) > 0)
 
@@ -445,12 +451,16 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                 {folderRoots.map((rootPath) => {
                   const name = rootPath.split(/[/\\]/).pop() ?? rootPath
                   const isExpandedRoot = !!expanded[rootPath]
+                  const isActiveRoot = activePath === rootPath
                   const children = treesByRoot[rootPath] ?? []
                   return (
                     <li key={rootPath}>
                       <div
-                        className={`sidebar-folder-row ${isExpandedRoot ? 'active' : ''}`}
-                        onClick={() => onToggle(rootPath)}
+                        className={`sidebar-folder-row ${isActiveRoot ? 'active' : ''}`}
+                        onClick={() => {
+                          onToggle(rootPath)
+                          onDirClick?.(rootPath)
+                        }}
                         onContextMenu={(e) => {
                           e.preventDefault()
                           e.stopPropagation()
@@ -486,6 +496,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                               expanded={expanded}
                               onToggle={onToggle}
                               onFileClick={onFileClick}
+                              onDirClick={onDirClick}
                               activePath={activePath}
                               highlightedPaths={highlightedPaths}
                               onFileVisited={onFileVisited}
