@@ -10,7 +10,13 @@
  * - 若当前行为空，则直接在当前行插入文本；
  * - 需保证 undo/redo 正常工作（由具体编辑器实现负责）。
  */
-type InsertImpl = ((text: string) => void | Promise<void>) | null
+export type EditorInsertPayload = {
+  text: string
+  /** 可选：这次插入源自哪个标签，用于防止内容串到其他标签 */
+  sourceTabId?: string
+}
+
+type InsertImpl = ((payload: EditorInsertPayload) => void | Promise<void>) | null
 
 let insertImpl: InsertImpl = null
 
@@ -19,21 +25,23 @@ let insertImpl: InsertImpl = null
  *
  * 通常在工作区 Shell（如 WorkspaceShell）中调用，利用实际的 EditorView 来完成插入。
  */
-export function registerEditorInsertBelow(fn: (text: string) => void | Promise<void>): void {
+export function registerEditorInsertBelow(fn: (payload: EditorInsertPayload) => void | Promise<void>): void {
   insertImpl = fn
 }
 
 /**
  * 在当前编辑区光标所在行的下一行插入 Markdown 文本。
  *
- * 若未注册具体实现，将输出警告但不会抛错，保证在纯 Web 环境下仍可运行。
+ * - 兼容旧签名：直接传字符串 text
+ * - 新签名：传入 { text, sourceTabId }
  */
-export async function insertMarkdownAtCursorBelow(text: string): Promise<void> {
+export async function insertMarkdownAtCursorBelow(arg: string | EditorInsertPayload): Promise<void> {
   if (!insertImpl) {
     console.warn('[editorInsertService] insertMarkdownAtCursorBelow called but no implementation registered')
     return
   }
-  await Promise.resolve(insertImpl(text))
+  const payload: EditorInsertPayload = typeof arg === 'string' ? { text: arg } : arg
+  await Promise.resolve(insertImpl(payload))
 }
 
 /**
@@ -44,7 +52,7 @@ export async function insertMarkdownAtCursorBelow(text: string): Promise<void> {
  * - 若当前无选区，则在光标位置插入文本；
  * - 需保证 undo/redo 正常工作（由具体编辑器实现负责）。
  */
-type ReplaceImpl = ((text: string) => void | Promise<void>) | null
+type ReplaceImpl = ((payload: EditorInsertPayload) => void | Promise<void>) | null
 
 let replaceImpl: ReplaceImpl = null
 
@@ -53,21 +61,23 @@ let replaceImpl: ReplaceImpl = null
  *
  * 通常在工作区 Shell（如 WorkspaceShell）中调用，利用实际的 EditorView 来完成替换。
  */
-export function registerEditorReplaceSelection(fn: (text: string) => void | Promise<void>): void {
+export function registerEditorReplaceSelection(fn: (payload: EditorInsertPayload) => void | Promise<void>): void {
   replaceImpl = fn
 }
 
 /**
  * 替换当前选区文本（或在光标位置插入）。
  *
- * 若未注册具体实现，将输出警告但不会抛错，保证在纯 Web 环境下仍可运行。
+ * - 兼容旧签名：直接传字符串 text
+ * - 新签名：传入 { text, sourceTabId }
  */
-export async function replaceSelectionWithText(text: string): Promise<void> {
+export async function replaceSelectionWithText(arg: string | EditorInsertPayload): Promise<void> {
   if (!replaceImpl) {
     console.warn('[editorInsertService] replaceSelectionWithText called but no implementation registered')
     return
   }
-  await Promise.resolve(replaceImpl(text))
+  const payload: EditorInsertPayload = typeof arg === 'string' ? { text: arg } : arg
+  await Promise.resolve(replaceImpl(payload))
 }
 
 /**

@@ -164,6 +164,11 @@ export function WorkspaceShell({
     },
   })
 
+  const activeIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    activeIdRef.current = activeId
+  }, [activeId])
+
   const closeTabWithAiSession = useCallback((id: string) => {
     // 按 tab 维度清理 AI Chat 会话
     aiChatSessionManager.deleteSession(id)
@@ -309,7 +314,7 @@ export function WorkspaceShell({
 
   // Register AI Editor handlers
   useEffect(() => {
-    registerEditorInsertBelow(async (text: string) => {
+    const runInsertBelow = (text: string) => {
       const view = editorViewRef.current
       if (!view || !text) return
       const { state } = view
@@ -321,8 +326,9 @@ export function WorkspaceShell({
         selection: { anchor: line.to + insertText.length },
         scrollIntoView: true,
       }))
-    })
-    registerEditorReplaceSelection(async (text: string) => {
+    }
+
+    const runReplaceSelection = (text: string) => {
       const view = editorViewRef.current
       if (!view || !text) return
       const { state } = view
@@ -332,7 +338,41 @@ export function WorkspaceShell({
         selection: { anchor: from + text.length },
         scrollIntoView: true,
       }))
+    }
+
+    registerEditorInsertBelow(async ({ text, sourceTabId }) => {
+      if (!text) return
+
+      const performInsert = () => {
+        runInsertBelow(text)
+      }
+
+      if (sourceTabId && activeIdRef.current !== sourceTabId) {
+        // 切回发起 AI 动作的标签页，避免内容串到其他标签
+        setActiveTab(sourceTabId)
+        activeIdRef.current = sourceTabId
+        setTimeout(performInsert, 50)
+      } else {
+        performInsert()
+      }
     })
+
+    registerEditorReplaceSelection(async ({ text, sourceTabId }) => {
+      if (!text) return
+
+      const performReplace = () => {
+        runReplaceSelection(text)
+      }
+
+      if (sourceTabId && activeIdRef.current !== sourceTabId) {
+        setActiveTab(sourceTabId)
+        activeIdRef.current = sourceTabId
+        setTimeout(performReplace, 50)
+      } else {
+        performReplace()
+      }
+    })
+
     registerEditorCreateAndInsert(async (text: string) => {
       if (!text || isCreatingTab) return
       setIsCreatingTab(true)
@@ -343,7 +383,7 @@ export function WorkspaceShell({
         setIsCreatingTab(false)
       }
     })
-  }, [createTab, isCreatingTab])
+  }, [createTab, isCreatingTab, setActiveTab])
 
   const openAiChatDialog = useCallback(
     (options: { entryMode: ChatEntryMode; initialContext?: EntryContext }) => {

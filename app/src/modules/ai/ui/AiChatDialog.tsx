@@ -232,11 +232,11 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
   }
 
   const handleInsert = async (content: string) => {
-    await insertMarkdownAtCursorBelow(content)
+    await insertMarkdownAtCursorBelow({ text: content, sourceTabId: tabId })
   }
 
   const handleReplace = async (content: string) => {
-    await replaceSelectionWithText(content)
+    await replaceSelectionWithText({ text: content, sourceTabId: tabId })
   }
 
   const handleSave = async (content: string) => {
