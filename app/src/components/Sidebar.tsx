@@ -156,7 +156,7 @@ function TreeNode({ node, level, expanded, onToggle, onFileClick, onDirClick, ac
         onContextMenu(e, { path: node.path, kind: 'tree-file' })
       }}
     >
-      <span className="tree-icon">📝</span>
+      <span className="tree-icon">📄</span>
       <span className="tree-name">{node.name}</span>
     </div>
   )
@@ -190,7 +190,7 @@ function InlineNewFileRow({ level, onConfirm, onCancel, isFolder }: InlineNewFil
   }
 
   const placeholder = isFolder ? 'new folder' : 'new file'
-  const icon = isFolder ? '📁' : '📝'
+  const icon = isFolder ? '📁' : '📄'
   const rowClass = isFolder ? 'tree-row dir new-file-editing' : 'tree-row file new-file-editing'
 
   return (

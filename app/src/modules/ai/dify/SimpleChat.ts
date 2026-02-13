@@ -310,6 +310,16 @@ export class SimpleChat {
     return this.config
   }
 
+  /** 获取当前会话 ID（用于 Dify conversationId 持久化与恢复） */
+  public getConversationId(): string | null {
+    return this.conversationId
+  }
+
+  /** 设置会话 ID（用于从持久化记录中恢复 Dify 会话） */
+  public setConversationId(id: string | null): void {
+    this.conversationId = id;
+  }
+
   /** 获取最后一条用户消息 */
   private getLastUserMessage(request: CompletionRequest): string {
     const last = request.messages[request.messages.length - 1]

@@ -159,6 +159,11 @@ export type StreamingChatResult = {
   content: string
   tokenCount: number
   completed: boolean
+  /**
+   * Provider 特定的会话标识，例如 Dify 的 conversationId。
+   * 其他 Provider 可忽略或返回 undefined。
+   */
+  conversationId?: string
   error?: Error
 }
 

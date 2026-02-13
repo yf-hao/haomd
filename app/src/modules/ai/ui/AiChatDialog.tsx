@@ -2,7 +2,6 @@ import type { FC, FormEvent, KeyboardEvent, MouseEventHandler, MouseEvent as Rea
 import { useEffect, useRef, useState } from 'react'
 import type { ChatEntryMode, ChatMessageView, EntryContext } from '../domain/chatSession'
 import { AiChatBody } from './AiChatBody'
-import type { AiChatSessionKey } from '../application/aiChatSessionService'
 import { useAiChatSession } from './hooks/useAiChatSession'
 import { copyTextToClipboard } from '../platform/clipboardService'
 import { insertMarkdownAtCursorBelow, replaceSelectionWithText, createTabAndInsertContent } from '../platform/editorInsertService'
@@ -13,14 +12,17 @@ const EMPTY_MESSAGES: ChatMessageView[] = []
 
 export type AiChatDialogProps = {
   open: boolean
-  sessionKey: AiChatSessionKey
   entryMode: ChatEntryMode
   initialContext?: EntryContext
   onClose: () => void
   currentFilePath?: string | null
+  /**
+   * 用于在本地持久化与恢复会话的 key，一般为 tabId。
+   */
+  tabId: string
 }
 
-export const AiChatDialog: FC<AiChatDialogProps> = ({ open, sessionKey, entryMode, initialContext, onClose, currentFilePath }) => {
+export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialContext, onClose, currentFilePath, tabId }) => {
   const [input, setInput] = useState('')
   const [contextPrefix, setContextPrefix] = useState<string | null>(null)
   const [contextPrefixUsed, setContextPrefixUsed] = useState(false)
@@ -58,10 +60,11 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, sessionKey, entryMod
     removeAttachment,
     isUploading,
   } = useAiChatSession({
-    sessionKey,
+    sessionKey: tabId,
     entryMode,
     initialContext,
     open,
+    docPath: currentFilePath ?? undefined,
   })
 
   useEffect(() => {

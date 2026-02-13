@@ -44,7 +44,8 @@ export function base64ToBytes(base64: string): Uint8Array {
 // Dify 模式需要：bytes → File
 export function base64ToImageFile(base64: string, fileName: string, mime = 'image/png'): File {
   const bytes = base64ToBytes(base64)
-  const blob = new Blob([bytes], { type: mime })
+  const buffer = bytes.buffer as ArrayBuffer
+  const blob = new Blob([buffer], { type: mime })
   return new File([blob], fileName, { type: mime })
 }
 

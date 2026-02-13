@@ -221,7 +221,7 @@ export function createExtensions(options: EditorOptions = {}): Extension[] {
       ...filteredDefaultKeymap,
       ...historyKeymap,
       ...foldKeymap,
-    ]),
+    ] as any),
     EditorView.lineWrapping,
     smartScrollOnInputPlugin(),
     language,

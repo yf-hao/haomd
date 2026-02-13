@@ -26,11 +26,27 @@ import type { SystemPromptInfo } from './systemPromptService'
 import { loadSystemPromptInfo, getSystemPromptByRoleId } from './systemPromptService'
 import { createStreamingClientFromSettings } from '../streamingClientFactory'
 import { createAttachmentUploadService } from './attachmentUploadService'
+import { docConversationService } from './docConversationService'
 
 export type StartChatOptions = {
   entryMode: ChatEntryMode
   initialContext?: EntryContext
+  /**
+   * 可选：用于从持久化快照中恢复会话时，直接注入完整的 ConversationState。
+   * 若提供，则不会再次根据 entryMode/initialContext 构造初始状态。
+   */
+  initialState?: ConversationState
   onStateChange?: (state: ConversationState) => void
+  /**
+   * 可选：当前会话关联的文档路径。提供后，chatSessionService 会在每轮对话结束时
+   * 将会话状态同步到文档会话持久化层。
+   */
+  docPath?: string
+  /**
+   * 可选：仅用于 Dify Provider，从文档会话记录恢复已有 conversationId，
+   * 以便在应用重启后续接同一 Dify 云端会话。
+   */
+  initialDifyConversationId?: string
 }
 
 export type ChatSession = {
@@ -86,6 +102,7 @@ function engineHistoryToChatMessages(history: EngineMessage[]): ChatMessage[] {
 export async function createChatSession(options: StartChatOptions): Promise<ChatSession> {
   const [aiState, systemInfo] = await Promise.all([loadAiSettingsState(), loadSystemPromptInfo()])
   const attachmentUploadService = createAttachmentUploadService()
+  const docPath = options.docPath
   let provider = pickDefaultProvider(aiState)
 
   let currentModelId = provider.defaultModelId ?? provider.models[0]?.id
@@ -94,17 +111,22 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
   let defaultMaxTokens = provider.models.find((m) => m.id === currentModelId)?.maxTokens ?? 2048
 
   let systemPromptInfo: SystemPromptInfo = systemInfo
-  let state: ConversationState = createInitialConversationState(
-    options.entryMode,
-    systemPromptInfo.systemPrompt,
-    options.initialContext,
-    systemPromptInfo.activeRoleId,
-  )
+  let difyConversationId: string | undefined = options.initialDifyConversationId
+  let state: ConversationState =
+    options.initialState ??
+    createInitialConversationState(
+      options.entryMode,
+      systemPromptInfo.systemPrompt,
+      options.initialContext,
+      systemPromptInfo.activeRoleId,
+    )
 
+  const initialConversationIdForClient = providerType === 'dify' ? difyConversationId : undefined
   let client: IStreamingChatClient | null = createStreamingClientFromSettings(
     provider,
     systemPromptInfo.systemPrompt,
     currentModelId,
+    initialConversationIdForClient,
   )
   let disposed = false
   let currentAbortController: AbortController | null = null
@@ -149,7 +171,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
     currentAbortController = new AbortController()
 
     try {
-      await client.askStream(
+      const result = await client.askStream(
         {
           messages,
           temperature: 0,
@@ -175,6 +197,10 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
           },
         },
       )
+
+      if (providerType === 'dify' && result.conversationId) {
+        difyConversationId = result.conversationId
+      }
     } catch (e) {
       if (disposed) return
       const error = e as Error
@@ -188,6 +214,20 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
         // 这样可以确保无论正常结束、打断还是出错，streaming 状态都能重置
         state = completeAssistantMessage(state, assistantId)
         notifyStateChange()
+
+        if (docPath) {
+          void docConversationService
+            .upsertFromState({
+              docPath,
+              state,
+              providerType,
+              modelName: currentModelId,
+              difyConversationId,
+            })
+            .catch((err) => {
+              console.error('[ChatSession] failed to persist doc conversation', err)
+            })
+        }
       }
       currentAbortController = null
     }
@@ -236,6 +276,20 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       if (!disposed) {
         state = completeAssistantMessage(state, assistantId)
         notifyStateChange()
+
+        if (docPath) {
+          void docConversationService
+            .upsertFromState({
+              docPath,
+              state,
+              providerType,
+              modelName: currentModelId,
+              difyConversationId,
+            })
+            .catch((err) => {
+              console.error('[ChatSession] failed to persist doc conversation (vision)', err)
+            })
+        }
       }
       currentAbortController = null
     }
@@ -275,7 +329,13 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       }
       // 重新创建客户端以应用新的 system prompt
       if (provider) {
-        client = createStreamingClientFromSettings(provider, systemPromptInfo.systemPrompt, currentModelId)
+        const initialConversationIdForClient = providerType === 'dify' ? difyConversationId : undefined
+        client = createStreamingClientFromSettings(
+          provider,
+          systemPromptInfo.systemPrompt,
+          currentModelId,
+          initialConversationIdForClient,
+        )
       }
       state = {
         ...state,
@@ -296,8 +356,15 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       providerType = provider.providerType ?? 'dify'
       defaultMaxTokens = provider.models.find((m) => m.id === modelId)?.maxTokens ?? 2048
 
+      const initialConversationIdForClient = providerType === 'dify' ? difyConversationId : undefined
+
       // 重新创建客户端以应用新的模型配置
-      client = createStreamingClientFromSettings(provider, systemPromptInfo.systemPrompt, modelId)
+      client = createStreamingClientFromSettings(
+        provider,
+        systemPromptInfo.systemPrompt,
+        modelId,
+        initialConversationIdForClient,
+      )
 
       notifyStateChange()
     },

@@ -13,8 +13,10 @@ import type { OutlineItem } from '../modules/outline/parser'
 import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout'
 import { AiChatDialog } from '../modules/ai/ui/AiChatDialog'
 import { AiChatPane } from '../modules/ai/ui/AiChatPane'
+import { DocConversationHistoryDialog } from '../modules/ai/ui/DocConversationHistoryDialog'
 import type { ChatEntryMode, EntryContext } from '../modules/ai/domain/chatSession'
 import type { AiChatSessionKey } from '../modules/ai/application/aiChatSessionService'
+import { aiChatSessionManager } from '../modules/ai/application/localStorageAiChatSessionManager'
 import { registerEditorInsertBelow, registerEditorReplaceSelection, registerEditorCreateAndInsert } from '../modules/ai/platform/editorInsertService'
 import { useFilePersistence } from '../hooks/useFilePersistence'
 import { useTabs } from '../hooks/useTabs'
@@ -44,7 +46,7 @@ const PreviewPaneLazy = lazy(() =>
   import('./PreviewPane').then((m) => ({ default: m.PreviewPane }))
 )
 
-export type LeftPanelId = 'files' | 'outline' | null
+export type LeftPanelId = 'files' | 'outline' | 'pdf' | null
 export type InitialWorkspaceAction = 'new' | 'open' | 'open_folder' | 'open_recent' | null
 
 export interface WorkspaceShellProps {
@@ -85,7 +87,14 @@ export function WorkspaceShell({
     open: boolean
     entryMode: ChatEntryMode
     initialContext?: EntryContext
+    tabId: string
   } | null>(null)
+
+  // AI History (doc-level) state
+  const [docHistoryState, setDocHistoryState] = useState<{
+    open: boolean
+    docPath: string | null
+  }>({ open: false, docPath: null })
   const [aiChatMode, setAiChatMode] = useState<'floating' | 'docked'>('docked')
   const [aiChatOpen, setAiChatOpen] = useState(false)
   const [aiChatDockSide, setAiChatDockSide] = useState<'left' | 'right'>('right')
@@ -154,6 +163,12 @@ export function WorkspaceShell({
       }
     },
   })
+
+  const closeTabWithAiSession = useCallback((id: string) => {
+    // 按 tab 维度清理 AI Chat 会话
+    aiChatSessionManager.deleteSession(id)
+    closeTab(id)
+  }, [closeTab])
 
   const sidebar = useSidebar()
   const editorViewRef = useRef<EditorView | null>(null)
@@ -333,15 +348,24 @@ export function WorkspaceShell({
   const openAiChatDialog = useCallback(
     (options: { entryMode: ChatEntryMode; initialContext?: EntryContext }) => {
       // 保持当前模式（floating/docked），只负责打开和设置会话参数
+      const tabId = activeTab?.id ?? 'global'
       setAiChatOpen(true)
-      setAiChatState({ open: true, ...options })
+      setAiChatState({ open: true, tabId, ...options })
     },
-    [],
+    [activeTab],
   )
 
   const closeAiChatDialog = useCallback(() => {
     setAiChatOpen(false)
     setAiChatState(null)
+  }, [])
+
+  const openDocHistoryDialog = useCallback((docPath: string) => {
+    setDocHistoryState({ open: true, docPath })
+  }, [])
+
+  const closeDocHistoryDialog = useCallback(() => {
+    setDocHistoryState((prev) => ({ ...prev, open: false }))
   }, [])
 
   const getCurrentMarkdown = useCallback(() => markdown, [markdown])
@@ -466,6 +490,8 @@ export function WorkspaceShell({
     }
   })
 
+  const getCurrentFilePath = useCallback(() => filePath ?? null, [filePath])
+
   useEffect(() => {
     if (activeTab) setFilePath(activeTab.path)
   }, [activeTab, setFilePath])
@@ -485,17 +511,17 @@ export function WorkspaceShell({
         onConfirm: async () => {
           setConfirmDialog(null)
           const res = await save()
-          if ((res as any)?.ok !== false) closeTab(activeId)
+          if ((res as any)?.ok !== false) closeTabWithAiSession(activeId)
         },
         onExtra: () => {
           setConfirmDialog(null)
-          closeTab(activeId)
+          closeTabWithAiSession(activeId)
         }
       })
     } else {
-      closeTab(activeId)
+      closeTabWithAiSession(activeId)
     }
-  }, [isCreatingTab, activeId, tabs, closeTab, save])
+  }, [isCreatingTab, activeId, tabs, closeTabWithAiSession, save])
 
   closeCurrentTabRef.current = handleCurrentTabClose
 
@@ -588,8 +614,8 @@ export function WorkspaceShell({
   }, [isTauriEnv, sidebar])
 
   const closeTabsByPath = useCallback((path: string) => {
-    tabs.forEach(t => { if (t.path === path) closeTab(t.id) })
-  }, [tabs, closeTab])
+    tabs.forEach(t => { if (t.path === path) closeTabWithAiSession(t.id) })
+  }, [tabs, closeTabWithAiSession])
 
   const normalizeDirPath = (dir: string): string => {
     if (!dir) return dir
@@ -921,10 +947,11 @@ export function WorkspaceShell({
     openFile, save, saveAs, handleShowRecent: undefined, clearRecentAll,
     createTab, updateActiveMeta, openFolderInSidebar, closeCurrentTab,
     openAiChatDialog: options => openAiChatDialog(options as any),
-    getCurrentMarkdown, getCurrentFileName, getCurrentSelectionText,
+    getCurrentMarkdown, getCurrentFileName, getCurrentSelectionText, getCurrentFilePath,
     onRequestCloseCurrentTab: () => closeCurrentTabRef.current?.(),
     onRequestQuit: handleQuit, isTauriEnv,
     addStandaloneFile: sidebar.addStandaloneFile,
+    openDocConversationsHistory: (docPath: string) => openDocHistoryDialog(docPath),
   })
 
   useNativePaste(editorViewRef, setStatusMessage)
@@ -1053,12 +1080,12 @@ export function WorkspaceShell({
         title: 'Cannot save background tab',
         message: `Close ${tab?.title} and discard changes?`,
         confirmText: 'Discard and Close',
-        onConfirm: () => { setConfirmDialog(null); closeTab(id); }
+        onConfirm: () => { setConfirmDialog(null); closeTabWithAiSession(id); }
       })
     } else {
       handleCurrentTabClose()
     }
-  }, [activeId, tabs, closeTab, handleCurrentTabClose])
+  }, [activeId, tabs, closeTabWithAiSession, handleCurrentTabClose])
 
   const initialActionHandledRef = useRef(false)
   useEffect(() => {
@@ -1113,7 +1140,19 @@ export function WorkspaceShell({
       {activeLeftPanel === 'outline' && (
         <OutlinePanel items={outlineItems} activeId={activeOutlineId} onSelect={handleOutlineSelect} panelWidth={sidebarWidth} />
       )}
-      {(activeLeftPanel === 'files' || activeLeftPanel === 'outline') && (
+      {activeLeftPanel === 'pdf' && (
+        <div className="pdf-panel" style={{ width: sidebarWidth }}>
+          <div className="pdf-panel-header">
+            <span>PDF</span>
+          </div>
+          <div className="pdf-panel-content">
+            <p style={{ color: '#9ca3af', padding: '12px', fontSize: '13px' }}>
+              PDF preview will be displayed here.
+            </p>
+          </div>
+        </div>
+      )}
+      {(activeLeftPanel === 'files' || activeLeftPanel === 'outline' || activeLeftPanel === 'pdf') && (
         <div className={`sidebar-resizer ${isSidebarResizing ? 'active' : ''}`} onMouseDown={handleSidebarResizeStart} />
       )}
 
@@ -1122,7 +1161,7 @@ export function WorkspaceShell({
           <Welcome onNewFile={() => createTab()} onOpenFile={() => openFile()} />
         ) : (
           <>
-            <TabBar tabs={tabs} activeId={activeId} onTabClick={setActiveTab} onTabClose={closeTab} onRequestSaveAndClose={handleTabSaveAndClose} />
+            <TabBar tabs={tabs} activeId={activeId} onTabClick={setActiveTab} onTabClose={closeTabWithAiSession} onRequestSaveAndClose={handleTabSaveAndClose} />
             <main className={`workspace ${dragging ? 'dragging' : ''}`} style={{ gridTemplateColumns: outerGridTemplateColumns }}>
               {aiChatMode === 'docked' && aiChatOpen && aiChatState && (
                 <>
@@ -1195,14 +1234,22 @@ export function WorkspaceShell({
       )}
       {confirmDialog && <ConfirmDialog title={confirmDialog.title} message={confirmDialog.message} confirmText={confirmDialog.confirmText} cancelText={confirmDialog.cancelText} extraText={confirmDialog.extraText} variant={confirmDialog.variant} onConfirm={confirmDialog.onConfirm} onExtra={confirmDialog.onExtra} onCancel={() => setConfirmDialog(null)} />}
       {quitConfirmDialog && <ConfirmDialog title={quitConfirmDialog.unsavedCount === 1 ? 'Save changes?' : `Save ${quitConfirmDialog.unsavedCount} files?`} message="Your changes will be lost." confirmText="Save All" cancelText="Cancel" extraText="Don't Save" variant="stacked" onConfirm={quitConfirmDialog.onSaveAll} onExtra={quitConfirmDialog.onQuitWithoutSaving} onCancel={() => setQuitConfirmDialog(null)} />}
-      {aiChatMode === 'floating' && aiChatOpen && aiChatState?.open && (
+      {aiChatMode === 'floating' && aiChatOpen && aiChatState?.open && activeTab && (
         <AiChatDialog
           open={aiChatOpen}
-          sessionKey={aiChatSessionKey}
           entryMode={aiChatState.entryMode}
           initialContext={aiChatState.initialContext}
           onClose={closeAiChatDialog}
           currentFilePath={filePath}
+          tabId={aiChatState.tabId}
+        />
+      )}
+
+      {docHistoryState.open && docHistoryState.docPath && (
+        <DocConversationHistoryDialog
+          open={docHistoryState.open}
+          docPath={docHistoryState.docPath}
+          onClose={closeDocHistoryDialog}
         />
       )}
     </>

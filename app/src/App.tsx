@@ -118,6 +118,16 @@ function App() {
           >
             <span className="activity-icon-outline" aria-hidden="true" />
           </button>
+
+          <button
+            type="button"
+            className={`activity-item ${activeLeftPanel === 'pdf' ? 'active' : ''}`}
+            onClick={() => handleLeftPanelToggle('pdf')}
+            aria-pressed={activeLeftPanel === 'pdf'}
+            title="PDF"
+          >
+            <span className="activity-icon-pdf" aria-hidden="true" />
+          </button>
         </div>
 
         {!hasWorkspace ? (

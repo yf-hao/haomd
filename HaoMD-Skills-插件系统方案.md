@@ -59,7 +59,7 @@ const metadata = {
   description: '根据主题生成技术文章', // 简短描述
   version: '1.0.0',                 // 版本号
   author: 'Your Name',              // 作者（可选）
-  icon: '📝'                        // Emoji 图标（可选）
+  icon: '📄'                        // Emoji 图标（可选）
 }
 
 /**
@@ -196,7 +196,7 @@ name: 文章生成器
 description: 根据主题生成结构化的技术文章
 version: 1.0.0
 author: Your Name
-icon: 📝
+icon: 📄
 ---
 
 # 文章生成器
@@ -422,7 +422,7 @@ const metadata = {
   name: '文章生成器',
   description: '根据主题生成结构化的技术文章',
   version: '1.0.0',
-  icon: '📝'
+  icon: '📄'
 }
 
 const form = [

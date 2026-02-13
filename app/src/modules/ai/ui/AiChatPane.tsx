@@ -62,6 +62,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
     entryMode,
     initialContext,
     open: true,
+    docPath: currentFilePath ?? undefined,
   })
 
   useEffect(() => {

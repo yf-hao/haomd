@@ -8,6 +8,11 @@ export type DifyChatClientConfig = {
   systemPrompt?: string
   temperature?: number
   maxTokens?: number
+  /**
+   * 可选：用于从持久化记录中恢复 Dify conversationId，
+   * 便于在应用重启后续接同一云端会话。
+   */
+  initialConversationId?: string
 }
 
 function toDifyMessages(messages: ChatMessage[]) {
@@ -28,6 +33,10 @@ export function createDifyStreamingClient(config: DifyChatClientConfig): IStream
     temperature: config.temperature,
     maxTokens: config.maxTokens,
   })
+
+  if (config.initialConversationId) {
+    chat.setConversationId(config.initialConversationId)
+  }
 
   return {
     async askStream(request: StreamingChatRequest, handlers): Promise<StreamingChatResult> {
@@ -51,6 +60,7 @@ export function createDifyStreamingClient(config: DifyChatClientConfig): IStream
         content: result.content,
         tokenCount: result.tokenCount,
         completed: result.completed,
+        conversationId: chat.getConversationId() ?? undefined,
         error: result.error,
       }
     },

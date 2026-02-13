@@ -901,12 +901,19 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .item(&MenuItemBuilder::new("Forward").id("go_forward").build(app)?)
         .build()?;
 
+  let ai_conversation_menu = SubmenuBuilder::new(app, "Session")
+        .item(&MenuItemBuilder::new("History").id("ai_conversation_history").build(app)?)
+        .item(&MenuItemBuilder::new("Compress").id("ai_conversation_compress").build(app)?)
+        .item(&MenuItemBuilder::new("Clear").id("ai_conversation_clear").build(app)?)
+        .build()?;
+
   let ai_menu = SubmenuBuilder::new(app, "AI")
         .item(&MenuItemBuilder::new("Provider Settings").id("ai_settings").accelerator("CmdOrCtrl+,").build(app)?)
         .item(&MenuItemBuilder::new("Prompt Settings").id("ai_prompt_settings").build(app)?)
         .item(&MenuItemBuilder::new("Open AI Chat").id("ai_chat").accelerator("CmdOrCtrl+Shift+C").build(app)?)
         .item(&MenuItemBuilder::new("Ask AI About File").id("ai_ask_file").accelerator("CmdOrCtrl+Shift+A").build(app)?)
         .item(&MenuItemBuilder::new("Ask AI About Selection").id("ai_ask_selection").accelerator("CmdOrCtrl+Shift+S").build(app)?)
+        .item(&ai_conversation_menu)
         .build()?;
 
   let help_menu = SubmenuBuilder::new(app, "Help")
@@ -1336,6 +1343,147 @@ async fn read_clipboard_image_as_base64() -> ResultPayload<String> {
   ok(encoded, trace)
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct DocConversationMessageMetaCfg {
+  #[serde(default)]
+  provider_type: Option<String>,
+  #[serde(default)]
+  model_name: Option<String>,
+  #[serde(default)]
+  has_image: Option<bool>,
+  #[serde(default)]
+  tokens_used: Option<u32>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct DocConversationMessageCfg {
+  id: String,
+  doc_path: String,
+  timestamp: i64,
+  role: String,
+  content: String,
+  #[serde(default)]
+  meta: Option<DocConversationMessageMetaCfg>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct DocConversationRecordCfg {
+  doc_path: String,
+  session_id: String,
+  last_active_at: i64,
+  #[serde(default)]
+  dify_conversation_id: Option<String>,
+  #[serde(default)]
+  messages: Vec<DocConversationMessageCfg>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct ConversationIndexEntryCfg {
+  doc_path: String,
+  session_id: String,
+  last_active_at: i64,
+  has_dify_conversation: bool,
+  message_count: usize,
+}
+
+fn ai_conversations_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
+  if let Ok(mut dir) = app.path().config_dir() {
+    dir.push("haomd");
+    dir.push("ai-conversations");
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir)
+  } else {
+    let mut dir = std::env::current_dir()?;
+    dir.push("ai-conversations");
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir)
+  }
+}
+
+fn ai_conversations_data_path(app: &AppHandle) -> std::io::Result<PathBuf> {
+  let mut dir = ai_conversations_dir(app)?;
+  dir.push("conversations_data.json");
+  Ok(dir)
+}
+
+fn ai_conversations_index_path(app: &AppHandle) -> std::io::Result<PathBuf> {
+  let mut dir = ai_conversations_dir(app)?;
+  dir.push("conversations_index.json");
+  Ok(dir)
+}
+
+async fn read_doc_conversations(app: &AppHandle) -> std::io::Result<Vec<DocConversationRecordCfg>> {
+  let path = ai_conversations_data_path(app)?;
+  match fs::read(&path).await {
+    Ok(bytes) => {
+      let records: Vec<DocConversationRecordCfg> = serde_json::from_slice(&bytes).unwrap_or_default();
+      Ok(records)
+    }
+    Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(vec![]),
+    Err(err) => Err(err),
+  }
+}
+
+async fn write_doc_conversations(app: &AppHandle, records: &[DocConversationRecordCfg]) -> std::io::Result<()> {
+  let data_path = ai_conversations_data_path(app)?;
+  let data_bytes = serde_json::to_vec_pretty(records)?;
+  fs::write(&data_path, data_bytes).await?;
+
+  let index_entries: Vec<ConversationIndexEntryCfg> = records
+    .iter()
+    .map(|rec| ConversationIndexEntryCfg {
+      doc_path: rec.doc_path.clone(),
+      session_id: rec.session_id.clone(),
+      last_active_at: rec.last_active_at,
+      has_dify_conversation: rec
+        .dify_conversation_id
+        .as_ref()
+        .map(|s| !s.is_empty())
+        .unwrap_or(false),
+      message_count: rec.messages.len(),
+    })
+    .collect();
+
+  let index_path = ai_conversations_index_path(app)?;
+  let index_bytes = serde_json::to_vec_pretty(&index_entries)?;
+  fs::write(&index_path, index_bytes).await?;
+
+  Ok(())
+}
+
+#[tauri::command]
+async fn load_doc_conversations(app: AppHandle) -> ResultPayload<Vec<DocConversationRecordCfg>> {
+  let trace = new_trace_id();
+  match read_doc_conversations(&app).await {
+    Ok(records) => ok(records, trace),
+    Err(err) => err_payload(
+      ErrorCode::IoError,
+      format!("读取 conversations_data 失败: {err}"),
+      trace,
+    ),
+  }
+}
+
+#[tauri::command]
+async fn save_doc_conversations(
+  app: AppHandle,
+  records: Vec<DocConversationRecordCfg>,
+) -> ResultPayload<()> {
+  let trace = new_trace_id();
+  match write_doc_conversations(&app, &records).await {
+    Ok(()) => ok((), trace),
+    Err(err) => err_payload(
+      ErrorCode::IoError,
+      format!("写入 conversations_data 失败: {err}"),
+      trace,
+    ),
+  }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -1544,6 +1692,8 @@ pub fn run() {
       open_in_file_explorer,
       save_clipboard_image_to_dir,
       read_clipboard_image_as_base64,
+      load_doc_conversations,
+      save_doc_conversations,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

@@ -2,7 +2,7 @@ import type { ChatEntryMode, ConversationState, EntryContext } from '../domain/c
 import type { ChatSession, StartChatOptions } from './chatSessionService'
 import { createChatSession } from './chatSessionService'
 
-export type AiChatSessionKey = string
+export type AiChatSessionKey = string // session key
 
 export type SessionListener = (state: ConversationState) => void
 
@@ -41,11 +41,12 @@ export class AiChatSessionService {
       return existing
     }
 
-    const { entryMode, initialContext, onStateChange } = options
+    const { entryMode, initialContext, onStateChange, ...rest } = options
 
     const startOptions: StartChatOptions = {
       entryMode,
       initialContext,
+      ...(rest as any),
       onStateChange: (nextState) => {
         const current = this.sessions.get(key)
         if (!current || current.disposed) return

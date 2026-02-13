@@ -1,6 +1,7 @@
 import usageDocs from '../../docs/使用说明.md?raw'
 import type { IAiClient } from '../ai/client'
 import type { ChatEntryMode, EntryContext } from '../ai/domain/chatSession'
+import { docConversationService } from '../ai/application/docConversationService'
 
 export type AppCommand = () => void | Promise<void>
 
@@ -86,6 +87,14 @@ export type AiCommandContext = StatusContext & {
   getCurrentFileName?: () => string | null
   /** 获取当前编辑器中选中的文本内容 */
   getCurrentSelectionText?: () => string | null
+  /** 获取当前文档的完整路径（用于文档会话历史/清理/压缩） */
+  getCurrentFilePath?: () => string | null
+  /** 打开文档会话历史视图（由 WorkspaceShell 提供，当前版本可选） */
+  openDocConversationsHistory?: (docPath: string) => void
+  /** 以下字段来自 Help/File 上下文，在 CommandContext 中总是存在，这里标记为可选以便 AI 命令复用 */
+  newDocument?: () => void
+  applyOpenedContent?: (content: string) => void
+  setFilePath?: (path: string) => void
 }
 
 /**
@@ -347,6 +356,63 @@ function createAiCommands(ctx: AiCommandContext): CommandRegistry {
         entryMode: 'selection',
         initialContext: { type: 'selection', content: selection },
       })
+    },
+    ai_conversation_history: async () => {
+      try {
+        if (!ctx.getCurrentFilePath) {
+          ctx.setStatusMessage('当前编辑器状态不可用，无法打开文档会话历史')
+          return
+        }
+        const docPath = ctx.getCurrentFilePath()
+        if (!docPath) {
+          ctx.setStatusMessage('请先打开并保存一个文档，再使用 History 查看会话历史')
+          return
+        }
+        if (!ctx.openDocConversationsHistory) {
+          ctx.setStatusMessage('当前版本未注册 History 浮窗，无法展示文档会话历史')
+          return
+        }
+        ctx.openDocConversationsHistory(docPath)
+      } catch (err) {
+        console.error('[commands] ai_conversation_history error', err)
+        ctx.setStatusMessage('打开文档会话历史失败，请检查控制台日志')
+      }
+    },
+    ai_conversation_clear: async () => {
+      try {
+        if (!ctx.getCurrentFilePath) {
+          ctx.setStatusMessage('当前编辑器状态不可用，无法清空文档会话历史')
+          return
+        }
+        const docPath = ctx.getCurrentFilePath()
+        if (!docPath) {
+          ctx.setStatusMessage('请先打开一个已保存的文档，再使用 Clear 会话历史')
+          return
+        }
+        await docConversationService.clearByDocPath(docPath)
+        ctx.setStatusMessage('已清空当前文档的 AI 会话历史')
+      } catch (err) {
+        console.error('[commands] ai_conversation_clear error', err)
+        ctx.setStatusMessage('清空文档会话历史失败，请检查控制台日志')
+      }
+    },
+    ai_conversation_compress: async () => {
+      try {
+        if (!ctx.getCurrentFilePath) {
+          ctx.setStatusMessage('当前编辑器状态不可用，无法压缩文档会话历史')
+          return
+        }
+        const docPath = ctx.getCurrentFilePath()
+        if (!docPath) {
+          ctx.setStatusMessage('请先打开一个已保存的文档，再使用 Compress')
+          return
+        }
+        await docConversationService.compressByDocPath(docPath)
+        ctx.setStatusMessage('已触发文档会话压缩（当前版本仅占位，未真正执行 AI 摘要）')
+      } catch (err) {
+        console.error('[commands] ai_conversation_compress error', err)
+        ctx.setStatusMessage('压缩文档会话历史失败，请检查控制台日志')
+      }
     },
   }
 }

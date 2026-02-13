@@ -12,6 +12,7 @@ export function createStreamingClientFromSettings(
   provider: UiProvider,
   systemPrompt?: string,
   overrideModelId?: string,
+  initialConversationId?: string,
 ): IStreamingChatClient {
   const baseUrl = provider.baseUrl.trim()
   const apiKey = provider.apiKey.trim()
@@ -41,6 +42,7 @@ export function createStreamingClientFromSettings(
         systemPrompt,
         temperature: 0,
         maxTokens: 256,
+        initialConversationId,
       })
   }
 }

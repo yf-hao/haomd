@@ -52,6 +52,8 @@ export function useCommandSystem(params: CommandSystemParams) {
     getCurrentMarkdown,
     getCurrentFileName,
     getCurrentSelectionText,
+    getCurrentFilePath,
+    openDocConversationsHistory,
     addStandaloneFile,
   } = params
 
@@ -93,6 +95,8 @@ export function useCommandSystem(params: CommandSystemParams) {
         getCurrentMarkdown,
         getCurrentFileName,
         getCurrentSelectionText,
+        getCurrentFilePath,
+        openDocConversationsHistory,
         addStandaloneFile,
       }),
     [
@@ -127,6 +131,8 @@ export function useCommandSystem(params: CommandSystemParams) {
       getCurrentMarkdown,
       getCurrentFileName,
       getCurrentSelectionText,
+      getCurrentFilePath,
+      openDocConversationsHistory,
       addStandaloneFile,
     ],
   )

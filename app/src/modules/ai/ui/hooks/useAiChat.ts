@@ -4,11 +4,20 @@ import type { SystemPromptInfo } from '../../application/systemPromptService'
 import type { ProviderType, VisionTask, UploadedFileRef } from '../../domain/types'
 import type { ChatSession, StartChatOptions } from '../../application/chatSessionService'
 import { createChatSession } from '../../application/chatSessionService'
+import { aiChatSessionManager } from '../../application/localStorageAiChatSessionManager'
 
 export type UseAiChatOptions = {
   entryMode: ChatEntryMode
   initialContext?: EntryContext
   open: boolean
+  /**
+   * Tab ID：用于在本地持久化与恢复会话。
+   */
+  tabId: string
+  /**
+   * 可选：当前对话关联的文档路径，用于文档会话历史持久化。
+   */
+  docPath?: string
 }
 
 export type UseAiChatResult = {
@@ -43,7 +52,7 @@ export type UseAiChatResult = {
 }
 
 export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
-  const { entryMode, initialContext, open } = options
+  const { entryMode, initialContext, open, tabId, docPath } = options
   const [session, setSession] = useState<ChatSession | null>(null)
   const [loading, setLoading] = useState(false)
   const [state, setState] = useState<ConversationState | null>(null)
@@ -66,26 +75,94 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
 
     const startSession = async () => {
       try {
-        const startOptions: StartChatOptions = {
-          entryMode,
-          initialContext,
-          onStateChange: (nextState) => {
-            if (cancelled) return
-            setState(nextState)
-          },
-        }
+        const saved = aiChatSessionManager.getOrCreateSession(tabId)
+        let createdSession: ChatSession | null = null
 
-        const created = await createChatSession(startOptions)
-        if (cancelled) {
-          created.dispose()
-          return
-        }
+        if (saved) {
+          // 1. 先用已保存的状态填充 UI
+          setState(saved.state)
+          setSystemPromptInfo(saved.systemPromptInfo)
+          setProviderType(saved.providerType)
 
-        setSession(created)
-        setState(created.getState())
-        setSystemPromptInfo(created.getSystemPromptInfo())
-        setProviderType(created.getProviderType())
-        setActiveModelId(created.getActiveModelId())
+          const startOptions: StartChatOptions = {
+            entryMode: saved.entryMode,
+            initialContext: saved.initialContext,
+            initialState: saved.state,
+            ...(docPath ? { docPath } : {}),
+            onStateChange: (nextState) => {
+              if (cancelled) return
+              setState(nextState)
+              if (createdSession) {
+                aiChatSessionManager.saveSession(tabId, {
+                  state: nextState,
+                  systemPromptInfo: createdSession.getSystemPromptInfo(),
+                  providerType: createdSession.getProviderType(),
+                  entryMode: saved.entryMode,
+                  initialContext: saved.initialContext,
+                })
+              }
+            },
+          }
+
+          const created = await createChatSession(startOptions)
+          createdSession = created
+
+          if (cancelled) {
+            created.dispose()
+            return
+          }
+
+          setSession(created)
+          setState(created.getState())
+          setSystemPromptInfo(created.getSystemPromptInfo())
+          setProviderType(created.getProviderType())
+          setActiveModelId(created.getActiveModelId())
+        } else {
+          const startOptions: StartChatOptions = {
+            entryMode,
+            initialContext,
+            ...(docPath ? { docPath } : {}),
+            onStateChange: (nextState) => {
+              if (cancelled) return
+              setState(nextState)
+              if (createdSession) {
+                aiChatSessionManager.saveSession(tabId, {
+                  state: nextState,
+                  systemPromptInfo: createdSession.getSystemPromptInfo(),
+                  providerType: createdSession.getProviderType(),
+                  entryMode,
+                  initialContext,
+                })
+              }
+            },
+          }
+
+          const created = await createChatSession(startOptions)
+          createdSession = created
+
+          if (cancelled) {
+            created.dispose()
+            return
+          }
+
+          setSession(created)
+          const initialState = created.getState()
+          setState(initialState)
+          const info = created.getSystemPromptInfo()
+          const type = created.getProviderType()
+          setSystemPromptInfo(info)
+          setProviderType(type)
+          setActiveModelId(created.getActiveModelId())
+
+          // 首次创建立即持久化一次
+          aiChatSessionManager.saveSession(tabId, {
+            state: initialState,
+            systemPromptInfo: info,
+            providerType: type,
+            entryMode,
+            initialContext,
+          })
+        }
       } catch (e) {
         if (cancelled) return
         setError(e as Error)
@@ -107,7 +184,7 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
         return null
       })
     }
-  }, [open, entryMode, initialContext])
+  }, [open, entryMode, initialContext, tabId])
 
   // Load available models
   useEffect(() => {

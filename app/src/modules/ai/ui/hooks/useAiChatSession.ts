@@ -1,22 +1,53 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { ChatEntryMode, ConversationState, EntryContext } from '../../domain/chatSession'
+import type {
+  ChatEntryMode,
+  ConversationState,
+  EntryContext,
+  ChatMessageView,
+  EngineMessage,
+  ChatRole,
+} from '../../domain/chatSession'
 import type { SystemPromptInfo } from '../../application/systemPromptService'
 import type { ProviderType, VisionMode, VisionTask, UploadedFileRef } from '../../domain/types'
 import type { UseAiChatResult } from './useAiChat'
 import type { AiChatSessionKey } from '../../application/aiChatSessionService'
-import type { ChatSession } from '../../application/chatSessionService'
-import { useAiChatSessionService } from '../AiChatProvider'
+import type { ChatSession, StartChatOptions } from '../../application/chatSessionService'
+import { createChatSession } from '../../application/chatSessionService'
+import { docConversationService } from '../../application/docConversationService'
+import type { DocConversationRecord } from '../../domain/docConversations'
 
 export type UseAiChatSessionOptions = {
   sessionKey: AiChatSessionKey
   entryMode: ChatEntryMode
   initialContext?: EntryContext
   open: boolean
+  /** 当前会话关联的文档路径，用于文档级会话历史持久化与恢复 */
+  docPath?: string
+}
+
+function buildStateFromDocRecord(record: DocConversationRecord, entryMode: ChatEntryMode): ConversationState {
+  const engineHistory: EngineMessage[] = record.messages.map((m): EngineMessage => ({
+    role: m.role,
+    content: m.content,
+  }))
+
+  const viewMessages: ChatMessageView[] = record.messages
+    .filter((m) => m.role === 'user' || m.role === 'assistant')
+    .map((m): ChatMessageView => ({
+      id: m.id,
+      role: m.role as ChatRole,
+      content: m.content,
+    }))
+
+  return {
+    engineHistory,
+    viewMessages,
+    entryMode,
+  }
 }
 
 export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatResult {
-  const { sessionKey, entryMode, initialContext, open } = options
-  const sessionService = useAiChatSessionService()
+  const { entryMode, initialContext, open, docPath } = options
 
   const [session, setSession] = useState<ChatSession | null>(null)
   const [loading, setLoading] = useState(false)
@@ -33,28 +64,47 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
     if (!open) return
 
     let cancelled = false
-    let unsubscribe: (() => void) | null = null
     setLoading(true)
     setError(null)
 
     const startSession = async () => {
       try {
-        const record = await sessionService.getOrCreateSession(sessionKey, {
+        let initialState: ConversationState | undefined
+        let initialDifyConversationId: string | undefined
+
+        if (docPath) {
+          const saved: DocConversationRecord | null = await docConversationService.getByDocPath(docPath)
+          if (saved) {
+            initialState = buildStateFromDocRecord(saved, entryMode)
+            if (saved.difyConversationId) {
+              initialDifyConversationId = saved.difyConversationId
+            }
+          }
+        }
+
+        const startOptions: StartChatOptions = {
           entryMode,
           initialContext,
-        })
-        if (cancelled) return
+          ...(initialState ? { initialState } : {}),
+          ...(docPath ? { docPath } : {}),
+          ...(initialDifyConversationId ? { initialDifyConversationId } : {}),
+          onStateChange: (nextState) => {
+            if (cancelled) return
+            setState(nextState)
+          },
+        }
 
-        setSession(record.session)
-        setState(record.state)
-        setSystemPromptInfo(record.session.getSystemPromptInfo())
-        setProviderType(record.session.getProviderType())
-        setActiveModelId(record.session.getActiveModelId())
+        const created = await createChatSession(startOptions)
+        if (cancelled) {
+          created.dispose()
+          return
+        }
 
-        unsubscribe = sessionService.subscribe(sessionKey, (nextState) => {
-          if (cancelled) return
-          setState(nextState)
-        })
+        setSession(created)
+        setState(created.getState())
+        setSystemPromptInfo(created.getSystemPromptInfo())
+        setProviderType(created.getProviderType())
+        setActiveModelId(created.getActiveModelId())
       } catch (e) {
         if (cancelled) return
         setError(e as Error)
@@ -69,9 +119,14 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
 
     return () => {
       cancelled = true
-      if (unsubscribe) unsubscribe()
+      setSession((prev) => {
+        if (prev) {
+          prev.dispose()
+        }
+        return null
+      })
     }
-  }, [open, sessionKey, entryMode, initialContext, sessionService])
+  }, [open, entryMode, initialContext, docPath])
 
   // Load available models
   useEffect(() => {
