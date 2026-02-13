@@ -295,16 +295,9 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
     }
   }
 
-  // 对于 file/selection 入口，若 engineHistory 中已经包含首轮 user 上下文，则立即发起首轮请求
-  if (options.entryMode !== 'chat' && state.engineHistory.some((m) => m.role === 'user')) {
-    const assistantId = genId()
-    state = appendAssistantPlaceholder(state, assistantId)
-    notifyStateChange()
-    void runStreamWithCurrentHistory(assistantId)
-  } else {
-    // chat 模式或无上下文时，同样把初始 state 通知给外部（viewMessages 为空）
-    notifyStateChange()
-  }
+  // 不再在 file/selection 入口自动触发首轮请求，由 UI 控制发送时机
+  // 这里统一将初始 state 通知给外部（viewMessages 可能为空）
+  notifyStateChange()
 
   const session: ChatSession = {
     getState() {
