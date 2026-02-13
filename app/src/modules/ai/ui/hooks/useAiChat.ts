@@ -331,7 +331,9 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
       if (options?.contextPrefix && !options?.contextPrefixUsed) {
         finalContent = basePrompt ? `${options.contextPrefix}\n\n${basePrompt}` : options.contextPrefix
         options.onContextUsed?.()
-        hideUserInView = true
+        // 有真实输入时在 UI 保留这条“提问”消息；
+        // 仅在“纯上下文（只发选区/文件，不输入问题）”时隐藏 user 气泡。
+        hideUserInView = !basePrompt
       }
 
       setLoading(true)
@@ -347,6 +349,9 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
           await session.sendUserMessage(finalContent, {
             hideInView: hideUserInView,
             attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined,
+            // 只在 UI 中展示用户真实输入的问题部分，
+            // selection/file 上下文只进入 engineHistory，不出现在气泡里。
+            viewContent: basePrompt,
           })
           setPendingAttachments([])
         }

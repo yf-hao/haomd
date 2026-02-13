@@ -58,7 +58,7 @@ export type ChatSession = {
   setActiveModel(modelId: string): Promise<void>
   sendUserMessage(
     content: string,
-    options?: { hideInView?: boolean; attachments?: UploadedFileRef[] },
+    options?: { hideInView?: boolean; attachments?: UploadedFileRef[]; viewContent?: string },
   ): Promise<void>
   /** 上传附件并返回引用，供 UI 预览及后续发送 */
   uploadAttachment(file: File, kind?: AttachmentKind): Promise<UploadedFileRef>
@@ -66,7 +66,7 @@ export type ChatSession = {
   sendUserMessageWithAttachments?(
     content: string,
     attachments: LocalAttachment[],
-    options?: { hideInView?: boolean },
+    options?: { hideInView?: boolean; viewContent?: string },
   ): Promise<void>
   /** 发送 VisionTask（图 + 文），由底层决定是否使用 Vision Provider 或退回文本流 */
   sendVisionTask(task: VisionTask, options?: { hideInView?: boolean }): Promise<void>
@@ -363,7 +363,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
     },
     async sendUserMessage(
       content: string,
-      options?: { hideInView?: boolean; attachments?: UploadedFileRef[] },
+      options?: { hideInView?: boolean; attachments?: UploadedFileRef[]; viewContent?: string },
     ): Promise<void> {
       if (disposed) return
       const userId = genId()
@@ -395,7 +395,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
     async sendUserMessageWithAttachments(
       content: string,
       attachments: LocalAttachment[],
-      options?: { hideInView?: boolean },
+      options?: { hideInView?: boolean; viewContent?: string },
     ): Promise<void> {
       if (disposed) return
       const userId = genId()
@@ -408,13 +408,13 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       const chatAttachments = await uploadLocalAttachments(attachments)
       await runStreamWithCurrentHistory(assistantId, chatAttachments)
     },
-    async sendVisionTask(task: VisionTask, options?: { hideInView?: boolean }): Promise<void> {
+    async sendVisionTask(task: VisionTask, options?: { hideInView?: boolean; viewContent?: string }): Promise<void> {
       if (disposed) return
       const userId = genId()
       const assistantId = genId()
 
       // 在 engineHistory/view 中仍然记录文本 prompt，以保持对话上下文
-      state = appendUserInput(state, userId, task.prompt, { hidden: options?.hideInView })
+      state = appendUserInput(state, userId, task.prompt, { hidden: options?.hideInView, viewContent: options?.viewContent })
       state = appendAssistantPlaceholder(state, assistantId)
       notifyStateChange()
 

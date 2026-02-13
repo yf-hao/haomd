@@ -96,23 +96,29 @@ export function appendUserInput(
   state: ConversationState,
   id: string,
   content: string,
-  options?: { hidden?: boolean },
+  options?: { hidden?: boolean; viewContent?: string },
 ): ConversationState {
   const trimmed = content.trim()
   if (!trimmed) return state
 
+  const engineContent = trimmed
+  const viewContent = (options?.viewContent ?? trimmed).trim()
+
   return {
     ...state,
-    engineHistory: [...state.engineHistory, { role: 'user', content: trimmed }],
-    viewMessages: [
-      ...state.viewMessages,
-      {
-        id,
-        role: 'user',
-        content: trimmed,
-        hidden: options?.hidden ?? false,
-      },
-    ],
+    engineHistory: [...state.engineHistory, { role: 'user', content: engineContent }],
+    viewMessages:
+      viewContent
+        ? [
+            ...state.viewMessages,
+            {
+              id,
+              role: 'user',
+              content: viewContent,
+              hidden: options?.hidden ?? false,
+            },
+          ]
+        : state.viewMessages,
   }
 }
 

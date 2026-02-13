@@ -97,12 +97,29 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
   // 默认视觉提示词（用于图片-only场景）
   const DEFAULT_VISION_PROMPT = '解析图片并根据上下文回复图片中内容的含义'
 
-  // 获取用户消息的显示内容（过滤掉默认提示词）
+  // 获取用户消息的显示内容（过滤掉默认提示词 & selection/file 上下文）
   const getUserDisplayContent = (content: string) => {
-    // 如果是默认提示词，返回空字符串（只显示图片）
-    if (content.trim() === DEFAULT_VISION_PROMPT) {
+    const trimmed = content.trim()
+
+    // 如果是默认视觉提示词，返回空字符串（只显示图片）
+    if (trimmed === DEFAULT_VISION_PROMPT) {
       return ''
     }
+
+    // 对于 selection/file 模式，首条 user 消息是：
+    //   选中内容 + "\n\n根据以上问题回答：\n\n" + 用户真实问题
+    // 这里只在展示层裁掉前面的上下文，只保留“根据以上问题回答：”之后的部分。
+    const marker = '根据以上问题回答：'
+    const idx = trimmed.indexOf(marker)
+    if (idx !== -1) {
+      const after = trimmed.slice(idx + marker.length).trim()
+      if (after) {
+        return after
+      }
+      // 如果确实没有额外问题（只发了选区作为上下文），那就不显示任何 user 文本。
+      return ''
+    }
+
     return content
   }
 

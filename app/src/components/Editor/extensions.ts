@@ -81,46 +81,23 @@ function cursorSyncPlugin(onCursorChange?: (line: number) => void): Extension[] 
         }
 
         update(update: { view: EditorView; selectionSet?: boolean; docChanged?: boolean }) {
-          if (update.selectionSet || update.docChanged) {
-            this.reportLine(update.view)
+          const { view, selectionSet, docChanged } = update
+          const main = view.state.selection.main
+          const hasRange = !main.empty
+
+          // 只在文档变更或光标位置变化时回调，避免拖选多行时高频调用
+          if (docChanged || (selectionSet && !hasRange)) {
+            this.reportLine(view)
           }
         }
 
         private reportLine(view: EditorView) {
           const pos = view.state.selection.main.head
           const line = view.state.doc.lineAt(pos).number
-          
-          // 调试：输出 CodeMirror 内部计算的行号
-          console.log('[Editor] cursor line =', line, 'lastLine =', this.lastLine)
-          
-          // 换行时的特殊处理 - 检查是否是新行
-          if (line === 1 && this.lastLine && this.lastLine > 1) {
-            console.log('[Editor] 可能是换行操作，检查是否是新行')
-            
-            // 检查光标是否在新行的开头
-            const doc = view.state.doc
-            const currentLine = doc.lineAt(pos)
-            const lineContent = doc.sliceString(currentLine.from, currentLine.to).trim()
-            
-            // 如果是新行且内容为空，可能是刚换行
-            if (lineContent === '') {
-              console.log('[Editor] 新行内容为空，可能是刚换行，立即更新到新行')
-              const newLine = this.lastLine + 1
-              if (newLine !== this.lastLine) {
-                this.lastLine = newLine
-                onCursorChange(newLine)
-                console.log('[Editor] sending new line number after newline:', newLine)
-              }
-              return
-            }
-          }
-          
-          // 确保行号是有效的正数
           const safeLine = Math.max(1, line)
           if (safeLine !== this.lastLine) {
             this.lastLine = safeLine
             onCursorChange(safeLine)
-            console.log('[Editor] sending activeLine to parent:', safeLine)
           }
         }
       },
@@ -157,14 +134,11 @@ function foldRegionsPlugin(onFoldRegionsChange?: (regions: { fromLine: number; t
         }
 
         update(update: { view: EditorView; docChanged?: boolean }) {
-          if (update.docChanged) {
-            this.view = update.view
-            this.reportRegions()
-          } else {
-            // 即使文档未变，用户也可能通过 gutter/快捷键折叠，我们尽量在每次 update 时重新计算
-            this.view = update.view
-            this.reportRegions()
-          }
+          // 这里只在文档实际发生变更时重新统计折叠区域，
+          // 避免在光标移动或拖选多行时每次都做一次完整扫描。
+          if (!update.docChanged) return
+          this.view = update.view
+          this.reportRegions()
         }
 
         private reportRegions() {

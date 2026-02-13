@@ -425,8 +425,15 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
       return full
     }
 
-    const visible = visibleLengths[msgId] ?? 0
-    const length = Math.max(0, Math.min(full.length, visible))
+    const msg = messages.find((m) => m.id === msgId && m.role === 'assistant')
+    const visible = visibleLengths[msgId]
+
+    // 兜底：如果已经不是 streaming 状态，且打字机进度还没初始化/为 0，则直接展示全文
+    if (!msg?.streaming && (visible === undefined || visible <= 0)) {
+      return full
+    }
+
+    const length = Math.max(0, Math.min(full.length, visible ?? 0))
     return full.slice(0, length)
   }
 

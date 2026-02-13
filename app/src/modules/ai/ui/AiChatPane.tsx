@@ -27,6 +27,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const paneRootRef = useRef<HTMLElement>(null)
+  const isPinnedToBottomRef = useRef(true)
   const isComposingRef = useRef(false)
   const lockEnterRef = useRef(false)
 
