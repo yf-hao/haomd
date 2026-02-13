@@ -413,19 +413,6 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
     }
   }, [animationKey, messageSource])
 
-  useEffect(() => {
-    if (!isDifyProvider) return
-    const assistantMessages = messages.filter((m) => m.role === 'assistant')
-    console.warn('[AiChatPane][typewriter] visibleLengths', {
-      animationKey,
-      items: assistantMessages.map((m) => ({
-        id: m.id,
-        streaming: m.streaming,
-        contentLen: m.content.length,
-        visible: visibleLengths[m.id],
-      })),
-    })
-  }, [isDifyProvider, animationKey, messages, visibleLengths])
 
   const getDisplayContent = (msgId: string, full: string) => {
     if (!isDifyProvider || full.length === 0 || !state) return full

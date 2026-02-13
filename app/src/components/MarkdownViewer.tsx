@@ -35,11 +35,7 @@ function remarkMathLineAnchors() {
         const startLine = pos?.start?.line
         const endLine = pos?.end?.line ?? startLine
 
-        // 调试：观察 remark 阶段 math/inlineMath 的位置信息和即将写入的 hProperties
-        if (typeof console !== 'undefined') {
-          // 注意：日志只在开发时使用，生产环境可通过构建配置去除
-          console.log('[remarkMathLineAnchors] node.type=%s pos=%o start=%s end=%s hProps(before)=%o', node.type, pos, startLine, endLine, node.data?.hProperties)
-        }
+
 
         if (typeof startLine === 'number') {
           if (!node.data) node.data = {}
@@ -47,9 +43,6 @@ function remarkMathLineAnchors() {
           node.data.hProperties['data-line-start'] = String(startLine)
           if (endLine != null) node.data.hProperties['data-line-end'] = String(endLine)
 
-          if (typeof console !== 'undefined') {
-            console.log('[remarkMathLineAnchors] hProps(after)=%o', node.data.hProperties)
-          }
         }
       }
 

@@ -25,9 +25,9 @@ function createEmptyTab(id: string): EditorTab {
 }
 
 export function useTabs(options?: UseTabsOptions) {
-  if (import.meta.env.DEV) {
-    console.log('[useTabs] hook 已初始化')
-  }
+  // if (import.meta.env.DEV) {
+  //   console.log('[useTabs] hook 已初始化')
+  // }
   const idRef = useRef(1)
   const [tabs, setTabs] = useState<EditorTab[]>(() => {
     // 初始不创建标签，返回空数组
