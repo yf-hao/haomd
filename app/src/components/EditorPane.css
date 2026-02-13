@@ -25,3 +25,19 @@
   border-radius: 0;
   box-shadow: none;
 }
+
+/* 当前行行号 gutter：在右侧加一条绿色竖条 */
+.code-editor .cm-gutters .cm-activeLineGutter {
+  position: relative;
+}
+
+.code-editor .cm-gutters .cm-gutter:last-child .cm-activeLineGutter::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  right: 0;
+  width: 3px;
+  border-radius: 999px;
+  background: #4ade80;
+}
