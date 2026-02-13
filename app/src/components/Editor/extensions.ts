@@ -40,13 +40,18 @@ const baseTheme = EditorView.theme(
     '.cm-gutters': {
       backgroundColor: 'rgba(5, 6, 10, 0.9) !important ',
       color: '#8fa1c7',
-      borderRight: '1px solid rgba(255, 255, 255, 0.04)',
+      borderRight: 'none',
       fontSize: '12px',
       // padding: '0px 5px 0px 5px',
       margin: 0,
     },
-    '.cm-activeLineGutter': {
+    // 光标所在行：所有 gutter 的 active 单元格统一高亮背景
+    '.cm-gutter .cm-activeLineGutter': {
       backgroundColor: 'rgba(98, 195, 255, 0.1)',
+    },
+    // 光标所在行：折叠 gutter（cm-foldGutter）这一列的右侧画绿色竖线
+    '.cm-gutter.cm-foldGutter .cm-activeLineGutter': {
+      borderRight: '2px solid #22c55e',
     },
     '.cm-line': {
       paddingLeft: '6px',

@@ -220,10 +220,6 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
     }
   }, [groups.length])
 
-  const handleDialogClick: MouseEventHandler<HTMLDivElement> = (e) => {
-    e.stopPropagation()
-  }
-
   const handleDragStart: MouseEventHandler<HTMLDivElement> = (e: ReactMouseEvent<HTMLDivElement>) => {
     if (e.button !== 0) return
     const target = e.target as HTMLElement | null
