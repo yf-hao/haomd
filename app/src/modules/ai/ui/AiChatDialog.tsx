@@ -258,7 +258,12 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
   }
 
   const messageSource = state?.viewMessages ?? EMPTY_MESSAGES
-  const messages = messageSource.filter((m) => !m.hidden)
+  const allMessages = messageSource.filter((m) => !m.hidden)
+  const MAX_VISIBLE_MESSAGES = 3
+  const messages =
+    allMessages.length > MAX_VISIBLE_MESSAGES
+      ? allMessages.slice(-MAX_VISIBLE_MESSAGES)
+      : allMessages
   const [visibleLengths, setVisibleLengths] = useState<Record<string, number>>({})
   const [activeTypewriterId, setActiveTypewriterId] = useState<string | null>(null)
 

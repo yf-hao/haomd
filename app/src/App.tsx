@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react'
-import { invoke } from '@tauri-apps/api/core'
 import './App.css'
 import WorkspaceShell, { type LeftPanelId, type InitialWorkspaceAction } from './components/WorkspaceShell'
 import { AiSettingsDialog } from './components/AiSettingsDialog'

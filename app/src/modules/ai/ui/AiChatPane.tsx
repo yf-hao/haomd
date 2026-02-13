@@ -27,7 +27,6 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const paneRootRef = useRef<HTMLElement>(null)
-  const isPinnedToBottomRef = useRef(true)
   const isComposingRef = useRef(false)
   const lockEnterRef = useRef(false)
 
@@ -262,7 +261,12 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   }
 
   const messageSource = state?.viewMessages ?? EMPTY_MESSAGES
-  const messages = messageSource.filter((m) => !m.hidden)
+  const allMessages = messageSource.filter((m) => !m.hidden)
+  const MAX_VISIBLE_MESSAGES = 3
+  const messages =
+    allMessages.length > MAX_VISIBLE_MESSAGES
+      ? allMessages.slice(-MAX_VISIBLE_MESSAGES)
+      : allMessages
 
   const [visibleLengths, setVisibleLengths] = useState<Record<string, number>>({})
   const [activeTypewriterId, setActiveTypewriterId] = useState<string | null>(null)
