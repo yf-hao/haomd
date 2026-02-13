@@ -3,9 +3,10 @@ import './Welcome.css'
 export interface WelcomeProps {
   onNewFile: () => void
   onOpenFile: () => void
+  onOpenAiChat?: () => void
 }
 
-export function Welcome({ onNewFile, onOpenFile }: WelcomeProps) {
+export function Welcome({ onNewFile, onOpenFile, onOpenAiChat }: WelcomeProps) {
   return (
     <div className="welcome">
       <div className="welcome-content">
@@ -21,13 +22,20 @@ export function Welcome({ onNewFile, onOpenFile }: WelcomeProps) {
         <div className="welcome-actions">
           <button className="welcome-button primary" onClick={onNewFile}>
             New File
-            
           </button>
 
           <button className="welcome-button secondary" onClick={onOpenFile}>
             Open File
-         
           </button>
+
+          {onOpenAiChat && (
+            <button
+              className="welcome-button secondary"
+              onClick={onOpenAiChat}
+            >
+              Open AI Chat
+            </button>
+          )}
         </div>
       </div>
     </div>

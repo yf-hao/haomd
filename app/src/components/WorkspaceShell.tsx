@@ -1226,7 +1226,17 @@ export function WorkspaceShell({
 
       <div className="workspace-column">
         {tabs.length === 0 ? (
-          <Welcome onNewFile={() => createTab()} onOpenFile={() => openFile()} />
+          <Welcome
+            onNewFile={() => createTab()}
+            onOpenFile={() => openFile()}
+            onOpenAiChat={() => {
+              // 在没有任何标签时，优先使用浮窗模式打开 AI Chat
+              if (aiChatMode !== 'floating') {
+                setAiChatMode('floating')
+              }
+              openAiChatDialog({ entryMode: 'chat' })
+            }}
+          />
         ) : (
           <>
             <TabBar tabs={tabs} activeId={activeId} onTabClick={setActiveTab} onTabClose={closeTabWithAiSession} onRequestSaveAndClose={handleTabSaveAndClose} />
@@ -1302,7 +1312,7 @@ export function WorkspaceShell({
       )}
       {confirmDialog && <ConfirmDialog title={confirmDialog.title} message={confirmDialog.message} confirmText={confirmDialog.confirmText} cancelText={confirmDialog.cancelText} extraText={confirmDialog.extraText} variant={confirmDialog.variant} onConfirm={confirmDialog.onConfirm} onExtra={confirmDialog.onExtra} onCancel={() => setConfirmDialog(null)} />}
       {quitConfirmDialog && <ConfirmDialog title={quitConfirmDialog.unsavedCount === 1 ? 'Save changes?' : `Save ${quitConfirmDialog.unsavedCount} files?`} message="Your changes will be lost." confirmText="Save All" cancelText="Cancel" extraText="Don't Save" variant="stacked" onConfirm={quitConfirmDialog.onSaveAll} onExtra={quitConfirmDialog.onQuitWithoutSaving} onCancel={() => setQuitConfirmDialog(null)} />}
-      {aiChatMode === 'floating' && aiChatOpen && aiChatState?.open && activeTab && (
+      {aiChatMode === 'floating' && aiChatOpen && aiChatState?.open && (
         <AiChatDialog
           open={aiChatOpen}
           entryMode={aiChatState.entryMode}
