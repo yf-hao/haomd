@@ -1186,3 +1186,242 @@ button.ghost.ghost-subtle:hover {
 .ai-chat-icon-button:active .ai-chat-icon-save::after {
   transform: rotate(-45deg) scale(0.95);
 }
+
+/* Doc Conversation History dialog layout */
+.modal.modal-ai-chat.modal-ai-history {
+  /* 固定大小，避免随内容无限增长 */
+  position: relative;
+  max-width: 880px;
+  width: 840px;
+  min-width: 640px;
+  height: 70vh;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal.modal-ai-chat.modal-ai-history .ai-chat-title {
+  /* 顶部标题栏始终可见 */
+  flex: 0 0 auto;
+}
+
+.ai-history-summary {
+  flex: 0 0 auto;
+  margin-top: 6px;
+  padding: 6px 10px 4px;
+  font-size: 12px;
+  color: #9ca3af;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+.ai-history-body {
+  /* 中间对话列表区域：可滚动 */
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.9);
+  overflow-y: auto;
+  /* 自定义滚动条，与 AI Settings / Provider 列表统一 */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.5) transparent;
+}
+
+.ai-history-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.ai-history-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ai-history-body::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.5);
+  border-radius: 4px;
+}
+
+.ai-history-body::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(148, 163, 184, 0.7);
+}
+
+.ai-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ai-history-group {
+  padding-bottom: 6px;
+}
+
+.ai-history-group-header {
+  margin-bottom: 4px;
+}
+
+.ai-history-group-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #e5e7eb;
+}
+
+.ai-history-message {
+  padding: 6px 4px;
+  border-radius: 6px;
+}
+
+.ai-history-message+.ai-history-message {
+  margin-top: 6px;
+}
+
+.ai-history-message-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.ai-history-message-content {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #e5e7eb;
+  white-space: pre-wrap;
+}
+
+.ai-history-message-user {
+  background: rgba(30, 64, 175, 0.35);
+  border: 1px solid rgba(59, 130, 246, 0.5);
+}
+
+.ai-history-message-assistant {
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+}
+
+.ai-history-message-system {
+  background: rgba(30, 64, 175, 0.18);
+  border: 1px dashed rgba(148, 163, 184, 0.6);
+}
+
+.ai-history-group-divider {
+  margin-top: 8px;
+  border-top: 1px dashed rgba(51, 65, 85, 0.9);
+}
+
+.ai-history-empty {
+  text-align: center;
+  padding: 18px 8px;
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+.ai-history-status {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.ai-history-status.ai-history-status-error {
+  color: #fecaca;
+}
+
+.ai-history-footer {
+  /* 底部分页栏固定在弹窗底部 */
+  flex: 0 0 auto;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(148, 163, 184, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ai-history-pagination {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-history-page-button {
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: rgba(15, 23, 42, 0.9);
+  color: #e5e7eb;
+  font-size: 12px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.ai-history-page-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ai-history-page-button:not(:disabled):hover {
+  background: rgba(30, 64, 175, 0.55);
+  border-color: rgba(129, 140, 248, 0.9);
+  transform: translateY(-0.5px);
+}
+
+.ai-history-page-info {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.ai-history-page-size {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.ai-history-page-size select {
+  margin: 0 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: rgba(15, 23, 42, 0.96);
+  color: #e5e7eb;
+  padding: 3px 10px;
+  font-size: 12px;
+  box-shadow: none;
+  transition: none;
+  background-image: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+.ai-history-page-size select:focus {
+  outline: none;
+  border-color: rgba(148, 163, 184, 0.9);
+  box-shadow: none;
+}
+
+.ai-history-actions {
+  margin-left: auto;
+  margin-right: 50px;
+}
+
+.ai-history-export-button {
+  border-radius: 999px;
+  border: 1px solid rgba(96, 165, 250, 0.9);
+  background: rgba(37, 99, 235, 0.3);
+  color: #e5e7eb;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.ai-history-export-button:hover {
+  background: #3b82f6;
+  border-color: rgba(129, 140, 248, 0.95);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.7);
+  transform: translateY(-0.5px);
+}

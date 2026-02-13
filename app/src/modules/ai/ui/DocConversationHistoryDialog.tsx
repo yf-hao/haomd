@@ -1,5 +1,5 @@
-import type { FC } from 'react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { FC, MouseEventHandler, MouseEvent as ReactMouseEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import type { DocConversationMessage, DocConversationRecord } from '../domain/docConversations'
 import { docConversationService } from '../application/docConversationService'
@@ -111,7 +111,7 @@ function buildMarkdownFromDocRecord(record: DocConversationRecord, groups: Conve
       const provider = meta.providerType ?? 'unknown'
       const model = meta.modelName ?? ''
       const label = model ? `${provider} / ${model}` : provider
-      lines.push(`**Assistant（${label}）**`)
+      lines.push(`**Assistant: （${label}）**`)
       lines.push('')
       g.assistantMessages.forEach((m) => {
         lines.push(`> ${m.content}`)
@@ -133,6 +133,10 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
   const [groups, setGroups] = useState<ConversationGroup[]>([])
   const [pageIndex, setPageIndex] = useState(0)
   const [pageSize, setPageSize] = useState(10)
+
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
+  const [dragging, setDragging] = useState(false)
+  const dragStateRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -215,6 +219,49 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
       setPageIndex(total - 1)
     }
   }, [groups.length])
+
+  const handleDialogClick: MouseEventHandler<HTMLDivElement> = (e) => {
+    e.stopPropagation()
+  }
+
+  const handleDragStart: MouseEventHandler<HTMLDivElement> = (e: ReactMouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return
+    const target = e.target as HTMLElement | null
+    if (target) {
+      const interactive = target.closest('select, button, input, textarea')
+      if (interactive) return
+    }
+    const { clientX, clientY } = e
+    dragStateRef.current = {
+      startX: clientX,
+      startY: clientY,
+      originX: dragOffset.x,
+      originY: dragOffset.y,
+    }
+    setDragging(true)
+    e.preventDefault()
+  }
+
+  useEffect(() => {
+    if (!dragging) return
+    const handleMove = (e: MouseEvent) => {
+      const state = dragStateRef.current
+      if (!state) return
+      const dx = e.clientX - state.startX
+      const dy = e.clientY - state.startY
+      setDragOffset({ x: state.originX + dx, y: state.originY + dy })
+    }
+    const handleUp = () => {
+      setDragging(false)
+      dragStateRef.current = null
+    }
+    window.addEventListener('mousemove', handleMove)
+    window.addEventListener('mouseup', handleUp)
+    return () => {
+      window.removeEventListener('mousemove', handleMove)
+      window.removeEventListener('mouseup', handleUp)
+    }
+  }, [dragging])
 
   if (!open) return null
 
@@ -389,6 +436,10 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
             对话
           </div>
         </div>
+
+        <div className="ai-chat-drag-handle ai-chat-drag-bottom" onMouseDown={handleDragStart} />
+        <div className="ai-chat-drag-handle ai-chat-drag-left" onMouseDown={handleDragStart} />
+        <div className="ai-chat-drag-handle ai-chat-drag-right" onMouseDown={handleDragStart} />
       </div>
     </div>
   )
