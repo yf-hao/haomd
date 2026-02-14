@@ -990,6 +990,11 @@ button.ghost.ghost-subtle:hover {
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
+.ai-chat-icon-button.ai-chat-icon-button-active {
+  background: rgba(30, 64, 175, 0.7);
+  border-color: rgba(129, 140, 248, 1);
+}
+
 .ai-chat-icon-button:active {
   transform: translateY(0);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
@@ -998,6 +1003,38 @@ button.ghost.ghost-subtle:hover {
 .ai-chat-icon {
   position: relative;
   display: inline-block;
+}
+
+/* 源代码视图："</>" 风格的图标 */
+.ai-chat-icon-source {
+  width: 16px;
+  height: 16px;
+  position: relative;
+  color: white;
+}
+
+.ai-chat-icon-source::before,
+.ai-chat-icon-source::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-top: 1.6px solid currentColor;
+  border-bottom: 1.6px solid transparent;
+  border-left: 1.6px solid currentColor;
+  border-right: 1.6px solid transparent;
+  transform-origin: center;
+}
+
+.ai-chat-icon-source::before {
+  left: 2px;
+  transform: translateY(-50%) rotate(-45deg);
+}
+
+.ai-chat-icon-source::after {
+  right: 2px;
+  transform: translateY(-50%) rotate(135deg);
 }
 
 /* 复制为 Markdown：改进的复制图标，体现复制的感觉 */

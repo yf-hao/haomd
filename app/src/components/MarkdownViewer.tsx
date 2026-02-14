@@ -15,6 +15,17 @@ export type Renderer = (code: string) => React.ReactNode
 
 export type FoldRegion = { fromLine: number; toLine: number }
 
+export type MarkdownViewerMode = 'rendered' | 'source'
+
+export interface MarkdownViewerProps {
+  value: string
+  activeLine?: number
+  previewWidth?: number
+  filePath?: string | null
+  foldRegions?: FoldRegion[]
+  mode?: MarkdownViewerMode
+}
+
 type LineRange = {
   start?: number
   end?: number
@@ -103,10 +114,10 @@ const DiagramsLazy = React.lazy(() => import('./diagrams'))
 
 
 function MarkdownViewerComponent(
-  props: Readonly<{ value: string; activeLine?: number; previewWidth?: number; filePath?: string | null; foldRegions?: FoldRegion[] }>
+  props: Readonly<MarkdownViewerProps>
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const { value, activeLine, previewWidth, filePath, foldRegions } = props
+  const { value, activeLine, previewWidth, filePath, foldRegions, mode = 'rendered' } = props
 
   const components = useMemo(() => {
     const regions = foldRegions ?? []
@@ -513,13 +524,19 @@ function MarkdownViewerComponent(
 
   return (
     <div className="markdown-body gh-markdown" ref={containerRef} data-preview-width={previewWidth}>
-      <ReactMarkdown
-        remarkPlugins={remarkPlugins}
-        remarkRehypeOptions={remarkRehypeOptions}
-        components={components}
-      >
-        {value}
-      </ReactMarkdown>
+      {mode === 'rendered' ? (
+        <ReactMarkdown
+          remarkPlugins={remarkPlugins}
+          remarkRehypeOptions={remarkRehypeOptions}
+          components={components}
+        >
+          {value}
+        </ReactMarkdown>
+      ) : (
+        <pre className="markdown-source">
+          <code>{value}</code>
+        </pre>
+      )}
     </div>
   )
 }

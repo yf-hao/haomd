@@ -6,10 +6,12 @@ import type {
   ChangeEvent,
   ClipboardEvent,
 } from 'react'
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { MarkdownViewer } from '../../../components/MarkdownViewer'
 import type { ChatMessageView } from '../domain/chatSession'
 import type { VisionMode, UploadedFileRef } from '../domain/types'
+
+type MessageViewMode = 'rendered' | 'source'
 
 export interface AiChatBodyProps {
   messages: ChatMessageView[]
@@ -86,6 +88,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
   onUploadFiles,
 }) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [messageViewModes, setMessageViewModes] = useState<Record<string, MessageViewMode>>({})
 
   // 提取模型显示名称（去掉 provider 前缀）
   const getModelDisplayName = (modelId: string) => {
@@ -217,15 +220,19 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
           <div className="ai-chat-empty muted small"></div>
         )}
         {messages.map((msg) => {
+          const viewMode: MessageViewMode = messageViewModes[msg.id] ?? 'rendered'
           const displayContent =
             msg.role === 'assistant'
-              ? getDisplayContent(msg.id, msg.content, msg.streaming)
+              ? (viewMode === 'source'
+                ? msg.content
+                : getDisplayContent(msg.id, msg.content, msg.streaming)
+              )
               : getUserDisplayContent(msg.content)
 
           return (
             <div key={msg.id} className={`ai-chat-message ai-chat-message-${msg.role}`}>
               {msg.role === 'assistant' ? (
-                <MarkdownViewer value={displayContent} />
+                <MarkdownViewer value={displayContent} mode={viewMode} />
               ) : (
                 <div className="ai-chat-message-content">{displayContent}</div>
               )}
@@ -266,6 +273,22 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
                     onClick={() => void onSave(msg.content)}
                   >
                     <span className="ai-chat-icon ai-chat-icon-save" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    className={`icon-button ai-chat-icon-button ${viewMode === 'source' ? 'ai-chat-icon-button-active' : ''}`}
+                    title={viewMode === 'source' ? '显示渲染后的 Markdown' : '查看 Markdown 源代码'}
+                    aria-label={viewMode === 'source' ? '显示渲染后的 Markdown' : '查看 Markdown 源代码'}
+                    aria-pressed={viewMode === 'source'}
+                    onClick={() => {
+                      setMessageViewModes((prev) => {
+                        const current = prev[msg.id] ?? 'rendered'
+                        const next: MessageViewMode = current === 'rendered' ? 'source' : 'rendered'
+                        return { ...prev, [msg.id]: next }
+                      })
+                    }}
+                  >
+                    <span className="ai-chat-icon ai-chat-icon-source" aria-hidden="true" />
                   </button>
                 </div>
               )}
