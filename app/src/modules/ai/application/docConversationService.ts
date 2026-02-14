@@ -12,6 +12,33 @@ import { createConversationCompressor, createLLMSummaryProvider, loadCompression
 // 后端 JSON 结构目前与领域模型一致，单独起别名便于未来扩展
 export type DocConversationRecordCfg = DocConversationRecord
 
+export type DocConversationEvent =
+  | { type: 'cleared'; docPath: string }
+  | { type: 'compressed'; docPath: string }
+  | { type: 'updated'; docPath: string }
+
+type DocConversationEventListener = (event: DocConversationEvent) => void
+
+const docConversationEventListeners = new Set<DocConversationEventListener>()
+
+function emitDocConversationEvent(event: DocConversationEvent): void {
+  if (docConversationEventListeners.size === 0) return
+  for (const listener of docConversationEventListeners) {
+    try {
+      listener(event)
+    } catch (e) {
+      console.error('[docConversationService] listener error', e)
+    }
+  }
+}
+
+export function subscribeDocConversationEvents(listener: DocConversationEventListener): () => void {
+  docConversationEventListeners.add(listener)
+  return () => {
+    docConversationEventListeners.delete(listener)
+  }
+}
+
 function genSessionId(): string {
   return `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 }
@@ -142,6 +169,7 @@ export function createDocConversationService(): DocConversationService {
       }
 
       await persist(records)
+      emitDocConversationEvent({ type: 'updated', docPath })
     },
 
     async clearByDocPath(docPath: string): Promise<void> {
@@ -169,6 +197,7 @@ export function createDocConversationService(): DocConversationService {
       }
 
       await persist(records)
+      emitDocConversationEvent({ type: 'cleared', docPath })
     },
 
     async compressByDocPath(docPath: string): Promise<void> {
@@ -187,6 +216,7 @@ export function createDocConversationService(): DocConversationService {
         const compressed = await conversationCompressor.compress(existing, cfg)
         records[idx] = compressed
         await persist(records)
+        emitDocConversationEvent({ type: 'compressed', docPath })
       } catch (e) {
         // 保持与之前占位实现类似的容错行为，不向外抛出，只记录日志
         console.error('[docConversationService] compressByDocPath failed', e)

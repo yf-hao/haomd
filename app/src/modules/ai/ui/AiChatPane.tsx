@@ -1,5 +1,5 @@
 import type { FC, FormEvent, KeyboardEvent } from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { useContext, useEffect, useRef, useState } from 'react'
 import type { ChatEntryMode, EntryContext } from '../domain/chatSession'
 import type { AiChatSessionKey } from '../application/aiChatSessionService'
 import { useAiChatSession } from './hooks/useAiChatSession'
@@ -8,6 +8,8 @@ import { insertMarkdownAtCursorBelow, replaceSelectionWithText, createTabAndInse
 import { onNativePaste, onNativePasteImage } from '../../platform/clipboardEvents'
 import { AiChatBody } from './AiChatBody'
 import { base64ToImageDataUrl, base64ToImageFile, readClipboardImageBase64 } from '../platform/clipboardImageService'
+import { tryHandleSlashCommand } from './aiSlashCommands'
+import { AiChatCommandBridgeContext } from './AiChatCommandBridgeContext'
 
 const EMPTY_MESSAGES = [] as const
 
@@ -24,6 +26,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   const [contextPrefix, setContextPrefix] = useState<string | null>(null)
   const [contextPrefixUsed, setContextPrefixUsed] = useState(false)
   const [attachedImageDataUrl, setAttachedImageDataUrl] = useState<string | null>(null)
+  const commandBridge = useContext(AiChatCommandBridgeContext)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const paneRootRef = useRef<HTMLElement>(null)
@@ -193,6 +196,15 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
     const contentToSend = input
     setInput('')
     autoResizeInput()
+
+    const handled = await tryHandleSlashCommand(contentToSend, {
+      docPath: currentFilePath ?? undefined,
+      runAppCommand: commandBridge?.runAppCommand,
+    })
+    if (handled === 'handled') {
+      return
+    }
+
     await sendMessage(contentToSend, {
       contextPrefix,
       contextPrefixUsed,

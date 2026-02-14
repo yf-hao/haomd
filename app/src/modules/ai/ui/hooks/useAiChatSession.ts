@@ -13,7 +13,7 @@ import type { UseAiChatResult } from './useAiChat'
 import type { AiChatSessionKey } from '../../application/aiChatSessionService'
 import type { ChatSession, StartChatOptions } from '../../application/chatSessionService'
 import { createChatSession } from '../../application/chatSessionService'
-import { docConversationService } from '../../application/docConversationService'
+import { docConversationService, subscribeDocConversationEvents, type DocConversationEvent } from '../../application/docConversationService'
 import type { DocConversationRecord } from '../../domain/docConversations'
 
 export type UseAiChatSessionOptions = {
@@ -59,6 +59,33 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
   const [rawModels, setRawModels] = useState<{ id: string; providerName: string; visionMode?: VisionMode }[]>([])
   const [pendingAttachments, setPendingAttachments] = useState<UploadedFileRef[]>([])
   const [uploadingCount, setUploadingCount] = useState(0)
+  const [reloadToken, setReloadToken] = useState(0)
+
+  useEffect(() => {
+    if (!docPath) return
+
+    const unsubscribe = subscribeDocConversationEvents((event: DocConversationEvent) => {
+      if (event.docPath !== docPath) return
+
+      if (event.type === 'cleared') {
+        // 清空当前 UI 并触发一次会话重建
+        setState(null)
+        setPendingAttachments([])
+        setReloadToken((prev) => prev + 1)
+        return
+      }
+
+      if (event.type === 'compressed') {
+        // 文档会话已被压缩：重建当前会话，以便 UI 与最新摘要后的历史保持一致
+        setState(null)
+        setReloadToken((prev) => prev + 1)
+      }
+    })
+
+    return () => {
+      unsubscribe()
+    }
+  }, [docPath])
 
   useEffect(() => {
     if (!open) return
@@ -126,7 +153,7 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
         return null
       })
     }
-  }, [open, entryMode, initialContext, docPath])
+  }, [open, entryMode, initialContext, docPath, reloadToken])
 
   // Load available models
   useEffect(() => {

@@ -1,5 +1,5 @@
 import type { FC, FormEvent, KeyboardEvent, MouseEventHandler, MouseEvent as ReactMouseEvent } from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { useContext, useEffect, useRef, useState } from 'react'
 import type { ChatEntryMode, ChatMessageView, EntryContext } from '../domain/chatSession'
 import { AiChatBody } from './AiChatBody'
 import { useAiChatSession } from './hooks/useAiChatSession'
@@ -7,6 +7,8 @@ import { copyTextToClipboard } from '../platform/clipboardService'
 import { insertMarkdownAtCursorBelow, replaceSelectionWithText, createTabAndInsertContent } from '../platform/editorInsertService'
 import { onNativePaste, onNativePasteImage } from '../../platform/clipboardEvents'
 import { base64ToImageDataUrl, base64ToImageFile, readClipboardImageBase64 } from '../platform/clipboardImageService'
+import { tryHandleSlashCommand } from './aiSlashCommands'
+import { AiChatCommandBridgeContext } from './AiChatCommandBridgeContext'
 
 const EMPTY_MESSAGES: ChatMessageView[] = []
 
@@ -27,6 +29,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
   const [contextPrefix, setContextPrefix] = useState<string | null>(null)
   const [contextPrefixUsed, setContextPrefixUsed] = useState(false)
   const [attachedImageDataUrl, setAttachedImageDataUrl] = useState<string | null>(null)
+  const commandBridge = useContext(AiChatCommandBridgeContext)
   const [isComposing, setIsComposing] = useState(false)
   const [compositionEndTime, setCompositionEndTime] = useState(0)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
@@ -188,6 +191,15 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     const contentToSend = input
     setInput('')
     autoResizeInput()
+
+    const handled = await tryHandleSlashCommand(contentToSend, {
+      docPath: currentFilePath ?? undefined,
+      runAppCommand: commandBridge?.runAppCommand,
+    })
+    if (handled === 'handled') {
+      return
+    }
+
     await sendMessage(contentToSend, {
       contextPrefix,
       contextPrefixUsed,

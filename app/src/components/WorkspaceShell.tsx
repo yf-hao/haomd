@@ -14,6 +14,7 @@ import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout'
 import { AiChatDialog } from '../modules/ai/ui/AiChatDialog'
 import { AiChatPane } from '../modules/ai/ui/AiChatPane'
 import { DocConversationHistoryDialog } from '../modules/ai/ui/DocConversationHistoryDialog'
+import { AiChatCommandBridgeContext } from '../modules/ai/ui/AiChatCommandBridgeContext'
 import type { ChatEntryMode, EntryContext } from '../modules/ai/domain/chatSession'
 import type { AiChatSessionKey } from '../modules/ai/application/aiChatSessionService'
 import { aiChatSessionManager } from '../modules/ai/application/localStorageAiChatSessionManager'
@@ -1008,7 +1009,7 @@ export function WorkspaceShell({
     return () => unlisten()
   }, [openRecentFileInNewTab, sidebar])
 
-  useCommandSystem({
+  const { dispatchAction } = useCommandSystem({
     layout, setLayout: setLayout as any, setShowPreview, setStatusMessage,
     aiChatMode, setAiChatMode, aiChatDockSide, setAiChatDockSide, aiChatOpen,
     confirmLoseChanges, hasUnsavedChanges, newDocument, setFilePath, applyOpenedContent,
@@ -1021,6 +1022,13 @@ export function WorkspaceShell({
     addStandaloneFile: sidebar.addStandaloneFile,
     openDocConversationsHistory: (docPath: string) => openDocHistoryDialog(docPath),
   })
+
+  const aiChatCommandBridge = useMemo(
+    () => ({
+      runAppCommand: (id: string) => dispatchAction(id),
+    }),
+    [dispatchAction],
+  )
 
   useNativePaste(editorViewRef, setStatusMessage)
 
@@ -1183,6 +1191,7 @@ export function WorkspaceShell({
   ])
 
   return (
+    <AiChatCommandBridgeContext.Provider value={aiChatCommandBridge}>
     <>
       {activeLeftPanel === 'files' && (
         <Sidebar
@@ -1331,6 +1340,7 @@ export function WorkspaceShell({
         />
       )}
     </>
+    </AiChatCommandBridgeContext.Provider>
   )
 }
 
