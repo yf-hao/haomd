@@ -190,13 +190,23 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
             if (disposed) return
             notifyStateChange()
           },
-          onError: (err: Error) => {
+          onError: () => {
             if (disposed) return
+            // 将错误交由 askStream 的 Promise / 外层 catch 处理，不在回调中直接抛出
             notifyStateChange()
-            throw err
           },
         },
       )
+
+      if (result.error) {
+        state = appendAssistantChunk(
+          state,
+          assistantId,
+          '当前模型连接失败，请检查 Base URL / 网关配置。',
+        )
+        notifyStateChange()
+        return
+      }
 
       if (providerType === 'dify' && result.conversationId) {
         difyConversationId = result.conversationId
@@ -204,10 +214,19 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
     } catch (e) {
       if (disposed) return
       const error = e as Error
-      if (error.name !== 'AbortError') {
-        console.error('[ChatSession] Stream exception:', e)
-        throw error
+
+      if (error.name === 'AbortError') {
+        return
       }
+
+      // 其他异常同样视为“连接异常”，在助手气泡中给出统一提示
+      state = appendAssistantChunk(
+        state,
+        assistantId,
+        '当前模型连接失败，请检查 Base URL / 网关配置。',
+      )
+      notifyStateChange()
+      return
     } finally {
       if (!disposed) {
         // 最终兜底：统一在这里将消息标记为完成并存入 history
