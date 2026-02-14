@@ -342,8 +342,49 @@ function MarkdownViewerComponent(
         const isVideo = isVideoByAlt || isVideoByExt
 
         if (isVideo) {
+          // 解析 alt 中的 poster 路径：video|poster.png
+          const parts = cleanAlt.split('|')
+          const posterAlt = parts[1]?.trim()
+          let posterUrl = ''
+
+          if (posterAlt) {
+            // 处理 poster 图片路径（复用路径转换逻辑）
+            let posterSrc = posterAlt
+            if (filePath && posterSrc && !posterSrc.startsWith('http://') && !posterSrc.startsWith('https://') && !posterSrc.startsWith('data:')) {
+              const fileDir = filePath.replace(/[/\\][^/\\]+$/, '')
+              const sep = filePath.includes('\\') ? '\\' : '/'
+
+              let absPath = posterSrc
+              if (posterSrc.startsWith('.')) {
+                const parts = posterSrc.split(/[\/\\]/)
+                let dir = fileDir
+                for (const part of parts) {
+                  if (part === '..') {
+                    dir = dir.replace(/[/\\][^/\\]+$/, '')
+                  } else if (part !== '.') {
+                    dir = dir + sep + part
+                  }
+                }
+                absPath = dir
+              } else if (!posterSrc.match(/^[a-zA-Z]:/)) {
+                absPath = fileDir + sep + posterSrc
+              }
+
+              const pathParts = absPath.split(/([/\\])/)
+              const encodedParts = pathParts.map((part: string) => {
+                if (part === '/' || part === '\\') return part
+                return encodeURIComponent(part)
+              })
+              const encoded = encodedParts.join('')
+              const isWindows = filePath.includes('\\') || navigator.userAgent.includes('Windows')
+              posterUrl = isWindows ? `https://haomd.localhost${encoded}` : `haomd://localhost${encoded}`
+            } else {
+              posterUrl = posterSrc
+            }
+          }
+
           return (
-            <video controls preload="metadata" src={finalSrc} style={{ maxWidth: '100%', height: 'auto' }}>
+            <video controls preload="metadata" poster={posterUrl || undefined} src={finalSrc} style={{ maxWidth: '100%', height: 'auto' }}>
               您的浏览器不支持 video 标签。
             </video>
           )

@@ -33,6 +33,10 @@ const baseTheme = EditorView.theme(
         "'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
       fontSize: '14px',
     },
+    // 当前行（编辑区正文）：不再使用底色高亮，只依靠左侧 gutter 的绿色竖条
+    '.cm-activeLine': {
+      backgroundColor: 'transparent',
+    },
     '.cm-content': {
       caretColor: '#7ad7ff',
       padding: '12px 14px 12px 14px',
