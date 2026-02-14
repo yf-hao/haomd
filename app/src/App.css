@@ -340,12 +340,6 @@
   padding: 4px 0 8px;
 }
 
-.sidebar-body {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding-right: 4px;
-}
 
 .sidebar-section+.sidebar-section {
   margin-top: 12px;

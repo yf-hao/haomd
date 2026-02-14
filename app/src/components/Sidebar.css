@@ -359,6 +359,8 @@
   min-height: 0;
   overflow: auto;
   padding-right: 4px;
+  /* 侧边栏文件区域统一使用手型光标，避免点击后短暂退回箭头 */
+  cursor: pointer;
 }
 
 .sidebar-section+.sidebar-section {
@@ -498,6 +500,19 @@
   padding: 0;
 }
 
+/* 当鼠标悬停在文件/文件夹列表区域时，统一保持手型光标，避免因行重渲染短暂退回箭头 */
+.sidebar-file-list:hover,
+.sidebar-folder-list:hover {
+  cursor: pointer;
+}
+
+/* 列表内部的行继承父级的光标设置，保证 hover 期间光标稳定 */
+.sidebar-file-list .sidebar-file-row,
+.sidebar-folder-list .sidebar-folder-row,
+.sidebar-folder-list .tree-row {
+  cursor: inherit;
+}
+
 .sidebar-folder-row {
   display: flex;
   align-items: center;
@@ -601,6 +616,7 @@
   color: #e5ecff;
   font-size: 13px;
   padding: 0;
+  cursor: text;
 }
 
 .tree-name-input::placeholder {
