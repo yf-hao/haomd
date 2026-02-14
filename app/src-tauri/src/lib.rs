@@ -1562,7 +1562,7 @@ pub fn run() {
       // raw_path 已经是正确的绝对路径（以 / 开头）
       let path = std::path::PathBuf::from(&decoded);
       log::info!("[tauri] haomd protocol: final path={:?}, exists={}", path, path.exists());
-      
+
       // 如果文件不存在，尝试列出父目录的内容来调试
       if !path.exists() {
         if let Some(parent) = path.parent() {
@@ -1575,19 +1575,92 @@ pub fn run() {
         }
       }
 
-      // 读取文件内容
-      match std::fs::read(&path) {
-        Ok(data) => {
-          log::info!("[tauri] haomd protocol: successfully read file, size={} bytes", data.len());
+      // 读取文件元数据和内容
+      match std::fs::metadata(&path) {
+        Ok(meta) => {
+          let file_size = meta.len();
+
+          // 解析 Range 请求头（格式: bytes=start-end 或 bytes=start-）
+          let range_header = _request.headers().get("range");
+          let (status, body_bytes, content_range) = if let Some(range) = range_header {
+            // 有 Range 请求：返回部分内容
+            let range_str = range.to_str().unwrap_or("");
+            log::info!("[tauri] haomd protocol: Range header={}", range_str);
+
+            // 解析 "bytes=0-1023" 格式
+            let (start, end) = if range_str.starts_with("bytes=") {
+              let range_spec = &range_str[6..];
+              let parts: Vec<&str> = range_spec.split('-').collect();
+              let start_opt = parts.get(0).and_then(|s| s.parse::<u64>().ok());
+              let end_opt = parts.get(1).and_then(|s| s.parse::<u64>().ok());
+
+              let start = start_opt.unwrap_or(0);
+              let end = end_opt.unwrap_or(file_size.saturating_sub(1));
+
+              (start, end.min(file_size.saturating_sub(1)))
+            } else {
+              (0, file_size.saturating_sub(1))
+            };
+
+            // 读取指定范围的文件内容
+            let data = match std::fs::read(&path) {
+              Ok(d) => d,
+              Err(e) => {
+                log::error!("[tauri] haomd protocol: failed to read file {:?}: {}", path, e);
+                return Response::builder()
+                  .status(404)
+                  .body(Vec::new())
+                  .unwrap();
+              }
+            };
+
+            let start_idx = start as usize;
+            let end_idx = (end + 1) as usize;
+            if start_idx >= data.len() {
+              log::error!("[tauri] haomd protocol: invalid range start={} file_size={}", start, file_size);
+              return Response::builder()
+                .status(416)  // Range Not Satisfiable
+                .header("Content-Range", format!("bytes */{}", file_size))
+                .body(Vec::new())
+                .unwrap();
+            }
+
+            let range_bytes = data[start_idx..end_idx.min(data.len())].to_vec();
+            let content_range_header = format!("bytes {}-{}/{}", start, end, file_size);
+
+            (206, range_bytes, Some(content_range_header))
+          } else {
+            // 无 Range 请求：返回完整文件
+            match std::fs::read(&path) {
+              Ok(data) => (200, data, None),
+              Err(e) => {
+                log::error!("[tauri] haomd protocol: failed to read file {:?}: {}", path, e);
+                return Response::builder()
+                  .status(404)
+                  .body(Vec::new())
+                  .unwrap();
+              }
+            }
+          };
+
+          log::info!("[tauri] haomd protocol: status={}, size={} bytes", status, body_bytes.len());
+
           let mime = mime_guess::from_path(&path)
             .first_or_octet_stream()
             .to_string();
 
-          match Response::builder()
-            .status(200)
+          // 构建响应，添加缓存和 Range 支持头
+          let mut builder = Response::builder()
+            .status(status)
             .header("Content-Type", mime.as_str())
-            .body(data)
-          {
+            .header("Cache-Control", "public, max-age=3600")  // 缓存 1 小时
+            .header("Accept-Ranges", "bytes");  // 声明支持 Range 请求
+
+          if let Some(cr) = content_range {
+            builder = builder.header("Content-Range", cr);
+          }
+
+          match builder.body(body_bytes) {
             Ok(response) => response,
             Err(e) => {
               log::error!("[tauri] haomd protocol: failed to build response: {}", e);
@@ -1599,7 +1672,7 @@ pub fn run() {
           }
         }
         Err(e) => {
-          log::error!("[tauri] haomd protocol: failed to read file {:?}: {}", path, e);
+          log::error!("[tauri] haomd protocol: failed to get metadata for {:?}: {}", path, e);
           Response::builder()
             .status(404)
             .body(Vec::new())

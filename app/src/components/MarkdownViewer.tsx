@@ -336,6 +336,19 @@ function MarkdownViewerComponent(
           )
         }
 
+        // 视频支持
+        const isVideoByAlt = lowerAlt === 'video' || lowerAlt === '视频'
+        const isVideoByExt = /\.(mp4|webm|mov|ogg|ogv)$/i.test(src)
+        const isVideo = isVideoByAlt || isVideoByExt
+
+        if (isVideo) {
+          return (
+            <video controls preload="metadata" src={finalSrc} style={{ maxWidth: '100%', height: 'auto' }}>
+              您的浏览器不支持 video 标签。
+            </video>
+          )
+        }
+
         return (
           <img
             {...props}
