@@ -265,7 +265,7 @@ function MarkdownViewerComponent(
         )
       },
 
-      // 图片渲染器
+      // 图片 / 音频渲染器
       img: ({ node, ...props }: any) => {
         // 解析 alt 末尾的 (30%) / (300px) / (20rem)
         const altText = props.alt || ''
@@ -284,7 +284,7 @@ function MarkdownViewerComponent(
           const fileDir = filePath.replace(/[/\\][^/\\]+$/, '')
           const sep = filePath.includes('\\') ? '\\' : '/'
 
-          // 先算出图片的绝对路径
+          // 先算出资源的绝对路径
           let absPath = src
           if (src.startsWith('.')) {
             // 处理 ./ ../ 等相对路径
@@ -321,6 +321,19 @@ function MarkdownViewerComponent(
           } else {
             finalSrc = `haomd://localhost${encoded}`
           }
+        }
+
+        const lowerAlt = cleanAlt.toLowerCase()
+        const isAudioByAlt = lowerAlt === 'audio' || lowerAlt === '音频'
+        const isAudioByExt = /\.(mp3|wav|m4a|ogg|flac)$/i.test(src)
+        const isAudio = isAudioByAlt || isAudioByExt
+
+        if (isAudio) {
+          return (
+            <audio controls src={finalSrc} style={{ width: '100%' }}>
+              您的浏览器不支持 audio 标签。
+            </audio>
+          )
         }
 
         return (
