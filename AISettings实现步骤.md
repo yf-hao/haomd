@@ -186,7 +186,7 @@ export type AiSettingsState = {
 - `Base URL`：单行文本框
 - `API Key`：密码输入 + 显示/隐藏按钮
 - `Models`：单行文本框，多个 ModelID 用逗号或空格分隔
-- `Description`：多行文本框
+- `Paramters`：多行文本框
 - 底部按钮：`[ Test & Add Provider ]`、`[ Reset Form ]`
 
 对应 React 组件形态（仅字段结构）：
@@ -288,7 +288,7 @@ type ProviderDraft = {
 
 5. **编辑 Provider（可选）**：
    - 点击 `Edit Provider`：将当前 Provider 的数据填充到左侧表单：
-     - `Provider Name`、`Base URL`、`API Key`、`Description`；
+     - `Provider Name`、`Base URL`、`API Key`、`Paramters`；
      - 将 `models` 数组合并成单行 `modelsInput`，例如：`"gpt-4.1, gpt-4o-mini, text-embedding-3"`；
    - 用户修改后再次点击 `Test & Add Provider`：
      - 可以选择覆盖原 Provider 或作为新的 Provider 追加（建议提示选择）。

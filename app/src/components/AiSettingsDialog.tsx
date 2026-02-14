@@ -51,7 +51,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
     { key: 'baseUrl', label: 'Base URL', type: 'text' },
     { key: 'apiKey', label: 'API Key', type: 'password' },
     { key: 'modelsInput', label: 'Models', type: 'text', placeholder: 'gpt-4.1, gpt-4o-mini' },
-    { key: 'description', label: 'Description', type: 'textarea' },
+    { key: 'description', label: 'Paramters', type: 'textarea' },
   ]
 
   // 打开对话框时重置展开状态，确保所有提供商默认不展开

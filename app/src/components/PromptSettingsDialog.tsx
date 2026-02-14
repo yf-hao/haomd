@@ -260,7 +260,7 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
 
   const ROLE_FORM_FIELDS: { key: keyof PromptRoleDraft; label: string; type: 'text' | 'textarea'; placeholder: string; ref: any }[] = [
     { key: 'name', label: 'Role Name', type: 'text', placeholder: 'e.g. Expert Markdown Editor', ref: nameInputRef },
-    { key: 'description', label: 'Description (optional)', type: 'text', placeholder: 'Short description shown in the list', ref: descInputRef },
+    { key: 'description', label: 'Paramters (optional)', type: 'text', placeholder: 'Short description shown in the list', ref: descInputRef },
     { key: 'prompt', label: 'Prompt', type: 'textarea', placeholder: 'You are an expert Markdown editor...', ref: promptTextareaRef },
   ]
 
