@@ -349,7 +349,12 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
 
                     {group.systemMessages.map((m) => (
                       <div key={m.id} className="ai-history-message ai-history-message-system">
-                        <div className="ai-history-message-meta">System</div>
+                        <div className="ai-history-message-meta">
+                          {(() => {
+                            const level = m.meta?.summaryLevel ?? 0
+                            return level >= 1 ? `摘要 (Level ${level})` : 'System'
+                          })()}
+                        </div>
                         <div className="ai-history-message-content">{m.content}</div>
                       </div>
                     ))}

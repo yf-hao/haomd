@@ -7,6 +7,7 @@ import type {
   DocConversationMessage,
   ConversationIndexEntry,
 } from '../domain/docConversations'
+import { createConversationCompressor, createLLMSummaryProvider, loadCompressionConfig, defaultCompressionConfig } from './conversationCompression'
 
 // 后端 JSON 结构目前与领域模型一致，单独起别名便于未来扩展
 export type DocConversationRecordCfg = DocConversationRecord
@@ -41,6 +42,9 @@ function toDocMessages(
 let recordsCache: DocConversationRecord[] | null = null
 let loaded = false
 let loadingPromise: Promise<void> | null = null
+
+const summaryProvider = createLLMSummaryProvider()
+const conversationCompressor = createConversationCompressor(summaryProvider)
 
 async function ensureLoaded(): Promise<void> {
   if (loaded) return
@@ -167,9 +171,26 @@ export function createDocConversationService(): DocConversationService {
       await persist(records)
     },
 
-    async compressByDocPath(_docPath: string): Promise<void> {
-      // 压缩逻辑会在后续阶段接入 AI 摘要，这里先留空实现，保持 API 完整
-      console.warn('[docConversationService] compressByDocPath is not implemented yet')
+    async compressByDocPath(docPath: string): Promise<void> {
+      await ensureLoaded()
+      const records = getCache()
+      const idx = records.findIndex((r) => r.docPath === docPath)
+
+      if (idx < 0) {
+        // 没有对应文档记录，直接返回
+        return
+      }
+
+      try {
+        const existing = records[idx]
+        const cfg = await loadCompressionConfig().catch(() => defaultCompressionConfig)
+        const compressed = await conversationCompressor.compress(existing, cfg)
+        records[idx] = compressed
+        await persist(records)
+      } catch (e) {
+        // 保持与之前占位实现类似的容错行为，不向外抛出，只记录日志
+        console.error('[docConversationService] compressByDocPath failed', e)
+      }
     },
 
     async getIndex(): Promise<ConversationIndexEntry[]> {

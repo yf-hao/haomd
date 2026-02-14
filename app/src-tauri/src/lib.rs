@@ -5,6 +5,7 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 mod fs_types;
+mod editor_settings;
 
 use fs_types::{ErrorCode, FilePayload, RecentFile, ResultPayload, ServiceError, WriteResult};
 use log::info;
@@ -209,6 +210,41 @@ struct ClipboardImageResult {
   file_name: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct AiCompressionCfg {
+  #[serde(default)]
+  min_messages_to_compress: Option<u32>,
+  #[serde(default)]
+  keep_recent_rounds: Option<u32>,
+  #[serde(default)]
+  max_messages_after_compress: Option<u32>,
+  #[serde(default)]
+  max_messages_per_summary_batch: Option<u32>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct EditorSettingsCfg {
+  #[serde(default)]
+  ai_compression: Option<AiCompressionCfg>,
+  /// 预留扩展位：保存未来新增的配置项，避免在写回文件时丢失
+  #[serde(flatten)]
+  extra: std::collections::HashMap<String, serde_json::Value>,
+}
+
+fn default_editor_settings() -> EditorSettingsCfg {
+  EditorSettingsCfg {
+    ai_compression: Some(AiCompressionCfg {
+      min_messages_to_compress: Some(80),
+      keep_recent_rounds: Some(8),
+      max_messages_after_compress: Some(200),
+      max_messages_per_summary_batch: Some(200),
+    }),
+    extra: std::collections::HashMap::new(),
+  }
+}
+
 // 内置默认 AI 配置，来源于 src-tauri/ai_settings.default.json
 static DEFAULT_AI_SETTINGS_JSON: &str = include_str!("../ai_settings.default.json");
 
@@ -245,6 +281,17 @@ fn prompt_settings_path(app: &AppHandle) -> std::io::Result<PathBuf> {
 
   let dir = std::env::current_dir()?;
   Ok(dir.join("prompt_settings.json"))
+}
+
+fn editor_settings_path(app: &AppHandle) -> std::io::Result<PathBuf> {
+  if let Ok(mut dir) = app.path().config_dir() {
+    dir.push("haomd");
+    std::fs::create_dir_all(&dir)?;
+    return Ok(dir.join("editor_settings.json"));
+  }
+
+  let dir = std::env::current_dir()?;
+  Ok(dir.join("editor_settings.json"))
 }
 
 async fn read_sidebar_state(app: &AppHandle) -> std::io::Result<SidebarState> {
@@ -1688,6 +1735,7 @@ pub fn run() {
       save_ai_settings,
       load_prompt_settings,
       save_prompt_settings,
+      editor_settings::load_editor_settings,
       open_terminal,
       open_in_file_explorer,
       save_clipboard_image_to_dir,
