@@ -8,6 +8,7 @@ import type {
   ConversationIndexEntry,
 } from '../domain/docConversations'
 import { createConversationCompressor, createLLMSummaryProvider, loadCompressionConfig, defaultCompressionConfig } from './conversationCompression'
+import { enqueueSessionDigestFromCompressedRecord } from '../globalMemory/sessionDigestQueue'
 
 // 后端 JSON 结构目前与领域模型一致，单独起别名便于未来扩展
 export type DocConversationRecordCfg = DocConversationRecord
@@ -213,10 +214,18 @@ export function createDocConversationService(): DocConversationService {
       try {
         const existing = records[idx]
         const cfg = await loadCompressionConfig().catch(() => defaultCompressionConfig)
+        const summaryCreatedAfter = Date.now()
         const compressed = await conversationCompressor.compress(existing, cfg)
         records[idx] = compressed
         await persist(records)
         emitDocConversationEvent({ type: 'compressed', docPath })
+
+        // 在压缩完成后，根据此次生成的摘要消息构建 SessionDigest 并入队
+        try {
+          enqueueSessionDigestFromCompressedRecord(compressed, { summaryCreatedAfter })
+        } catch (digestError) {
+          console.error('[docConversationService] enqueue SessionDigest failed', digestError)
+        }
       } catch (e) {
         // 保持与之前占位实现类似的容错行为，不向外抛出，只记录日志
         console.error('[docConversationService] compressByDocPath failed', e)

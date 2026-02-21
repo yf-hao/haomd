@@ -948,10 +948,16 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .item(&MenuItemBuilder::new("Forward").id("go_forward").build(app)?)
         .build()?;
 
+  let global_memory_menu = SubmenuBuilder::new(app, "Global Memory")
+        .item(&MenuItemBuilder::new("User Persona").id("ai_session_globalMemory_userPersona").build(app)?)
+        .item(&MenuItemBuilder::new("Manage Global Memory").id("ai_session_globalMemory_manage").build(app)?)
+        .build()?;
+
   let ai_conversation_menu = SubmenuBuilder::new(app, "Session")
         .item(&MenuItemBuilder::new("History").id("ai_conversation_history").build(app)?)
         .item(&MenuItemBuilder::new("Compress").id("ai_conversation_compress").build(app)?)
         .item(&MenuItemBuilder::new("Clear").id("ai_conversation_clear").build(app)?)
+        .item(&global_memory_menu)
         .build()?;
 
   let ai_menu = SubmenuBuilder::new(app, "AI")

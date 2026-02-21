@@ -81,6 +81,8 @@ export type AiCommandContext = StatusContext & {
    * 打开 AI Chat 对话框的 UI 回调，由 WorkspaceShell 提供。
    */
   openAiChatDialog?: (options: { entryMode: ChatEntryMode; initialContext?: EntryContext }) => void
+  /** 打开 Global Memory 对话框的 UI 回调，由 WorkspaceShell 提供。 */
+  openGlobalMemoryDialog?: (options: { initialTab: 'persona' | 'manage' }) => void
   /** 获取当前编辑器中的完整 Markdown 文本 */
   getCurrentMarkdown?: () => string
   /** 获取当前标签对应的文件名（用于展示给模型） */
@@ -408,11 +410,25 @@ function createAiCommands(ctx: AiCommandContext): CommandRegistry {
           return
         }
         await docConversationService.compressByDocPath(docPath)
-        ctx.setStatusMessage('已触发文档会话压缩（当前版本仅占位，未真正执行 AI 摘要）')
+        ctx.setStatusMessage('已触发文档会话压缩，并加入全局记忆学习队列（若已开启）')
       } catch (err) {
         console.error('[commands] ai_conversation_compress error', err)
         ctx.setStatusMessage('压缩文档会话历史失败，请检查控制台日志')
       }
+    },
+    ai_session_globalMemory_userPersona: () => {
+      if (!ctx.openGlobalMemoryDialog) {
+        ctx.setStatusMessage('当前版本未注册 Global Memory 对话框')
+        return
+      }
+      ctx.openGlobalMemoryDialog({ initialTab: 'persona' })
+    },
+    ai_session_globalMemory_manage: () => {
+      if (!ctx.openGlobalMemoryDialog) {
+        ctx.setStatusMessage('当前版本未注册 Global Memory 对话框')
+        return
+      }
+      ctx.openGlobalMemoryDialog({ initialTab: 'manage' })
     },
   }
 }

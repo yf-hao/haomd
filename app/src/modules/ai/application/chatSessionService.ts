@@ -10,6 +10,7 @@ import type {
   UploadedFileRef,
 } from '../domain/types'
 import { createVisionClientFromProvider } from '../vision/visionClientFactory'
+import { buildGlobalMemorySystemPrompt, type RequestContext } from '../globalMemory/context'
 import {
   type ChatEntryMode,
   type ConversationState,
@@ -103,6 +104,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
   const [aiState, systemInfo] = await Promise.all([loadAiSettingsState(), loadSystemPromptInfo()])
   const attachmentUploadService = createAttachmentUploadService()
   const docPath = options.docPath
+  const entryMode = options.entryMode
   let provider = pickDefaultProvider(aiState)
 
   let currentModelId = provider.defaultModelId ?? provider.models[0]?.id
@@ -163,15 +165,17 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
   async function runStreamWithCurrentHistory(
     assistantId: string,
     attachments?: ChatAttachment[],
+    clientOverride?: IStreamingChatClient | null,
   ): Promise<void> {
-    if (!client) return
+    const usedClient = clientOverride ?? client
+    if (!usedClient) return
     const messages = engineHistoryToChatMessages(state.engineHistory)
     if (!messages.length) return
 
     currentAbortController = new AbortController()
 
     try {
-      const result = await client.askStream(
+      const result = await usedClient.askStream(
         {
           messages,
           temperature: 0,
@@ -397,7 +401,28 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
         source: { kind: 'uploaded', fileId: u.id },
       }))
 
-      await runStreamWithCurrentHistory(assistantId, chatAttachments)
+      let clientOverride: IStreamingChatClient | null = null
+      if (provider) {
+        const reqContext: RequestContext = {
+          source: 'chat-pane',
+          entryMode,
+          userInput: content,
+          docPath,
+        }
+        const systemPromptWithMemory = buildGlobalMemorySystemPrompt(
+          systemPromptInfo.systemPrompt,
+          reqContext,
+        )
+        const initialConversationIdForClient = providerType === 'dify' ? difyConversationId : undefined
+        clientOverride = createStreamingClientFromSettings(
+          provider,
+          systemPromptWithMemory,
+          currentModelId,
+          initialConversationIdForClient,
+        )
+      }
+
+      await runStreamWithCurrentHistory(assistantId, chatAttachments, clientOverride)
     },
     async uploadAttachment(file: File, kind: AttachmentKind = 'image'): Promise<UploadedFileRef> {
       if (disposed) throw new Error('Session disposed')
@@ -425,7 +450,29 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       notifyStateChange()
 
       const chatAttachments = await uploadLocalAttachments(attachments)
-      await runStreamWithCurrentHistory(assistantId, chatAttachments)
+
+      let clientOverride: IStreamingChatClient | null = null
+      if (provider) {
+        const reqContext: RequestContext = {
+          source: 'chat-pane',
+          entryMode,
+          userInput: content,
+          docPath,
+        }
+        const systemPromptWithMemory = buildGlobalMemorySystemPrompt(
+          systemPromptInfo.systemPrompt,
+          reqContext,
+        )
+        const initialConversationIdForClient = providerType === 'dify' ? difyConversationId : undefined
+        clientOverride = createStreamingClientFromSettings(
+          provider,
+          systemPromptWithMemory,
+          currentModelId,
+          initialConversationIdForClient,
+        )
+      }
+
+      await runStreamWithCurrentHistory(assistantId, chatAttachments, clientOverride)
     },
     async sendVisionTask(task: VisionTask, options?: { hideInView?: boolean; viewContent?: string }): Promise<void> {
       if (disposed) return

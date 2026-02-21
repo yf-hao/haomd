@@ -14,6 +14,7 @@ import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout'
 import { AiChatDialog } from '../modules/ai/ui/AiChatDialog'
 import { AiChatPane } from '../modules/ai/ui/AiChatPane'
 import { DocConversationHistoryDialog } from '../modules/ai/ui/DocConversationHistoryDialog'
+import { GlobalMemoryDialog } from '../modules/ai/ui/GlobalMemoryDialog'
 import { AiChatCommandBridgeContext } from '../modules/ai/ui/AiChatCommandBridgeContext'
 import type { ChatEntryMode, EntryContext } from '../modules/ai/domain/chatSession'
 import type { AiChatSessionKey } from '../modules/ai/application/aiChatSessionService'
@@ -96,6 +97,12 @@ export function WorkspaceShell({
     open: boolean
     docPath: string | null
   }>({ open: false, docPath: null })
+
+  // Global Memory dialog state
+  const [globalMemoryState, setGlobalMemoryState] = useState<{
+    open: boolean
+    initialTab: 'persona' | 'manage'
+  }>({ open: false, initialTab: 'persona' })
   const [aiChatMode, setAiChatMode] = useState<'floating' | 'docked'>('docked')
   const [aiChatOpen, setAiChatOpen] = useState(false)
   const [aiChatDockSide, setAiChatDockSide] = useState<'left' | 'right'>('right')
@@ -407,6 +414,14 @@ export function WorkspaceShell({
 
   const closeDocHistoryDialog = useCallback(() => {
     setDocHistoryState((prev) => ({ ...prev, open: false }))
+  }, [])
+
+  const openGlobalMemoryDialog = useCallback((options: { initialTab: 'persona' | 'manage' }) => {
+    setGlobalMemoryState({ open: true, initialTab: options.initialTab })
+  }, [])
+
+  const closeGlobalMemoryDialog = useCallback(() => {
+    setGlobalMemoryState((prev) => ({ ...prev, open: false }))
   }, [])
 
   const isAiChatActuallyOpen = aiChatOpen && !!aiChatState?.open
@@ -1016,6 +1031,7 @@ export function WorkspaceShell({
     openFile, save, saveAs, handleShowRecent: undefined, clearRecentAll,
     createTab, updateActiveMeta, openFolderInSidebar, closeCurrentTab,
     openAiChatDialog: options => openAiChatDialog(options as any),
+    openGlobalMemoryDialog,
     getCurrentMarkdown, getCurrentFileName, getCurrentSelectionText, getCurrentFilePath,
     onRequestCloseCurrentTab: () => closeCurrentTabRef.current?.(),
     onRequestQuit: handleQuit, isTauriEnv,
@@ -1337,6 +1353,14 @@ export function WorkspaceShell({
           open={docHistoryState.open}
           docPath={docHistoryState.docPath}
           onClose={closeDocHistoryDialog}
+        />
+      )}
+
+      {globalMemoryState.open && (
+        <GlobalMemoryDialog
+          open={globalMemoryState.open}
+          initialTab={globalMemoryState.initialTab}
+          onClose={closeGlobalMemoryDialog}
         />
       )}
     </>
