@@ -20,13 +20,13 @@ export type GlobalMemoryDialogProps = {
 }
 
 function formatLastUpdated(profile: UserProfile | null): string {
-  if (!profile || !profile.updatedAt) return '未生成用户画像'
+  if (!profile || !profile.updatedAt) return 'User persona not generated yet'
   const d = new Date(profile.updatedAt)
   return d.toLocaleString()
 }
 
 function formatGlobalUpdateTime(timestamp: number | null): string {
-  if (!timestamp) return '尚未执行全局更新'
+  if (!timestamp) return 'Global memory has not been updated yet'
   const d = new Date(timestamp)
   return d.toLocaleString()
 }
@@ -65,7 +65,7 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
 
   const personaSummary =
     profile?.summary?.trim() ||
-    '当前尚未生成用户画像。你可以通过持续使用 AI Chat 与文档会话，等待系统自动学习你的长期偏好。'
+    'Your user persona has not been generated yet. Keep using AI Chat and document conversations, and the system will gradually learn your long-term preferences.'
 
   const handleToggleEnabled = () => {
     const next: GlobalMemorySettings = {
@@ -125,7 +125,7 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
 
   const handleDeleteItem = (id: string) => {
     if (typeof window !== 'undefined') {
-      const ok = window.confirm('确定要删除这条记忆吗？此操作不会影响任何文档和会话历史。')
+      const ok = window.confirm('Are you sure you want to delete this memory? This will not affect any documents or conversation history.')
       if (!ok) return
     }
     updateItemsAndSave((prev) => prev.filter((item) => item.id !== id))
@@ -135,7 +135,7 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
     if (isClearing) return
     if (typeof window !== 'undefined') {
       const ok = window.confirm(
-        '确定要清空所有全局记忆吗？此操作不会删除任何文档和会话历史。',
+        'Are you sure you want to clear all global memories? This will not delete any documents or conversation history.',
       )
       if (!ok) return
     }
@@ -177,12 +177,11 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
           <button
             type="button"
             className="ai-chat-close-button"
-            aria-label="关闭 Global Memory"
+            aria-label="Close Global Memory"
             onClick={onClose}
           >
             <span className="ai-chat-close-icon" aria-hidden="true" />
           </button>
-          <div className="modal-title-text">Global Memory</div>
           <div className="ai-global-memory-tabs">
             <button
               type="button"
@@ -214,13 +213,13 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
                 <div className="ai-global-memory-preference-block">
                   <div className="ai-global-memory-preference-label">Language</div>
                   <div className="ai-global-memory-preference-value">
-                    {profile?.languages?.length ? profile.languages.join(', ') : '尚未确定'}
+                    {profile?.languages?.length ? profile.languages.join(', ') : 'Not specified yet'}
                   </div>
                 </div>
                 <div className="ai-global-memory-preference-block">
                   <div className="ai-global-memory-preference-label">Style</div>
                   <div className="ai-global-memory-preference-value">
-                    {profile?.writingStyle || '尚未确定'}
+                    {profile?.writingStyle || 'Not specified yet'}
                   </div>
                 </div>
               </div>
@@ -236,7 +235,7 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
                     </span>
                   ))
                 ) : (
-                  <span className="ai-global-memory-empty-text">暂无兴趣标签</span>
+                  <span className="ai-global-memory-empty-text">No interest tags yet</span>
                 )}
               </div>
             </section>
@@ -267,11 +266,11 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
               <input
                 type="text"
                 className="ai-global-memory-search-input"
-                placeholder="Search memories (当前版本仅支持浏览)"
+                placeholder="Search memories (browse-only in this version)"
                 disabled
               />
               <div className="ai-global-memory-filter-summary">
-                共 {items.length} 条记忆，其中 {enabledItems.length} 条启用，{pinnedCount} 条已固定。
+                Total {items.length} · Enabled {enabledItems.length} · Pinned {pinnedCount}
               </div>
             </div>
 
@@ -306,7 +305,7 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
             <div className="ai-global-memory-list">
               {items.length === 0 && (
                 <div className="ai-global-memory-empty-text">
-                  当前还没有任何全局记忆条目。你可以继续使用 AI Chat 与文档会话，系统会在合适的时机自动学习你的长期偏好。
+                  There are no global memory items yet. Keep using AI Chat and document conversations; the system will learn your long-term preferences over time.
                 </div>
               )}
 
@@ -378,8 +377,7 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
               </span>
             </div>
             <div className="ai-global-memory-footer-text">
-              数据仅保存在本地，全局记忆只作为回答时的偏好参考，你的显式指令始终优先。
-              清空全局记忆不会删除任何文档和会话历史。
+              Your data is stored locally only. Global memory is used as preference context, and your explicit instructions always take precedence. Clearing global memory will not delete any documents or conversation history.
             </div>
           </div>
           <div className="ai-global-memory-footer-right">
