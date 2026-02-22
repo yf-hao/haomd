@@ -8,8 +8,14 @@ export type AiCompressionSettings = {
   maxMessagesPerSummaryBatch: number
 }
 
+export type HugeDocSettings = {
+  enabled?: boolean
+  lineThreshold?: number
+}
+
 export type EditorSettings = {
   aiCompression?: Partial<AiCompressionSettings>
+  hugeDoc?: HugeDocSettings
 }
 
 const defaultCompression: AiCompressionSettings = {
@@ -17,6 +23,11 @@ const defaultCompression: AiCompressionSettings = {
   keepRecentRounds: 8,
   maxMessagesAfterCompress: 200,
   maxMessagesPerSummaryBatch: 200,
+}
+
+const defaultHugeDoc: Required<HugeDocSettings> = {
+  enabled: true,
+  lineThreshold: 1000,
 }
 
 let cachedSettings: EditorSettings | null = null
@@ -48,5 +59,14 @@ export async function getAiCompressionSettings(): Promise<AiCompressionSettings>
     keepRecentRounds: cfg.keepRecentRounds ?? defaultCompression.keepRecentRounds,
     maxMessagesAfterCompress: cfg.maxMessagesAfterCompress ?? defaultCompression.maxMessagesAfterCompress,
     maxMessagesPerSummaryBatch: cfg.maxMessagesPerSummaryBatch ?? defaultCompression.maxMessagesPerSummaryBatch,
+  }
+}
+
+export async function getHugeDocSettings(): Promise<{ enabled: boolean; lineThreshold: number }> {
+  const settings = await loadEditorSettings()
+  const cfg = settings.hugeDoc ?? {}
+  return {
+    enabled: cfg.enabled ?? defaultHugeDoc.enabled,
+    lineThreshold: cfg.lineThreshold ?? defaultHugeDoc.lineThreshold,
   }
 }

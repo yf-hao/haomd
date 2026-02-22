@@ -112,10 +112,27 @@ function cursorSyncPlugin(onCursorChange?: (line: number) => void): Extension[] 
   ]
 }
 
-// 在输入内容时，使用 CodeMirror 自带的 scrollIntoView 效果，避免光标贴在底部
+// 在输入内容时，仅在「回车产生换行」时才触发 scrollIntoView，避免每个字符输入都触发布局
 function smartScrollOnInputPlugin(): Extension {
-  return EditorView.updateListener.of((update) => {
+  return EditorView.updateListener.of((update: any) => {
     if (!update.docChanged) return
+
+    // 检查本次变更是否插入了换行符（回车 / 粘贴带换行）
+    let insertedNewline = false
+    try {
+      update.changes.iterChanges(
+        (_fromA: number, _toA: number, _fromB: number, _toB: number, inserted: any) => {
+          if (String(inserted) && String(inserted).includes('\n')) {
+            insertedNewline = true
+          }
+        },
+      )
+    } catch {
+      // 如果无法安全遍历 changes，就保守起见当作有换行处理
+      insertedNewline = true
+    }
+
+    if (!insertedNewline) return
 
     const head = update.state.selection.main.head
 

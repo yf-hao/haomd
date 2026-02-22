@@ -32,6 +32,8 @@ import type { EditorTab } from '../types/tabs'
 import { openTerminalAt } from '../modules/platform/terminalService'
 import { openInFileManager } from '../modules/platform/fileExplorerService'
 import { loadDefaultImagePathStrategyConfig, resolveImageTarget } from '../modules/images/imagePasteStrategy'
+import { countLines, extractChunkAroundLine, applyChunkPatch, localToGlobalLine } from '../modules/editor/chunkEdit'
+import { getHugeDocSettings } from '../modules/settings/editorSettings'
 
 // AI Chat localStorage keys
 const STORAGE_AI_MODE = 'haomd:aiChat:mode'
@@ -59,6 +61,19 @@ export interface WorkspaceShellProps {
   initialOpenRecentIsFolder?: boolean | null
   onInitialActionHandled?: () => void
 }
+
+type HugeDocState = {
+  enabled: boolean
+  threshold: number
+  currentChunk: {
+    from: number
+    to: number
+    value: string
+  } | null
+}
+
+const DEFAULT_HUGE_DOC_LINE_THRESHOLD = 1000
+const DEFAULT_ENABLE_HUGE_DOC_LOCAL_EDIT = true
 
 const seed = ''
 const DEFAULT_TITLE = 'undefined.md'
@@ -125,7 +140,11 @@ export function WorkspaceShell({
   const [foldRegions, setFoldRegions] = useState<{ fromLine: number; toLine: number }[]>([])
   const [inlineNewFileDir, setInlineNewFileDir] = useState<string | null>(null)
   const [inlineNewFolderDir, setInlineNewFolderDir] = useState<string | null>(null)
+  const [hugeDocState, setHugeDocState] = useState<HugeDocState | null>(null)
+  const [hugeDocEnabled, setHugeDocEnabled] = useState(DEFAULT_ENABLE_HUGE_DOC_LOCAL_EDIT)
+  const [hugeDocLineThreshold, setHugeDocLineThreshold] = useState(DEFAULT_HUGE_DOC_LINE_THRESHOLD)
   const sidebarResizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
+  const pendingFocusRef = useRef<{ globalLine: number; searchText?: string } | null>(null)
 
   // 将编辑器的实时行号节流后再传给预览，减少大文档频繁重渲染
   useEffect(() => {
@@ -409,6 +428,65 @@ export function WorkspaceShell({
 
   const outlineItems = useOutline(markdown)
 
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const cfg = await getHugeDocSettings()
+        if (cancelled) return
+        setHugeDocEnabled(cfg.enabled)
+        setHugeDocLineThreshold(cfg.lineThreshold)
+      } catch (e) {
+        console.error('[WorkspaceShell] load hugeDoc settings failed, using defaults', e)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // Huge doc detection & initial chunk computation
+  useEffect(() => {
+    if (!hugeDocEnabled) {
+      setHugeDocState(null)
+      return
+    }
+
+    const lineCount = countLines(markdown)
+    const enabled = lineCount >= hugeDocLineThreshold
+
+    if (!enabled) {
+      if (hugeDocState) {
+        console.debug('[HugeDoc] disabled for current document, lineCount =', lineCount)
+      }
+      setHugeDocState(null)
+      return
+    }
+
+    try {
+      const centerLine = activeLine > 0 ? activeLine : 1
+      const chunk = extractChunkAroundLine(markdown, centerLine, {
+        contextLines: 80,
+        maxLines: 400,
+      })
+
+      console.debug('[HugeDoc] enabled, lineCount =', lineCount, 'chunk =', {
+        from: chunk.from,
+        to: chunk.to,
+        length: chunk.value.length,
+      })
+
+      setHugeDocState({
+        enabled: true,
+        threshold: hugeDocLineThreshold,
+        currentChunk: chunk,
+      })
+    } catch (e) {
+      console.error('[HugeDoc] failed to compute chunk for huge doc, fallback to normal mode', e)
+      setHugeDocState(null)
+    }
+  }, [markdown, activeLine, hugeDocEnabled, hugeDocLineThreshold])
+
   // Sidebar Resize
   useEffect(() => {
     if (!isSidebarResizing) return
@@ -524,10 +602,21 @@ export function WorkspaceShell({
   })
 
   const handleMarkdownChange = useCallback((val: string) => {
+    if (hugeDocEnabled && hugeDocState?.enabled && hugeDocState.currentChunk) {
+      const { from, to } = hugeDocState.currentChunk
+      const nextFullDoc = applyChunkPatch(markdown, { from, to }, val)
+
+      setMarkdown(nextFullDoc)
+      markDirty()
+      updateActiveContent(nextFullDoc)
+      return
+    }
+
+    // 普通模式：直接用整篇文档更新
     setMarkdown(val)
     markDirty()
     updateActiveContent(val)
-  }, [markDirty, updateActiveContent])
+  }, [markdown, hugeDocState, hugeDocEnabled, markDirty, updateActiveContent])
 
   // Register AI Editor handlers
   useEffect(() => {
@@ -1193,15 +1282,81 @@ export function WorkspaceShell({
     })
   }, [])
 
+  const handleCursorChange = useCallback((localLine: number) => {
+    if (hugeDocEnabled && hugeDocState?.enabled && hugeDocState.currentChunk) {
+      const globalLine = localToGlobalLine(markdown, hugeDocState.currentChunk.from, localLine)
+      setActiveLine(globalLine)
+      return
+    }
+    setActiveLine(localLine)
+  }, [markdown, hugeDocState, setActiveLine])
+
+  useEffect(() => {
+    if (!hugeDocEnabled) return
+    if (!hugeDocState?.enabled || !hugeDocState.currentChunk) return
+    if (!pendingFocusRef.current) return
+
+    const { globalLine, searchText } = pendingFocusRef.current
+    const safeGlobal = globalLine > 0 ? globalLine : 1
+    const chunk = hugeDocState.currentChunk
+
+    try {
+      const chunkStartGlobalLine = localToGlobalLine(markdown, chunk.from, 1)
+      const totalLocalLines = countLines(chunk.value)
+      let localLine = safeGlobal - chunkStartGlobalLine + 1
+      if (localLine < 1) localLine = 1
+      if (localLine > totalLocalLines) localLine = totalLocalLines
+
+      scrollEditorToLineCenter(localLine, searchText)
+    } catch (e) {
+      console.error('[HugeDoc] pending focus scroll failed, fallback to normal scroll', e)
+      scrollEditorToLineCenter(safeGlobal, searchText)
+    } finally {
+      pendingFocusRef.current = null
+    }
+  }, [hugeDocState, markdown, scrollEditorToLineCenter])
+
+  const focusEditorOnGlobalLine = useCallback((globalLine: number, searchText?: string) => {
+    if (!hugeDocEnabled) {
+      scrollEditorToLineCenter(globalLine, searchText)
+      return
+    }
+
+    const totalLines = countLines(markdown)
+    if (totalLines < hugeDocLineThreshold) {
+      scrollEditorToLineCenter(globalLine, searchText)
+      return
+    }
+
+    try {
+      const safeGlobal = globalLine > 0 ? globalLine : 1
+      const chunk = extractChunkAroundLine(markdown, safeGlobal, {
+        contextLines: 100,
+        maxLines: 400,
+      })
+
+      setHugeDocState({
+        enabled: true,
+        threshold: hugeDocLineThreshold,
+        currentChunk: chunk,
+      })
+      setActiveLine(safeGlobal)
+      pendingFocusRef.current = { globalLine: safeGlobal, searchText }
+    } catch (e) {
+      console.error('[HugeDoc] focusEditorOnGlobalLine failed, fallback to normal scroll', e)
+      pendingFocusRef.current = null
+      scrollEditorToLineCenter(globalLine, searchText)
+    }
+  }, [markdown, hugeDocEnabled, hugeDocLineThreshold, scrollEditorToLineCenter, setHugeDocState, setActiveLine])
   const handlePreviewLineClick = useCallback((line: number) => {
-    scrollEditorToLineCenter(line)
-  }, [scrollEditorToLineCenter])
+    focusEditorOnGlobalLine(line)
+  }, [focusEditorOnGlobalLine])
 
   const handleOutlineSelect = useCallback((item: OutlineItem) => {
     setActiveOutlineId(item.id)
     if (effectiveLayout === 'preview-only') setLayout('preview-left')
-    setTimeout(() => scrollEditorToLineCenter(item.line, item.searchText), 100)
-  }, [effectiveLayout, setLayout, scrollEditorToLineCenter])
+    focusEditorOnGlobalLine(item.line, item.searchText)
+  }, [effectiveLayout, setLayout, focusEditorOnGlobalLine])
 
   const handleTabSaveAndClose = useCallback(async (id: string) => {
     const isActive = id === activeId
@@ -1326,9 +1481,9 @@ export function WorkspaceShell({
                 <section className="pane" style={effectiveLayout === 'preview-only' ? { display: 'none' } : effectiveLayout === 'preview-left' ? { gridColumn: '2/3' } : effectiveLayout === 'preview-right' ? { gridColumn: '1/2' } : { gridColumn: '1/-1' }}>
                   <Suspense fallback={<div className="code-editor" />}>
                     <EditorPaneLazy
-                      markdown={markdown}
+                      markdown={hugeDocState?.enabled && hugeDocState.currentChunk && hugeDocEnabled ? hugeDocState.currentChunk.value : markdown}
                       onChange={handleMarkdownChange}
-                      onCursorChange={setActiveLine}
+                      onCursorChange={handleCursorChange}
                       showPreview={showPreview}
                       setShowPreview={setShowPreview}
                       editorViewRef={editorViewRef}

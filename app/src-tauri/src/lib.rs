@@ -225,9 +225,20 @@ struct AiCompressionCfg {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+struct HugeDocCfg {
+  #[serde(default)]
+  enabled: Option<bool>,
+  #[serde(default)]
+  line_threshold: Option<u32>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 struct EditorSettingsCfg {
   #[serde(default)]
   ai_compression: Option<AiCompressionCfg>,
+  #[serde(default)]
+  huge_doc: Option<HugeDocCfg>,
   /// 预留扩展位：保存未来新增的配置项，避免在写回文件时丢失
   #[serde(flatten)]
   extra: std::collections::HashMap<String, serde_json::Value>,
@@ -240,6 +251,10 @@ fn default_editor_settings() -> EditorSettingsCfg {
       keep_recent_rounds: Some(8),
       max_messages_after_compress: Some(200),
       max_messages_per_summary_batch: Some(200),
+    }),
+    huge_doc: Some(HugeDocCfg {
+      enabled: Some(true),
+      line_threshold: Some(1000),
     }),
     extra: std::collections::HashMap::new(),
   }

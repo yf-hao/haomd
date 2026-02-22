@@ -203,41 +203,46 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
     el.innerHTML = ''
 
     const init = () => {
-      if (mindRef.current) {
-        try {
-          mindRef.current.destroy?.()
-        } catch (e) {
-          console.warn('Mind-elixir destroy failed', e)
-        }
-        mindRef.current = null
-      }
-
-      const mind = new MindElixir({
-        el,
-        direction: data.direction ?? SIDE,
-        editable: false,
-        contextMenu: false,
-        toolBar: false,
-        keypress: false,
-        allowUndo: false,
-        locale: 'zh_CN',
-      })
-      mind.init(data)
-      mind.initSide()
-      mindRef.current = mind
-      lastHashRef.current = codeHash
-
       try {
+        if (mindRef.current) {
+          try {
+            mindRef.current.destroy?.()
+          } catch (e) {
+            console.warn('Mind-elixir destroy failed', e)
+          }
+          mindRef.current = null
+        }
+
+        const mind = new MindElixir({
+          el,
+          direction: data.direction ?? SIDE,
+          editable: false,
+          contextMenu: false,
+          toolBar: false,
+          keypress: false,
+          allowUndo: false,
+          locale: 'zh_CN',
+        })
+        mind.init(data)
+        mind.initSide()
+        mindRef.current = mind
+        lastHashRef.current = codeHash
+
         // 仅在容器宽度 > 0 时才进行自适应缩放，避免 NaN 路径
         const width = el.clientWidth
         if (width > 0) {
-          mind.scaleFit()
-          mind.toCenter()
+          try {
+            mind.scaleFit()
+            mind.toCenter()
+          } catch (e) {
+            console.warn('Mind-elixir scaleFit failed', e)
+          }
         } else {
           console.warn('Mind-elixir scaleFit skipped: container width is 0')
         }
       } catch (e) {
-        console.warn('Mind-elixir scaleFit failed', e)
+        console.error('[XMindBlock] Mind-elixir init failed', e)
+        setError(e instanceof Error ? `思维导图渲染失败：${e.message}` : '思维导图渲染失败')
       }
     }
 

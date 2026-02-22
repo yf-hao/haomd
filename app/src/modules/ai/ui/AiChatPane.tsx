@@ -253,11 +253,13 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   }
 
   const handleInsert = async (content: string) => {
-    await insertMarkdownAtCursorBelow({ text: content, sourceTabId: sessionKey })
+    const effectiveSourceTabId = sourceTabId ?? sessionKey
+    await insertMarkdownAtCursorBelow({ text: content, sourceTabId: effectiveSourceTabId })
   }
 
   const handleReplace = async (content: string) => {
-    await replaceSelectionWithText({ text: content, sourceTabId: sessionKey })
+    const effectiveSourceTabId = sourceTabId ?? sessionKey
+    await replaceSelectionWithText({ text: content, sourceTabId: effectiveSourceTabId })
   }
 
   const handleSave = async (content: string) => {

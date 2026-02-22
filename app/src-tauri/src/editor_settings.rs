@@ -25,6 +25,10 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::Editor
         cfg.ai_compression = default_editor_settings().ai_compression;
         changed = true;
       }
+      if cfg.huge_doc.is_none() {
+        cfg.huge_doc = default_editor_settings().huge_doc;
+        changed = true;
+      }
       if changed {
         if let Ok(bytes) = serde_json::to_vec_pretty(&cfg) {
           let _ = fs::write(&path, bytes).await;

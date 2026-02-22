@@ -1,0 +1,1 @@
+added pendingFocusRef and refactored focusEditorOnGlobalLine to defer scrolling until after chunk is applied
