@@ -86,6 +86,12 @@ function TreeNode({ node, level, expanded, onToggle, onFileClick, onDirClick, ac
             onToggle(node.path)
             onDirClick?.(node.path)
           }}
+          onContextMenu={(e) => {
+            if (!onContextMenu) return
+            e.preventDefault()
+            e.stopPropagation()
+            onContextMenu(e, { path: node.path, kind: 'tree-dir' })
+          }}
         >
           <span
             className={`tree-icon tree-icon-chevron ${isExpanded ? 'expanded' : 'collapsed'}`}
