@@ -11,6 +11,7 @@ export type TaskType =
   | 'code'
   | 'paper'
   | 'design'
+  | 'study'
   | 'command'
 
 export type RequestSource = 'chat-pane' | 'command' | 'other'
@@ -40,6 +41,7 @@ export function inferTaskType(req: RequestContext): TaskType {
   const text = req.userInput.toLowerCase()
   if (text.includes('论文') || text.includes('paper')) return 'paper'
   if (text.includes('代码') || text.includes('bug') || text.includes('typescript')) return 'code'
+  if (text.includes('study') || text.includes('学习') || text.includes('复习') || text.includes('备考')) return 'study'
 
   return 'chat'
 }
@@ -57,6 +59,8 @@ export function inferScenarioTags(taskType: TaskType): string[] {
       return ['paper', 'format']
     case 'design':
       return ['design']
+    case 'study':
+      return ['study', 'paper', 'language']
     default:
       return ['language', 'style']
   }

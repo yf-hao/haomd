@@ -135,6 +135,25 @@ function applyDeltaToProfile(current: UserProfile | null, delta: GlobalMemoryDel
   return next
 }
 
+function enrichTagsForGlobalMemoryItem(item: GlobalMemoryItem): GlobalMemoryItem {
+  const tagsSet = new Set<string>(item.tags ?? [])
+
+  const text = `${item.title ?? ''} ${item.content ?? ''}`.toLowerCase()
+  const hasStudySignal =
+    tagsSet.has('study') ||
+    /study|learning|exam|homework|lecture|course|课程|学习|复习|备考/.test(text) ||
+    (item.sourceDocs && item.sourceDocs.some((p) => /\/study\//i.test(p)))
+
+  if (hasStudySignal) {
+    tagsSet.add('study')
+  }
+
+  return {
+    ...item,
+    tags: Array.from(tagsSet),
+  }
+}
+
 function applyDeltaToItems(current: GlobalMemoryItem[], delta: GlobalMemoryDelta | null): GlobalMemoryItem[] {
   if (!delta) return current
 
@@ -215,7 +234,8 @@ function applyDeltaToItems(current: GlobalMemoryItem[], delta: GlobalMemoryDelta
     }
   }
 
-  return Array.from(byId.values())
+  const all = Array.from(byId.values())
+  return all.map((item) => enrichTagsForGlobalMemoryItem(item))
 }
 
 export async function updateFromSessions(digests: SessionDigest[]): Promise<void> {

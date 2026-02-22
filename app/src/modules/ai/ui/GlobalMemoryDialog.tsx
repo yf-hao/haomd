@@ -123,6 +123,26 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
     )
   }
 
+  const handleEditTags = (item: GlobalMemoryItem) => {
+    if (typeof window === 'undefined') return
+    const current = (item.tags ?? []).join(', ')
+    const next = window.prompt('Edit tags (comma separated)', current)
+    if (next == null) return
+    const tags = Array.from(new Set(next.split(',').map((t) => t.trim()).filter((t) => t.length > 0)))
+    const now = Date.now()
+    updateItemsAndSave((prev) =>
+      prev.map((m) =>
+        m.id === item.id
+          ? {
+              ...m,
+              tags,
+              updatedAt: now,
+            }
+          : m,
+      ),
+    )
+  }
+
   const handleDeleteItem = (id: string) => {
     if (typeof window !== 'undefined') {
       const ok = window.confirm('Are you sure you want to delete this memory? This will not affect any documents or conversation history.')
@@ -335,6 +355,13 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
                       {new Date(item.updatedAt).toLocaleDateString()}
                     </span>
                     <span className="ai-global-memory-item-actions">
+                      <button
+                        type="button"
+                        className="ai-global-memory-item-action-button"
+                        onClick={() => handleEditTags(item)}
+                      >
+                        Edit tags
+                      </button>
                       <button
                         type="button"
                         className="ai-global-memory-item-action-button"
