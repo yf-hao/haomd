@@ -82,6 +82,8 @@ export function WorkspaceShell({
   const [markdown, setMarkdown] = useState(seed)
   const [previewValue, setPreviewValue] = useState(seed)
   const [activeLine, setActiveLine] = useState(1)
+  // 预览专用的行号：对 activeLine 做轻量节流后再驱动 Preview，降低重渲染频率
+  const [previewActiveLine, setPreviewActiveLine] = useState(1)
   const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null)
 
   // AI Chat States
@@ -124,6 +126,17 @@ export function WorkspaceShell({
   const [inlineNewFileDir, setInlineNewFileDir] = useState<string | null>(null)
   const [inlineNewFolderDir, setInlineNewFolderDir] = useState<string | null>(null)
   const sidebarResizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
+
+  // 将编辑器的实时行号节流后再传给预览，减少大文档频繁重渲染
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setPreviewActiveLine((prev) => (prev !== activeLine ? activeLine : prev))
+    }, 1000)
+
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [activeLine])
 
   const {
     layout,
@@ -1326,7 +1339,7 @@ export function WorkspaceShell({
                 <Suspense fallback={<section className="pane preview"><div className="preview-body" /></section>}>
                   <PreviewPaneLazy
                     value={previewValue}
-                    activeLine={activeLine}
+                    activeLine={previewActiveLine}
                     previewWidth={previewWidthForRender}
                     effectiveLayout={effectiveLayout}
                     filePath={filePath}

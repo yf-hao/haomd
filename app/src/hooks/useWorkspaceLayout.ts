@@ -30,11 +30,22 @@ export function useWorkspaceLayout() {
   const [dragging, setDragging] = useState(false)
   const workspaceRef = useRef<HTMLElement | null>(null)
 
+  // 将布局和宽度持久化到 localStorage，但避免在拖动过程中高频同步 I/O
   useEffect(() => {
-    localStorage.setItem(STORAGE_LAYOUT, layout)
-    localStorage.setItem(STORAGE_WIDTH, String(editorWidth))
-    localStorage.setItem(STORAGE_SHOW, String(showPreview))
-  }, [layout, editorWidth, showPreview])
+    if (typeof localStorage === 'undefined') return
+    // 拖动时只更新 UI，不写入 localStorage，等拖动结束后再保存一次最终结果
+    if (dragging) return
+
+    const timer = setTimeout(() => {
+      localStorage.setItem(STORAGE_LAYOUT, layout)
+      localStorage.setItem(STORAGE_WIDTH, String(editorWidth))
+      localStorage.setItem(STORAGE_SHOW, String(showPreview))
+    }, 200)
+
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [layout, editorWidth, showPreview, dragging])
 
   const effectiveLayout = useMemo<LayoutType>(() => {
     if (!showPreview) return 'editor-only'

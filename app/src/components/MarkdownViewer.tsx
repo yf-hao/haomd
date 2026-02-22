@@ -70,6 +70,9 @@ function remarkMathLineAnchors() {
 
 const remarkPlugins = [remarkGfm, remarkMath, remarkMathLineAnchors]
 
+// 预览虚拟化开关：关闭时走浏览器原生滚动，体验更稳定
+const ENABLE_PREVIEW_VIRTUALIZATION = false
+
 // remark → rehype 阶段：将 math / inlineMath 映射为自定义标签，携带原始行号
 const remarkRehypeOptions: any = {
   handlers: {
@@ -115,10 +118,23 @@ const remarkRehypeOptions: any = {
 const DiagramsLazy = React.lazy(() => import('./diagrams'))
 
 
+type BlockMetric = {
+  el: HTMLElement
+  top: number
+  height: number
+  startLine: number
+  endLine: number
+}
+
 function MarkdownViewerComponent(
   props: Readonly<MarkdownViewerProps>
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const topSpacerRef = useRef<HTMLDivElement | null>(null)
+  const bottomSpacerRef = useRef<HTMLDivElement | null>(null)
+  const blocksRef = useRef<BlockMetric[]>([])
+  const [virtualize, setVirtualize] = React.useState(false)
+
   const { value, activeLine, previewWidth, filePath, foldRegions, mode = 'rendered', onLineClick } = props
 
   const components = useMemo(() => {
@@ -515,21 +531,156 @@ function MarkdownViewerComponent(
     const container = containerRef.current
     if (!container) return
 
-    // 保存当前滚动位置和是否在底部
     const scrollParent = container.closest('.preview-body') as HTMLElement | null
     if (!scrollParent) return
 
     const savedScrollTop = scrollParent.scrollTop
     const wasNearBottom = scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight < 100
 
-    // 立即恢复滚动位置（在 DOM 更新后、浏览器绘制前）
-    // 用户看不到跳转，因为浏览器还未绘制
     if (wasNearBottom) {
       scrollParent.scrollTop = scrollParent.scrollHeight
     } else {
       scrollParent.scrollTop = savedScrollTop
     }
   }, [value])
+
+  // 基于 DOM 的简单虚拟化：只让视口附近的块参与布局，其余用占位高度代替
+  useLayoutEffect(() => {
+    if (!ENABLE_PREVIEW_VIRTUALIZATION) return
+
+    const container = containerRef.current
+    if (!container) return
+
+    const scrollParent = container.closest('.preview-body') as HTMLElement | null
+    if (!scrollParent) return
+
+    const anchors = Array.from(
+      container.querySelectorAll<HTMLElement>('[data-line-start]')
+    )
+
+    // 小文档不启用虚拟化，保留原有行为
+    if (anchors.length < 400) {
+      blocksRef.current = []
+      React.startTransition(() => setVirtualize(false))
+      anchors.forEach((el) => {
+        el.style.display = ''
+      })
+      if (topSpacerRef.current) topSpacerRef.current.style.height = '0px'
+      if (bottomSpacerRef.current) bottomSpacerRef.current.style.height = '0px'
+      return
+    }
+
+    const parentTop = scrollParent.getBoundingClientRect().top
+    const metrics: BlockMetric[] = anchors.map((el) => {
+      const rect = el.getBoundingClientRect()
+      const start = Number(el.dataset.lineStart)
+      const endRaw = el.dataset.lineEnd ?? el.dataset.lineStart
+      const end = typeof endRaw === 'string' ? Number(endRaw) : Number(el.dataset.lineStart)
+      const safeStart = Number.isNaN(start) ? 0 : start
+      const safeEnd = Number.isNaN(end) ? safeStart : end
+      return {
+        el,
+        top: rect.top - parentTop + scrollParent.scrollTop,
+        height: rect.height || 0,
+        startLine: safeStart,
+        endLine: safeEnd,
+      }
+    })
+
+    blocksRef.current = metrics
+    React.startTransition(() => setVirtualize(true))
+  }, [value, filePath, foldRegions])
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const scrollParent = container.closest('.preview-body') as HTMLElement | null
+    if (!scrollParent) return
+
+    // 非虚拟化模式：确保所有块可见、占位高度为 0
+    if (!virtualize) {
+      const anchors = Array.from(
+        container.querySelectorAll<HTMLElement>('[data-line-start]')
+      )
+      anchors.forEach((el) => {
+        el.style.display = ''
+      })
+      if (topSpacerRef.current) topSpacerRef.current.style.height = '0px'
+      if (bottomSpacerRef.current) bottomSpacerRef.current.style.height = '0px'
+      return
+    }
+
+    const applyVirtualWindow = () => {
+      const blocks = blocksRef.current
+      if (!blocks.length) return
+
+      const top = scrollParent.scrollTop
+      const vh = scrollParent.clientHeight
+      const buffer = vh * 1.0
+
+      const windowStart = top - buffer
+      const windowEnd = top + vh + buffer
+
+      let from = 0
+      let to = blocks.length - 1
+
+      while (from < blocks.length && (blocks[from].top + blocks[from].height) < windowStart) {
+        from += 1
+      }
+      while (to >= 0 && blocks[to].top > windowEnd) {
+        to -= 1
+      }
+
+      if (from < 0) from = 0
+      if (to < from) to = from
+
+      // 确保包含 activeLine 的块始终在可见窗口内，避免同步滚动时目标块被隐藏
+      if (typeof activeLine === 'number' && activeLine > 0) {
+        let activeIndex = -1
+        for (let i = 0; i < blocks.length; i += 1) {
+          const b = blocks[i]
+          const start = b.startLine
+          const end = b.endLine || b.startLine
+          if (activeLine >= start && activeLine <= end) {
+            activeIndex = i
+            break
+          }
+        }
+        if (activeIndex !== -1) {
+          if (activeIndex < from) from = activeIndex
+          if (activeIndex > to) to = activeIndex
+        }
+      }
+
+      let topHidden = 0
+      for (let i = 0; i < from; i += 1) {
+        topHidden += blocks[i].height
+      }
+      let bottomHidden = 0
+      for (let i = to + 1; i < blocks.length; i += 1) {
+        bottomHidden += blocks[i].height
+      }
+
+      if (topSpacerRef.current) topSpacerRef.current.style.height = `${topHidden}px`
+      if (bottomSpacerRef.current) bottomSpacerRef.current.style.height = `${bottomHidden}px`
+
+      blocks.forEach((b, index) => {
+        const inRange = index >= from && index <= to
+        b.el.style.display = inRange ? '' : 'none'
+      })
+    }
+
+    applyVirtualWindow()
+
+    const handleScroll = () => {
+      applyVirtualWindow()
+    }
+
+    scrollParent.addEventListener('scroll', handleScroll)
+    return () => {
+      scrollParent.removeEventListener('scroll', handleScroll)
+    }
+  }, [virtualize, activeLine])
 
   // 高亮当前行逻辑
   useEffect(() => {
@@ -619,6 +770,7 @@ function MarkdownViewerComponent(
 
   return (
     <div className="markdown-body gh-markdown" ref={containerRef} data-preview-width={previewWidth}>
+      <div ref={topSpacerRef} aria-hidden="true" />
       {mode === 'rendered' ? (
         <ReactMarkdown
           remarkPlugins={remarkPlugins}
@@ -632,9 +784,19 @@ function MarkdownViewerComponent(
           <code>{value}</code>
         </pre>
       )}
+      <div ref={bottomSpacerRef} aria-hidden="true" />
     </div>
   )
 }
 
-export const MarkdownViewer = memo(MarkdownViewerComponent)
+export const MarkdownViewer = memo(
+  MarkdownViewerComponent,
+  (prev, next) => (
+    prev.value === next.value &&
+    prev.activeLine === next.activeLine &&
+    prev.filePath === next.filePath &&
+    prev.mode === next.mode &&
+    prev.foldRegions === next.foldRegions
+  ),
+)
 MarkdownViewer.displayName = 'MarkdownViewer'
