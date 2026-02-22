@@ -111,6 +111,8 @@ export type CommandContext = LayoutCommandContext &
 
 // ===== 分组命令工厂 =====
 
+let lastLayoutForPreviewOnly: string | null = null
+
 function createLayoutCommands(ctx: LayoutCommandContext): CommandRegistry {
   return {
     layout_preview_left: () => {
@@ -132,6 +134,20 @@ function createLayoutCommands(ctx: LayoutCommandContext): CommandRegistry {
       ctx.setLayout('preview-only')
       ctx.setShowPreview(true)
       ctx.setStatusMessage('布局：仅预览')
+    },
+    toggle_preview_only: () => {
+      if (ctx.layout === 'preview-only') {
+        const target = lastLayoutForPreviewOnly ?? 'preview-right'
+        ctx.setLayout(target)
+        ctx.setShowPreview(true)
+        ctx.setStatusMessage('布局：退出预览专注模式')
+        return
+      }
+
+      lastLayoutForPreviewOnly = ctx.layout
+      ctx.setLayout('preview-only')
+      ctx.setShowPreview(true)
+      ctx.setStatusMessage('布局：预览专注模式')
     },
     view_ai_chat_floating: () => {
       ctx.setAiChatMode('floating')

@@ -926,15 +926,16 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .build()?;
 
   let view_menu = SubmenuBuilder::new(app, "View")
-        .item(&MenuItemBuilder::new("Toggle Preview (⌘P)").id("toggle_preview").accelerator("CmdOrCtrl+P").build(app)?)
-        .item(&MenuItemBuilder::new("Split View").id("split_view").build(app)?)
+        .item(&MenuItemBuilder::new("Toggle Editor (⌘P)").id("toggle_preview").accelerator("CmdOrCtrl+P").build(app)?)
+        .item(&MenuItemBuilder::new("Toggle Preview Only (⇧⌘P)").id("toggle_preview_only").accelerator("CmdOrCtrl+Shift+P").build(app)?)
+        // .item(&MenuItemBuilder::new("Split View").id("split_view").build(app)?)
         .item(&MenuItemBuilder::new("Toggle Sidebar").id("toggle_sidebar").build(app)?)
         .item(&MenuItemBuilder::new("Toggle Status Bar").id("toggle_status_bar").build(app)?)
         .item(&MenuItemBuilder::new("Zoom In").id("zoom_in").accelerator("CmdOrCtrl+=").build(app)?)
         .item(&MenuItemBuilder::new("Zoom Out").id("zoom_out").accelerator("CmdOrCtrl+-").build(app)?)
         .item(&MenuItemBuilder::new("Reset Zoom").id("zoom_reset").accelerator("CmdOrCtrl+0").build(app)?)
-        .item(&MenuItemBuilder::new("Word Wrap").id("word_wrap").build(app)?)
-        .item(&MenuItemBuilder::new("Developer Tools").id("devtools").accelerator("CmdOrCtrl+Shift+I").build(app)?)
+        // .item(&MenuItemBuilder::new("Word Wrap").id("word_wrap").build(app)?)
+        // .item(&MenuItemBuilder::new("Developer Tools").id("devtools").accelerator("CmdOrCtrl+Shift+I").build(app)?)
         .item(&dock_ai_chat_menu)
         .item(&layout_menu)
         .build()?;

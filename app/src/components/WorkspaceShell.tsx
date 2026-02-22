@@ -320,79 +320,6 @@ export function WorkspaceShell({
     }
   }, [isAiChatResizing, aiChatDockSide])
 
-  // Register AI Editor handlers
-  useEffect(() => {
-    const runInsertBelow = (text: string) => {
-      const view = editorViewRef.current
-      if (!view || !text) return
-      const { state } = view
-      const pos = state.selection.main.head
-      const line = state.doc.lineAt(pos)
-      const insertText = '\n' + text
-      view.dispatch(state.update({
-        changes: { from: line.to, to: line.to, insert: insertText },
-        selection: { anchor: line.to + insertText.length },
-        scrollIntoView: true,
-      }))
-    }
-
-    const runReplaceSelection = (text: string) => {
-      const view = editorViewRef.current
-      if (!view || !text) return
-      const { state } = view
-      const { from, to } = state.selection.main
-      view.dispatch(state.update({
-        changes: { from, to, insert: text },
-        selection: { anchor: from + text.length },
-        scrollIntoView: true,
-      }))
-    }
-
-    registerEditorInsertBelow(async ({ text, sourceTabId }) => {
-      if (!text) return
-
-      const performInsert = () => {
-        runInsertBelow(text)
-      }
-
-      if (sourceTabId && activeIdRef.current !== sourceTabId) {
-        // 切回发起 AI 动作的标签页，避免内容串到其他标签
-        setActiveTab(sourceTabId)
-        activeIdRef.current = sourceTabId
-        setTimeout(performInsert, 50)
-      } else {
-        performInsert()
-      }
-    })
-
-    registerEditorReplaceSelection(async ({ text, sourceTabId }) => {
-      if (!text) return
-
-      const performReplace = () => {
-        runReplaceSelection(text)
-      }
-
-      if (sourceTabId && activeIdRef.current !== sourceTabId) {
-        setActiveTab(sourceTabId)
-        activeIdRef.current = sourceTabId
-        setTimeout(performReplace, 50)
-      } else {
-        performReplace()
-      }
-    })
-
-    registerEditorCreateAndInsert(async (text: string) => {
-      if (!text || isCreatingTab) return
-      setIsCreatingTab(true)
-      try {
-        createTab({ content: text })
-        await new Promise(resolve => setTimeout(resolve, 50))
-      } finally {
-        setIsCreatingTab(false)
-      }
-    })
-  }, [createTab, isCreatingTab, setActiveTab])
-
   const openAiChatDialog = useCallback(
     (options: { entryMode: ChatEntryMode; initialContext?: EntryContext }) => {
       // 保持当前模式（floating/docked），只负责打开和设置会话参数
@@ -574,6 +501,94 @@ export function WorkspaceShell({
     }
   })
 
+  const handleMarkdownChange = useCallback((val: string) => {
+    setMarkdown(val)
+    markDirty()
+    updateActiveContent(val)
+  }, [markDirty, updateActiveContent])
+
+  // Register AI Editor handlers
+  useEffect(() => {
+    const syncEditorToReactState = () => {
+      const view = editorViewRef.current
+      if (!view) return
+      const next = view.state.doc.toString()
+      handleMarkdownChange(next)
+    }
+
+    const runInsertBelow = (text: string) => {
+      const view = editorViewRef.current
+      if (!view || !text) return
+      const { state } = view
+      const pos = state.selection.main.head
+      const line = state.doc.lineAt(pos)
+      const insertText = '\n' + text
+      view.dispatch(state.update({
+        changes: { from: line.to, to: line.to, insert: insertText },
+        selection: { anchor: line.to + insertText.length },
+        scrollIntoView: true,
+      }))
+    }
+
+    const runReplaceSelection = (text: string) => {
+      const view = editorViewRef.current
+      if (!view || !text) return
+      const { state } = view
+      const { from, to } = state.selection.main
+      view.dispatch(state.update({
+        changes: { from, to, insert: text },
+        selection: { anchor: from + text.length },
+        scrollIntoView: true,
+      }))
+    }
+
+    registerEditorInsertBelow(async ({ text, sourceTabId }) => {
+      if (!text) return
+
+      const performInsert = () => {
+        runInsertBelow(text)
+        syncEditorToReactState()
+      }
+
+      if (sourceTabId && activeIdRef.current !== sourceTabId) {
+        // 切回发起 AI 动作的标签页，避免内容串到其他标签
+        setActiveTab(sourceTabId)
+        activeIdRef.current = sourceTabId
+        setTimeout(performInsert, 50)
+      } else {
+        performInsert()
+      }
+    })
+
+    registerEditorReplaceSelection(async ({ text, sourceTabId }) => {
+      if (!text) return
+
+      const performReplace = () => {
+        runReplaceSelection(text)
+        syncEditorToReactState()
+      }
+
+      if (sourceTabId && activeIdRef.current !== sourceTabId) {
+        setActiveTab(sourceTabId)
+        activeIdRef.current = sourceTabId
+        setTimeout(performReplace, 50)
+      } else {
+        performReplace()
+      }
+    })
+
+    registerEditorCreateAndInsert(async (text: string) => {
+      if (!text || isCreatingTab) return
+      setIsCreatingTab(true)
+      try {
+        createTab({ content: text })
+        await new Promise(resolve => setTimeout(resolve, 50))
+      } finally {
+        setIsCreatingTab(false)
+      }
+    })
+  }, [createTab, isCreatingTab, setActiveTab, handleMarkdownChange])
+
   const getCurrentFilePath = useCallback(() => filePath ?? null, [filePath])
 
   useEffect(() => {
@@ -637,12 +652,6 @@ export function WorkspaceShell({
       }
     })
   }, [isCreatingTab, getUnsavedTabs, isTauriEnv, save, setActiveTab])
-
-  const handleMarkdownChange = useCallback((val: string) => {
-    setMarkdown(val)
-    markDirty()
-    updateActiveContent(val)
-  }, [markDirty, updateActiveContent])
 
   useEffect(() => {
     const timer = setTimeout(() => setPreviewValue(markdown), 320)

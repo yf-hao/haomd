@@ -11,6 +11,7 @@ export function buildOutlineFromMarkdown(source: string): OutlineItem[] {
   const items: OutlineItem[] = []
   let counter = 0
   let line = 1 // 与 CodeMirror 的 line() 保持一致，从 1 开始
+  let inFencedCodeBlock = false // 是否处于 ``` / ~~~ 代码块内部
 
   // 逐字符遍历，准确计算行号，避免 split 方法的换行符处理差异
   let i = 0
@@ -23,19 +24,27 @@ export function buildOutlineFromMarkdown(source: string): OutlineItem[] {
     }
 
     const lineContent = source.slice(lineStart, i)
-    const match = /^(#{1,6})\s+(.+)$/.exec(lineContent)
+    const trimmed = lineContent.trimStart()
 
-    if (match) {
-      const level = match[1].length as 1 | 2 | 3 | 4 | 5 | 6
-      const text = match[2].trim()
+    // 检测 fenced code block（``` 或 ~~~），在代码块内部不解析标题
+    if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) {
+      // 遇到 fence 行，切换代码块状态，但本行不参与标题解析
+      inFencedCodeBlock = !inFencedCodeBlock
+    } else if (!inFencedCodeBlock) {
+      const match = /^(#{1,6})\s+(.+)$/.exec(lineContent)
 
-      items.push({
-        id: `h-${level}-${counter++}`,
-        level,
-        text,
-        line: line, // 使用计数器确保与 CodeMirror 行号一致
-        searchText: text, // 保存纯文本用于精确查找
-      })
+      if (match) {
+        const level = match[1].length as 1 | 2 | 3 | 4 | 5 | 6
+        const text = match[2].trim()
+
+        items.push({
+          id: `h-${level}-${counter++}`,
+          level,
+          text,
+          line: line, // 使用计数器确保与 CodeMirror 行号一致
+          searchText: text, // 保存纯文本用于精确查找
+        })
+      }
     }
 
     // 处理换行符，更新行号

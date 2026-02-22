@@ -185,7 +185,11 @@ export function useCommandSystem(params: CommandSystemParams) {
         void dispatchAction('close_file')
       } else if (key === 'p') {
         e.preventDefault()
-        void dispatchAction('toggle_preview')
+        if (e.shiftKey) {
+          void dispatchAction('toggle_preview_only')
+        } else {
+          void dispatchAction('toggle_preview')
+        }
       } else if (key === 'c') {
         // 额外兜底一次复制命令，避免某些环境下系统菜单未生效
         void dispatchAction('copy')
