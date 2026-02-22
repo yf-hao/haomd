@@ -550,7 +550,9 @@ export function WorkspaceShell({
         syncEditorToReactState()
       }
 
-      if (sourceTabId && activeIdRef.current !== sourceTabId) {
+      const hasSourceTab = !!sourceTabId && tabs.some((t) => t.id === sourceTabId)
+
+      if (hasSourceTab && activeIdRef.current !== sourceTabId) {
         // 切回发起 AI 动作的标签页，避免内容串到其他标签
         setActiveTab(sourceTabId)
         activeIdRef.current = sourceTabId
@@ -568,7 +570,9 @@ export function WorkspaceShell({
         syncEditorToReactState()
       }
 
-      if (sourceTabId && activeIdRef.current !== sourceTabId) {
+      const hasSourceTab = !!sourceTabId && tabs.some((t) => t.id === sourceTabId)
+
+      if (hasSourceTab && activeIdRef.current !== sourceTabId) {
         setActiveTab(sourceTabId)
         activeIdRef.current = sourceTabId
         setTimeout(performReplace, 50)
@@ -587,7 +591,7 @@ export function WorkspaceShell({
         setIsCreatingTab(false)
       }
     })
-  }, [createTab, isCreatingTab, setActiveTab, handleMarkdownChange])
+  }, [createTab, isCreatingTab, setActiveTab, handleMarkdownChange, tabs])
 
   const getCurrentFilePath = useCallback(() => filePath ?? null, [filePath])
 
@@ -1284,6 +1288,7 @@ export function WorkspaceShell({
                       initialContext={aiChatState.initialContext}
                       onClose={closeAiChatDialog}
                       currentFilePath={filePath}
+                      sourceTabId={activeTab?.id ?? null}
                     />
                   )}
                   <div className="divider-hotzone vertical" style={{ position: 'absolute', left: aiChatDockSide === 'left' ? aiChatWidth : `calc(100% - ${aiChatWidth}px)`, height: '100%', zIndex: 10, cursor: 'col-resize' }} onMouseDown={handleAiChatResizeStart}>
@@ -1328,6 +1333,7 @@ export function WorkspaceShell({
                   initialContext={aiChatState.initialContext}
                   onClose={closeAiChatDialog}
                   currentFilePath={filePath}
+                  sourceTabId={activeTab?.id ?? null}
                 />
               )}
             </main>

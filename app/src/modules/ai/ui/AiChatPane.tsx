@@ -19,9 +19,11 @@ export interface AiChatPaneProps {
   initialContext?: EntryContext
   onClose: () => void
   currentFilePath?: string | null
+  /** 触发 AI 操作的编辑器标签 ID，用于避免内容串到其他标签 */
+  sourceTabId?: string | null
 }
 
-export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initialContext, onClose, currentFilePath }) => {
+export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initialContext, onClose, currentFilePath, sourceTabId }) => {
   const [input, setInput] = useState('')
   const [contextPrefix, setContextPrefix] = useState<string | null>(null)
   const [contextPrefixUsed, setContextPrefixUsed] = useState(false)
