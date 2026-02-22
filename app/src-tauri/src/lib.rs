@@ -230,6 +230,10 @@ struct HugeDocCfg {
   enabled: Option<bool>,
   #[serde(default)]
   line_threshold: Option<u32>,
+  #[serde(default)]
+  chunk_context_lines: Option<u32>,
+  #[serde(default)]
+  chunk_max_lines: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -255,6 +259,8 @@ fn default_editor_settings() -> EditorSettingsCfg {
     huge_doc: Some(HugeDocCfg {
       enabled: Some(true),
       line_threshold: Some(1000),
+      chunk_context_lines: Some(200),
+      chunk_max_lines: Some(400),
     }),
     extra: std::collections::HashMap::new(),
   }

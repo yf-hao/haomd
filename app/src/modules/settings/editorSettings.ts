@@ -11,6 +11,8 @@ export type AiCompressionSettings = {
 export type HugeDocSettings = {
   enabled?: boolean
   lineThreshold?: number
+  chunkContextLines?: number
+  chunkMaxLines?: number
 }
 
 export type EditorSettings = {
@@ -28,6 +30,8 @@ const defaultCompression: AiCompressionSettings = {
 const defaultHugeDoc: Required<HugeDocSettings> = {
   enabled: true,
   lineThreshold: 1000,
+  chunkContextLines: 200,
+  chunkMaxLines: 400,
 }
 
 let cachedSettings: EditorSettings | null = null
@@ -62,11 +66,13 @@ export async function getAiCompressionSettings(): Promise<AiCompressionSettings>
   }
 }
 
-export async function getHugeDocSettings(): Promise<{ enabled: boolean; lineThreshold: number }> {
+export async function getHugeDocSettings(): Promise<{ enabled: boolean; lineThreshold: number; chunkContextLines: number; chunkMaxLines: number }> {
   const settings = await loadEditorSettings()
   const cfg = settings.hugeDoc ?? {}
   return {
     enabled: cfg.enabled ?? defaultHugeDoc.enabled,
     lineThreshold: cfg.lineThreshold ?? defaultHugeDoc.lineThreshold,
+    chunkContextLines: cfg.chunkContextLines ?? defaultHugeDoc.chunkContextLines,
+    chunkMaxLines: cfg.chunkMaxLines ?? defaultHugeDoc.chunkMaxLines,
   }
 }

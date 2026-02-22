@@ -74,6 +74,8 @@ type HugeDocState = {
 
 const DEFAULT_HUGE_DOC_LINE_THRESHOLD = 1000
 const DEFAULT_ENABLE_HUGE_DOC_LOCAL_EDIT = true
+const DEFAULT_HUGE_DOC_CHUNK_CONTEXT_LINES = 200
+const DEFAULT_HUGE_DOC_CHUNK_MAX_LINES = 400
 
 const seed = ''
 const DEFAULT_TITLE = 'undefined.md'
@@ -143,8 +145,11 @@ export function WorkspaceShell({
   const [hugeDocState, setHugeDocState] = useState<HugeDocState | null>(null)
   const [hugeDocEnabled, setHugeDocEnabled] = useState(DEFAULT_ENABLE_HUGE_DOC_LOCAL_EDIT)
   const [hugeDocLineThreshold, setHugeDocLineThreshold] = useState(DEFAULT_HUGE_DOC_LINE_THRESHOLD)
+  const [hugeDocChunkContextLines, setHugeDocChunkContextLines] = useState(DEFAULT_HUGE_DOC_CHUNK_CONTEXT_LINES)
+  const [hugeDocChunkMaxLines, setHugeDocChunkMaxLines] = useState(DEFAULT_HUGE_DOC_CHUNK_MAX_LINES)
+  const [focusRequest, setFocusRequest] = useState<{ localLine: number; searchText?: string } | null>(null)
+  const isProgrammaticScrollRef = useRef(false)
   const sidebarResizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
-  const pendingFocusRef = useRef<{ globalLine: number; searchText?: string } | null>(null)
 
   // 将编辑器的实时行号节流后再传给预览，减少大文档频繁重渲染
   useEffect(() => {
@@ -436,6 +441,8 @@ export function WorkspaceShell({
         if (cancelled) return
         setHugeDocEnabled(cfg.enabled)
         setHugeDocLineThreshold(cfg.lineThreshold)
+        setHugeDocChunkContextLines(cfg.chunkContextLines)
+        setHugeDocChunkMaxLines(cfg.chunkMaxLines)
       } catch (e) {
         console.error('[WorkspaceShell] load hugeDoc settings failed, using defaults', e)
       }
@@ -445,7 +452,7 @@ export function WorkspaceShell({
     }
   }, [])
 
-  // Huge doc detection & initial chunk computation
+  // Huge doc detection & initial chunk computation（只负责开启/关闭和首次初始化，不反复重算）
   useEffect(() => {
     if (!hugeDocEnabled) {
       setHugeDocState(null)
@@ -463,11 +470,16 @@ export function WorkspaceShell({
       return
     }
 
+    // 已经有有效 chunk，则不在这里自动重算，避免与程序性跳转互相覆盖
+    if (hugeDocState?.enabled && hugeDocState.currentChunk) {
+      return
+    }
+
     try {
       const centerLine = activeLine > 0 ? activeLine : 1
       const chunk = extractChunkAroundLine(markdown, centerLine, {
-        contextLines: 80,
-        maxLines: 400,
+        contextLines: hugeDocChunkContextLines,
+        maxLines: hugeDocChunkMaxLines,
       })
 
       console.debug('[HugeDoc] enabled, lineCount =', lineCount, 'chunk =', {
@@ -485,7 +497,7 @@ export function WorkspaceShell({
       console.error('[HugeDoc] failed to compute chunk for huge doc, fallback to normal mode', e)
       setHugeDocState(null)
     }
-  }, [markdown, activeLine, hugeDocEnabled, hugeDocLineThreshold])
+  }, [markdown, activeLine, hugeDocEnabled, hugeDocLineThreshold, hugeDocChunkContextLines, hugeDocChunkMaxLines, hugeDocState])
 
   // Sidebar Resize
   useEffect(() => {
@@ -1283,38 +1295,16 @@ export function WorkspaceShell({
   }, [])
 
   const handleCursorChange = useCallback((localLine: number) => {
+    // 程序性滚动期间不更新 activeLine，避免触发大文档 effect 重算 chunk
+    if (isProgrammaticScrollRef.current) return
+
     if (hugeDocEnabled && hugeDocState?.enabled && hugeDocState.currentChunk) {
       const globalLine = localToGlobalLine(markdown, hugeDocState.currentChunk.from, localLine)
       setActiveLine(globalLine)
       return
     }
     setActiveLine(localLine)
-  }, [markdown, hugeDocState, setActiveLine])
-
-  useEffect(() => {
-    if (!hugeDocEnabled) return
-    if (!hugeDocState?.enabled || !hugeDocState.currentChunk) return
-    if (!pendingFocusRef.current) return
-
-    const { globalLine, searchText } = pendingFocusRef.current
-    const safeGlobal = globalLine > 0 ? globalLine : 1
-    const chunk = hugeDocState.currentChunk
-
-    try {
-      const chunkStartGlobalLine = localToGlobalLine(markdown, chunk.from, 1)
-      const totalLocalLines = countLines(chunk.value)
-      let localLine = safeGlobal - chunkStartGlobalLine + 1
-      if (localLine < 1) localLine = 1
-      if (localLine > totalLocalLines) localLine = totalLocalLines
-
-      scrollEditorToLineCenter(localLine, searchText)
-    } catch (e) {
-      console.error('[HugeDoc] pending focus scroll failed, fallback to normal scroll', e)
-      scrollEditorToLineCenter(safeGlobal, searchText)
-    } finally {
-      pendingFocusRef.current = null
-    }
-  }, [hugeDocState, markdown, scrollEditorToLineCenter])
+  }, [markdown, hugeDocState, hugeDocEnabled, setActiveLine])
 
   const focusEditorOnGlobalLine = useCallback((globalLine: number, searchText?: string) => {
     if (!hugeDocEnabled) {
@@ -1331,9 +1321,15 @@ export function WorkspaceShell({
     try {
       const safeGlobal = globalLine > 0 ? globalLine : 1
       const chunk = extractChunkAroundLine(markdown, safeGlobal, {
-        contextLines: 100,
-        maxLines: 400,
+        contextLines: hugeDocChunkContextLines,
+        maxLines: hugeDocChunkMaxLines,
       })
+
+      const chunkStartGlobalLine = localToGlobalLine(markdown, chunk.from, 1)
+      const totalLocalLines = countLines(chunk.value)
+      let localLine = safeGlobal - chunkStartGlobalLine + 1
+      if (localLine < 1) localLine = 1
+      if (localLine > totalLocalLines) localLine = totalLocalLines
 
       setHugeDocState({
         enabled: true,
@@ -1341,13 +1337,12 @@ export function WorkspaceShell({
         currentChunk: chunk,
       })
       setActiveLine(safeGlobal)
-      pendingFocusRef.current = { globalLine: safeGlobal, searchText }
+      setFocusRequest({ localLine, searchText })
     } catch (e) {
       console.error('[HugeDoc] focusEditorOnGlobalLine failed, fallback to normal scroll', e)
-      pendingFocusRef.current = null
       scrollEditorToLineCenter(globalLine, searchText)
     }
-  }, [markdown, hugeDocEnabled, hugeDocLineThreshold, scrollEditorToLineCenter, setHugeDocState, setActiveLine])
+  }, [markdown, hugeDocEnabled, hugeDocLineThreshold, hugeDocChunkContextLines, hugeDocChunkMaxLines, scrollEditorToLineCenter, setHugeDocState, setActiveLine])
   const handlePreviewLineClick = useCallback((line: number) => {
     focusEditorOnGlobalLine(line)
   }, [focusEditorOnGlobalLine])
@@ -1488,6 +1483,10 @@ export function WorkspaceShell({
                       setShowPreview={setShowPreview}
                       editorViewRef={editorViewRef}
                       onFoldRegionsChange={setFoldRegions}
+                      focusRequest={focusRequest}
+                      onFocusHandled={() => setFocusRequest(null)}
+                      onProgrammaticScrollStart={() => { isProgrammaticScrollRef.current = true }}
+                      onProgrammaticScrollEnd={() => { isProgrammaticScrollRef.current = false }}
                     />
                   </Suspense>
                 </section>
