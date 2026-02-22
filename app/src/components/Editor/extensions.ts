@@ -49,9 +49,12 @@ const baseTheme = EditorView.theme(
       // padding: '0px 5px 0px 5px',
       margin: 0,
     },
-    // 光标所在行：所有 gutter 的 active 单元格统一高亮背景
+    // 光标所在行：所有 gutter 的 active 单元格统一高亮背景（更明显）
     '.cm-gutter .cm-activeLineGutter': {
-      backgroundColor: 'rgba(98, 195, 255, 0.1)',
+      // 比原来更亮、更实一些，方便一眼看到当前行
+      backgroundColor: 'rgba(56, 189, 248, 0.28)', // #38bdf8 @ 28%
+      // 在 gutter 右侧加一条绿色竖线
+      borderRight: '2px solid #22c55e',
     },
     // 光标所在行：折叠 gutter（cm-foldGutter）这一列的右侧画绿色竖线
     '.cm-gutter.cm-foldGutter .cm-activeLineGutter': {

@@ -24,6 +24,8 @@ export interface MarkdownViewerProps {
   filePath?: string | null
   foldRegions?: FoldRegion[]
   mode?: MarkdownViewerMode
+  /** 当用户点击预览中的某个块时，返回对应的起始行号 */
+  onLineClick?: (line: number) => void
 }
 
 type LineRange = {
@@ -117,7 +119,7 @@ function MarkdownViewerComponent(
   props: Readonly<MarkdownViewerProps>
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const { value, activeLine, previewWidth, filePath, foldRegions, mode = 'rendered' } = props
+  const { value, activeLine, previewWidth, filePath, foldRegions, mode = 'rendered', onLineClick } = props
 
   const components = useMemo(() => {
     const regions = foldRegions ?? []
@@ -588,6 +590,32 @@ function MarkdownViewerComponent(
       if (rafId) cancelAnimationFrame(rafId)
     }
   }, [activeLine])
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container || !onLineClick || mode !== 'rendered') return
+
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null
+      if (!target) return
+
+      // 避免点击超链接或交互控件时触发跳转编辑器
+      if (target.closest('a, button, input, textarea')) return
+
+      const block = target.closest<HTMLElement>('[data-line-start]')
+      if (!block) return
+
+      const start = Number(block.dataset.lineStart)
+      if (!start || Number.isNaN(start)) return
+
+      onLineClick(start)
+    }
+
+    container.addEventListener('click', handleClick)
+    return () => {
+      container.removeEventListener('click', handleClick)
+    }
+  }, [onLineClick, mode])
 
   return (
     <div className="markdown-body gh-markdown" ref={containerRef} data-preview-width={previewWidth}>

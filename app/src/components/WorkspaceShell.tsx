@@ -177,6 +177,9 @@ export function WorkspaceShell({
     activeIdRef.current = activeId
   }, [activeId])
 
+  // 仅在真正切换激活标签时重置 activeLine，避免保存时预览自动滚回顶部
+  const lastActiveIdForPreviewRef = useRef<string | null>(null)
+
   const closeTabWithAiSession = useCallback((id: string) => {
     // 按 tab 维度清理 AI Chat 会话
     aiChatSessionManager.deleteSession(id)
@@ -428,14 +431,20 @@ export function WorkspaceShell({
   const setConfirmDialogRef = useRef(setConfirmDialog)
   setConfirmDialogRef.current = setConfirmDialog
 
-  // Sync Content
+  // Sync Content：切换激活标签时，同步内容，并仅在 tab 变化时重置 activeLine
   useEffect(() => {
     if (!activeId) return
     const tab = tabs.find((t) => t.id === activeId)
     if (!tab) return
+
     setMarkdown(tab.content)
     setPreviewValue(tab.content)
-    setActiveLine(1)
+
+    // 只有在真正切换到另一个标签时，才把 activeLine 重置为 1
+    if (lastActiveIdForPreviewRef.current !== activeId) {
+      lastActiveIdForPreviewRef.current = activeId
+      setActiveLine(1)
+    }
   }, [activeId, tabs])
 
   // Window Title
@@ -1171,6 +1180,10 @@ export function WorkspaceShell({
     })
   }, [])
 
+  const handlePreviewLineClick = useCallback((line: number) => {
+    scrollEditorToLineCenter(line)
+  }, [scrollEditorToLineCenter])
+
   const handleOutlineSelect = useCallback((item: OutlineItem) => {
     setActiveOutlineId(item.id)
     if (effectiveLayout === 'preview-only') setLayout('preview-left')
@@ -1318,6 +1331,7 @@ export function WorkspaceShell({
                     effectiveLayout={effectiveLayout}
                     filePath={filePath}
                     foldRegions={foldRegions}
+                    onPreviewLineClick={handlePreviewLineClick}
                   />
                 </Suspense>
                 {(effectiveLayout === 'preview-left' || effectiveLayout === 'preview-right') && (

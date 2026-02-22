@@ -10,9 +10,11 @@ export type PreviewPaneProps = {
   effectiveLayout: LayoutType
   filePath?: string | null
   foldRegions?: FoldRegion[]
+  /** 点击预览中的块时回调对应的源行号 */
+  onPreviewLineClick?: (line: number) => void
 }
 
-export function PreviewPane({ value, activeLine, previewWidth, effectiveLayout, filePath, foldRegions }: PreviewPaneProps) {
+export function PreviewPane({ value, activeLine, previewWidth, effectiveLayout, filePath, foldRegions, onPreviewLineClick }: PreviewPaneProps) {
   const style: CSSProperties = {}
 
   if (effectiveLayout === 'preview-only') {
@@ -39,6 +41,7 @@ export function PreviewPane({ value, activeLine, previewWidth, effectiveLayout, 
           previewWidth={previewWidth}
           filePath={filePath}
           foldRegions={foldRegions}
+          onLineClick={onPreviewLineClick}
         />
       </div>
     </section>
