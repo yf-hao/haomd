@@ -73,6 +73,57 @@ const remarkPlugins = [remarkGfm, remarkMath, remarkMathLineAnchors]
 // 预览虚拟化开关：关闭时走浏览器原生滚动，体验更稳定
 const ENABLE_PREVIEW_VIRTUALIZATION = false
 
+// KaTeX 渲染结果缓存，按内容去重
+const blockMathHtmlCache = new Map<string, string>()
+const inlineMathHtmlCache = new Map<string, string>()
+
+function renderBlockMathHtml(tex: string): string {
+  const key = tex
+  const cached = blockMathHtmlCache.get(key)
+  if (cached) return cached
+  let html = ''
+  try {
+    html = katex.renderToString(tex, { displayMode: true, throwOnError: false })
+  } catch {
+    html = tex
+  }
+  blockMathHtmlCache.set(key, html)
+  return html
+}
+
+function renderInlineMathHtml(tex: string): string {
+  const key = tex
+  const cached = inlineMathHtmlCache.get(key)
+  if (cached) return cached
+  let html = ''
+  try {
+    html = katex.renderToString(tex, { displayMode: false, throwOnError: false })
+  } catch {
+    html = tex
+  }
+  inlineMathHtmlCache.set(key, html)
+  return html
+}
+
+// 图片/媒体路径编码缓存，避免重复计算 haomd:// / https://haomd.localhost 路径
+const mediaUrlCache = new Map<string, string>()
+
+function encodeMediaPath(absPath: string, isWindows: boolean): string {
+  const cacheKey = (isWindows ? 'win|' : 'unix|') + absPath
+  const cached = mediaUrlCache.get(cacheKey)
+  if (cached) return cached
+
+  const pathParts = absPath.split(/([/\\])/)
+  const encodedParts = pathParts.map((part: string) => {
+    if (part === '/' || part === '\\') return part
+    return encodeURIComponent(part)
+  })
+  const encoded = encodedParts.join('')
+  const finalUrl = isWindows ? `https://haomd.localhost${encoded}` : `haomd://localhost${encoded}`
+  mediaUrlCache.set(cacheKey, finalUrl)
+  return finalUrl
+}
+
 // remark → rehype 阶段：将 math / inlineMath 映射为自定义标签，携带原始行号
 const remarkRehypeOptions: any = {
   handlers: {
@@ -125,6 +176,43 @@ type BlockMetric = {
   startLine: number
   endLine: number
 }
+
+type DiagramBlockProps = {
+  lang: 'mermaid' | 'mind'
+  code: string
+}
+
+type CodeBlockProps = React.ComponentProps<typeof SyntaxHighlighter> & {
+  lang?: string
+  content: string
+}
+
+const DiagramBlock = memo(
+  ({ lang, code }: DiagramBlockProps) => (
+    <React.Suspense fallback={<pre>图表加载中…</pre>}>
+      <DiagramsLazy lang={lang} code={code} />
+    </React.Suspense>
+  ),
+  (prev, next) => prev.lang === next.lang && prev.code === next.code,
+)
+
+const CodeBlock = memo(
+  ({ lang, content, ...rest }: CodeBlockProps) => (
+    <SyntaxHighlighter
+      language={lang}
+      style={oneDark}
+      showLineNumbers
+      wrapLines
+      {...rest}
+    >
+      {content}
+    </SyntaxHighlighter>
+  ),
+  (prev, next) =>
+    prev.lang === next.lang &&
+    prev.content === next.content &&
+    prev.className === next.className,
+)
 
 function MarkdownViewerComponent(
   props: Readonly<MarkdownViewerProps>
@@ -205,12 +293,7 @@ function MarkdownViewerComponent(
         }
 
         const tex = (value ?? (node as any).value ?? '').trim()
-        let html = ''
-        try {
-          html = katex.renderToString(tex, { displayMode: true, throwOnError: false })
-        } catch {
-          html = tex
-        }
+        const html = renderBlockMathHtml(tex)
 
         const dataProps = start
           ? { 'data-line-start': start, 'data-line-end': end }
@@ -247,12 +330,7 @@ function MarkdownViewerComponent(
         }
 
         const tex = (value ?? (node as any).value ?? '').trim()
-        let html = ''
-        try {
-          html = katex.renderToString(tex, { displayMode: false, throwOnError: false })
-        } catch {
-          html = tex
-        }
+        const html = renderInlineMathHtml(tex)
 
         return (
           <span
@@ -388,14 +466,8 @@ function MarkdownViewerComponent(
                 absPath = fileDir + sep + posterSrc
               }
 
-              const pathParts = absPath.split(/([/\\])/)
-              const encodedParts = pathParts.map((part: string) => {
-                if (part === '/' || part === '\\') return part
-                return encodeURIComponent(part)
-              })
-              const encoded = encodedParts.join('')
               const isWindows = filePath.includes('\\') || navigator.userAgent.includes('Windows')
-              posterUrl = isWindows ? `https://haomd.localhost${encoded}` : `haomd://localhost${encoded}`
+              posterUrl = encodeMediaPath(absPath, isWindows)
             } else {
               posterUrl = posterSrc
             }
@@ -486,24 +558,16 @@ function MarkdownViewerComponent(
           if (renderer) return renderer(content)
 
           if (lang === 'mermaid' || lang === 'mind') {
-            return (
-              <React.Suspense fallback={<pre>图表加载中…</pre>}>
-                <DiagramsLazy lang={lang} code={content} />
-              </React.Suspense>
-            )
+            return <DiagramBlock lang={lang} code={content} />
           }
 
-          // 使用 SyntaxHighlighter 渲染并显示行号
+          // 使用 SyntaxHighlighter 渲染并显示行号（通过 CodeBlock 做内容级缓存）
           return (
-            <SyntaxHighlighter
-              language={lang}
-              style={oneDark}
-              showLineNumbers
-              wrapLines
+            <CodeBlock
+              lang={lang}
+              content={content}
               {...rest}
-            >
-              {content}
-            </SyntaxHighlighter>
+            />
           )
         }
 
