@@ -66,3 +66,30 @@ export function enqueueSessionDigestFromCompressedRecord(
   pending.push(digest)
   savePendingSessionDigests(pending)
 }
+
+/**
+ * 从 AI Chat 的手工摘要中直接构造一条 SessionDigest 并入队。
+ *
+ * - 用于 /remember 等命令，将用户提供的摘要写入 Global Memory 待学习队列；
+ * - 当前版本不依赖 docConversations 记录，直接按当前时间构造一个极简时间范围。
+ */
+export function enqueueSessionDigestFromChatSummary(options: {
+  docPath: string
+  summary: string
+  periodFrom?: number
+  periodTo?: number
+}): void {
+  const now = Date.now()
+  const from = options.periodFrom ?? now
+  const to = options.periodTo ?? now
+
+  const digest: SessionDigest = {
+    docPath: options.docPath,
+    period: { from, to },
+    summaries: [options.summary],
+  }
+
+  const pending = loadPendingSessionDigests()
+  pending.push(digest)
+  savePendingSessionDigests(pending)
+}

@@ -9,6 +9,7 @@ import { onNativePaste, onNativePasteImage } from '../../platform/clipboardEvent
 import { base64ToImageDataUrl, base64ToImageFile, readClipboardImageBase64 } from '../platform/clipboardImageService'
 import { tryHandleSlashCommand } from './aiSlashCommands'
 import { AiChatCommandBridgeContext } from './AiChatCommandBridgeContext'
+import { ConfirmDialog } from '../../../components/ConfirmDialog'
 
 const EMPTY_MESSAGES: ChatMessageView[] = []
 
@@ -29,6 +30,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
   const [contextPrefix, setContextPrefix] = useState<string | null>(null)
   const [contextPrefixUsed, setContextPrefixUsed] = useState(false)
   const [attachedImageDataUrl, setAttachedImageDataUrl] = useState<string | null>(null)
+  const [slashModalMessage, setSlashModalMessage] = useState<string | null>(null)
   const commandBridge = useContext(AiChatCommandBridgeContext)
   const [isComposing, setIsComposing] = useState(false)
   const [compositionEndTime, setCompositionEndTime] = useState(0)
@@ -195,6 +197,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     const handled = await tryHandleSlashCommand(contentToSend, {
       docPath: currentFilePath ?? undefined,
       runAppCommand: commandBridge?.runAppCommand,
+      showModal: (message: string) => setSlashModalMessage(message),
     })
     if (handled === 'handled') {
       return
@@ -554,6 +557,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
   if (!open) return null
 
   return (
+    <>
     <div className="modal-backdrop modal-backdrop-plain">
       <div
         className="modal modal-ai-chat"
@@ -633,5 +637,16 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
         <div className="ai-chat-drag-handle ai-chat-drag-right" onMouseDown={handleDragStart} />
       </div>
     </div>
+    {slashModalMessage && (
+      <ConfirmDialog
+        title="Global Memory"
+        message={slashModalMessage}
+        confirmText="确定"
+        cancelText="关闭"
+        onConfirm={() => setSlashModalMessage(null)}
+        onCancel={() => setSlashModalMessage(null)}
+      />
+    )}
+    </>
   )
 }

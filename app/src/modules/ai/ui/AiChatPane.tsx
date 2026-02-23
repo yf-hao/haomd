@@ -10,6 +10,7 @@ import { AiChatBody } from './AiChatBody'
 import { base64ToImageDataUrl, base64ToImageFile, readClipboardImageBase64 } from '../platform/clipboardImageService'
 import { tryHandleSlashCommand } from './aiSlashCommands'
 import { AiChatCommandBridgeContext } from './AiChatCommandBridgeContext'
+import { ConfirmDialog } from '../../../components/ConfirmDialog'
 
 const EMPTY_MESSAGES = [] as const
 
@@ -28,6 +29,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   const [contextPrefix, setContextPrefix] = useState<string | null>(null)
   const [contextPrefixUsed, setContextPrefixUsed] = useState(false)
   const [attachedImageDataUrl, setAttachedImageDataUrl] = useState<string | null>(null)
+  const [slashModalMessage, setSlashModalMessage] = useState<string | null>(null)
   const commandBridge = useContext(AiChatCommandBridgeContext)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
@@ -202,6 +204,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
     const handled = await tryHandleSlashCommand(contentToSend, {
       docPath: currentFilePath ?? undefined,
       runAppCommand: commandBridge?.runAppCommand,
+      showModal: (message: string) => setSlashModalMessage(message),
     })
     if (handled === 'handled') {
       return
@@ -512,6 +515,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   }, [onClose])
 
   return (
+    <>
     <section className="pane ai-chat-pane" ref={paneRootRef}>
       <div className="ai-chat-pane-header">
         <div className="ai-chat-pane-title">
@@ -582,5 +586,16 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
         />
       </div>
     </section>
+    {slashModalMessage && (
+      <ConfirmDialog
+        title="Global Memory"
+        message={slashModalMessage}
+        confirmText="确定"
+        cancelText="关闭"
+        onConfirm={() => setSlashModalMessage(null)}
+        onCancel={() => setSlashModalMessage(null)}
+      />
+    )}
+    </>
   )
 }
