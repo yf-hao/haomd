@@ -175,6 +175,9 @@ export function WorkspaceShell({
     startDragging,
   } = useWorkspaceLayout()
 
+  const isPreviewVisible = effectiveLayout !== 'editor-only'
+  const prevIsPreviewVisibleRef = useRef(isPreviewVisible)
+
   const MIN_SIDEBAR_WIDTH = 150
   const MAX_SIDEBAR_WIDTH = 400
 
@@ -439,7 +442,8 @@ export function WorkspaceShell({
       try {
         const cfg = await getHugeDocSettings()
         if (cancelled) return
-        setHugeDocEnabled(cfg.enabled)
+        // 关闭大文档局部编辑：始终使用整篇文档，不再按 chunk 裁剪编辑器内容
+        setHugeDocEnabled(false)
         setHugeDocLineThreshold(cfg.lineThreshold)
         setHugeDocChunkContextLines(cfg.chunkContextLines)
         setHugeDocChunkMaxLines(cfg.chunkMaxLines)
@@ -780,10 +784,21 @@ export function WorkspaceShell({
     })
   }, [isCreatingTab, getUnsavedTabs, isTauriEnv, save, setActiveTab])
 
+  // 预览内容只在预览可见时才节流同步，避免 editor-only 模式下做无意义渲染
   useEffect(() => {
+    if (!isPreviewVisible) return
+
     const timer = setTimeout(() => setPreviewValue(markdown), 320)
     return () => clearTimeout(timer)
-  }, [markdown])
+  }, [markdown, isPreviewVisible])
+
+  // 当预览从不可见切换为可见时，立即用最新 markdown 做一次全量同步
+  useEffect(() => {
+    if (!prevIsPreviewVisibleRef.current && isPreviewVisible) {
+      setPreviewValue(markdown)
+    }
+    prevIsPreviewVisibleRef.current = isPreviewVisible
+  }, [isPreviewVisible, markdown])
 
   const applyOpenedContent = useCallback((content: string) => {
     setMarkdown(content)
@@ -1490,17 +1505,19 @@ export function WorkspaceShell({
                     />
                   </Suspense>
                 </section>
-                <Suspense fallback={<section className="pane preview"><div className="preview-body" /></section>}>
-                  <PreviewPaneLazy
-                    value={previewValue}
-                    activeLine={previewActiveLine}
-                    previewWidth={previewWidthForRender}
-                    effectiveLayout={effectiveLayout}
-                    filePath={filePath}
-                    foldRegions={foldRegions}
-                    onPreviewLineClick={handlePreviewLineClick}
-                  />
-                </Suspense>
+                {isPreviewVisible && (
+                  <Suspense fallback={<section className="pane preview"><div className="preview-body" /></section>}>
+                    <PreviewPaneLazy
+                      value={previewValue}
+                      activeLine={previewActiveLine}
+                      previewWidth={previewWidthForRender}
+                      effectiveLayout={effectiveLayout}
+                      filePath={filePath}
+                      foldRegions={foldRegions}
+                      onPreviewLineClick={handlePreviewLineClick}
+                    />
+                  </Suspense>
+                )}
                 {(effectiveLayout === 'preview-left' || effectiveLayout === 'preview-right') && (
                   <div className={`divider-hotzone ${dragging ? 'active' : ''}`} style={{ left: effectiveLayout === 'preview-left' ? `${previewWidthForRender}%` : `${100 - previewWidthForRender}%` }} onMouseDown={startDragging}>
                     <div className="divider-rail"><span className="divider-handle" /></div>
