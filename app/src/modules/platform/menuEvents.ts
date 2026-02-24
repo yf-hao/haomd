@@ -16,18 +16,22 @@ export function onMenuAction(handler: (actionId: string) => void | Promise<void>
   let disposed = false
 
   const setup = async () => {
-    const un = await listen<string>('menu://action', (event) => {
-      void handler(event.payload)
-    })
-    if (disposed) {
-      // 如果在监听完成前已经被清理，立刻注销，避免遗留监听
-      try {
-        un()
-      } catch (err) {
-        console.warn('[menuEvents] unlisten menu://action failed', err)
+    try {
+      const un = await listen<string>('menu://action', (event) => {
+        void handler(event.payload)
+      })
+      if (disposed) {
+        // 如果在监听完成前已经被清理，立刻注销，避免遗留监听
+        try {
+          un()
+        } catch (err) {
+          console.warn('[menuEvents] unlisten menu://action failed', err)
+        }
+      } else {
+        unlisten = un
       }
-    } else {
-      unlisten = un
+    } catch (err) {
+      console.error('[menuEvents] listen menu://action failed', err)
     }
   }
 
@@ -49,17 +53,21 @@ export function onOpenRecentFile(handler: (payload: RecentMenuPayload) => void |
   let disposed = false
 
   const setup = async () => {
-    const un = await listen<RecentMenuPayload>('menu://open_recent_file', (event) => {
-      void handler(event.payload)
-    })
-    if (disposed) {
-      try {
-        un()
-      } catch (err) {
-        console.warn('[menuEvents] unlisten menu://open_recent_file failed', err)
+    try {
+      const un = await listen<RecentMenuPayload>('menu://open_recent_file', (event) => {
+        void handler(event.payload)
+      })
+      if (disposed) {
+        try {
+          un()
+        } catch (err) {
+          console.warn('[menuEvents] unlisten menu://open_recent_file failed', err)
+        }
+      } else {
+        unlisten = un
       }
-    } else {
-      unlisten = un
+    } catch (err) {
+      console.error('[menuEvents] listen menu://open_recent_file failed', err)
     }
   }
 

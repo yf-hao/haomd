@@ -451,6 +451,35 @@ async fn read_file(app: AppHandle, path: String, trace_id: Option<String>) -> Re
 }
 
 #[tauri::command]
+async fn read_binary_file(_app: AppHandle, path: String, trace_id: Option<String>) -> ResultPayload<Vec<u8>> {
+  let trace = trace_id.unwrap_or_else(new_trace_id);
+  let normalized = match normalize_path(&path) {
+    Ok(p) => p,
+    Err(e) => return ResultPayload::Err { error: e },
+  };
+
+  let meta = match fs::metadata(&normalized).await {
+    Ok(m) => m,
+    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+      return err_payload(ErrorCode::NotFound, "文件不存在", trace);
+    }
+    Err(err) => return err_payload(ErrorCode::IoError, format!("读取元数据失败: {err}"), trace),
+  };
+
+  if meta.len() > MAX_FILE_BYTES {
+    return err_payload(ErrorCode::TooLarge, "文件过大，已超过上限", trace);
+  }
+
+  let bytes = match fs::read(&normalized).await {
+    Ok(b) => b,
+    Err(err) => return err_payload(ErrorCode::IoError, format!("读取文件失败: {err}"), trace),
+  };
+
+  // 仅作为 PDF 等二进制读取辅助，不记录最近文件
+  ok(bytes, trace)
+}
+
+#[tauri::command]
 async fn write_file(
   app: AppHandle,
   path: String,
@@ -1821,6 +1850,7 @@ pub fn run() {
     })
     .invoke_handler(tauri::generate_handler![
       read_file,
+      read_binary_file,
       write_file,
       list_recent,
       log_recent_file,

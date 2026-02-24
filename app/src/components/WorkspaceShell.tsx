@@ -25,7 +25,7 @@ import { useTabs } from '../hooks/useTabs'
 import { useCommandSystem } from '../hooks/useCommandSystem'
 import { useSidebar } from '../hooks/useSidebar'
 import { onOpenRecentFile } from '../modules/platform/menuEvents'
-import { createFolder, deleteFsEntry, listFolder, writeFile } from '../modules/files/service'
+import { createFolder, deleteFsEntry, listFolder, writeFile, listRecent } from '../modules/files/service'
 import { useNativePaste } from '../hooks/useNativePaste'
 import { onNativePasteImage } from '../modules/platform/clipboardEvents'
 import type { EditorTab } from '../types/tabs'
@@ -34,6 +34,7 @@ import { openInFileManager } from '../modules/platform/fileExplorerService'
 import { loadDefaultImagePathStrategyConfig, resolveImageTarget } from '../modules/images/imagePasteStrategy'
 import { countLines, extractChunkAroundLine, applyChunkPatch, localToGlobalLine } from '../modules/editor/chunkEdit'
 import { getHugeDocSettings } from '../modules/settings/editorSettings'
+import type { RecentFile } from '../modules/files/types'
 
 // AI Chat localStorage keys
 const STORAGE_AI_MODE = 'haomd:aiChat:mode'
@@ -48,6 +49,10 @@ const EditorPaneLazy = lazy(() =>
 
 const PreviewPaneLazy = lazy(() =>
   import('./PreviewPane').then((m) => ({ default: m.PreviewPane }))
+)
+
+const PdfViewerLazy = lazy(() =>
+  import('../modules/pdf/components/PdfViewer').then((m) => ({ default: m.PdfViewer }))
 )
 
 export type LeftPanelId = 'files' | 'outline' | 'pdf' | null
@@ -148,6 +153,9 @@ export function WorkspaceShell({
   const [hugeDocChunkContextLines, setHugeDocChunkContextLines] = useState(DEFAULT_HUGE_DOC_CHUNK_CONTEXT_LINES)
   const [hugeDocChunkMaxLines, setHugeDocChunkMaxLines] = useState(DEFAULT_HUGE_DOC_CHUNK_MAX_LINES)
   const [focusRequest, setFocusRequest] = useState<{ localLine: number; searchText?: string } | null>(null)
+  const [pdfRecent, setPdfRecent] = useState<RecentFile[]>([])
+  const [pdfRecentLoading, setPdfRecentLoading] = useState(false)
+  const [pdfRecentError, setPdfRecentError] = useState<string | null>(null)
   const isProgrammaticScrollRef = useRef(false)
   const sidebarResizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
 
@@ -211,6 +219,8 @@ export function WorkspaceShell({
       }
     },
   })
+
+  const isPdfActive = !!activeTab?.path && activeTab.path.toLowerCase().endsWith('.pdf')
 
   const activeIdRef = useRef<string | null>(null)
   useEffect(() => {
@@ -435,6 +445,45 @@ export function WorkspaceShell({
   }, [])
 
   const outlineItems = useOutline(markdown)
+
+  // PDF 最近文件列表：仅在左侧 PDF 面板激活时从后端加载
+  useEffect(() => {
+    if (activeLeftPanel !== 'pdf') return
+
+    let cancelled = false
+
+    const load = async () => {
+      if (!isTauriEnv()) {
+        setPdfRecent([])
+        setPdfRecentError('PDF 面板仅在桌面应用中可用')
+        return
+      }
+
+      setPdfRecentLoading(true)
+      setPdfRecentError(null)
+      try {
+        const resp = await listRecent()
+        if (cancelled) return
+        if (!resp.ok) {
+          setPdfRecent([])
+          setPdfRecentError(resp.error.message)
+          return
+        }
+        const pdfItems = resp.data.filter((item) => !item.isFolder && item.path.toLowerCase().endsWith('.pdf'))
+        setPdfRecent(pdfItems)
+      } finally {
+        if (!cancelled) {
+          setPdfRecentLoading(false)
+        }
+      }
+    }
+
+    void load()
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeLeftPanel, isTauriEnv])
 
   useEffect(() => {
     let cancelled = false
@@ -723,8 +772,8 @@ export function WorkspaceShell({
   const getCurrentFilePath = useCallback(() => filePath ?? null, [filePath])
 
   useEffect(() => {
-    if (activeTab) setFilePath(activeTab.path)
-  }, [activeTab, setFilePath])
+    if (activeTab && !isPdfActive) setFilePath(activeTab.path)
+  }, [activeTab, isPdfActive, setFilePath])
 
   const handleCurrentTabClose = useCallback(() => {
     if (isCreatingTab || !activeId) return
@@ -807,8 +856,35 @@ export function WorkspaceShell({
     updateActiveContent(content, { markDirty: false })
   }, [updateActiveContent])
 
+  const saveWithPdfGuard = useCallback(async () => {
+    if (isPdfActive) {
+      setStatusMessage('当前为 PDF 标签，保存命令仅适用于 Markdown 文档')
+      return { ok: false as const, error: { code: 'UNSUPPORTED', message: '当前标签为 PDF，不支持保存', traceId: undefined } }
+    }
+    return await save()
+  }, [isPdfActive, save, setStatusMessage])
+
+  const saveAsWithPdfGuard = useCallback(async () => {
+    if (isPdfActive) {
+      setStatusMessage('当前为 PDF 标签，保存命令仅适用于 Markdown 文档')
+      return { ok: false as const, error: { code: 'UNSUPPORTED', message: '当前标签为 PDF，不支持另存为', traceId: undefined } }
+    }
+    return await saveAs()
+  }, [isPdfActive, saveAs, setStatusMessage])
+
   const openFileInNewTab = useCallback(async (path: string) => {
     if (isCreatingTab) return { ok: false } as any
+
+    const isPdf = path.toLowerCase().endsWith('.pdf')
+
+    if (isPdf) {
+      // PDF 文件：不通过文本读取管线，直接新建只读标签，由 PdfViewer 负责展示
+      const tab = createTab({ path, content: '' })
+      // 对于 PDF，不更新 markdown/preview 内容，保持当前文档内容不变
+      setActiveTab(tab.id)
+      return { ok: true, data: { path } } as any
+    }
+
     const resp = await openFromPath(path)
     if (resp.ok) {
       const tab = createTab({ path: resp.data.path, content: '' })
@@ -818,7 +894,7 @@ export function WorkspaceShell({
       setActiveLine(1)
     }
     return resp
-  }, [isCreatingTab, openFromPath, createTab, updateTabContent, setMarkdown, setPreviewValue, setActiveLine])
+  }, [isCreatingTab, openFromPath, createTab, updateTabContent, setMarkdown, setPreviewValue, setActiveLine, setActiveTab])
 
   const openFileFromSidebar = useCallback(async (path: string) => {
     if (isCreatingTab) return { ok: false } as any
@@ -1179,7 +1255,7 @@ export function WorkspaceShell({
     layout, setLayout: setLayout as any, setShowPreview, setStatusMessage,
     aiChatMode, setAiChatMode, aiChatDockSide, setAiChatDockSide, aiChatOpen,
     confirmLoseChanges, hasUnsavedChanges, newDocument, setFilePath, applyOpenedContent,
-    openFile, save, saveAs, handleShowRecent: undefined, clearRecentAll,
+    openFile, save: saveWithPdfGuard, saveAs: saveAsWithPdfGuard, handleShowRecent: undefined, clearRecentAll,
     createTab, updateActiveMeta, openFolderInSidebar, closeCurrentTab,
     openAiChatDialog: options => openAiChatDialog(options as any),
     openGlobalMemoryDialog,
@@ -1443,9 +1519,36 @@ export function WorkspaceShell({
             <span>PDF</span>
           </div>
           <div className="pdf-panel-content">
-            <p style={{ color: '#9ca3af', padding: '12px', fontSize: '13px' }}>
-              PDF preview will be displayed here.
-            </p>
+            {pdfRecentLoading && (
+              <p style={{ color: '#9ca3af', padding: '12px', fontSize: '13px' }}>正在加载最近的 PDF...</p>
+            )}
+            {!pdfRecentLoading && pdfRecentError && (
+              <p style={{ color: '#f97373', padding: '12px', fontSize: '13px' }}>{pdfRecentError}</p>
+            )}
+            {!pdfRecentLoading && !pdfRecentError && pdfRecent.length === 0 && (
+              <p style={{ color: '#9ca3af', padding: '12px', fontSize: '13px' }}>
+                暂无最近 PDF。可以通过菜单 File → Open 打开 PDF 文件。
+              </p>
+            )}
+            {!pdfRecentLoading && !pdfRecentError && pdfRecent.length > 0 && (
+              <ul className="pdf-recent-list">
+                {pdfRecent.map((item) => {
+                  const name = item.displayName || item.path.split(/[/\\]/).pop() || item.path
+                  const date = new Date(item.lastOpenedAt).toLocaleString()
+                  const isActive = activeTab?.path === item.path
+                  return (
+                    <li
+                      key={item.path}
+                      className={`pdf-recent-item ${isActive ? 'active' : ''}`}
+                      onClick={() => { void openRecentFileInNewTab(item.path) }}
+                    >
+                      <div className="pdf-recent-title">{name}</div>
+                      <div className="pdf-recent-meta">{date}</div>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
           </div>
         </div>
       )}
@@ -1488,40 +1591,50 @@ export function WorkspaceShell({
                 </>
               )}
               <section className="pane-group editor-preview-group" style={{ gridTemplateColumns }} ref={workspaceRef}>
-                <section className="pane" style={effectiveLayout === 'preview-only' ? { display: 'none' } : effectiveLayout === 'preview-left' ? { gridColumn: '2/3' } : effectiveLayout === 'preview-right' ? { gridColumn: '1/2' } : { gridColumn: '1/-1' }}>
-                  <Suspense fallback={<div className="code-editor" />}>
-                    <EditorPaneLazy
-                      markdown={hugeDocState?.enabled && hugeDocState.currentChunk && hugeDocEnabled ? hugeDocState.currentChunk.value : markdown}
-                      onChange={handleMarkdownChange}
-                      onCursorChange={handleCursorChange}
-                      showPreview={showPreview}
-                      setShowPreview={setShowPreview}
-                      editorViewRef={editorViewRef}
-                      onFoldRegionsChange={setFoldRegions}
-                      focusRequest={focusRequest}
-                      onFocusHandled={() => setFocusRequest(null)}
-                      onProgrammaticScrollStart={() => { isProgrammaticScrollRef.current = true }}
-                      onProgrammaticScrollEnd={() => { isProgrammaticScrollRef.current = false }}
-                    />
-                  </Suspense>
-                </section>
-                {isPreviewVisible && (
-                  <Suspense fallback={<section className="pane preview"><div className="preview-body" /></section>}>
-                    <PreviewPaneLazy
-                      value={previewValue}
-                      activeLine={previewActiveLine}
-                      previewWidth={previewWidthForRender}
-                      effectiveLayout={effectiveLayout}
-                      filePath={filePath}
-                      foldRegions={foldRegions}
-                      onPreviewLineClick={handlePreviewLineClick}
-                    />
-                  </Suspense>
-                )}
-                {(effectiveLayout === 'preview-left' || effectiveLayout === 'preview-right') && (
-                  <div className={`divider-hotzone ${dragging ? 'active' : ''}`} style={{ left: effectiveLayout === 'preview-left' ? `${previewWidthForRender}%` : `${100 - previewWidthForRender}%` }} onMouseDown={startDragging}>
-                    <div className="divider-rail"><span className="divider-handle" /></div>
-                  </div>
+                {isPdfActive ? (
+                  <section className="pane" style={{ gridColumn: '1/-1' }}>
+                    <Suspense fallback={<div className="pdf-viewer" />}>
+                      {activeTab?.path && <PdfViewerLazy filePath={activeTab.path} />}
+                    </Suspense>
+                  </section>
+                ) : (
+                  <>
+                    <section className="pane" style={effectiveLayout === 'preview-only' ? { display: 'none' } : effectiveLayout === 'preview-left' ? { gridColumn: '2/3' } : effectiveLayout === 'preview-right' ? { gridColumn: '1/2' } : { gridColumn: '1/-1' }}>
+                      <Suspense fallback={<div className="code-editor" />}>
+                        <EditorPaneLazy
+                          markdown={hugeDocState?.enabled && hugeDocState.currentChunk && hugeDocEnabled ? hugeDocState.currentChunk.value : markdown}
+                          onChange={handleMarkdownChange}
+                          onCursorChange={handleCursorChange}
+                          showPreview={showPreview}
+                          setShowPreview={setShowPreview}
+                          editorViewRef={editorViewRef}
+                          onFoldRegionsChange={setFoldRegions}
+                          focusRequest={focusRequest}
+                          onFocusHandled={() => setFocusRequest(null)}
+                          onProgrammaticScrollStart={() => { isProgrammaticScrollRef.current = true }}
+                          onProgrammaticScrollEnd={() => { isProgrammaticScrollRef.current = false }}
+                        />
+                      </Suspense>
+                    </section>
+                    {isPreviewVisible && (
+                      <Suspense fallback={<section className="pane preview"><div className="preview-body" /></section>}>
+                        <PreviewPaneLazy
+                          value={previewValue}
+                          activeLine={previewActiveLine}
+                          previewWidth={previewWidthForRender}
+                          effectiveLayout={effectiveLayout}
+                          filePath={filePath}
+                          foldRegions={foldRegions}
+                          onPreviewLineClick={handlePreviewLineClick}
+                        />
+                      </Suspense>
+                    )}
+                    {(effectiveLayout === 'preview-left' || effectiveLayout === 'preview-right') && (
+                      <div className={`divider-hotzone ${dragging ? 'active' : ''}`} style={{ left: effectiveLayout === 'preview-left' ? `${previewWidthForRender}%` : `${100 - previewWidthForRender}%` }} onMouseDown={startDragging}>
+                        <div className="divider-rail"><span className="divider-handle" /></div>
+                      </div>
+                    )}
+                  </>
                 )}
               </section>
               {aiChatMode === 'docked' && aiChatOpen && aiChatState && aiChatDockSide === 'right' && (

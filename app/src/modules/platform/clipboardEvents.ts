@@ -10,18 +10,22 @@ export function onNativePaste(handler: (text: string) => void): Unlisten {
   let disposed = false
 
   const setup = async () => {
-    const un = await listen<string>('native://paste', (event) => {
-      console.log('[clipboardEvents] native://paste event received, len=', event.payload?.length)
-      handler(event.payload)
-    })
-    if (disposed) {
-      try {
-        un()
-      } catch (err) {
-        console.warn('[clipboardEvents] unlisten native://paste failed', err)
+    try {
+      const un = await listen<string>('native://paste', (event) => {
+        console.log('[clipboardEvents] native://paste event received, len=', event.payload?.length)
+        handler(event.payload)
+      })
+      if (disposed) {
+        try {
+          un()
+        } catch (err) {
+          console.warn('[clipboardEvents] unlisten native://paste failed', err)
+        }
+      } else {
+        unlisten = un
       }
-    } else {
-      unlisten = un
+    } catch (err) {
+      console.error('[clipboardEvents] listen native://paste failed', err)
     }
   }
 
@@ -77,18 +81,22 @@ export function onNativePasteImage(handler: () => void): Unlisten {
   let disposed = false
 
   const setup = async () => {
-    const un = await listen<unknown>('native://paste_image', () => {
-      console.log('[clipboardEvents] native://paste_image event received')
-      handler()
-    })
-    if (disposed) {
-      try {
-        un()
-      } catch (err) {
-        console.warn('[clipboardEvents] unlisten native://paste_image failed', err)
+    try {
+      const un = await listen<unknown>('native://paste_image', () => {
+        console.log('[clipboardEvents] native://paste_image event received')
+        handler()
+      })
+      if (disposed) {
+        try {
+          un()
+        } catch (err) {
+          console.warn('[clipboardEvents] unlisten native://paste_image failed', err)
+        }
+      } else {
+        unlisten = un
       }
-    } else {
-      unlisten = un
+    } catch (err) {
+      console.error('[clipboardEvents] listen native://paste_image failed', err)
     }
   }
 

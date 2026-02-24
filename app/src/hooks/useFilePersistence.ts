@@ -340,7 +340,10 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
         const chosen = await openDialog({
           multiple: false,
           directory: false,
-          filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdx'] }],
+          filters: [
+            { name: 'Markdown', extensions: ['md', 'markdown', 'mdx'] },
+            { name: 'PDF', extensions: ['pdf'] },
+          ],
         })
         console.log('[openFile] after openDialog, chosen =', chosen)
 
@@ -350,7 +353,24 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
           return { ok: false as const, error: { code: 'CANCELLED', message: '用户取消', traceId: undefined } }
         }
 
-        const path = Array.isArray(chosen) ? chosen[0] : chosen
+        const selected = Array.isArray(chosen) ? chosen[0] : chosen
+        const path = String(selected)
+        const isPdf = path.toLowerCase().endsWith('.pdf')
+
+        if (isPdf) {
+          console.log('[openFile] open PDF path', path)
+          if (isTauri()) {
+            void logRecentFile(path, false).then((res) => {
+              if (!res.ok) {
+                console.warn('[logRecentFile] openFile(pdf) failed', res.error)
+                setStatusMessage(res.error.message)
+              }
+            })
+          }
+          // 返回最小信息，由上层根据扩展名决定如何展示（例如在 PdfViewer 中打开）
+          return { ok: true as const, data: { path } }
+        }
+
         console.log('[openFile] openFromPath', path)
         return await openFromPath(path)
       } catch (err) {

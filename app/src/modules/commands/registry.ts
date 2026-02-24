@@ -191,10 +191,24 @@ function createFileCommands(ctx: FileCommandContext): CommandRegistry {
       // 像「新建 + 打开」一样，为每个打开的文件创建独立标签
       ctx.createTab()
       const resp = await ctx.openFile()
-      if (resp && resp.ok) {
-        ctx.applyOpenedContent(resp.data.content)
+      if (resp && resp.ok && resp.data) {
+        const path = (resp.data as any).path as string | undefined
+        if (!path) {
+          return
+        }
+        const isPdf = typeof path === 'string' && path.toLowerCase().endsWith('.pdf')
+        if (isPdf) {
+          // PDF：不触碰当前 Markdown 文本，仅更新当前标签的路径和标题
+          ctx.updateActiveMeta(path, false)
+          // 同步到 Sidebar：将通过 Open 打开的文件展示在 File Browser 中
+          if (ctx.addStandaloneFile) {
+            ctx.addStandaloneFile(path)
+          }
+          return
+        }
+
+        ctx.applyOpenedContent((resp.data as any).content)
         // 更新当前标签的路径和标题，并标记为未脏
-        const path = resp.data.path
         ctx.setFilePath(path)
         ctx.updateActiveMeta(path, false)
         // 同步到 Sidebar：将通过 Open 打开的文件展示在 File Browser 中
