@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { ChatEntryMode, ConversationState, EntryContext } from '../../domain/chatSession'
+import type { ChatEntryMode, ConversationState, EntryContext, ChatMessageView } from '../../domain/chatSession'
 import type { SystemPromptInfo } from '../../application/systemPromptService'
 import type { ProviderType, VisionTask, UploadedFileRef } from '../../domain/types'
 import type { ChatSession, StartChatOptions } from '../../application/chatSessionService'
@@ -49,6 +49,11 @@ export type UseAiChatResult = {
   uploadFiles: (files: File[]) => Promise<void>
   removeAttachment: (id: string) => void
   isUploading: boolean
+  /**
+   * 提供给 /remember 等功能使用的“近期会话消息视图”。
+   * 只包含未隐藏的 user/assistant 消息，并按时间顺序返回最后 limit 条。
+   */
+  getRecentMessagesForDigest: (limit: number) => ChatMessageView[]
 }
 
 export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
@@ -391,6 +396,16 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
     setError(null)
   }, [])
 
+  const getRecentMessagesForDigest: UseAiChatResult['getRecentMessagesForDigest'] = useCallback(
+    (limit: number) => {
+      const messages = state?.viewMessages ?? []
+      const visible = messages.filter((m) => !m.hidden)
+      if (limit <= 0 || visible.length <= limit) return visible
+      return visible.slice(-limit)
+    },
+    [state],
+  )
+
   return {
     loading: isGenerating, // Rename derived state to loading for UI compatibility
     state,
@@ -411,5 +426,6 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
     uploadFiles,
     removeAttachment,
     isUploading: uploadingCount > 0,
+    getRecentMessagesForDigest,
   }
 }

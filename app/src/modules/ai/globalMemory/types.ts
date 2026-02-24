@@ -6,10 +6,24 @@ export type SessionDigest = {
   docPath: string
   /** 摘要覆盖的时间范围（基于原始会话消息的 timestamp） */
   period: { from: number; to: number }
-  /** 一批摘要消息的内容（通常来自不同层级的 summary 消息） */
+  /**
+   * 一批摘要消息的内容。
+   *
+   * 约定：
+   * - 当来源为 /remember 且包含用户手写摘要时，summaries[0] 一定是用户摘要（优先级最高）；
+   * - 其余项（summaries[1..]）为系统自动摘要，仅作补充参考；
+   * - 仅自动摘要场景（如会话压缩或 /remember 无参）则全部视为系统自动摘要。
+   */
   summaries: string[]
   /** 可选：该批摘要的主题标签，便于后续全局分析与过滤 */
   topics?: string[]
+  /**
+   * 可选：SessionDigest 的来源标记，例如：
+   * - 'conversation-compress'：来自文档会话压缩；
+   * - 'chat-remember'：来自 /remember（用户文本 + 可选自动摘要）；
+   * - 'chat-remember-auto'：来自 /remember 无参（纯自动摘要）。
+   */
+  source?: string
 }
 
 export type UserProfile = {

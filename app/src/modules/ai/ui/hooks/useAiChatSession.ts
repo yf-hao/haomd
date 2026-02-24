@@ -354,6 +354,16 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
     setError(null)
   }, [])
 
+  const getRecentMessagesForDigest = useCallback<UseAiChatResult['getRecentMessagesForDigest']>(
+    (limit: number) => {
+      const messages = state?.viewMessages ?? []
+      const visible = messages.filter((m) => !m.hidden)
+      if (limit <= 0 || visible.length <= limit) return visible
+      return visible.slice(-limit)
+    },
+    [state],
+  )
+
   return {
     loading: isGenerating,
     state,
@@ -374,5 +384,6 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
     uploadFiles,
     removeAttachment,
     isUploading: uploadingCount > 0,
+    getRecentMessagesForDigest,
   }
 }

@@ -91,7 +91,7 @@ function buildUserPromptContent(input: {
     tags: item.tags ?? [],
     pinned: !!item.pinned,
     disabled: !!item.disabled,
-    sourceDocs: item.sourceDocs,
+    sourceDocs: item.sourceDocs ?? [],
   }))
 
   const payload = {
@@ -103,6 +103,10 @@ function buildUserPromptContent(input: {
   const lines: string[] = []
   lines.push('下面是本次需要你分析的一批会话摘要（SessionDigest），以及当前已有的全局记忆状态。')
   lines.push('请根据这些信息，生成一个 GlobalMemoryDelta JSON 对象，用于更新用户画像和全局记忆。')
+  lines.push('其中 SessionDigest.summaries 的约定如下：')
+  lines.push('- 当 source 为 "chat-remember" 且 summaries.length > 0 时，summaries[0] 一定是用户手写摘要（优先级最高），其余项为系统自动摘要，仅作参考；')
+  lines.push('- 当 source 为 "chat-remember-auto" 或其他值时，所有 summaries 均视为系统自动摘要。')
+  lines.push('在推理时，遇到冲突信息请一律以用户手写摘要（summaries[0]）为准。')
   lines.push('--- INPUT JSON START ---')
   lines.push(JSON.stringify(payload, null, 2))
   lines.push('--- INPUT JSON END ---')
@@ -142,7 +146,7 @@ function enrichTagsForGlobalMemoryItem(item: GlobalMemoryItem): GlobalMemoryItem
   const hasStudySignal =
     tagsSet.has('study') ||
     /study|learning|exam|homework|lecture|course|课程|学习|复习|备考/.test(text) ||
-    (item.sourceDocs && item.sourceDocs.some((p) => /\/study\//i.test(p)))
+    (Array.isArray(item.sourceDocs) && item.sourceDocs.some((p) => /\/study\//i.test(p)))
 
   if (hasStudySignal) {
     tagsSet.add('study')
@@ -212,8 +216,8 @@ function applyDeltaToItems(current: GlobalMemoryItem[], delta: GlobalMemoryDelta
       const merged: GlobalMemoryItem = {
         ...existing,
         weight: Math.max(existing.weight, item.weight),
-        sourceDocs: Array.from(new Set([...existing.sourceDocs, ...item.sourceDocs])),
-        sourceSessions: Array.from(new Set([...existing.sourceSessions, ...item.sourceSessions])),
+        sourceDocs: Array.from(new Set([...(existing.sourceDocs ?? []), ...(item.sourceDocs ?? [])])),
+        sourceSessions: Array.from(new Set([...(existing.sourceSessions ?? []), ...(item.sourceSessions ?? [])])),
         updatedAt: now,
       }
       byId.set(existing.id, merged)

@@ -351,7 +351,7 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
                       ))}
                     </span>
                     <span className="ai-global-memory-item-meta-small">
-                      Sources: {item.sourceDocs.length} docs · Updated:{' '}
+                      Sources: {(item.sourceDocs?.length ?? 0)} docs · Updated:{' '}
                       {new Date(item.updatedAt).toLocaleDateString()}
                     </span>
                     <span className="ai-global-memory-item-actions">

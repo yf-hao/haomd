@@ -64,6 +64,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     uploadFiles,
     removeAttachment,
     isUploading,
+    getRecentMessagesForDigest,
   } = useAiChatSession({
     sessionKey: tabId,
     entryMode,
@@ -198,6 +199,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
       docPath: currentFilePath ?? undefined,
       runAppCommand: commandBridge?.runAppCommand,
       showModal: (message: string) => setSlashModalMessage(message),
+      getRecentMessagesForDigest: getRecentMessagesForDigest,
     })
     if (handled === 'handled') {
       return

@@ -1,5 +1,7 @@
 import type { AiChatCommandBridge } from './AiChatCommandBridgeContext'
-import { enqueueSessionDigestFromChatSummary } from '../globalMemory/sessionDigestQueue'
+import type { ChatMessageView } from '../domain/chatSession'
+import { enqueueSessionDigestFromChat } from '../globalMemory/sessionDigestQueue'
+import { buildAutoDigestSummaryForCurrentChat } from '../globalMemory/chatAutoDigest'
 
 export type AiSlashCommandContext = {
   /** 当前关联文档路径；目前主要用于后续扩展 */
@@ -8,6 +10,13 @@ export type AiSlashCommandContext = {
   runAppCommand?: AiChatCommandBridge['runAppCommand']
   /** 在当前 AI Chat 中展示一条模态提示 */
   showModal?: (message: string) => void
+  /**
+   * 从当前 AI Chat 会话中获取最近的若干条消息，用于会话摘要/全局记忆。
+   * - 只应返回 user/assistant 消息；
+   * - 应过滤掉 hidden 消息；
+   * - 按时间顺序返回最后 limit 条。
+   */
+  getRecentMessagesForDigest?: (limit: number) => ChatMessageView[]
 }
 
 export type AiSlashCommandHandler = (ctx: AiSlashCommandContext, args: string[]) => Promise<void> | void
@@ -45,7 +54,7 @@ const slashCommands: Record<string, AiSlashCommandDef> = {
   },
   remember: {
     name: 'remember',
-    description: '将当前文档的一段摘要加入 Global Memory 队列',
+    description: '将当前会话中对未来有用的偏好摘要加入 Global Memory 队列',
     async handler(ctx, args) {
       const docPath = ctx.docPath
       if (!docPath) {
@@ -57,27 +66,94 @@ const slashCommands: Record<string, AiSlashCommandDef> = {
         return
       }
 
-      const summaryText = args.join(' ').trim()
-      if (!summaryText) {
+      const userSummary = args.join(' ').trim()
+      const hasUserSummary = !!userSummary
+
+      const getMessages = ctx.getRecentMessagesForDigest
+
+      // 情况一：用户提供了手写摘要
+      if (hasUserSummary) {
+        let autoSummary: string | null = null
+
+        if (getMessages) {
+          try {
+            const messages = getMessages(30)
+            if (messages.length) {
+              const summary = await buildAutoDigestSummaryForCurrentChat({
+                docPath,
+                messages,
+              })
+              if (summary.trim()) {
+                autoSummary = summary.trim()
+              }
+            }
+          } catch (err) {
+            console.warn('[aiSlashCommands] /remember auto summary failed, fallback to user only', err)
+          }
+        }
+
+        const summaries = autoSummary ? [userSummary, autoSummary] : [userSummary]
+
+        try {
+          enqueueSessionDigestFromChat({
+            docPath,
+            summaries,
+          })
+          console.log('[aiSlashCommands] /remember enqueued SessionDigest for docPath:', docPath)
+          if (ctx.showModal) {
+            if (autoSummary) {
+              ctx.showModal('已将你手写摘要及自动总结一起加入 Global Memory 队列。')
+            } else {
+              ctx.showModal('已将你手写的摘要加入 Global Memory 队列（自动总结失败，未加入）。')
+            }
+          }
+        } catch (e) {
+          console.error('[aiSlashCommands] failed to enqueue SessionDigest from /remember', e)
+        }
+
+        return
+      }
+
+      // 情况二：无参数，纯自动摘要
+      if (!getMessages) {
         if (ctx.showModal) {
-          ctx.showModal('请在 /remember 后输入摘要内容，例如：/remember 本次会话的要点…')
-        } else {
-          console.warn('[aiSlashCommands] /remember requires non-empty summary text, ignored')
+          ctx.showModal('当前会话内容太少，无法生成摘要。')
+        }
+        console.warn('[aiSlashCommands] /remember auto summary requested but getRecentMessagesForDigest is not available')
+        return
+      }
+
+      const messages = getMessages(30)
+      if (!messages.length) {
+        if (ctx.showModal) {
+          ctx.showModal('当前会话内容太少，无法生成摘要。')
         }
         return
       }
 
       try {
-        enqueueSessionDigestFromChatSummary({
-          docPath,
-          summary: summaryText,
-        })
-        console.log('[aiSlashCommands] /remember enqueued SessionDigest for docPath:', docPath)
-        if (ctx.showModal) {
-          ctx.showModal('已将当前文档摘要加入 Global Memory 待学习队列')
+        const autoSummary = (await buildAutoDigestSummaryForCurrentChat({ docPath, messages })).trim()
+        if (!autoSummary) {
+          if (ctx.showModal) {
+            ctx.showModal('自动总结结果为空，未加入 Global Memory。')
+          }
+          return
         }
-      } catch (e) {
-        console.error('[aiSlashCommands] failed to enqueue SessionDigest from /remember', e)
+
+        enqueueSessionDigestFromChat({
+          docPath,
+          summaries: [autoSummary],
+          source: 'chat-remember-auto',
+        })
+        console.log('[aiSlashCommands] /remember enqueued auto SessionDigest for docPath:', docPath)
+        if (ctx.showModal) {
+          ctx.showModal('已根据当前会话生成摘要并加入 Global Memory 队列。')
+        }
+      } catch (err) {
+        console.error('[aiSlashCommands] /remember auto summary failed', err)
+        if (ctx.showModal) {
+          ctx.showModal('自动总结当前会话失败，请稍后重试。')
+        }
       }
     },
   },

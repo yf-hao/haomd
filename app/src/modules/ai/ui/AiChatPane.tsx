@@ -64,6 +64,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
     uploadFiles,
     removeAttachment,
     isUploading,
+    getRecentMessagesForDigest,
   } = useAiChatSession({
     sessionKey,
     entryMode,
@@ -205,6 +206,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
       docPath: currentFilePath ?? undefined,
       runAppCommand: commandBridge?.runAppCommand,
       showModal: (message: string) => setSlashModalMessage(message),
+      getRecentMessagesForDigest: getRecentMessagesForDigest,
     })
     if (handled === 'handled') {
       return

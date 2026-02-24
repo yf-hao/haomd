@@ -75,7 +75,14 @@ export function saveUserProfile(profile: UserProfile | null): void {
 
 export function loadGlobalMemoryItems(): GlobalMemoryItem[] {
   const state = loadGlobalMemoryState()
-  return state.items
+  const rawItems = Array.isArray(state.items) ? state.items : []
+  return rawItems
+    .filter((item): item is GlobalMemoryItem => !!item && typeof item === 'object')
+    .map((item) => ({
+      ...item,
+      sourceDocs: Array.isArray(item.sourceDocs) ? item.sourceDocs : [],
+      sourceSessions: Array.isArray(item.sourceSessions) ? item.sourceSessions : [],
+    }))
 }
 
 export function saveGlobalMemoryItems(items: GlobalMemoryItem[]): void {
