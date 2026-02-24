@@ -156,6 +156,7 @@ export function WorkspaceShell({
   const [pdfRecent, setPdfRecent] = useState<RecentFile[]>([])
   const [pdfRecentLoading, setPdfRecentLoading] = useState(false)
   const [pdfRecentError, setPdfRecentError] = useState<string | null>(null)
+  const [pdfNotes, setPdfNotes] = useState<Record<string, string>>({})
   const isProgrammaticScrollRef = useRef(false)
   const sidebarResizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
 
@@ -682,6 +683,44 @@ export function WorkspaceShell({
     markDirty()
     updateActiveContent(val)
   }, [markdown, hugeDocState, hugeDocEnabled, markDirty, updateActiveContent])
+
+  // 当前激活的 PDF 文件路径（仅在 isPdfActive 时有值）
+  const activePdfPath = isPdfActive ? activeTab?.path ?? null : null
+
+  // 统一决定编辑器里展示的内容：
+  // - Markdown 标签：走原来的 hugeDoc/markdown 逻辑
+  // - PDF 标签：按路径从 pdfNotes 中取笔记
+  const editorMarkdown = useMemo(() => {
+    if (isPdfActive) {
+      if (!activePdfPath) return ''
+      return pdfNotes[activePdfPath] ?? ''
+    }
+
+    if (hugeDocEnabled && hugeDocState?.enabled && hugeDocState.currentChunk) {
+      return hugeDocState.currentChunk.value
+    }
+
+    return markdown
+  }, [isPdfActive, activePdfPath, pdfNotes, hugeDocEnabled, hugeDocState, markdown])
+
+  // 统一的编辑器 onChange：
+  // - PDF 标签：只更新 pdfNotes，不碰 markdown/tab 内容
+  // - Markdown 标签：沿用原有 handleMarkdownChange
+  const handleEditorChange = useCallback(
+    (val: string) => {
+      if (isPdfActive) {
+        if (!activePdfPath) return
+        setPdfNotes((prev) => {
+          if (prev[activePdfPath] === val) return prev
+          return { ...prev, [activePdfPath]: val }
+        })
+        return
+      }
+
+      handleMarkdownChange(val)
+    },
+    [isPdfActive, activePdfPath, handleMarkdownChange],
+  )
 
   // Register AI Editor handlers
   useEffect(() => {
@@ -1591,50 +1630,87 @@ export function WorkspaceShell({
                 </>
               )}
               <section className="pane-group editor-preview-group" style={{ gridTemplateColumns }} ref={workspaceRef}>
-                {isPdfActive ? (
-                  <section className="pane" style={{ gridColumn: '1/-1' }}>
-                    <Suspense fallback={<div className="pdf-viewer" />}>
-                      {activeTab?.path && <PdfViewerLazy filePath={activeTab.path} />}
-                    </Suspense>
-                  </section>
-                ) : (
-                  <>
-                    <section className="pane" style={effectiveLayout === 'preview-only' ? { display: 'none' } : effectiveLayout === 'preview-left' ? { gridColumn: '2/3' } : effectiveLayout === 'preview-right' ? { gridColumn: '1/2' } : { gridColumn: '1/-1' }}>
-                      <Suspense fallback={<div className="code-editor" />}>
-                        <EditorPaneLazy
-                          markdown={hugeDocState?.enabled && hugeDocState.currentChunk && hugeDocEnabled ? hugeDocState.currentChunk.value : markdown}
-                          onChange={handleMarkdownChange}
-                          onCursorChange={handleCursorChange}
-                          showPreview={showPreview}
-                          setShowPreview={setShowPreview}
-                          editorViewRef={editorViewRef}
-                          onFoldRegionsChange={setFoldRegions}
-                          focusRequest={focusRequest}
-                          onFocusHandled={() => setFocusRequest(null)}
-                          onProgrammaticScrollStart={() => { isProgrammaticScrollRef.current = true }}
-                          onProgrammaticScrollEnd={() => { isProgrammaticScrollRef.current = false }}
-                        />
-                      </Suspense>
-                    </section>
-                    {isPreviewVisible && (
-                      <Suspense fallback={<section className="pane preview"><div className="preview-body" /></section>}>
-                        <PreviewPaneLazy
-                          value={previewValue}
-                          activeLine={previewActiveLine}
-                          previewWidth={previewWidthForRender}
-                          effectiveLayout={effectiveLayout}
-                          filePath={filePath}
-                          foldRegions={foldRegions}
-                          onPreviewLineClick={handlePreviewLineClick}
-                        />
-                      </Suspense>
+                <section
+                  className="pane"
+                  style={
+                    effectiveLayout === 'preview-only'
+                      ? { display: 'none' }
+                      : effectiveLayout === 'preview-left'
+                        ? { gridColumn: '2/3' }
+                        : effectiveLayout === 'preview-right'
+                          ? { gridColumn: '1/2' }
+                          : { gridColumn: '1/-1' }
+                  }
+                >
+                  <Suspense fallback={<div className="code-editor" />}>
+                    <EditorPaneLazy
+                      markdown={editorMarkdown}
+                      onChange={handleEditorChange}
+                      onCursorChange={handleCursorChange}
+                      showPreview={showPreview}
+                      setShowPreview={setShowPreview}
+                      editorViewRef={editorViewRef}
+                      onFoldRegionsChange={setFoldRegions}
+                      focusRequest={focusRequest}
+                      onFocusHandled={() => setFocusRequest(null)}
+                      onProgrammaticScrollStart={() => { isProgrammaticScrollRef.current = true }}
+                      onProgrammaticScrollEnd={() => { isProgrammaticScrollRef.current = false }}
+                    />
+                  </Suspense>
+                </section>
+
+                {isPreviewVisible && (
+                  <Suspense
+                    fallback={(
+                      <section
+                        className="pane preview"
+                        style={
+                          effectiveLayout === 'preview-only'
+                            ? { gridColumn: '1 / -1', gridRow: '1 / 2' }
+                            : effectiveLayout === 'preview-left'
+                              ? { gridColumn: '1 / 2', gridRow: '1 / 2' }
+                              : effectiveLayout === 'preview-right'
+                                ? { gridColumn: '2 / 3', gridRow: '1 / 2' }
+                                : undefined
+                        }
+                      >
+                        <div className="preview-body" />
+                      </section>
                     )}
-                    {(effectiveLayout === 'preview-left' || effectiveLayout === 'preview-right') && (
-                      <div className={`divider-hotzone ${dragging ? 'active' : ''}`} style={{ left: effectiveLayout === 'preview-left' ? `${previewWidthForRender}%` : `${100 - previewWidthForRender}%` }} onMouseDown={startDragging}>
-                        <div className="divider-rail"><span className="divider-handle" /></div>
-                      </div>
+                  >
+                    {isPdfActive ? (
+                      <section
+                        className="pane preview"
+                        style={
+                          effectiveLayout === 'preview-only'
+                            ? { gridColumn: '1 / -1', gridRow: '1 / 2' }
+                            : effectiveLayout === 'preview-left'
+                              ? { gridColumn: '1 / 2', gridRow: '1 / 2' }
+                              : effectiveLayout === 'preview-right'
+                                ? { gridColumn: '2 / 3', gridRow: '1 / 2' }
+                                : undefined
+                        }
+                      >
+                        {activeTab?.path && <PdfViewerLazy filePath={activeTab.path} />}
+                      </section>
+                    ) : (
+                      <PreviewPaneLazy
+                        value={previewValue}
+                        activeLine={previewActiveLine}
+                        previewWidth={previewWidthForRender}
+                        effectiveLayout={effectiveLayout}
+                        filePath={filePath}
+                        foldRegions={foldRegions}
+                        onPreviewLineClick={handlePreviewLineClick}
+                      />
                     )}
-                  </>
+                  </Suspense>
+                )}
+
+                {(effectiveLayout === 'preview-left' || effectiveLayout === 'preview-right') && (
+                  <div className={`divider-hotzone ${dragging ? 'active' : ''}`} style={{ left: effectiveLayout === 'preview-left' ? `${previewWidthForRender}%` : `${100 - previewWidthForRender}%` }} onMouseDown={startDragging}>
+                    <div className="divider-rail"><span className="divider-handle" /></div>
+                  </div>
                 )}
               </section>
               {aiChatMode === 'docked' && aiChatOpen && aiChatState && aiChatDockSide === 'right' && (
