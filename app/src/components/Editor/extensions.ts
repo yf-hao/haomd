@@ -53,8 +53,6 @@ const baseTheme = EditorView.theme(
     '.cm-gutter .cm-activeLineGutter': {
       // 比原来更亮、更实一些，方便一眼看到当前行
       backgroundColor: 'rgba(56, 189, 248, 0.28)', // #38bdf8 @ 28%
-      // 在 gutter 右侧加一条绿色竖线
-      borderRight: '2px solid #22c55e',
     },
     // 光标所在行：折叠 gutter（cm-foldGutter）这一列的右侧画绿色竖线
     '.cm-gutter.cm-foldGutter .cm-activeLineGutter': {

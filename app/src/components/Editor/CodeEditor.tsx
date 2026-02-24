@@ -21,7 +21,14 @@ export function CodeEditor(props: Readonly<CodeEditorProps>) {
 
   const mergedExtensions = useMemo(() => {
     if (extensions && extensions.length) return extensions
-    return createExtensions({ onCursorChange, readOnly, onFoldRegionsChange } as EditorOptions)
+    // 显式开启行号和当前行高亮，避免默认值被未来改动影响
+    return createExtensions({
+      onCursorChange,
+      readOnly,
+      onFoldRegionsChange,
+      showLineNumbers: true,
+      showActiveLine: true,
+    } as EditorOptions)
   }, [extensions, onCursorChange, readOnly, onFoldRegionsChange])
 
   return (
