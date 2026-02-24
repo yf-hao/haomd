@@ -365,17 +365,131 @@
   box-sizing: border-box;
 }
 
+/* PDF 文本层：叠加在 canvas 之上的真实 DOM 文本，用于选择/复制 */
+.pdf-text-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  color: transparent; /* 默认不干扰视觉，只在选择时高亮 */
+}
+
+.pdf-text-layer ::selection {
+  background: rgba(96, 165, 250, 0.35);
+}
+
 .pdf-viewer-sidebar {
-  width: 220px;
-  min-width: 200px;
-  max-width: 260px;
+  width: 80px;
+  min-width: 72px;
+  max-width: 96px;
   border-left: 1px solid rgba(51, 65, 85, 0.8);
   background: linear-gradient(to bottom, rgba(15, 23, 42, 0.98), rgba(15, 23, 42, 0.94));
-  padding: 16px 12px;
+  padding: 16px 8px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 右侧 PDF 导航栏：垂直工具条布局 */
+.pdf-toolbar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: 16px;
+}
+
+.pdf-toolbar-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.pdf-toolbar-separator {
+  width: 60%;
+  height: 1px;
+  background: rgba(148, 163, 184, 0.3);
+}
+
+/* 页码显示：当前页大号胶囊 + 总页数文本 */
+.pdf-page-current-wrapper {
+  display: flex;
+  justify-content: center;
+}
+
+.pdf-page-input-pill {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  background: radial-gradient(circle at 0% 0%, rgba(30, 64, 175, 0.4), rgba(15, 23, 42, 0.98));
+  color: #e5e7eb;
+  font-size: 14px;
+  text-align: center;
+  outline: none;
+}
+
+.pdf-page-input-pill::placeholder {
+  color: #6b7280;
+}
+
+.pdf-page-total-text {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+/* 通用圆角图标按钮 */
+.pdf-icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: radial-gradient(circle at 0% 0%, rgba(37, 99, 235, 0.3), rgba(15, 23, 42, 0.98));
+  color: #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  font-size: 16px;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease, color 0.15s ease, opacity 0.15s ease;
+}
+
+/* 恢复实际大小：用一个小页面图标替代“100%”文字 */
+.pdf-icon-btn--zoom-reset {
+  font-size: 0;
+}
+
+.pdf-icon-btn--zoom-reset .pdf-icon-glyph {
+  display: block;
+  width: 16px;
+  height: 12px;
+  border-radius: 3px;
+  border: 2px solid #e5e7eb;
+}
+
+.pdf-icon-btn:hover:not(:disabled) {
+  background: radial-gradient(circle at 0% 0%, rgba(59, 130, 246, 0.5), rgba(15, 23, 42, 0.98));
+  border-color: rgba(59, 130, 246, 0.85);
+  transform: translateY(-0.5px);
+}
+
+.pdf-icon-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.pdf-zoom-percent {
+  font-size: 12px;
+  color: #e5e7eb;
+}
+
+.pdf-zoom-icon-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
 }
 
 .pdf-page-controls {

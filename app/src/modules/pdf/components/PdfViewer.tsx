@@ -164,76 +164,82 @@ export function PdfViewer({ filePath }: PdfViewerProps) {
         </div>
       </div>
       <div className="pdf-viewer-sidebar">
-        <div className="pdf-page-controls">
-          <button
-            type="button"
-            className="pdf-page-btn"
-            onClick={handlePrev}
-            disabled={currentPage <= 1}
-          >
-            上一页
-          </button>
-          <button
-            type="button"
-            className="pdf-page-btn"
-            onClick={handleNext}
-            disabled={currentPage >= pageCount}
-          >
-            下一页
-          </button>
-          <div className="pdf-page-jump">
-            <span className="pdf-page-label">页码</span>
-            <div className="pdf-page-input-group">
+        <div className="pdf-toolbar">
+          <div className="pdf-toolbar-section pdf-toolbar-pages">
+            <div className="pdf-page-current-wrapper">
               <input
                 type="text"
-                className="pdf-page-input"
+                className="pdf-page-input-pill"
                 value={pageInput}
                 onChange={handlePageInputChange}
                 onBlur={handlePageInputBlur}
                 onKeyDown={handlePageInputKeyDown}
                 inputMode="numeric"
               />
-              <span className="pdf-page-total">/ {pageCount}</span>
             </div>
+            <div className="pdf-page-total-text">{pageCount}</div>
+            <button
+              type="button"
+              className="pdf-icon-btn"
+              onClick={handlePrev}
+              disabled={currentPage <= 1}
+              aria-label="上一页"
+            >
+              ▲
+            </button>
+            <button
+              type="button"
+              className="pdf-icon-btn"
+              onClick={handleNext}
+              disabled={currentPage >= pageCount}
+              aria-label="下一页"
+            >
+              ▼
+            </button>
           </div>
 
-          <div className="pdf-zoom-controls">
-            <span className="pdf-page-label">缩放</span>
-            <div className="pdf-zoom-row">
+          <div className="pdf-toolbar-separator" />
+
+          <div className="pdf-toolbar-section pdf-toolbar-zoom">
+            <button
+              type="button"
+              className="pdf-icon-btn pdf-icon-btn--zoom-reset"
+              onClick={handleZoomReset}
+              disabled={Math.abs(scale - 1) < 0.001}
+              aria-label="恢复实际大小"
+            >
+              <span className="pdf-icon-glyph" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="pdf-icon-btn"
+              onClick={handleZoomFitWidth}
+              disabled={!basePageWidth}
+              aria-label="适配宽度"
+            >
+              ⤢
+            </button>
+            <div className="pdf-zoom-percent">{zoomPercent}%</div>
+            <div className="pdf-zoom-icon-row">
               <button
                 type="button"
-                className="pdf-zoom-btn"
-                onClick={handleZoomOut}
-                disabled={scale <= ZOOM_MIN}
-              >
-                -
-              </button>
-              <span className="pdf-zoom-value">{zoomPercent}%</span>
-              <button
-                type="button"
-                className="pdf-zoom-btn"
+                className="pdf-icon-btn"
                 onClick={handleZoomIn}
                 disabled={scale >= ZOOM_MAX}
+                aria-label="放大"
               >
                 +
               </button>
+              <button
+                type="button"
+                className="pdf-icon-btn"
+                onClick={handleZoomOut}
+                disabled={scale <= ZOOM_MIN}
+                aria-label="缩小"
+              >
+                -
+              </button>
             </div>
-            <button
-              type="button"
-              className="pdf-zoom-fit"
-              onClick={handleZoomFitWidth}
-              disabled={!basePageWidth}
-            >
-              适配宽度
-            </button>
-            <button
-              type="button"
-              className="pdf-zoom-reset"
-              onClick={handleZoomReset}
-              disabled={Math.abs(scale - 1) < 0.001}
-            >
-              实际大小 100%
-            </button>
           </div>
         </div>
       </div>

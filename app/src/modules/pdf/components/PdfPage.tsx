@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PDFDocumentProxy } from '../hooks/usePdfDocument'
 import { renderPage } from '../utils/pdfRender'
+import { PdfTextLayer } from './PdfTextLayer'
 
 export interface PdfPageProps {
   pdfDocument: PDFDocumentProxy
@@ -68,12 +69,17 @@ export function PdfPage({ pdfDocument, pageNumber, scale, style }: PdfPageProps)
     <div
       className="pdf-page"
       style={{
+        position: 'relative',
         width: size.width,
         height: size.height,
         ...style,
       }}
     >
+      {/* 底层：位图渲染层 */}
       <canvas ref={canvasRef} style={{ width: '100%', height: '100%' }} />
+
+      {/* 叠加：文本层，用于选择/复制（与 canvas 完全重叠） */}
+      <PdfTextLayer pdfDocument={pdfDocument} pageNumber={pageNumber} scale={scale} />
     </div>
   )
 }
