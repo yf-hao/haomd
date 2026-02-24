@@ -68,9 +68,6 @@ export function PdfPage({ pdfDocument, pageNumber, scale, style }: PdfPageProps)
     <div
       className="pdf-page"
       style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
         width: size.width,
         height: size.height,
         ...style,
