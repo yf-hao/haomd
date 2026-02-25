@@ -115,6 +115,8 @@
   max-height: 720px;
   overflow-y: auto;
   padding-bottom: 30px;
+  display: flex;
+  flex-direction: column;
 }
 
 /* AI Chat 额外拖拽 handle：底部 + 左右两侧 */
@@ -599,10 +601,8 @@
   height: 20px;
   border-radius: 50%;
   /* 使用 conic-gradient 实现一半白一半灰 */
-  background: conic-gradient(
-    #e5e7eb 0deg 180deg,
-    rgba(148, 163, 184, 0.4) 180deg 360deg
-  );
+  background: conic-gradient(#e5e7eb 0deg 180deg,
+      rgba(148, 163, 184, 0.4) 180deg 360deg);
   /* 添加中心空洞形成圆环效果 */
   mask: radial-gradient(circle, transparent 45%, black 50%);
   -webkit-mask: radial-gradient(circle, transparent 45%, black 50%);
@@ -770,6 +770,7 @@ button.ghost.ghost-subtle:hover {
   background: rgba(15, 23, 42, 0.5);
   flex-wrap: wrap;
   gap: 8px;
+  min-height: 44px;
 }
 
 .ai-chat-input-tools-left {
@@ -957,13 +958,36 @@ button.ghost.ghost-subtle:hover {
 }
 
 .ai-chat-message {
-  padding: 4px 2px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  max-width: 92%;
+  position: relative;
+  line-height: 1.5;
+}
+
+.ai-chat-message-user {
+  align-self: flex-end;
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  margin-left: auto;
+  color: #e5edff;
+}
+
+.ai-chat-message-assistant {
+  align-self: flex-start;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  margin-right: auto;
+  color: #e8ecf5;
+}
+
+.ai-chat-message-content {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .ai-chat-message+.ai-chat-message {
-  border-top: 1px solid rgba(30, 64, 175, 0.5);
-  margin-top: 4px;
-  padding-top: 8px;
+  margin-top: 12px;
 }
 
 .ai-chat-message-actions {

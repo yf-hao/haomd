@@ -1,0 +1,539 @@
+  display: grid;
+  column-gap: 0;
+  row-gap: 12px;
+  align-items: stretch;
+  min-height: 0;
+}
+
+.ai-chat-pane {
+  /* Width controlled by grid */
+  width: 100%;
+  height: 100%;
+}
+
+.ai-chat-pane-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.96);
+}
+
+.ai-chat-pane-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ai-chat-pane-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Dock 模式下的 AI Chat 布局：上方消息滚动，下方输入固定 */
+.ai-chat-pane-body .ai-chat-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex: 1;
+  min-height: 0;
+}
+
+.ai-chat-pane-body .ai-chat-messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  max-height: none;
+  padding-bottom: 30px;
+  /* Dock 模式下不限制高度，由 pane 自己决定 */
+}
+
+/* Dock 模式下去掉模态内容默认底部外边距，避免发送按钮下方空隙过大 */
+.ai-chat-pane-body .modal-content {
+  margin-bottom: 0;
+}
+
+/* Dock 模式下的关闭按钮使用内联定位，避免被 pane 的 overflow 裁切 */
+.ai-chat-pane-header .ai-chat-close-button {
+  position: static;
+  transform: none;
+  /* 去掉浮动窗口里的垂直位移 */
+  margin-left: auto;
+  /* 在 Dock 头部里靠右排列 */
+}
+
+.floating-toggle {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 5;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e8ecf5;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  backdrop-filter: blur(6px);
+  transition: all 0.2s ease;
+}
+
+.floating-toggle:hover,
+.floating-toggle:focus-visible {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  outline: none;
+  box-shadow: 0 0 12px rgba(92, 124, 250, 0.35);
+}
+
+.editor {
+  width: 100%;
+  height: 100%;
+  flex: 1;
+  padding: 14px;
+  border: none;
+  outline: none;
+  resize: none;
+  color: #e8ecf5;
+  background: transparent;
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.code-editor {
+  flex: 1;
+  min-height: 0;
+}
+
+.code-editor .cm-editor {
+  height: 100%;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.sidebar-context-menu {
+  position: fixed;
+  z-index: 2147483647;
+  min-width: 180px;
+  padding: 4px 0;
+  background: rgba(15, 23, 42, 0.98);
+  border-radius: 6px;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(148, 163, 184, 0.35);
+  border: 1px solid rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(12px);
+}
+
+.sidebar-context-menu button {
+  display: block;
+  width: 100%;
+  padding: 4px 12px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font-size: 13px;
+  line-height: 22px;
+  color: #e5e7eb;
+  cursor: default;
+}
+
+.sidebar-context-menu button:hover,
+.sidebar-context-menu button.active {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.sidebar-context-menu button:focus {
+  outline: none;
+}
+
+/* Modal button styles */
+.modal-btn {
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 80px;
+}
+
+.modal-btn:focus-visible,
+.modal-btn:focus {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.5);
+}
+
+.modal-btn.primary {
+  border: 1px solid #5c7cfa;
+  background: linear-gradient(135deg, #5c7cfa, #62c3ff);
+  color: #0a0c12;
+}
+
+.modal-btn.secondary {
+  background: rgba(148, 163, 184, 0.24);
+  color: #e5e7eb;
+}
+
+.modal-btn.tertiary {
+  background: transparent;
+  color: #e5e7eb;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.modal-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.modal-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+/* Modal Styles */
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.modal {
+  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 12px;
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.8),
+    0 0 0 1px rgba(148, 163, 184, 0.2);
+  backdrop-filter: blur(12px);
+  min-width: 360px;
+  max-width: 480px;
+  padding: 22px 24px 20px;
+  animation: slideIn 0.2s ease;
+}
+
+.modal-confirm {
+  min-width: 240px;
+  max-width: 340px;
+  padding: 20px 24px 18px;
+}
+
+.modal-confirm .modal-title {
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.modal-confirm .modal-content {
+  margin-bottom: 18px;
+}
+
+.modal-confirm .modal-message {
+  text-align: center;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(-20px) scale(0.95);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+.modal-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #e8ecf5;
+  margin-bottom: 6px;
+}
+
+.modal-content {
+  margin-bottom: 24px;
+}
+
+.modal-message {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #c4ccee;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.modal-actions-stacked {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.modal-actions-stacked .modal-btn {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+}
+
+.modal-actions-stacked .modal-btn.primary {
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
+  color: #ffffff;
+}
+
+.modal-actions-stacked .modal-btn.secondary {
+  background: rgba(148, 163, 184, 0.24);
+  color: #e5e7eb;
+}
+
+.modal-actions-stacked .modal-btn.tertiary {
+  background: #fff2;
+  color: #e5e7eb;
+}
+
+
+.preview {
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  /* 与编辑区保持一致，在预览末尾预留一段“虚拟空白”，避免最后一行贴底 */
+  padding-bottom: 25vh;
+}
+
+.markdown-body {
+  padding: 5px 10px;
+}
+
+/* AI Chat Send/Stop Button */
+.ai-chat-send-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid rgba(92, 124, 250, 0.3);
+  background: linear-gradient(135deg, #5c7cfa, #62c3ff);
+  color: #0a0c12;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.ai-chat-send-button:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 12px rgba(92, 124, 250, 0.4);
+}
+
+.ai-chat-send-button.loading {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.2);
+}
+
+.ai-chat-send-button.loading:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.4);
+}
+
+/* 纸飞机图标 (CSS Drawing) */
+.ai-chat-icon-paper-plane {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  background-color: #0a0c12;
+  /* Keep plane dark on blue background */
+  clip-path: polygon(0% 0%, 100% 50%, 0% 100%, 25% 50%);
+  transform: rotate(-15deg) translateX(1px);
+}
+
+/* 停止图标 (CSS Drawing) */
+.ai-chat-icon-stop {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  background-color: #ffffff;
+  /* 白色停止图标 */
+  border-radius: 2px;
+}
+
+/* AI Chat Image Attachment Preview */
+.ai-chat-pending-image {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  margin: 4px 12px 0px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ai-chat-pending-image-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.ai-chat-pending-image-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ai-chat-pending-image-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: #e2e8f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+}
+
+.ai-chat-pending-image-hint {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.ai-chat-pending-image-clear {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ai-chat-pending-image-clear:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+/* AI Chat New Attachment Preview Bar */
+.ai-chat-attachment-preview-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.ai-chat-attachment-item {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.ai-chat-attachment-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ai-chat-attachment-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  transition: background 0.2s;
+}
+
+.ai-chat-attachment-remove:hover {
+  background: rgba(239, 68, 68, 0.8);
+}
+
+.ai-chat-attachment-item.uploading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.05);
+  border-style: dashed;
+}
+
+.ai-chat-attachment-loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-top-color: #5c7cfa;
+  border-radius: 50%;
+  animation: ai-spin 0.8s linear infinite;
+}
+
+@keyframes ai-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* AI Chat vision-enabled model highlight */
+.ai-chat-role-select-inline option[data-vision="enabled"] {
+  color: #5ad8a6;
+  font-weight: 500;
+}

@@ -498,19 +498,19 @@ export function WorkspaceShell({
 
   useEffect(() => {
     let cancelled = false
-    ;(async () => {
-      try {
-        const cfg = await getHugeDocSettings()
-        if (cancelled) return
-        // 关闭大文档局部编辑：始终使用整篇文档，不再按 chunk 裁剪编辑器内容
-        setHugeDocEnabled(false)
-        setHugeDocLineThreshold(cfg.lineThreshold)
-        setHugeDocChunkContextLines(cfg.chunkContextLines)
-        setHugeDocChunkMaxLines(cfg.chunkMaxLines)
-      } catch (e) {
-        console.error('[WorkspaceShell] load hugeDoc settings failed, using defaults', e)
-      }
-    })()
+      ; (async () => {
+        try {
+          const cfg = await getHugeDocSettings()
+          if (cancelled) return
+          // 关闭大文档局部编辑：始终使用整篇文档，不再按 chunk 裁剪编辑器内容
+          setHugeDocEnabled(false)
+          setHugeDocLineThreshold(cfg.lineThreshold)
+          setHugeDocChunkContextLines(cfg.chunkContextLines)
+          setHugeDocChunkMaxLines(cfg.chunkMaxLines)
+        } catch (e) {
+          console.error('[WorkspaceShell] load hugeDoc settings failed, using defaults', e)
+        }
+      })()
     return () => {
       cancelled = true
     }
@@ -1538,157 +1538,139 @@ export function WorkspaceShell({
 
   return (
     <AiChatCommandBridgeContext.Provider value={aiChatCommandBridge}>
-    <>
-      {activeLeftPanel === 'files' && (
-        <Sidebar
-          standaloneFiles={sidebar.standaloneFiles} folderRoots={sidebar.folderRoots}
-          treesByRoot={sidebar.treesByRoot} expanded={sidebar.expanded}
-          onToggle={sidebar.toggleNode} onFileClick={openFileFromSidebar}
-          onDirClick={handleDirClick}
-          onContextAction={handleSidebarContextAction} activePath={selectedFolderPath ?? activeTab?.path ?? null}
-          panelWidth={sidebarWidth}
-          highlightedPaths={sidebar.highlightedFiles}
-          onFileVisited={sidebar.markFileVisited}
-          onToolbarNewFileInCurrentFolder={handleToolbarNewFileInCurrentFolder}
-          onToolbarNewFolderInCurrentFolder={handleToolbarNewFolderInCurrentFolder}
-          onToolbarRefreshCurrentFolder={handleToolbarRefreshCurrentFolder}
-          inlineNewFileDir={inlineNewFileDir}
-          onInlineNewFileConfirm={handleInlineNewFileConfirm}
-          onInlineNewFileCancel={handleInlineNewFileCancel}
-          inlineNewFolderDir={inlineNewFolderDir}
-          onInlineNewFolderConfirm={handleInlineNewFolderConfirm}
-          onInlineNewFolderCancel={handleInlineNewFolderCancel}
-        />
-      )}
-      {activeLeftPanel === 'outline' && (
-        <OutlinePanel items={outlineItems} activeId={activeOutlineId} onSelect={handleOutlineSelect} panelWidth={sidebarWidth} />
-      )}
-      {activeLeftPanel === 'pdf' && (
-        <div className="pdf-panel" style={{ width: sidebarWidth }}>
-          <div className="pdf-panel-header">
-            <span>PDF</span>
-          </div>
-          <div className="pdf-panel-content">
-            {pdfRecentLoading && (
-              <p style={{ color: '#9ca3af', padding: '12px', fontSize: '13px' }}>正在加载最近的 PDF...</p>
-            )}
-            {!pdfRecentLoading && pdfRecentError && (
-              <p style={{ color: '#f97373', padding: '12px', fontSize: '13px' }}>{pdfRecentError}</p>
-            )}
-            {!pdfRecentLoading && !pdfRecentError && pdfRecent.length === 0 && (
-              <p style={{ color: '#9ca3af', padding: '12px', fontSize: '13px' }}>
-                暂无最近 PDF。可以通过菜单 File → Open 打开 PDF 文件。
-              </p>
-            )}
-            {!pdfRecentLoading && !pdfRecentError && pdfRecent.length > 0 && (
-              <ul className="pdf-recent-list">
-                {pdfRecent.map((item) => {
-                  const name = item.displayName || item.path.split(/[/\\]/).pop() || item.path
-                  const date = new Date(item.lastOpenedAt).toLocaleString()
-                  const isActive = activeTab?.path === item.path
-                  return (
-                    <li
-                      key={item.path}
-                      className={`pdf-recent-item ${isActive ? 'active' : ''}`}
-                      onClick={() => { void openRecentFileInNewTab(item.path) }}
-                    >
-                      <div className="pdf-recent-title">{name}</div>
-                      <div className="pdf-recent-meta">{date}</div>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-          </div>
-        </div>
-      )}
-      {(activeLeftPanel === 'files' || activeLeftPanel === 'outline' || activeLeftPanel === 'pdf') && (
-        <div className={`sidebar-resizer ${isSidebarResizing ? 'active' : ''}`} onMouseDown={handleSidebarResizeStart} />
-      )}
-
-      <div className="workspace-column">
-        {tabs.length === 0 ? (
-          <Welcome
-            onNewFile={() => createTab()}
-            onOpenFile={() => openFile()}
-            onOpenAiChat={() => {
-              // 在没有任何标签时，优先使用浮窗模式打开 AI Chat
-              if (aiChatMode !== 'floating') {
-                setAiChatMode('floating')
-              }
-              openAiChatDialog({ entryMode: 'chat' })
-            }}
+      <>
+        {activeLeftPanel === 'files' && (
+          <Sidebar
+            standaloneFiles={sidebar.standaloneFiles} folderRoots={sidebar.folderRoots}
+            treesByRoot={sidebar.treesByRoot} expanded={sidebar.expanded}
+            onToggle={sidebar.toggleNode} onFileClick={openFileFromSidebar}
+            onDirClick={handleDirClick}
+            onContextAction={handleSidebarContextAction} activePath={selectedFolderPath ?? activeTab?.path ?? null}
+            panelWidth={sidebarWidth}
+            highlightedPaths={sidebar.highlightedFiles}
+            onFileVisited={sidebar.markFileVisited}
+            onToolbarNewFileInCurrentFolder={handleToolbarNewFileInCurrentFolder}
+            onToolbarNewFolderInCurrentFolder={handleToolbarNewFolderInCurrentFolder}
+            onToolbarRefreshCurrentFolder={handleToolbarRefreshCurrentFolder}
+            inlineNewFileDir={inlineNewFileDir}
+            onInlineNewFileConfirm={handleInlineNewFileConfirm}
+            onInlineNewFileCancel={handleInlineNewFileCancel}
+            inlineNewFolderDir={inlineNewFolderDir}
+            onInlineNewFolderConfirm={handleInlineNewFolderConfirm}
+            onInlineNewFolderCancel={handleInlineNewFolderCancel}
           />
-        ) : (
-          <>
-            <TabBar tabs={tabs} activeId={activeId} onTabClick={setActiveTab} onTabClose={closeTabWithAiSession} onRequestSaveAndClose={handleTabSaveAndClose} />
-            <main className={`workspace ${dragging ? 'dragging' : ''}`} style={{ gridTemplateColumns: outerGridTemplateColumns }}>
-              {aiChatMode === 'docked' && aiChatOpen && aiChatState && (
-                <>
-                  {aiChatDockSide === 'left' && (
-                    <AiChatPane
-                      sessionKey={aiChatSessionKey}
-                      entryMode={aiChatState.entryMode}
-                      initialContext={aiChatState.initialContext}
-                      onClose={closeAiChatDialog}
-                      currentFilePath={filePath}
-                      sourceTabId={activeTab?.id ?? null}
-                    />
-                  )}
-                  <div className="divider-hotzone vertical" style={{ position: 'absolute', left: aiChatDockSide === 'left' ? aiChatWidth : `calc(100% - ${aiChatWidth}px)`, height: '100%', zIndex: 10, cursor: 'col-resize' }} onMouseDown={handleAiChatResizeStart}>
-                    <div className="divider-rail"><span className="divider-handle" /></div>
-                  </div>
-                </>
+        )}
+        {activeLeftPanel === 'outline' && (
+          <OutlinePanel items={outlineItems} activeId={activeOutlineId} onSelect={handleOutlineSelect} panelWidth={sidebarWidth} />
+        )}
+        {activeLeftPanel === 'pdf' && (
+          <div className="pdf-panel" style={{ width: sidebarWidth }}>
+            <div className="pdf-panel-header">
+              <span>PDF</span>
+            </div>
+            <div className="pdf-panel-content">
+              {pdfRecentLoading && (
+                <p style={{ color: '#9ca3af', padding: '12px', fontSize: '13px' }}>正在加载最近的 PDF...</p>
               )}
-              <section className="pane-group editor-preview-group" style={{ gridTemplateColumns }} ref={workspaceRef}>
-                <section
-                  className="pane"
-                  style={
-                    effectiveLayout === 'preview-only'
-                      ? { display: 'none' }
-                      : effectiveLayout === 'preview-left'
-                        ? { gridColumn: '2/3' }
-                        : effectiveLayout === 'preview-right'
-                          ? { gridColumn: '1/2' }
-                          : { gridColumn: '1/-1' }
-                  }
-                >
-                  <Suspense fallback={<div className="code-editor" />}>
-                    <EditorPaneLazy
-                      markdown={editorMarkdown}
-                      onChange={handleEditorChange}
-                      onCursorChange={handleCursorChange}
-                      showPreview={showPreview}
-                      setShowPreview={setShowPreview}
-                      editorViewRef={editorViewRef}
-                      onFoldRegionsChange={setFoldRegions}
-                      focusRequest={focusRequest}
-                      onFocusHandled={() => setFocusRequest(null)}
-                      onProgrammaticScrollStart={() => { isProgrammaticScrollRef.current = true }}
-                      onProgrammaticScrollEnd={() => { isProgrammaticScrollRef.current = false }}
-                    />
-                  </Suspense>
-                </section>
-
-                {isPreviewVisible && (
-                  <Suspense
-                    fallback={(
-                      <section
-                        className="pane preview"
-                        style={
-                          effectiveLayout === 'preview-only'
-                            ? { gridColumn: '1 / -1', gridRow: '1 / 2' }
-                            : effectiveLayout === 'preview-left'
-                              ? { gridColumn: '1 / 2', gridRow: '1 / 2' }
-                              : effectiveLayout === 'preview-right'
-                                ? { gridColumn: '2 / 3', gridRow: '1 / 2' }
-                                : undefined
-                        }
+              {!pdfRecentLoading && pdfRecentError && (
+                <p style={{ color: '#f97373', padding: '12px', fontSize: '13px' }}>{pdfRecentError}</p>
+              )}
+              {!pdfRecentLoading && !pdfRecentError && pdfRecent.length === 0 && (
+                <p style={{ color: '#9ca3af', padding: '12px', fontSize: '13px' }}>
+                  暂无最近 PDF。可以通过菜单 File → Open 打开 PDF 文件。
+                </p>
+              )}
+              {!pdfRecentLoading && !pdfRecentError && pdfRecent.length > 0 && (
+                <ul className="pdf-recent-list">
+                  {pdfRecent.map((item) => {
+                    const name = item.displayName || item.path.split(/[/\\]/).pop() || item.path
+                    const date = new Date(item.lastOpenedAt).toLocaleString()
+                    const isActive = activeTab?.path === item.path
+                    return (
+                      <li
+                        key={item.path}
+                        className={`pdf-recent-item ${isActive ? 'active' : ''}`}
+                        onClick={() => { void openRecentFileInNewTab(item.path) }}
                       >
-                        <div className="preview-body" />
-                      </section>
+                        <div className="pdf-recent-title">{name}</div>
+                        <div className="pdf-recent-meta">{date}</div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+          </div>
+        )}
+        {(activeLeftPanel === 'files' || activeLeftPanel === 'outline' || activeLeftPanel === 'pdf') && (
+          <div className={`sidebar-resizer ${isSidebarResizing ? 'active' : ''}`} onMouseDown={handleSidebarResizeStart} />
+        )}
+
+        <div className="workspace-column">
+          {tabs.length === 0 ? (
+            <Welcome
+              onNewFile={() => createTab()}
+              onOpenFile={() => openFile()}
+              onOpenAiChat={() => {
+                // 在没有任何标签时，优先使用浮窗模式打开 AI Chat
+                if (aiChatMode !== 'floating') {
+                  setAiChatMode('floating')
+                }
+                openAiChatDialog({ entryMode: 'chat' })
+              }}
+            />
+          ) : (
+            <>
+              <TabBar tabs={tabs} activeId={activeId} onTabClick={setActiveTab} onTabClose={closeTabWithAiSession} onRequestSaveAndClose={handleTabSaveAndClose} />
+              <main className={`workspace ${dragging ? 'dragging' : ''}`} style={{ gridTemplateColumns: outerGridTemplateColumns }}>
+                {aiChatMode === 'docked' && aiChatOpen && aiChatState && (
+                  <>
+                    {aiChatDockSide === 'left' && (
+                      <AiChatPane
+                        sessionKey={aiChatSessionKey}
+                        entryMode={aiChatState.entryMode}
+                        initialContext={aiChatState.initialContext}
+                        onClose={closeAiChatDialog}
+                        currentFilePath={filePath}
+                        sourceTabId={activeTab?.id ?? null}
+                      />
                     )}
+                    <div className="divider-hotzone vertical" style={{ position: 'absolute', left: aiChatDockSide === 'left' ? aiChatWidth : `calc(100% - ${aiChatWidth}px)`, height: '100%', zIndex: 100, cursor: 'col-resize' }} onMouseDown={handleAiChatResizeStart}>
+                      <div className="divider-rail"><span className="divider-handle" /></div>
+                    </div>
+                  </>
+                )}
+                <section className="pane-group editor-preview-group" style={{ gridTemplateColumns }} ref={workspaceRef}>
+                  <section
+                    className="pane"
+                    style={
+                      effectiveLayout === 'preview-only'
+                        ? { display: 'none' }
+                        : effectiveLayout === 'preview-left'
+                          ? { gridColumn: '2/3' }
+                          : effectiveLayout === 'preview-right'
+                            ? { gridColumn: '1/2' }
+                            : { gridColumn: '1/-1' }
+                    }
                   >
+                    <Suspense fallback={<div className="code-editor" />}>
+                      <EditorPaneLazy
+                        markdown={editorMarkdown}
+                        onChange={handleEditorChange}
+                        onCursorChange={handleCursorChange}
+                        showPreview={showPreview}
+                        setShowPreview={setShowPreview}
+                        editorViewRef={editorViewRef}
+                        onFoldRegionsChange={setFoldRegions}
+                        focusRequest={focusRequest}
+                        onFocusHandled={() => setFocusRequest(null)}
+                        onProgrammaticScrollStart={() => { isProgrammaticScrollRef.current = true }}
+                        onProgrammaticScrollEnd={() => { isProgrammaticScrollRef.current = false }}
+                      />
+                    </Suspense>
+                  </section>
+
+                  <Suspense fallback={<section className="pane preview"><div className="preview-body" /></section>}>
                     {isPdfActive ? (
                       <section
                         className="pane preview"
@@ -1699,7 +1681,9 @@ export function WorkspaceShell({
                               ? { gridColumn: '1 / 2', gridRow: '1 / 2' }
                               : effectiveLayout === 'preview-right'
                                 ? { gridColumn: '2 / 3', gridRow: '1 / 2' }
-                                : undefined
+                                : effectiveLayout === 'editor-only'
+                                  ? { display: 'none' }
+                                  : undefined
                         }
                       >
                         {activeTab?.path && <PdfViewerLazy filePath={activeTab.path} />}
@@ -1716,67 +1700,66 @@ export function WorkspaceShell({
                       />
                     )}
                   </Suspense>
-                )}
 
-                {(effectiveLayout === 'preview-left' || effectiveLayout === 'preview-right') && (
-                  <div className={`divider-hotzone ${dragging ? 'active' : ''}`} style={{ left: effectiveLayout === 'preview-left' ? `${previewWidthForRender}%` : `${100 - previewWidthForRender}%` }} onMouseDown={startDragging}>
-                    <div className="divider-rail"><span className="divider-handle" /></div>
-                  </div>
+                  {(effectiveLayout === 'preview-left' || effectiveLayout === 'preview-right') && (
+                    <div className={`divider-hotzone ${dragging ? 'active' : ''}`} style={{ left: effectiveLayout === 'preview-left' ? `${previewWidthForRender}%` : `${100 - previewWidthForRender}%` }} onMouseDown={startDragging}>
+                      <div className="divider-rail"><span className="divider-handle" /></div>
+                    </div>
+                  )}
+                </section>
+                {aiChatMode === 'docked' && aiChatOpen && aiChatState && aiChatDockSide === 'right' && (
+                  <AiChatPane
+                    sessionKey={aiChatSessionKey}
+                    entryMode={aiChatState.entryMode}
+                    initialContext={aiChatState.initialContext}
+                    onClose={closeAiChatDialog}
+                    currentFilePath={filePath}
+                    sourceTabId={activeTab?.id ?? null}
+                  />
                 )}
-              </section>
-              {aiChatMode === 'docked' && aiChatOpen && aiChatState && aiChatDockSide === 'right' && (
-                <AiChatPane
-                  sessionKey={aiChatSessionKey}
-                  entryMode={aiChatState.entryMode}
-                  initialContext={aiChatState.initialContext}
-                  onClose={closeAiChatDialog}
-                  currentFilePath={filePath}
-                  sourceTabId={activeTab?.id ?? null}
-                />
-              )}
-            </main>
-          </>
+              </main>
+            </>
+          )}
+        </div>
+
+        {conflictError && (
+          <ConflictModal
+            error={conflictError}
+            onRetrySave={async () => {
+              await save()
+            }}
+            onCancel={() => setConflictError(null)}
+          />
         )}
-      </div>
+        {confirmDialog && <ConfirmDialog title={confirmDialog.title} message={confirmDialog.message} confirmText={confirmDialog.confirmText} cancelText={confirmDialog.cancelText} extraText={confirmDialog.extraText} variant={confirmDialog.variant} onConfirm={confirmDialog.onConfirm} onExtra={confirmDialog.onExtra} onCancel={() => setConfirmDialog(null)} />}
+        {quitConfirmDialog && <ConfirmDialog title={quitConfirmDialog.unsavedCount === 1 ? 'Save changes?' : `Save ${quitConfirmDialog.unsavedCount} files?`} message="Your changes will be lost." confirmText="Save All" cancelText="Cancel" extraText="Don't Save" variant="stacked" onConfirm={quitConfirmDialog.onSaveAll} onExtra={quitConfirmDialog.onQuitWithoutSaving} onCancel={() => setQuitConfirmDialog(null)} />}
+        {aiChatMode === 'floating' && aiChatOpen && aiChatState?.open && (
+          <AiChatDialog
+            open={aiChatOpen}
+            entryMode={aiChatState.entryMode}
+            initialContext={aiChatState.initialContext}
+            onClose={closeAiChatDialog}
+            currentFilePath={filePath}
+            tabId={aiChatState.tabId}
+          />
+        )}
 
-      {conflictError && (
-        <ConflictModal
-          error={conflictError}
-          onRetrySave={async () => {
-            await save()
-          }}
-          onCancel={() => setConflictError(null)}
-        />
-      )}
-      {confirmDialog && <ConfirmDialog title={confirmDialog.title} message={confirmDialog.message} confirmText={confirmDialog.confirmText} cancelText={confirmDialog.cancelText} extraText={confirmDialog.extraText} variant={confirmDialog.variant} onConfirm={confirmDialog.onConfirm} onExtra={confirmDialog.onExtra} onCancel={() => setConfirmDialog(null)} />}
-      {quitConfirmDialog && <ConfirmDialog title={quitConfirmDialog.unsavedCount === 1 ? 'Save changes?' : `Save ${quitConfirmDialog.unsavedCount} files?`} message="Your changes will be lost." confirmText="Save All" cancelText="Cancel" extraText="Don't Save" variant="stacked" onConfirm={quitConfirmDialog.onSaveAll} onExtra={quitConfirmDialog.onQuitWithoutSaving} onCancel={() => setQuitConfirmDialog(null)} />}
-      {aiChatMode === 'floating' && aiChatOpen && aiChatState?.open && (
-        <AiChatDialog
-          open={aiChatOpen}
-          entryMode={aiChatState.entryMode}
-          initialContext={aiChatState.initialContext}
-          onClose={closeAiChatDialog}
-          currentFilePath={filePath}
-          tabId={aiChatState.tabId}
-        />
-      )}
+        {docHistoryState.open && docHistoryState.docPath && (
+          <DocConversationHistoryDialog
+            open={docHistoryState.open}
+            docPath={docHistoryState.docPath}
+            onClose={closeDocHistoryDialog}
+          />
+        )}
 
-      {docHistoryState.open && docHistoryState.docPath && (
-        <DocConversationHistoryDialog
-          open={docHistoryState.open}
-          docPath={docHistoryState.docPath}
-          onClose={closeDocHistoryDialog}
-        />
-      )}
-
-      {globalMemoryState.open && (
-        <GlobalMemoryDialog
-          open={globalMemoryState.open}
-          initialTab={globalMemoryState.initialTab}
-          onClose={closeGlobalMemoryDialog}
-        />
-      )}
-    </>
+        {globalMemoryState.open && (
+          <GlobalMemoryDialog
+            open={globalMemoryState.open}
+            initialTab={globalMemoryState.initialTab}
+            onClose={closeGlobalMemoryDialog}
+          />
+        )}
+      </>
     </AiChatCommandBridgeContext.Provider>
   )
 }
