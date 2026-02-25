@@ -796,6 +796,128 @@ async fn compute_file_hash(path: String) -> Result<String, String> {
 | 100 页 PDF（虚拟滚动） | 120 MB | 快 | 流畅 |
 | 100 页 PDF（虚拟+低精度） | 80 MB | 快 | 流畅 |
 
+## 11. 方案五：针对多页 / 大文档的折中渲染实施方案
+
+> 目标：在 "多页纵向滚动 + 高 DPI 渲染 + 文本选择 / 批注" 的场景下，既保持视口附近页面的清晰度和交互能力，又避免内存和渲染成本随总页数线性爆炸。
+
+### 11.1 设计原则
+
+1. **视口优先**：只保证视口附近的页面是“完全体”（高清 canvas + 文本层 + 批注层），远离视口的页面可以降级甚至只占位。
+2. **渐进加载**：滚动接近某页时再做高质量渲染，远离视口后逐步降级 / 卸载，配合 LRU 避免内存堆积。
+3. **无感切换**：模式切换过程对用户尽量透明，不出现明显的闪烁、模糊或“空白页”停留。
+4. **与现有架构对齐**：复用文档中已有的 `useVirtualPages`、`PdfPage`、`PdfTextLayer` 等抽象，避免大规模重写。
+
+### 11.2 视口感知与虚拟滚动 Hook（`useVirtualPages`）
+
+**目的**：根据滚动位置计算“视口内”和“视口附近”的页码区间，为后续按页分档渲染提供依据。
+
+- **输入参数**：
+  - `pageCount`: 总页数；
+  - `estimatePageHeight`: 估算页高（可用首屏实际测量或固定值 * 当前 scale）；
+  - `bufferPages`: 视口上下缓冲页数（建议 2~3）；
+  - `containerRef`: 指向 `pdf-scroll-container` 的 ref。
+- **输出结构**：
+  - `visibleRange: { start, end }`：真实出现在视口中的页码区间（闭区间）；
+  - `nearbyRange: { start, end }`：`visibleRange` 上下各扩展 `bufferPages` 后的区间；
+  - `totalHeight`: 整个虚拟滚动区域高度，用于撑开滚动条；
+  - `onScroll`: 绑定在 `pdf-scroll-container` 上的滚动处理函数。
+- **实现要点**：
+  - 根据 `scrollTop` / `clientHeight` 估算当前页：`current = floor(scrollTop / estimatePageHeight)`；
+  - `visibleStart = floor(scrollTop / estimatePageHeight)`，`visibleEnd = ceil((scrollTop + clientHeight) / estimatePageHeight) - 1`；
+  - `nearbyStart = max(0, visibleStart - bufferPages)`，`nearbyEnd = min(pageCount - 1, visibleEnd + bufferPages)`；
+  - 对于每一页，后续可通过 `pageIndex` 与 `visibleRange/nearbyRange` 的关系决定渲染模式。
+
+### 11.3 页面质量档位与 `PdfPage` 接口调整
+
+**目的**：为不同距离视口的页面指定不同的渲染策略，控制内存与 CPU 使用。
+
+1. **扩展 `PdfPage` 的 props**：
+   - 新增 `mode: 'high' | 'low' | 'placeholder'`；
+   - 可选新增 `estimatedHeight`，在 `placeholder` 模式下用来撑开高度。
+
+2. **三种模式行为约定**：
+   - `high`（高质量）：
+     - 使用当前 `scale` + `devicePixelRatio` 渲染 canvas（保持清晰度）；
+     - 挂载 `PdfTextLayer`，支持文本选择和后续批注；
+     - 如有批注层（`AnnotationLayer`），也在此模式下渲染；
+     - 用于：`nearbyRange` 内的页面，尤其是 `visibleRange` 内。
+   - `low`（低质量 / 缩略）：
+     - 使用较低 `scaleLow = min(scale, LOW_SCALE_MAX)` 渲染 canvas，或使用预生成的缩略图；
+     - 不挂载 `PdfTextLayer` 和批注层，只提供视觉参考；
+     - 文本选择与批注操作仅在 `high` 模式可用；
+     - 用于：距离视口一定距离但仍可能较快滚动到的页面。
+   - `placeholder`（仅占位）：
+     - 不渲染 canvas / 文本层 / 批注层，仅渲染一个空 div 或“第 N 页”占位；
+     - 高度使用 `estimatedHeight` 或统一页高；
+     - 用于：远离视口的区域（譬如 20 页以外）。
+
+3. **在 `PdfViewer` 中的模式决策**：
+   - 对于每个 `pageIndex`：
+     - 若 `pageIndex` 在 `visibleRange` 内：`mode = 'high'`；
+     - 否则若在 `nearbyRange` 内：`mode = 'low'`；
+     - 否则：`mode = 'placeholder'`。
+   - 提供可调参数：
+     - `HIGH_DISTANCE = 0`（始终只对视口内页面开高质）；
+     - `LOW_BUFFER = bufferPages`；
+     - 后续可以加入“强制高质量页缓存上限”（见 11.4）。
+
+### 11.4 资源管理与 LRU 回收策略
+
+**目的**：防止在快速滚动或大文档场景下高质量页面无限增加，导致内存/显存占用过高。
+
+1. **状态追踪结构**：
+   - 在 `PdfViewer` 内维护 `Map<pageIndex, PageRenderState>`：
+     - `mode: 'high' | 'low' | 'placeholder'`；
+     - `canvasReady: boolean`；
+     - `lastUsedAt: number`（最近进入 `nearbyRange` 或被交互的时间戳）。
+
+2. **容量上限**：
+   - 配置项（可以写在 `config/pdfViewer.ts` 或常量区）：
+     - `MAX_HIGH_PAGES = 5`：允许同时存在的高质量页面数；
+     - `MAX_LOW_PAGES = 20`：允许同时存在的低质量页面数。
+
+3. **回收策略**：
+   - 每次滚动或模式决策后：
+     - 统计当前 `mode = 'high'` 的页面数量，如果超过 `MAX_HIGH_PAGES`：
+       - 按 `lastUsedAt` 从旧到新排序，依次将超出的页面降级为 `low`，并通知对应 `PdfPage` 组件执行 canvas 降级（可选清空或改用低 scale 重渲染）；
+     - 同理对 `mode = 'low'` 做控制，超出 `MAX_LOW_PAGES` 的部分降级为 `placeholder`，并清理 canvas / textLayer DOM：
+       - `canvas.getContext('2d')?.clearRect(...)`；
+       - 将 `canvas.width/height` 置 0；
+       - 清空该页下的 `PdfTextLayer` 容器。
+
+4. **与批注 / 文本选择的配合**：
+   - 批注操作仅允许在 `mode = 'high'` 时触发；
+   - 当某页存在未保存的批注编辑状态时，可暂时将其纳入高质量页面“强制保留列表”，避免被 LRU 立即降级。
+
+### 11.5 渐进式实施步骤
+
+1. **第一阶段：基础虚拟滚动**
+   - 在 `PdfViewer` 中引入 `useVirtualPages`，支持纵向滚动 + `totalHeight` 占位；
+   - 先保持“只渲染 visibleRange 内各页 + 简单 buffer”，所有页均使用当前 `scale` 和 `mode = 'high'`，验证滚动体验和文本选择兼容性。
+
+2. **第二阶段：引入页面档位与 `mode`**
+   - 扩展 `PdfPage` 接口增加 `mode`，在 JSX 中根据 `mode` 决定是否挂载 `PdfTextLayer`、是否用低 scale；
+   - 在 `PdfViewer` 中根据 `visibleRange/nearbyRange` 计算各页的 `mode`，先不做 LRU 限流，只开 `high/low/placeholder` 三档逻辑；
+   - 观察大文档（> 100 页）滚动时的 CPU、内存与首帧时间。
+
+3. **第三阶段：接入资源上限与 LRU 回收**
+   - 实现 `PageRenderState` 和上述的 LRU 降级策略；
+   - 通过简单打点（`console.debug` 或性能监控）记录在滚动过程中的高质量页面数与内存变化；
+   - 调整 `MAX_HIGH_PAGES` / `MAX_LOW_PAGES` 与 `lineThreshold`、`bufferPages` 等参数，找到体验与资源之间的平衡点。
+
+4. **第四阶段：与批注 / 文本选择集成**
+   - 确保 `PdfTextLayer` 只在 `mode = 'high'` 时挂载，选择坐标与现有 `Rect`/批注模型完全对齐；
+   - 在页面从 `low` → `high` 再次渲染时，能够正确重放已有批注（根据 pageIndex + Rect 信息重新绘制高亮）；
+   - 为后续的“选中后浮出工具条 / 右键菜单”保留扩展点。
+
+5. **第五阶段：长文档专项调优**
+   - 针对 300~500 页 PDF 做专项测试：
+     - 测量打开时间、首屏渲染时间、平均滚动 FPS；
+     - 对比“无虚拟滚动 / 无档位”版本的内存占用（可用浏览器性能面板或 Tauri 端统计）；
+   - 如有必要，对屏幕外页面引入更 aggressive 的策略（如只保留缩略图或完全 placeholder）。
+
+---
+
 ## 12. 总结
 
 本方案通过以下策略实现高性能 PDF 批注：

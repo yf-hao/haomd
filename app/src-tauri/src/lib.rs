@@ -25,7 +25,7 @@ use tauri::{AppHandle, Emitter, Manager, UriSchemeContext};
 use tokio::fs;
 use tokio::sync::Mutex;
 
-const MAX_FILE_BYTES: u64 = 20 * 1024 * 1024; // 20MB
+const MAX_FILE_BYTES: u64 = 500 * 1024 * 1024; // 500MB
 const MAX_RECENT_ITEMS: usize = 100; // 最近文件最大条数
 const RECENT_PAGE_SIZE: usize = 20; // Open Recent 子菜单每页显示条数
 
