@@ -121,6 +121,11 @@ export function useSidebar() {
 
   const addStandaloneFile = useCallback((filePath: string) => {
     const norm = normalizePath(filePath)
+    const lower = norm.toLowerCase()
+    // 保守策略：永远不要把 PDF 放到 File Browser 的「文件」列表
+    if (lower.endsWith('.pdf')) {
+      return
+    }
     const name = norm.split('/').pop() ?? norm
     setStandaloneFiles((prev) => {
       if (prev.some((f) => f.path === norm)) return prev
