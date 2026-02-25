@@ -44,7 +44,7 @@ export type FileCommandContext = StatusContext & {
   saveAs: () => Promise<any>
   handleShowRecent?: () => Promise<void>
   clearRecentAll: () => Promise<any>
-  createTab: () => void
+  createTab: (opts?: { title?: string; path?: string; content?: string }) => void
   updateActiveMeta: (path: string, dirty: boolean) => void
   openFolderInSidebar?: () => Promise<void>
   /** 打开文件后，向 Sidebar 注入一个独立文件条目 */
@@ -188,33 +188,47 @@ function createFileCommands(ctx: FileCommandContext): CommandRegistry {
       await ctx.saveAs()
     },
     open_file: async () => {
-      // 像「新建 + 打开」一样，为每个打开的文件创建独立标签
-      ctx.createTab()
       const resp = await ctx.openFile()
+      if (import.meta.env.DEV) {
+        console.log('[commands.open_file] openFile resp =', resp)
+      }
       if (resp && resp.ok && resp.data) {
-        const path = (resp.data as any).path as string | undefined
+        const data: any = resp.data as any
+        const path = data.path as string | undefined
         if (!path) {
+          if (import.meta.env.DEV) {
+            console.warn('[commands.open_file] resp.ok but missing data.path, skip')
+          }
           return
         }
         const isPdf = typeof path === 'string' && path.toLowerCase().endsWith('.pdf')
+        if (import.meta.env.DEV) {
+          console.log('[commands.open_file] resolved path =', path, 'isPdf =', isPdf)
+        }
+
         if (isPdf) {
-          // PDF：不触碰当前 Markdown 文本，仅更新当前标签的路径和标题
-          ctx.updateActiveMeta(path, false)
-          // 同步到 Sidebar：将通过 Open 打开的文件展示在 File Browser 中
+          // PDF：不走文本管线，直接用正确的 path 创建只读标签
+          if (import.meta.env.DEV) {
+            console.log('[commands.open_file] createTab for PDF with path', path)
+          }
+          ctx.createTab({ path, content: '' })
           if (ctx.addStandaloneFile) {
             ctx.addStandaloneFile(path)
           }
           return
         }
 
-        ctx.applyOpenedContent((resp.data as any).content)
-        // 更新当前标签的路径和标题，并标记为未脏
+        const content = data.content as string
+        // 文本文件：保持原有行为，为每个打开的文件创建独立标签，并同步编辑器内容
+        ctx.createTab({ path, content })
+        ctx.applyOpenedContent(content)
         ctx.setFilePath(path)
         ctx.updateActiveMeta(path, false)
-        // 同步到 Sidebar：将通过 Open 打开的文件展示在 File Browser 中
         if (ctx.addStandaloneFile) {
           ctx.addStandaloneFile(path)
         }
+      } else if (import.meta.env.DEV) {
+        console.warn('[commands.open_file] openFile returned non-ok or missing data', resp)
       }
     },
     open_folder: async () => {

@@ -126,16 +126,23 @@ export function useTabs(options?: UseTabsOptions) {
     (path: string, dirty: boolean) => {
       if (!activeId) return
       setTabs((prev) =>
-        prev.map((t) =>
-          t.id === activeId
-            ? {
-                ...t,
-                path,
-                title: deriveTitleFromPath(path),
-                dirty,
-              }
-            : t,
-        ),
+        prev.map((t) => {
+          if (t.id !== activeId) return t
+          const nextTitle = deriveTitleFromPath(path)
+          if (import.meta.env.DEV) {
+            console.log('[useTabs.updateActiveMeta]', {
+              activeId,
+              old: { path: t.path, title: t.title, dirty: t.dirty },
+              next: { path, title: nextTitle, dirty },
+            })
+          }
+          return {
+            ...t,
+            path,
+            title: nextTitle,
+            dirty,
+          }
+        }),
       )
     },
     [activeId],

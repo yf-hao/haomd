@@ -4,6 +4,41 @@ import { usePdfDocument } from '../hooks/usePdfDocument'
 import { useVirtualPages } from '../hooks/useVirtualPages'
 import { PdfPage } from './PdfPage'
 
+type PdfReadingState = {
+  page: number
+  scale: number
+}
+
+function getPdfStateKey(filePath: string) {
+  return `pdf-reading-state:${filePath}`
+}
+
+function loadPdfReadingState(filePath: string): PdfReadingState | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const key = getPdfStateKey(filePath)
+    const raw = window.localStorage.getItem(key)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as PdfReadingState
+    if (typeof parsed.page === 'number' && typeof parsed.scale === 'number') {
+      return parsed
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+function savePdfReadingState(filePath: string, state: PdfReadingState) {
+  if (typeof window === 'undefined') return
+  try {
+    const key = getPdfStateKey(filePath)
+    window.localStorage.setItem(key, JSON.stringify(state))
+  } catch {
+    // ignore
+  }
+}
+
 export interface PdfViewerProps {
   filePath: string
   onClose?: () => void
@@ -23,11 +58,19 @@ export function PdfViewer({ filePath }: PdfViewerProps) {
   const ZOOM_STEP = 0.25
   const zoomPercent = Math.round(scale * 100)
 
+  const scrollToPageWithScale = (page: number, scaleForScroll: number) => {
+    const el = containerRef.current
+    if (!el) return
+
+    const baseHeight = basePageHeight ?? 800
+    const estimatedPageHeight = Math.max(1, baseHeight * scaleForScroll)
+    el.scrollTop = (page - 1) * estimatedPageHeight
+  }
+
   const handleZoomIn = () => {
     setScale((prev) => {
       const next = Math.min(ZOOM_MAX, prev + ZOOM_STEP)
-      const el = containerRef.current
-      if (el) el.scrollTop = 0
+      scrollToPageWithScale(currentPage, next)
       return next
     })
   }
@@ -35,16 +78,15 @@ export function PdfViewer({ filePath }: PdfViewerProps) {
   const handleZoomOut = () => {
     setScale((prev) => {
       const next = Math.max(ZOOM_MIN, prev - ZOOM_STEP)
-      const el = containerRef.current
-      if (el) el.scrollTop = 0
+      scrollToPageWithScale(currentPage, next)
       return next
     })
   }
 
   const handleZoomReset = () => {
-    setScale(1.0)
-    const el = containerRef.current
-    if (el) el.scrollTop = 0
+    const next = 1.0
+    setScale(next)
+    scrollToPageWithScale(currentPage, next)
   }
 
   const handleZoomFitWidth = () => {
@@ -58,8 +100,9 @@ export function PdfViewer({ filePath }: PdfViewerProps) {
 
     const fitScale = availableWidth / basePageWidth
     const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, fitScale))
+
     setScale(clamped)
-    el.scrollTop = 0
+    scrollToPageWithScale(currentPage, clamped)
   }
 
   // 当文档或总页数变化时，确保当前页在合法范围内
@@ -74,6 +117,43 @@ export function PdfViewer({ filePath }: PdfViewerProps) {
       setPageInput(String(pageCount))
     }
   }, [pageCount, currentPage])
+
+  // 文档加载完成后，尝试从 localStorage 恢复上次的页码和缩放
+  useEffect(() => {
+    if (!pdfDocument || !pageCount || pageCount <= 0) return
+
+    const saved = loadPdfReadingState(filePath)
+    if (!saved) return
+
+    const clampedPage = Math.min(Math.max(saved.page, 1), pageCount)
+    const clampedScale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, saved.scale))
+
+    setScale(clampedScale)
+    setCurrentPage(clampedPage)
+    setPageInput(String(clampedPage))
+
+    const el = containerRef.current
+    if (el) {
+      const estimatedPageHeight = Math.max(1, (basePageHeight ?? 800) * clampedScale)
+      el.scrollTop = (clampedPage - 1) * estimatedPageHeight
+    }
+  }, [pdfDocument, pageCount, filePath, basePageHeight])
+
+  // 当页码或缩放发生变化时，将当前阅读状态持久化到 localStorage
+  useEffect(() => {
+    if (!pageCount || pageCount <= 0) return
+
+    const handle = window.setTimeout(() => {
+      savePdfReadingState(filePath, {
+        page: currentPage,
+        scale,
+      })
+    }, 300)
+
+    return () => {
+      window.clearTimeout(handle)
+    }
+  }, [filePath, currentPage, scale, pageCount])
 
   // 计算 PDF 原始尺寸（scale = 1 时的宽高），用于“适配宽度”缩放和多页高度估算
   useEffect(() => {
