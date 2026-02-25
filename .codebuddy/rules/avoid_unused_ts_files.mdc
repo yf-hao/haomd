@@ -1,0 +1,11 @@
+---
+description: 
+alwaysApply: true
+enabled: true
+updatedAt: 2026-02-25T13:52:52.757Z
+provider: 
+---
+
+- 不要创建未被任何代码引用的 TS/JS 文件；
+- 如果误创建了这类文件，应删除或在后续清理；
+- 当前项目中 `editorSettings_extra.ts` 是误创建的，应在后续人工删除。

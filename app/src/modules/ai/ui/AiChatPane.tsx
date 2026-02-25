@@ -1,5 +1,6 @@
 import type { FC, FormEvent, KeyboardEvent } from 'react'
 import { useContext, useEffect, useRef, useState } from 'react'
+import { getAiChatUiSettings } from '../../settings/editorSettings'
 import type { ChatEntryMode, EntryContext } from '../domain/chatSession'
 import { getDirKeyFromDocPath } from '../domain/docPathUtils'
 import type { AiChatSessionKey } from '../application/aiChatSessionService'
@@ -286,12 +287,34 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
     await changeModel(modelId)
   }
 
+  const [maxVisibleMessages, setMaxVisibleMessages] = useState<number>(10)
+
+  useEffect(() => {
+    let cancelled = false
+
+    getAiChatUiSettings()
+      .then((cfg) => {
+        if (cancelled) return
+        const n = cfg.maxVisibleMessagesPane
+        if (typeof n === 'number' && n > 0) {
+          setMaxVisibleMessages(n)
+        }
+      })
+      .catch((e) => {
+        console.error('[AiChatPane] failed to load AiChatUiSettings', e)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const messageSource = state?.viewMessages ?? EMPTY_MESSAGES
   const allMessages = messageSource.filter((m) => !m.hidden)
-  const MAX_VISIBLE_MESSAGES = 3
+  const limit = maxVisibleMessages && maxVisibleMessages > 0 ? maxVisibleMessages : allMessages.length
   const messages =
-    allMessages.length > MAX_VISIBLE_MESSAGES
-      ? allMessages.slice(-MAX_VISIBLE_MESSAGES)
+    allMessages.length > limit
+      ? allMessages.slice(-limit)
       : allMessages
 
   const [visibleLengths, setVisibleLengths] = useState<Record<string, number>>({})

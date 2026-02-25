@@ -15,9 +15,15 @@ export type HugeDocSettings = {
   chunkMaxLines?: number
 }
 
+export type AiChatUiSettings = {
+  maxVisibleMessagesDialog: number
+  maxVisibleMessagesPane: number
+}
+
 export type EditorSettings = {
   aiCompression?: Partial<AiCompressionSettings>
   hugeDoc?: HugeDocSettings
+  aiChat?: Partial<AiChatUiSettings>
 }
 
 const defaultCompression: AiCompressionSettings = {
@@ -32,6 +38,11 @@ const defaultHugeDoc: Required<HugeDocSettings> = {
   lineThreshold: 1000,
   chunkContextLines: 200,
   chunkMaxLines: 400,
+}
+
+const defaultAiChatUi: AiChatUiSettings = {
+  maxVisibleMessagesDialog: 10,
+  maxVisibleMessagesPane: 10,
 }
 
 let cachedSettings: EditorSettings | null = null
@@ -74,5 +85,14 @@ export async function getHugeDocSettings(): Promise<{ enabled: boolean; lineThre
     lineThreshold: cfg.lineThreshold ?? defaultHugeDoc.lineThreshold,
     chunkContextLines: cfg.chunkContextLines ?? defaultHugeDoc.chunkContextLines,
     chunkMaxLines: cfg.chunkMaxLines ?? defaultHugeDoc.chunkMaxLines,
+  }
+}
+
+export async function getAiChatUiSettings(): Promise<AiChatUiSettings> {
+  const settings = await loadEditorSettings()
+  const cfg = settings.aiChat ?? {}
+  return {
+    maxVisibleMessagesDialog: cfg.maxVisibleMessagesDialog ?? defaultAiChatUi.maxVisibleMessagesDialog,
+    maxVisibleMessagesPane: cfg.maxVisibleMessagesPane ?? defaultAiChatUi.maxVisibleMessagesPane,
   }
 }

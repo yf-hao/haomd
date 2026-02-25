@@ -32,6 +32,10 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::Editor
         cfg.huge_doc = default_cfg.huge_doc.clone();
         changed = true;
       }
+      if cfg.ai_chat.is_none() {
+        cfg.ai_chat = default_cfg.ai_chat.clone();
+        changed = true;
+      }
 
       // 为 huge_doc 填充新增字段的默认值，避免写回时丢失
       if let Some(ref mut huge) = cfg.huge_doc {
@@ -50,6 +54,20 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::Editor
           }
           if huge.chunk_max_lines.is_none() {
             huge.chunk_max_lines = default_huge.chunk_max_lines;
+            changed = true;
+          }
+        }
+      }
+
+      // 为 ai_chat 填充新增字段的默认值，避免写回时丢失
+      if let Some(ref mut chat) = cfg.ai_chat {
+        if let Some(ref default_chat) = default_cfg.ai_chat {
+          if chat.max_visible_messages_dialog.is_none() {
+            chat.max_visible_messages_dialog = default_chat.max_visible_messages_dialog;
+            changed = true;
+          }
+          if chat.max_visible_messages_pane.is_none() {
+            chat.max_visible_messages_pane = default_chat.max_visible_messages_pane;
             changed = true;
           }
         }

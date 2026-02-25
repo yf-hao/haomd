@@ -238,11 +238,22 @@ struct HugeDocCfg {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+struct AiChatUiCfg {
+  #[serde(default)]
+  max_visible_messages_dialog: Option<u32>,
+  #[serde(default)]
+  max_visible_messages_pane: Option<u32>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 struct EditorSettingsCfg {
   #[serde(default)]
   ai_compression: Option<AiCompressionCfg>,
   #[serde(default)]
   huge_doc: Option<HugeDocCfg>,
+  #[serde(default)]
+  ai_chat: Option<AiChatUiCfg>,
   /// 预留扩展位：保存未来新增的配置项，避免在写回文件时丢失
   #[serde(flatten)]
   extra: std::collections::HashMap<String, serde_json::Value>,
@@ -261,6 +272,10 @@ fn default_editor_settings() -> EditorSettingsCfg {
       line_threshold: Some(1000),
       chunk_context_lines: Some(200),
       chunk_max_lines: Some(400),
+    }),
+    ai_chat: Some(AiChatUiCfg {
+      max_visible_messages_dialog: Some(10),
+      max_visible_messages_pane: Some(10),
     }),
     extra: std::collections::HashMap::new(),
   }
