@@ -447,6 +447,34 @@ export function WorkspaceShell({
 
   const outlineItems = useOutline(markdown)
 
+  const refreshPdfRecent = useCallback(async () => {
+    console.log('[WorkspaceShell.refreshPdfRecent] called, isTauriEnv =', isTauriEnv())
+    if (!isTauriEnv()) {
+      setPdfRecent([])
+      setPdfRecentError('PDF 面板仅在桌面应用中可用')
+      return
+    }
+
+    setPdfRecentLoading(true)
+    setPdfRecentError(null)
+    try {
+      console.log('[WorkspaceShell.refreshPdfRecent] before listRecent()')
+      const resp = await listRecent()
+      console.log('[WorkspaceShell.refreshPdfRecent] listRecent resp =', resp)
+      if (!resp.ok) {
+        setPdfRecent([])
+        setPdfRecentError(resp.error.message)
+        return
+      }
+      const pdfItems = resp.data.filter((item) => !item.isFolder && item.path.toLowerCase().endsWith('.pdf'))
+      console.log('[WorkspaceShell.refreshPdfRecent] pdfItems length =', pdfItems.length)
+      setPdfRecent(pdfItems)
+    } finally {
+      console.log('[WorkspaceShell.refreshPdfRecent] finally, set loading = false')
+      setPdfRecentLoading(false)
+    }
+  }, [isTauriEnv])
+
   // PDF 最近文件列表：仅在左侧 PDF 面板激活时从后端加载
   useEffect(() => {
     if (activeLeftPanel !== 'pdf') return
@@ -454,37 +482,19 @@ export function WorkspaceShell({
     let cancelled = false
 
     const load = async () => {
-      if (!isTauriEnv()) {
-        setPdfRecent([])
-        setPdfRecentError('PDF 面板仅在桌面应用中可用')
-        return
-      }
-
-      setPdfRecentLoading(true)
-      setPdfRecentError(null)
-      try {
-        const resp = await listRecent()
-        if (cancelled) return
-        if (!resp.ok) {
-          setPdfRecent([])
-          setPdfRecentError(resp.error.message)
-          return
-        }
-        const pdfItems = resp.data.filter((item) => !item.isFolder && item.path.toLowerCase().endsWith('.pdf'))
-        setPdfRecent(pdfItems)
-      } finally {
-        if (!cancelled) {
-          setPdfRecentLoading(false)
-        }
-      }
+      if (cancelled) return
+      console.log('[WorkspaceShell.pdfPanelEffect] activeLeftPanel === "pdf", calling refreshPdfRecent')
+      await refreshPdfRecent()
     }
 
+    console.log('[WorkspaceShell.pdfPanelEffect] effect mounted, activeLeftPanel =', activeLeftPanel)
     void load()
 
     return () => {
       cancelled = true
+      console.log('[WorkspaceShell.pdfPanelEffect] cleanup, cancelled = true')
     }
-  }, [activeLeftPanel, isTauriEnv])
+  }, [activeLeftPanel, refreshPdfRecent])
 
   useEffect(() => {
     let cancelled = false
@@ -1303,6 +1313,7 @@ export function WorkspaceShell({
     onRequestQuit: handleQuit, isTauriEnv,
     addStandaloneFile: sidebar.addStandaloneFile,
     openDocConversationsHistory: (docPath: string) => openDocHistoryDialog(docPath),
+    refreshPdfRecent,
   })
 
   const aiChatCommandBridge = useMemo(

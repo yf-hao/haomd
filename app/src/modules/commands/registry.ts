@@ -49,6 +49,8 @@ export type FileCommandContext = StatusContext & {
   openFolderInSidebar?: () => Promise<void>
   /** 打开文件后，向 Sidebar 注入一个独立文件条目 */
   addStandaloneFile?: (path: string) => void
+  /** 当通过命令系统打开 PDF 时，通知 WorkspaceShell 刷新 PDF 最近列表 */
+  refreshPdfRecent?: () => Promise<void> | void
 }
 
 /**
@@ -212,8 +214,19 @@ function createFileCommands(ctx: FileCommandContext): CommandRegistry {
             console.log('[commands.open_file] createTab for PDF with path', path)
           }
           ctx.createTab({ path, content: '' })
-          if (ctx.addStandaloneFile) {
-            ctx.addStandaloneFile(path)
+          // 注意：不将 PDF 注入 File Browser 的独立文件列表，仅在 PDF 面板中展示
+          if (ctx.refreshPdfRecent) {
+            console.log('[commands.open_file] will refreshPdfRecent immediately, hasFn =', typeof ctx.refreshPdfRecent === 'function')
+            // 有些后端实现可能在 openFile 返回后才异步写入最近文件，这里做一次轻量延时刷新
+            void ctx.refreshPdfRecent()
+            setTimeout(() => {
+              console.log('[commands.open_file] delayed refreshPdfRecent fired')
+              if (ctx.refreshPdfRecent) {
+                void ctx.refreshPdfRecent()
+              }
+            }, 500)
+          } else if (import.meta.env.DEV) {
+            console.warn('[commands.open_file] refreshPdfRecent is not provided in ctx')
           }
           return
         }

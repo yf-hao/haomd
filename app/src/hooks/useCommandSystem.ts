@@ -56,6 +56,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     getCurrentFilePath,
     openDocConversationsHistory,
     addStandaloneFile,
+    refreshPdfRecent,
   } = params
 
   const aiClient = useMemo<IAiClient>(() => {
@@ -100,6 +101,7 @@ export function useCommandSystem(params: CommandSystemParams) {
         getCurrentFilePath,
         openDocConversationsHistory,
         addStandaloneFile,
+        refreshPdfRecent,
       }),
     [
       layout,
@@ -137,6 +139,7 @@ export function useCommandSystem(params: CommandSystemParams) {
       getCurrentFilePath,
       openDocConversationsHistory,
       addStandaloneFile,
+      refreshPdfRecent,
     ],
   )
 
