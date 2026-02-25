@@ -203,6 +203,16 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
     el.innerHTML = ''
 
     const init = () => {
+      if (!containerRef.current || !data || error) return
+      if (lastHashRef.current === codeHash && mindRef.current) return
+
+      const el = containerRef.current
+      const width = el.clientWidth
+      if (width <= 0) {
+        console.warn('Mind-elixir init deferred: container width is 0')
+        return
+      }
+
       try {
         if (mindRef.current) {
           try {
@@ -212,6 +222,9 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
           }
           mindRef.current = null
         }
+
+        // 重新清空容器，确保 init 时是干净的
+        el.innerHTML = ''
 
         const mind = new MindElixir({
           el,
@@ -228,17 +241,11 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
         mindRef.current = mind
         lastHashRef.current = codeHash
 
-        // 仅在容器宽度 > 0 时才进行自适应缩放，避免 NaN 路径
-        const width = el.clientWidth
-        if (width > 0) {
-          try {
-            mind.scaleFit()
-            mind.toCenter()
-          } catch (e) {
-            console.warn('Mind-elixir scaleFit failed', e)
-          }
-        } else {
-          console.warn('Mind-elixir scaleFit skipped: container width is 0')
+        try {
+          mind.scaleFit()
+          mind.toCenter()
+        } catch (e) {
+          console.warn('Mind-elixir scaleFit failed', e)
         }
       } catch (e) {
         console.error('[XMindBlock] Mind-elixir init failed', e)
@@ -249,16 +256,19 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
     const timer = window.setTimeout(init, 200)
 
     const resizeHandler = () => {
-      if (!mindRef.current) return
+      const el = containerRef.current
+      if (!el) return
+      const width = el.clientWidth
+      if (width <= 0) return
+
+      if (!mindRef.current || lastHashRef.current !== codeHash) {
+        init()
+        return
+      }
+
       try {
-        // 仅在容器宽度 > 0 时重新自适应缩放并居中
-        const width = el.clientWidth
-        if (width > 0) {
-          mindRef.current.scaleFit()
-          mindRef.current.toCenter()
-        } else {
-          console.warn('Mind-elixir scaleFit on resize skipped: container width is 0')
-        }
+        mindRef.current.scaleFit()
+        mindRef.current.toCenter()
       } catch (e) {
         console.warn('Mind-elixir scaleFit on resize failed', e)
       }
@@ -295,7 +305,7 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
         <div
           ref={containerRef}
           className="diagram-canvas mind-center"
-          style={{height: '100%', width: '100%', pointerEvents: 'none', cursor: 'default' }}
+          style={{ height: '100%', width: '100%', pointerEvents: 'none', cursor: 'default' }}
           aria-hidden
         />
       )}

@@ -14,6 +14,7 @@ export type RecentMenuPayload = {
 export function onMenuAction(handler: (actionId: string) => void | Promise<void>): Unlisten {
   let unlisten: Unlisten | undefined
   let disposed = false
+  let unlistenCalled = false
 
   const setup = async () => {
     try {
@@ -21,11 +22,13 @@ export function onMenuAction(handler: (actionId: string) => void | Promise<void>
         void handler(event.payload)
       })
       if (disposed) {
-        // 如果在监听完成前已经被清理，立刻注销，避免遗留监听
-        try {
-          un()
-        } catch (err) {
-          console.warn('[menuEvents] unlisten menu://action failed', err)
+        if (!unlistenCalled) {
+          unlistenCalled = true
+          try {
+            un()
+          } catch (err) {
+            console.warn('[menuEvents] unlisten menu://action failed', err)
+          }
         }
       } else {
         unlisten = un
@@ -39,8 +42,13 @@ export function onMenuAction(handler: (actionId: string) => void | Promise<void>
 
   return () => {
     disposed = true
-    if (unlisten) {
-      unlisten()
+    if (unlisten && !unlistenCalled) {
+      unlistenCalled = true
+      try {
+        unlisten()
+      } catch (err) {
+        console.warn('[menuEvents] manual unlisten menu://action failed', err)
+      }
     }
   }
 }
@@ -51,6 +59,7 @@ export function onMenuAction(handler: (actionId: string) => void | Promise<void>
 export function onOpenRecentFile(handler: (payload: RecentMenuPayload) => void | Promise<void>): Unlisten {
   let unlisten: Unlisten | undefined
   let disposed = false
+  let unlistenCalled = false
 
   const setup = async () => {
     try {
@@ -58,10 +67,13 @@ export function onOpenRecentFile(handler: (payload: RecentMenuPayload) => void |
         void handler(event.payload)
       })
       if (disposed) {
-        try {
-          un()
-        } catch (err) {
-          console.warn('[menuEvents] unlisten menu://open_recent_file failed', err)
+        if (!unlistenCalled) {
+          unlistenCalled = true
+          try {
+            un()
+          } catch (err) {
+            console.warn('[menuEvents] unlisten menu://open_recent_file failed', err)
+          }
         }
       } else {
         unlisten = un
@@ -75,8 +87,13 @@ export function onOpenRecentFile(handler: (payload: RecentMenuPayload) => void |
 
   return () => {
     disposed = true
-    if (unlisten) {
-      unlisten()
+    if (unlisten && !unlistenCalled) {
+      unlistenCalled = true
+      try {
+        unlisten()
+      } catch (err) {
+        console.warn('[menuEvents] manual unlisten menu://open_recent_file failed', err)
+      }
     }
   }
 }

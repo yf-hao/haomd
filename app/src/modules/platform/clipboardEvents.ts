@@ -8,6 +8,7 @@ export type Unlisten = () => void
 export function onNativePaste(handler: (text: string) => void): Unlisten {
   let unlisten: Unlisten | undefined
   let disposed = false
+  let unlistenCalled = false
 
   const setup = async () => {
     try {
@@ -16,10 +17,13 @@ export function onNativePaste(handler: (text: string) => void): Unlisten {
         handler(event.payload)
       })
       if (disposed) {
-        try {
-          un()
-        } catch (err) {
-          console.warn('[clipboardEvents] unlisten native://paste failed', err)
+        if (!unlistenCalled) {
+          unlistenCalled = true
+          try {
+            un()
+          } catch (err) {
+            console.warn('[clipboardEvents] unlisten native://paste failed', err)
+          }
         }
       } else {
         unlisten = un
@@ -33,8 +37,13 @@ export function onNativePaste(handler: (text: string) => void): Unlisten {
 
   return () => {
     disposed = true
-    if (unlisten) {
-      unlisten()
+    if (unlisten && !unlistenCalled) {
+      unlistenCalled = true
+      try {
+        unlisten()
+      } catch (err) {
+        console.warn('[clipboardEvents] manual unlisten native://paste failed', err)
+      }
     }
   }
 }
@@ -45,6 +54,7 @@ export function onNativePaste(handler: (text: string) => void): Unlisten {
 export function onNativePasteError(handler: (message: string) => void): Unlisten {
   let unlisten: Unlisten | undefined
   let disposed = false
+  let unlistenCalled = false
 
   const setup = async () => {
     const un = await listen<string>('native://paste_error', (event) => {
@@ -52,10 +62,13 @@ export function onNativePasteError(handler: (message: string) => void): Unlisten
       handler(event.payload)
     })
     if (disposed) {
-      try {
-        un()
-      } catch (err) {
-        console.warn('[clipboardEvents] unlisten native://paste_error failed', err)
+      if (!unlistenCalled) {
+        unlistenCalled = true
+        try {
+          un()
+        } catch (err) {
+          console.warn('[clipboardEvents] unlisten native://paste_error failed', err)
+        }
       }
     } else {
       unlisten = un
@@ -66,8 +79,13 @@ export function onNativePasteError(handler: (message: string) => void): Unlisten
 
   return () => {
     disposed = true
-    if (unlisten) {
-      unlisten()
+    if (unlisten && !unlistenCalled) {
+      unlistenCalled = true
+      try {
+        unlisten()
+      } catch (err) {
+        console.warn('[clipboardEvents] manual unlisten native://paste_error failed', err)
+      }
     }
   }
 }
@@ -79,6 +97,7 @@ export function onNativePasteError(handler: (message: string) => void): Unlisten
 export function onNativePasteImage(handler: () => void): Unlisten {
   let unlisten: Unlisten | undefined
   let disposed = false
+  let unlistenCalled = false
 
   const setup = async () => {
     try {
@@ -87,10 +106,13 @@ export function onNativePasteImage(handler: () => void): Unlisten {
         handler()
       })
       if (disposed) {
-        try {
-          un()
-        } catch (err) {
-          console.warn('[clipboardEvents] unlisten native://paste_image failed', err)
+        if (!unlistenCalled) {
+          unlistenCalled = true
+          try {
+            un()
+          } catch (err) {
+            console.warn('[clipboardEvents] unlisten native://paste_image failed', err)
+          }
         }
       } else {
         unlisten = un
@@ -104,8 +126,13 @@ export function onNativePasteImage(handler: () => void): Unlisten {
 
   return () => {
     disposed = true
-    if (unlisten) {
-      unlisten()
+    if (unlisten && !unlistenCalled) {
+      unlistenCalled = true
+      try {
+        unlisten()
+      } catch (err) {
+        console.warn('[clipboardEvents] manual unlisten native://paste_image failed', err)
+      }
     }
   }
 }

@@ -211,9 +211,14 @@
 .workspace {
   flex: 1;
   min-height: 0;
-  display: grid;
-  grid-template-columns: 1fr;
   position: relative;
+  /* 允许 divider 热区绝对定位覆盖在内部 */
+  display: grid;
+  column-gap: 0;
+  row-gap: 12px;
+  align-items: stretch;
+  overflow: auto;
+  /* 仅在工作区内部滚动 */
 }
 
 /* 编辑器 / 预览 / PDF 中间区域栅格容器 */
@@ -638,12 +643,6 @@
   color: #9ca3af;
 }
 
-  display: grid;
-  column-gap: 0;
-  row-gap: 12px;
-  align-items: stretch;
-  min-height: 0;
-}
 
 .ai-chat-pane {
   /* Width controlled by grid */
@@ -685,6 +684,7 @@
 .ai-chat-pane-body .ai-chat-messages {
   flex: 1;
   min-height: 0;
+  width: 100%;
   overflow-y: auto;
   max-height: none;
   padding-bottom: 30px;
