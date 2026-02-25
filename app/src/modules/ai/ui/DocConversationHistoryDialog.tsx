@@ -2,6 +2,7 @@ import type { FC, MouseEventHandler, MouseEvent as ReactMouseEvent } from 'react
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import type { DocConversationMessage, DocConversationRecord } from '../domain/docConversations'
+import { getDirKeyFromDocPath } from '../domain/docPathUtils'
 import { docConversationService } from '../application/docConversationService'
 
 export type DocConversationHistoryDialogProps = {
@@ -71,7 +72,7 @@ function buildConversationGroups(messages: DocConversationMessage[]): Conversati
 function buildMarkdownFromDocRecord(record: DocConversationRecord, groups: ConversationGroup[]): string {
   const lines: string[] = []
 
-  lines.push('# AI 会话历史（当前文档）')
+  lines.push('# AI 会话历史（当前目录会话）')
   lines.push('')
   lines.push(`- 导出时间：${new Date().toLocaleString()}`)
   lines.push(`- 总消息数：${record.messages.length}`)
@@ -134,6 +135,8 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
   const [pageIndex, setPageIndex] = useState(0)
   const [pageSize, setPageSize] = useState(10)
 
+  const dirKey = useMemo(() => getDirKeyFromDocPath(docPath) ?? docPath, [docPath])
+
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [dragging, setDragging] = useState(false)
   const dragStateRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null)
@@ -147,7 +150,7 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
 
     ;(async () => {
       try {
-        const rec = await docConversationService.getByDocPath(docPath)
+        const rec = await docConversationService.getByDocPath(dirKey)
         if (cancelled) return
         setRecord(rec)
 
@@ -174,7 +177,7 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
     return () => {
       cancelled = true
     }
-  }, [open, docPath, pageSize])
+  }, [open, dirKey, pageSize])
 
   const hasData = !!record && record.messages.length > 0 && groups.length > 0
 
@@ -286,7 +289,7 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
   }, [record, groups, docPath])
 
   const summaryLine = (() => {
-    if (!record || !record.messages.length) return '当前文档暂无 AI 会话历史'
+    if (!record || !record.messages.length) return '当前目录暂无 AI 会话历史'
     const lastTs = new Date(record.lastActiveAt).toLocaleString()
     return `最近活跃时间：${lastTs} · 总消息数：${record.messages.length} · 总对话轮次：${groups.length}`
   })()
@@ -331,7 +334,7 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
         <div className="ai-history-body">
           {!loading && !error && !hasData && (
             <div className="ai-history-empty">
-              当前文档暂无 AI 会话历史。
+              当前目录暂无 AI 会话历史。
               <br />
               你可以通过 AI Chat 或 Ask File / Ask Selection 发起对话，历史会自动记录在这里。
             </div>

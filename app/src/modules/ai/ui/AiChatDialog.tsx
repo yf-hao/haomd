@@ -1,6 +1,7 @@
 import type { FC, FormEvent, KeyboardEvent, MouseEventHandler, MouseEvent as ReactMouseEvent } from 'react'
 import { useContext, useEffect, useRef, useState } from 'react'
 import type { ChatEntryMode, ChatMessageView, EntryContext } from '../domain/chatSession'
+import { getDirKeyFromDocPath } from '../domain/docPathUtils'
 import { AiChatBody } from './AiChatBody'
 import { useAiChatSession } from './hooks/useAiChatSession'
 import { copyTextToClipboard } from '../platform/clipboardService'
@@ -46,6 +47,8 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     el.style.height = `${next}px`
   }
 
+  const dirKey = currentFilePath ? getDirKeyFromDocPath(currentFilePath) : undefined
+
   const {
     loading,
     state,
@@ -70,7 +73,8 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     entryMode,
     initialContext,
     open,
-    docPath: currentFilePath ?? undefined,
+    docPath: dirKey,
+    legacyDocPath: currentFilePath ?? undefined,
   })
 
   useEffect(() => {
@@ -196,7 +200,8 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     autoResizeInput()
 
     const handled = await tryHandleSlashCommand(contentToSend, {
-      docPath: currentFilePath ?? undefined,
+      // slash 命令与文档会话保持一致：按目录共享会话
+      docPath: dirKey,
       runAppCommand: commandBridge?.runAppCommand,
       showModal: (message: string) => setSlashModalMessage(message),
       getRecentMessagesForDigest: getRecentMessagesForDigest,

@@ -21,8 +21,10 @@ export type UseAiChatSessionOptions = {
   entryMode: ChatEntryMode
   initialContext?: EntryContext
   open: boolean
-  /** 当前会话关联的文档路径，用于文档级会话历史持久化与恢复 */
+  /** 当前会话关联的文档路径（目录级 key），用于文档级会话历史持久化与恢复 */
   docPath?: string
+  /** 旧版文档级会话使用的原始 docPath（文件路径），用于懒迁移 */
+  legacyDocPath?: string
 }
 
 function buildStateFromDocRecord(record: DocConversationRecord, entryMode: ChatEntryMode): ConversationState {
@@ -47,7 +49,7 @@ function buildStateFromDocRecord(record: DocConversationRecord, entryMode: ChatE
 }
 
 export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatResult {
-  const { entryMode, initialContext, open, docPath } = options
+  const { entryMode, initialContext, open, docPath, legacyDocPath } = options
 
   const [session, setSession] = useState<ChatSession | null>(null)
   const [loading, setLoading] = useState(false)
@@ -100,7 +102,17 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
         let initialDifyConversationId: string | undefined
 
         if (docPath) {
-          const saved: DocConversationRecord | null = await docConversationService.getByDocPath(docPath)
+          let saved: DocConversationRecord | null = await docConversationService.getByDocPath(docPath)
+
+          // 懒迁移：如果目录级 docPath 下没有记录，且提供了旧版文件级 docPath，则尝试回退加载
+          if (!saved && legacyDocPath && legacyDocPath !== docPath) {
+            try {
+              saved = await docConversationService.getByDocPath(legacyDocPath)
+            } catch (e) {
+              console.warn('[useAiChatSession] failed to load legacy doc conversation', e)
+            }
+          }
+
           if (saved) {
             initialState = buildStateFromDocRecord(saved, entryMode)
             if (saved.difyConversationId) {

@@ -975,10 +975,14 @@ button.ghost.ghost-subtle:hover {
 }
 
 .ai-chat-message-assistant {
-  align-self: flex-end;
+  /* 助手消息占满整行宽度 */
+  width: 100%;
+  max-width: 100%;
+  align-self: stretch;
   background: rgba(15, 23, 42, 0.6);
   border: 1px solid rgba(148, 163, 184, 0.2);
-  margin-left: auto;
+  margin-left: 0;
+  margin-right: 0;
   color: #e8ecf5;
 }
 
