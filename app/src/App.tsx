@@ -15,6 +15,7 @@ function App() {
   const [initialOpenRecentIsFolder, setInitialOpenRecentIsFolder] = useState<boolean | null>(null)
   const [isAiSettingsOpen, setAiSettingsOpen] = useState(false)
   const [isPromptSettingsOpen, setPromptSettingsOpen] = useState(false)
+  const [isStatusBarVisible, setStatusBarVisible] = useState(true)
 
   const handleLeftPanelToggle = useCallback(
     (id: LeftPanelId) => {
@@ -40,6 +41,11 @@ function App() {
       }
       if (actionId === 'ai_prompt_settings') {
         setPromptSettingsOpen(true)
+        return
+      }
+      if (actionId === 'toggle_status_bar') {
+        setStatusBarVisible((prev) => !prev)
+        return
       }
     })
 
@@ -97,10 +103,12 @@ function App() {
         />
       </div>
 
-      <div className="bottom-bar">
-        <div className="bottom-bar-left">Markdown Workspace</div>
-        <div className="bottom-bar-right">&nbsp;</div>
-      </div>
+      {isStatusBarVisible && (
+        <div className="status-bar">
+          <div className="status-bar-left">HaoMD · AI Markdown</div>
+          <div className="status-bar-right">&nbsp;</div>
+        </div>
+      )}
 
       <AiSettingsDialog open={isAiSettingsOpen} onClose={() => setAiSettingsOpen(false)} />
       <PromptSettingsDialog open={isPromptSettingsOpen} onClose={() => setPromptSettingsOpen(false)} />

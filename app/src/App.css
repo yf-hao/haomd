@@ -1230,3 +1230,23 @@
       rgba(92, 124, 250, 0.35),
       rgba(98, 195, 255, 0.35));
 }
+
+/* 状态栏：缩小为一行文字高度的紧凑条 */
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 10px;
+  /* 几乎只保留文字本身的高度 */
+  font-size: 12px;
+  line-height: 1.2;
+  border-top: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(7, 9, 15, 0.98);
+}
+
+.status-bar-left,
+.status-bar-right {
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}

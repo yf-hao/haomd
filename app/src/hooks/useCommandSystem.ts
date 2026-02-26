@@ -214,7 +214,8 @@ export function useCommandSystem(params: CommandSystemParams) {
   // 统一处理来自 Tauri 原生菜单的命令分发
   useEffect(() => {
     const unlisten = onMenuAction((actionId) => {
-      if (actionId === 'ai_settings') return
+      // 这些菜单在 App 层或其他地方单独处理，这里忽略
+      if (actionId === 'ai_settings' || actionId === 'ai_prompt_settings' || actionId === 'toggle_status_bar') return
       console.log('menu action', actionId)
       void dispatchAction(actionId)
     })
