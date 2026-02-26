@@ -223,7 +223,7 @@ function MarkdownViewerComponent(
   const blocksRef = useRef<BlockMetric[]>([])
   const [virtualize, setVirtualize] = React.useState(false)
 
-  const { value, activeLine, previewWidth, filePath, foldRegions, mode = 'rendered', onLineClick } = props
+  const { value, activeLine, previewWidth, filePath, foldRegions, mode = 'rendered', onLineClick, onSelectionChange } = props
 
   const components = useMemo(() => {
     const regions = foldRegions ?? []
@@ -831,6 +831,50 @@ function MarkdownViewerComponent(
       container.removeEventListener('click', handleClick)
     }
   }, [onLineClick, mode])
+
+  // 将 Markdown 预览中的文字选区同步给上层（Ask AI About Selection 使用）
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container || !onSelectionChange || mode !== 'rendered') return
+
+    const syncSelectionFromWindow = () => {
+      if (typeof window === 'undefined') {
+        onSelectionChange(null)
+        return
+      }
+      const sel = window.getSelection()
+      if (!sel || sel.isCollapsed) {
+        onSelectionChange(null)
+        return
+      }
+      const isInContainer = (node: Node | null) => !!node && container.contains(node)
+      const anchorNode = sel.anchorNode
+      const focusNode = sel.focusNode
+      if (!isInContainer(anchorNode) && !isInContainer(focusNode)) {
+        onSelectionChange(null)
+        return
+      }
+      const text = sel.toString().trim()
+      onSelectionChange(text || null)
+    }
+
+    const handleMouseUp = () => {
+      syncSelectionFromWindow()
+    }
+
+    const handleKeyUp = () => {
+      syncSelectionFromWindow()
+    }
+
+    container.addEventListener('mouseup', handleMouseUp)
+    container.addEventListener('keyup', handleKeyUp)
+
+    return () => {
+      container.removeEventListener('mouseup', handleMouseUp)
+      container.removeEventListener('keyup', handleKeyUp)
+      onSelectionChange(null)
+    }
+  }, [onSelectionChange, mode])
 
   return (
     <div className="markdown-body gh-markdown" ref={containerRef} data-preview-width={previewWidth}>

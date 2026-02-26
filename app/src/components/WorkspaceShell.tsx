@@ -159,6 +159,8 @@ export function WorkspaceShell({
   const [pdfRecentError, setPdfRecentError] = useState<string | null>(null)
   const [pdfNotes, setPdfNotes] = useState<Record<string, string>>({})
   const [pdfMenuState, setPdfMenuState] = useState<{ visible: boolean; x: number; y: number; targetPath: string | null }>({ visible: false, x: 0, y: 0, targetPath: null })
+  const [pdfSelectionText, setPdfSelectionText] = useState<string | null>(null)
+  const [previewSelectionText, setPreviewSelectionText] = useState<string | null>(null)
   const isProgrammaticScrollRef = useRef(false)
   const sidebarResizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
 
@@ -442,10 +444,24 @@ export function WorkspaceShell({
     return path.split(/[/\\]/).pop() || path
   }, [activeTab])
   const getCurrentSelectionText = useCallback(() => {
+    // PDF 标签：优先使用 PDF 预览中的选区
+    if (isPdfActive) {
+      if (pdfSelectionText && pdfSelectionText.trim()) {
+        return pdfSelectionText
+      }
+      return null
+    }
+
+    // 非 PDF：优先使用 Markdown 预览的选区
+    if (previewSelectionText && previewSelectionText.trim()) {
+      return previewSelectionText
+    }
+
+    // 回退到编辑器选区
     const view = editorViewRef.current
     if (!view || view.state.selection.main.empty) return null
     return view.state.doc.sliceString(view.state.selection.main.from, view.state.selection.main.to)
-  }, [])
+  }, [isPdfActive, pdfSelectionText, previewSelectionText])
 
   const outlineItems = useOutline(markdown)
 
@@ -1322,6 +1338,27 @@ export function WorkspaceShell({
     refreshPdfRecent,
   })
 
+  // 全局快捷键：Shift+Cmd/Ctrl+S 触发 "Ask AI About Selection"
+  useEffect(() => {
+    const handleKeyDownAskSelection = (e: globalThis.KeyboardEvent) => {
+      const key = e.key.toLowerCase()
+      const isMeta = e.metaKey || e.ctrlKey
+      const isShift = e.shiftKey
+      if (!isMeta || !isShift || key !== 's') {
+        return
+      }
+
+      e.preventDefault()
+      e.stopPropagation()
+      void dispatchAction('ai_ask_selection')
+    }
+
+    window.addEventListener('keydown', handleKeyDownAskSelection, true)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDownAskSelection, true)
+    }
+  }, [dispatchAction])
+
   const aiChatCommandBridge = useMemo(
     () => ({
       runAppCommand: (id: string) => dispatchAction(id),
@@ -1590,7 +1627,6 @@ export function WorkspaceShell({
                 <ul className="pdf-recent-list">
                   {pdfRecent.map((item) => {
                     const name = item.displayName || item.path.split(/[/\\]/).pop() || item.path
-                    const date = new Date(item.lastOpenedAt).toLocaleString()
                     const isActive = activeTab?.path === item.path
                     return (
                       <li
@@ -1609,7 +1645,6 @@ export function WorkspaceShell({
                         }}
                       >
                         <div className="pdf-recent-title">{name}</div>
-                        <div className="pdf-recent-meta">{date}</div>
                       </li>
                     )
                   })}
@@ -1748,7 +1783,12 @@ export function WorkspaceShell({
                                   : undefined
                         }
                       >
-                        {activeTab?.path && <PdfViewerLazy filePath={activeTab.path} />}
+                        {activeTab?.path && (
+                          <PdfViewerLazy
+                            filePath={activeTab.path}
+                            onSelectionChange={setPdfSelectionText}
+                          />
+                        )}
                       </section>
                     ) : (
                       <PreviewPaneLazy
@@ -1759,6 +1799,7 @@ export function WorkspaceShell({
                         filePath={filePath}
                         foldRegions={foldRegions}
                         onPreviewLineClick={handlePreviewLineClick}
+                        onSelectionChange={setPreviewSelectionText}
                       />
                     )}
                   </Suspense>

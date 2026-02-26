@@ -42,7 +42,6 @@ export function PdfSidebarPanel(props: PdfSidebarPanelProps) {
                     <ul className="pdf-recent-list">
                         {pdfRecent.map((item) => {
                             const name = item.displayName || item.path.split(/[/\\]/).pop() || item.path
-                            const date = new Date(item.lastOpenedAt).toLocaleString()
                             const isActive = activeTab?.path === item.path
                             return (
                                 <li
@@ -51,7 +50,6 @@ export function PdfSidebarPanel(props: PdfSidebarPanelProps) {
                                     onClick={() => { void openRecentFileInNewTab(item.path) }}
                                 >
                                     <div className="pdf-recent-title">{name}</div>
-                                    <div className="pdf-recent-meta">{date}</div>
                                 </li>
                             )
                         })}

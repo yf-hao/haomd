@@ -42,9 +42,10 @@ function savePdfReadingState(filePath: string, state: PdfReadingState) {
 export interface PdfViewerProps {
   filePath: string
   onClose?: () => void
+  onSelectionChange?: (text: string | null) => void
 }
 
-export function PdfViewer({ filePath }: PdfViewerProps) {
+export function PdfViewer({ filePath, onSelectionChange }: PdfViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [scale, setScale] = useState(1.25)
   const { pdfDocument, pageCount, loading, error } = usePdfDocument(filePath)
@@ -230,6 +231,33 @@ export function PdfViewer({ filePath }: PdfViewerProps) {
   // 估算单页高度（基于首屏 viewport 高度和当前 scale），供多页虚拟滚动使用
   const pageHeightForVirtual = Math.max(1, (basePageHeight ?? 800) * scale)
 
+  const syncSelectionFromWindow = () => {
+    if (!onSelectionChange) return
+    if (typeof window === 'undefined') {
+      onSelectionChange(null)
+      return
+    }
+    const sel = window.getSelection()
+    if (!sel || sel.isCollapsed) {
+      onSelectionChange(null)
+      return
+    }
+    const container = containerRef.current
+    if (!container) {
+      onSelectionChange(null)
+      return
+    }
+    const isInContainer = (node: Node | null) => !!node && container.contains(node)
+    const anchorNode = sel.anchorNode
+    const focusNode = sel.focusNode
+    if (!isInContainer(anchorNode) && !isInContainer(focusNode)) {
+      onSelectionChange(null)
+      return
+    }
+    const text = sel.toString().trim()
+    onSelectionChange(text || null)
+  }
+
   const { nearbyRange, totalHeight, onScroll: handleVirtualScroll } = useVirtualPages({
     pageCount,
     pageHeight: pageHeightForVirtual,
@@ -252,6 +280,22 @@ export function PdfViewer({ filePath }: PdfViewerProps) {
       setPageInput(String(nextPage))
     }
   }
+
+  const handleMouseUp: React.MouseEventHandler<HTMLDivElement> = () => {
+    syncSelectionFromWindow()
+  }
+
+  const handleKeyUp: React.KeyboardEventHandler<HTMLDivElement> = () => {
+    syncSelectionFromWindow()
+  }
+
+  useEffect(() => {
+    return () => {
+      if (onSelectionChange) {
+        onSelectionChange(null)
+      }
+    }
+  }, [onSelectionChange, filePath])
 
   const pages: JSX.Element[] = []
   const startIndex = nearbyRange.start
@@ -295,7 +339,13 @@ export function PdfViewer({ filePath }: PdfViewerProps) {
   return (
     <div className="pdf-viewer">
       <div className="pdf-viewer-main">
-        <div ref={containerRef} className="pdf-scroll-container" onScroll={handleScroll}>
+        <div
+          ref={containerRef}
+          className="pdf-scroll-container"
+          onScroll={handleScroll}
+          onMouseUp={handleMouseUp}
+          onKeyUp={handleKeyUp}
+        >
           <div
             style={{
               position: 'relative',

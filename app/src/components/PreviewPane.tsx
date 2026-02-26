@@ -12,9 +12,11 @@ export type PreviewPaneProps = {
   foldRegions?: FoldRegion[]
   /** 点击预览中的块时回调对应的源行号 */
   onPreviewLineClick?: (line: number) => void
+  /** 预览区域文字选中变更回调 */
+  onSelectionChange?: (text: string | null) => void
 }
 
-export function PreviewPane({ value, activeLine, previewWidth, effectiveLayout, filePath, foldRegions, onPreviewLineClick }: PreviewPaneProps) {
+export function PreviewPane({ value, activeLine, previewWidth, effectiveLayout, filePath, foldRegions, onPreviewLineClick, onSelectionChange }: PreviewPaneProps) {
   const style: CSSProperties = {}
 
   if (effectiveLayout === 'preview-only') {
@@ -42,6 +44,7 @@ export function PreviewPane({ value, activeLine, previewWidth, effectiveLayout, 
           filePath={filePath}
           foldRegions={foldRegions}
           onLineClick={onPreviewLineClick}
+          onSelectionChange={onSelectionChange}
         />
       </div>
     </section>
