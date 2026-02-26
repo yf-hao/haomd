@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FileTreeNode } from '../domain/sidebarTree'
+import { FileContextMenu } from './FileContextMenu'
 import './Sidebar.css'
 
 export type StandaloneFileItem = {
@@ -413,7 +414,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
       <div className="sidebar-body">
         {hasStandalone && (
           <section className="sidebar-section">
-            <div className="sidebar-section-title">文件</div>
+            <div className="sidebar-section-title">Files</div>
             <ul className="sidebar-file-list">
               {standaloneFiles.map((file) => (
                 <li
@@ -443,7 +444,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
         {hasTree && (
           <section className="sidebar-section">
             <div className="sidebar-section-header">
-              <div className="sidebar-section-title">文件夹</div>
+              <div className="sidebar-section-title">Folders</div>
               <div className="folder-section-actions">
                 <button
                   type="button"
@@ -560,12 +561,34 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
       </div>
 
       {menuState.visible && menuState.target && (
-        <SidebarContextMenu
+        <FileContextMenu
           x={menuState.x}
           y={menuState.y}
-          target={menuState.target}
-          onAction={triggerContextAction}
           onRequestClose={closeMenu}
+          items={(() => {
+            const target = menuState.target!
+            const items = [
+              { id: 'open', label: 'Open', onClick: () => triggerContextAction('open') },
+              { id: 'open-in-file-manager', label: 'Open in File Manager', onClick: () => triggerContextAction('open-in-file-manager') },
+              { id: 'open-terminal', label: 'Open in Terminal', onClick: () => triggerContextAction('open-terminal') },
+            ] as { id: string; label: string; onClick: () => void }[]
+
+            const isStandaloneFile = target.kind === 'standalone-file'
+            const isFileTarget = target.kind === 'standalone-file' || target.kind === 'tree-file'
+            const isFolderRoot = target.kind === 'folder-root'
+
+            if (isFileTarget) {
+              items.push({ id: 'delete', label: 'Delete…', onClick: () => triggerContextAction('delete') })
+            }
+            if (isStandaloneFile) {
+              items.push({ id: 'remove', label: 'Remove from File List', onClick: () => triggerContextAction('remove') })
+            }
+            if (isFolderRoot) {
+              items.push({ id: 'remove-folder', label: 'Remove Folder', onClick: () => triggerContextAction('remove') })
+            }
+
+            return items
+          })()}
         />
       )}
     </aside>

@@ -5,6 +5,7 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { ConflictModal } from './ConflictModal'
 import { ConfirmDialog } from './ConfirmDialog'
 import { TabBar } from './TabBar'
+import { FileContextMenu } from './FileContextMenu'
 import { Sidebar, type SidebarContextActionPayload } from './Sidebar'
 import { OutlinePanel } from './OutlinePanel'
 import { Welcome } from './Welcome'
@@ -25,7 +26,7 @@ import { useTabs } from '../hooks/useTabs'
 import { useCommandSystem } from '../hooks/useCommandSystem'
 import { useSidebar } from '../hooks/useSidebar'
 import { onOpenRecentFile } from '../modules/platform/menuEvents'
-import { createFolder, deleteFsEntry, listFolder, writeFile, listRecent } from '../modules/files/service'
+import { createFolder, deleteFsEntry, deleteRecentRemote, listFolder, writeFile, listRecent } from '../modules/files/service'
 import { useNativePaste } from '../hooks/useNativePaste'
 import { onNativePasteImage } from '../modules/platform/clipboardEvents'
 import type { EditorTab } from '../types/tabs'
@@ -157,6 +158,7 @@ export function WorkspaceShell({
   const [pdfRecentLoading, setPdfRecentLoading] = useState(false)
   const [pdfRecentError, setPdfRecentError] = useState<string | null>(null)
   const [pdfNotes, setPdfNotes] = useState<Record<string, string>>({})
+  const [pdfMenuState, setPdfMenuState] = useState<{ visible: boolean; x: number; y: number; targetPath: string | null }>({ visible: false, x: 0, y: 0, targetPath: null })
   const isProgrammaticScrollRef = useRef(false)
   const sidebarResizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
 
@@ -446,6 +448,10 @@ export function WorkspaceShell({
   }, [])
 
   const outlineItems = useOutline(markdown)
+
+  const closePdfMenu = useCallback(() => {
+    setPdfMenuState({ visible: false, x: 0, y: 0, targetPath: null })
+  }, [])
 
   const refreshPdfRecent = useCallback(async () => {
     console.log('[WorkspaceShell.refreshPdfRecent] called, isTauriEnv =', isTauriEnv())
@@ -1591,6 +1597,16 @@ export function WorkspaceShell({
                         key={item.path}
                         className={`pdf-recent-item ${isActive ? 'active' : ''}`}
                         onClick={() => { void openRecentFileInNewTab(item.path) }}
+                        onContextMenu={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setPdfMenuState({
+                            visible: true,
+                            x: e.clientX,
+                            y: e.clientY,
+                            targetPath: item.path,
+                          })
+                        }}
                       >
                         <div className="pdf-recent-title">{name}</div>
                         <div className="pdf-recent-meta">{date}</div>
@@ -1598,6 +1614,52 @@ export function WorkspaceShell({
                     )
                   })}
                 </ul>
+              )}
+              {pdfMenuState.visible && pdfMenuState.targetPath && (
+                <FileContextMenu
+                  x={pdfMenuState.x}
+                  y={pdfMenuState.y}
+                  onRequestClose={closePdfMenu}
+                  items={[
+                    {
+                      id: 'open',
+                      label: 'Open',
+                      onClick: () => {
+                        void openRecentFileInNewTab(pdfMenuState.targetPath!)
+                        closePdfMenu()
+                      },
+                    },
+                    {
+                      id: 'open-in-file-manager',
+                      label: 'Open in File Manager',
+                      onClick: () => {
+                        const dir = computeDirFromPath(pdfMenuState.targetPath!)
+                        void (async () => {
+                          const result = await openInFileManager(dir)
+                          if (!result.ok && result.message) {
+                            setStatusMessage(result.message)
+                          }
+                        })()
+                        closePdfMenu()
+                      },
+                    },
+                    {
+                      id: 'remove-from-recent',
+                      label: 'Remove from Recent',
+                      onClick: () => {
+                        void (async () => {
+                          const resp = await deleteRecentRemote(pdfMenuState.targetPath!)
+                          if (!resp.ok) {
+                            setStatusMessage(resp.error.message)
+                          } else {
+                            await refreshPdfRecent()
+                          }
+                        })()
+                        closePdfMenu()
+                      },
+                    },
+                  ]}
+                />
               )}
             </div>
           </div>
