@@ -42,10 +42,11 @@ function savePdfReadingState(filePath: string, state: PdfReadingState) {
 export interface PdfViewerProps {
   filePath: string
   onClose?: () => void
-  onSelectionChange?: (text: string | null) => void
+  /** 向父组件注册一个用于获取当前 PDF 文本选区的 getter */
+  onRegisterSelectionGetter?: (getter: (() => string | null) | null) => void
 }
 
-export function PdfViewer({ filePath, onSelectionChange }: PdfViewerProps) {
+export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [scale, setScale] = useState(1.25)
   const { pdfDocument, pageCount, loading, error } = usePdfDocument(filePath)
@@ -231,32 +232,33 @@ export function PdfViewer({ filePath, onSelectionChange }: PdfViewerProps) {
   // 估算单页高度（基于首屏 viewport 高度和当前 scale），供多页虚拟滚动使用
   const pageHeightForVirtual = Math.max(1, (basePageHeight ?? 800) * scale)
 
-  const syncSelectionFromWindow = () => {
-    if (!onSelectionChange) return
-    if (typeof window === 'undefined') {
-      onSelectionChange(null)
-      return
-    }
+  // 实时读取当前 PDF 文本选区（仅限 pdf-scroll-container 内部）
+  const getCurrentSelectionText = () => {
+    if (typeof window === 'undefined') return null
     const sel = window.getSelection()
-    if (!sel || sel.isCollapsed) {
-      onSelectionChange(null)
-      return
-    }
+    if (!sel || sel.isCollapsed) return null
+
     const container = containerRef.current
-    if (!container) {
-      onSelectionChange(null)
-      return
-    }
+    if (!container) return null
+
     const isInContainer = (node: Node | null) => !!node && container.contains(node)
     const anchorNode = sel.anchorNode
     const focusNode = sel.focusNode
-    if (!isInContainer(anchorNode) && !isInContainer(focusNode)) {
-      onSelectionChange(null)
-      return
-    }
+    if (!isInContainer(anchorNode) && !isInContainer(focusNode)) return null
+
     const text = sel.toString().trim()
-    onSelectionChange(text || null)
+    return text || null
   }
+
+  // 将选区 getter 注册给父组件，在组件卸载时清理
+  useEffect(() => {
+    if (!onRegisterSelectionGetter) return
+
+    onRegisterSelectionGetter(() => getCurrentSelectionText())
+    return () => {
+      onRegisterSelectionGetter(null)
+    }
+  }, [onRegisterSelectionGetter, filePath, basePageHeight, scale])
 
   const { nearbyRange, totalHeight, onScroll: handleVirtualScroll } = useVirtualPages({
     pageCount,
@@ -280,22 +282,6 @@ export function PdfViewer({ filePath, onSelectionChange }: PdfViewerProps) {
       setPageInput(String(nextPage))
     }
   }
-
-  const handleMouseUp: React.MouseEventHandler<HTMLDivElement> = () => {
-    syncSelectionFromWindow()
-  }
-
-  const handleKeyUp: React.KeyboardEventHandler<HTMLDivElement> = () => {
-    syncSelectionFromWindow()
-  }
-
-  useEffect(() => {
-    return () => {
-      if (onSelectionChange) {
-        onSelectionChange(null)
-      }
-    }
-  }, [onSelectionChange, filePath])
 
   const pages: JSX.Element[] = []
   const startIndex = nearbyRange.start
@@ -343,8 +329,6 @@ export function PdfViewer({ filePath, onSelectionChange }: PdfViewerProps) {
           ref={containerRef}
           className="pdf-scroll-container"
           onScroll={handleScroll}
-          onMouseUp={handleMouseUp}
-          onKeyUp={handleKeyUp}
         >
           <div
             style={{

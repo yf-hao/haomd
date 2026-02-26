@@ -159,8 +159,8 @@ export function WorkspaceShell({
   const [pdfRecentError, setPdfRecentError] = useState<string | null>(null)
   const [pdfNotes, setPdfNotes] = useState<Record<string, string>>({})
   const [pdfMenuState, setPdfMenuState] = useState<{ visible: boolean; x: number; y: number; targetPath: string | null }>({ visible: false, x: 0, y: 0, targetPath: null })
-  const [pdfSelectionText, setPdfSelectionText] = useState<string | null>(null)
   const [previewSelectionText, setPreviewSelectionText] = useState<string | null>(null)
+  const pdfSelectionGetterRef = useRef<(() => string | null) | null>(null)
   const isProgrammaticScrollRef = useRef(false)
   const sidebarResizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
 
@@ -444,10 +444,14 @@ export function WorkspaceShell({
     return path.split(/[/\\]/).pop() || path
   }, [activeTab])
   const getCurrentSelectionText = useCallback(() => {
-    // PDF 标签：优先使用 PDF 预览中的选区
+    // PDF 标签：优先使用 PdfViewer 提供的实时选区 getter
     if (isPdfActive) {
-      if (pdfSelectionText && pdfSelectionText.trim()) {
-        return pdfSelectionText
+      const getter = pdfSelectionGetterRef.current
+      if (getter) {
+        const text = getter()
+        if (text && text.trim()) {
+          return text
+        }
       }
       return null
     }
@@ -461,7 +465,7 @@ export function WorkspaceShell({
     const view = editorViewRef.current
     if (!view || view.state.selection.main.empty) return null
     return view.state.doc.sliceString(view.state.selection.main.from, view.state.selection.main.to)
-  }, [isPdfActive, pdfSelectionText, previewSelectionText])
+  }, [isPdfActive, previewSelectionText])
 
   const outlineItems = useOutline(markdown)
 
@@ -1786,7 +1790,9 @@ export function WorkspaceShell({
                         {activeTab?.path && (
                           <PdfViewerLazy
                             filePath={activeTab.path}
-                            onSelectionChange={setPdfSelectionText}
+                            onRegisterSelectionGetter={(getter) => {
+                              pdfSelectionGetterRef.current = getter
+                            }}
                           />
                         )}
                       </section>
