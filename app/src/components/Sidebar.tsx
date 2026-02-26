@@ -309,7 +309,7 @@ function SidebarContextMenu({ x, y, target, onAction, onRequestClose }: SidebarC
   return (
       <div
         ref={menuRef}
-        className="sidebar-context-menu"
+        className="app-overlay-menu sidebar-context-menu"
         style={{ left: position.left, top: position.top }}
         role="menu"
         onClick={(e) => e.stopPropagation()}

@@ -758,10 +758,13 @@
   box-shadow: none;
 }
 
-.sidebar-context-menu {
+.app-overlay-menu {
   position: fixed;
-  /* 确保始终在预览等所有面板之上 */
+  /* 全局浮层：用于各种右键菜单、悬浮面板，确保压过预览等内容 */
   z-index: 9999999999;
+}
+
+.sidebar-context-menu {
   min-width: 180px;
   padding: 4px 0;
   background: rgba(15, 23, 42, 0.98);
