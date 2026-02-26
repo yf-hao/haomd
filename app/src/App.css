@@ -218,7 +218,8 @@
   row-gap: 12px;
   align-items: stretch;
   overflow: auto;
-  /* 仅在工作区内部滚动 */
+  /* 仅在工作区内部滚动，阻断滚动链避免把整个应用往外拉出空白 */
+  overscroll-behavior: contain;
 }
 
 /* 编辑器 / 预览 / PDF 中间区域栅格容器 */
