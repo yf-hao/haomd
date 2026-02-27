@@ -1,11 +1,32 @@
 name: Release
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
 
 jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      is_new_version: ${{ steps.check.outputs.is_new_version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check if version is bumped
+        id: check
+        run: |
+          VERSION=$(node -p "require('./app/package.json').version")
+          TAG="v$VERSION"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists. No need to release."
+            echo "is_new_version=false" >> $GITHUB_OUTPUT
+          else
+            echo "New version $TAG detected! Triggering release."
+            echo "is_new_version=true" >> $GITHUB_OUTPUT
+          fi
+
   publish:
+    needs: check-version
+    if: needs.check-version.outputs.is_new_version == 'true'
     strategy:
       fail-fast: false
       matrix:
