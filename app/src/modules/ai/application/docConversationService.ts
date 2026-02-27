@@ -10,6 +10,8 @@ import type {
 } from '../domain/docConversations'
 import { createConversationCompressor, createLLMSummaryProvider, loadCompressionConfig, defaultCompressionConfig } from './conversationCompression'
 import { enqueueSessionDigestFromCompressedRecord } from '../globalMemory/sessionDigestQueue'
+import { readFile, writeFile } from '../../files/service'
+import { getDirKeyFromDocPath } from '../domain/docPathUtils'
 
 // 后端 JSON 结构目前与领域模型一致，单独起别名便于未来扩展
 export type DocConversationRecordCfg = DocConversationRecord
@@ -75,6 +77,147 @@ let loadingPromise: Promise<void> | null = null
 const summaryProvider = createLLMSummaryProvider()
 const conversationCompressor = createConversationCompressor(summaryProvider)
 
+// ===== WorkspaceId + 稳定 docPath key 映射 =====
+
+type WorkspaceConfig = {
+  id: string
+}
+
+const WORKSPACE_CONFIG_BASENAME = '.haomd-workspace.json'
+const workspaceIdCache = new Map<string, string>()
+
+function normalizeDirPath(dir: string): string {
+  if (!dir) return ''
+  const normalized = dir.replace(/\\/g, '/').trim()
+  if (!normalized) return ''
+  if (normalized === '/') return '/'
+  return normalized.replace(/\/+$/, '')
+}
+
+function joinPath(dir: string, basename: string): string {
+  const normalizedDir = normalizeDirPath(dir)
+  if (!normalizedDir || normalizedDir === '/') {
+    return `/${basename}`
+  }
+  return `${normalizedDir}/${basename}`
+}
+
+function getParentDir(dir: string): string | null {
+  const normalized = normalizeDirPath(dir)
+  if (!normalized || normalized === '/') return null
+  const idx = normalized.lastIndexOf('/')
+  if (idx <= 0) return '/'
+  return normalized.slice(0, idx)
+}
+
+function genWorkspaceId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID()
+  }
+  return `ws_${Date.now()}_${Math.random().toString(16).slice(2)}`
+}
+
+async function readWorkspaceConfig(configPath: string): Promise<WorkspaceConfig | null> {
+  try {
+    const resp = await readFile(configPath)
+    if (!resp.ok) {
+      if (resp.error.code !== 'NOT_FOUND') {
+        console.warn('[docConversationService] readWorkspaceConfig error', resp.error)
+      }
+      return null
+    }
+    const raw = resp.data.content
+    const parsed = JSON.parse(raw) as any
+    const id = typeof parsed?.id === 'string' ? parsed.id.trim() : ''
+    if (!id) return null
+    return { id }
+  } catch (e) {
+    console.warn('[docConversationService] readWorkspaceConfig parse error', e)
+    return null
+  }
+}
+
+async function writeWorkspaceConfig(configPath: string, id: string): Promise<void> {
+  try {
+    const content = JSON.stringify({ id }, null, 2)
+    const resp = await writeFile({ path: configPath, content })
+    if (!resp.ok) {
+      console.warn('[docConversationService] writeWorkspaceConfig failed', resp.error)
+    }
+  } catch (e) {
+    console.error('[docConversationService] writeWorkspaceConfig error', e)
+  }
+}
+
+async function resolveWorkspaceIdForDir(dir: string): Promise<{ workspaceId: string; workspaceRoot: string } | null> {
+  let current = normalizeDirPath(dir)
+  if (!current || current === '/') return null
+
+  while (true) {
+    const configPath = joinPath(current, WORKSPACE_CONFIG_BASENAME)
+    const cached = workspaceIdCache.get(configPath)
+    if (cached) {
+      return { workspaceId: cached, workspaceRoot: current }
+    }
+    const cfg = await readWorkspaceConfig(configPath)
+    if (cfg && cfg.id) {
+      workspaceIdCache.set(configPath, cfg.id)
+      return { workspaceId: cfg.id, workspaceRoot: current }
+    }
+    const parent = getParentDir(current)
+    if (!parent || parent === current || parent === '/') break
+    current = parent
+  }
+
+  return null
+}
+
+async function ensureWorkspaceIdForDir(dir: string): Promise<{ workspaceId: string; workspaceRoot: string } | null> {
+  const existing = await resolveWorkspaceIdForDir(dir)
+  if (existing) return existing
+
+  const rootDir = normalizeDirPath(dir)
+  if (!rootDir || rootDir === '/') return null
+  const configPath = joinPath(rootDir, WORKSPACE_CONFIG_BASENAME)
+  const newId = genWorkspaceId()
+  await writeWorkspaceConfig(configPath, newId)
+  workspaceIdCache.set(configPath, newId)
+  return { workspaceId: newId, workspaceRoot: rootDir }
+}
+
+function getLastDirName(dir: string): string {
+  const normalized = normalizeDirPath(dir)
+  if (!normalized || normalized === '/') return '/'
+  const parts = normalized.split('/')
+  return parts[parts.length - 1] || '/'
+}
+
+/**
+ * 将外部传入的 docPath（可以是文件路径或目录路径）映射为稳定 key：
+ * - 先通过 getDirKeyFromDocPath 归一到父目录；
+ * - 再使用 workspaceId + 最后一级目录名 作为真正的存盘 docPath；
+ * - 若 workspaceId 无法解析，则退回到「最后一级目录名」。
+ */
+async function toStableDocPathKey(rawDocPath: string): Promise<string> {
+  const dirKey = getDirKeyFromDocPath(rawDocPath) ?? rawDocPath
+  const dir = normalizeDirPath(dirKey)
+  if (!dir || dir === '/') {
+    return getLastDirName(rawDocPath)
+  }
+
+  try {
+    const info = await ensureWorkspaceIdForDir(dir)
+    const lastName = getLastDirName(dir)
+    if (!info) {
+      return lastName
+    }
+    return `${info.workspaceId}::${lastName}`
+  } catch (e) {
+    console.error('[docConversationService] toStableDocPathKey failed', e)
+    return getLastDirName(dir)
+  }
+}
+
 async function ensureLoaded(): Promise<void> {
   if (loaded) return
   if (loadingPromise) return loadingPromise
@@ -131,17 +274,24 @@ export function createDocConversationService(): DocConversationService {
 
     async getByDocPath(docPath: string): Promise<DocConversationRecord | null> {
       await ensureLoaded()
-      return getCache().find((r) => r.docPath === docPath) ?? null
+      const stableKey = await toStableDocPathKey(docPath)
+      const records = getCache()
+      return (
+        records.find((r) => r.docPath === stableKey) ??
+        records.find((r) => r.docPath === docPath) ??
+        null
+      )
     },
 
     async upsertFromState(options): Promise<void> {
       const { docPath, state, providerType, modelName, difyConversationId } = options
       await ensureLoaded()
       const records = getCache()
-      const nextMessages = toDocMessages(docPath, state, providerType, modelName)
+      const stableKey = await toStableDocPathKey(docPath)
+      const nextMessages = toDocMessages(stableKey, state, providerType, modelName)
       const now = Date.now()
 
-      const idx = records.findIndex((r) => r.docPath === docPath)
+      const idx = records.findIndex((r) => r.docPath === stableKey || r.docPath === docPath)
 
       if (idx >= 0) {
         const existing = records[idx]
@@ -157,13 +307,14 @@ export function createDocConversationService(): DocConversationService {
 
         records[idx] = {
           ...existing,
+          docPath: stableKey,
           lastActiveAt: now,
           difyConversationId: difyConversationId ?? existing.difyConversationId,
           messages: mergedMessages,
         }
       } else {
         records.push({
-          docPath,
+          docPath: stableKey,
           sessionId: genSessionId(),
           lastActiveAt: now,
           difyConversationId,
@@ -179,11 +330,12 @@ export function createDocConversationService(): DocConversationService {
       await ensureLoaded()
       const records = getCache()
       const now = Date.now()
-      const idx = records.findIndex((r) => r.docPath === docPath)
+      const stableKey = await toStableDocPathKey(docPath)
+      const idx = records.findIndex((r) => r.docPath === stableKey || r.docPath === docPath)
 
       if (idx >= 0) {
         records[idx] = {
-          docPath,
+          docPath: stableKey,
           sessionId: genSessionId(),
           lastActiveAt: now,
           difyConversationId: undefined,
@@ -191,7 +343,7 @@ export function createDocConversationService(): DocConversationService {
         }
       } else {
         records.push({
-          docPath,
+          docPath: stableKey,
           sessionId: genSessionId(),
           lastActiveAt: now,
           difyConversationId: undefined,
@@ -206,7 +358,8 @@ export function createDocConversationService(): DocConversationService {
     async compressByDocPath(docPath: string): Promise<void> {
       await ensureLoaded()
       const records = getCache()
-      const idx = records.findIndex((r) => r.docPath === docPath)
+      const stableKey = await toStableDocPathKey(docPath)
+      const idx = records.findIndex((r) => r.docPath === stableKey || r.docPath === docPath)
 
       if (idx < 0) {
         // 没有对应文档记录，直接返回
@@ -218,13 +371,17 @@ export function createDocConversationService(): DocConversationService {
         const cfg = await loadCompressionConfig().catch(() => defaultCompressionConfig)
         const summaryCreatedAfter = Date.now()
         const compressed = await conversationCompressor.compress(existing, cfg)
-        records[idx] = compressed
+        const merged: DocConversationRecord = {
+          ...compressed,
+          docPath: stableKey,
+        }
+        records[idx] = merged
         await persist(records)
         emitDocConversationEvent({ type: 'compressed', docPath })
 
         // 在压缩完成后，根据此次生成的摘要消息构建 SessionDigest 并入队
         try {
-          enqueueSessionDigestFromCompressedRecord(compressed, { summaryCreatedAfter })
+          enqueueSessionDigestFromCompressedRecord(merged, { summaryCreatedAfter })
         } catch (digestError) {
           console.error('[docConversationService] enqueue SessionDigest failed', digestError)
         }
