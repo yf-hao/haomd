@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 export type FileContextMenuItem = {
   id: string
@@ -82,7 +83,7 @@ export function FileContextMenu({ x, y, items, onRequestClose }: FileContextMenu
     return null
   }
 
-  return (
+  const menu = (
     <div
       ref={menuRef}
       className="app-overlay-menu sidebar-context-menu"
@@ -104,4 +105,10 @@ export function FileContextMenu({ x, y, items, onRequestClose }: FileContextMenu
       ))}
     </div>
   )
+
+  if (typeof document === 'undefined') {
+    return menu
+  }
+
+  return createPortal(menu, document.body)
 }
