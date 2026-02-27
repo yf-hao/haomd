@@ -11,39 +11,65 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: 20
-          cache: 'npm'
-          cache-dependency-path: app/package-lock.json
+          bun-version: latest
       
       - name: Install dependencies
-        run: cd app && npm ci
+        run: bun install
+        working-directory: app
         
       - name: Lint
-        run: cd app && npm run lint
+        run: bun run lint
+        working-directory: app
         
       - name: Type Check
-        run: cd app && npm run type-check
+        run: bun run type-check
+        working-directory: app
         
       - name: Test
-        run: cd app && npm run test:run
+        run: bun run test:coverage
+        working-directory: app
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: app/coverage
+        continue-on-error: true
+
+      - name: Upload Test Coverage Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: app/coverage/
 
   rust-check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
           
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri -> target
+
       - name: Rust Format Check
-        run: cd app/src-tauri && cargo fmt -- --check
+        run: cargo fmt -- --check
+        working-directory: app/src-tauri
         
       - name: Rust Clippy
-        run: cd app/src-tauri && cargo clippy -- -D warnings
+        run: cargo clippy -- -D warnings
+        working-directory: app/src-tauri
         
       - name: Rust Test
-        run: cd app/src-tauri && cargo test
+        run: cargo test
+        working-directory: app/src-tauri
+

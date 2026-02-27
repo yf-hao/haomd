@@ -96,3 +96,9 @@ export async function getAiChatUiSettings(): Promise<AiChatUiSettings> {
     maxVisibleMessagesPane: cfg.maxVisibleMessagesPane ?? defaultAiChatUi.maxVisibleMessagesPane,
   }
 }
+
+/** 仅供测试使用：清除单例缓存 */
+export function resetSettingsCache() {
+  cachedSettings = null
+}
+

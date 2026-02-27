@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/9</span>
+                <span class='fraction'>9/9</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/6</span>
+                <span class='fraction'>6/6</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>0/1</span>
+                <span class='fraction'>1/1</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/7</span>
+                <span class='fraction'>7/7</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line low'></div>
+    <div class='status-line high'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -82,40 +82,40 @@
 <a name='L17'></a><a href='#L17'>17</a>
 <a name='L18'></a><a href='#L18'>18</a>
 <a name='L19'></a><a href='#L19'>19</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">16x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">13x</span>
+<span class="cline-any cline-yes">13x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">12x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">12x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">export function <span class="fstat-no" title="function not covered" >getDirKeyFromDocPath(d</span>ocPath?: string | null): string | undefined {
-<span class="cstat-no" title="statement not covered" >  if (!docPath) <span class="cstat-no" title="statement not covered" >return undefined</span></span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">10x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">export function getDirKeyFromDocPath(docPath?: string | null): string | undefined {
+  if (!docPath) return undefined
 &nbsp;
-  const normalized = <span class="cstat-no" title="statement not covered" >docPath.replace(/\\/g, '/').trim()</span>
-<span class="cstat-no" title="statement not covered" >  if (!normalized) <span class="cstat-no" title="statement not covered" >return undefined</span></span>
+  const normalized = docPath.replace(/\\/g, '/').trim()
+  if (!normalized) return undefined
 &nbsp;
-  const idx = <span class="cstat-no" title="statement not covered" >normalized.lastIndexOf('/')</span>
+  const idx = normalized.lastIndexOf('/')
   // 严格模式：仅使用本目录作为 key，不向上合并父目录，也不包含子目录
   // - 绝对路径如 "/Users/me/notes/todo.md" → "/Users/me/notes"
   // - 相对路径如 "notes/todo.md" → "notes"
   // - 根目录下文件如 "/todo.md" 或 "todo.md" 统一视作根目录会话
-<span class="cstat-no" title="statement not covered" >  if (idx &lt;= 0) {</span>
+  if (idx &lt;= 0) {
     // 将整个工作区根视为一个特殊目录 key
-<span class="cstat-no" title="statement not covered" >    return '/'</span>
+    return '/'
   }
 &nbsp;
-<span class="cstat-no" title="statement not covered" >  return normalized.slice(0, idx)</span>
+  return normalized.slice(0, idx)
 }
 &nbsp;</pre></td></tr></table></pre>
 
@@ -124,7 +124,7 @@
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-02-27T01:44:16.346Z
+                at 2026-02-27T03:43:38.985Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>
