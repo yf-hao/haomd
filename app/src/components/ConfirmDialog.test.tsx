@@ -77,7 +77,10 @@ describe('ConfirmDialog', () => {
             />
         )
 
-        fireEvent.keyDown(screen.getByRole('button', { name: '确认' }).parentElement?.parentElement!, { key: 'Escape' })
+        const dialog = screen.getByRole('button', { name: '确认' }).closest('.modal-confirm')
+        if (dialog) {
+            fireEvent.keyDown(dialog, { key: 'Escape' })
+        }
         expect(onCancel).toHaveBeenCalledTimes(1)
     })
 
@@ -93,7 +96,10 @@ describe('ConfirmDialog', () => {
         )
 
         // Default active is confirm
-        fireEvent.keyDown(screen.getByRole('button', { name: '确认' }).parentElement?.parentElement!, { key: 'Enter' })
+        const dialog = screen.getByRole('button', { name: '确认' }).closest('.modal-confirm')
+        if (dialog) {
+            fireEvent.keyDown(dialog, { key: 'Enter' })
+        }
         expect(onConfirm).toHaveBeenCalledTimes(1)
     })
 })

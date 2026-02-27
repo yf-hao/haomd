@@ -9,7 +9,7 @@ describe('editorSettings', () => {
     })
 
     it('should return default compression settings if backend is empty', async () => {
-        ; (mockInvoke as any).mockResolvedValue({ Ok: { data: {} } })
+        vi.mocked(mockInvoke).mockResolvedValue({ Ok: { data: {} } })
 
         const settings = await getAiCompressionSettings()
         expect(settings.minMessagesToCompress).toBe(80)
@@ -17,7 +17,7 @@ describe('editorSettings', () => {
     })
 
     it('should merge backend settings with defaults', async () => {
-        ; (mockInvoke as any).mockResolvedValue({
+        vi.mocked(mockInvoke).mockResolvedValue({
             Ok: {
                 data: {
                     aiCompression: { minMessagesToCompress: 50 },
@@ -36,7 +36,7 @@ describe('editorSettings', () => {
     })
 
     it('should handle backend errors and return defaults', async () => {
-        ; (mockInvoke as any).mockResolvedValue({
+        vi.mocked(mockInvoke).mockResolvedValue({
             Err: { error: { message: 'fail', code: 'Unknown' } }
         })
 

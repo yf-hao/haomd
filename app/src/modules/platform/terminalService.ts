@@ -25,7 +25,7 @@ export async function openTerminalAt(cwd: string): Promise<OpenTerminalResult> {
     return { ok: true }
   } catch (err) {
     console.error('[terminalService] open_terminal failed', err)
-    const message = (err as any)?.message || String(err)
+    const message = err instanceof Error ? err.message : String(err)
     return { ok: false, message: `无法打开终端：${message}` }
   }
 }

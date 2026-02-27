@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum ErrorCode {
   OK,
   CANCELLED,

@@ -11,13 +11,11 @@ use fs_types::{ErrorCode, FilePayload, RecentFile, ResultPayload, ServiceError, 
 use log::info;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use serde_json;
 use sha2::{Digest, Sha256};
 use arboard::Clipboard;
 use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba};
 use rand::{distributions::Alphanumeric, Rng};
 use chrono::Local;
-use mime_guess;
 use percent_encoding::percent_decode_str;
 use tauri::http::{Request, Response};
 use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
@@ -1660,10 +1658,9 @@ pub fn run() {
             log::info!("[tauri] haomd protocol: Range header={}", range_str);
 
             // 解析 "bytes=0-1023" 格式
-            let (start, end) = if range_str.starts_with("bytes=") {
-              let range_spec = &range_str[6..];
+            let (start, end) = if let Some(range_spec) = range_str.strip_prefix("bytes=") {
               let parts: Vec<&str> = range_spec.split('-').collect();
-              let start_opt = parts.get(0).and_then(|s| s.parse::<u64>().ok());
+              let start_opt = parts.first().and_then(|s| s.parse::<u64>().ok());
               let end_opt = parts.get(1).and_then(|s| s.parse::<u64>().ok());
 
               let start = start_opt.unwrap_or(0);
@@ -1762,7 +1759,7 @@ pub fn run() {
 
       // 构建原生菜单（参考 VS Code）
       tauri::async_runtime::block_on(async {
-        let menu = build_app_menu(&handle).await?;
+        let menu = build_app_menu(handle).await?;
         handle.set_menu(menu)?;
         Ok::<(), tauri::Error>(())
       })?;
@@ -1798,15 +1795,12 @@ pub fn run() {
 
               {
                 let mut page = RECENT_PAGE.lock().unwrap();
-                if action_id == "recent_prev_page" {
-                  if *page > 0 {
-                    *page -= 1;
-                  }
-                } else if action_id == "recent_next_page" {
-                  if *page < max_page {
+                if action_id == "recent_prev_page" && *page > 0 {
+                  *page -= 1;
+                } else if action_id == "recent_next_page"
+                  && *page < max_page {
                     *page += 1;
                   }
-                }
               }
 
               refresh_app_menu(&app_handle).await;
