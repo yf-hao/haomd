@@ -25,7 +25,7 @@ describe('clipboardEvents', () => {
 
         // Simulate event
         const callback = vi.mocked(listen).mock.calls[0][1]
-        callback({ payload: 'test text' })
+        callback({ payload: 'test text', event: 'native://paste', id: 1 } as any)
         expect(handler).toHaveBeenCalledWith('test text')
 
         unlisten()
@@ -41,7 +41,7 @@ describe('clipboardEvents', () => {
         await new Promise(r => setTimeout(r, 0))
 
         const callback = vi.mocked(listen).mock.calls[0][1]
-        callback({ payload: 'error message' })
+        callback({ payload: 'error message', event: 'native://paste_error', id: 1 } as any)
         expect(handler).toHaveBeenCalledWith('error message')
 
         unlisten()
@@ -57,7 +57,7 @@ describe('clipboardEvents', () => {
         await new Promise(r => setTimeout(r, 0))
 
         const callback = vi.mocked(listen).mock.calls[0][1]
-        callback({})
+        callback({ payload: '', event: 'native://paste_image', id: 1 } as any)
         expect(handler).toHaveBeenCalled()
 
         unlisten()

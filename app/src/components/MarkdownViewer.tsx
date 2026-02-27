@@ -447,7 +447,7 @@ function MarkdownViewerComponent(
 
           if (posterAlt) {
             // 处理 poster 图片路径（复用路径转换逻辑）
-            let posterSrc = posterAlt
+            const posterSrc = posterAlt
             if (filePath && posterSrc && !posterSrc.startsWith('http://') && !posterSrc.startsWith('https://') && !posterSrc.startsWith('data:')) {
               const fileDir = filePath.replace(/[/\\][^/\\]+$/, '')
               const sep = filePath.includes('\\') ? '\\' : '/'
@@ -752,7 +752,7 @@ function MarkdownViewerComponent(
   useEffect(() => {
     const container = containerRef.current
     if (!container || typeof activeLine !== 'number' || activeLine < 1) return
-    
+
     const rafId = requestAnimationFrame(() => {
       const anchors = Array.from(
         container.querySelectorAll<HTMLElement>('[data-line-start]')
@@ -771,7 +771,7 @@ function MarkdownViewerComponent(
         if (scrollParent) {
           // 判断是否在底部区域（滚动位置在最后 100px）
           const isNearBottom = scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight < 100
-          
+
           // 如果在底部，滚动到文档末尾
           if (isNearBottom) {
             scrollParent.scrollTo({ top: scrollParent.scrollHeight, behavior: 'smooth' })
@@ -779,7 +779,7 @@ function MarkdownViewerComponent(
         }
         return
       }
-      
+
       target.classList.add('active-block')
 
       const scrollParent = container.closest('.preview-body') as HTMLElement | null
@@ -787,22 +787,22 @@ function MarkdownViewerComponent(
 
       const parentRect = scrollParent.getBoundingClientRect()
       const targetRect = target.getBoundingClientRect()
-      
+
       // 判断目标元素是否在可视区域内
-      const isVisible = 
-        targetRect.top >= parentRect.top && 
+      const isVisible =
+        targetRect.top >= parentRect.top &&
         targetRect.bottom <= parentRect.bottom
-      
+
       // 只在目标元素不可见时滚动
       if (!isVisible) {
         const currentBottomOffset = parentRect.height - (targetRect.bottom - parentRect.top)
         const desiredBottomOffset = parentRect.height / 4
         const delta = desiredBottomOffset - currentBottomOffset
-        
+
         scrollParent.scrollTo({ top: scrollParent.scrollTop + delta })
       }
     })
-    
+
     return () => {
       if (rafId) cancelAnimationFrame(rafId)
     }

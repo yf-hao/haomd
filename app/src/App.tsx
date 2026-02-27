@@ -54,9 +54,11 @@ function App() {
     }
   }, [])
 
-  if (import.meta.env.DEV) {
-    console.log('[Perf] App first render cost:', performance.now() - appStartTime, 'ms')
-  }
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.log('[Perf] App first render cost:', performance.now() - appStartTime, 'ms')
+    }
+  }, [])
 
   return (
     <div className="app-shell">

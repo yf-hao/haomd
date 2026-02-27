@@ -2,7 +2,7 @@ import type { FC, ChangeEvent, FormEvent } from 'react'
 import { useEffect, useState } from 'react'
 import './AiSettingsDialog.css'
 import { onNativePaste, onNativePasteError } from '../modules/platform/clipboardEvents'
-import { emptySettings, type UiProvider } from '../modules/ai/settings'
+import { emptySettings, type UiProvider, type ProviderType } from '../modules/ai/settings'
 import { useAiSettingsPersistence } from '../hooks/useAiSettingsPersistence'
 import { useAiSettingsState, type ProviderDraft, parseModelsInput } from '../hooks/useAiSettingsState'
 import { testProviderConnection } from '../modules/ai/testConnection'
@@ -121,7 +121,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
       unPaste()
       unError()
     }
-  }, [open, activeField])
+  }, [open, activeField, setDraft])
 
   if (!open) return null
 
@@ -286,7 +286,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
         models: models.map((m) => ({ id: m })),
         defaultModelId: models[0],
         description: draft.description.trim() || undefined,
-        providerType: (draft.providerType || 'dify') as any,
+        providerType: (draft.providerType || 'dify') as ProviderType,
         visionMode: draft.visionMode || undefined,
       }
 
@@ -312,7 +312,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
           ...currentProvider,
           apiKey: shouldUpdateApiKey ? newApiKeyCandidate : currentProvider.apiKey,
           // Type 与 Vision 都从草稿同步；空字符串表示“自动/默认”
-          providerType: (draft.providerType || 'dify') as any,
+          providerType: (draft.providerType || 'dify') as ProviderType,
           visionMode: draft.visionMode || undefined,
         }
 

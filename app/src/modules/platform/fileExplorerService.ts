@@ -25,7 +25,7 @@ export async function openInFileManager(targetPath: string): Promise<OpenInFileM
     return { ok: true }
   } catch (err) {
     console.error('[fileExplorerService] open_in_file_explorer failed', err)
-    const message = (err as any)?.message || String(err)
+    const message = err instanceof Error ? err.message : String(err)
     return { ok: false, message: `无法打开文件管理器：${message}` }
   }
 }

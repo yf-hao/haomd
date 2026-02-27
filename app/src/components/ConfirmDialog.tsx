@@ -29,7 +29,7 @@ export function ConfirmDialog({
   const confirmRef = useRef<HTMLButtonElement | null>(null)
   const cancelRef = useRef<HTMLButtonElement | null>(null)
   const extraRef = useRef<HTMLButtonElement | null>(null)
-  const [activeIndex, setActiveIndex] = useState<number>(-1)
+
 
   type ButtonConfig = {
     ref: React.RefObject<HTMLButtonElement | null>
@@ -53,24 +53,27 @@ export function ConfirmDialog({
     ]
   }
 
+  // 计算默认焦点索引
+  const defaultIdx = isStacked ? 0 : 1 // 在 getButtons 中，如果是 stacked，confirm 在索引 0；如果是 default，confirm 在索引 1
+
+  const [activeIndex, setActiveIndex] = useState<number>(defaultIdx)
+
+  // 处理布局变化时的索引重置
   useEffect(() => {
-    const buttons = getButtons()
-    if (!buttons.length) return
+    const currentButtons = getButtons()
+    const confirmIdx = currentButtons.findIndex((b) => b.action === 'confirm')
+    setActiveIndex(confirmIdx >= 0 ? confirmIdx : 0)
+  }, [isStacked, extraText, !!onExtra])
 
-    let index = activeIndex
-    if (index < 0 || index >= buttons.length) {
-      const confirmIdx = buttons.findIndex((b) => b.action === 'confirm')
-      index = confirmIdx >= 0 ? confirmIdx : 0
-      if (index !== activeIndex) {
-        setActiveIndex(index)
-      }
-    }
-
-    const btn = buttons[index]?.ref.current
+  // 处理焦点同步
+  useEffect(() => {
+    const currentButtons = getButtons()
+    const index = activeIndex >= 0 && activeIndex < currentButtons.length ? activeIndex : 0
+    const btn = currentButtons[index]?.ref.current
     if (btn) {
       btn.focus()
     }
-  }, [activeIndex, isStacked, extraText, onExtra])
+  }, [activeIndex, isStacked, extraText, !!onExtra])
 
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
@@ -157,22 +160,22 @@ export function ConfirmDialog({
               </button>
             </>
           ) : (
-<>
-            <button
-              ref={cancelRef}
-              className="modal-btn tertiary"
-              onClick={onCancel}
-            >
-              {cancelText}
-            </button>
-            <button
-              ref={confirmRef}
-              className="modal-btn primary"
-              onClick={onConfirm}
-            >
-              {confirmText}
-            </button>
-          </>
+            <>
+              <button
+                ref={cancelRef}
+                className="modal-btn tertiary"
+                onClick={onCancel}
+              >
+                {cancelText}
+              </button>
+              <button
+                ref={confirmRef}
+                className="modal-btn primary"
+                onClick={onConfirm}
+              >
+                {confirmText}
+              </button>
+            </>
           )}
         </div>
       </div>

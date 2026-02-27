@@ -1,0 +1,446 @@
+
+> HaoMD@0.1.0 lint
+> eslint .
+
+
+/Users/yfhao/Documents/study/markdown/app/src/App.tsx
+  58:50  error  Error: Cannot call impure function during render
+
+`performance.now` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+/Users/yfhao/Documents/study/markdown/app/src/App.tsx:58:50
+  56 |
+  57 |   if (import.meta.env.DEV) {
+> 58 |     console.log('[Perf] App first render cost:', performance.now() - appStartTime, 'ms')
+     |                                                  ^^^^^^^^^^^^^^^^^ Cannot call impure function
+  59 |   }
+  60 |
+  61 |   return (  react-hooks/purity
+
+/Users/yfhao/Documents/study/markdown/app/src/components/AiSettingsDialog.tsx
+  124:6   warning  React Hook useEffect has a missing dependency: 'setDraft'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  289:57  error    Unexpected any. Specify a different type                                                                     @typescript-eslint/no-explicit-any
+  315:59  error    Unexpected any. Specify a different type                                                                     @typescript-eslint/no-explicit-any
+
+/Users/yfhao/Documents/study/markdown/app/src/components/ConfirmDialog.tsx
+  65:9  error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/yfhao/Documents/study/markdown/app/src/components/ConfirmDialog.tsx:65:9
+  63 |       index = confirmIdx >= 0 ? confirmIdx : 0
+  64 |       if (index !== activeIndex) {
+> 65 |         setActiveIndex(index)
+     |         ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  66 |       }
+  67 |     }
+  68 |  react-hooks/set-state-in-effect
+  73:6  warning  React Hook useEffect has a missing dependency: 'getButtons'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                react-hooks/exhaustive-deps
+
+/Users/yfhao/Documents/study/markdown/app/src/components/Editor/extensions.ts
+  115:48  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  122:80  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  225:10  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/yfhao/Documents/study/markdown/app/src/components/FileContextMenu.tsx
+  40:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/yfhao/Documents/study/markdown/app/src/components/FileContextMenu.tsx:40:5
+  38 |     }
+  39 |
+> 40 |     setPosition({ left, top })
+     |     ^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  41 |   }, [x, y, visibleItems.length])
+  42 |
+  43 |   useEffect(() => {  react-hooks/set-state-in-effect
+
+/Users/yfhao/Documents/study/markdown/app/src/components/MarkdownViewer.tsx
+   44:17  error    Unexpected any. Specify a different type                                                                                                                                                                                                              @typescript-eslint/no-explicit-any
+   45:25  error    Unexpected any. Specify a different type                                                                                                                                                                                                              @typescript-eslint/no-explicit-any
+  130:28  error    Unexpected any. Specify a different type                                                                                                                                                                                                              @typescript-eslint/no-explicit-any
+  134:18  error    Unexpected any. Specify a different type                                                                                                                                                                                                              @typescript-eslint/no-explicit-any
+  134:29  error    Unexpected any. Specify a different type                                                                                                                                                                                                              @typescript-eslint/no-explicit-any
+  138:20  error    Unexpected any. Specify a different type                                                                                                                                                                                                              @typescript-eslint/no-explicit-any
+  151:24  error    Unexpected any. Specify a different type                                                                                                                                                                                                              @typescript-eslint/no-explicit-any
+  151:35  error    Unexpected any. Specify a different type                                                                                                                                                                                                              @typescript-eslint/no-explicit-any
+  155:20  error    Unexpected any. Specify a different type                                                                                                                                                                                                              @typescript-eslint/no-explicit-any
+  242:55  error    Unexpected any. Specify a different type                                                                                                                                                                                                              @typescript-eslint/no-explicit-any
+  282:48  error    Unexpected any. Specify a different type                                                                                                                                                                                                              @typescript-eslint/no-explicit-any
+  289:40  error    Unexpected any. Specify a different type                                                                                                                                                                                                              @typescript-eslint/no-explicit-any
+  297:40  error    Unexpected any. Specify a different type                                                                                                                                                                                                              @typescript-eslint/no-explicit-any
+  319:46  error    Unexpected any. Specify a different type                                                                                                                                                                                                              @typescript-eslint/no-explicit-any
+  320:27  error    React Hook "useLineRange" is called in function "inlineMath" that is neither a React function component nor a custom React Hook function. React component names must start with an uppercase letter. React Hook names must start with the word "use"  react-hooks/rules-of-hooks
+  334:40  error    Unexpected any. Specify a different type                                                                                                                                                                                                              @typescript-eslint/no-explicit-any
+  346:13  error    'node' is defined but never used                                                                                                                                                                                                                      @typescript-eslint/no-unused-vars
+  346:47  error    Unexpected any. Specify a different type                                                                                                                                                                                                              @typescript-eslint/no-explicit-any
+  367:15  error    'node' is defined but never used                                                                                                                                                                                                                      @typescript-eslint/no-unused-vars
+  367:33  error    Unexpected any. Specify a different type                                                                                                                                                                                                              @typescript-eslint/no-explicit-any
+  389:39  error    Unnecessary escape character: \/                                                                                                                                                                                                                      no-useless-escape
+  450:17  error    'posterSrc' is never reassigned. Use 'const' instead                                                                                                                                                                                                  prefer-const
+  457:49  error    Unnecessary escape character: \/                                                                                                                                                                                                                      no-useless-escape
+  502:31  error    'className' is defined but never used                                                                                                                                                                                                                 @typescript-eslint/no-unused-vars
+  502:53  error    Unexpected any. Specify a different type                                                                                                                                                                                                              @typescript-eslint/no-explicit-any
+  533:60  error    Unexpected any. Specify a different type                                                                                                                                                                                                              @typescript-eslint/no-explicit-any
+  539:32  error    Unexpected any. Specify a different type                                                                                                                                                                                                              @typescript-eslint/no-explicit-any
+  540:30  error    Unexpected any. Specify a different type                                                                                                                                                                                                              @typescript-eslint/no-explicit-any
+  593:6   warning  React Hook useMemo has a missing dependency: 'filePath'. Either include it or remove the dependency array                                                                                                                                             react-hooks/exhaustive-deps
+
+/Users/yfhao/Documents/study/markdown/app/src/components/PdfSidebarPanel.tsx
+  10:55  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/yfhao/Documents/study/markdown/app/src/components/PromptSettingsDialog.tsx
+  261:125  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/yfhao/Documents/study/markdown/app/src/components/Sidebar.tsx
+   64:27  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  253:45  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/yfhao/Documents/study/markdown/app/src/components/WorkspaceDialogs.tsx
+   8:20  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   9:29  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  11:20  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  12:32  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  13:24  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  14:36  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  17:18  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/yfhao/Documents/study/markdown/app/src/components/WorkspaceShell.tsx
+   200:56  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+   261:55  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+   620:54  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+   621:62  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+   878:23  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+   908:23  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+   961:48  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+   970:46  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+   985:48  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+   991:61  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+  1102:9   warning  The 'getCurrentFolderForNewFile' function makes the dependencies of useCallback Hook (at line 1152) change on every render. To fix this, wrap the definition of 'getCurrentFolderForNewFile' in its own useCallback() Hook                                               react-hooks/exhaustive-deps
+  1119:9   warning  The 'getTargetFolderForNewFolder' function makes the dependencies of useCallback Hook (at line 1211) change on every render. Move it inside the useCallback callback. Alternatively, wrap the definition of 'getTargetFolderForNewFolder' in its own useCallback() Hook  react-hooks/exhaustive-deps
+  1193:6   warning  React Hook useCallback has a missing dependency: 'generateUniqueMarkdownPath'. Either include it or remove the dependency array                                                                                                                                          react-hooks/exhaustive-deps
+  1245:6   warning  React Hook useCallback has a missing dependency: 'generateUniqueFolderPath'. Either include it or remove the dependency array                                                                                                                                            react-hooks/exhaustive-deps
+  1264:6   warning  React Hook useCallback has an unnecessary dependency: 'sidebar.folderRoots'. Either exclude it or remove the dependency array                                                                                                                                            react-hooks/exhaustive-deps
+  1340:37  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+  1345:62  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+  1434:15  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+
+/Users/yfhao/Documents/study/markdown/app/src/components/diagrams.tsx
+   20:35  error  Error: Cannot call impure function during render
+
+`Math.random` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+/Users/yfhao/Documents/study/markdown/app/src/components/diagrams.tsx:20:35
+  18 |   const [svg, setSvg] = useState<string>('加载中…')
+  19 |   const [error, setError] = useState<string | null>(null)
+> 20 |   const idRef = useRef(`mermaid-${Math.random().toString(36).slice(2)}`)
+     |                                   ^^^^^^^^^^^^^ Cannot call impure function
+  21 |   const runIdRef = useRef(0)
+  22 |   const containerRef = useRef<HTMLDivElement | null>(null)
+  23 |   const [containerWidth, setContainerWidth] = useState<number | null>(null)  react-hooks/purity
+  169:26  error  Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            @typescript-eslint/no-explicit-any
+  178:70  error  Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            @typescript-eslint/no-explicit-any
+  184:14  error  '_' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       @typescript-eslint/no-unused-vars
+
+/Users/yfhao/Documents/study/markdown/app/src/hooks/useAiChatManager.ts
+   48:17  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/yfhao/Documents/study/markdown/app/src/hooks/useAiChatManager.ts:48:17
+  46 |
+  47 |             if (storedMode === 'floating' || storedMode === 'docked') {
+> 48 |                 setAiChatMode(storedMode as 'floating' | 'docked')
+     |                 ^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  49 |             }
+  50 |             if (storedDockSide === 'left' || storedDockSide === 'right') {
+  51 |                 setAiChatDockSide(storedDockSide as 'left' | 'right')  react-hooks/set-state-in-effect
+   98:13  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/yfhao/Documents/study/markdown/app/src/hooks/useAiChatManager.ts:98:13
+   96 |
+   97 |         if (aiChatDockSide === 'left') {
+>  98 |             setAiChatWidthLeft(aiChatWidthRight)
+      |             ^^^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+   99 |         } else {
+  100 |             setAiChatWidthRight(aiChatWidthLeft)
+  101 |         }                                                                                                                              react-hooks/set-state-in-effect
+  160:57  error  Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      @typescript-eslint/no-explicit-any
+
+/Users/yfhao/Documents/study/markdown/app/src/hooks/useConfirmDialogs.ts
+  51:21  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  69:26  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  70:64  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  76:23  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  86:23  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/yfhao/Documents/study/markdown/app/src/hooks/useFilePersistence.ts
+  191:6   warning  React Hook useCallback has an unnecessary dependency: 'filePath'. Either exclude it or remove the dependency array  react-hooks/exhaustive-deps
+  379:52  error    Unexpected any. Specify a different type                                                                            @typescript-eslint/no-explicit-any
+
+/Users/yfhao/Documents/study/markdown/app/src/hooks/useHugeDocManager.ts
+  55:13  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/yfhao/Documents/study/markdown/app/src/hooks/useHugeDocManager.ts:55:13
+  53 |     useEffect(() => {
+  54 |         if (!hugeDocEnabled) {
+> 55 |             setHugeDocState(null)
+     |             ^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  56 |             return
+  57 |         }
+  58 |  react-hooks/set-state-in-effect
+
+/Users/yfhao/Documents/study/markdown/app/src/hooks/useNativeBridge.ts
+  12:14  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  13:55  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  17:32  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  97:23  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/yfhao/Documents/study/markdown/app/src/hooks/useSidebarActions.ts
+  18:29  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/yfhao/Documents/study/markdown/app/src/hooks/useTabs.ts
+  152:5  error    Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `options`, but the source dependencies were [activeId, tabs, closeTab, options?.onRequestCloseCurrentTab]. Inferred less specific property than source.
+
+/Users/yfhao/Documents/study/markdown/app/src/hooks/useTabs.ts:152:5
+  150 |
+  151 |   const closeCurrentTab = useCallback(
+> 152 |     () => {
+      |     ^^^^^^^
+> 153 |       if (import.meta.env.DEV) {
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 154 |         console.log('[closeCurrentTab] 被调用')
+      …
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 207 |       closeTab(activeId)
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 208 |     },
+      | ^^^^^^ Could not preserve existing manual memoization
+  209 |     [activeId, tabs, closeTab, options?.onRequestCloseCurrentTab],
+  210 |   )
+  211 |  react-hooks/preserve-manual-memoization
+  209:5  warning  React Hook useCallback has a missing dependency: 'options'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             react-hooks/exhaustive-deps
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/ai/application/aiChatSessionService.ts
+  37:119  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  49:19   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/ai/application/docConversationService.ts
+  130:39  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/ai/modelscope/ModelScopeVisionClient.ts
+   5:74  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  17:10  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/ai/openai/createOpenAIStreamingClient.ts
+  78:51  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/ai/platform/clipboardImageService.ts
+  5:72  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/ai/testConnection.ts
+  82:5  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/ai/ui/AiChatDialog.tsx
+   83:7  error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/ai/ui/AiChatDialog.tsx:83:7
+  81 |   useEffect(() => {
+  82 |     if (!open) {
+> 83 |       setContextPrefix(null)
+     |       ^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  84 |       setContextPrefixUsed(false)
+  85 |       return
+  86 |     }     react-hooks/set-state-in-effect
+  339:7  error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/ai/ui/AiChatDialog.tsx:339:7
+  337 |   useEffect(() => {
+  338 |     if (!open || !isDifyProvider) {
+> 339 |       setActiveTypewriterId(null)
+      |       ^^^^^^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  340 |       return
+  341 |     }
+  342 |  react-hooks/set-state-in-effect
+  454:6  warning  React Hook useEffect has a missing dependency: 'messages'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                react-hooks/exhaustive-deps
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/ai/ui/AiChatPane.tsx
+   91:7  error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/ai/ui/AiChatPane.tsx:91:7
+  89 |   useEffect(() => {
+  90 |     if (!entryMode || !initialContext) {
+> 91 |       setContextPrefix(null)
+     |       ^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  92 |       setContextPrefixUsed(false)
+  93 |       return
+  94 |     }  react-hooks/set-state-in-effect
+  342:7  error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/ai/ui/AiChatPane.tsx:342:7
+  340 |   useEffect(() => {
+  341 |     if (!isDifyProvider) {
+> 342 |       setActiveTypewriterId(null)
+      |       ^^^^^^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  343 |       return
+  344 |     }
+  345 |                                react-hooks/set-state-in-effect
+  467:6  warning  React Hook useEffect has missing dependencies: 'isDifyProvider' and 'messages'. Either include them or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            react-hooks/exhaustive-deps
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/ai/ui/AiChatProvider.tsx
+  29:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/ai/ui/DocConversationHistoryDialog.tsx
+  267:32  error  React Hook "useCallback" is called conditionally. React Hooks must be called in the exact same order in every component render  react-hooks/rules-of-hooks
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/ai/ui/hooks/useAiChat.ts
+  192:6  warning  React Hook useEffect has a missing dependency: 'docPath'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/ai/ui/hooks/useAiChatSession.ts
+  168:6  warning  React Hook useEffect has a missing dependency: 'legacyDocPath'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/commands/registry.ts
+   43:27  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   44:23  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   45:25  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   47:33  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  199:21  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  199:40  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/export/html/index.tsx
+    1:1   error  Do not use "@ts-nocheck" because it alters compilation errors  @typescript-eslint/ban-ts-comment
+   24:41  error  Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+  130:23  error  Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/images/defaultImageUrlResolver.ts
+  27:69  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/markdown/rehypeMathLineAnchors.ts
+   8:32  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  10:26  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  10:46  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  14:28  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  55:33  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/pdf/components/PdfTextLayer.tsx
+  38:35  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  39:22  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  39:59  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/pdf/components/PdfViewer.tsx
+  114:7  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/pdf/components/PdfViewer.tsx:114:7
+  112 |   useEffect(() => {
+  113 |     if (!pageCount || pageCount <= 0) {
+> 114 |       setCurrentPage(1)
+      |       ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  115 |       setPageInput('1')
+  116 |       return
+  117 |     }                                         react-hooks/set-state-in-effect
+  134:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/pdf/components/PdfViewer.tsx:134:5
+  132 |     const clampedScale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, saved.scale))
+  133 |
+> 134 |     setScale(clampedScale)
+      |     ^^^^^^^^ Avoid calling setState() directly within an effect
+  135 |     setCurrentPage(clampedPage)
+  136 |     setPageInput(String(clampedPage))
+  137 |  react-hooks/set-state-in-effect
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/pdf/hooks/usePdfDocument.ts
+   9:15  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  14:32  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  37:26  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/pdf/hooks/useVirtualPages.ts
+  95:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/pdf/hooks/useVirtualPages.ts:95:5
+  93 |   // 当页数、单页高度或容器就绪时，初始化 / 同步一次可见区
+  94 |   useEffect(() => {
+> 95 |     recomputeRanges()
+     |     ^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  96 |   }, [recomputeRanges])
+  97 |
+  98 |   return {  react-hooks/set-state-in-effect
+
+/Users/yfhao/Documents/study/markdown/app/src/modules/platform/fileExplorerService.ts
+  28:29  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/yfhao/Documents/study/markdown/app/src/utils/debug.ts
+  3:5  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+
+✖ 134 problems (118 errors, 16 warnings)
+  1 error and 2 warnings potentially fixable with the `--fix` option.
+
