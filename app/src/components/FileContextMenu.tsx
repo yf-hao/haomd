@@ -21,19 +21,25 @@ export function FileContextMenu({ x, y, items, onRequestClose }: FileContextMenu
   const visibleItems = items.filter((item) => item && item.visible !== false)
 
   useEffect(() => {
-    const menuWidth = 200
-    const itemCount = visibleItems.length || 1
-    const menuHeight = itemCount * 28 + 8
+    const el = menuRef.current
+    let menuWidth = 200
+    let menuHeight = (visibleItems.length || 1) * 28 + 8
+
+    if (el) {
+      const rect = el.getBoundingClientRect()
+      if (rect.width > 0) menuWidth = rect.width
+      if (rect.height > 0) menuHeight = rect.height
+    }
 
     let left = x
     let top = y
     const vw = window.innerWidth
     const vh = window.innerHeight
 
-    if (left + menuWidth > vw) {
+    if (left + menuWidth > vw - 4) {
       left = Math.max(4, vw - menuWidth - 4)
     }
-    if (top + menuHeight > vh) {
+    if (top + menuHeight > vh - 4) {
       top = Math.max(4, vh - menuHeight - 4)
     }
 
@@ -80,7 +86,7 @@ export function FileContextMenu({ x, y, items, onRequestClose }: FileContextMenu
     <div
       ref={menuRef}
       className="app-overlay-menu sidebar-context-menu"
-      style={{ left: position.left, top: position.top }}
+      style={{ left: position.left, top: position.top, position: 'fixed', zIndex: 9999999999 }}
       role="menu"
       onClick={(e) => e.stopPropagation()}
     >
