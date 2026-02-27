@@ -25,6 +25,8 @@ jobs:
           fi
 
   publish:
+    permissions:
+      contents: write
     needs: check-version
     if: needs.check-version.outputs.is_new_version == 'true'
     strategy:
