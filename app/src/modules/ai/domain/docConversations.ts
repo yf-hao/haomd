@@ -2,6 +2,9 @@
 
 export type SummaryLevel = 0 | 1 | 2
 
+/** 文档会话类型：按 Markdown / PDF 区分，同一目录下互不干扰 */
+export type DocConversationKind = 'markdown' | 'pdf'
+
 export type DocConversationMessageMeta = {
   providerType?: 'dify' | 'openai' | 'local' | 'coze' | 'other'
   modelName?: string
@@ -26,8 +29,11 @@ export type DocConversationMessage = {
 }
 
 // 按 docPath 聚合的一份文档会话记录
+// - kind 缺省时按 'markdown' 处理，用于兼容旧数据
 export type DocConversationRecord = {
   docPath: string
+  /** 会话类型：Markdown / PDF。旧记录缺省视为 markdown */
+  kind?: DocConversationKind
   sessionId: string
   lastActiveAt: number
   difyConversationId?: string
@@ -37,6 +43,8 @@ export type DocConversationRecord = {
 // 轻量索引结构：用于列表/菜单展示
 export type ConversationIndexEntry = {
   docPath: string
+  /** 会话类型：Markdown / PDF。旧记录缺省视为 markdown */
+  kind?: DocConversationKind
   sessionId: string
   lastActiveAt: number
   hasDifyConversation: boolean

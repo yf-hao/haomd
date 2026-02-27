@@ -723,6 +723,11 @@ export function WorkspaceShell({
   // 当前激活的 PDF 文件路径（仅在 isPdfActive 时有值）
   const activePdfPath = isPdfActive ? activeTab?.path ?? null : null
 
+  // AI Chat 使用的“文档路径”：
+  // - Markdown 标签：使用当前文本文件的路径（filePath）
+  // - PDF 标签：使用当前激活的 PDF 文件路径（activePdfPath）
+  const aiChatFilePath = isPdfActive ? activePdfPath : filePath
+
   // 统一决定编辑器里展示的内容：
   // - Markdown 标签：走原来的 hugeDoc/markdown 逻辑
   // - PDF 标签：按路径从 pdfNotes 中取笔记
@@ -844,7 +849,12 @@ export function WorkspaceShell({
     })
   }, [createTab, isCreatingTab, setActiveTab, handleMarkdownChange, tabs])
 
-  const getCurrentFilePath = useCallback(() => filePath ?? null, [filePath])
+  const getCurrentFilePath = useCallback(() => {
+    if (isPdfActive) {
+      return activePdfPath ?? null
+    }
+    return filePath ?? null
+  }, [isPdfActive, activePdfPath, filePath])
 
   useEffect(() => {
     if (activeTab && !isPdfActive) setFilePath(activeTab.path)
@@ -1732,7 +1742,7 @@ export function WorkspaceShell({
                         entryMode={aiChatState.entryMode}
                         initialContext={aiChatState.initialContext}
                         onClose={closeAiChatDialog}
-                        currentFilePath={filePath}
+                        currentFilePath={aiChatFilePath}
                         sourceTabId={activeTab?.id ?? null}
                       />
                     )}
@@ -1822,7 +1832,7 @@ export function WorkspaceShell({
                     entryMode={aiChatState.entryMode}
                     initialContext={aiChatState.initialContext}
                     onClose={closeAiChatDialog}
-                    currentFilePath={filePath}
+                    currentFilePath={aiChatFilePath}
                     sourceTabId={activeTab?.id ?? null}
                   />
                 )}
@@ -1848,7 +1858,7 @@ export function WorkspaceShell({
             entryMode={aiChatState.entryMode}
             initialContext={aiChatState.initialContext}
             onClose={closeAiChatDialog}
-            currentFilePath={filePath}
+            currentFilePath={aiChatFilePath}
             tabId={aiChatState.tabId}
           />
         )}

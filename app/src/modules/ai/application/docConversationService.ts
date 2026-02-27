@@ -6,6 +6,7 @@ import type {
   DocConversationRecord,
   DocConversationMessage,
   ConversationIndexEntry,
+  DocConversationKind,
 } from '../domain/docConversations'
 import { createConversationCompressor, createLLMSummaryProvider, loadCompressionConfig, defaultCompressionConfig } from './conversationCompression'
 import { enqueueSessionDigestFromCompressedRecord } from '../globalMemory/sessionDigestQueue'
@@ -14,9 +15,9 @@ import { enqueueSessionDigestFromCompressedRecord } from '../globalMemory/sessio
 export type DocConversationRecordCfg = DocConversationRecord
 
 export type DocConversationEvent =
-  | { type: 'cleared'; docPath: string }
-  | { type: 'compressed'; docPath: string }
-  | { type: 'updated'; docPath: string }
+  | { type: 'cleared'; docPath: string; kind?: DocConversationKind }
+  | { type: 'compressed'; docPath: string; kind?: DocConversationKind }
+  | { type: 'updated'; docPath: string; kind?: DocConversationKind }
 
 type DocConversationEventListener = (event: DocConversationEvent) => void
 
@@ -107,16 +108,17 @@ async function persist(records: DocConversationRecord[]): Promise<void> {
 
 export type DocConversationService = {
   loadAll(): Promise<DocConversationRecord[]>
-  getByDocPath(docPath: string): Promise<DocConversationRecord | null>
+  getByDocPath(docPath: string, kind?: DocConversationKind): Promise<DocConversationRecord | null>
   upsertFromState(options: {
     docPath: string
+    kind?: DocConversationKind
     state: ConversationState
     providerType: ProviderType
     modelName: string
     difyConversationId?: string
   }): Promise<void>
-  clearByDocPath(docPath: string): Promise<void>
-  compressByDocPath(docPath: string): Promise<void>
+  clearByDocPath(docPath: string, kind?: DocConversationKind): Promise<void>
+  compressByDocPath(docPath: string, kind?: DocConversationKind): Promise<void>
   getIndex(): Promise<ConversationIndexEntry[]>
 }
 

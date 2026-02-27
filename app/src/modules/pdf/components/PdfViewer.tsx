@@ -1,3 +1,4 @@
+import type { ReactElement } from 'react'
 import { useRef, useState, useEffect } from 'react'
 import type { PDFDocumentProxy } from '../hooks/usePdfDocument'
 import { usePdfDocument } from '../hooks/usePdfDocument'
@@ -283,7 +284,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     }
   }
 
-  const pages: JSX.Element[] = []
+  const pages: ReactElement[] = []
   const startIndex = nearbyRange.start
   const endIndex = nearbyRange.end
 

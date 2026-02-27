@@ -2,6 +2,7 @@ import usageDocs from '../../docs/使用说明.md?raw'
 import type { IAiClient } from '../ai/client'
 import type { ChatEntryMode, EntryContext } from '../ai/domain/chatSession'
 import { docConversationService } from '../ai/application/docConversationService'
+import { getDirKeyFromDocPath } from '../ai/domain/docPathUtils'
 
 export type AppCommand = () => void | Promise<void>
 
@@ -422,8 +423,8 @@ function createAiCommands(ctx: AiCommandContext): CommandRegistry {
           ctx.setStatusMessage('当前编辑器状态不可用，无法打开文档会话历史')
           return
         }
-        const docPath = ctx.getCurrentFilePath()
-        if (!docPath) {
+        const filePath = ctx.getCurrentFilePath()
+        if (!filePath) {
           ctx.setStatusMessage('请先打开并保存一个文档，再使用 History 查看会话历史')
           return
         }
@@ -431,6 +432,7 @@ function createAiCommands(ctx: AiCommandContext): CommandRegistry {
           ctx.setStatusMessage('当前版本未注册 History 浮窗，无法展示文档会话历史')
           return
         }
+        const docPath = getDirKeyFromDocPath(filePath) ?? filePath
         ctx.openDocConversationsHistory(docPath)
       } catch (err) {
         console.error('[commands] ai_conversation_history error', err)
@@ -443,13 +445,14 @@ function createAiCommands(ctx: AiCommandContext): CommandRegistry {
           ctx.setStatusMessage('当前编辑器状态不可用，无法清空文档会话历史')
           return
         }
-        const docPath = ctx.getCurrentFilePath()
-        if (!docPath) {
+        const filePath = ctx.getCurrentFilePath()
+        if (!filePath) {
           ctx.setStatusMessage('请先打开一个已保存的文档，再使用 Clear 会话历史')
           return
         }
+        const docPath = getDirKeyFromDocPath(filePath) ?? filePath
         await docConversationService.clearByDocPath(docPath)
-        ctx.setStatusMessage('已清空当前文档的 AI 会话历史')
+        ctx.setStatusMessage('已清空当前目录的 AI 会话历史')
       } catch (err) {
         console.error('[commands] ai_conversation_clear error', err)
         ctx.setStatusMessage('清空文档会话历史失败，请检查控制台日志')
@@ -461,13 +464,14 @@ function createAiCommands(ctx: AiCommandContext): CommandRegistry {
           ctx.setStatusMessage('当前编辑器状态不可用，无法压缩文档会话历史')
           return
         }
-        const docPath = ctx.getCurrentFilePath()
-        if (!docPath) {
+        const filePath = ctx.getCurrentFilePath()
+        if (!filePath) {
           ctx.setStatusMessage('请先打开一个已保存的文档，再使用 Compress')
           return
         }
+        const docPath = getDirKeyFromDocPath(filePath) ?? filePath
         await docConversationService.compressByDocPath(docPath)
-        ctx.setStatusMessage('已触发文档会话压缩，并加入全局记忆学习队列（若已开启）')
+        ctx.setStatusMessage('已触发当前目录会话压缩，并加入全局记忆学习队列（若已开启）')
       } catch (err) {
         console.error('[commands] ai_conversation_compress error', err)
         ctx.setStatusMessage('压缩文档会话历史失败，请检查控制台日志')

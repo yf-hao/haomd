@@ -1,4 +1,3 @@
-import React from 'react'
 import { ConflictModal } from './ConflictModal'
 import { ConfirmDialog } from './ConfirmDialog'
 import { DocConversationHistoryDialog } from '../modules/ai/ui/DocConversationHistoryDialog'

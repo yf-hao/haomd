@@ -1,4 +1,3 @@
-import React from 'react'
 import type { RecentFile } from '../modules/files/types'
 import type { EditorTab } from '../types/tabs'
 

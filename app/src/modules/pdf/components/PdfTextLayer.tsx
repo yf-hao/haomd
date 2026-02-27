@@ -52,8 +52,6 @@ export function PdfTextLayer({ pdfDocument, pageNumber, scale }: PdfTextLayerPro
           try {
             if (Util && item.transform) {
               const tx = Util.transform(viewport.transform, item.transform)
-              const a = tx[0]
-              const b = tx[1]
               const c = tx[2]
               const d = tx[3]
               const e = tx[4]

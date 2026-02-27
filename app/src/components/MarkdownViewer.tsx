@@ -6,7 +6,7 @@ import katex from 'katex'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import 'katex/dist/katex.min.css'
-import 'github-markdown-css/github-markdown.css'
+import 'github-markdown-css/github-markdown-dark.css'
 import './MarkdownViewer.css'
 import { getRenderer } from '../modules/markdown/plugins'
 import { invoke } from '@tauri-apps/api/core'
@@ -26,6 +26,8 @@ export interface MarkdownViewerProps {
   mode?: MarkdownViewerMode
   /** 当用户点击预览中的某个块时，返回对应的起始行号 */
   onLineClick?: (line: number) => void
+  /** 预览区域文字选中变更回调 */
+  onSelectionChange?: (text: string | null) => void
 }
 
 type LineRange = {
