@@ -1,6 +1,7 @@
 {
   "scripts": {
-    "test": "cd app && vitest"
+    "test": "cd app && vitest",
+    "test:ci": "cd app && npm run test:run"
   },
   "devDependencies": {
     "vite": "^5.4.21",

@@ -1,9 +1,35 @@
-import { defineConfig } from 'vitest/config'
+import { defineConfig, mergeConfig } from 'vitest/config'
+import react from '@vitejs/plugin-react'
+import viteConfig from './vite.config'
 
-export default defineConfig({
-  test: {
-    globals: true,
-    environment: 'jsdom',
-    setupFiles: './vitest.setup.ts',
-  },
-})
+export default mergeConfig(
+  viteConfig,
+  defineConfig({
+    test: {
+      globals: true,
+      environment: 'jsdom',
+      setupFiles: './vitest.setup.ts',
+      coverage: {
+        provider: 'v8',
+        reporter: ['text', 'json', 'html', 'lcov'],
+        reportsDirectory: './coverage',
+        thresholds: {
+          lines: 60,
+          functions: 60,
+          branches: 50,
+          statements: 60
+        },
+        exclude: [
+          'node_modules/**',
+          'src/main.tsx',
+          'src/vite-env.d.ts',
+          '**/*.d.ts',
+          '**/*.test.{ts,tsx}',
+          '**/*.spec.{ts,tsx}',
+          '**/__tests__/**',
+          '**/types.ts'
+        ]
+      },
+    },
+  })
+)

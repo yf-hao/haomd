@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  frontend-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: app/package-lock.json
+      
+      - name: Install dependencies
+        run: cd app && npm ci
+        
+      - name: Lint
+        run: cd app && npm run lint
+        
+      - name: Type Check
+        run: cd app && npm run type-check
+        
+      - name: Test
+        run: cd app && npm run test:run
+
+  rust-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+          
+      - name: Rust Format Check
+        run: cd app/src-tauri && cargo fmt -- --check
+        
+      - name: Rust Clippy
+        run: cd app/src-tauri && cargo clippy -- -D warnings
+        
+      - name: Rust Test
+        run: cd app/src-tauri && cargo test
