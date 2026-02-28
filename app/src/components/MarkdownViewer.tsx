@@ -41,7 +41,6 @@ const FilePathContext = React.createContext<string | null>(null)
 
 const useLineRange = () => React.useContext(LineRangeContext)
 const useFoldRegions = () => React.useContext(FoldContext)
-const useFilePath = () => React.useContext(FilePathContext)
 
 // 为 math / inlineMath 节点打上 data-line-start / data-line-end 属性，便于后续按行号折叠
 function remarkMathLineAnchors() {
