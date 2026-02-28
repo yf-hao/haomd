@@ -21,9 +21,18 @@ export function generateHTMLTemplate(options: TemplateOptions): string {
   <link rel="stylesheet" href="${HLJS_CSS_CDN}">
   ${options.hasMermaid ? `<script src="${MERMAID_CDN}" defer></script>
   <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      mermaid.initialize({ startOnLoad: true, theme: 'default' });
-    });
+    (function() {
+      const initMermaid = function() {
+        if (typeof mermaid !== 'undefined') {
+          mermaid.initialize({ startOnLoad: true, theme: 'default' });
+        }
+      };
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initMermaid);
+      } else {
+        initMermaid();
+      }
+    })();
   </script>` : ''}
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; padding: 20px; color: #1a1a1a; }
@@ -37,6 +46,11 @@ export function generateHTMLTemplate(options: TemplateOptions): string {
     th, td { border: 1px solid #dfe2e5; padding: 6px 13px; }
     th { background-color: #f6f8fa; }
     blockquote { border-left: 4px solid #dfe2e5; margin: 0; padding-left: 16px; color: #6a737d; }
+    @media print {
+      body { padding: 0; }
+      .markdown-body { max-width: none; }
+      .page-break { page-break-before: always; }
+    }
   </style>
 </head>
 <body>

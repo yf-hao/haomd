@@ -20,6 +20,49 @@ export interface ExportHtmlOptions {
 }
 
 /**
+ * 准备导出的 HTML 内容（供 HTML 和 PDF 导出复用）
+ * 包含：思维导图渲染、React 静态渲染、图片转 Base64、模板生成
+ */
+export async function prepareExportHtmlContents(ctx: any) {
+  const rawTitle = ctx.getCurrentFileName() || 'Document'
+  const title = rawTitle.replace(/\.md$/i, '')
+  const filePath = ctx.getFilePath ? ctx.getFilePath() : null
+  const markdown = ctx.getCurrentMarkdown()
+  const baseDir = filePath ? await dirname(filePath) : null
+
+  // 1. 并行渲染思维导图
+  ctx.setStatusMessage('正在渲染思维导图...')
+  const processedMarkdown = await preTreatMindBlocks(markdown)
+
+  // 2. 渲染 React 组件为静态字符串
+  ctx.setStatusMessage('正在构建页面结构...')
+  const renderedHtml = renderToString(
+    <ExportWrapper markdown={processedMarkdown} />
+  )
+
+  // 3. 图片转 Base64（离线化）
+  ctx.setStatusMessage('正在处理图片资源...')
+  const finalHtml = await convertImagesToBase64(renderedHtml, baseDir)
+
+  // 4. 生成最终完整的 HTML 模板
+  const hasMind = processedMarkdown.includes('mind-diagram-export')
+  const hasMermaid = finalHtml.includes('class="mermaid"')
+
+  const fullHtml = generateHTMLTemplate({
+    title,
+    body: finalHtml,
+    hasMind,
+    hasMermaid
+  })
+
+  return {
+    title,
+    fullHtml,
+    saveName: `${title}.html`
+  }
+}
+
+/**
  * 导出为 HTML
  */
 export async function exportToHtml(ctx: any) {
@@ -28,9 +71,8 @@ export async function exportToHtml(ctx: any) {
 
     const rawTitle = ctx.getCurrentFileName() || 'Document'
     const title = rawTitle.replace(/\.md$/i, '')
-    const filePath = ctx.getFilePath ? ctx.getFilePath() : null
 
-    // --- 优化 1: 先弹窗获取路径，给用户即时交互反馈 ---
+    // 1. 先弹窗获取保存路径
     const savePath = await save({
       defaultPath: `${title}.html`,
       filters: [{ name: 'HTML 文件', extensions: ['html'] }]
@@ -41,36 +83,10 @@ export async function exportToHtml(ctx: any) {
       return false
     }
 
-    ctx.setStatusMessage('正在准备导出数据...')
-    const markdown = ctx.getCurrentMarkdown()
-    const baseDir = filePath ? await dirname(filePath) : null
+    // 2. 准备内容
+    const { fullHtml } = await prepareExportHtmlContents(ctx)
 
-    // --- 优化 2: 并行渲染思维导图 ---
-    ctx.setStatusMessage('正在渲染思维导图(并行)...')
-    const processedMarkdown = await preTreatMindBlocks(markdown)
-
-    // 1. 渲染 React 组件
-    ctx.setStatusMessage('正在构建 HTML 结构...')
-    const renderedHtml = renderToString(
-      <ExportWrapper markdown={processedMarkdown} />
-    )
-
-    // 2. 图片转 Base64
-    ctx.setStatusMessage('正在处理图片资源...')
-    const finalHtml = await convertImagesToBase64(renderedHtml, baseDir)
-
-    // 3. 生成最终模板
-    const hasMind = processedMarkdown.includes('mind-diagram-export')
-    const hasMermaid = processedMarkdown.includes('class="mermaid"')
-
-    const fullHtml = generateHTMLTemplate({
-      title,
-      body: finalHtml,
-      hasMind,
-      hasMermaid
-    })
-
-    // 4. 写入文件
+    // 3. 写入文件
     ctx.setStatusMessage('正在保存到磁盘...')
     const writeResult = await writeFile({ path: savePath, content: fullHtml })
     if (!writeResult.ok) {
@@ -103,7 +119,7 @@ type MindElixirData = {
   direction?: 0 | 1 | 2
 }
 
-function toMindElixirData(root: MindNode): MindElixirData {
+function toMindElixirData(root: MindNode, SIDE: any): MindElixirData {
   let counter = 0
   const genId = () => `m-${Date.now().toString(36)}-${counter++}`
   const walk = (node: MindNode): MindElixirData['nodeData'] => ({
@@ -153,13 +169,13 @@ async function renderMindBlockToSvg(code: string, MindElixir: any, SIDE: any): P
   try {
     const parsed = JSON.parse(code) as MindNode
     if (parsed && typeof parsed === 'object' && typeof (parsed as any).title === 'string') {
-      data = toMindElixirData(parsed)
+      data = toMindElixirData(parsed, SIDE)
     } else {
       throw new Error('not a MindNode JSON')
     }
   } catch {
     const outline = parseOutline(code)
-    if (outline) data = toMindElixirData(outline)
+    if (outline) data = toMindElixirData(outline, SIDE)
   }
   if (!data) {
     console.warn('[Export Mind] 无法解析 mind 代码')

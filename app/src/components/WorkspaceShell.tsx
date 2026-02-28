@@ -1339,6 +1339,7 @@ export function WorkspaceShell({
   }, [openRecentFileInNewTab, sidebar])
 
   const isExportingHtmlRef = useRef(false)
+  const isExportingPdfRef = useRef(false)
   const activeTabPathRef = useRef<string | null>(null)
 
   // 同步 Ref 以保持回调函数稳定
@@ -1371,7 +1372,34 @@ export function WorkspaceShell({
     } finally {
       isExportingHtmlRef.current = false
     }
-  }, [setStatusMessage, getCurrentMarkdown, getCurrentFileName]) // 移除了 activeTab?.path 依赖，使其彻底稳定
+  }, [setStatusMessage, getCurrentMarkdown, getCurrentFileName])
+
+  const handleExportPdf = useCallback(async () => {
+    alert('[WorkspaceShell] handleExportPdf called')
+    console.log('[WorkspaceShell] 预备导出 PDF...')
+    // 防重入
+    if (isExportingPdfRef.current) {
+      setStatusMessage('正在准备导出，请稍候...')
+      return
+    }
+
+    isExportingPdfRef.current = true
+    try {
+      const { exportToPdf: dynamicPdfExport } = await import('../modules/export/pdf')
+
+      await dynamicPdfExport({
+        setStatusMessage,
+        getCurrentMarkdown,
+        getCurrentFileName,
+        getFilePath: () => activeTabPathRef.current
+      })
+    } catch (e) {
+      console.error('[Export PDF] 动态加载失败:', e)
+      setStatusMessage('PDF 导出加载失败，请重试')
+    } finally {
+      isExportingPdfRef.current = false
+    }
+  }, [setStatusMessage, getCurrentMarkdown, getCurrentFileName])
 
   const { dispatchAction } = useCommandSystem({
     layout, setLayout: setLayout as any, setShowPreview, setStatusMessage,
@@ -1388,6 +1416,7 @@ export function WorkspaceShell({
     openDocConversationsHistory: (docPath: string) => openDocHistoryDialog(docPath),
     refreshPdfRecent,
     exportHtml: handleExportHtml,
+    exportPdf: handleExportPdf,
   })
 
   // 全局快捷键：Shift+Cmd/Ctrl+S 触发 "Ask AI About Selection"
