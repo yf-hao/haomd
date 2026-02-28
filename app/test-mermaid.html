@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11.12.2/dist/mermaid.min.js"></script>
+</head>
+<body>
+  <div id="haomd-print-portal" style="position:fixed;left:-9999px;width:1000px;display:block;">
+    <pre class="mermaid">
+      graph TD
+        A-->B
+    </pre>
+  </div>
+  <script>
+    setTimeout(async () => {
+        try {
+            mermaid.initialize({ startOnLoad: false, theme: 'default' });
+            await mermaid.run({
+                querySelector: '#haomd-print-portal .mermaid'
+            });
+            console.log("SUCCESS");
+        } catch(e) {
+            console.error("FAIL", e);
+        }
+    }, 1000);
+  </script>
+</body>
+</html>

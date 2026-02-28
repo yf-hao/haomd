@@ -7,7 +7,7 @@ import React from 'react'
 import { renderToString } from 'react-dom/server'
 import { save } from '@tauri-apps/plugin-dialog'
 import { dirname } from '@tauri-apps/api/path'
-// mind-elixir 使用动态 import，避免主包启动时加载其全局事件监听（会影响 CodeMirror 性能）
+import MindElixir, { SIDE } from 'mind-elixir'
 import { writeFile } from '../../files/service'
 import { ExportWrapper } from './components/ExportWrapper'
 import { generateHTMLTemplate } from './template'
@@ -230,17 +230,9 @@ async function preTreatMindBlocks(markdown: string): Promise<string> {
 
   console.log('[Export Mind] 开始并行处理', matches.length, '个图表')
 
-  // 优化: 预加载一次库
-  let MindElixirLib: any = null
-  let SIDELib: any = null
-  try {
-    const mod = await import('mind-elixir')
-    MindElixirLib = mod.default
-    SIDELib = mod.SIDE
-  } catch (e) {
-    console.error('[Export Mind] 库加载失败:', e)
-    return markdown
-  }
+  // 直接复用静态导入的 MindElixir，避免动态 import 在某些打包环境下失败
+  const MindElixirLib: any = MindElixir
+  const SIDELib: any = SIDE
 
   // 并行启动所有渲染任务
   const renderTasks = matches.map(async (match) => {
