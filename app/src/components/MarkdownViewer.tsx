@@ -292,6 +292,28 @@ const CodeBlock = memo(
     prev.className === next.className,
 )
 
+const StableCode = memo(({ inline, className, children, node, ...rest }: any) => {
+  const regions = useFoldRegions()
+  const content = String(children).trim()
+  const match = /language-([\w]+)/.exec(className || '')
+  const lang = match?.[1]
+
+  const start = (node as any)?.position?.start?.line as number | undefined
+  const end = (node as any)?.position?.end?.line ?? start
+  if (!inline && isBlockFolded(regions, start, end)) return null
+
+  if (lang) {
+    const renderer = getRenderer(lang)
+    if (renderer) return renderer(content)
+    if (lang === 'mermaid' || lang === 'mind') return <DiagramBlock lang={lang} code={content} />
+    return <CodeBlock lang={lang} content={content} {...rest} />
+  }
+
+  const isMultiline = content.includes('\n')
+  if (!isMultiline) return <code className="code" {...rest}>{content}</code>
+  return <pre {...rest}><code className="plain">{content}</code></pre>
+})
+
 const StableMath = memo(({ node, value, ...rest }: any) => {
   const regions = useFoldRegions()
   const start = node?.position?.start?.line as number | undefined
@@ -381,20 +403,7 @@ function MarkdownViewerComponent(
         </FilePathContext.Consumer>
       ),
       pre: (p: any) => <FoldableBlock tag="pre" hideOnFold={true} {...p} />,
-      code({ inline, className, children, node, ...rest }: any) {
-        const content = String(children).trim()
-        const match = /language-([\w]+)/.exec(className || '')
-        const lang = match?.[1]
-        if (lang) {
-          const renderer = getRenderer(lang)
-          if (renderer) return renderer(content)
-          if (lang === 'mermaid' || lang === 'mind') return <DiagramBlock lang={lang} code={content} />
-          return <CodeBlock lang={lang} content={content} {...rest} />
-        }
-        const isMultiline = content.includes('\n')
-        if (!isMultiline) return <code className="code" {...rest}>{content}</code>
-        return <pre {...rest}><code className="plain">{content}</code></pre>
-      },
+      code: StableCode,
     }
   }, []) // 稳定引用
 
@@ -685,23 +694,27 @@ function MarkdownViewerComponent(
   }, [onSelectionChange, mode])
 
   return (
-    <div className="markdown-body gh-markdown" ref={containerRef} data-preview-width={previewWidth}>
-      <div ref={topSpacerRef} aria-hidden="true" />
-      {mode === 'rendered' ? (
-        <ReactMarkdown
-          remarkPlugins={remarkPlugins}
-          remarkRehypeOptions={remarkRehypeOptions}
-          components={components}
-        >
-          {value}
-        </ReactMarkdown>
-      ) : (
-        <pre className="markdown-source">
-          <code>{value}</code>
-        </pre>
-      )}
-      <div ref={bottomSpacerRef} aria-hidden="true" />
-    </div>
+    <FilePathContext.Provider value={filePath ?? null}>
+      <FoldContext.Provider value={foldRegions ?? []}>
+        <div className="markdown-body gh-markdown" ref={containerRef} data-preview-width={previewWidth}>
+          <div ref={topSpacerRef} aria-hidden="true" />
+          {mode === 'rendered' ? (
+            <ReactMarkdown
+              remarkPlugins={remarkPlugins}
+              remarkRehypeOptions={remarkRehypeOptions}
+              components={components}
+            >
+              {value}
+            </ReactMarkdown>
+          ) : (
+            <pre className="markdown-source">
+              <code>{value}</code>
+            </pre>
+          )}
+          <div ref={bottomSpacerRef} aria-hidden="true" />
+        </div>
+      </FoldContext.Provider>
+    </FilePathContext.Provider>
   )
 }
 

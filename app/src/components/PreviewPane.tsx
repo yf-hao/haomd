@@ -31,7 +31,7 @@ export function PreviewPane({ value, activeLine, previewWidth, effectiveLayout, 
   }
 
   if (effectiveLayout === 'editor-only') {
-    style.display = 'none'
+    return null
   }
 
   return (
