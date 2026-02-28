@@ -38,6 +38,7 @@ export function generateHTMLTemplate(options: TemplateOptions): string {
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; padding: 20px; color: #1a1a1a; }
     .markdown-body { max-width: 800px; margin: 0 auto; line-height: 1.7; }
     img { max-width: 100%; height: auto; }
+    .mind-diagram-export svg { max-width: 100%; height: auto; display: block; margin: 0 auto; }
     pre { background-color: #f6f8fa; padding: 16px; border-radius: 6px; overflow: auto; }
     pre.mermaid { background-color: transparent; padding: 0; }
     code { font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace; font-size: 0.9em; }

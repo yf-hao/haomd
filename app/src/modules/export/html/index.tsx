@@ -208,10 +208,49 @@ async function renderMindBlockToSvg(code: string, MindElixir: any, SIDE: any): P
 
     try { mind.scaleFit(); mind.toCenter() } catch { /* 忽略 */ }
 
-    // 5. 导出 SVG
+    // 5. 导出 SVG：补充 viewBox，但保留像素宽高，避免打印阶段丢失
     const svgBlob: Blob = mind.exportSvg(/* noForeignObject */ true)
-    const svgText = await svgBlob.text()
-    return svgText
+    const rawSvgText = await svgBlob.text()
+
+    try {
+      const parser = new DOMParser()
+      const svgDoc = parser.parseFromString(rawSvgText, 'image/svg+xml')
+      const svgEl = svgDoc.documentElement
+
+      if (svgEl && svgEl.tagName.toLowerCase() === 'svg') {
+        let viewBox = svgEl.getAttribute('viewBox') || ''
+        let w = parseFloat(svgEl.getAttribute('width') || '') || 0
+        let h = parseFloat(svgEl.getAttribute('height') || '') || 0
+
+        // 如果没有 viewBox，则尝试用 svg/rect 的宽高来构造
+        if (!viewBox) {
+          if (!w || !h) {
+            const rect = svgDoc.querySelector('rect') as SVGRectElement | null
+            if (rect) {
+              const rw = parseFloat(rect.getAttribute('width') || '') || 0
+              const rh = parseFloat(rect.getAttribute('height') || '') || 0
+              if (!w) w = rw
+              if (!h) h = rh
+            }
+          }
+          if (w && h) {
+            viewBox = `0 0 ${w} ${h}`
+            svgEl.setAttribute('viewBox', viewBox)
+          }
+        }
+
+        if (!svgEl.getAttribute('preserveAspectRatio')) {
+          svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet')
+        }
+
+        const serializer = new XMLSerializer()
+        return serializer.serializeToString(svgEl)
+      }
+    } catch (e) {
+      console.warn('[Export Mind] 规范化 SVG 尺寸失败，使用原始 SVG', e)
+    }
+
+    return rawSvgText
   } catch (e) {
     console.error('[Export Mind] 渲染失败:', e)
     return null
