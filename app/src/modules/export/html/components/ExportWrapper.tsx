@@ -33,6 +33,24 @@ function CodeRenderer({ className, children, ...rest }: any) {
     )
 }
 
+// 导出 HTML 时的 img 渲染器：支持在 alt 文本尾部使用 (50%)/(240px) 指定宽度
+function ExportImage(props: any) {
+    const altText = props.alt || ''
+    const widthMatch = /\(([^)]+)\)$/.exec(altText)
+    const maxWidth = widthMatch ? widthMatch[1] : '100%'
+    const cleanAlt = altText.replace(/\(([^)]+)\)$/, '').trim()
+    const { src, ...rest } = props
+
+    return (
+        <img
+            {...rest}
+            src={src}
+            alt={cleanAlt}
+            style={{ maxWidth, height: 'auto', display: 'block', margin: '0 auto' }}
+        />
+    )
+}
+
 export function ExportWrapper({ markdown }: { markdown: string }) {
     return (
         <div className="markdown-body">
@@ -49,6 +67,7 @@ export function ExportWrapper({ markdown }: { markdown: string }) {
                 components={{
                     code: CodeRenderer,
                     pre: PreRenderer,
+                    img: ExportImage,
                 }}
             >
                 {markdown}

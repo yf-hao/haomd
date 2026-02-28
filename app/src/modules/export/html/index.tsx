@@ -208,7 +208,7 @@ async function renderMindBlockToSvg(code: string, MindElixir: any, SIDE: any): P
 
     try { mind.scaleFit(); mind.toCenter() } catch { /* 忽略 */ }
 
-    // 5. 导出 SVG：补充 viewBox，但保留像素宽高，避免打印阶段丢失
+    // 5. 导出 SVG，并根据 SVG/rect 尺寸规范为“文档同宽”
     const svgBlob: Blob = mind.exportSvg(/* noForeignObject */ true)
     const rawSvgText = await svgBlob.text()
 
@@ -239,6 +239,10 @@ async function renderMindBlockToSvg(code: string, MindElixir: any, SIDE: any): P
           }
         }
 
+        // 移除固定像素宽高，改为随容器宽度缩放
+        svgEl.removeAttribute('width')
+        svgEl.removeAttribute('height')
+        svgEl.setAttribute('width', '100%')
         if (!svgEl.getAttribute('preserveAspectRatio')) {
           svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet')
         }
