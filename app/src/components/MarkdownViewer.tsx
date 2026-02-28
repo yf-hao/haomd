@@ -36,8 +36,12 @@ type LineRange = {
 }
 
 const LineRangeContext = React.createContext<LineRange | undefined>(undefined)
+const FoldContext = React.createContext<FoldRegion[]>([])
+const FilePathContext = React.createContext<string | null>(null)
 
 const useLineRange = () => React.useContext(LineRangeContext)
+const useFoldRegions = () => React.useContext(FoldContext)
+const useFilePath = () => React.useContext(FilePathContext)
 
 // 为 math / inlineMath 节点打上 data-line-start / data-line-end 属性，便于后续按行号折叠
 function remarkMathLineAnchors() {
@@ -171,13 +175,31 @@ const remarkRehypeOptions: any = {
 const DiagramsLazy = React.lazy(() => import('./diagrams'))
 
 
-type BlockMetric = {
-  el: HTMLElement
-  top: number
-  height: number
-  startLine: number
-  endLine: number
+// 判断一个块 [start, end] 是否与任一折叠区间有重叠
+const isBlockFolded = (regions: FoldRegion[], start?: number, end?: number): boolean => {
+  if (!regions.length || !start) return false
+  const s = start
+  const e = end ?? start
+  return regions.some((r) => !(e < r.fromLine || s > r.toLine))
 }
+
+// 稳定版的基础容器组件
+const FoldableBlock = memo(({ tag, hideOnFold, node, children, className, ...rest }: any) => {
+  const regions = useFoldRegions()
+  const start = node?.position?.start?.line as number | undefined
+  const end = (node?.position?.end?.line ?? start) as number | undefined
+
+  if (hideOnFold && isBlockFolded(regions, start, end)) return null
+
+  const dataProps = start ? { 'data-line-start': start, 'data-line-end': end } : undefined
+  const lineRange: LineRange = { start, end }
+
+  return (
+    <LineRangeContext.Provider value={lineRange}>
+      {React.createElement(tag, { className, ...dataProps, ...rest }, children)}
+    </LineRangeContext.Provider>
+  )
+})
 
 type DiagramBlockProps = {
   lang: 'mermaid' | 'mind'
@@ -188,6 +210,60 @@ type CodeBlockProps = React.ComponentProps<typeof SyntaxHighlighter> & {
   lang?: string
   content: string
 }
+
+// 提取稳定的媒体组件，避免受 foldRegions 变动影响导致视频重刷
+const MarkdownMedia = memo(({ node, filePath, encodeMediaPath, ...props }: any) => {
+  const altText = props.alt || ''
+  const widthMatch = /\(([\d.]+(?:px|%|rem|vw))\)$/.exec(altText)
+  const maxWidth = widthMatch ? widthMatch[1] : '100%'
+  const cleanAlt = altText.replace(/\(([\d.]+(?:px|%|rem|vw))\)$/, '').trim()
+  const src = props.src || ''
+  let finalSrc = src
+
+  if (filePath && src && !src.startsWith('http://') && !src.startsWith('https://') && !src.startsWith('data:')) {
+    const fileDir = filePath.replace(/[/\\][^/\\]+$/, '')
+    const sep = filePath.includes('\\') ? '\\' : '/'
+    let absPath = src
+    if (src.startsWith('.')) {
+      const parts = src.split(/[\/\\]/)
+      let dir = fileDir
+      for (const part of parts) {
+        if (part === '..') dir = dir.replace(/[/\\][^/\\]+$/, '')
+        else if (part !== '.') dir = dir + sep + part
+      }
+      absPath = dir
+    } else if (!src.match(/^[a-zA-Z]:/)) {
+      absPath = fileDir + sep + src
+    }
+
+    const pathParts = absPath.split(/([/\\])/)
+    const encodedParts = pathParts.map((part: string) => (part === '/' || part === '\\') ? part : encodeURIComponent(part))
+    const encoded = encodedParts.join('')
+    const isWindows = filePath.includes('\\') || navigator.userAgent.includes('Windows')
+    finalSrc = isWindows ? `https://haomd.localhost${encoded}` : `haomd://localhost${encoded}`
+  }
+
+  const lowerAlt = cleanAlt.toLowerCase()
+  const isAudio = lowerAlt === 'audio' || lowerAlt === '音频' || /\.(mp3|wav|m4a|ogg|flac)$/i.test(src)
+
+  if (isAudio) {
+    return <audio controls src={finalSrc} style={{ width: '100%' }}>您的浏览器不支持 audio 标签。</audio>
+  }
+
+  const isVideo = lowerAlt === 'video' || lowerAlt === '视频' || /\.(mp4|webm|mov|ogg|ogv)$/i.test(src)
+  if (isVideo) {
+    const parts = cleanAlt.split('|')
+    const posterAlt = parts[1]?.trim()
+    let posterUrl = ''
+    if (posterAlt && filePath && !posterAlt.startsWith('http')) {
+      // 简化的 poster 路径逻辑
+      posterUrl = finalSrc.substring(0, finalSrc.lastIndexOf('/') + 1) + encodeURIComponent(posterAlt)
+    }
+    return <video controls preload="metadata" poster={posterUrl || undefined} src={finalSrc} style={{ maxWidth: '100%', height: 'auto' }}>您的浏览器不支持 video 标签。</video>
+  }
+
+  return <img {...props} src={finalSrc} loading="lazy" alt={cleanAlt} style={{ maxWidth, height: 'auto', display: 'block', margin: '0 auto' }} />
+})
 
 const DiagramBlock = memo(
   ({ lang, code }: DiagramBlockProps) => (
@@ -216,6 +292,53 @@ const CodeBlock = memo(
     prev.className === next.className,
 )
 
+const StableMath = memo(({ node, value, ...rest }: any) => {
+  const regions = useFoldRegions()
+  const start = node?.position?.start?.line as number | undefined
+  const end = (node?.position?.end?.line ?? start) as number | undefined
+
+  if (isBlockFolded(regions, start, end)) return null
+
+  const tex = (value ?? (node as any).value ?? '').trim()
+  const html = renderBlockMathHtml(tex)
+  const dataProps = start ? { 'data-line-start': start, 'data-line-end': end } : undefined
+  const lineRange: LineRange = { start, end }
+
+  return (
+    <LineRangeContext.Provider value={lineRange}>
+      <div {...rest} {...dataProps} dangerouslySetInnerHTML={{ __html: html }} />
+    </LineRangeContext.Provider>
+  )
+})
+
+const StableInlineMath = memo(({ node, value, ...rest }: any) => {
+  const regions = useFoldRegions()
+  const lineRange = useLineRange()
+  let start = lineRange?.start
+  let end = lineRange?.end ?? start
+
+  if (start == null) {
+    const pos = node?.position
+    start = pos?.start?.line as number | undefined
+    end = (pos?.end?.line ?? start) as number | undefined
+  }
+
+  if (isBlockFolded(regions, start, end)) return null
+
+  const tex = (value ?? (node as any).value ?? '').trim()
+  const html = renderInlineMathHtml(tex)
+
+  return <span {...rest} dangerouslySetInnerHTML={{ __html: html }} />
+})
+
+type BlockMetric = {
+  el: HTMLElement
+  top: number
+  height: number
+  startLine: number
+  endLine: number
+}
+
 function MarkdownViewerComponent(
   props: Readonly<MarkdownViewerProps>
 ) {
@@ -228,369 +351,52 @@ function MarkdownViewerComponent(
   const { value, activeLine, previewWidth, filePath, foldRegions, mode = 'rendered', onLineClick, onSelectionChange } = props
 
   const components = useMemo(() => {
-    const regions = foldRegions ?? []
-
-    // 判断一个块 [start, end] 是否与任一折叠区间有重叠
-    const isBlockFolded = (start?: number, end?: number): boolean => {
-      if (!regions.length || !start) return false
-      const s = start
-      const e = end ?? start
-      return regions.some((r) => !(e < r.fromLine || s > r.toLine))
-    }
-
-    const blockWithAnchor = (Tag: keyof React.JSX.IntrinsicElements, hideOnFold: boolean) => {
-      return ({ node, children, className, ...rest }: any) => {
-        const start = node?.position?.start?.line as number | undefined
-        const end = (node?.position?.end?.line ?? start) as number | undefined
-
-        if (hideOnFold && isBlockFolded(start, end)) {
-          return null
-        }
-
-        const dataProps = start
-          ? { 'data-line-start': start, 'data-line-end': end }
-          : undefined
-
-        const lineRange: LineRange = { start, end }
-
-        return (
-          <LineRangeContext.Provider value={lineRange}>
-            {React.createElement(Tag, { className, ...dataProps, ...rest }, children)}
-          </LineRangeContext.Provider>
-        )
-      }
-    }
-
     return {
-      // 文本块：若起始行位于折叠区间内，则在预览中隐藏
-      p: blockWithAnchor('p', true),
-      // 一级标题：作为折叠入口本身不隐藏（其所在行通常不在折叠区间内）
-      h1: blockWithAnchor('h1', false),
-      // 二级及以下标题：如果所在行在折叠区间内（例如属于某个 H1/H2 的折叠内容），则隐藏
-      h2: blockWithAnchor('h2', true),
-      h3: blockWithAnchor('h3', true),
-      h4: blockWithAnchor('h4', true),
-      h5: blockWithAnchor('h5', true),
-      h6: blockWithAnchor('h6', true),
-      ul: blockWithAnchor('ul', true),
-      ol: blockWithAnchor('ol', true),
-      li: blockWithAnchor('li', true),
-      blockquote: blockWithAnchor('blockquote', true),
-      div: blockWithAnchor('div', true),
-
-      // 通用 span：不再承担 KaTeX 折叠职责，由 math/inlineMath 专门处理
-      span: ({ className, children, ...rest }: any) => (
-        <span className={className} {...rest}>
-          {children}
-        </span>
-      ),
-
-      // 块级 KaTeX 公式：直接在 React 层渲染，并参与折叠与高亮
-      math: ({ node, value, ...rest }: any) => {
-        const start = node?.position?.start?.line as number | undefined
-        const end = (node?.position?.end?.line ?? start) as number | undefined
-
-        if (isBlockFolded(start, end)) {
-          return null
-        }
-
-        const tex = (value ?? (node as any).value ?? '').trim()
-        const html = renderBlockMathHtml(tex)
-
-        const dataProps = start
-          ? { 'data-line-start': start, 'data-line-end': end }
-          : undefined
-
-        const lineRange: LineRange = { start, end }
-
-        return (
-          <LineRangeContext.Provider value={lineRange}>
-            <div
-              {...rest}
-              {...dataProps}
-              // KaTeX 已经返回完整的 HTML 结构（含 .katex-display/.katex 等），这里仅包一层用于行号锚点
-              dangerouslySetInnerHTML={{ __html: html }}
-            />
-          </LineRangeContext.Provider>
-        )
-      },
-
-      // 行内 KaTeX 公式：使用父块的行号参与折叠
-      inlineMath: ({ node, value, ...rest }: any) => {
-        const lineRange = useLineRange()
-        let start = lineRange?.start
-        let end = lineRange?.end ?? start
-
-        if (start == null) {
-          const pos = node?.position
-          start = pos?.start?.line as number | undefined
-          end = (pos?.end?.line ?? start) as number | undefined
-        }
-
-        if (isBlockFolded(start, end)) {
-          return null
-        }
-
-        const tex = (value ?? (node as any).value ?? '').trim()
-        const html = renderInlineMathHtml(tex)
-
-        return (
-          <span
-            {...rest}
-            dangerouslySetInnerHTML={{ __html: html }}
-          />
-        )
-      },
-
-      // 自定义链接渲染：在应用内新建浏览器窗口
+      p: (p: any) => <FoldableBlock tag="p" hideOnFold={true} {...p} />,
+      h1: (p: any) => <FoldableBlock tag="h1" hideOnFold={false} {...p} />,
+      h2: (p: any) => <FoldableBlock tag="h2" hideOnFold={true} {...p} />,
+      h3: (p: any) => <FoldableBlock tag="h3" hideOnFold={true} {...p} />,
+      h4: (p: any) => <FoldableBlock tag="h4" hideOnFold={true} {...p} />,
+      h5: (p: any) => <FoldableBlock tag="h5" hideOnFold={true} {...p} />,
+      h6: (p: any) => <FoldableBlock tag="h6" hideOnFold={true} {...p} />,
+      ul: (p: any) => <FoldableBlock tag="ul" hideOnFold={true} {...p} />,
+      ol: (p: any) => <FoldableBlock tag="ol" hideOnFold={true} {...p} />,
+      li: (p: any) => <FoldableBlock tag="li" hideOnFold={true} {...p} />,
+      blockquote: (p: any) => <FoldableBlock tag="blockquote" hideOnFold={true} {...p} />,
+      div: (p: any) => <FoldableBlock tag="div" hideOnFold={true} {...p} />,
+      span: ({ className, children, ...rest }: any) => <span className={className} {...rest}>{children}</span>,
+      math: StableMath,
+      inlineMath: StableInlineMath,
       a: ({ node, href, children, ...props }: any) => {
         const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
           e.preventDefault()
           if (!href) return
           void invoke('open_webview_browser', { url: href })
         }
-
-        return (
-          <a
-            href={href}
-            onClick={handleClick}
-            target="_blank"
-            rel="noreferrer"
-            {...props}
-          >
-            {children}
-          </a>
-        )
+        return <a href={href} onClick={handleClick} target="_blank" rel="noreferrer" {...props}>{children}</a>
       },
-
-      // 图片 / 音频渲染器
-      img: ({ node, ...props }: any) => {
-        // 解析 alt 末尾的 (30%) / (300px) / (20rem)
-        const altText = props.alt || ''
-
-        const widthMatch = /\(([\d.]+(?:px|%|rem|vw))\)$/.exec(altText)
-        const maxWidth = widthMatch ? widthMatch[1] : '100%'
-
-        // 从 alt 文本中移除宽度标记
-        const cleanAlt = altText.replace(/\(([\d.]+(?:px|%|rem|vw))\)$/, '').trim()
-
-        // 处理相对路径：如果 src 是相对路径且知道当前文件路径，则转换为 haomd:// 协议的绝对地址
-        const src = props.src || ''
-        let finalSrc = src
-
-        if (filePath && src && !src.startsWith('http://') && !src.startsWith('https://') && !src.startsWith('data:')) {
-          const fileDir = filePath.replace(/[/\\][^/\\]+$/, '')
-          const sep = filePath.includes('\\') ? '\\' : '/'
-
-          // 先算出资源的绝对路径
-          let absPath = src
-          if (src.startsWith('.')) {
-            // 处理 ./ ../ 等相对路径
-            const parts = src.split(/[\/\\]/)
-            let dir = fileDir
-            for (const part of parts) {
-              if (part === '..') {
-                dir = dir.replace(/[/\\][^/\\]+$/, '')
-              } else if (part !== '.') {
-                dir = dir + sep + part
-              }
-            }
-            absPath = dir
-          } else if (!src.match(/^[a-zA-Z]:/)) {
-            // 不是绝对路径，拼接当前文件目录
-            absPath = fileDir + sep + src
-          }
-
-          // 根据平台生成正确的自定义协议 URL
-          // Windows: https://haomd.localhost/绝对路径
-          // macOS/Linux: haomd://localhost/绝对路径
-          // 使用 encodeURIComponent 对每个路径组件进行编码，以支持中文文件名
-          const pathParts = absPath.split(/([/\\])/)
-          const encodedParts = pathParts.map((part: string) => {
-            // 保留分隔符不编码
-            if (part === '/' || part === '\\') return part
-            // 对路径组件进行编码
-            return encodeURIComponent(part)
-          })
-          const encoded = encodedParts.join('')
-          const isWindows = filePath.includes('\\') || navigator.userAgent.includes('Windows')
-          if (isWindows) {
-            finalSrc = `https://haomd.localhost${encoded}`
-          } else {
-            finalSrc = `haomd://localhost${encoded}`
-          }
-        }
-
-        const lowerAlt = cleanAlt.toLowerCase()
-        const isAudioByAlt = lowerAlt === 'audio' || lowerAlt === '音频'
-        const isAudioByExt = /\.(mp3|wav|m4a|ogg|flac)$/i.test(src)
-        const isAudio = isAudioByAlt || isAudioByExt
-
-        if (isAudio) {
-          return (
-            <audio controls src={finalSrc} style={{ width: '100%' }}>
-              您的浏览器不支持 audio 标签。
-            </audio>
-          )
-        }
-
-        // 视频支持
-        const isVideoByAlt = lowerAlt === 'video' || lowerAlt === '视频'
-        const isVideoByExt = /\.(mp4|webm|mov|ogg|ogv)$/i.test(src)
-        const isVideo = isVideoByAlt || isVideoByExt
-
-        if (isVideo) {
-          // 解析 alt 中的 poster 路径：video|poster.png
-          const parts = cleanAlt.split('|')
-          const posterAlt = parts[1]?.trim()
-          let posterUrl = ''
-
-          if (posterAlt) {
-            // 处理 poster 图片路径（复用路径转换逻辑）
-            const posterSrc = posterAlt
-            if (filePath && posterSrc && !posterSrc.startsWith('http://') && !posterSrc.startsWith('https://') && !posterSrc.startsWith('data:')) {
-              const fileDir = filePath.replace(/[/\\][^/\\]+$/, '')
-              const sep = filePath.includes('\\') ? '\\' : '/'
-
-              let absPath = posterSrc
-              if (posterSrc.startsWith('.')) {
-                const parts = posterSrc.split(/[\/\\]/)
-                let dir = fileDir
-                for (const part of parts) {
-                  if (part === '..') {
-                    dir = dir.replace(/[/\\][^/\\]+$/, '')
-                  } else if (part !== '.') {
-                    dir = dir + sep + part
-                  }
-                }
-                absPath = dir
-              } else if (!posterSrc.match(/^[a-zA-Z]:/)) {
-                absPath = fileDir + sep + posterSrc
-              }
-
-              const isWindows = filePath.includes('\\') || navigator.userAgent.includes('Windows')
-              posterUrl = encodeMediaPath(absPath, isWindows)
-            } else {
-              posterUrl = posterSrc
-            }
-          }
-
-          return (
-            <video controls preload="metadata" poster={posterUrl || undefined} src={finalSrc} style={{ maxWidth: '100%', height: 'auto' }}>
-              您的浏览器不支持 video 标签。
-            </video>
-          )
-        }
-
-        return (
-          <img
-            {...props}
-            src={finalSrc}
-            loading="lazy"
-            alt={cleanAlt}
-            style={{
-              maxWidth,
-              height: 'auto',
-              display: 'block',
-              margin: '0 auto',
-            }}
-          />
-        )
-      },
-
-      // pre 渲染器
-      pre: ({ node, children, className, ...rest }: any) => {
-        const start = node?.position?.start?.line as number | undefined
-        const end = (node?.position?.end?.line ?? start) as number | undefined
-
-        if (isBlockFolded(start, end)) {
-          return null
-        }
-
-        const dataProps = start
-          ? { 'data-line-start': start, 'data-line-end': end }
-          : undefined
-
-        const parentIsPre =
-          node?.parent?.type === 'element' &&
-          node.parent.tagName === 'pre'
-
-        const classNames = []
-        if (!parentIsPre) classNames.push('code-block')
-
-        const lineRange: LineRange = { start, end }
-
-        return (
-          <LineRangeContext.Provider value={lineRange}>
-            <pre className={classNames.join(' ')} {...dataProps} {...rest}>
-              {children}
-            </pre>
-          </LineRangeContext.Provider>
-        )
-      },
-
-      // code 渲染器
+      img: (innerProps: any) => (
+        <FilePathContext.Consumer>
+          {path => <MarkdownMedia {...innerProps} filePath={path} encodeMediaPath={encodeMediaPath} />}
+        </FilePathContext.Consumer>
+      ),
+      pre: (p: any) => <FoldableBlock tag="pre" hideOnFold={true} {...p} />,
       code({ inline, className, children, node, ...rest }: any) {
         const content = String(children).trim()
         const match = /language-([\w]+)/.exec(className || '')
         const lang = match?.[1]
-
-        // 对块级 code，根据行号区间折叠对应内容（行内 code 按父块处理即可）
-        const start = (node as any)?.position?.start?.line as number | undefined
-        const end = (node as any)?.position?.end?.line ?? start
-        if (!inline && isBlockFolded(start, end)) {
-          return null
-        }
-
-        // // 行内 code
-        // if (inline) {
-        //   return (
-        //     <code className="inline-code" {...rest}>
-        //       {children}
-        //     </code>
-        //   )
-        // }
-
-        // 块级代码处理
-        const isMultiline = content.includes('\n')
-
-        // 优先使用自定义 renderer
         if (lang) {
           const renderer = getRenderer(lang)
           if (renderer) return renderer(content)
-
-          if (lang === 'mermaid' || lang === 'mind') {
-            return <DiagramBlock lang={lang} code={content} />
-          }
-
-          // 使用 SyntaxHighlighter 渲染并显示行号（通过 CodeBlock 做内容级缓存）
-          return (
-            <CodeBlock
-              lang={lang}
-              content={content}
-              {...rest}
-            />
-          )
+          if (lang === 'mermaid' || lang === 'mind') return <DiagramBlock lang={lang} code={content} />
+          return <CodeBlock lang={lang} content={content} {...rest} />
         }
-
-        // 单行无语言 → 行内 code
-        if (!isMultiline) {
-          return (
-            <code className="code" {...rest}>
-              {content}
-            </code>
-          )
-        }
-
-        // 多行无语言 → 普通 pre/code
-        return (
-          <pre {...rest}>
-            <code className="plain">{content}</code>
-          </pre>
-        )
+        const isMultiline = content.includes('\n')
+        if (!isMultiline) return <code className="code" {...rest}>{content}</code>
+        return <pre {...rest}><code className="plain">{content}</code></pre>
       },
     }
-  }, [foldRegions])
+  }, []) // 稳定引用
 
   // 保存和恢复滚动位置
   useLayoutEffect(() => {

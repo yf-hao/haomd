@@ -36,7 +36,8 @@ import { loadDefaultImagePathStrategyConfig, resolveImageTarget } from '../modul
 import { countLines, extractChunkAroundLine, applyChunkPatch, localToGlobalLine } from '../modules/editor/chunkEdit'
 import { getHugeDocSettings } from '../modules/settings/editorSettings'
 import type { RecentFile } from '../modules/files/types'
-import { exportToHtml } from '../modules/export/html'
+// 改为从内部动态加载，优化编辑性能
+// import { exportToHtml } from '../modules/export/html'
 
 // AI Chat localStorage keys
 const STORAGE_AI_MODE = 'haomd:aiChat:mode'
@@ -1338,24 +1339,39 @@ export function WorkspaceShell({
   }, [openRecentFileInNewTab, sidebar])
 
   const isExportingHtmlRef = useRef(false)
+  const activeTabPathRef = useRef<string | null>(null)
+
+  // 同步 Ref 以保持回调函数稳定
+  useEffect(() => {
+    activeTabPathRef.current = activeTab?.path ?? null
+  }, [activeTab?.path])
+
   const handleExportHtml = useCallback(async () => {
-    // 防重入：导出进行中时忽略后续触发（mind-elixir 渲染需要时间，菜单/用户可能多次触发）
+    // 防重入
     if (isExportingHtmlRef.current) {
-      setStatusMessage('正在导出 HTML，请稍候…')
+      setStatusMessage('正在准备导出，请稍候...')
       return
     }
+
     isExportingHtmlRef.current = true
     try {
-      await exportToHtml({
+      // --- 关键优化：动态加载整个导出模块 ---
+      // 这样生成的代码体积和运行时开销在不点击导出时为 0
+      const { exportToHtml: dynamicExport } = await import('../modules/export/html')
+
+      await dynamicExport({
         setStatusMessage,
         getCurrentMarkdown,
         getCurrentFileName,
-        getFilePath: () => activeTab?.path ?? null
+        getFilePath: () => activeTabPathRef.current
       })
+    } catch (e) {
+      console.error('[Export] 动态加载失败:', e)
+      setStatusMessage('导出功能加载失败，请重试')
     } finally {
       isExportingHtmlRef.current = false
     }
-  }, [setStatusMessage, getCurrentMarkdown, getCurrentFileName, activeTab?.path])
+  }, [setStatusMessage, getCurrentMarkdown, getCurrentFileName]) // 移除了 activeTab?.path 依赖，使其彻底稳定
 
   const { dispatchAction } = useCommandSystem({
     layout, setLayout: setLayout as any, setShowPreview, setStatusMessage,
