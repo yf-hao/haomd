@@ -36,6 +36,7 @@ import { loadDefaultImagePathStrategyConfig, resolveImageTarget } from '../modul
 import { countLines, extractChunkAroundLine, applyChunkPatch, localToGlobalLine } from '../modules/editor/chunkEdit'
 import { getHugeDocSettings } from '../modules/settings/editorSettings'
 import type { RecentFile } from '../modules/files/types'
+import { exportToHtml } from '../modules/export/html'
 
 // AI Chat localStorage keys
 const STORAGE_AI_MODE = 'haomd:aiChat:mode'
@@ -1336,6 +1337,26 @@ export function WorkspaceShell({
     return () => unlisten()
   }, [openRecentFileInNewTab, sidebar])
 
+  const isExportingHtmlRef = useRef(false)
+  const handleExportHtml = useCallback(async () => {
+    // 防重入：导出进行中时忽略后续触发（mind-elixir 渲染需要时间，菜单/用户可能多次触发）
+    if (isExportingHtmlRef.current) {
+      setStatusMessage('正在导出 HTML，请稍候…')
+      return
+    }
+    isExportingHtmlRef.current = true
+    try {
+      await exportToHtml({
+        setStatusMessage,
+        getCurrentMarkdown,
+        getCurrentFileName,
+        getFilePath: () => activeTab?.path ?? null
+      })
+    } finally {
+      isExportingHtmlRef.current = false
+    }
+  }, [setStatusMessage, getCurrentMarkdown, getCurrentFileName, activeTab?.path])
+
   const { dispatchAction } = useCommandSystem({
     layout, setLayout: setLayout as any, setShowPreview, setStatusMessage,
     aiChatMode, setAiChatMode, aiChatDockSide, setAiChatDockSide, aiChatOpen,
@@ -1350,6 +1371,7 @@ export function WorkspaceShell({
     addStandaloneFile: sidebar.addStandaloneFile,
     openDocConversationsHistory: (docPath: string) => openDocHistoryDialog(docPath),
     refreshPdfRecent,
+    exportHtml: handleExportHtml,
   })
 
   // 全局快捷键：Shift+Cmd/Ctrl+S 触发 "Ask AI About Selection"

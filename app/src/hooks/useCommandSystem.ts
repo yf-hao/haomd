@@ -57,6 +57,8 @@ export function useCommandSystem(params: CommandSystemParams) {
     openDocConversationsHistory,
     addStandaloneFile,
     refreshPdfRecent,
+    exportHtml,
+    exportPdf,
   } = params
 
   const aiClient = useMemo<IAiClient>(() => {
@@ -102,6 +104,8 @@ export function useCommandSystem(params: CommandSystemParams) {
         openDocConversationsHistory,
         addStandaloneFile,
         refreshPdfRecent,
+        exportHtml,
+        exportPdf,
       }),
     [
       layout,
@@ -140,6 +144,8 @@ export function useCommandSystem(params: CommandSystemParams) {
       openDocConversationsHistory,
       addStandaloneFile,
       refreshPdfRecent,
+      exportHtml,
+      exportPdf,
     ],
   )
 

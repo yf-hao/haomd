@@ -1007,6 +1007,11 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 
     let open_recent_menu = open_recent_builder.build()?;
 
+    let export_menu = SubmenuBuilder::new(app, "Export")
+        .item(&MenuItemBuilder::new("HTML").id("export_html").build(app)?)
+        .item(&MenuItemBuilder::new("PDF").id("export_pdf").build(app)?)
+        .build()?;
+
     // File 菜单
     let file_menu = SubmenuBuilder::new(app, "File")
         .item(
@@ -1042,6 +1047,8 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
                 .accelerator("CmdOrCtrl+Shift+s")
                 .build(app)?,
         )
+        .separator()
+        .item(&export_menu)
         .separator()
         .item(
             &MenuItemBuilder::new("Close File")

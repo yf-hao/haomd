@@ -52,6 +52,9 @@ export type FileCommandContext = StatusContext & {
   addStandaloneFile?: (path: string) => void
   /** 当通过命令系统打开 PDF 时，通知 WorkspaceShell 刷新 PDF 最近列表 */
   refreshPdfRecent?: () => Promise<void> | void
+  /** 导出命令 */
+  exportHtml?: () => Promise<void>
+  exportPdf?: () => Promise<void>
 }
 
 /**
@@ -265,6 +268,20 @@ function createFileCommands(ctx: FileCommandContext): CommandRegistry {
       const resp = await ctx.clearRecentAll()
       if (resp && resp.ok) {
         ctx.setStatusMessage('已清空最近文件')
+      }
+    },
+    export_html: async () => {
+      if (ctx.exportHtml) {
+        await ctx.exportHtml()
+      } else {
+        ctx.setStatusMessage('当前版本 HTML 导出功能未挂载')
+      }
+    },
+    export_pdf: async () => {
+      if (ctx.exportPdf) {
+        await ctx.exportPdf()
+      } else {
+        ctx.setStatusMessage('当前版本 PDF 导出功能未挂载')
       }
     },
   }
