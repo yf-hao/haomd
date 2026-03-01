@@ -143,6 +143,19 @@ fn recent_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
     Ok(dir.join("recent.json"))
 }
 
+fn pdf_recent_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
+    // 与 recent.json 相同策略：优先使用应用配置目录
+    if let Ok(mut dir) = app.path().config_dir() {
+        dir.push("haomd");
+        std::fs::create_dir_all(&dir)?;
+        return Ok(dir.join("pdf_recent.json"));
+    }
+
+    // 兜底：退回到当前工作目录
+    let dir = std::env::current_dir()?;
+    Ok(dir.join("pdf_recent.json"))
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct SidebarState {
     root: Option<String>,
@@ -377,6 +390,73 @@ async fn write_recent_store(app: &AppHandle, items: &[RecentFile]) -> std::io::R
     let path = recent_store_path(app)?;
     let bytes = serde_json::to_vec_pretty(items)?;
     fs::write(path, bytes).await
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct PdfRecentEntry {
+    path: String,
+    display_name: String,
+    last_opened_at: u64,
+}
+
+async fn read_pdf_recent_store(app: &AppHandle) -> std::io::Result<Vec<PdfRecentEntry>> {
+    let path = pdf_recent_store_path(app)?;
+    match fs::read(&path).await {
+        Ok(bytes) => {
+            let items: Vec<PdfRecentEntry> = serde_json::from_slice(&bytes).unwrap_or_default();
+            Ok(items)
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(vec![]),
+        Err(err) => Err(err),
+    }
+}
+
+async fn write_pdf_recent_store(app: &AppHandle, items: &[PdfRecentEntry]) -> std::io::Result<()> {
+    let path = pdf_recent_store_path(app)?;
+    let bytes = serde_json::to_vec_pretty(items)?;
+    fs::write(path, bytes).await
+}
+
+async fn upsert_pdf_recent(app: &AppHandle, path: &str) -> std::io::Result<()> {
+    let mut list = read_pdf_recent_store(app).await?;
+
+    let display_name = std::path::Path::new(path)
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .into_owned();
+
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+
+    if let Some(item) = list.iter_mut().find(|item| item.path == path) {
+        item.display_name = display_name.clone();
+        item.last_opened_at = now_ms;
+    } else {
+        list.push(PdfRecentEntry {
+            path: path.to_string(),
+            display_name,
+            last_opened_at: now_ms,
+        });
+    }
+
+    // 按最近使用时间降序排序
+    list.sort_by(|a, b| b.last_opened_at.cmp(&a.last_opened_at));
+
+    // 截断到最大条数
+    if list.len() > MAX_RECENT_ITEMS {
+        list.truncate(MAX_RECENT_ITEMS);
+    }
+
+    write_pdf_recent_store(app, &list).await
+}
+
+async fn delete_pdf_recent(app: &AppHandle, path: &str) -> std::io::Result<()> {
+    let mut list = read_pdf_recent_store(app).await?;
+    list.retain(|item| item.path != path);
+    write_pdf_recent_store(app, &list).await
 }
 
 async fn update_recent(app: &AppHandle, path: &str, is_folder: bool) -> std::io::Result<()> {
@@ -795,6 +875,71 @@ async fn delete_recent_entry(
         Err(err) => err_payload(
             ErrorCode::IoError,
             format!("写入最近文件失败: {err}"),
+            trace,
+        ),
+    }
+}
+
+#[tauri::command]
+async fn list_pdf_recent(
+    app: AppHandle,
+    limit: Option<u32>,
+    trace_id: Option<String>,
+) -> ResultPayload<Vec<PdfRecentEntry>> {
+    let trace = trace_id.unwrap_or_else(new_trace_id);
+    let mut list = match read_pdf_recent_store(&app).await {
+        Ok(list) => list,
+        Err(err) => {
+            return err_payload(
+                ErrorCode::IoError,
+                format!("读取 PDF 最近文件失败: {err}"),
+                trace,
+            )
+        }
+    };
+
+    // 防御性排序
+    list.sort_by(|a, b| b.last_opened_at.cmp(&a.last_opened_at));
+
+    if let Some(limit) = limit {
+        let limit = limit as usize;
+        if list.len() > limit {
+            list.truncate(limit);
+        }
+    }
+
+    ok(list, trace)
+}
+
+#[tauri::command]
+async fn log_pdf_recent_file(
+    app: AppHandle,
+    path: String,
+    trace_id: Option<String>,
+) -> ResultPayload<()> {
+    let trace = trace_id.unwrap_or_else(new_trace_id);
+    match upsert_pdf_recent(&app, &path).await {
+        Ok(()) => ok((), trace),
+        Err(err) => err_payload(
+            ErrorCode::IoError,
+            format!("更新 PDF 最近文件失败: {err}"),
+            trace,
+        ),
+    }
+}
+
+#[tauri::command]
+async fn delete_pdf_recent_entry(
+    app: AppHandle,
+    path: String,
+    trace_id: Option<String>,
+) -> ResultPayload<()> {
+    let trace = trace_id.unwrap_or_else(new_trace_id);
+    match delete_pdf_recent(&app, &path).await {
+        Ok(()) => ok((), trace),
+        Err(err) => err_payload(
+            ErrorCode::IoError,
+            format!("删除 PDF 最近文件失败: {err}"),
             trace,
         ),
     }
@@ -2252,6 +2397,9 @@ pub fn run() {
       log_recent_file,
       clear_recent,
       delete_recent_entry,
+      list_pdf_recent,
+      log_pdf_recent_file,
+      delete_pdf_recent_entry,
       load_sidebar_state,
       save_sidebar_state,
       list_folder,

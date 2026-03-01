@@ -26,7 +26,8 @@ import { useTabs } from '../hooks/useTabs'
 import { useCommandSystem } from '../hooks/useCommandSystem'
 import { useSidebar } from '../hooks/useSidebar'
 import { onOpenRecentFile } from '../modules/platform/menuEvents'
-import { createFolder, deleteFsEntry, deleteRecentRemote, listFolder, writeFile, listRecent } from '../modules/files/service'
+import { createFolder, deleteFsEntry, deleteRecentRemote, listFolder, writeFile } from '../modules/files/service'
+import { listPdfRecent, deletePdfRecent } from '../modules/pdf/pdfRecentService'
 import { useNativePaste } from '../hooks/useNativePaste'
 import { onNativePasteImage } from '../modules/platform/clipboardEvents'
 import type { EditorTab } from '../types/tabs'
@@ -487,17 +488,14 @@ export function WorkspaceShell({
     setPdfRecentLoading(true)
     setPdfRecentError(null)
     try {
-      console.log('[WorkspaceShell.refreshPdfRecent] before listRecent()')
-      const resp = await listRecent()
-      console.log('[WorkspaceShell.refreshPdfRecent] listRecent resp =', resp)
-      if (!resp.ok) {
-        setPdfRecent([])
-        setPdfRecentError(resp.error.message)
-        return
-      }
-      const pdfItems = resp.data.filter((item) => !item.isFolder && item.path.toLowerCase().endsWith('.pdf'))
-      console.log('[WorkspaceShell.refreshPdfRecent] pdfItems length =', pdfItems.length)
-      setPdfRecent(pdfItems)
+      console.log('[WorkspaceShell.refreshPdfRecent] before listPdfRecent()')
+      const items = await listPdfRecent()
+      console.log('[WorkspaceShell.refreshPdfRecent] listPdfRecent items =', items)
+      setPdfRecent(items)
+    } catch (e) {
+      console.error('[WorkspaceShell.refreshPdfRecent] listPdfRecent failed', e)
+      setPdfRecent([])
+      setPdfRecentError((e as any)?.message ?? '加载 PDF 最近文件失败')
     } finally {
       console.log('[WorkspaceShell.refreshPdfRecent] finally, set loading = false')
       setPdfRecentLoading(false)
@@ -1765,10 +1763,16 @@ export function WorkspaceShell({
                       label: 'Remove from Recent',
                       onClick: () => {
                         void (async () => {
-                          const resp = await deleteRecentRemote(pdfMenuState.targetPath!)
+                          const targetPath = pdfMenuState.targetPath!
+                          const resp = await deleteRecentRemote(targetPath)
                           if (!resp.ok) {
                             setStatusMessage(resp.error.message)
                           } else {
+                            try {
+                              await deletePdfRecent(targetPath)
+                            } catch (err) {
+                              console.warn('[WorkspaceShell] deletePdfRecent failed', err)
+                            }
                             await refreshPdfRecent()
                           }
                         })()

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 import { clearRecentRemote, deleteRecentRemote, logRecentFile, readFile, writeFile } from '../modules/files/service'
+import { logPdfRecent } from '../modules/pdf/pdfRecentService'
 import { createAutoSaver, type AutoSaveHandle } from '../modules/files/autoSave'
 import type { RecentFile, Result, ServiceError, WriteResult } from '../modules/files/types'
 import { isTauriEnv } from '../modules/platform/runtime'
@@ -365,6 +366,9 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
                 console.warn('[logRecentFile] openFile(pdf) failed', res.error)
                 setStatusMessage(res.error.message)
               }
+            })
+            void logPdfRecent(path).catch((err) => {
+              console.warn('[logPdfRecent] openFile(pdf) failed', err)
             })
           }
           // 返回最小信息，由上层根据扩展名决定如何展示（例如在 PdfViewer 中打开）
