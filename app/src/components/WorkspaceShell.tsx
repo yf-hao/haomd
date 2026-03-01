@@ -91,7 +91,8 @@ const DEFAULT_TITLE = 'undefined.md'
 function formatWindowTitleFromTab(tab: EditorTab | null): string {
   if (!tab) return DEFAULT_TITLE
   const path = tab.path
-  const name = path ? path.split(/[/\\]/).pop() || path : tab.title || DEFAULT_TITLE
+  const rawName = path ? path.split(/[/\\]/).pop() || path : tab.title || DEFAULT_TITLE
+  const name = rawName.replace(/\.md$/i, '')
   const prefix = tab.dirty ? '*' : ''
   return `${prefix}${name}`
 }

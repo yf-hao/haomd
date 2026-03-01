@@ -166,6 +166,32 @@ export async function writeFile(params: {
   }
 }
 
+export async function writeFileNoRecent(params: {
+  path: string
+  content: string
+  expectedMtime?: number
+  expectedHash?: string
+  traceId?: string
+}): Promise<Result<WriteResult>> {
+  const traceId = params.traceId ?? makeTraceId()
+  if (!isTauri()) return notAvailable(traceId)
+  try {
+    const resp = await invoke<BackendResult<BackendWriteResult>>('write_file_no_recent', {
+      path: params.path,
+      content: params.content,
+      expected_mtime: params.expectedMtime,
+      expected_hash: params.expectedHash,
+      trace_id: traceId,
+    })
+    if ('Ok' in resp) {
+      return mapWriteResult(resp.Ok.data)
+    }
+    return { ok: false, error: toError(resp.Err.error, traceId) }
+  } catch (error) {
+    return normalizeInvokeError(error, traceId)
+  }
+}
+
 export async function listRecent(traceId = makeTraceId()): Promise<Result<RecentFile[]>> {
   // 兼容旧接口：默认请求第 0 页，limit 使用前端配置
   return listRecentPage(0, filesConfig.maxRecent, traceId)

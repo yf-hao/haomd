@@ -88,7 +88,7 @@ export async function exportToHtml(ctx: any) {
 
     // 3. 写入文件
     ctx.setStatusMessage('正在保存到磁盘...')
-    const writeResult = await writeFile({ path: savePath, content: fullHtml })
+    const writeResult = await writeFileNoRecent({ path: savePath, content: fullHtml })
     if (!writeResult.ok) {
       throw new Error(writeResult.error?.message || '文件写入失败')
     }

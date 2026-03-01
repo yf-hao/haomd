@@ -612,6 +612,92 @@ async fn write_file(
 }
 
 #[tauri::command]
+async fn write_file_no_recent(
+    app: AppHandle,
+    path: String,
+    content: String,
+    expected_mtime: Option<u64>,
+    expected_hash: Option<String>,
+    trace_id: Option<String>,
+) -> ResultPayload<WriteResult> {
+    let trace = trace_id.unwrap_or_else(new_trace_id);
+    let normalized = match normalize_path(&path) {
+        Ok(p) => p,
+        Err(e) => return ResultPayload::Err { error: e },
+    };
+
+    if (content.len() as u64) > MAX_FILE_BYTES {
+        return err_payload(ErrorCode::TooLarge, "写入内容超过上限", trace);
+    }
+
+    let lock = file_lock(&normalized).await;
+    let _guard = lock.lock().await;
+
+    if let Ok(meta) = fs::metadata(&normalized).await {
+        if let Some(exp) = expected_mtime {
+            let mtime = mtime_ms(&meta);
+            if mtime != exp {
+                return err_payload(ErrorCode::CONFLICT, "mtime 不匹配，可能存在外部修改", trace);
+            }
+        }
+        if let Some(exp_hash) = expected_hash {
+            if let Ok(bytes) = fs::read(&normalized).await {
+                let current_hash = hash_bytes(&bytes);
+                if current_hash != exp_hash {
+                    return err_payload(
+                        ErrorCode::CONFLICT,
+                        "hash 不匹配，可能存在外部修改",
+                        trace,
+                    );
+                }
+            }
+        }
+    }
+
+    if let Some(parent) = normalized.parent() {
+        if let Err(err) = fs::create_dir_all(parent).await {
+            return err_payload(ErrorCode::IoError, format!("创建目录失败: {err}"), trace);
+        }
+    }
+
+    if let Err(err) = fs::write(&normalized, content.as_bytes()).await {
+        return err_payload(ErrorCode::IoError, format!("写入失败: {err}"), trace);
+    }
+
+    let meta = match fs::metadata(&normalized).await {
+        Ok(m) => m,
+        Err(err) => {
+            return err_payload(
+                ErrorCode::IoError,
+                format!("获取写入后元数据失败: {err}"),
+                trace,
+            )
+        }
+    };
+
+    let bytes = fs::read(&normalized)
+        .await
+        .unwrap_or_else(|_| content.as_bytes().to_vec());
+    let result = WriteResult {
+        path: normalized.to_string_lossy().into_owned(),
+        mtime_ms: mtime_ms(&meta),
+        hash: hash_bytes(&bytes),
+        code: ErrorCode::OK,
+        message: None,
+    };
+
+    info!(
+        "action=write_file_no_recent outcome=ok path={} trace_id={} size={}B",
+        result.path,
+        trace,
+        meta.len()
+    );
+
+    // 注意：不更新最近文件列表，也不刷新原生菜单
+    ok(result, trace)
+}
+
+#[tauri::command]
 async fn list_recent(
     app: AppHandle,
     offset: Option<u32>,
@@ -1009,7 +1095,7 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 
     let export_menu = SubmenuBuilder::new(app, "Export")
         .item(&MenuItemBuilder::new("HTML").id("export_html").build(app)?)
-        .item(&MenuItemBuilder::new("PDF").id("export_pdf").build(app)?)
+        .item(&MenuItemBuilder::new("PDF (Text only)").id("export_pdf").build(app)?)
         .build()?;
 
     // File 菜单
@@ -2157,6 +2243,7 @@ pub fn run() {
       read_file,
       read_binary_file,
       write_file,
+      write_file_no_recent,
       list_recent,
       log_recent_file,
       clear_recent,
