@@ -4,7 +4,13 @@ import { Sidebar } from './Sidebar'
 
 // Mock context menu to avoid its complex logic
 vi.mock('./FileContextMenu', () => ({
-    FileContextMenu: () => <div data-testid="context-menu" />
+    FileContextMenu: (props: any) => (
+        <div data-testid="context-menu">
+            {props.items?.map((item: any) => (
+                <button key={item.id} onClick={item.onClick}>{item.label}</button>
+            ))}
+        </div>
+    )
 }))
 
 describe('Sidebar', () => {
@@ -88,5 +94,34 @@ describe('Sidebar', () => {
         const btn = screen.getByTitle('在当前文件夹中新建文件')
         fireEvent.click(btn)
         expect(onToolbarNewFileInCurrentFolder).toHaveBeenCalled()
+    })
+
+    it('should show Delete in context menu for tree dir and emit delete action', () => {
+        const onContextAction = vi.fn()
+        const props = {
+            ...mockProps,
+            folderRoots: ['/root'],
+            expanded: { '/root': true },
+            treesByRoot: {
+                '/root': [
+                    { id: 'd1', name: 'dir1', path: '/root/dir1', kind: 'dir' as const, children: [] },
+                ],
+            },
+            onContextAction,
+        }
+
+        render(<Sidebar {...props} />)
+
+        const dirNode = screen.getByText('dir1')
+        fireEvent.contextMenu(dirNode)
+
+        const deleteButton = screen.getByText('Delete…')
+        fireEvent.click(deleteButton)
+
+        expect(onContextAction).toHaveBeenCalledWith({
+            path: '/root/dir1',
+            kind: 'tree-dir',
+            action: 'delete',
+        })
     })
 })

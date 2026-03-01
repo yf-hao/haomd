@@ -462,9 +462,10 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
 
             const isStandaloneFile = target.kind === 'standalone-file'
             const isFileTarget = target.kind === 'standalone-file' || target.kind === 'tree-file'
+            const isTreeDir = target.kind === 'tree-dir'
             const isFolderRoot = target.kind === 'folder-root'
 
-            if (isFileTarget) {
+            if (isFileTarget || isTreeDir) {
               items.push({ id: 'delete', label: 'Delete…', onClick: () => triggerContextAction('delete') })
             }
             if (isStandaloneFile) {
