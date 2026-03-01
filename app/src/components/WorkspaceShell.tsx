@@ -1702,7 +1702,7 @@ export function WorkspaceShell({
               )}
               {!pdfRecentLoading && !pdfRecentError && pdfRecent.length === 0 && (
                 <p style={{ color: '#9ca3af', padding: '12px', fontSize: '13px' }}>
-                  暂无最近 PDF。可以通过菜单 File → Open 打开 PDF 文件。
+                  No recent PDFs. Use File → Open to open a PDF file.
                 </p>
               )}
               {!pdfRecentLoading && !pdfRecentError && pdfRecent.length > 0 && (
