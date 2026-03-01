@@ -189,10 +189,13 @@ function InlineNewFileRow({ level, onConfirm, onCancel, isFolder }: InlineNewFil
 
   const finish = (commit: boolean, value: string) => {
     const name = value.trim()
+    console.log('[Sidebar.InlineNewFileRow.finish]', { isFolder, commit, raw: value, name })
     if (!commit || !name) {
+      console.log('[Sidebar.InlineNewFileRow.finish] cancel', { reason: !commit ? 'no-commit' : 'empty-name' })
       onCancel?.()
       return
     }
+    console.log('[Sidebar.InlineNewFileRow.finish] confirm', { name })
     onConfirm?.(name)
   }
 

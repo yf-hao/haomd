@@ -346,4 +346,31 @@ describe('files/service API', () => {
       expect(createRes.error.message).toContain('not allowed')
     }
   })
+
+  it('createFolder should return notAvailable when Tauri is not available', async () => {
+    tauriOff()
+
+    const result = await createFolder('/foo', 'trace-create-no-tauri')
+
+    expect(mockInvoke).not.toHaveBeenCalled()
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error.code).toBe('UNKNOWN')
+      expect(result.error.message).toBe('Tauri 后端不可用')
+      expect(result.error.traceId).toBe('trace-create-no-tauri')
+    }
+  })
+
+  it('createFolder should map Ok result and propagate trace id', async () => {
+    mockInvoke.mockResolvedValueOnce(ok<unknown>(null))
+
+    const result = await createFolder('/dir', 'trace-create-ok')
+
+    expect(mockInvoke).toHaveBeenCalledWith('create_folder', { path: '/dir', trace_id: 'trace-create-ok' })
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.data).toBeNull()
+      expect(result.traceId).toBe('trace-backend')
+    }
+  })
 })

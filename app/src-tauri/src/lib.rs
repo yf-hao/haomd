@@ -1013,6 +1013,28 @@ async fn delete_fs_entry(
     }
 }
 
+#[tauri::command]
+async fn create_folder(
+    _app: AppHandle,
+    path: String,
+    trace_id: Option<String>,
+) -> ResultPayload<()> {
+    let trace = trace_id.unwrap_or_else(new_trace_id);
+    let normalized = match normalize_path(&path) {
+        Ok(p) => p,
+        Err(e) => return ResultPayload::Err { error: e },
+    };
+
+    match fs::create_dir_all(&normalized).await {
+        Ok(()) => ok((), trace),
+        Err(err) => err_payload(
+            ErrorCode::IoError,
+            format!("创建目录失败: {err}"),
+            trace,
+        ),
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "lowercase")]
 enum FsEntryKind {
@@ -2403,6 +2425,7 @@ pub fn run() {
       load_sidebar_state,
       save_sidebar_state,
       list_folder,
+      create_folder,
       set_title,
       delete_fs_entry,
       quit_app,

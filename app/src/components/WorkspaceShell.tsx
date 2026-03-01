@@ -1053,16 +1053,23 @@ export function WorkspaceShell({
 
   const generateUniqueFolderPath = async (baseFolder: string, rawName: string): Promise<string | null> => {
     const trimmed = rawName.trim()
-    if (!trimmed) return null
+    console.log('[WorkspaceShell.generateUniqueFolderPath] start', { baseFolder, rawName, trimmed })
+    if (!trimmed) {
+      console.log('[WorkspaceShell.generateUniqueFolderPath] empty-name, abort')
+      return null
+    }
 
     if (/[\\/]/.test(trimmed)) {
+      console.log('[WorkspaceShell.generateUniqueFolderPath] invalid-name-has-separator', { trimmed })
       setStatusMessage('文件夹名中不能包含路径分隔符')
       return null
     }
 
     const normalizedFolder = normalizeDirPath(baseFolder)
+    console.log('[WorkspaceShell.generateUniqueFolderPath] normalizedFolder =', normalizedFolder)
 
     const resp = await listFolder(normalizedFolder)
+    console.log('[WorkspaceShell.generateUniqueFolderPath] listFolder resp =', resp)
     if (!resp.ok) {
       setStatusMessage(resp.error.message)
       return null
@@ -1078,7 +1085,9 @@ export function WorkspaceShell({
       index += 1
     }
 
-    return `${normalizedFolder}/${candidateName}`
+    const fullPath = `${normalizedFolder}/${candidateName}`
+    console.log('[WorkspaceShell.generateUniqueFolderPath] resolved fullPath =', fullPath)
+    return fullPath
   }
 
   const computeDirFromPath = (targetPath: string): string => {
@@ -1212,16 +1221,23 @@ export function WorkspaceShell({
   }, [isCreatingTab, getTargetFolderForNewFolder, setStatusMessage, sidebar])
 
   const handleInlineNewFolderConfirm = useCallback((rawName: string) => {
-    if (!inlineNewFolderDir) return
+    console.log('[WorkspaceShell.handleInlineNewFolderConfirm] called', { rawName, inlineNewFolderDir })
+    if (!inlineNewFolderDir) {
+      console.log('[WorkspaceShell.handleInlineNewFolderConfirm] no inlineNewFolderDir, abort')
+      return
+    }
 
     void (async () => {
       const folderPath = await generateUniqueFolderPath(inlineNewFolderDir, rawName)
+      console.log('[WorkspaceShell.handleInlineNewFolderConfirm] folderPath =', folderPath)
       if (!folderPath) {
+        console.log('[WorkspaceShell.handleInlineNewFolderConfirm] folderPath null, clear inlineNewFolderDir')
         setInlineNewFolderDir(null)
         return
       }
 
       const resp = await createFolder(folderPath)
+      console.log('[WorkspaceShell.handleInlineNewFolderConfirm] createFolder resp =', resp)
       if (!resp.ok) {
         setStatusMessage(resp.error.message)
         return
@@ -1237,6 +1253,7 @@ export function WorkspaceShell({
         return normalized.startsWith(rootNorm + '/')
       }) ?? sidebar.folderRoots[0]
 
+      console.log('[WorkspaceShell.handleInlineNewFolderConfirm] refresh root =', root)
       if (root) {
         void sidebar.refreshFolderTree(root)
       }
