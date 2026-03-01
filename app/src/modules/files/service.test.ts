@@ -29,11 +29,11 @@ const ok = <T>(data: T): BackendResult<T> => ({ Ok: { data, trace_id: 'trace-bac
 const err = (error: BackendError): BackendResult<never> => ({ Err: { error } })
 
 const tauriOff = () => {
-  ;(isTauriEnv as unknown as vi.Mock).mockReturnValue(false)
+  ;(isTauriEnv as unknown as { mockReturnValue: (v: boolean) => void }).mockReturnValue(false)
 }
 
 const tauriOn = () => {
-  ;(isTauriEnv as unknown as vi.Mock).mockReturnValue(true)
+  ;(isTauriEnv as unknown as { mockReturnValue: (v: boolean) => void }).mockReturnValue(true)
 }
 
 describe('files/service helpers', () => {
