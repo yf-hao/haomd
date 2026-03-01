@@ -613,7 +613,7 @@ async fn write_file(
 
 #[tauri::command]
 async fn write_file_no_recent(
-    app: AppHandle,
+    _app: AppHandle,
     path: String,
     content: String,
     expected_mtime: Option<u64>,
