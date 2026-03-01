@@ -53,8 +53,18 @@ const baseTheme = EditorView.theme(
     '.cm-gutter .cm-activeLineGutter': {
       // 比原来更亮、更实一些，方便一眼看到当前行
       backgroundColor: 'rgba(56, 189, 248, 0.28)', // #38bdf8 @ 28%
-      // 在 active gutter 右侧增加绿色竖条（不占布局宽度）
-      boxShadow: 'inset -2px 0 0 #22c55e',
+      position: 'relative',
+    },
+    // 竖绿条整体向右移动 5px（从 gutter 右边界外移）
+    '.cm-gutter .cm-activeLineGutter::after': {
+      content: '""',
+      position: 'absolute',
+      top: 0,
+      bottom: 0,
+      right: '0px',
+      width: '2px',
+      backgroundColor: '#22c55e',
+      pointerEvents: 'none',
     },
     '.cm-line': {
       paddingLeft: '6px',
