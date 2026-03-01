@@ -987,7 +987,10 @@ async fn delete_pdf_recent_entry(
 }
 
 #[tauri::command]
-async fn load_pdf_folders(app: AppHandle, trace_id: Option<String>) -> ResultPayload<Vec<PdfFolder>> {
+async fn load_pdf_folders(
+    app: AppHandle,
+    trace_id: Option<String>,
+) -> ResultPayload<Vec<PdfFolder>> {
     let trace = trace_id.unwrap_or_else(new_trace_id);
     match read_pdf_folders_store(&app).await {
         Ok(list) => ok(list, trace),
@@ -1038,11 +1041,7 @@ async fn update_pdf_recent_folder(
     if let Some(item) = list.iter_mut().find(|item| item.path == path) {
         item.folder_id = folder_id;
     } else {
-        return err_payload(
-            ErrorCode::NotFound,
-            "目标 PDF 不在最近列表中",
-            trace,
-        );
+        return err_payload(ErrorCode::NotFound, "目标 PDF 不在最近列表中", trace);
     }
 
     match write_pdf_recent_store(&app, &list).await {

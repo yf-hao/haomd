@@ -184,14 +184,64 @@
 }
 
 .pdf-folder-header {
-  padding: 4px 16px 0;
-  font-size: 11px;
-  font-weight: 500;
-  color: #9ca3af;
+  padding: 4px 12px 2px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #e5e7eb;
+  background: rgba(31, 41, 55, 0.9);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.pdf-folder-header:hover {
+  background: rgba(55, 65, 81, 0.95);
+}
+
+.pdf-folder-toggle-icon {
+  font-size: 10px;
+  opacity: 0.8;
 }
 
 .pdf-folder-name {
-  opacity: 0.9;
+  opacity: 0.95;
+  flex: 1;
+}
+
+.pdf-folder-rename-input {
+  width: 100%;
+  background: rgba(15, 23, 42, 0.95);
+  border-radius: 4px;
+  border: 1px solid rgba(148, 163, 184, 0.7);
+  color: #e5e7eb;
+  font-size: 12px;
+  padding: 2px 6px;
+  outline: none;
+}
+
+.pdf-folder-delete-btn {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: #9ca3af;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.pdf-folder-delete-btn:hover {
+  background: rgba(248, 113, 113, 0.18);
+  color: #fecaca;
+}
+
+.pdf-folder-rename-input:focus {
+  border-color: rgba(59, 130, 246, 0.9);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.4);
 }
 
 .pdf-panel-content {
