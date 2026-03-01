@@ -30,6 +30,12 @@ export interface RecentFile {
   displayName: string
   lastOpenedAt: number
   isFolder?: boolean
+  /**
+   * PDF 面板使用的虚拟文件夹 id。
+   * - 对于普通最近文件列表，可忽略此字段。
+   * - 对于 PDF 最近列表，undefined 表示在面板根列表中。
+   */
+  folderId?: string
 }
 
 export type FileKind = 'file' | 'dir'

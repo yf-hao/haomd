@@ -1,1 +1,5 @@
-提示词技巧.md
+# 忽略根目录下除了 README.md 和 README_CN.md 之外的所有 .md 文件
+/*.md
+!/README.md
+!/README_CN.md
+

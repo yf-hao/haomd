@@ -156,6 +156,19 @@ fn pdf_recent_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
     Ok(dir.join("pdf_recent.json"))
 }
 
+fn pdf_folders_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
+    // 与 pdf_recent.json 相同策略：优先使用配置目录
+    if let Ok(mut dir) = app.path().config_dir() {
+        dir.push("haomd");
+        std::fs::create_dir_all(&dir)?;
+        return Ok(dir.join("pdf_folders.json"));
+    }
+
+    // 兜底：退回到当前工作目录
+    let dir = std::env::current_dir()?;
+    Ok(dir.join("pdf_folders.json"))
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct SidebarState {
     root: Option<String>,
@@ -397,6 +410,8 @@ struct PdfRecentEntry {
     path: String,
     display_name: String,
     last_opened_at: u64,
+    #[serde(default)]
+    folder_id: Option<String>,
 }
 
 async fn read_pdf_recent_store(app: &AppHandle) -> std::io::Result<Vec<PdfRecentEntry>> {
@@ -413,6 +428,30 @@ async fn read_pdf_recent_store(app: &AppHandle) -> std::io::Result<Vec<PdfRecent
 
 async fn write_pdf_recent_store(app: &AppHandle, items: &[PdfRecentEntry]) -> std::io::Result<()> {
     let path = pdf_recent_store_path(app)?;
+    let bytes = serde_json::to_vec_pretty(items)?;
+    fs::write(path, bytes).await
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct PdfFolder {
+    id: String,
+    name: String,
+}
+
+async fn read_pdf_folders_store(app: &AppHandle) -> std::io::Result<Vec<PdfFolder>> {
+    let path = pdf_folders_store_path(app)?;
+    match fs::read(&path).await {
+        Ok(bytes) => {
+            let items: Vec<PdfFolder> = serde_json::from_slice(&bytes).unwrap_or_default();
+            Ok(items)
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(vec![]),
+        Err(err) => Err(err),
+    }
+}
+
+async fn write_pdf_folders_store(app: &AppHandle, items: &[PdfFolder]) -> std::io::Result<()> {
+    let path = pdf_folders_store_path(app)?;
     let bytes = serde_json::to_vec_pretty(items)?;
     fs::write(path, bytes).await
 }
@@ -434,11 +473,13 @@ async fn upsert_pdf_recent(app: &AppHandle, path: &str) -> std::io::Result<()> {
     if let Some(item) = list.iter_mut().find(|item| item.path == path) {
         item.display_name = display_name.clone();
         item.last_opened_at = now_ms;
+        // 保留已有的 folder_id，不在这里修改分类
     } else {
         list.push(PdfRecentEntry {
             path: path.to_string(),
             display_name,
             last_opened_at: now_ms,
+            folder_id: None,
         });
     }
 
@@ -940,6 +981,75 @@ async fn delete_pdf_recent_entry(
         Err(err) => err_payload(
             ErrorCode::IoError,
             format!("删除 PDF 最近文件失败: {err}"),
+            trace,
+        ),
+    }
+}
+
+#[tauri::command]
+async fn load_pdf_folders(app: AppHandle, trace_id: Option<String>) -> ResultPayload<Vec<PdfFolder>> {
+    let trace = trace_id.unwrap_or_else(new_trace_id);
+    match read_pdf_folders_store(&app).await {
+        Ok(list) => ok(list, trace),
+        Err(err) => err_payload(
+            ErrorCode::IoError,
+            format!("读取 PDF 虚拟文件夹失败: {err}"),
+            trace,
+        ),
+    }
+}
+
+#[tauri::command]
+async fn save_pdf_folders(
+    app: AppHandle,
+    folders: Vec<PdfFolder>,
+    trace_id: Option<String>,
+) -> ResultPayload<()> {
+    let trace = trace_id.unwrap_or_else(new_trace_id);
+    match write_pdf_folders_store(&app, &folders).await {
+        Ok(()) => ok((), trace),
+        Err(err) => err_payload(
+            ErrorCode::IoError,
+            format!("写入 PDF 虚拟文件夹失败: {err}"),
+            trace,
+        ),
+    }
+}
+
+#[tauri::command]
+async fn update_pdf_recent_folder(
+    app: AppHandle,
+    path: String,
+    folder_id: Option<String>,
+    trace_id: Option<String>,
+) -> ResultPayload<()> {
+    let trace = trace_id.unwrap_or_else(new_trace_id);
+    let mut list = match read_pdf_recent_store(&app).await {
+        Ok(list) => list,
+        Err(err) => {
+            return err_payload(
+                ErrorCode::IoError,
+                format!("读取 PDF 最近文件失败: {err}"),
+                trace,
+            )
+        }
+    };
+
+    if let Some(item) = list.iter_mut().find(|item| item.path == path) {
+        item.folder_id = folder_id;
+    } else {
+        return err_payload(
+            ErrorCode::NotFound,
+            "目标 PDF 不在最近列表中",
+            trace,
+        );
+    }
+
+    match write_pdf_recent_store(&app, &list).await {
+        Ok(()) => ok((), trace),
+        Err(err) => err_payload(
+            ErrorCode::IoError,
+            format!("更新 PDF 最近文件分类失败: {err}"),
             trace,
         ),
     }
@@ -2418,6 +2528,9 @@ pub fn run() {
       list_pdf_recent,
       log_pdf_recent_file,
       delete_pdf_recent_entry,
+      load_pdf_folders,
+      save_pdf_folders,
+      update_pdf_recent_folder,
       load_sidebar_state,
       save_sidebar_state,
       list_folder,

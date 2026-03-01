@@ -27,7 +27,7 @@ import { useCommandSystem } from '../hooks/useCommandSystem'
 import { useSidebar } from '../hooks/useSidebar'
 import { onOpenRecentFile } from '../modules/platform/menuEvents'
 import { createFolder, deleteFsEntry, deleteRecentRemote, listFolder, writeFile } from '../modules/files/service'
-import { listPdfRecent, deletePdfRecent } from '../modules/pdf/pdfRecentService'
+import { listPdfRecent, deletePdfRecent, loadPdfFolders, savePdfFolders, updatePdfRecentFolder, type PdfFolder } from '../modules/pdf/pdfRecentService'
 import { useNativePaste } from '../hooks/useNativePaste'
 import { onNativePasteImage } from '../modules/platform/clipboardEvents'
 import type { EditorTab } from '../types/tabs'
@@ -159,6 +159,7 @@ export function WorkspaceShell({
   const [hugeDocChunkMaxLines, setHugeDocChunkMaxLines] = useState(DEFAULT_HUGE_DOC_CHUNK_MAX_LINES)
   const [focusRequest, setFocusRequest] = useState<{ localLine: number; searchText?: string } | null>(null)
   const [pdfRecent, setPdfRecent] = useState<RecentFile[]>([])
+  const [pdfFolders, setPdfFolders] = useState<PdfFolder[]>([])
   const [pdfRecentLoading, setPdfRecentLoading] = useState(false)
   const [pdfRecentError, setPdfRecentError] = useState<string | null>(null)
   const [pdfNotes, setPdfNotes] = useState<Record<string, string>>({})
@@ -489,18 +490,24 @@ export function WorkspaceShell({
     setPdfRecentError(null)
     try {
       console.log('[WorkspaceShell.refreshPdfRecent] before listPdfRecent()')
-      const items = await listPdfRecent()
+      const [items, folders] = await Promise.all([
+        listPdfRecent(),
+        loadPdfFolders(),
+      ])
       console.log('[WorkspaceShell.refreshPdfRecent] listPdfRecent items =', items)
       setPdfRecent(items)
+      setPdfFolders(folders)
     } catch (e) {
-      console.error('[WorkspaceShell.refreshPdfRecent] listPdfRecent failed', e)
+      console.error('[WorkspaceShell.refreshPdfRecent] listPdfRecent or loadPdfFolders failed', e)
       setPdfRecent([])
+      setPdfFolders([])
       setPdfRecentError((e as any)?.message ?? '加载 PDF 最近文件失败')
     } finally {
       console.log('[WorkspaceShell.refreshPdfRecent] finally, set loading = false')
       setPdfRecentLoading(false)
     }
   }, [isTauriEnv])
+
 
   // PDF 最近文件列表：仅在左侧 PDF 面板激活时从后端加载
   useEffect(() => {
@@ -703,6 +710,74 @@ export function WorkspaceShell({
       }
     }
   })
+
+  const handleCreatePdfFolder = useCallback(() => {
+    if (!isTauriEnv()) {
+      setStatusMessage('虚拟文件夹仅在桌面应用中可用')
+      return
+    }
+    if (typeof window === 'undefined') return
+
+    const input = window.prompt('请输入虚拟文件夹名称：')
+    if (input == null) return
+    const name = input.trim()
+    if (!name) return
+
+    void (async () => {
+      try {
+        if (pdfFolders.some((f) => f.name === name)) {
+          setStatusMessage('已存在同名虚拟文件夹')
+          return
+        }
+        const id = `${name}-${Math.random().toString(16).slice(2, 8)}`
+        const next = [...pdfFolders, { id, name }]
+        next.sort((a, b) => a.name.localeCompare(b.name))
+        await savePdfFolders(next)
+        setPdfFolders(next)
+      } catch (e) {
+        console.error('[WorkspaceShell] handleCreatePdfFolder failed', e)
+        setStatusMessage((e as any)?.message ?? '创建虚拟文件夹失败')
+      }
+    })()
+  }, [isTauriEnv, pdfFolders, setStatusMessage])
+
+  const handleMovePdfToFolder = useCallback((path: string) => {
+    if (!isTauriEnv()) {
+      setStatusMessage('虚拟文件夹仅在桌面应用中可用')
+      return
+    }
+    if (typeof window === 'undefined') return
+
+    const input = window.prompt('输入虚拟文件夹名称（留空移动到根列表）：')
+    if (input == null) return
+    const name = input.trim()
+
+    void (async () => {
+      try {
+        if (!name) {
+          await updatePdfRecentFolder(path, null)
+          await refreshPdfRecent()
+          return
+        }
+
+        let target = pdfFolders.find((f) => f.name === name)
+        if (!target) {
+          const id = `${name}-${Math.random().toString(16).slice(2, 8)}`
+          const next = [...pdfFolders, { id, name }]
+          next.sort((a, b) => a.name.localeCompare(b.name))
+          await savePdfFolders(next)
+          setPdfFolders(next)
+          target = { id, name }
+        }
+
+        await updatePdfRecentFolder(path, target.id)
+        await refreshPdfRecent()
+      } catch (e) {
+        console.error('[WorkspaceShell] handleMovePdfToFolder failed', e)
+        setStatusMessage((e as any)?.message ?? '更新 PDF 虚拟文件夹失败')
+      }
+    })()
+  }, [isTauriEnv, pdfFolders, refreshPdfRecent, setStatusMessage])
 
   const handleMarkdownChange = useCallback((val: string) => {
     if (hugeDocEnabled && hugeDocState?.enabled && hugeDocState.currentChunk) {
@@ -1707,6 +1782,14 @@ export function WorkspaceShell({
           <div className="pdf-panel" style={{ width: sidebarWidth }}>
             <div className="pdf-panel-header">
               <span>PDF</span>
+              <button
+                type="button"
+                className="pdf-folder-add-btn"
+                title="新建虚拟文件夹"
+                onClick={() => handleCreatePdfFolder()}
+              >
+                +
+              </button>
             </div>
             <div className="pdf-panel-content">
               {pdfRecentLoading && (
@@ -1721,31 +1804,74 @@ export function WorkspaceShell({
                 </p>
               )}
               {!pdfRecentLoading && !pdfRecentError && pdfRecent.length > 0 && (
-                <ul className="pdf-recent-list">
-                  {pdfRecent.map((item) => {
-                    const name = item.displayName || item.path.split(/[/\\]/).pop() || item.path
-                    const isActive = activeTab?.path === item.path
+                <>
+                  {/* 根列表：未分配虚拟文件夹的 PDF */}
+                  {pdfRecent.filter((item) => !item.folderId).length > 0 && (
+                    <ul className="pdf-recent-list">
+                      {pdfRecent.filter((item) => !item.folderId).map((item) => {
+                        const name = item.displayName || item.path.split(/[/\\]/).pop() || item.path
+                        const isActive = activeTab?.path === item.path
+                        return (
+                          <li
+                            key={item.path}
+                            className={`pdf-recent-item ${isActive ? 'active' : ''}`}
+                            onClick={() => { void openRecentFileInNewTab(item.path) }}
+                            onContextMenu={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              setPdfMenuState({
+                                visible: true,
+                                x: e.clientX,
+                                y: e.clientY,
+                                targetPath: item.path,
+                              })
+                            }}
+                          >
+                            <div className="pdf-recent-title">{name}</div>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  )}
+
+                  {/* 虚拟文件夹分组 */}
+                  {pdfFolders.map((folder) => {
+                    const items = pdfRecent.filter((item) => item.folderId === folder.id)
+                    if (items.length === 0) return null
                     return (
-                      <li
-                        key={item.path}
-                        className={`pdf-recent-item ${isActive ? 'active' : ''}`}
-                        onClick={() => { void openRecentFileInNewTab(item.path) }}
-                        onContextMenu={(e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          setPdfMenuState({
-                            visible: true,
-                            x: e.clientX,
-                            y: e.clientY,
-                            targetPath: item.path,
-                          })
-                        }}
-                      >
-                        <div className="pdf-recent-title">{name}</div>
-                      </li>
+                      <div key={folder.id} className="pdf-folder-section">
+                        <div className="pdf-folder-header">
+                          <span className="pdf-folder-name">{folder.name}</span>
+                        </div>
+                        <ul className="pdf-recent-list">
+                          {items.map((item) => {
+                            const name = item.displayName || item.path.split(/[/\\]/).pop() || item.path
+                            const isActive = activeTab?.path === item.path
+                            return (
+                              <li
+                                key={item.path}
+                                className={`pdf-recent-item ${isActive ? 'active' : ''}`}
+                                onClick={() => { void openRecentFileInNewTab(item.path) }}
+                                onContextMenu={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  setPdfMenuState({
+                                    visible: true,
+                                    x: e.clientX,
+                                    y: e.clientY,
+                                    targetPath: item.path,
+                                  })
+                                }}
+                              >
+                                <div className="pdf-recent-title">{name}</div>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      </div>
                     )
                   })}
-                </ul>
+                </>
               )}
               {pdfMenuState.visible && pdfMenuState.targetPath && (
                 <FileContextMenu
@@ -1758,6 +1884,15 @@ export function WorkspaceShell({
                       label: 'Open',
                       onClick: () => {
                         void openRecentFileInNewTab(pdfMenuState.targetPath!)
+                        closePdfMenu()
+                      },
+                    },
+                    {
+                      id: 'move-to-folder',
+                      label: 'Move to Virtual Folder…',
+                      onClick: () => {
+                        const targetPath = pdfMenuState.targetPath!
+                        handleMovePdfToFolder(targetPath)
                         closePdfMenu()
                       },
                     },
