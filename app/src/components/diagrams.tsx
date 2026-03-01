@@ -21,6 +21,8 @@ export const MermaidBlock = memo(function MermaidBlock({ code }: Readonly<{ code
   const idRef = useRef(mermaidId)
   const runIdRef = useRef(0)
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const resizeRafRef = useRef<number | null>(null)
+  const lastObservedWidthRef = useRef<number>(-1)
   const [containerWidth, setContainerWidth] = useState<number | null>(null)
 
   const cacheKey = useMemo(() => {
@@ -30,15 +32,31 @@ export const MermaidBlock = memo(function MermaidBlock({ code }: Readonly<{ code
 
   useEffect(() => {
     if (!containerRef.current) return
+
     const observer = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect?.width ?? 0
-      setContainerWidth((prev) => {
-        const next = Math.round(w)
-        return prev === next ? prev : next
+      const width = entries[0]?.contentRect?.width ?? 0
+      const next = Math.round(width)
+      if (Math.abs(next - lastObservedWidthRef.current) < 2) return
+      lastObservedWidthRef.current = next
+
+      if (resizeRafRef.current != null) {
+        window.cancelAnimationFrame(resizeRafRef.current)
+      }
+      resizeRafRef.current = window.requestAnimationFrame(() => {
+        resizeRafRef.current = null
+        setContainerWidth((prev) => (prev === next ? prev : next))
       })
     })
+
     observer.observe(containerRef.current)
-    return () => observer.disconnect()
+
+    return () => {
+      observer.disconnect()
+      if (resizeRafRef.current != null) {
+        window.cancelAnimationFrame(resizeRafRef.current)
+        resizeRafRef.current = null
+      }
+    }
   }, [])
 
   useEffect(() => {
@@ -169,6 +187,9 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mindRef = useRef<any>(null)
   const lastHashRef = useRef<string | null>(null)
+  const resizeRafRef = useRef<number | null>(null)
+  const isHandlingResizeRef = useRef(false)
+  const lastResizeWidthRef = useRef<number>(-1)
   const [error, setError] = useState<string | null>(null)
   const codeHash = useMemo(() => hashString(code), [code])
 
@@ -259,30 +280,53 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
     const resizeHandler = () => {
       const el = containerRef.current
       if (!el) return
-      const width = el.clientWidth
+      const width = Math.round(el.clientWidth)
       if (width <= 0) return
+      if (isHandlingResizeRef.current) return
 
-      if (!mindRef.current || lastHashRef.current !== codeHash) {
-        init()
-        return
-      }
+      const shouldSkip =
+        Math.abs(width - lastResizeWidthRef.current) < 2 &&
+        !!mindRef.current &&
+        lastHashRef.current === codeHash
+      if (shouldSkip) return
 
+      isHandlingResizeRef.current = true
+      lastResizeWidthRef.current = width
       try {
+        if (!mindRef.current || lastHashRef.current !== codeHash) {
+          init()
+          return
+        }
+
         mindRef.current.scaleFit()
         mindRef.current.toCenter()
       } catch (e) {
         console.warn('Mind-elixir scaleFit on resize failed', e)
+      } finally {
+        isHandlingResizeRef.current = false
       }
     }
 
-    const observer = new ResizeObserver(() => resizeHandler())
+    const scheduleResize = () => {
+      if (resizeRafRef.current != null) {
+        window.cancelAnimationFrame(resizeRafRef.current)
+      }
+      resizeRafRef.current = window.requestAnimationFrame(() => {
+        resizeRafRef.current = null
+        resizeHandler()
+      })
+    }
+
+    const observer = new ResizeObserver(scheduleResize)
     observer.observe(el)
-    window.addEventListener('resize', resizeHandler)
 
     return () => {
       if (timer) window.clearTimeout(timer)
-      window.removeEventListener('resize', resizeHandler)
       observer.disconnect()
+      if (resizeRafRef.current != null) {
+        window.cancelAnimationFrame(resizeRafRef.current)
+        resizeRafRef.current = null
+      }
       if (mindRef.current) {
         try {
           mindRef.current.destroy?.()

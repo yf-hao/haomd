@@ -140,8 +140,10 @@
 
 /* PDF Panel */
 .pdf-panel {
-  background: rgba(15, 23, 42, 0.95);
-  border-right: 1px solid rgba(51, 65, 85, 0.6);
+  /* 与文件浏览器 Sidebar 保持一致的深色毛玻璃风格 */
+  background: rgba(5, 7, 12, 0.96);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(8px);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -202,6 +204,7 @@
 .pdf-folder-toggle-icon {
   font-size: 10px;
   opacity: 0.8;
+ 
 }
 
 .pdf-folder-name {
@@ -332,6 +335,7 @@
   min-width: 200px;
   max-width: 320px;
   border-right: 1px solid rgba(255, 255, 255, 0.06);
+  
   background: rgba(5, 7, 12, 0.96);
   backdrop-filter: blur(8px);
   padding: 8px 8px 8px 12px;
@@ -344,6 +348,7 @@
   min-width: 180px;
   max-width: 260px;
   border-right: 1px solid rgba(255, 255, 255, 0.06);
+  
   background: rgba(5, 7, 12, 0.96);
   backdrop-filter: blur(8px);
   padding: 8px 8px 8px 8px;
@@ -358,6 +363,7 @@
   color: #8fa1c7;
   margin-bottom: 4px;
   padding: 4px 4px 8px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.35);
 }
 
 .outline-list {
@@ -1066,8 +1072,17 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
+  /* 不显示滚动条，但保留滚动能力 */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   /* 与编辑区保持一致，在预览末尾预留一段“虚拟空白”，避免最后一行贴底 */
   padding-bottom: 25vh;
+}
+
+.preview-body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 .markdown-body {
@@ -1289,7 +1304,7 @@
 
 .divider-rail {
   width: 4px;
-  height: 60px;
+  height: 384px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
   transition: all 0.2s ease;
