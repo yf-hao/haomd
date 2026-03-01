@@ -1095,7 +1095,11 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 
     let export_menu = SubmenuBuilder::new(app, "Export")
         .item(&MenuItemBuilder::new("HTML").id("export_html").build(app)?)
-        .item(&MenuItemBuilder::new("PDF (Text only)").id("export_pdf").build(app)?)
+        .item(
+            &MenuItemBuilder::new("PDF (Text only)")
+                .id("export_pdf")
+                .build(app)?,
+        )
         .build()?;
 
     // File 菜单

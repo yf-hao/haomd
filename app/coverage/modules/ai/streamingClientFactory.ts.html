@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/9</span>
+                <span class='fraction'>9/9</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/14</span>
+                <span class='fraction'>14/14</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>0/1</span>
+                <span class='fraction'>1/1</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/9</span>
+                <span class='fraction'>9/9</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line low'></div>
+    <div class='status-line high'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -127,20 +127,18 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">9x</span>
+<span class="cline-any cline-yes">9x</span>
+<span class="cline-any cline-yes">9x</span>
+<span class="cline-any cline-yes">9x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">9x</span>
+<span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -148,7 +146,9 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">5x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -169,24 +169,24 @@ import { createOpenAIStreamingClient } from './openai/createOpenAIStreamingClien
  * 当 providerType 为空或为 'dify' 时使用 Dify；为 'openai' 时使用 OpenAI 兼容接口。
  * 可选的 systemPrompt 会传递给底层 Provider，用于设置系统提示词。
  */
-export function <span class="fstat-no" title="function not covered" >createStreamingClientFromSettings(</span>
+export function createStreamingClientFromSettings(
   provider: UiProvider,
   systemPrompt?: string,
   overrideModelId?: string,
   initialConversationId?: string,
 ): IStreamingChatClient {
-  const baseUrl = <span class="cstat-no" title="statement not covered" >provider.baseUrl.trim()</span>
-  const apiKey = <span class="cstat-no" title="statement not covered" >provider.apiKey.trim()</span>
-  const modelId = <span class="cstat-no" title="statement not covered" >overrideModelId || provider.defaultModelId || provider.models[0]?.id || ''</span>
-  const providerType = <span class="cstat-no" title="statement not covered" >provider.providerType ?? 'dify'</span>
+  const baseUrl = provider.baseUrl.trim()
+  const apiKey = provider.apiKey.trim()
+  const modelId = overrideModelId || provider.defaultModelId || provider.models[0]?.id || ''
+  const providerType = provider.providerType ?? 'dify'
 &nbsp;
-<span class="cstat-no" title="statement not covered" >  if (!baseUrl || !apiKey || !modelId) {</span>
-<span class="cstat-no" title="statement not covered" >    throw new Error('Provider 配置不完整：缺少 Base URL / API Key / Model')</span>
+  if (!baseUrl || !apiKey || !modelId) {
+    throw new Error('Provider 配置不完整：缺少 Base URL / API Key / Model')
   }
 &nbsp;
-<span class="cstat-no" title="statement not covered" >  switch (providerType) {</span>
+  switch (providerType) {
     case 'openai':
-<span class="cstat-no" title="statement not covered" >      return createOpenAIStreamingClient({</span>
+      return createOpenAIStreamingClient({
         apiKey,
         baseUrl,
         modelId,
@@ -196,7 +196,7 @@ export function <span class="fstat-no" title="function not covered" >createStrea
       })
     case 'dify':
     default:
-<span class="cstat-no" title="statement not covered" >      return createDifyStreamingClient({</span>
+      return createDifyStreamingClient({
         apiKey,
         baseUrl,
         modelId,
@@ -214,7 +214,7 @@ export function <span class="fstat-no" title="function not covered" >createStrea
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-02-27T03:43:38.833Z
+                at 2026-03-01T07:11:11.205Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

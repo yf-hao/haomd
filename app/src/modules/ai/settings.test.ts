@@ -1,57 +1,38 @@
 import { describe, it, expect } from 'vitest'
-import { emptySettings, fromCfg, toCfg, type AiSettingsCfg, type AiSettingsState } from './settings'
 
-describe('ai/settings mapping', () => {
-  it('fromCfg should map backend cfg to state and handle null/undefined', () => {
-    const cfg: AiSettingsCfg = {
-      providers: [
-        {
-          id: 'p1',
-          name: 'Test',
-          base_url: 'https://api.example.com',
-          api_key: 'key',
-          models: [{ id: 'gpt-4' }],
-          default_model_id: 'gpt-4',
-          description: null,
-        },
-      ],
-      default_provider_id: 'p1',
-    }
+// 从入口聚合模块导入
+import {
+  emptySettings as settingsEmpty,
+  fromCfg as settingsFromCfg,
+  toCfg as settingsToCfg,
+  loadAiSettingsState as settingsLoadAi,
+  saveAiSettingsState as settingsSaveAi,
+  loadDefaultChatConfig as settingsLoadDefaultChat,
+} from './settings'
 
-    const state = fromCfg(cfg)
-    expect(state.providers).toHaveLength(1)
-    const p = state.providers[0]
-    expect(p.id).toBe('p1')
-    expect(p.baseUrl).toBe('https://api.example.com')
-    expect(p.models[0].id).toBe('gpt-4')
-    expect(state.defaultProviderId).toBe('p1')
+// 从实际实现模块导入，用于对比引用是否一致
+import { emptySettings as domainEmptySettings } from './domain/types'
+import {
+  fromCfg as repoFromCfg,
+  toCfg as repoToCfg,
+  loadAiSettingsState as repoLoadAi,
+  saveAiSettingsState as repoSaveAi,
+  loadDefaultChatConfig as repoLoadDefaultChat,
+} from './config/aiSettingsRepo'
 
-    // null / undefined 应映射为 emptySettings
-    expect(fromCfg(null)).toEqual(emptySettings)
-    expect(fromCfg(undefined)).toEqual(emptySettings)
+describe('ai/settings aggregate exports', () => {
+  it('should re-export emptySettings from domain/types', () => {
+    // 引用相等，说明是同一个对象
+    expect(settingsEmpty).toBe(domainEmptySettings)
+    expect(settingsEmpty).toEqual({ providers: [], defaultProviderId: undefined })
   })
 
-  it('toCfg should map state to backend cfg with nulls for optional fields', () => {
-    const state: AiSettingsState = {
-      providers: [
-        {
-          id: 'p1',
-          name: 'Test',
-          baseUrl: 'https://api.example.com',
-          apiKey: 'key',
-          models: [{ id: 'gpt-4' }],
-          defaultModelId: undefined,
-          description: undefined,
-        },
-      ],
-      defaultProviderId: undefined,
-    }
-
-    const cfg = toCfg(state)
-    expect(cfg.providers[0].base_url).toBe('https://api.example.com')
-    expect(cfg.providers[0].models[0].id).toBe('gpt-4')
-    expect(cfg.providers[0].default_model_id).toBeNull()
-    expect(cfg.providers[0].description).toBeNull()
-    expect(cfg.default_provider_id).toBeNull()
+  it('should re-export aiSettingsRepo mapping functions and IO helpers', () => {
+    // 直接比较函数引用是否完全一致
+    expect(settingsFromCfg).toBe(repoFromCfg)
+    expect(settingsToCfg).toBe(repoToCfg)
+    expect(settingsLoadAi).toBe(repoLoadAi)
+    expect(settingsSaveAi).toBe(repoSaveAi)
+    expect(settingsLoadDefaultChat).toBe(repoLoadDefaultChat)
   })
 })

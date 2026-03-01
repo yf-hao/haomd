@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/15</span>
+                <span class='fraction'>15/15</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">75% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/16</span>
+                <span class='fraction'>12/16</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>0/7</span>
+                <span class='fraction'>7/7</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/13</span>
+                <span class='fraction'>13/13</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line low'></div>
+    <div class='status-line high'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -145,12 +145,10 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -162,14 +160,12 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -177,17 +173,21 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { invoke } from '@tauri-apps/api/core'
 import type { BackendResult } from '../../platform/backendTypes'
@@ -207,11 +207,11 @@ export type PromptSettingsCfg = {
   default_role_id?: string | null
 }
 &nbsp;
-export function <span class="fstat-no" title="function not covered" >fromCfg(c</span>fg: PromptSettingsCfg | null | undefined): PromptSettingsState {
-<span class="cstat-no" title="statement not covered" >  if (!cfg) <span class="cstat-no" title="statement not covered" >return emptyPromptSettings</span></span>
+export function fromCfg(cfg: PromptSettingsCfg | null | undefined): PromptSettingsState {
+  if (!cfg) return emptyPromptSettings
 &nbsp;
-<span class="cstat-no" title="statement not covered" >  return {</span>
-    roles: (cfg.roles ?? []).<span class="fstat-no" title="function not covered" >map((r</span>) =&gt; (<span class="cstat-no" title="statement not covered" >{</span>
+  return {
+    roles: (cfg.roles ?? <span class="branch-1 cbranch-no" title="branch not covered" >[])</span>.map((r) =&gt; ({
       id: r.id,
       name: r.name,
       description: r.description ?? undefined,
@@ -219,38 +219,38 @@ export function <span class="fstat-no" title="function not covered" >fromCfg(c</
       // 从配置文件加载的角色一律视为用户自定义角色
       builtin: false,
     } as PromptRole)),
-    defaultRoleId: cfg.default_role_id ?? undefined,
+    defaultRoleId: cfg.default_role_id ?? <span class="branch-1 cbranch-no" title="branch not covered" >undefined,</span>
   }
 }
 &nbsp;
-export function <span class="fstat-no" title="function not covered" >toCfg(s</span>tate: PromptSettingsState): PromptSettingsCfg {
+export function toCfg(state: PromptSettingsState): PromptSettingsCfg {
   // 只持久化用户自定义角色，忽略内置角色
-  const userRoles = <span class="cstat-no" title="statement not covered" >state.roles.<span class="fstat-no" title="function not covered" >filter((r</span>) =&gt; <span class="cstat-no" title="statement not covered" >!r.builtin)</span></span>
+  const userRoles = state.roles.filter((r) =&gt; !r.builtin)
 &nbsp;
-<span class="cstat-no" title="statement not covered" >  return {</span>
-    roles: userRoles.<span class="fstat-no" title="function not covered" >map((r</span>) =&gt; (<span class="cstat-no" title="statement not covered" >{</span>
+  return {
+    roles: userRoles.map((r) =&gt; ({
       id: r.id,
       name: r.name,
       description: r.description ?? null,
       prompt: r.prompt,
-      is_default: (state.defaultRoleId ?? null) === r.id,
+      is_default: (state.defaultRoleId ?? <span class="branch-1 cbranch-no" title="branch not covered" >null) === r</span>.id,
     })),
-    default_role_id: state.defaultRoleId ?? null,
+    default_role_id: state.defaultRoleId ?? <span class="branch-1 cbranch-no" title="branch not covered" >null,</span>
   }
 }
 &nbsp;
-export async function <span class="fstat-no" title="function not covered" >loadPromptSettingsState(): Promise&lt;PromptSettingsState&gt; {</span>
-  const resp = <span class="cstat-no" title="statement not covered" >await invoke&lt;BackendResult&lt;PromptSettingsCfg&gt;&gt;('load_prompt_settings')</span>
-<span class="cstat-no" title="statement not covered" >  if ('Ok' in resp) {</span>
-<span class="cstat-no" title="statement not covered" >    return fromCfg(resp.Ok.data)</span>
+export async function loadPromptSettingsState(): Promise&lt;PromptSettingsState&gt; {
+  const resp = await invoke&lt;BackendResult&lt;PromptSettingsCfg&gt;&gt;('load_prompt_settings')
+  if ('Ok' in resp) {
+    return fromCfg(resp.Ok.data)
   }
-<span class="cstat-no" title="statement not covered" >  console.warn('[ai/promptSettings] load_prompt_settings error', resp.Err.error)</span>
-<span class="cstat-no" title="statement not covered" >  return emptyPromptSettings</span>
+  console.warn('[ai/promptSettings] load_prompt_settings error', resp.Err.error)
+  return emptyPromptSettings
 }
 &nbsp;
-export async function <span class="fstat-no" title="function not covered" >savePromptSettingsState(s</span>tate: PromptSettingsState): Promise&lt;void&gt; {
-  const cfg = <span class="cstat-no" title="statement not covered" >toCfg(state)</span>
-<span class="cstat-no" title="statement not covered" >  await invoke('save_prompt_settings', { cfg })</span>
+export async function savePromptSettingsState(state: PromptSettingsState): Promise&lt;void&gt; {
+  const cfg = toCfg(state)
+  await invoke('save_prompt_settings', { cfg })
 }
 &nbsp;</pre></td></tr></table></pre>
 
@@ -259,7 +259,7 @@ export async function <span class="fstat-no" title="function not covered" >saveP
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-02-27T03:43:38.985Z
+                at 2026-03-01T07:11:11.291Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>
