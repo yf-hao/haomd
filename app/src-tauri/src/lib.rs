@@ -1027,11 +1027,7 @@ async fn create_folder(
 
     match fs::create_dir_all(&normalized).await {
         Ok(()) => ok((), trace),
-        Err(err) => err_payload(
-            ErrorCode::IoError,
-            format!("创建目录失败: {err}"),
-            trace,
-        ),
+        Err(err) => err_payload(ErrorCode::IoError, format!("创建目录失败: {err}"), trace),
     }
 }
 
