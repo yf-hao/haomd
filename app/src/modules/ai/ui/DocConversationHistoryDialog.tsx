@@ -2,7 +2,6 @@ import type { FC, MouseEventHandler, MouseEvent as ReactMouseEvent } from 'react
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import type { DocConversationMessage, DocConversationRecord } from '../domain/docConversations'
-import { getDirKeyFromDocPath } from '../domain/docPathUtils'
 import { docConversationService } from '../application/docConversationService'
 
 export type DocConversationHistoryDialogProps = {
@@ -135,8 +134,6 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
   const [pageIndex, setPageIndex] = useState(0)
   const [pageSize, setPageSize] = useState(10)
 
-  const dirKey = useMemo(() => getDirKeyFromDocPath(docPath) ?? docPath, [docPath])
-
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [dragging, setDragging] = useState(false)
   const dragStateRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null)
@@ -150,7 +147,7 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
 
     ;(async () => {
       try {
-        const rec = await docConversationService.getByDocPath(dirKey)
+        const rec = await docConversationService.getByDocPath(docPath)
         if (cancelled) return
         setRecord(rec)
 
@@ -177,7 +174,7 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
     return () => {
       cancelled = true
     }
-  }, [open, dirKey, pageSize])
+  }, [open, docPath, pageSize])
 
   const hasData = !!record && record.messages.length > 0 && groups.length > 0
 
