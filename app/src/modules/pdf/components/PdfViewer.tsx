@@ -156,7 +156,6 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     setScale(clampedFit)
     setCurrentPage(1)
     setPageInput('1')
-    const estimatedPageHeight = Math.max(1, (basePageHeight ?? 800) * clampedFit)
     el.scrollTop = 0
   }, [pdfDocument, pageCount, filePath, basePageHeight, basePageWidth])
 
