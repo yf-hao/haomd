@@ -385,7 +385,7 @@
 }
 
 .sidebar-section-title {
-  font-size: 11px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: #8fa1c7;
@@ -501,7 +501,8 @@
 }
 
 .sidebar-file-row {
-  /* standalone 文件分组的条目，仅作为语义标记，视觉样式复用 .tree-row.file */
+  /* standalone 文件分组的条目，字号与 Folders 分组保持一致 */
+  font-size: 12px;
 }
 
 .sidebar-folder-list {
@@ -530,7 +531,7 @@
   padding: 2px 4px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 12px;
   color: #c4ccee;
 }
 

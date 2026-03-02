@@ -121,26 +121,44 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     }
   }, [pageCount, currentPage])
 
-  // 文档加载完成后，尝试从 localStorage 恢复上次的页码和缩放
+  // 文档加载完成后：优先从 localStorage 恢复阅读状态；若无记录，则默认“适配宽度”
   useEffect(() => {
     if (!pdfDocument || !pageCount || pageCount <= 0) return
 
     const saved = loadPdfReadingState(filePath)
-    if (!saved) return
-
-    const clampedPage = Math.min(Math.max(saved.page, 1), pageCount)
-    const clampedScale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, saved.scale))
-
-    setScale(clampedScale)
-    setCurrentPage(clampedPage)
-    setPageInput(String(clampedPage))
-
     const el = containerRef.current
-    if (el) {
-      const estimatedPageHeight = Math.max(1, (basePageHeight ?? 800) * clampedScale)
-      el.scrollTop = (clampedPage - 1) * estimatedPageHeight
+
+    if (saved) {
+      const clampedPage = Math.min(Math.max(saved.page, 1), pageCount)
+      const clampedScale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, saved.scale))
+
+      setScale(clampedScale)
+      setCurrentPage(clampedPage)
+      setPageInput(String(clampedPage))
+
+      if (el) {
+        const estimatedPageHeight = Math.max(1, (basePageHeight ?? 800) * clampedScale)
+        el.scrollTop = (clampedPage - 1) * estimatedPageHeight
+      }
+      return
     }
-  }, [pdfDocument, pageCount, filePath, basePageHeight])
+
+    // 没有历史记录时：自动计算“适配宽度”的缩放比例
+    if (!el || !basePageWidth) return
+
+    const horizontalPadding = 32
+    const availableWidth = el.clientWidth - horizontalPadding
+    if (availableWidth <= 0) return
+
+    const fitScale = availableWidth / basePageWidth
+    const clampedFit = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, fitScale))
+
+    setScale(clampedFit)
+    setCurrentPage(1)
+    setPageInput('1')
+    const estimatedPageHeight = Math.max(1, (basePageHeight ?? 800) * clampedFit)
+    el.scrollTop = 0
+  }, [pdfDocument, pageCount, filePath, basePageHeight, basePageWidth])
 
   // 当页码或缩放发生变化时，将当前阅读状态持久化到 localStorage
   useEffect(() => {
