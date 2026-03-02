@@ -308,8 +308,11 @@
   column-gap: 0;
   row-gap: 12px;
   align-items: stretch;
-  overflow: auto;
-  /* 仅在工作区内部滚动，阻断滚动链避免把整个应用往外拉出空白 */
+  /* 锁定单行高度为剩余空间，保证每一列（编辑/预览、AI Panel）各自内部滚动 */
+  grid-template-rows: 1fr;
+  /* 由内部 pane 自己滚动，工作区本身不再产生额外滚动条 */
+  overflow: hidden;
+  /* 阻断滚动链，避免滚动事件冒泡到应用外层 */
   overscroll-behavior: contain;
 }
 
