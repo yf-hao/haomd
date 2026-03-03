@@ -1,9 +1,9 @@
 /* AI Settings dialog styles */
 .modal.modal-ai-settings {
   /* 使用当前更宽的布局参数 */
-  max-width: 1040px;
-  width: 1000px;
-  min-width: 820px;
+  max-width: 400px;
+  width: 300px;
+  min-width: 200px;
   padding: 20px 24px 18px;
 }
 

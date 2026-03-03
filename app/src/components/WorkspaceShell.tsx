@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { ConflictModal } from './ConflictModal'
 import { ConfirmDialog } from './ConfirmDialog'
+import { AboutDialog } from './AboutDialog'
 import { TabBar } from './TabBar'
 import { FileContextMenu } from './FileContextMenu'
 import { Sidebar, type SidebarContextActionPayload } from './Sidebar'
@@ -132,6 +133,7 @@ export function WorkspaceShell({
     open: boolean
     initialTab: 'persona' | 'manage'
   }>({ open: false, initialTab: 'persona' })
+  const [aboutOpen, setAboutOpen] = useState(false)
   const [aiChatMode, setAiChatMode] = useState<'floating' | 'docked'>('docked')
   const [aiChatOpen, setAiChatOpen] = useState(false)
   const [aiChatDockSide, setAiChatDockSide] = useState<'left' | 'right'>('right')
@@ -418,6 +420,14 @@ export function WorkspaceShell({
 
   const closeGlobalMemoryDialog = useCallback(() => {
     setGlobalMemoryState((prev) => ({ ...prev, open: false }))
+  }, [])
+
+  const openAboutDialog = useCallback(() => {
+    setAboutOpen(true)
+  }, [])
+
+  const closeAboutDialog = useCallback(() => {
+    setAboutOpen(false)
   }, [])
 
   const isAiChatActuallyOpen = aiChatOpen && !!aiChatState?.open
@@ -1644,6 +1654,7 @@ export function WorkspaceShell({
     createTab, updateActiveMeta, openFolderInSidebar, closeCurrentTab,
     openAiChatDialog: options => openAiChatDialog(options as any),
     openGlobalMemoryDialog,
+    openAboutDialog,
     getCurrentMarkdown, getCurrentFileName, getCurrentSelectionText, getCurrentFilePath,
     onRequestCloseCurrentTab: () => closeCurrentTabRef.current?.(),
     onRequestQuit: handleQuit, isTauriEnv,
@@ -2358,6 +2369,8 @@ export function WorkspaceShell({
             onClose={closeGlobalMemoryDialog}
           />
         )}
+
+        <AboutDialog open={aboutOpen} onClose={closeAboutDialog} />
       </>
     </AiChatCommandBridgeContext.Provider>
   )

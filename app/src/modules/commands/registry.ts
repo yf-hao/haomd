@@ -76,6 +76,8 @@ export type HelpCommandContext = StatusContext & {
   newDocument: () => void
   applyOpenedContent: (content: string) => void
   setFilePath: (path: string) => void
+  /** 打开关于对话框的回调，由 WorkspaceShell 提供 */
+  openAboutDialog?: () => void
 }
 
 /**
@@ -348,7 +350,11 @@ function createClipboardCommands(ctx: StatusContext): CommandRegistry {
 function createHelpCommands(ctx: HelpCommandContext): CommandRegistry {
   return {
     haomd_about: () => {
-      ctx.setStatusMessage('HaoMD · 关于（占位）')
+      if (ctx.openAboutDialog) {
+        ctx.openAboutDialog()
+      } else {
+        ctx.setStatusMessage('HaoMD · 关于（占位）')
+      }
     },
     help_docs: () => {
       if (!ctx.confirmLoseChanges()) return
