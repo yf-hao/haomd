@@ -1,5 +1,6 @@
 [package]
 name = "HaoMD"
+# NOTE: Cargo 版本仅为占位，实际应用版本以 app/package.json 为准。
 version = "0.1.0"
 description = "An AI-powered Markdown editor for writing, thinking, and knowledge management"
 authors = ["hao yufeng"]
