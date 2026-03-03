@@ -213,7 +213,12 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       }
 
       if (providerType === 'dify' && result.conversationId) {
+        const prev = difyConversationId
         difyConversationId = result.conversationId
+        console.warn('[ChatSession] Dify conversationId updated after stream', {
+          prevConversationId: prev || '(none)',
+          newConversationId: difyConversationId,
+        })
       }
     } catch (e) {
       if (disposed) return
@@ -239,6 +244,12 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
         notifyStateChange()
 
         if (docPath) {
+          console.warn('[ChatSession] Persisting doc conversation', {
+            docPath,
+            providerType,
+            modelName: currentModelId,
+            difyConversationId: difyConversationId || '(none)',
+          })
           void docConversationService
             .upsertFromState({
               docPath,

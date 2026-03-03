@@ -201,7 +201,12 @@ export class SimpleChat {
 
               // 提取 Conversation ID 和 Task ID
               if (event.conversation_id && !this.conversationId) {
+                const prev = this.conversationId
                 this.conversationId = event.conversation_id
+                this.logger.info('Dify askStream: conversationId updated from event', {
+                  prevConversationId: prev || '(none)',
+                  newConversationId: this.conversationId,
+                })
               }
               if (event.task_id && !this.currentTaskId) {
                 this.currentTaskId = event.task_id
@@ -277,6 +282,9 @@ export class SimpleChat {
       if (signal) {
         signal.removeEventListener('abort', onAbort)
       }
+      this.logger.info('Dify askStream: request finished', {
+        finalConversationId: this.conversationId || '(none)',
+      })
       this.currentTaskId = null
     }
   }
