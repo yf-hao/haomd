@@ -1,7 +1,6 @@
 import type { FC } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { getName, getVersion, getTauriVersion } from '@tauri-apps/api/app'
-import { platform, arch, version as osVersion } from '@tauri-apps/api/os'
 
 export type AboutDialogProps = {
   open: boolean
@@ -33,20 +32,32 @@ export const AboutDialog: FC<AboutDialogProps> = ({ open, onClose }) => {
 
     ;(async () => {
       try {
-        const [name, version, tauri, osPlat, osArch, osVer] = await Promise.all([
+        const [name, version, tauri] = await Promise.all([
           getName().catch(() => DEFAULT_APP_NAME),
           getVersion().catch(() => ''),
           getTauriVersion().catch(() => ''),
-          platform().catch(() => ''),
-          arch().catch(() => ''),
-          osVersion().catch(() => ''),
         ])
 
         if (cancelled) return
 
-        const osDescription = osPlat && osArch && osVer
-          ? `${osPlat.charAt(0).toUpperCase()}${osPlat.slice(1)} ${osArch} ${osVer}`
-          : ''
+        let osDescription = ''
+        if (typeof navigator !== 'undefined') {
+          const plat = (navigator.platform || '').trim()
+          const ua = navigator.userAgent || ''
+
+          let arch = ''
+          if (/arm64|aarch64/i.test(ua)) arch = 'arm64'
+          else if (/x86_64|Win64|WOW64|x64/i.test(ua)) arch = 'x64'
+
+          let ver = ''
+          const macMatch = ua.match(/Mac OS X (\d+[_.]\d+[_.]?\d*)/)
+          if (macMatch) {
+            ver = macMatch[1].replace(/_/g, '.')
+          }
+
+          const parts = [plat || 'Unknown', arch, ver].filter(Boolean)
+          osDescription = parts.join(' ')
+        }
 
         setInfo({
           appName: name || DEFAULT_APP_NAME,
