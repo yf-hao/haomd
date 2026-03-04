@@ -22,6 +22,24 @@
   width: 820px;
   min-width: 640px;
   padding: 14px 22px 16px;
+  display: flex;
+  flex-direction: column;
+  max-height: 72vh;
+  overflow: hidden;
+}
+
+/* Float 模式下，整体内容区在对话框内部伸缩，不再把高度“撑出”弹窗 */
+.modal.modal-ai-chat .modal-content.ai-chat-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-bottom: 0;
+}
+
+/* Float 模式下，消息区域在内容区内部承担滚动和伸缩 */
+.modal.modal-ai-chat .ai-chat-messages {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
 }
 
 .ai-chat-body {
