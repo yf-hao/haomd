@@ -92,6 +92,7 @@ export function useVirtualPages({
 
   // 当页数、单页高度或容器就绪时，初始化 / 同步一次可见区
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     recomputeRanges()
   }, [recomputeRanges])
 

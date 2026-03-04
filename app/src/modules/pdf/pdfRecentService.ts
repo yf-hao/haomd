@@ -77,7 +77,7 @@ export async function loadPdfFolders(): Promise<PdfFolder[]> {
   }
 
   const { error } = resp.Err
-  const err: any = new Error(error.message)
+  const err = new Error(error.message) as Error & { code?: string; traceId?: string }
   err.code = error.code
   err.traceId = error.trace_id
   throw err
