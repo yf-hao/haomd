@@ -30,6 +30,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   const [input, setInput] = useState('')
   const [contextPrefix, setContextPrefix] = useState<string | null>(null)
   const [contextPrefixUsed, setContextPrefixUsed] = useState(false)
+  const [contextPlaceholderMode, setContextPlaceholderMode] = useState<'none' | 'selection' | 'file'>('none')
   const [attachedImageDataUrl, setAttachedImageDataUrl] = useState<string | null>(null)
   const [slashModalMessage, setSlashModalMessage] = useState<string | null>(null)
   const commandBridge = useContext(AiChatCommandBridgeContext)
@@ -123,6 +124,18 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
 
     setContextPrefix(null)
     setContextPrefixUsed(false)
+  }, [entryMode, initialContext])
+
+  useEffect(() => {
+    if (entryMode === 'selection' && initialContext && initialContext.type === 'selection') {
+      setContextPlaceholderMode('selection')
+      return
+    }
+    if (entryMode === 'file' && initialContext && initialContext.type === 'file') {
+      setContextPlaceholderMode('file')
+      return
+    }
+    setContextPlaceholderMode('none')
   }, [entryMode, initialContext])
 
   useEffect(() => {
@@ -224,6 +237,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
       onContextUsed: () => {
         setContextPrefixUsed(true)
         setContextPrefix(null)
+        setContextPlaceholderMode('none')
       },
       attachedImageDataUrl,
       onClearAttachedImage: () => setAttachedImageDataUrl(null),
@@ -494,6 +508,13 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   )
   const isProcessing = loading || isStreamingUI
 
+  const inputPlaceholder =
+    contextPlaceholderMode === 'selection'
+      ? 'Selected content will be used as context for the answer.'
+      : contextPlaceholderMode === 'file'
+        ? 'Current file content will be used as context for the answer.'
+        : 'Ask anything to AI'
+
   const handleStop = () => {
     // 找到当前正在“吐出”的消息（无论是网络流还是打字机补齐阶段）
     const activeMsg = messages.find((m) =>
@@ -557,14 +578,13 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
       <div className="ai-chat-pane-header">
         <div className="ai-chat-pane-title">
           {(() => {
-            switch (entryMode) {
-              case 'selection':
-                return 'AI Chat -- About Selection';
-              case 'file':
-                return 'AI Chat -- About File';
-              default:
-                return 'AI Chat';
+            if (entryMode === 'selection') {
+              return contextPlaceholderMode === 'selection' ? 'AI Chat -- About Selection' : 'AI Chat';
             }
+            if (entryMode === 'file') {
+              return contextPlaceholderMode === 'file' ? 'AI Chat -- About File' : 'AI Chat';
+            }
+            return 'AI Chat';
           })()}
         </div>
         <button
@@ -620,6 +640,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
             const canUpload = !providerType || providerType === 'dify';
             return canUpload ? uploadFiles : undefined;
           })()}
+          inputPlaceholder={inputPlaceholder}
         />
       </div>
     </section>

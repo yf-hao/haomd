@@ -1,4 +1,4 @@
-import type { FC } from 'react'
+你import type { FC } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { getName, getVersion, getTauriVersion } from '@tauri-apps/api/app'
 

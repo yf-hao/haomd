@@ -52,6 +52,8 @@ export interface AiChatBodyProps {
   isUploading?: boolean
   /** 批量上传文件回调 */
   onUploadFiles?: (files: File[]) => void
+  /** Optional placeholder text for the input textarea */
+  inputPlaceholder?: string
 }
 
 export const AiChatBody: FC<AiChatBodyProps> = ({
@@ -86,6 +88,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
   onRemoveAttachment,
   isUploading,
   onUploadFiles,
+  inputPlaceholder,
 }) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [messageViewModes, setMessageViewModes] = useState<Record<string, MessageViewMode>>({})
@@ -355,7 +358,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
             onCompositionStart={onCompositionStart}
             onCompositionEnd={onCompositionEnd}
             onPaste={handlePaste}
-            placeholder="Ask anything to AI"
+            placeholder={inputPlaceholder ?? 'Ask anything to AI'}
           />
           <div className="ai-chat-input-footer">
             <div className="ai-chat-input-tools-left">

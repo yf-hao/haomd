@@ -31,6 +31,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
   const [input, setInput] = useState('')
   const [contextPrefix, setContextPrefix] = useState<string | null>(null)
   const [contextPrefixUsed, setContextPrefixUsed] = useState(false)
+  const [contextPlaceholderMode, setContextPlaceholderMode] = useState<'none' | 'selection' | 'file'>('none')
   const [attachedImageDataUrl, setAttachedImageDataUrl] = useState<string | null>(null)
   const [slashModalMessage, setSlashModalMessage] = useState<string | null>(null)
   const commandBridge = useContext(AiChatCommandBridgeContext)
@@ -115,6 +116,22 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
 
     setContextPrefix(null)
     setContextPrefixUsed(false)
+  }, [open, entryMode, initialContext])
+
+  useEffect(() => {
+    if (!open) {
+      setContextPlaceholderMode('none')
+      return
+    }
+    if (entryMode === 'selection' && initialContext && initialContext.type === 'selection') {
+      setContextPlaceholderMode('selection')
+      return
+    }
+    if (entryMode === 'file' && initialContext && initialContext.type === 'file') {
+      setContextPlaceholderMode('file')
+      return
+    }
+    setContextPlaceholderMode('none')
   }, [open, entryMode, initialContext])
 
   useEffect(() => {
@@ -217,6 +234,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
       onContextUsed: () => {
         setContextPrefixUsed(true)
         setContextPrefix(null)
+        setContextPlaceholderMode('none')
       },
       attachedImageDataUrl,
       onClearAttachedImage: () => setAttachedImageDataUrl(null),
@@ -584,6 +602,13 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     }
   }, [open, onClose])
 
+  const inputPlaceholder =
+    contextPlaceholderMode === 'selection'
+      ? 'Selected content will be used as context for the answer.'
+      : contextPlaceholderMode === 'file'
+        ? 'Current file content will be used as context for the answer.'
+        : 'Ask anything to AI'
+
   if (!open) return null
 
   return (
@@ -605,14 +630,13 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
           </button>
           <div className="modal-title-text">
             {(() => {
-              switch (entryMode) {
-                case 'selection':
-                  return 'AI Chat -- About Selection';
-                case 'file':
-                  return 'AI Chat -- About File';
-                default:
-                  return 'AI Chat';
+              if (entryMode === 'selection') {
+                return contextPlaceholderMode === 'selection' ? 'AI Chat -- About Selection' : 'AI Chat';
               }
+              if (entryMode === 'file') {
+                return contextPlaceholderMode === 'file' ? 'AI Chat -- About File' : 'AI Chat';
+              }
+              return 'AI Chat';
             })()}
           </div>
         </div>
@@ -659,6 +683,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
             const canUpload = !providerType || providerType === 'dify';
             return canUpload ? uploadFiles : undefined;
           })()}
+          inputPlaceholder={inputPlaceholder}
         />
 
 
