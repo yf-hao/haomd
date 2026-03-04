@@ -1,9 +1,17 @@
 /* AI Settings dialog styles */
-.modal.modal-ai-settings {
-  /* 使用当前更宽的布局参数 */
+/* About dialog styles - 独立窄弹窗 */
+.modal.modal-about {
   max-width: 400px;
   width: 300px;
   min-width: 200px;
+  padding: 20px 24px 18px;
+}
+
+/* Provider Settings dialog styles - 宽弹窗 */
+.modal.modal-ai-settings {
+  max-width: 820px;
+  width: 800px;
+  min-width: 640px;
   padding: 20px 24px 18px;
 }
 

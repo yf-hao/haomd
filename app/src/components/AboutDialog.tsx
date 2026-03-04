@@ -107,7 +107,7 @@ export const AboutDialog: FC<AboutDialogProps> = ({ open, onClose }) => {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal modal-ai-settings" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal-about" onClick={(e) => e.stopPropagation()}>
         <div className="modal-title" style={{ textAlign: 'center' }}>
           <img
             src={new URL('../assets/logo.png', import.meta.url).href}
