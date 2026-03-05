@@ -3,3 +3,8 @@
 !/README.md
 !/README_CN.md
 
+# Environment variables
+.env
+.env.*
+.env.local
+.env.*.local
