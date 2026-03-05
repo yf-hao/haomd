@@ -100,11 +100,11 @@ describe('docConversationService', () => {
             modelName: 'gpt-4'
         })
 
-        // Stable key should be "ws-123::subdir" (since subdir is the directory containing the file)
+        // Stable key should be "ws-123::my-project/subdir" (since getLastTwoDirNames is used)
         expect(mockInvoke).toHaveBeenCalledWith('save_doc_conversations', expect.objectContaining({
             records: expect.arrayContaining([
                 expect.objectContaining({
-                    docPath: 'ws-123::subdir'
+                    docPath: 'ws-123::my-project/subdir'
                 })
             ])
         }))

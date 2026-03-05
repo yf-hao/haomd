@@ -171,9 +171,11 @@ export function useCommandSystem(params: CommandSystemParams) {
       const key = e.key.toLowerCase()
       if (!meta) return
 
-      // 避免在 Tauri 中与系统菜单快捷键（会发 menu://action 事件）重复触发
+      // 避免在 Tauri Mac 中与系统菜单快捷键（会发 menu://action 事件）重复触发。
+      // Windows/Linux 下原生菜单加速键响应不如 Mac 稳定，且 JS 处理与原生通常不冲突，因此仅在 Mac 下阻断。
       const tauriBlocks = ['s', 'o', 'n', 'w'] as const
-      if (isTauriEnv && isTauriEnv() && tauriBlocks.includes(key as (typeof tauriBlocks)[number])) return
+      const isMac = typeof navigator !== 'undefined' && /macintosh|mac os x/i.test(navigator.userAgent)
+      if (isTauriEnv && isTauriEnv() && isMac && tauriBlocks.includes(key as (typeof tauriBlocks)[number])) return
 
       if (key === 's') {
         e.preventDefault()
