@@ -192,29 +192,40 @@ function getLastDirName(dir: string): string {
   return parts[parts.length - 1] || '/'
 }
 
+function getLastTwoDirNames(dir: string): string {
+  const normalized = normalizeDirPath(dir)
+  if (!normalized || normalized === '/') return '/'
+  const parts = normalized.split('/').filter(Boolean)
+  if (parts.length === 0) return '/'
+  if (parts.length === 1) return parts[0]
+  const lastTwo = parts.slice(-2)
+  return lastTwo.join('/')
+}
+
 /**
  * 将外部传入的 docPath（可以是文件路径或目录路径）映射为稳定 key：
  * - 先通过 getDirKeyFromDocPath 归一到父目录；
- * - 再使用 workspaceId + 最后一级目录名 作为真正的存盘 docPath；
- * - 若 workspaceId 无法解析，则退回到「最后一级目录名」。
+ * - 再使用 workspaceId + 「父目录名/当前目录名」两级路径 作为真正的存盘 docPath；
+ * - 若 workspaceId 无法解析，则退回到「父目录名/当前目录名」。
  */
 async function toStableDocPathKey(rawDocPath: string): Promise<string> {
   const dirKey = getDirKeyFromDocPath(rawDocPath) ?? rawDocPath
   const dir = normalizeDirPath(dirKey)
   if (!dir || dir === '/') {
+    // 根目录：仍然使用原始路径的最后一级名称，避免破坏旧数据
     return getLastDirName(rawDocPath)
   }
 
   try {
     const info = await ensureWorkspaceIdForDir(dir)
-    const lastName = getLastDirName(dir)
+    const lastTwo = getLastTwoDirNames(dir)
     if (!info) {
-      return lastName
+      return lastTwo
     }
-    return `${info.workspaceId}::${lastName}`
+    return `${info.workspaceId}::${lastTwo}`
   } catch (e) {
     console.error('[docConversationService] toStableDocPathKey failed', e)
-    return getLastDirName(dir)
+    return getLastTwoDirNames(dir)
   }
 }
 
