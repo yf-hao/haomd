@@ -346,11 +346,15 @@ export class SimpleChat {
     maxTokens?: number,
     attachments?: ChatAttachment[],
   ) {
+    const inputs: Record<string, unknown> = {
+      model: this.config?.model,
+    }
+    if (this.config?.systemPrompt && this.config.systemPrompt.trim().length > 0) {
+      inputs.system = this.config.systemPrompt
+    }
+
     const body: Record<string, unknown> = {
-      inputs: {
-        system: this.config?.systemPrompt || '',
-        model: this.config?.model,
-      },
+      inputs,
       query,
       response_mode: mode,
       user: 'ai-settings-tester',

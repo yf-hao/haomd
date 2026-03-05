@@ -32,6 +32,7 @@ export function createDifyStreamingClient(config: DifyChatClientConfig): IStream
     systemPrompt: config.systemPrompt,
     temperature: config.temperature,
     maxTokens: config.maxTokens,
+    omitInputsModel: config.omitInputsModel,
   })
 
   if (config.initialConversationId) {

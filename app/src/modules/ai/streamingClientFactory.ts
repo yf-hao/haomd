@@ -23,13 +23,17 @@ export function createStreamingClientFromSettings(
     throw new Error('Provider 配置不完整：缺少 Base URL / API Key / Model')
   }
 
+  const description = (provider.description ?? '').trim().toLowerCase()
+  const omitSystemAndType = providerType === 'dify' && description === 'null'
+  const effectiveSystemPrompt = omitSystemAndType ? undefined : systemPrompt
+
   switch (providerType) {
     case 'openai':
       return createOpenAIStreamingClient({
         apiKey,
         baseUrl,
         modelId,
-        systemPrompt,
+        systemPrompt: effectiveSystemPrompt,
         temperature: 0,
         maxTokens: 256,
       })
@@ -39,7 +43,7 @@ export function createStreamingClientFromSettings(
         apiKey,
         baseUrl,
         modelId,
-        systemPrompt,
+        systemPrompt: effectiveSystemPrompt,
         temperature: 0,
         maxTokens: 256,
         initialConversationId,
