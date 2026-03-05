@@ -36,7 +36,10 @@ export type DocConversationRecord = {
   kind?: DocConversationKind
   sessionId: string
   lastActiveAt: number
+  /** 旧字段：仅保留用于兼容，未来将迁移至 difyProviderConversations */
   difyConversationId?: string
+  /** 按 ProviderId 隔离的 Dify 会话 ID 映射 */
+  difyProviderConversations?: Record<string, string>
   messages: DocConversationMessage[]
 }
 
@@ -47,6 +50,7 @@ export type ConversationIndexEntry = {
   kind?: DocConversationKind
   sessionId: string
   lastActiveAt: number
+  /** 只要存在任一 Dify 会话 ID 即为 true */
   hasDifyConversation: boolean
   messageCount: number
 }

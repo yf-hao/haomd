@@ -269,6 +269,7 @@ export type DocConversationService = {
     state: ConversationState
     providerType: ProviderType
     modelName: string
+    providerId?: string
     difyConversationId?: string
   }): Promise<void>
   clearByDocPath(docPath: string, kind?: DocConversationKind): Promise<void>
@@ -295,7 +296,7 @@ export function createDocConversationService(): DocConversationService {
     },
 
     async upsertFromState(options): Promise<void> {
-      const { docPath, state, providerType, modelName, difyConversationId } = options
+      const { docPath, state, providerType, modelName, providerId, difyConversationId } = options
       await ensureLoaded()
       const records = getCache()
       const stableKey = await toStableDocPathKey(docPath)
@@ -315,12 +316,17 @@ export function createDocConversationService(): DocConversationService {
         }
 
         const mergedMessages = Array.from(byId.values()).sort((a, b) => a.timestamp - b.timestamp)
+        const difyProviderConversations = existing.difyProviderConversations ?? {}
+        if (providerId && difyConversationId) {
+          difyProviderConversations[providerId] = difyConversationId
+        }
 
         records[idx] = {
           ...existing,
           docPath: stableKey,
           lastActiveAt: now,
           difyConversationId: difyConversationId ?? existing.difyConversationId,
+          difyProviderConversations,
           messages: mergedMessages,
         }
       } else {
@@ -329,6 +335,7 @@ export function createDocConversationService(): DocConversationService {
           sessionId: genSessionId(),
           lastActiveAt: now,
           difyConversationId,
+          difyProviderConversations: providerId && difyConversationId ? { [providerId]: difyConversationId } : {},
           messages: nextMessages,
         })
       }
@@ -408,7 +415,7 @@ export function createDocConversationService(): DocConversationService {
         docPath: r.docPath,
         sessionId: r.sessionId,
         lastActiveAt: r.lastActiveAt,
-        hasDifyConversation: !!r.difyConversationId,
+        hasDifyConversation: !!r.difyConversationId || (!!r.difyProviderConversations && Object.keys(r.difyProviderConversations).length > 0),
         messageCount: r.messages.length,
       }))
     },

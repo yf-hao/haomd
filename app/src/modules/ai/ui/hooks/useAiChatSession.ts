@@ -100,6 +100,7 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
       try {
         let initialState: ConversationState | undefined
         let initialDifyConversationId: string | undefined
+        let initialDifyMapping: Record<string, string> | undefined
 
         if (docPath) {
           let saved: DocConversationRecord | null = await docConversationService.getByDocPath(docPath)
@@ -115,9 +116,8 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
 
           if (saved) {
             initialState = buildStateFromDocRecord(saved, entryMode)
-            if (saved.difyConversationId) {
-              initialDifyConversationId = saved.difyConversationId
-            }
+            initialDifyConversationId = saved.difyConversationId
+            initialDifyMapping = saved.difyProviderConversations
           }
         }
 
@@ -127,6 +127,7 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
           ...(initialState ? { initialState } : {}),
           ...(docPath ? { docPath } : {}),
           ...(initialDifyConversationId ? { initialDifyConversationId } : {}),
+          ...(initialDifyMapping ? { initialDifyProviderConversations: initialDifyMapping } : {}),
           onStateChange: (nextState) => {
             if (cancelled) return
             setState(nextState)

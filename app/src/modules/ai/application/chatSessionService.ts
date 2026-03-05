@@ -48,6 +48,10 @@ export type StartChatOptions = {
    * 以便在应用重启后续接同一 Dify 云端会话。
    */
   initialDifyConversationId?: string
+  /**
+   * 可选：按 ProviderId 隔离的 Dify 会话 ID 映射。
+   */
+  initialDifyProviderConversations?: Record<string, string>
 }
 
 export type ChatSession = {
@@ -113,7 +117,9 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
   let defaultMaxTokens = provider.models.find((m) => m.id === currentModelId)?.maxTokens ?? 2048
 
   let systemPromptInfo: SystemPromptInfo = systemInfo
-  let difyConversationId: string | undefined = options.initialDifyConversationId
+  let difyProviderConversations: Record<string, string> = options.initialDifyProviderConversations ?? {}
+  // 查找当前 provider 下是否有已存的会话 ID
+  let difyConversationId: string | undefined = difyProviderConversations[provider.id] ?? options.initialDifyConversationId
   let state: ConversationState =
     options.initialState ??
     createInitialConversationState(
@@ -256,6 +262,8 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
               state,
               providerType,
               modelName: currentModelId,
+              providerId: provider.id,
+
               difyConversationId,
             })
             .catch((err) => {
@@ -318,6 +326,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
               state,
               providerType,
               modelName: currentModelId,
+              providerId: provider.id,
               difyConversationId,
             })
             .catch((err) => {
