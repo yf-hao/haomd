@@ -117,7 +117,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
   let defaultMaxTokens = provider.models.find((m) => m.id === currentModelId)?.maxTokens ?? 2048
 
   let systemPromptInfo: SystemPromptInfo = systemInfo
-  let difyProviderConversations: Record<string, string> = options.initialDifyProviderConversations ?? {}
+  const difyProviderConversations: Record<string, string> = options.initialDifyProviderConversations ?? {}
   // 查找当前 provider 下是否有已存的会话 ID
   let difyConversationId: string | undefined = difyProviderConversations[provider.id] ?? options.initialDifyConversationId
   let state: ConversationState =

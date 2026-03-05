@@ -166,7 +166,7 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
         return null
       })
     }
-  }, [open, entryMode, initialContext, docPath, reloadToken])
+  }, [open, entryMode, initialContext, docPath, legacyDocPath, reloadToken])
 
   // Load available models
   useEffect(() => {
