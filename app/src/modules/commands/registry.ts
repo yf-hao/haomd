@@ -26,6 +26,7 @@ export type LayoutCommandContext = StatusContext & {
   aiChatDockSide: 'left' | 'right'
   setAiChatDockSide: (side: 'left' | 'right') => void
   aiChatOpen: boolean
+  openSearch?: () => void
 }
 
 /**
@@ -142,6 +143,9 @@ function createLayoutCommands(ctx: LayoutCommandContext): CommandRegistry {
       ctx.setLayout('preview-only')
       ctx.setShowPreview(true)
       ctx.setStatusMessage('布局：仅预览')
+    },
+    find: () => {
+      ctx.openSearch?.()
     },
     toggle_preview_only: () => {
       if (ctx.layout === 'preview-only') {

@@ -1439,7 +1439,12 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
                 .build(app)?,
         )
         .separator()
-        .item(&MenuItemBuilder::new("Find").id("find").build(app)?)
+        .item(
+            &MenuItemBuilder::new("Find")
+                .id("find")
+                .accelerator("CmdOrCtrl+f")
+                .build(app)?,
+        )
         .item(&MenuItemBuilder::new("Replace").id("replace").build(app)?)
         .item(
             &MenuItemBuilder::new("Select All")

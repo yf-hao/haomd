@@ -14,6 +14,8 @@ import { indentOnInput, foldGutter, foldKeymap, foldedRanges } from '@codemirror
 import { closeBrackets, autocompletion } from '@codemirror/autocomplete'
 import { markdown } from '@codemirror/lang-markdown'
 import { oneDark } from '@codemirror/theme-one-dark'
+import { search } from '@codemirror/search'
+import { customSearchHighlight } from './searchHighlight'
 
 export type EditorOptions = {
   readOnly?: boolean
@@ -233,6 +235,8 @@ export function createExtensions(options: EditorOptions = {}): Extension[] {
     ] as any),
     EditorView.lineWrapping,
     smartScrollOnInputPlugin(),
+    search(), // 启用搜索逻辑
+    customSearchHighlight(), // 自定义独立的高亮重绘层，彻底解决依赖冲突和样式被盖问题
     language,
     EditorView.editable.of(!readOnly),
   ]

@@ -10,6 +10,7 @@ import { FileContextMenu } from './FileContextMenu'
 import { Sidebar, type SidebarContextActionPayload } from './Sidebar'
 import { OutlinePanel } from './OutlinePanel'
 import { Welcome } from './Welcome'
+import { SearchBar } from './Editor/SearchBar'
 import { useOutline } from '../hooks/useOutline'
 import type { OutlineItem } from '../modules/outline/parser'
 import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout'
@@ -140,6 +141,7 @@ export function WorkspaceShell({
   const [aiChatMode, setAiChatMode] = useState<'floating' | 'docked'>('docked')
   const [aiChatOpen, setAiChatOpen] = useState(false)
   const [aiChatDockSide, setAiChatDockSide] = useState<'left' | 'right'>('right')
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [aiChatWidthLeft, setAiChatWidthLeft] = useState(400)
   const [aiChatWidthRight, setAiChatWidthRight] = useState(400)
   const [isAiChatResizing, setIsAiChatResizing] = useState(false)
@@ -1681,6 +1683,7 @@ export function WorkspaceShell({
     confirmLoseChanges, hasUnsavedChanges, newDocument, setFilePath, applyOpenedContent,
     openFile, save: saveWithPdfGuard, saveAs: saveAsWithPdfGuard, handleShowRecent: undefined, clearRecentAll,
     createTab, updateActiveMeta, openFolderInSidebar, closeCurrentTab,
+    openSearch: () => setIsSearchOpen(true),
     openAiChatDialog: options => openAiChatDialog(options as any),
     openGlobalMemoryDialog,
     openAboutDialog,
@@ -2286,6 +2289,12 @@ export function WorkspaceShell({
                     }
                   >
                     <Suspense fallback={<div className="code-editor" />}>
+                      {isSearchOpen && (
+                        <SearchBar
+                          view={editorViewRef.current}
+                          onClose={() => setIsSearchOpen(false)}
+                        />
+                      )}
                       <EditorPaneLazy
                         markdown={editorMarkdown}
                         onChange={handleEditorChange}

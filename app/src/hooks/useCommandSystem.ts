@@ -60,6 +60,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     refreshPdfRecent,
     exportHtml,
     exportPdf,
+    openSearch,
   } = params
 
   const aiClient = useMemo<IAiClient>(() => {
@@ -108,6 +109,7 @@ export function useCommandSystem(params: CommandSystemParams) {
         refreshPdfRecent,
         exportHtml,
         exportPdf,
+        openSearch,
       }),
     [
       layout,
@@ -149,6 +151,7 @@ export function useCommandSystem(params: CommandSystemParams) {
       refreshPdfRecent,
       exportHtml,
       exportPdf,
+      openSearch,
     ],
   )
 
@@ -173,7 +176,7 @@ export function useCommandSystem(params: CommandSystemParams) {
 
       // 避免在 Tauri Mac 中与系统菜单快捷键（会发 menu://action 事件）重复触发。
       // Windows/Linux 下原生菜单加速键响应不如 Mac 稳定，且 JS 处理与原生通常不冲突，因此仅在 Mac 下阻断。
-      const tauriBlocks = ['s', 'o', 'n', 'w', 'k', 'l', 'd'] as const
+      const tauriBlocks = ['s', 'o', 'n', 'w', 'k', 'l', 'd', 'f'] as const
       const isMac = typeof navigator !== 'undefined' && /macintosh|mac os x/i.test(navigator.userAgent)
       if (isTauriEnv && isTauriEnv() && isMac && tauriBlocks.includes(key as (typeof tauriBlocks)[number])) return
 
@@ -224,6 +227,9 @@ export function useCommandSystem(params: CommandSystemParams) {
           e.preventDefault()
           void dispatchAction('open_recent')
         }
+      } else if (key === 'f') {
+        e.preventDefault()
+        void dispatchAction('find')
       }
     }
 
