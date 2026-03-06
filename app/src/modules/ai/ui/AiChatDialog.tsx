@@ -34,6 +34,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
   const [contextPlaceholderMode, setContextPlaceholderMode] = useState<'none' | 'selection' | 'file'>('none')
   const [attachedImageDataUrl, setAttachedImageDataUrl] = useState<string | null>(null)
   const [slashModalMessage, setSlashModalMessage] = useState<string | null>(null)
+  const [lastUserInput, setLastUserInput] = useState<string | null>(null)
   const commandBridge = useContext(AiChatCommandBridgeContext)
   const [isComposing, setIsComposing] = useState(false)
   const [compositionEndTime, setCompositionEndTime] = useState(0)
@@ -214,6 +215,9 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
 
   const doSend = async () => {
     const contentToSend = input
+    if (contentToSend.trim()) {
+      setLastUserInput(contentToSend)
+    }
     setInput('')
     autoResizeInput()
 
@@ -257,6 +261,33 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
   }
 
   const handleInputKeyDown = async (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // 当输入框为空时，按 ArrowUp 回填上一条用户输入
+    if (
+      e.key === 'ArrowUp' &&
+      !e.shiftKey &&
+      !e.metaKey &&
+      !e.ctrlKey &&
+      !e.altKey
+    ) {
+      if (isComposing || e.nativeEvent.isComposing) return
+      if (input.trim().length > 0) return
+      if (!lastUserInput || !lastUserInput.trim()) return
+
+      const el = inputRef.current
+      if (!el) return
+
+      e.preventDefault()
+      setInput(lastUserInput)
+      // 将光标移动到末尾
+      requestAnimationFrame(() => {
+        const target = inputRef.current
+        if (!target) return
+        const len = target.value.length
+        target.setSelectionRange(len, len)
+      })
+      return
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       if (isComposing || e.nativeEvent.isComposing) return
       const now = Date.now()

@@ -33,6 +33,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   const [contextPlaceholderMode, setContextPlaceholderMode] = useState<'none' | 'selection' | 'file'>('none')
   const [attachedImageDataUrl, setAttachedImageDataUrl] = useState<string | null>(null)
   const [slashModalMessage, setSlashModalMessage] = useState<string | null>(null)
+  const [lastUserInput, setLastUserInput] = useState<string | null>(null)
   const commandBridge = useContext(AiChatCommandBridgeContext)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
@@ -217,6 +218,9 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
 
   const doSend = async () => {
     const contentToSend = input
+    if (contentToSend.trim()) {
+      setLastUserInput(contentToSend)
+    }
     setInput('')
     autoResizeInput()
 
@@ -253,6 +257,34 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
 
   const handleInputKeyDown = async (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (isComposingRef.current) return
+
+    // 当输入框为空时，按 ArrowUp 回填上一条用户输入
+    if (
+      e.key === 'ArrowUp' &&
+      !e.shiftKey &&
+      !e.metaKey &&
+      !e.ctrlKey &&
+      !e.altKey
+    ) {
+      if (!input.trim()) {
+        if (lastUserInput && lastUserInput.trim()) {
+          const el = inputRef.current
+          if (el) {
+            e.preventDefault()
+            setInput(lastUserInput)
+            requestAnimationFrame(() => {
+              const target = inputRef.current
+              if (!target) return
+              const len = target.value.length
+              target.setSelectionRange(len, len)
+            })
+            return
+          }
+        }
+      }
+      // 如果当前输入非空或没有上一条输入，则交给默认的光标移动逻辑
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       if (lockEnterRef.current) return
       e.preventDefault()
