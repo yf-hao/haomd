@@ -8,3 +8,10 @@
 .env.*
 .env.local
 .env.*.local
+
+# IDE / AI tool temporary files
+.codebuddy_tmp
+
+# macOS system files
+.DS_Store
+**/.DS_Store
