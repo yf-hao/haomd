@@ -26,10 +26,12 @@ A high-performance, cross-platform Markdown editor built with Tauri 2 + React + 
 - 🗜️ **Conversation Compression**: Smart compression to manage long conversations
 
 ### Visualizations
-- 📐 **KaTeX**: Beautiful mathematical formulas
+- 📐 **KaTeX**:Natural language alone is sufficient to generate elegant mathematical formulas.
+![Katex](docs/images/katex.png)
 - 📊 **Mermaid**: Flowcharts, sequence diagrams, Gantt charts, and more
+![class ](docs/images/class.png)
 - 🧠 **Mind Maps**: Interactive mind map diagrams
-
+![mind ](docs/images/mind.png)
 ### File Management
 - 📁 **File Browser**: Built-in file explorer with folder navigation
 - 🕒 **Recent Files**: Quick access to recently opened files

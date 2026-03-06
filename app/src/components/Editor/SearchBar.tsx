@@ -99,6 +99,28 @@ export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose }) => {
         if (direction === 'next') {
             findNext(view as any)
         } else {
+            // 为了防止向后查找时因为光标在当前匹配词末尾而反复匹配当前词
+            // 先尝试把光标移到当前匹配词的开头
+            const query = new SearchQuery({ search: searchText, caseSensitive, wholeWord, regexp })
+            const cursor = query.getCursor(view.state) as any
+            const head = view.state.selection.main.head
+            let matchFrom = null
+
+            while (!cursor.next().done) {
+                const f = cursor.value?.from ?? cursor.from
+                const t = cursor.value?.to ?? cursor.to
+                if (t === head) {
+                    matchFrom = f
+                    break
+                }
+            }
+
+            if (matchFrom !== null) {
+                view.dispatch({
+                    selection: { anchor: matchFrom, head: matchFrom }
+                })
+            }
+
             findPrevious(view as any)
         }
 
@@ -115,7 +137,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose }) => {
         }
 
         updateIndex()
-    }, [view, searchText, updateIndex])
+    }, [view, searchText, caseSensitive, wholeWord, regexp, updateIndex])
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') {
