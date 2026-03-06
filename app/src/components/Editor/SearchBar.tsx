@@ -37,6 +37,34 @@ export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose }) => {
         }
     }, [view])
 
+    const updateIndex = useCallback(() => {
+        if (!view || !searchText) return;
+        const query = new SearchQuery({ search: searchText, caseSensitive, wholeWord, regexp });
+        let cursor = query.getCursor(view.state) as any;
+        let count = 0;
+        while (!cursor.next().done) {
+            count++;
+        }
+        setMatchCount(count);
+
+        if (count > 0) {
+            let index = 1;
+            const head = view.state.selection.main.head;
+            cursor = query.getCursor(view.state) as any;
+            while (!cursor.next().done) {
+                const matchFrom = cursor.value?.from ?? cursor.from;
+                const matchTo = cursor.value?.to ?? cursor.to;
+                if (matchFrom >= head || (matchFrom < head && matchTo >= head)) {
+                    break;
+                }
+                index++;
+            }
+            setCurrentMatchIndex(Math.min(index, count));
+        } else {
+            setCurrentMatchIndex(0);
+        }
+    }, [view, searchText, caseSensitive, wholeWord, regexp]);
+
     // Update query and count matches
     useEffect(() => {
         if (!view) return
@@ -58,31 +86,12 @@ export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose }) => {
 
         // Count matches manually for the UI
         if (searchText) {
-            let count = 0
-            const cursor = query.getCursor(view.state)
-            while (!cursor.next().done) {
-                count++
-            }
-            setMatchCount(count)
-
-            // Determine current index based on cursor position
-            if (count > 0) {
-                let index = 1
-                const head = view.state.selection.main.head
-                const cursorForPos = query.getCursor(view.state) as any
-                while (!cursorForPos.next().done) {
-                    if (cursorForPos.from >= head) break
-                    index++
-                }
-                setCurrentMatchIndex(Math.min(index, count))
-            } else {
-                setCurrentMatchIndex(0)
-            }
+            updateIndex();
         } else {
             setMatchCount(0)
             setCurrentMatchIndex(0)
         }
-    }, [view, searchText, caseSensitive, wholeWord, regexp])
+    }, [view, searchText, caseSensitive, wholeWord, regexp, updateIndex])
 
     const navigate = useCallback((direction: 'next' | 'prev') => {
         if (!view || !searchText) return
@@ -104,7 +113,9 @@ export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose }) => {
                 userEvent: 'select.search'
             })
         }
-    }, [view, searchText])
+
+        updateIndex()
+    }, [view, searchText, updateIndex])
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') {

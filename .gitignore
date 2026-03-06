@@ -1,7 +1,7 @@
 # 忽略根目录下除了 README.md 外的所有 .md 文件
 /*.md
 !/README.md
-!/README_CN.md
+!/README_EN.md
 
 # Environment variables
 .env
