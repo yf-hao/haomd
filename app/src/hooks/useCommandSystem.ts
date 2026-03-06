@@ -173,7 +173,7 @@ export function useCommandSystem(params: CommandSystemParams) {
 
       // 避免在 Tauri Mac 中与系统菜单快捷键（会发 menu://action 事件）重复触发。
       // Windows/Linux 下原生菜单加速键响应不如 Mac 稳定，且 JS 处理与原生通常不冲突，因此仅在 Mac 下阻断。
-      const tauriBlocks = ['s', 'o', 'n', 'w'] as const
+      const tauriBlocks = ['s', 'o', 'n', 'w', 'k', 'l', 'd'] as const
       const isMac = typeof navigator !== 'undefined' && /macintosh|mac os x/i.test(navigator.userAgent)
       if (isTauriEnv && isTauriEnv() && isMac && tauriBlocks.includes(key as (typeof tauriBlocks)[number])) return
 
@@ -210,6 +210,15 @@ export function useCommandSystem(params: CommandSystemParams) {
       } else if (key === 'x') {
         // 额外兜底一次剪切命令，避免某些环境下系统菜单未生效
         void dispatchAction('cut')
+      } else if (key === 'k') {
+        e.preventDefault()
+        void dispatchAction('ai_chat')
+      } else if (key === 'd') {
+        e.preventDefault()
+        void dispatchAction('ai_ask_file')
+      } else if (key === 'l') {
+        e.preventDefault()
+        void dispatchAction('ai_ask_selection')
       } else if (key === 'h') {
         if (e.altKey) {
           e.preventDefault()

@@ -1638,19 +1638,19 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .item(
             &MenuItemBuilder::new("Open AI Chat")
                 .id("ai_chat")
-                .accelerator("CmdOrCtrl+Shift+C")
+                .accelerator("CmdOrCtrl+K")
                 .build(app)?,
         )
         .item(
             &MenuItemBuilder::new("Ask AI About File")
                 .id("ai_ask_file")
-                .accelerator("CmdOrCtrl+Shift+A")
+                .accelerator("CmdOrCtrl+D")
                 .build(app)?,
         )
         .item(
             &MenuItemBuilder::new("Ask AI About Selection")
                 .id("ai_ask_selection")
-                .accelerator("CmdOrCtrl+Shift+S")
+                .accelerator("CmdOrCtrl+L")
                 .build(app)?,
         )
         .item(&ai_conversation_menu)
