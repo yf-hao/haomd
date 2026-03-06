@@ -157,11 +157,9 @@ HaoMD supports multiple AI providers, configurable within the app:
 | Save As | `Cmd+Shift+S` | `Ctrl+Shift+S` |
 | Close File | `Cmd+W` | `Ctrl+W` |
 | Toggle Preview | `Cmd+P` | `Ctrl+P` |
-| Toggle Sidebar | `Cmd+B` | `Ctrl+B` |
-| AI Chat | `Cmd+Shift+C` | `Ctrl+Shift+C` |
-| Ask AI About File | `Cmd+Shift+A` | `Ctrl+Shift+A` |
-| Ask AI About Selection | `Cmd+Shift+S` | `Ctrl+Shift+S` |
-| Go to Line | `Cmd+L` | `Ctrl+L` |
+| AI Chat | `Cmd+K` | `Ctrl+K` |
+| Ask AI About File | `Cmd+D` | `Ctrl+D` |
+| Ask AI About Selection | `Cmd+L` | `Ctrl+L` |
 | Find | `Cmd+F` | `Ctrl+F` |
 | Replace | `Cmd+H` | `Ctrl+H` |
 | Format Document | `Cmd+Shift+F` | `Ctrl+Shift+F` |

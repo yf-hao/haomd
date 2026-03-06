@@ -157,11 +157,9 @@ HaoMD 支持多种 AI 提供商，可在应用内配置：
 | 另存为 | `Cmd+Shift+S` | `Ctrl+Shift+S` |
 | 关闭文件 | `Cmd+W` | `Ctrl+W` |
 | 切换预览 | `Cmd+P` | `Ctrl+P` |
-| 切换侧边栏 | `Cmd+B` | `Ctrl+B` |
-| AI 聊天 | `Cmd+Shift+C` | `Ctrl+Shift+C` |
-| AI 分析文件 | `Cmd+Shift+A` | `Ctrl+Shift+A` |
-| AI 分析选区 | `Cmd+Shift+S` | `Ctrl+Shift+S` |
-| 跳转到行 | `Cmd+L` | `Ctrl+L` |
+| AI 聊天 | `Cmd+K` | `Ctrl+K` |
+| AI 分析文件 | `Cmd+D` | `Ctrl+D` |
+| AI 分析选区 | `Cmd+L` | `Ctrl+L` |
 | 查找 | `Cmd+F` | `Ctrl+F` |
 | 替换 | `Cmd+H` | `Ctrl+H` |
 | 格式化文档 | `Cmd+Shift+F` | `Ctrl+Shift+F` |
