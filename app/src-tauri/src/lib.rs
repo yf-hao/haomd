@@ -18,7 +18,7 @@ use rand::{distributions::Alphanumeric, Rng};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::http::{Request, Response};
-use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder, PredefinedMenuItem};
 use tauri::{AppHandle, Emitter, Manager, UriSchemeContext};
 use tokio::fs;
 use tokio::sync::Mutex;
@@ -1422,22 +1422,12 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 
     // Edit 菜单
     let edit_menu = SubmenuBuilder::new(app, "Edit")
-        .item(&MenuItemBuilder::new("Undo").id("undo").build(app)?)
-        .item(&MenuItemBuilder::new("Redo").id("redo").build(app)?)
+        .item(&PredefinedMenuItem::undo(app, None)?)
+        .item(&PredefinedMenuItem::redo(app, None)?)
         .separator()
-        .item(&MenuItemBuilder::new("Cut").id("cut").build(app)?)
-        .item(
-            &MenuItemBuilder::new("Copy")
-                .id("copy")
-                .accelerator("CmdOrCtrl+C")
-                .build(app)?,
-        )
-        .item(
-            &MenuItemBuilder::new("Paste")
-                .id("paste")
-                .accelerator("CmdOrCtrl+v")
-                .build(app)?,
-        )
+        .item(&PredefinedMenuItem::cut(app, None)?)
+        .item(&PredefinedMenuItem::copy(app, None)?)
+        .item(&PredefinedMenuItem::paste(app, None)?)
         .separator()
         .item(
             &MenuItemBuilder::new("Find")
@@ -1446,11 +1436,7 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
                 .build(app)?,
         )
         .item(&MenuItemBuilder::new("Replace").id("replace").build(app)?)
-        .item(
-            &MenuItemBuilder::new("Select All")
-                .id("select_all")
-                .build(app)?,
-        )
+        .item(&PredefinedMenuItem::select_all(app, None)?)
         .item(
             &MenuItemBuilder::new("Toggle Comment")
                 .id("toggle_comment")

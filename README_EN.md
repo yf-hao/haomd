@@ -1,6 +1,5 @@
 # HaoMD
 
-English | [中文](README_CN.md)
 
 A high-performance, cross-platform Markdown editor built with Tauri 2 + React + TypeScript. Features real-time preview, AI assistant integration, visualizations, multi-tab editing, and offline-first experience.
 
