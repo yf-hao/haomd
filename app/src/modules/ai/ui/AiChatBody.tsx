@@ -390,7 +390,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
                       value={m.id}
                       data-vision={m.visionMode === 'enabled' ? 'enabled' : 'disabled'}
                     >
-                      {getModelDisplayName(m.id)} ({m.providerName}){m.visionMode === 'enabled' ? '   ❂' : ''}
+                      {getModelDisplayName(m.id)} ({m.providerName}){m.visionMode === 'enabled' ? '  👁' : ''}
                     </option>
                   ))}
                 </select>

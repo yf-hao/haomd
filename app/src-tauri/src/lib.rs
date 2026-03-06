@@ -1567,22 +1567,10 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
                 .accelerator("CmdOrCtrl+0")
                 .build(app)?,
         )
-        // .item(&MenuItemBuilder::new("Word Wrap").id("word_wrap").build(app)?)
-        // .item(&MenuItemBuilder::new("Developer Tools").id("devtools").accelerator("CmdOrCtrl+Shift+I").build(app)?)
-        .item(&dock_ai_chat_menu)
-        .item(&layout_menu)
-        .build()?;
-
-    let go_menu = SubmenuBuilder::new(app, "Go")
         .item(
             &MenuItemBuilder::new("Go to Line")
                 .id("go_line")
                 .accelerator("CmdOrCtrl+L")
-                .build(app)?,
-        )
-        .item(
-            &MenuItemBuilder::new("Go to Symbol")
-                .id("go_symbol")
                 .build(app)?,
         )
         .item(
@@ -1597,13 +1585,12 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
                 .accelerator("Ctrl+Shift+Tab")
                 .build(app)?,
         )
-        .item(&MenuItemBuilder::new("Back").id("go_back").build(app)?)
-        .item(
-            &MenuItemBuilder::new("Forward")
-                .id("go_forward")
-                .build(app)?,
-        )
+        // .item(&MenuItemBuilder::new("Word Wrap").id("word_wrap").build(app)?)
+        // .item(&MenuItemBuilder::new("Developer Tools").id("devtools").accelerator("CmdOrCtrl+Shift+I").build(app)?)
+        .item(&dock_ai_chat_menu)
+        .item(&layout_menu)
         .build()?;
+
 
     let global_memory_menu = SubmenuBuilder::new(app, "Global Memory")
         .item(
@@ -1691,7 +1678,6 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .item(&edit_menu)
         .item(&selection_menu)
         .item(&view_menu)
-        .item(&go_menu)
         .item(&ai_menu)
         .item(&help_menu)
         .build()?;
