@@ -1138,11 +1138,24 @@ export function WorkspaceShell({
   const handleQuit = useCallback(() => {
     if (isCreatingTab) return
     const unsaved = getUnsavedTabs()
+
+    // 无论是否存在未保存标签，都先弹出确认模态
     if (unsaved.length === 0) {
-      if (isTauriEnv()) invoke('quit_app').catch(() => { })
-      else window.close()
+      setConfirmDialog({
+        title: 'Quit HaoMD?',
+        message: 'Are you sure you want to quit HaoMD?',
+        confirmText: 'Quit',
+        cancelText: 'Cancel',
+        onConfirm: () => {
+          setConfirmDialog(null)
+          if (isTauriEnv()) invoke('quit_app').catch(() => { })
+          else window.close()
+        },
+      })
       return
     }
+
+    // 存在未保存标签：使用带 Save All / Don't Save 的退出确认对话框
     setQuitConfirmDialog({
       unsavedCount: unsaved.length,
       onSaveAll: async () => {
@@ -1162,7 +1175,7 @@ export function WorkspaceShell({
         else window.close()
       }
     })
-  }, [isCreatingTab, getUnsavedTabs, isTauriEnv, save, setActiveTab])
+  }, [isCreatingTab, getUnsavedTabs, isTauriEnv, save, setActiveTab, setConfirmDialog])
 
   // 预览内容只在预览可见时才节流同步，避免 editor-only 模式下做无意义渲染
   useEffect(() => {
