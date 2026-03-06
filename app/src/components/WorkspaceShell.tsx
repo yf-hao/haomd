@@ -113,6 +113,9 @@ export function WorkspaceShell({
   // 预览专用的行号：对 activeLine 做轻量节流后再驱动 Preview，降低重渲染频率
   const [previewActiveLine, setPreviewActiveLine] = useState(1)
   const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null)
+  const markdownRef = useRef(markdown)
+  const hugeDocStateRef = useRef(null as any) // 稍后在 Effect 中保持同步
+  const lastActiveIdForPreviewRef = useRef<string | null>(null)
 
   // AI Chat States
   const [aiChatState, setAiChatState] = useState<{
@@ -245,8 +248,13 @@ export function WorkspaceShell({
     activeIdRef.current = activeId
   }, [activeId])
 
-  // 仅在真正切换激活标签时重置 activeLine，避免保存时预览自动滚回顶部
-  const lastActiveIdForPreviewRef = useRef<string | null>(null)
+  useEffect(() => {
+    markdownRef.current = markdown
+  }, [markdown])
+
+  useEffect(() => {
+    hugeDocStateRef.current = hugeDocState
+  }, [hugeDocState])
 
   const closeTabWithAiSession = useCallback((id: string) => {
     // 按 tab 维度清理 AI Chat 会话
@@ -665,13 +673,18 @@ export function WorkspaceShell({
     const tab = tabs.find((t) => t.id === activeId)
     if (!tab) return
 
-    setMarkdown(tab.content)
-    setPreviewValue(tab.content)
+    const isTabSwitch = lastActiveIdForPreviewRef.current !== activeId
 
-    // 只有在真正切换到另一个标签时，才把 activeLine 重置为 1
-    if (lastActiveIdForPreviewRef.current !== activeId) {
-      lastActiveIdForPreviewRef.current = activeId
-      setActiveLine(1)
+    // 只有在切换标签页，或者外部强制更新了标签内容（且与当前编辑器不一致）时，才同步回编辑器
+    // 这样避免了「输入 -> 更新 tabs -> tabs 触发 effect -> effect 用旧 tab.content 回滚输入」的循环
+    if (isTabSwitch || tab.content !== markdownRef.current) {
+      setMarkdown(tab.content)
+      setPreviewValue(tab.content)
+
+      if (isTabSwitch) {
+        lastActiveIdForPreviewRef.current = activeId
+        setActiveLine(1)
+      }
     }
   }, [activeId, tabs])
 
@@ -934,9 +947,12 @@ export function WorkspaceShell({
   }, [isTauriEnv, setStatusMessage])
 
   const handleMarkdownChange = useCallback((val: string) => {
-    if (hugeDocEnabled && hugeDocState?.enabled && hugeDocState.currentChunk) {
-      const { from, to } = hugeDocState.currentChunk
-      const nextFullDoc = applyChunkPatch(markdown, { from, to }, val)
+    const currentMarkdown = markdownRef.current
+    const currentHugeDocState = hugeDocStateRef.current
+
+    if (hugeDocEnabled && currentHugeDocState?.enabled && currentHugeDocState.currentChunk) {
+      const { from, to } = currentHugeDocState.currentChunk
+      const nextFullDoc = applyChunkPatch(currentMarkdown, { from, to }, val)
 
       setMarkdown(nextFullDoc)
       markDirty()
@@ -948,7 +964,7 @@ export function WorkspaceShell({
     setMarkdown(val)
     markDirty()
     updateActiveContent(val)
-  }, [markdown, hugeDocState, hugeDocEnabled, markDirty, updateActiveContent])
+  }, [hugeDocEnabled, markDirty, updateActiveContent])
 
   // 当前激活的 PDF 文件路径（仅在 isPdfActive 时有值）
   const activePdfPath = isPdfActive ? activeTab?.path ?? null : null
@@ -1809,13 +1825,14 @@ export function WorkspaceShell({
     // 程序性滚动期间不更新 activeLine，避免触发大文档 effect 重算 chunk
     if (isProgrammaticScrollRef.current) return
 
-    if (hugeDocEnabled && hugeDocState?.enabled && hugeDocState.currentChunk) {
-      const globalLine = localToGlobalLine(markdown, hugeDocState.currentChunk.from, localLine)
+    const currentHugeDocState = hugeDocStateRef.current
+    if (hugeDocEnabled && currentHugeDocState?.enabled && currentHugeDocState.currentChunk) {
+      const globalLine = localToGlobalLine(markdownRef.current, currentHugeDocState.currentChunk.from, localLine)
       setActiveLine(globalLine)
       return
     }
     setActiveLine(localLine)
-  }, [markdown, hugeDocState, hugeDocEnabled, setActiveLine])
+  }, [hugeDocEnabled, setActiveLine])
 
   const focusEditorOnGlobalLine = useCallback((globalLine: number, searchText?: string) => {
     if (!hugeDocEnabled) {
