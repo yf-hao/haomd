@@ -160,6 +160,7 @@ HaoMD supports multiple AI providers, configurable within the app:
 | AI Chat | `Cmd+K` | `Ctrl+K` |
 | Ask AI About File | `Cmd+D` | `Ctrl+D` |
 | Ask AI About Selection | `Cmd+L` | `Ctrl+L` |
+| AI Chat: Recall Last Input | `↑` (when input is empty) | `↑` (when input is empty) |
 | Find | `Cmd+F` | `Ctrl+F` |
 | Replace | `Cmd+H` | `Ctrl+H` |
 | Format Document | `Cmd+Shift+F` | `Ctrl+Shift+F` |

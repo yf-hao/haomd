@@ -1697,27 +1697,6 @@ export function WorkspaceShell({
     exportPdf: handleExportPdf,
   })
 
-  // 全局快捷键：Shift+Cmd/Ctrl+S 触发 "Ask AI About Selection"
-  useEffect(() => {
-    const handleKeyDownAskSelection = (e: globalThis.KeyboardEvent) => {
-      const key = e.key.toLowerCase()
-      const isMeta = e.metaKey || e.ctrlKey
-      const isShift = e.shiftKey
-      if (!isMeta || !isShift || key !== 's') {
-        return
-      }
-
-      e.preventDefault()
-      e.stopPropagation()
-      void dispatchAction('ai_ask_selection')
-    }
-
-    window.addEventListener('keydown', handleKeyDownAskSelection, true)
-    return () => {
-      window.removeEventListener('keydown', handleKeyDownAskSelection, true)
-    }
-  }, [dispatchAction])
-
   const aiChatCommandBridge = useMemo(
     () => ({
       runAppCommand: (id: string) => dispatchAction(id),

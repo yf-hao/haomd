@@ -160,6 +160,7 @@ HaoMD 支持多种 AI 提供商，可在应用内配置：
 | AI 聊天 | `Cmd+K` | `Ctrl+K` |
 | AI 分析文件 | `Cmd+D` | `Ctrl+D` |
 | AI 分析选区 | `Cmd+L` | `Ctrl+L` |
+| AI Chat 回填上一条输入 | `↑`（输入框为空时） | `↑`（输入框为空时） |
 | 查找 | `Cmd+F` | `Ctrl+F` |
 | 替换 | `Cmd+H` | `Ctrl+H` |
 | 格式化文档 | `Cmd+Shift+F` | `Ctrl+Shift+F` |
