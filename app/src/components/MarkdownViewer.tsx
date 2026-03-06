@@ -2,6 +2,7 @@ import React, { memo, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
+import rehypeRaw from 'rehype-raw'
 import katex from 'katex'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
@@ -701,6 +702,7 @@ function MarkdownViewerComponent(
             <ReactMarkdown
               remarkPlugins={remarkPlugins}
               remarkRehypeOptions={remarkRehypeOptions}
+              rehypePlugins={[rehypeRaw]}
               components={components}
             >
               {value}
