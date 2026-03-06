@@ -2148,6 +2148,8 @@ struct DocConversationRecordCfg {
     #[serde(default)]
     dify_conversation_id: Option<String>,
     #[serde(default)]
+    dify_provider_conversations: Option<HashMap<String, String>>,
+    #[serde(default)]
     messages: Vec<DocConversationMessageCfg>,
 }
 
@@ -2218,7 +2220,12 @@ async fn write_doc_conversations(
                 .dify_conversation_id
                 .as_ref()
                 .map(|s| !s.is_empty())
-                .unwrap_or(false),
+                .unwrap_or(false)
+                || rec
+                    .dify_provider_conversations
+                    .as_ref()
+                    .map(|m| !m.is_empty())
+                    .unwrap_or(false),
             message_count: rec.messages.len(),
         })
         .collect();

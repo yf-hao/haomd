@@ -221,6 +221,9 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       if (providerType === 'dify' && result.conversationId) {
         const prev = difyConversationId
         difyConversationId = result.conversationId
+        // 【关键修复】：不仅更新当前变量，还要同步更新映射表，确保切换回来时能找回
+        difyProviderConversations[provider.id] = result.conversationId
+
         console.warn('[ChatSession] Dify conversationId updated after stream', {
           prevConversationId: prev || '(none)',
           newConversationId: difyConversationId,
@@ -365,6 +368,10 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       }
       // 重新创建客户端以应用新的 system prompt
       if (provider) {
+        // 【同步刷新】：确保在创建客户端前，使用的是对应当前 Provider 的 ID
+        if (providerType === 'dify') {
+          difyConversationId = difyProviderConversations[provider.id]
+        }
         const initialConversationIdForClient = providerType === 'dify' ? difyConversationId : undefined
         client = createStreamingClientFromSettings(
           provider,
@@ -391,6 +398,14 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       currentModelId = modelId
       providerType = provider.providerType ?? 'dify'
       defaultMaxTokens = provider.models.find((m) => m.id === modelId)?.maxTokens ?? 2048
+
+      // 【核心修复】：切换 Provider 时，根据映射表恢复对应的 Dify 会话 ID
+      // 如果映射表中没有（说明该 Provider 是第一次用），则 ID 会置为 undefined，从而在下一次对话时生成新会话
+      if (providerType === 'dify') {
+        difyConversationId = difyProviderConversations[provider.id]
+      } else {
+        difyConversationId = undefined
+      }
 
       const initialConversationIdForClient = providerType === 'dify' ? difyConversationId : undefined
 
