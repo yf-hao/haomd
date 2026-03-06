@@ -1591,7 +1591,6 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .item(&layout_menu)
         .build()?;
 
-
     let global_memory_menu = SubmenuBuilder::new(app, "Global Memory")
         .item(
             &MenuItemBuilder::new("User Persona")

@@ -1038,6 +1038,36 @@
   justify-content: flex-end;
 }
 
+/* 全局 Ghost 按钮样式：所有模态框统一视觉风格 */
+.modal .modal-actions .ghost {
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: rgba(15, 23, 42, 0.96);
+  color: #e5e7eb;
+  font-size: 12px;
+  padding: 4px 12px;
+}
+
+.modal .modal-actions .ghost.primary {
+  border-color: rgba(96, 165, 250, 0.9);
+  background: rgba(37, 99, 235, 0.9);
+}
+
+.modal .modal-actions .ghost.danger {
+  border-color: rgba(248, 113, 113, 0.8);
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.8);
+}
+
+.modal .modal-actions .ghost:not(:disabled):hover {
+  background: rgba(30, 64, 175, 0.6);
+  border-color: rgba(129, 140, 248, 0.9);
+}
+
+.modal .modal-actions .ghost.primary:not(:disabled):hover {
+  background: #3b82f6;
+}
+
 .modal-actions-stacked {
   flex-direction: column;
   align-items: stretch;
