@@ -203,26 +203,45 @@ function getLastTwoDirNames(dir: string): string {
 }
 
 /**
+ * 将外部传入的 docPath（可以是文件路径或目录路径）归一化为会话使用的目录路径：
+ * - 如果看起来是文件路径（最后一段带扩展名），则取父目录；
+ * - 如果看起来是目录路径，则直接使用该目录；
+ * - 根目录或空路径统一视为 '/'
+ */
+function resolveDocDirForKey(rawDocPath: string): string {
+  const normalized = normalizeDirPath(rawDocPath)
+  if (!normalized || normalized === '/') return '/'
+
+  const segments = normalized.split('/')
+  const lastSegment = segments[segments.length - 1] ?? ''
+  const looksLikeFile = /\.[^./\\]+$/.test(lastSegment)
+
+  if (looksLikeFile) {
+    // 老行为：文件路径 -> 父目录
+    return getDirKeyFromDocPath(normalized) ?? '/'
+  }
+
+  // 新行为：目录路径 -> 自己
+  return normalized
+}
+
+/**
  * 将外部传入的 docPath（可以是文件路径或目录路径）映射为稳定 key：
- * - 先通过 getDirKeyFromDocPath 归一到父目录；
- * - 再使用 workspaceId + 「父目录名/当前目录名」两级路径 作为真正的存盘 docPath；
- * - 若 workspaceId 无法解析，则退回到「父目录名/当前目录名」。
+ * - 先通过 resolveDocDirForKey 归一到“用于会话的目录路径”；
+ * - 再使用「父目录名/当前目录名」两级路径 作为真正的存盘 docPath；
+ * - 历史上曾使用 workspaceId::lastTwo 形式，读取时会兼容并懒迁移到新格式。
  */
 async function toStableDocPathKey(rawDocPath: string): Promise<string> {
-  const dirKey = getDirKeyFromDocPath(rawDocPath) ?? rawDocPath
-  const dir = normalizeDirPath(dirKey)
+  const dir = resolveDocDirForKey(rawDocPath)
   if (!dir || dir === '/') {
     // 根目录：仍然使用原始路径的最后一级名称，避免破坏旧数据
     return getLastDirName(rawDocPath)
   }
 
   try {
-    const info = await ensureWorkspaceIdForDir(dir)
-    const lastTwo = getLastTwoDirNames(dir)
-    if (!info) {
-      return lastTwo
-    }
-    return `${info.workspaceId}::${lastTwo}`
+    // 仍然解析 workspaceId，以确保工作区配置文件存在，但不再将其纳入存储 key
+    await ensureWorkspaceIdForDir(dir)
+    return getLastTwoDirNames(dir)
   } catch (e) {
     console.error('[docConversationService] toStableDocPathKey failed', e)
     return getLastTwoDirNames(dir)
@@ -303,7 +322,11 @@ export function createDocConversationService(): DocConversationService {
       const nextMessages = toDocMessages(stableKey, state, providerType, modelName)
       const now = Date.now()
 
-      const idx = records.findIndex((r) => r.docPath === stableKey || r.docPath === docPath)
+      const idx = records.findIndex((r) => {
+        if (r.docPath === stableKey || r.docPath === docPath) return true
+        if (typeof r.docPath === 'string' && r.docPath.endsWith(`::${stableKey}`)) return true
+        return false
+      })
 
       if (idx >= 0) {
         const existing = records[idx]
@@ -349,7 +372,11 @@ export function createDocConversationService(): DocConversationService {
       const records = getCache()
       const now = Date.now()
       const stableKey = await toStableDocPathKey(docPath)
-      const idx = records.findIndex((r) => r.docPath === stableKey || r.docPath === docPath)
+      const idx = records.findIndex((r) => {
+        if (r.docPath === stableKey || r.docPath === docPath) return true
+        if (typeof r.docPath === 'string' && r.docPath.endsWith(`::${stableKey}`)) return true
+        return false
+      })
 
       if (idx >= 0) {
         records[idx] = {
@@ -377,7 +404,11 @@ export function createDocConversationService(): DocConversationService {
       await ensureLoaded()
       const records = getCache()
       const stableKey = await toStableDocPathKey(docPath)
-      const idx = records.findIndex((r) => r.docPath === stableKey || r.docPath === docPath)
+      const idx = records.findIndex((r) => {
+        if (r.docPath === stableKey || r.docPath === docPath) return true
+        if (typeof r.docPath === 'string' && r.docPath.endsWith(`::${stableKey}`)) return true
+        return false
+      })
 
       if (idx < 0) {
         // 没有对应文档记录，直接返回

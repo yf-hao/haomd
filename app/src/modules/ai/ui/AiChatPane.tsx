@@ -5,6 +5,7 @@ import type { ChatEntryMode, EntryContext } from '../domain/chatSession'
 import { getDirKeyFromDocPath } from '../domain/docPathUtils'
 import type { AiChatSessionKey } from '../application/aiChatSessionService'
 import { useAiChatSession } from './hooks/useAiChatSession'
+import { getLatestAiInput } from '../application/localStorageAiChatInputHistory'
 import { copyTextToClipboard } from '../platform/clipboardService'
 import { insertMarkdownAtCursorBelow, replaceSelectionWithText, createTabAndInsertContent } from '../platform/editorInsertService'
 import { onNativePaste, onNativePasteImage } from '../../platform/clipboardEvents'
@@ -33,7 +34,6 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   const [contextPlaceholderMode, setContextPlaceholderMode] = useState<'none' | 'selection' | 'file'>('none')
   const [attachedImageDataUrl, setAttachedImageDataUrl] = useState<string | null>(null)
   const [slashModalMessage, setSlashModalMessage] = useState<string | null>(null)
-  const [lastUserInput, setLastUserInput] = useState<string | null>(null)
   const commandBridge = useContext(AiChatCommandBridgeContext)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
@@ -218,9 +218,6 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
 
   const doSend = async () => {
     const contentToSend = input
-    if (contentToSend.trim()) {
-      setLastUserInput(contentToSend)
-    }
     setInput('')
     autoResizeInput()
 
@@ -258,7 +255,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   const handleInputKeyDown = async (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (isComposingRef.current) return
 
-    // 当输入框为空时，按 ArrowUp 回填上一条用户输入
+    // 当输入框为空时，按 ArrowUp 回填最近一条持久化的用户输入
     if (
       e.key === 'ArrowUp' &&
       !e.shiftKey &&
@@ -267,22 +264,25 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
       !e.altKey
     ) {
       if (!input.trim()) {
-        if (lastUserInput && lastUserInput.trim()) {
+        const directoryKey = dirKey ?? '/'
+        const latest = getLatestAiInput(directoryKey)
+        if (latest && latest.text.trim()) {
           const el = inputRef.current
           if (el) {
             e.preventDefault()
-            setInput(lastUserInput)
+            setInput(latest.text)
             requestAnimationFrame(() => {
               const target = inputRef.current
               if (!target) return
               const len = target.value.length
               target.setSelectionRange(len, len)
+              autoResizeInput()
             })
             return
           }
         }
       }
-      // 如果当前输入非空或没有上一条输入，则交给默认的光标移动逻辑
+      // 如果当前输入非空或没有历史记录，则交给默认的光标移动逻辑
     }
 
     if (e.key === 'Enter' && !e.shiftKey) {

@@ -15,6 +15,7 @@ import type { ChatSession, StartChatOptions } from '../../application/chatSessio
 import { createChatSession } from '../../application/chatSessionService'
 import { docConversationService, subscribeDocConversationEvents, type DocConversationEvent } from '../../application/docConversationService'
 import type { DocConversationRecord } from '../../domain/docConversations'
+import { appendAiInputHistory } from '../../application/localStorageAiChatInputHistory'
 
 export type UseAiChatSessionOptions = {
   sessionKey: AiChatSessionKey
@@ -299,6 +300,11 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
 
       if (!trimmed && !options?.contextPrefix && !hasAttachments) return
 
+      const directoryKey = docPath ?? '/'
+      if (trimmed) {
+        appendAiInputHistory(directoryKey, trimmed)
+      }
+
       const basePrompt = trimmed || (hasAttachments ? DEFAULT_VISION_PROMPT : '')
 
       let finalContent = basePrompt
@@ -343,7 +349,7 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
         setSystemPromptInfo(session.getSystemPromptInfo())
       }
     },
-    [session, providerType, pendingAttachments],
+    [session, providerType, pendingAttachments, docPath],
   )
 
   const stop = useCallback<UseAiChatResult['stop']>(() => {
