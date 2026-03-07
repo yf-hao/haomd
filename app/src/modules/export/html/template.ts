@@ -37,6 +37,13 @@ export function generateHTMLTemplate(options: TemplateOptions): string {
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Source Han Sans CN', 'Segoe UI', Helvetica, Arial, sans-serif; padding: 20px; color: #1a1a1a; }
     .markdown-body { max-width: 800px; margin: 0 auto; line-height: 1.7; }
+    .markdown-body em {
+      font-style: italic;
+      display: inline-block;
+      transform: skewX(-8deg);
+      font-family: "Noto Serif SC", "Songti SC", "STSong", "Source Han Serif SC",
+                   system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
     img { max-width: 100%; height: auto; }
     pre { background-color: #f6f8fa; padding: 16px; border-radius: 6px; overflow: auto; }
     pre.mermaid { background-color: transparent; padding: 0; }

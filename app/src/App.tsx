@@ -93,6 +93,16 @@ function App() {
           >
             <span className="activity-icon-pdf" aria-hidden="true" />
           </button>
+
+          <button
+            type="button"
+            className={`activity-item ${activeLeftPanel === 'sessions' ? 'active' : ''}`}
+            onClick={() => handleLeftPanelToggle('sessions')}
+            aria-pressed={activeLeftPanel === 'sessions'}
+            title="会话管理"
+          >
+            <span className="activity-icon-sessions" aria-hidden="true" />
+          </button>
         </div>
 
         <WorkspaceShell

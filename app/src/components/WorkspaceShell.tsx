@@ -61,7 +61,7 @@ const PdfViewerLazy = lazy(() =>
   import('../modules/pdf/components/PdfViewer').then((m) => ({ default: m.PdfViewer }))
 )
 
-export type LeftPanelId = 'files' | 'outline' | 'pdf' | null
+export type LeftPanelId = 'files' | 'outline' | 'pdf' | 'sessions' | null
 export type InitialWorkspaceAction = 'new' | 'open' | 'open_folder' | 'open_recent' | null
 
 export interface WorkspaceShellProps {
@@ -2188,7 +2188,7 @@ export function WorkspaceShell({
             </div>
           </div>
         )}
-        {(activeLeftPanel === 'files' || activeLeftPanel === 'outline' || activeLeftPanel === 'pdf') && (
+        {(activeLeftPanel === 'files' || activeLeftPanel === 'outline' || activeLeftPanel === 'pdf' || activeLeftPanel === 'sessions') && (
           <div className={`sidebar-resizer ${isSidebarResizing ? 'active' : ''}`} onMouseDown={handleSidebarResizeStart} />
         )}
 

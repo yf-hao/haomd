@@ -138,6 +138,72 @@
   background: rgba(239, 68, 68, 0.9);
 }
 
+/* 会话管理图标：两个叠加的对话气泡 */
+.activity-icon-sessions {
+  position: relative;
+  width: 18px;
+  height: 16px;
+}
+
+.activity-icon-sessions::before,
+.activity-icon-sessions::after {
+  content: '';
+  position: absolute;
+  border-radius: 5px;
+  border: 1.5px solid rgba(226, 232, 240, 0.9);
+  background: transparent;
+}
+
+/* 前景气泡 */
+.activity-icon-sessions::before {
+  left: 1px;
+  bottom: 0;
+  width: 11px;
+  height: 9px;
+}
+
+/* 小尾巴 */
+.activity-icon-sessions::after {
+  right: 0;
+  top: 0;
+  width: 9px;
+  height: 7px;
+}
+
+/* 会话 Panel */
+.conversation-panel {
+  background: rgba(5, 7, 12, 0.96);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(8px);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.conversation-panel-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.6);
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.conversation-panel-body {
+  flex: 1;
+  min-height: 0;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+.conversation-panel-empty {
+  margin: 0;
+  opacity: 0.9;
+}
+
 /* PDF Panel */
 .pdf-panel {
   /* 与文件浏览器 Sidebar 保持一致的深色毛玻璃风格 */

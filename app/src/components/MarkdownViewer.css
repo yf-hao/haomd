@@ -49,3 +49,12 @@
 .markdown-body pre.code-block > pre>code{
   background-color: transparent !important;
 }
+
+/* 让斜体在中文场景下也有明显的视觉效果 */
+.markdown-body em {
+  font-style: italic;
+  display: inline-block;
+  transform: skewX(-8deg);
+  font-family: "Noto Serif SC", "Songti SC", "STSong", "Source Han Serif SC",
+               system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
