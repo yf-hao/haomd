@@ -5,7 +5,7 @@ import type { ChatEntryMode, EntryContext } from '../domain/chatSession'
 import { getDirKeyFromDocPath } from '../domain/docPathUtils'
 import type { AiChatSessionKey } from '../application/aiChatSessionService'
 import { useAiChatSession } from './hooks/useAiChatSession'
-import { getLatestAiInput } from '../application/localStorageAiChatInputHistory'
+import { getAiInputHistory } from '../application/localStorageAiChatInputHistory'
 import { copyTextToClipboard } from '../platform/clipboardService'
 import { insertMarkdownAtCursorBelow, replaceSelectionWithText, createTabAndInsertContent } from '../platform/editorInsertService'
 import { onNativePaste, onNativePasteImage } from '../../platform/clipboardEvents'
@@ -40,6 +40,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   const paneRootRef = useRef<HTMLElement>(null)
   const isComposingRef = useRef(false)
   const lockEnterRef = useRef(false)
+  const [historyCursor, setHistoryCursor] = useState<number | null>(null)
 
   const autoResizeInput = () => {
     const el = inputRef.current
@@ -255,34 +256,64 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   const handleInputKeyDown = async (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (isComposingRef.current) return
 
-    // 当输入框为空时，按 ArrowUp 回填最近一条持久化的用户输入
+    const isHistoryMode = historyCursor != null
+
+    // 当输入框为空或已处于历史模式时，使用 ArrowUp / ArrowDown 在当前目录的输入历史中导航
     if (
-      e.key === 'ArrowUp' &&
+      (e.key === 'ArrowUp' || e.key === 'ArrowDown') &&
       !e.shiftKey &&
       !e.metaKey &&
       !e.ctrlKey &&
       !e.altKey
     ) {
-      if (!input.trim()) {
+      if (!isHistoryMode && input.trim()) {
+        // 非历史模式且当前输入非空：不进入历史浏览，交给默认光标逻辑
+      } else {
         const directoryKey = dirKey ?? '/'
-        const latest = getLatestAiInput(directoryKey)
-        if (latest && latest.text.trim()) {
-          const el = inputRef.current
-          if (el) {
-            e.preventDefault()
-            setInput(latest.text)
-            requestAnimationFrame(() => {
-              const target = inputRef.current
-              if (!target) return
-              const len = target.value.length
-              target.setSelectionRange(len, len)
-              autoResizeInput()
-            })
-            return
+        const historyList = getAiInputHistory(directoryKey)
+        if (historyList.length > 0) {
+          const direction = e.key === 'ArrowUp' ? 'up' as const : 'down' as const
+          let nextCursor = historyCursor
+
+          if (direction === 'up') {
+            if (nextCursor == null) {
+              nextCursor = historyList.length - 1
+            } else if (nextCursor > 0) {
+              nextCursor = nextCursor - 1
+            } else {
+              nextCursor = 0
+            }
+          } else {
+            if (nextCursor == null) {
+              // 尚未进入历史模式时，向下键不做特殊处理，交给默认光标逻辑
+              return
+            } else if (nextCursor < historyList.length - 1) {
+              nextCursor = nextCursor + 1
+            } else {
+              nextCursor = historyList.length - 1
+            }
+          }
+
+          const entry = historyList[nextCursor]
+          if (entry && entry.text.trim()) {
+            const el = inputRef.current
+            if (el) {
+              e.preventDefault()
+              setHistoryCursor(nextCursor)
+              setInput(entry.text)
+              requestAnimationFrame(() => {
+                const target = inputRef.current
+                if (!target) return
+                const len = target.value.length
+                target.setSelectionRange(len, len)
+                autoResizeInput()
+              })
+              return
+            }
           }
         }
       }
-      // 如果当前输入非空或没有历史记录，则交给默认的光标移动逻辑
+      // 如果当前输入非空且尚未进入历史模式，或没有历史记录，则交给默认的光标移动逻辑
     }
 
     if (e.key === 'Enter' && !e.shiftKey) {

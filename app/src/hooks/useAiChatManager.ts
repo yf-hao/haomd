@@ -165,33 +165,8 @@ export function useAiChatManager({ activeTabId }: AiChatManagerOptions) {
         event.stopPropagation()
     }, [aiChatDockSide, aiChatWidthLeft, aiChatWidthRight])
 
-    const isAiChatActuallyOpen = aiChatOpen && !!aiChatState?.open
 
-    useEffect(() => {
-        const handleKeyDown = (e: globalThis.KeyboardEvent) => {
-            const key = e.key.toLowerCase()
-            const isMeta = e.metaKey || e.ctrlKey
-            const isShift = e.shiftKey
-            if (!isMeta || !isShift || key !== 'c') {
-                return
-            }
 
-            // Shift+Command+C（或 Shift+Ctrl+C）：在打开和关闭 AI Chat 之间切换
-            e.preventDefault()
-            e.stopPropagation()
-
-            if (isAiChatActuallyOpen) {
-                closeAiChatDialog()
-            } else {
-                openAiChatDialog({ entryMode: 'chat' })
-            }
-        }
-
-        window.addEventListener('keydown', handleKeyDown, true)
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown, true)
-        }
-    }, [isAiChatActuallyOpen, openAiChatDialog, closeAiChatDialog])
 
     return {
         aiChatState,

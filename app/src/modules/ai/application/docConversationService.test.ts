@@ -100,11 +100,11 @@ describe('docConversationService', () => {
             modelName: 'gpt-4'
         })
 
-        // Stable key should be "ws-123::my-project/subdir" (since getLastTwoDirNames is used)
+        // Stable key should be "my-project/subdir" (workspace ID no longer participates in docPath key)
         expect(mockInvoke).toHaveBeenCalledWith('save_doc_conversations', expect.objectContaining({
             records: expect.arrayContaining([
                 expect.objectContaining({
-                    docPath: 'ws-123::my-project/subdir'
+                    docPath: 'my-project/subdir'
                 })
             ])
         }))
