@@ -299,12 +299,12 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
               {error && <div className="form-error">{error}</div>}
 
               <div className="prompt-settings-form-actions">
-                <button type="button" className="ghost" onClick={handleResetDraft}>
+                <Button type="button" variant="tertiary" onClick={handleResetDraft}>
                   Reset Draft
-                </button>
-                <button type="submit" className="ghost primary">
+                </Button>
+                <Button type="submit" variant="primary">
                   Add
-                </button>
+                </Button>
               </div>
             </form>
           </div>

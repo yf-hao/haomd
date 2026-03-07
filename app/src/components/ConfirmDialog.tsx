@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { Button } from './Button'
 
 export type ConfirmDialogProps = {
   title: string

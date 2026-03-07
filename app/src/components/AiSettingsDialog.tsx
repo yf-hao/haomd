@@ -7,6 +7,7 @@ import { useAiSettingsPersistence } from '../hooks/useAiSettingsPersistence'
 import { useAiSettingsState, type ProviderDraft, parseModelsInput } from '../hooks/useAiSettingsState'
 import { testProviderConnection } from '../modules/ai/testConnection'
 import { FieldGroup } from './FieldGroup'
+import { Button } from './Button'
 
 export type AiSettingsDialogProps = {
   open: boolean
@@ -396,15 +397,15 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
               {testResult && !error && <div className="form-success">{testResult}</div>}
 
               <div className="ai-settings-form-actions">
-                <button type="button" className="ghost" onClick={handleResetDraft}>
+                <Button type="button" variant="tertiary" onClick={handleResetDraft}>
                   Reset Form
-                </button>
-                <button type="button" className="ghost primary" onClick={handleTestConnection}>
+                </Button>
+                <Button type="button" variant="secondary" onClick={handleTestConnection}>
                   Test
-                </button>
-                <button type="submit" className="ghost primary">
+                </Button>
+                <Button type="submit" variant="primary">
                   Add
-                </button>
+                </Button>
               </div>
             </form>
           </div>
@@ -542,12 +543,12 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
         </div>
 
         <div className="modal-actions">
-          <button className="ghost" type="button" onClick={handleCancel}>
+          <Button variant="tertiary" type="button" onClick={handleCancel}>
             Cancel
-          </button>
-          <button className="ghost primary" type="button" onClick={handleSave}>
+          </Button>
+          <Button variant="primary" type="button" onClick={handleSave}>
             Save
-          </button>
+          </Button>
         </div>
 
         {showKeyOnlyModal && (
@@ -560,13 +561,13 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                 如需更新 API Key，请直接点击右下角的 Save 按钮保存配置。
               </div>
               <div className="submodal-actions">
-                <button
+                <Button
                   type="button"
-                  className="ghost primary"
+                  variant="primary"
                   onClick={() => setShowKeyOnlyModal(false)}
                 >
                   知道了
-                </button>
+                </Button>
               </div>
             </div>
           </div>

@@ -67,7 +67,8 @@ export const AiChatHistoryDialog: FC<AiChatHistoryDialogProps> = ({
             <ul className="ai-chat-history-list">
               {page.items.map((item) => (
                 <li key={item.ordinal} className="ai-chat-history-item">
-                  {`${item.ordinal}    ${item.text}`}
+                  <span className="ai-chat-history-ordinal">{item.ordinal}</span>
+                  <span className="ai-chat-history-text">{item.text}</span>
                 </li>
               ))}
             </ul>
