@@ -17,7 +17,7 @@ export type AiSlashCommandContext = {
    * - 按时间顺序返回最后 limit 条。
    */
   getRecentMessagesForDigest?: (limit: number) => ChatMessageView[]
-  /** 在当前 AI Chat 中打开输入历史弹窗（例如 /history 命令） */
+  /** 在当前 AI Chat 中打开输入历史弹窗（例如 /list 命令） */
   openHistoryDialog?: (payload: { docPath?: string }) => void
 }
 
@@ -48,10 +48,25 @@ const slashCommands: Record<string, AiSlashCommandDef> = {
   },
   history: {
     name: 'history',
-    description: '显示当前文档的 AI Session History',
+    description: '显示当前文档的 AI 会话历史',
     async handler(ctx) {
       if (!ctx.runAppCommand) return
       await ctx.runAppCommand('ai_conversation_history')
+    },
+  },
+  list: {
+    name: 'list',
+    description: '显示当前目录的 AI 输入历史列表',
+    async handler(ctx) {
+      if (ctx.openHistoryDialog) {
+        ctx.openHistoryDialog({ docPath: ctx.docPath })
+        return
+      }
+      if (ctx.showModal) {
+        ctx.showModal('当前版本未挂载输入历史弹窗，无法使用 /list。')
+      } else {
+        console.warn('[aiSlashCommands] /list requires openHistoryDialog, ignored')
+      }
     },
   },
   remember: {

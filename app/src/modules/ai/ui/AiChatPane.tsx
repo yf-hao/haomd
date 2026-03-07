@@ -5,7 +5,7 @@ import type { ChatEntryMode, EntryContext } from '../domain/chatSession'
 import { getDirKeyFromDocPath } from '../domain/docPathUtils'
 import type { AiChatSessionKey } from '../application/aiChatSessionService'
 import { useAiChatSession } from './hooks/useAiChatSession'
-import { getAiInputHistory } from '../application/localStorageAiChatInputHistory'
+import { getAiInputHistory, appendAiInputHistory } from '../application/localStorageAiChatInputHistory'
 import { resolveHistoryEntryByOrdinal } from '../application/historyViewService'
 import { copyTextToClipboard } from '../platform/clipboardService'
 import { insertMarkdownAtCursorBelow, replaceSelectionWithText, createTabAndInsertContent } from '../platform/editorInsertService'
@@ -38,6 +38,8 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   const [slashModalMessage, setSlashModalMessage] = useState<string | null>(null)
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
   const [historyDialogDirKey, setHistoryDialogDirKey] = useState<string | null>(null)
+  // 仅在通过 /list 打开输入历史弹窗时，才允许使用 `!n` 本地历史回填命令
+  const [historyRecallEnabled, setHistoryRecallEnabled] = useState(false)
   const commandBridge = useContext(AiChatCommandBridgeContext)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
@@ -228,6 +230,10 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
     // 先处理本地历史回填命令：!n / ！n
     const ordinal = parseHistoryRecallCommand(contentToSend)
     if (ordinal != null) {
+      if (!historyRecallEnabled) {
+        // 当前未处于“输入历史选择”模式：忽略本次 !n 命令，避免与 /history 语义混淆
+        return
+      }
       const entry = resolveHistoryEntryByOrdinal(directoryKey, ordinal)
       if (entry && entry.text.trim()) {
         const nextText = entry.text
@@ -241,6 +247,11 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
         })
       }
       return
+    }
+
+    // 记录本次输入到当前目录的输入历史（包含普通提问和 /history /list 等指令）
+    if (contentToSend.trim()) {
+      appendAiInputHistory(directoryKey, contentToSend)
     }
 
     // 非本地历史命令：正常进入 slash 命令和模型发送流程
@@ -257,6 +268,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
         const key = docPath ?? dirKey ?? '/'
         setHistoryDialogDirKey(key)
         setHistoryDialogOpen(true)
+        setHistoryRecallEnabled(true)
       },
     })
     if (handled === 'handled') {
@@ -742,7 +754,10 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
         open={historyDialogOpen}
         directoryKey={historyDialogDirKey}
         pageSize={10}
-        onClose={() => setHistoryDialogOpen(false)}
+        onClose={() => {
+          setHistoryDialogOpen(false)
+          setHistoryRecallEnabled(false)
+        }}
       />
     )}
     {slashModalMessage && (
