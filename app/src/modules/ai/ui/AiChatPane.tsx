@@ -6,14 +6,16 @@ import { getDirKeyFromDocPath } from '../domain/docPathUtils'
 import type { AiChatSessionKey } from '../application/aiChatSessionService'
 import { useAiChatSession } from './hooks/useAiChatSession'
 import { getAiInputHistory } from '../application/localStorageAiChatInputHistory'
+import { resolveHistoryEntryByOrdinal } from '../application/historyViewService'
 import { copyTextToClipboard } from '../platform/clipboardService'
 import { insertMarkdownAtCursorBelow, replaceSelectionWithText, createTabAndInsertContent } from '../platform/editorInsertService'
 import { onNativePaste, onNativePasteImage } from '../../platform/clipboardEvents'
 import { AiChatBody } from './AiChatBody'
 import { base64ToImageDataUrl, base64ToImageFile, readClipboardImageBase64 } from '../platform/clipboardImageService'
-import { tryHandleSlashCommand } from './aiSlashCommands'
+import { tryHandleSlashCommand, parseHistoryRecallCommand } from './aiSlashCommands'
 import { AiChatCommandBridgeContext } from './AiChatCommandBridgeContext'
 import { ConfirmDialog } from '../../../components/ConfirmDialog'
+import { AiChatHistoryDialog } from './AiChatHistoryDialog'
 
 const EMPTY_MESSAGES = [] as const
 
@@ -34,6 +36,8 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   const [contextPlaceholderMode, setContextPlaceholderMode] = useState<'none' | 'selection' | 'file'>('none')
   const [attachedImageDataUrl, setAttachedImageDataUrl] = useState<string | null>(null)
   const [slashModalMessage, setSlashModalMessage] = useState<string | null>(null)
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
+  const [historyDialogDirKey, setHistoryDialogDirKey] = useState<string | null>(null)
   const commandBridge = useContext(AiChatCommandBridgeContext)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
@@ -219,6 +223,27 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
 
   const doSend = async () => {
     const contentToSend = input
+    const directoryKey = dirKey ?? '/'
+
+    // 先处理本地历史回填命令：!n / ！n
+    const ordinal = parseHistoryRecallCommand(contentToSend)
+    if (ordinal != null) {
+      const entry = resolveHistoryEntryByOrdinal(directoryKey, ordinal)
+      if (entry && entry.text.trim()) {
+        const nextText = entry.text
+        setInput(nextText)
+        requestAnimationFrame(() => {
+          const el = inputRef.current
+          if (!el) return
+          const len = el.value.length
+          el.setSelectionRange(len, len)
+          autoResizeInput()
+        })
+      }
+      return
+    }
+
+    // 非本地历史命令：正常进入 slash 命令和模型发送流程
     setInput('')
     autoResizeInput()
 
@@ -228,6 +253,11 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
       runAppCommand: commandBridge?.runAppCommand,
       showModal: (message: string) => setSlashModalMessage(message),
       getRecentMessagesForDigest: getRecentMessagesForDigest,
+      openHistoryDialog: ({ docPath }) => {
+        const key = docPath ?? dirKey ?? '/'
+        setHistoryDialogDirKey(key)
+        setHistoryDialogOpen(true)
+      },
     })
     if (handled === 'handled') {
       return
@@ -707,6 +737,14 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
         />
       </div>
     </section>
+    {historyDialogOpen && historyDialogDirKey && (
+      <AiChatHistoryDialog
+        open={historyDialogOpen}
+        directoryKey={historyDialogDirKey}
+        pageSize={10}
+        onClose={() => setHistoryDialogOpen(false)}
+      />
+    )}
     {slashModalMessage && (
       <ConfirmDialog
         title="Global Memory"

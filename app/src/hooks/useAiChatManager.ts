@@ -180,6 +180,5 @@ export function useAiChatManager({ activeTabId }: AiChatManagerOptions) {
         openAiChatDialog,
         closeAiChatDialog,
         handleAiChatResizeStart,
-        isAiChatActuallyOpen,
     }
 }

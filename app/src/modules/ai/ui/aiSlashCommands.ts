@@ -17,6 +17,8 @@ export type AiSlashCommandContext = {
    * - 按时间顺序返回最后 limit 条。
    */
   getRecentMessagesForDigest?: (limit: number) => ChatMessageView[]
+  /** 在当前 AI Chat 中打开输入历史弹窗（例如 /history 命令） */
+  openHistoryDialog?: (payload: { docPath?: string }) => void
 }
 
 export type AiSlashCommandHandler = (ctx: AiSlashCommandContext, args: string[]) => Promise<void> | void
@@ -168,6 +170,24 @@ export function parseSlashCommand(input: string): { cmd: string; args: string[] 
   if (!cmd) return null
 
   return { cmd, args }
+}
+
+/**
+ * 解析形如 `!2` 或 `！2` 的本地历史回填命令：
+ * - 以半角/全角感叹号开头；
+ * - 后面紧跟正整数编号（按时间顺序编号，最早为 1，最新为 N）。
+ */
+export function parseHistoryRecallCommand(input: string): number | null {
+  const trimmed = input.trim()
+  if (!trimmed) return null
+  const first = trimmed[0]
+  if (first !== '!' && first !== '！') return null
+  const rest = trimmed.slice(1).trim()
+  if (!rest) return null
+  if (!/^\d+$/.test(rest)) return null
+  const n = Number(rest)
+  if (!Number.isSafeInteger(n) || n <= 0) return null
+  return n
 }
 
 export async function tryHandleSlashCommand(
