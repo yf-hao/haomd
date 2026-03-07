@@ -135,46 +135,46 @@ export function ConfirmDialog({
         <div className={`modal-actions ${isStacked ? 'modal-actions-stacked' : ''}`}>
           {isStacked ? (
             <>
-              <button
+              <Button
                 ref={confirmRef}
-                className="modal-btn primary"
+                variant="primary"
                 onClick={onConfirm}
               >
                 {confirmText}
-              </button>
+              </Button>
               {onExtra && (
-                <button
+                <Button
                   ref={extraRef}
-                  className="modal-btn secondary"
+                  variant="secondary"
                   onClick={onExtra}
                 >
                   {extraText}
-                </button>
+                </Button>
               )}
-              <button
+              <Button
                 ref={cancelRef}
-                className="modal-btn tertiary"
+                variant="tertiary"
                 onClick={onCancel}
               >
                 {cancelText}
-              </button>
+              </Button>
             </>
           ) : (
             <>
-              <button
+              <Button
                 ref={cancelRef}
-                className="modal-btn tertiary"
+                variant="tertiary"
                 onClick={onCancel}
               >
                 {cancelText}
-              </button>
-              <button
+              </Button>
+              <Button
                 ref={confirmRef}
-                className="modal-btn primary"
+                variant="primary"
                 onClick={onConfirm}
               >
                 {confirmText}
-              </button>
+              </Button>
             </>
           )}
         </div>

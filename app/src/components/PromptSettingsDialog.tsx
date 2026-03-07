@@ -6,6 +6,7 @@ import { usePromptSettingsPersistence } from '../hooks/usePromptSettingsPersiste
 import { usePromptSettingsState, type PromptRoleDraft } from '../hooks/usePromptSettingsState'
 import { onNativePaste } from '../modules/platform/clipboardEvents'
 import { FieldGroup } from './FieldGroup'
+import { Button } from './Button'
 
 export type PromptSettingsDialogProps = {
   open: boolean
@@ -402,16 +403,16 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
                           <div className="provider-actions">
                             {!isBuiltin && (
                               <>
-                                <button type="button" className="ghost" onClick={() => handleEditRole(r)}>
+                                <Button type="button" variant="tertiary" onClick={() => handleEditRole(r)}>
                                   Edit Role
-                                </button>
-                                <button
+                                </Button>
+                                <Button
                                   type="button"
-                                  className="ghost danger"
+                                  variant="secondary"
                                   onClick={() => handleDeleteRole(r.id)}
                                 >
                                   Delete Role
-                                </button>
+                                </Button>
                               </>
                             )}
                           </div>
@@ -432,12 +433,12 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
         </div>
 
         <div className="modal-actions">
-          <button className="ghost" type="button" onClick={handleCancel}>
+          <Button variant="tertiary" type="button" onClick={handleCancel}>
             Cancel
-          </button>
-          <button className="ghost primary" type="button" onClick={handleSave}>
+          </Button>
+          <Button variant="primary" type="button" onClick={handleSave}>
             Save
-          </button>
+          </Button>
         </div>
       </div>
     </div>

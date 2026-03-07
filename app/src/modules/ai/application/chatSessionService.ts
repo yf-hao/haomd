@@ -259,6 +259,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
             modelName: currentModelId,
             difyConversationId: difyConversationId || '(none)',
           })
+
           void docConversationService
             .upsertFromState({
               docPath,

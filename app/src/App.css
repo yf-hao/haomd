@@ -904,10 +904,14 @@
   border: none;
   cursor: pointer;
   transition: all 0.2s ease;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 80px;
+}
+
+.modal-btn--block {
+  width: 100%;
 }
 
 .modal-btn:focus-visible,
@@ -942,6 +946,25 @@
 .modal-btn:active {
   transform: translateY(0);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.modal-btn .btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-btn .btn-icon-left {
+  margin-right: 6px;
+}
+
+.modal-btn .btn-icon-right {
+  margin-left: 6px;
+}
+
+.modal-btn .btn-label {
+  display: inline-flex;
+  align-items: center;
 }
 
 /* Modal Styles */
