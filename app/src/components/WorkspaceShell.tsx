@@ -38,6 +38,7 @@ import { openInFileManager } from '../modules/platform/fileExplorerService'
 import { loadDefaultImagePathStrategyConfig, resolveImageTarget } from '../modules/images/imagePasteStrategy'
 import { countLines, extractChunkAroundLine, applyChunkPatch, localToGlobalLine } from '../modules/editor/chunkEdit'
 import { getHugeDocSettings } from '../modules/settings/editorSettings'
+import { registerApplyHeadingLevel, registerResetHeadingToParagraph, registerEmphasizeSelection } from '../modules/editor/formatService'
 import type { RecentFile } from '../modules/files/types'
 // 改为从内部动态加载，优化编辑性能
 // import { exportToHtml } from '../modules/export/html'
@@ -1086,6 +1087,77 @@ export function WorkspaceShell({
       } finally {
         setIsCreatingTab(false)
       }
+    })
+
+    registerApplyHeadingLevel(async (level: number) => {
+      const view = editorViewRef.current
+      if (!view) return
+
+      const { state } = view
+      const head = state.selection.main.head
+      const line = state.doc.lineAt(head)
+      const rawText = line.text
+
+      // 去掉已有的 # 和前导空格，只保留正文
+      const withoutHashes = rawText.replace(/^\s*#{1,6}\s*/, '')
+      const trimmed = withoutHashes.replace(/^\s+/, '')
+
+      const safeLevel = Math.min(6, Math.max(1, level))
+      const prefix = '#'.repeat(safeLevel) + ' '
+      const nextLine = prefix + trimmed
+
+      view.dispatch(state.update({
+        changes: { from: line.from, to: line.to, insert: nextLine },
+        selection: { anchor: line.from + nextLine.length },
+        scrollIntoView: true,
+      }))
+
+      // 保持 React 状态与编辑器内容同步
+      syncEditorToReactState()
+    })
+
+    registerResetHeadingToParagraph(async () => {
+      const view = editorViewRef.current
+      if (!view) return
+
+      const { state } = view
+      const head = state.selection.main.head
+      const line = state.doc.lineAt(head)
+      const rawText = line.text
+
+      // 如果当前行是标题，去掉行首的 # 和多余空格，恢复普通文本
+      const withoutHashes = rawText.replace(/^\s*#{1,6}\s*/, '')
+      const nextLine = withoutHashes.replace(/^\s+/, '')
+
+      view.dispatch(state.update({
+        changes: { from: line.from, to: line.to, insert: nextLine },
+        selection: { anchor: line.from + nextLine.length },
+        scrollIntoView: true,
+      }))
+
+      syncEditorToReactState()
+    })
+
+    registerEmphasizeSelection(async () => {
+      const view = editorViewRef.current
+      if (!view) return
+
+      const { state } = view
+      const { from, to } = state.selection.main
+
+      // 没有选区时不做处理
+      if (from === to) return
+
+      const selected = state.doc.sliceString(from, to)
+      const emphasized = `**${selected}**`
+
+      view.dispatch(state.update({
+        changes: { from, to, insert: emphasized },
+        selection: { anchor: from + emphasized.length },
+        scrollIntoView: true,
+      }))
+
+      syncEditorToReactState()
     })
   }, [createTab, isCreatingTab, setActiveTab, handleMarkdownChange, tabs])
 

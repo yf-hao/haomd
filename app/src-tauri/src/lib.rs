@@ -1449,25 +1449,69 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         )
         .build()?;
 
-    let selection_menu = SubmenuBuilder::new(app, "Selection")
+    // Heading 子菜单
+    let heading_menu = SubmenuBuilder::new(app, "Heading")
         .item(
-            &MenuItemBuilder::new("Expand Selection")
-                .id("expand_selection")
+            &MenuItemBuilder::new("Paragraph")
+                .id("format_heading_paragraph")
+                .accelerator("CmdOrCtrl+0")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Shrink Selection")
-                .id("shrink_selection")
+            &MenuItemBuilder::new("Heading 1")
+                .id("format_heading_1")
+                .accelerator("CmdOrCtrl+1")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Select Line")
-                .id("select_line")
+            &MenuItemBuilder::new("Heading 2")
+                .id("format_heading_2")
+                .accelerator("CmdOrCtrl+2")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Select All Matches")
-                .id("select_all_matches")
+            &MenuItemBuilder::new("Heading 3")
+                .id("format_heading_3")
+                .accelerator("CmdOrCtrl+3")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new("Heading 4")
+                .id("format_heading_4")
+                .accelerator("CmdOrCtrl+4")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new("Heading 5")
+                .id("format_heading_5")
+                .accelerator("CmdOrCtrl+5")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new("Heading 6")
+                .id("format_heading_6")
+                .accelerator("CmdOrCtrl+6")
+                .build(app)?,
+        )
+        .build()?;
+
+    // Format 菜单
+    let format_menu = SubmenuBuilder::new(app, "Format")
+        .item(&heading_menu)
+        .item(
+            &MenuItemBuilder::new("Emphasis")
+                .id("format_emphasize_selection")
+                .accelerator("CmdOrCtrl+B")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new("Insert Table")
+                .id("format_insert_table")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new("Insert Code Block")
+                .id("format_insert_code_block")
                 .build(app)?,
         )
         .build()?;
@@ -1555,7 +1599,7 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .item(
             &MenuItemBuilder::new("Reset Zoom")
                 .id("zoom_reset")
-                .accelerator("CmdOrCtrl+0")
+                .accelerator("CmdOrCtrl+Shift+0")
                 .build(app)?,
         )
         .item(
@@ -1666,7 +1710,7 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .item(&haomd_menu)
         .item(&file_menu)
         .item(&edit_menu)
-        .item(&selection_menu)
+        .item(&format_menu)
         .item(&view_menu)
         .item(&ai_menu)
         .item(&help_menu)

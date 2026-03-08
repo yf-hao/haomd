@@ -3,10 +3,9 @@ import type { IAiClient } from '../ai/client'
 import type { ChatEntryMode, EntryContext } from '../ai/domain/chatSession'
 import { docConversationService } from '../ai/application/docConversationService'
 import { getDirKeyFromDocPath } from '../ai/domain/docPathUtils'
+import type { CommandRegistry } from './types'
 
-export type AppCommand = () => void | Promise<void>
-
-export type CommandRegistry = Record<string, AppCommand>
+export type { AppCommand, CommandRegistry } from './types'
 
 // ===== 命令上下文拆分（ISP） =====
 
@@ -565,6 +564,8 @@ function createAiCommands(ctx: AiCommandContext): CommandRegistry {
 
 // ===== 总的命令注册表 =====
 
+import { createFormatCommands } from './formatCommands'
+
 export const createCommandRegistry = (ctx: CommandContext): CommandRegistry => ({
   ...createLayoutCommands(ctx),
   ...createFileCommands(ctx),
@@ -572,4 +573,5 @@ export const createCommandRegistry = (ctx: CommandContext): CommandRegistry => (
   ...createClipboardCommands(ctx),
   ...createHelpCommands(ctx),
   ...createAiCommands(ctx),
+  ...createFormatCommands(ctx),
 })
