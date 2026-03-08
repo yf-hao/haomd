@@ -388,7 +388,7 @@ function MarkdownViewerComponent(
       div: (p: any) => <FoldableBlock tag="div" hideOnFold={true} {...p} />,
       span: ({ className, children, ...rest }: any) => <span className={className} {...rest}>{children}</span>,
       math: StableMath,
-      inlineMath: StableInlineMath,
+      inlinemath: StableInlineMath,
       a: ({ node, href, children, ...props }: any) => {
         const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
           e.preventDefault()
