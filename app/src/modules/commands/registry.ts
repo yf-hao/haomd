@@ -90,6 +90,13 @@ export type AiCommandContext = StatusContext & {
    * 打开 AI Chat 对话框的 UI 回调，由 WorkspaceShell 提供。
    */
   openAiChatDialog?: (options: { entryMode: ChatEntryMode; initialContext?: EntryContext }) => void
+  /**
+   * 关闭 AI Chat 对话框的 UI 回调，由 WorkspaceShell 提供。
+   * 用于实现快捷键/命令层的 toggle 行为。
+   */
+  closeAiChatDialog?: () => void
+  /** 当前 AI Chat 是否处于打开状态（来自 LayoutCommandContext） */
+  aiChatOpen?: boolean
   /** 打开 Global Memory 对话框的 UI 回调，由 WorkspaceShell 提供。 */
   openGlobalMemoryDialog?: (options: { initialTab: 'persona' | 'manage' }) => void
   /** 获取当前编辑器中的完整 Markdown 文本 */
@@ -383,6 +390,13 @@ function createHelpCommands(ctx: HelpCommandContext): CommandRegistry {
 function createAiCommands(ctx: AiCommandContext): CommandRegistry {
   return {
     ai_chat: async () => {
+      // 如果当前 AI Chat 已经打开，并且提供了关闭回调，则作为 toggle 行为优先关闭
+      if (ctx.aiChatOpen && ctx.closeAiChatDialog) {
+        ctx.closeAiChatDialog()
+        ctx.setStatusMessage('AI Chat：已关闭')
+        return
+      }
+
       try {
         if (!ctx.aiClient) {
           ctx.setStatusMessage('AI Chat 未配置：AI 客户端未初始化')

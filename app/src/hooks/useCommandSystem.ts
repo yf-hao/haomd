@@ -13,6 +13,10 @@ export type CommandSystemParams = CommandContext & {
   onRequestCloseCurrentTab?: () => void
   onRequestQuit?: () => void
   /**
+   * 由 WorkspaceShell 提供，用于命令系统层关闭 AI Chat（实现 Cmd+K toggle）。
+   */
+  closeAiChatDialog?: () => void
+  /**
    * 可选的 AI 客户端实现，默认使用基于 AI Settings 的实现。
    */
   aiClient?: IAiClient
@@ -61,6 +65,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     exportHtml,
     exportPdf,
     openSearch,
+    closeAiChatDialog,
   } = params
 
   const aiClient = useMemo<IAiClient>(() => {
@@ -110,6 +115,7 @@ export function useCommandSystem(params: CommandSystemParams) {
         exportHtml,
         exportPdf,
         openSearch,
+        closeAiChatDialog,
       }),
     [
       layout,

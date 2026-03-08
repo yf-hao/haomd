@@ -1657,6 +1657,7 @@ export function WorkspaceShell({
     createTab, updateActiveMeta, openFolderInSidebar, closeCurrentTab,
     openSearch: () => setIsSearchOpen(true),
     openAiChatDialog: options => openAiChatDialog(options as any),
+    closeAiChatDialog,
     openGlobalMemoryDialog,
     openAboutDialog,
     getCurrentMarkdown, getCurrentFileName, getCurrentSelectionText, getCurrentFilePath,
