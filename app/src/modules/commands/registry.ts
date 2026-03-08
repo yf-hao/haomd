@@ -27,6 +27,8 @@ export type LayoutCommandContext = StatusContext & {
   setAiChatDockSide: (side: 'left' | 'right') => void
   aiChatOpen: boolean
   openSearch?: () => void
+  editorZoom: number
+  setEditorZoom: (value: number | ((prev: number) => number)) => void
 }
 
 /**
@@ -129,6 +131,10 @@ export type CommandContext = LayoutCommandContext &
 
 let lastLayoutForPreviewOnly: string | null = null
 
+const EDITOR_ZOOM_MIN = 0.75
+const EDITOR_ZOOM_MAX = 1.5
+const EDITOR_ZOOM_STEP = 0.1
+
 function createLayoutCommands(ctx: LayoutCommandContext): CommandRegistry {
   return {
     layout_preview_left: () => {
@@ -181,6 +187,27 @@ function createLayoutCommands(ctx: LayoutCommandContext): CommandRegistry {
       ctx.setAiChatMode('docked')
       ctx.setAiChatDockSide('right')
       ctx.setStatusMessage('AI Chat：Dock 在右侧')
+    },
+    zoom_in: () => {
+      ctx.setEditorZoom((prev) => {
+        const next = Math.min(EDITOR_ZOOM_MAX, prev + EDITOR_ZOOM_STEP)
+        const percent = Math.round(next * 100)
+        ctx.setStatusMessage(`Editor Zoom：${percent}%`)
+        return next
+      })
+    },
+    zoom_out: () => {
+      ctx.setEditorZoom((prev) => {
+        const next = Math.max(EDITOR_ZOOM_MIN, prev - EDITOR_ZOOM_STEP)
+        const percent = Math.round(next * 100)
+        ctx.setStatusMessage(`Editor Zoom：${percent}%`)
+        return next
+      })
+    },
+    zoom_reset: () => {
+      const next = 1.0
+      ctx.setEditorZoom(next)
+      ctx.setStatusMessage('Editor Zoom：100%')
     },
     toggle_preview: () => {
       ctx.setShowPreview((v) => {

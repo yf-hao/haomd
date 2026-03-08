@@ -152,6 +152,26 @@ export function WorkspaceShell({
   const aiChatPrevDockSideRef = useRef<'left' | 'right'>(aiChatDockSide)
 
   // Other States
+  const [editorZoom, setEditorZoom] = useState(() => {
+    if (typeof localStorage === 'undefined') return 1.0
+    const stored = localStorage.getItem('haomd:editor:zoom')
+    if (!stored) return 1.0
+    const n = Number(stored)
+    if (!Number.isFinite(n)) return 1.0
+    const min = 0.75
+    const max = 1.5
+    if (n < min) return min
+    if (n > max) return max
+    return n
+  })
+  useEffect(() => {
+    try {
+      if (typeof localStorage === 'undefined') return
+      localStorage.setItem('haomd:editor:zoom', String(editorZoom))
+    } catch (e) {
+      console.error('Failed to save editor zoom to localStorage', e)
+    }
+  }, [editorZoom])
   const [activeOutlineId, setActiveOutlineId] = useState<string | null>(null)
   const [sidebarWidth, setSidebarWidth] = useState(260)
   const [isSidebarResizing, setIsSidebarResizing] = useState(false)
@@ -1652,6 +1672,7 @@ export function WorkspaceShell({
   const { dispatchAction } = useCommandSystem({
     layout, setLayout: setLayout as any, setShowPreview, setStatusMessage,
     aiChatMode, setAiChatMode, aiChatDockSide, setAiChatDockSide, aiChatOpen,
+    editorZoom, setEditorZoom,
     confirmLoseChanges, hasUnsavedChanges, newDocument, setFilePath, applyOpenedContent,
     openFile, save: saveWithPdfGuard, saveAs: saveAsWithPdfGuard, handleShowRecent: undefined, clearRecentAll,
     createTab, updateActiveMeta, openFolderInSidebar, closeCurrentTab,
@@ -2259,6 +2280,7 @@ export function WorkspaceShell({
                         onFocusHandled={() => setFocusRequest(null)}
                         onProgrammaticScrollStart={() => { isProgrammaticScrollRef.current = true }}
                         onProgrammaticScrollEnd={() => { isProgrammaticScrollRef.current = false }}
+                        editorZoom={editorZoom}
                       />
                     </Suspense>
                   </section>

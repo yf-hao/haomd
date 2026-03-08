@@ -33,7 +33,7 @@ const baseTheme = EditorView.theme(
       color: '#e8ecf5',
       fontFamily:
         "'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-      fontSize: '14px',
+      fontSize: 'var(--haomd-editor-font-size, 14px)',
     },
     // 当前行（编辑区正文）：不再使用底色高亮，只依靠左侧 gutter 的绿色竖条
     '.cm-activeLine': {
@@ -47,7 +47,7 @@ const baseTheme = EditorView.theme(
       backgroundColor: 'rgba(5, 6, 10, 0.9) !important ',
       color: '#8fa1c7',
       borderRight: 'none',
-      fontSize: '12px',
+      fontSize: 'var(--haomd-editor-gutter-font-size, 12px)',
       // padding: '0px 5px 0px 5px',
       margin: 0,
     },

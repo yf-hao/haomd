@@ -20,6 +20,7 @@ export type EditorPaneProps = {
   onFocusHandled?: () => void
   onProgrammaticScrollStart?: () => void
   onProgrammaticScrollEnd?: () => void
+  editorZoom: number
 }
 
 export function EditorPane(props: EditorPaneProps) {
@@ -33,6 +34,7 @@ export function EditorPane(props: EditorPaneProps) {
     onFocusHandled,
     onProgrammaticScrollStart,
     onProgrammaticScrollEnd,
+    editorZoom,
   } = props
 
   useEffect(() => {
@@ -82,6 +84,7 @@ export function EditorPane(props: EditorPaneProps) {
       onCursorChange={onCursorChange}
       placeholder="在此输入 Markdown..."
       className="code-editor"
+      editorZoom={editorZoom}
       onViewReady={(view) => {
         editorViewRef.current = view
       }}
