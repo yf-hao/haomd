@@ -53,8 +53,8 @@ const baseTheme = EditorView.theme(
     },
     // 光标所在行：所有 gutter 的 active 单元格统一高亮背景（更明显）
     '.cm-gutter .cm-activeLineGutter': {
-      // 比原来更亮、更实一些，方便一眼看到当前行
-      backgroundColor: 'rgba(56, 189, 248, 0.28)', // #38bdf8 @ 28%
+      // 提高对比度：更深的蓝色 + 更高不透明度，让当前行更突出
+      backgroundColor: 'rgba(37, 99, 235, 0.55)', // #2563eb @ 55%
       position: 'relative',
     },
     // 竖绿条整体向右移动 5px（从 gutter 右边界外移）
@@ -65,7 +65,9 @@ const baseTheme = EditorView.theme(
       bottom: 0,
       right: '0px',
       width: '2px',
-      backgroundColor: '#22c55e',
+      // 更亮一点的绿色，并带一点发光效果
+      backgroundColor: '#4ade80', // 比 #22c55e 更鲜亮
+      boxShadow: '0 0 8px rgba(74, 222, 128, 0.9)',
       pointerEvents: 'none',
     },
     '.cm-line': {

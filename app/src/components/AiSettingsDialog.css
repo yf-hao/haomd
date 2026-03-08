@@ -13,6 +13,10 @@
   width: 800px;
   min-width: 640px;
   padding: 20px 24px 18px;
+  display: flex;
+  flex-direction: column;
+  max-height: 72vh;
+  overflow: hidden;
 }
 
 /* AI Chat dialog layout */
@@ -277,6 +281,20 @@
 }
 
 /* Provider Settings layout */
+.modal.modal-ai-settings .modal-content.ai-settings-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-bottom: 0;
+  overflow-y: auto;
+  /* 隐藏 Provider Settings 主体的滚动条，保留滚动行为 */
+  scrollbar-width: none; /* Firefox */
+}
+
+.modal.modal-ai-settings .modal-content.ai-settings-body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
 .ai-settings-body {
   display: flex;
   gap: 20px;
@@ -408,9 +426,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 560px;
-  overflow-y: auto;
-  /* 自定义滚动条样式 */
+  /* 滚动由对话框主体承担，这里只负责排列 */
   scrollbar-width: thin;
   scrollbar-color: rgba(148, 163, 184, 0.5) transparent;
 }
