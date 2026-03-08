@@ -94,9 +94,12 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
 }) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [messageViewModes, setMessageViewModes] = useState<Record<string, MessageViewMode>>({})
+  const [cursorIndex, setCursorIndex] = useState(input.length)
 
-  // 计算当前光标位置，用于 slash 命令提示
-  const cursorIndex = inputRef?.current?.selectionStart ?? input.length
+  const updateCursorIndex = (el: HTMLTextAreaElement) => {
+    setCursorIndex(el.selectionStart ?? el.value.length)
+  }
+
   const slashHints = useAiSlashCommandHints({ input, cursorIndex })
 
   // 提取模型显示名称（去掉 provider 前缀）
@@ -234,10 +237,11 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
         const el = inputRef.current
         const value = el.value
         const next = value.slice(0, start) + text + value.slice(end)
+        const caret = start + text.length
         onInputChange(next)
+        setCursorIndex(caret)
         // 将光标移动到补全文本之后
         window.requestAnimationFrame(() => {
-          const caret = start + text.length
           inputRef.current?.setSelectionRange(caret, caret)
         })
       }
@@ -413,7 +417,14 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
             ref={inputRef}
             value={input}
             onChange={(e) => {
+              updateCursorIndex(e.target)
               onInputChange(e.target.value)
+            }}
+            onClick={(e) => {
+              updateCursorIndex(e.currentTarget)
+            }}
+            onKeyUp={(e) => {
+              updateCursorIndex(e.currentTarget)
             }}
             onKeyDown={handleTextareaKeyDown}
             onCompositionStart={onCompositionStart}
