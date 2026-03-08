@@ -1406,6 +1406,62 @@
   color: #5ad8a6;
   font-weight: 500;
 }
+
+/* AI Chat Slash Commands 提示浮层 */
+.ai-chat-slash-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;      /* 面板底部紧贴输入容器顶部 */
+  margin-bottom: 4px;/* 与输入框之间留一点间距 */
+  padding: 6px 4px;
+  background: rgba(15, 23, 42, 0.98);
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(10px);
+  z-index: 20;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.ai-chat-slash-item {
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  cursor: pointer;
+  color: #e5e7eb;
+  font-size: 12px;
+}
+
+.ai-chat-slash-item:hover {
+  background: rgba(51, 65, 85, 0.9);
+}
+
+.ai-chat-slash-item-active {
+  background: rgba(37, 99, 235, 0.9);
+}
+
+.ai-chat-slash-item-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e5e7eb;
+}
+
+.ai-chat-slash-item-desc {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #9ca3af;
+}
+
 /* 浮在编辑区和预览区交界处的透明热区 */
 .divider-hotzone {
   position: absolute;

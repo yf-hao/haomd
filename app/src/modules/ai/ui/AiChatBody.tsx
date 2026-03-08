@@ -10,6 +10,8 @@ import { useRef, useState } from 'react'
 import { MarkdownViewer } from '../../../components/MarkdownViewer'
 import type { ChatMessageView } from '../domain/chatSession'
 import type { VisionMode, UploadedFileRef } from '../domain/types'
+import { useAiSlashCommandHints } from './hooks/useAiSlashCommandHints'
+import { AiSlashCommandHintPanel } from './AiSlashCommandHintPanel'
 
 type MessageViewMode = 'rendered' | 'source'
 
@@ -92,6 +94,10 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
 }) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [messageViewModes, setMessageViewModes] = useState<Record<string, MessageViewMode>>({})
+
+  // 计算当前光标位置，用于 slash 命令提示
+  const cursorIndex = inputRef?.current?.selectionStart ?? input.length
+  const slashHints = useAiSlashCommandHints({ input, cursorIndex })
 
   // 提取模型显示名称（去掉 provider 前缀）
   const getModelDisplayName = (modelId: string) => {
@@ -213,6 +219,41 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
     reader.readAsDataURL(file)
   }
 
+  const handleTextareaKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // 处于 IME 合成阶段时不做任何特殊处理，交给浏览器/上层逻辑
+    if ((e as any).nativeEvent?.isComposing) {
+      return
+    }
+
+    // 当 slash 提示面板打开时，优先处理 Enter/Tab 作为“补全命令”而不是发送
+    if (slashHints.isOpen && (e.key === 'Enter' || e.key === 'Tab')) {
+      e.preventDefault()
+      const replacement = slashHints.getReplacement()
+      if (replacement && inputRef?.current) {
+        const { start, end, text } = replacement
+        const el = inputRef.current
+        const value = el.value
+        const next = value.slice(0, start) + text + value.slice(end)
+        onInputChange(next)
+        // 将光标移动到补全文本之后
+        window.requestAnimationFrame(() => {
+          const caret = start + text.length
+          inputRef.current?.setSelectionRange(caret, caret)
+        })
+      }
+      slashHints.close()
+      return
+    }
+
+    // 其次交给 slash 提示处理方向键 / Esc 等导航
+    if (slashHints.handleKeyDown(e)) {
+      return
+    }
+
+    // 剩余情况保持原有行为（历史导航、回车发送等）
+    onInputKeyDown(e)
+  }
+
   return (
     <div className="modal-content ai-chat-body">
       <div
@@ -308,6 +349,26 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
 
       <form className="ai-chat-input" onSubmit={loading ? (e) => e.preventDefault() : onSubmit}>
         <div className="ai-chat-input-container">
+          {slashHints.isOpen && (
+            <AiSlashCommandHintPanel
+              items={slashHints.items}
+              activeIndex={slashHints.activeIndex}
+              onItemClick={(idx) => {
+                const replacement = slashHints.getReplacement(idx)
+                if (!replacement || !inputRef?.current) return
+                const { start, end, text } = replacement
+                const el = inputRef.current
+                const value = el.value
+                const next = value.slice(0, start) + text + value.slice(end)
+                onInputChange(next)
+                window.requestAnimationFrame(() => {
+                  const caret = start + text.length
+                  inputRef.current?.setSelectionRange(caret, caret)
+                })
+                slashHints.close()
+              }}
+            />
+          )}
           {((pendingAttachments && pendingAttachments.length > 0) || attachedImageDataUrl || isUploading) && (
             <div className="ai-chat-attachment-preview-bar">
               {pendingAttachments && pendingAttachments.map((att) => (
@@ -354,7 +415,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
             onChange={(e) => {
               onInputChange(e.target.value)
             }}
-            onKeyDown={onInputKeyDown}
+            onKeyDown={handleTextareaKeyDown}
             onCompositionStart={onCompositionStart}
             onCompositionEnd={onCompositionEnd}
             onPaste={handlePaste}

@@ -197,10 +197,12 @@
 
 /* Input container as unified box with textarea and footer inside */
 .ai-chat-input-container {
+  position: relative;
   border-radius: 10px;
   border: 1px solid rgba(148, 163, 184, 0.7);
   background: rgba(15, 23, 42, 0.92);
-  overflow: hidden;
+  /* 允许 slash-panel 浮动在输入框上方，不被裁剪 */
+  overflow: visible;
 }
 
 .ai-chat-input-container:focus-within {

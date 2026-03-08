@@ -221,3 +221,11 @@ export async function tryHandleSlashCommand(
   await Promise.resolve(def.handler(ctx, parsed.args))
   return 'handled'
 }
+
+/**
+ * 返回当前可用的 slash 命令定义列表，用于输入提示等 UI 逻辑。
+ * UI 层不应直接依赖内部的 slashCommands 映射，以便未来支持隐藏命令等扩展。
+ */
+export function listAiSlashCommands(): AiSlashCommandDef[] {
+  return Object.values(slashCommands)
+}
