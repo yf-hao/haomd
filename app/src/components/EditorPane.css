@@ -16,12 +16,20 @@
 .code-editor {
   flex: 1;
   min-height: 0;
+  display: flex;
+  width: 100%;
 }
 
 .code-editor .cm-editor {
   height: 100%;
+  width: 100%;
   background: transparent;
   border: none;
   border-radius: 0;
   box-shadow: none;
+}
+
+.code-editor .cm-scroller {
+  height: 100%;
+  overflow: auto;
 }
