@@ -2322,7 +2322,7 @@ export function WorkspaceShell({
                 )}
                 <section className="pane-group editor-preview-group" style={{ gridTemplateColumns }} ref={workspaceRef}>
                   <section
-                    className="pane"
+                    className={`pane ${effectiveLayout === 'preview-only' ? '' : 'editor-pane'}`}
                     style={
                       effectiveLayout === 'preview-only'
                         ? { display: 'none' }

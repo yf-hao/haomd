@@ -32,4 +32,19 @@
 .code-editor .cm-scroller {
   height: 100%;
   overflow: auto;
+  /* 确保滚动容器有明确的 flex 行为 */
+  flex: 1;
+  min-height: 0;
+  /* 隐藏滚动条，但保留滚动功能 */
+  scrollbar-width: none; /* Firefox */
+}
+
+.code-editor .cm-scroller::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* 可选：给内容留一点右侧内边距，避免文字贴边 */
+.code-editor .cm-content {
+  padding-right: 8px;
 }

@@ -398,7 +398,17 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  /* 保留 overflow: hidden 但允许编辑器容器独立滚动 */
   overflow: hidden;
+}
+
+/* 针对编辑器区域，允许其内部滚动 */
+.pane.editor-pane {
+  overflow: visible;
+}
+
+.pane.editor-pane > .code-editor {
+  overflow: visible;
 }
 
 .sidebar {
