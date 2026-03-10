@@ -32,7 +32,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [macos-latest, ubuntu-22.04, windows-latest]
+        platform:
+          - macos-latest    # Apple Silicon (ARM64)
+          - macos-13        # Intel (x86_64)
+          - ubuntu-22.04
+          - windows-latest
 
     runs-on: ${{ matrix.platform }}
     steps:
