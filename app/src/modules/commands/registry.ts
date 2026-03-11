@@ -117,6 +117,14 @@ export type AiCommandContext = StatusContext & {
 }
 
 /**
+ * 编辑格式相关命令所需的 UI 上下文。
+ */
+export type FormatUiCommandContext = StatusContext & {
+  /** 打开“插入表格”对话框的 UI 回调，由 WorkspaceShell 提供 */
+  openInsertTableDialog?: () => void
+}
+
+/**
  * 完整的命令上下文：各子上下文的并集。
  * 外层系统（如 useCommandSystem）只需要提供这一份，总体仍保持向后兼容。
  */
@@ -124,7 +132,8 @@ export type CommandContext = LayoutCommandContext &
   FileCommandContext &
   AppLifecycleCommandContext &
   HelpCommandContext &
-  AiCommandContext
+  AiCommandContext &
+  FormatUiCommandContext
 
 // ===== 分组命令工厂 =====
 

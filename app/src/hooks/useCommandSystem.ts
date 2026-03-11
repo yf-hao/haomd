@@ -17,6 +17,10 @@ export type CommandSystemParams = CommandContext & {
    */
   closeAiChatDialog?: () => void
   /**
+   * 打开“插入表格”对话框的 UI 回调，由 WorkspaceShell 提供。
+   */
+  openInsertTableDialog?: () => void
+  /**
    * 可选的 AI 客户端实现，默认使用基于 AI Settings 的实现。
    */
   aiClient?: IAiClient
@@ -68,6 +72,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     exportPdf,
     openSearch,
     closeAiChatDialog,
+    openInsertTableDialog,
   } = params
 
   const aiClient = useMemo<IAiClient>(() => {
@@ -119,6 +124,7 @@ export function useCommandSystem(params: CommandSystemParams) {
         exportHtml,
         exportPdf,
         openSearch,
+        openInsertTableDialog,
         closeAiChatDialog,
       }),
     [
@@ -164,6 +170,8 @@ export function useCommandSystem(params: CommandSystemParams) {
       exportHtml,
       exportPdf,
       openSearch,
+      openInsertTableDialog,
+      closeAiChatDialog,
     ],
   )
 

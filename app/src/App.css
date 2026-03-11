@@ -1137,6 +1137,86 @@
   justify-content: flex-end;
 }
 
+/* Insert Table Dialog - 复用全局模态风格的紧凑表单布局 */
+.insert-table-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.insert-table-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.insert-table-label {
+  font-size: 13px;
+  color: #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.insert-table-input-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.insert-table-input {
+  width: 120px;
+  max-width: 100%;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.7);
+  background: rgba(15, 23, 42, 0.95);
+  color: #e5e7eb;
+  font-size: 13px;
+  outline: none;
+}
+
+/* 隐藏原生 number spinner，改用自定义 + / - 按钮 */
+.insert-table-input::-webkit-outer-spin-button,
+.insert-table-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.insert-table-input[type='number'] {
+  -moz-appearance: textfield;
+}
+
+.insert-table-input:focus {
+  border-color: rgba(96, 165, 250, 0.9);
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.5);
+}
+
+.insert-table-stepper {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+}
+
+.insert-table-stepper-button {
+  padding: 0;
+  width: 24px;
+  height: 22px;
+  min-width: 0;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.insert-table-error {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #fecaca;
+}
+
 /* 全局 Ghost 按钮样式：所有模态框统一视觉风格 */
 .modal .modal-actions .ghost {
   border-radius: 999px;

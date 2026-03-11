@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { ConflictModal } from './ConflictModal'
 import { ConfirmDialog } from './ConfirmDialog'
+import { InsertTableDialog } from './InsertTableDialog'
 import { AboutDialog } from './AboutDialog'
 import { TabBar } from './TabBar'
 import { FileContextMenu } from './FileContextMenu'
@@ -22,7 +23,7 @@ import { AiChatCommandBridgeContext } from '../modules/ai/ui/AiChatCommandBridge
 import type { ChatEntryMode, EntryContext } from '../modules/ai/domain/chatSession'
 import type { AiChatSessionKey } from '../modules/ai/application/aiChatSessionService'
 import { aiChatSessionManager } from '../modules/ai/application/localStorageAiChatSessionManager'
-import { registerEditorInsertBelow, registerEditorReplaceSelection, registerEditorCreateAndInsert } from '../modules/ai/platform/editorInsertService'
+import { registerEditorInsertBelow, registerEditorReplaceSelection, registerEditorCreateAndInsert, insertMarkdownAtCursorBelow } from '../modules/ai/platform/editorInsertService'
 import { useFilePersistence } from '../hooks/useFilePersistence'
 import { useTabs } from '../hooks/useTabs'
 import { useCommandSystem } from '../hooks/useCommandSystem'
@@ -657,6 +658,7 @@ export function WorkspaceShell({
 
   const [confirmDialog, setConfirmDialog] = useState<any>(null)
   const [quitConfirmDialog, setQuitConfirmDialog] = useState<any>(null)
+  const [isInsertTableDialogOpen, setIsInsertTableDialogOpen] = useState(false)
 
   // 用于在 useEffect 中访问最新的 setConfirmDialog
   const setConfirmDialogRef = useRef(setConfirmDialog)
@@ -1741,6 +1743,45 @@ export function WorkspaceShell({
     }
   }, [setStatusMessage, getCurrentMarkdown, getCurrentFileName])
 
+  const openInsertTableDialog = useCallback(() => {
+    if (isPdfActive) {
+      setStatusMessage('当前为 PDF 标签，暂不支持插入 Markdown 表格')
+      return
+    }
+    setIsInsertTableDialogOpen(true)
+  }, [isPdfActive, setStatusMessage])
+
+  const generateMarkdownTable = useCallback((rows: number, cols: number): string => {
+    const safeRows = Math.max(1, rows)
+    const safeCols = Math.max(1, cols)
+
+    const headerCells = Array.from({ length: safeCols }, (_, i) => `Col ${i + 1}`)
+    const header = `| ${headerCells.join(' | ')} |`
+
+    const separatorCells = Array.from({ length: safeCols }, () => '---')
+    const separator = `| ${separatorCells.join(' | ')} |`
+
+    const bodyRow = `| ${Array.from({ length: safeCols }, () => '').join(' | ')} |`
+    const body = Array.from({ length: safeRows }, () => bodyRow).join('\n')
+
+    return `${header}\n${separator}\n${body}\n`
+  }, [])
+
+  const handleInsertTableConfirm = useCallback(
+    async (rows: number, cols: number) => {
+      setIsInsertTableDialogOpen(false)
+
+      if (isPdfActive) {
+        setStatusMessage('当前为 PDF 标签，暂不支持插入 Markdown 表格')
+        return
+      }
+
+      const tableMarkdown = generateMarkdownTable(rows, cols)
+      await insertMarkdownAtCursorBelow(tableMarkdown)
+    },
+    [generateMarkdownTable, insertMarkdownAtCursorBelow, isPdfActive, setStatusMessage],
+  )
+
   const { dispatchAction } = useCommandSystem({
     layout, setLayout: setLayout as any, setShowPreview, setStatusMessage,
     aiChatMode, setAiChatMode, aiChatDockSide, setAiChatDockSide, aiChatOpen,
@@ -1749,6 +1790,7 @@ export function WorkspaceShell({
     openFile, save: saveWithPdfGuard, saveAs: saveAsWithPdfGuard, handleShowRecent: undefined, clearRecentAll,
     createTab, updateActiveMeta, openFolderInSidebar, closeCurrentTab,
     openSearch: () => setIsSearchOpen(true),
+    openInsertTableDialog,
     openAiChatDialog: options => openAiChatDialog(options as any),
     closeAiChatDialog,
     openGlobalMemoryDialog,
@@ -2428,6 +2470,13 @@ export function WorkspaceShell({
         )}
         {confirmDialog && <ConfirmDialog title={confirmDialog.title} message={confirmDialog.message} confirmText={confirmDialog.confirmText} cancelText={confirmDialog.cancelText} extraText={confirmDialog.extraText} variant={confirmDialog.variant} onConfirm={confirmDialog.onConfirm} onExtra={confirmDialog.onExtra} onCancel={() => setConfirmDialog(null)} />}
         {quitConfirmDialog && <ConfirmDialog title={quitConfirmDialog.unsavedCount === 1 ? 'Save changes?' : `Save ${quitConfirmDialog.unsavedCount} files?`} message="Your changes will be lost." confirmText="Save All" cancelText="Cancel" extraText="Don't Save" variant="stacked" onConfirm={quitConfirmDialog.onSaveAll} onExtra={quitConfirmDialog.onQuitWithoutSaving} onCancel={() => setQuitConfirmDialog(null)} />}
+
+        <InsertTableDialog
+          open={isInsertTableDialogOpen}
+          onConfirm={handleInsertTableConfirm}
+          onCancel={() => setIsInsertTableDialogOpen(false)}
+        />
+
         {aiChatMode === 'floating' && aiChatOpen && aiChatState?.open && (
           <AiChatDialog
             open={aiChatOpen}

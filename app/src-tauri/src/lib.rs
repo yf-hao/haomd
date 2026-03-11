@@ -1539,8 +1539,9 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Insert Table")
+            &MenuItemBuilder::new("Table")
                 .id("format_insert_table")
+                .accelerator("CmdOrCtrl+T")
                 .build(app)?,
         )
         .item(

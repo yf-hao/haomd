@@ -3,6 +3,7 @@ import { applyHeadingLevel, resetHeadingToParagraph, emphasizeSelection } from '
 
 export type FormatCommandContext = {
   setStatusMessage: (msg: string) => void
+  openInsertTableDialog?: () => void
 }
 
 export function createFormatCommands(ctx: FormatCommandContext): CommandRegistry {
@@ -40,7 +41,11 @@ export function createFormatCommands(ctx: FormatCommandContext): CommandRegistry
       ctx.setStatusMessage('已加粗选中内容')
     },
     format_insert_table: () => {
-      ctx.setStatusMessage('Insert Table 尚未实现')
+      if (ctx.openInsertTableDialog) {
+        ctx.openInsertTableDialog()
+      } else {
+        ctx.setStatusMessage('Insert Table 尚未实现')
+      }
     },
     format_insert_code_block: () => {
       ctx.setStatusMessage('Insert Code Block 尚未实现')
