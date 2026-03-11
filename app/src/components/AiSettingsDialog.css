@@ -1056,6 +1056,18 @@ button.ghost.ghost-subtle:hover {
   overflow-wrap: break-word;
 }
 
+/* AI Chat 窗口中的 gh-markdown 字体调小一些 */
+.modal.modal-ai-chat .ai-chat-message-content .markdown-body.gh-markdown {
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+/* Dock 模式下 AI Chat 面板中的 gh-markdown 字体也调小 */
+.ai-chat-pane .ai-chat-message-content .markdown-body.gh-markdown {
+  font-size: 10px;
+  line-height: 1.6;
+}
+
 .ai-chat-message+.ai-chat-message {
   margin-top: 12px;
 }
