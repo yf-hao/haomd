@@ -360,34 +360,66 @@ function createLifecycleCommands(ctx: AppLifecycleCommandContext): CommandRegist
 }
 
 function createClipboardCommands(ctx: StatusContext): CommandRegistry {
+  const isEditableElement = (el: Element | null): boolean => {
+    if (!el) return false
+    const tag = el.tagName
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return true
+    if (el instanceof HTMLElement && el.isContentEditable) return true
+    return false
+  }
+
   return {
     paste: () => {
       // 粘贴由原生菜单 -> native://paste 事件负责，这里不再调用 execCommand
     },
     copy: () => {
-      if (typeof document !== 'undefined') {
-        try {
-          const ok = document.execCommand('copy')
-          if (!ok) ctx.setStatusMessage('复制未生效')
-        } catch (err) {
-          console.warn('execCommand copy failed', err)
-          ctx.setStatusMessage('复制未生效')
-        }
-      } else {
+      if (typeof document === 'undefined') {
+        ctx.setStatusMessage('复制未生效')
+        return
+      }
+      try {
+        const ok = document.execCommand('copy')
+        if (!ok) ctx.setStatusMessage('复制未生效')
+      } catch (err) {
+        console.warn('execCommand copy failed', err)
         ctx.setStatusMessage('复制未生效')
       }
     },
     cut: () => {
-      if (typeof document !== 'undefined') {
+      if (typeof document === 'undefined') {
+        ctx.setStatusMessage('剪切未生效')
+        return
+      }
+
+      const active = document.activeElement as Element | null
+
+      // 只在可编辑区域兜底剪切；否则退化为 copy
+      if (!isEditableElement(active)) {
         try {
-          const ok = document.execCommand('cut')
-          if (!ok) ctx.setStatusMessage('剪切未生效')
+          const okCopy = document.execCommand('copy')
+          if (!okCopy) ctx.setStatusMessage('剪切未生效')
         } catch (err) {
-          console.warn('execCommand cut failed', err)
+          console.warn('fallback copy for cut failed', err)
           ctx.setStatusMessage('剪切未生效')
         }
-      } else {
-        ctx.setStatusMessage('剪切未生效')
+        return
+      }
+
+      try {
+        const ok = document.execCommand('cut')
+        if (!ok) {
+          const okCopy = document.execCommand('copy')
+          if (!okCopy) ctx.setStatusMessage('剪切未生效')
+        }
+      } catch (err) {
+        console.warn('execCommand cut failed', err)
+        try {
+          const okCopy = document.execCommand('copy')
+          if (!okCopy) ctx.setStatusMessage('剪切未生效')
+        } catch (err2) {
+          console.warn('fallback copy after cut failed', err2)
+          ctx.setStatusMessage('剪切未生效')
+        }
       }
     },
   }

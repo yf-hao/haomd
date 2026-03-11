@@ -189,16 +189,26 @@ export function useCommandSystem(params: CommandSystemParams) {
 
   // 统一处理快捷键映射
   useEffect(() => {
+    const isEditableElement = (el: Element | null): boolean => {
+      if (!el) return false
+      const tag = el.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return true
+      if (el instanceof HTMLElement && el.isContentEditable) return true
+      return false
+    }
+
     const onKey = (e: KeyboardEvent) => {
       const meta = e.metaKey || e.ctrlKey
       const key = e.key.toLowerCase()
       if (!meta) return
 
+      const isMac = typeof navigator !== 'undefined' && /macintosh|mac os x/i.test(navigator.userAgent)
+      const isTauri = typeof isTauriEnv === 'function' && !!isTauriEnv()
+
       // 避免在 Tauri Mac 中与系统菜单快捷键（会发 menu://action 事件）重复触发。
       // Windows/Linux 下原生菜单加速键响应不如 Mac 稳定，且 JS 处理与原生通常不冲突，因此仅在 Mac 下阻断。
       const tauriBlocks = ['s', 'o', 'n', 'w', 'k', 'l', 'd', 'f'] as const
-      const isMac = typeof navigator !== 'undefined' && /macintosh|mac os x/i.test(navigator.userAgent)
-      if (isTauriEnv && isTauriEnv() && isMac && tauriBlocks.includes(key as (typeof tauriBlocks)[number])) return
+      if (isTauri && isMac && tauriBlocks.includes(key as (typeof tauriBlocks)[number])) return
 
       if (key === 's') {
         e.preventDefault()
@@ -228,11 +238,23 @@ export function useCommandSystem(params: CommandSystemParams) {
           void dispatchAction('toggle_preview')
         }
       } else if (key === 'c') {
-        // 额外兜底一次复制命令，避免某些环境下系统菜单未生效
-        void dispatchAction('copy')
+        // Mac + Tauri：完全交给系统 / WebView 处理
+        if (isMac && isTauri) return
+        const active = (typeof document !== 'undefined'
+          ? (document.activeElement as Element | null)
+          : null)
+        if (isEditableElement(active)) {
+          void dispatchAction('copy')
+        }
       } else if (key === 'x') {
-        // 额外兜底一次剪切命令，避免某些环境下系统菜单未生效
-        void dispatchAction('cut')
+        // Mac + Tauri：完全交给系统 / WebView 处理
+        if (isMac && isTauri) return
+        const active = (typeof document !== 'undefined'
+          ? (document.activeElement as Element | null)
+          : null)
+        if (isEditableElement(active)) {
+          void dispatchAction('cut')
+        }
       } else if (key === 'k') {
         e.preventDefault()
         void dispatchAction('ai_chat')
