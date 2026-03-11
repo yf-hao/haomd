@@ -1947,6 +1947,40 @@ async fn open_in_file_explorer(target_path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn open_webview_browser(url: String) -> Result<(), String> {
+    if url.trim().is_empty() {
+        return Err("url is empty".to_string());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(&url)
+            .spawn()
+            .map_err(|e| format!("无法打开浏览器: {e}"))?;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("cmd")
+            .args(["/C", "start"])
+            .arg(&url)
+            .spawn()
+            .map_err(|e| format!("无法打开浏览器: {e}"))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("xdg-open")
+            .arg(&url)
+            .spawn()
+            .map_err(|e| format!("无法打开浏览器: {e}"))?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 async fn open_terminal(cwd: String) -> Result<(), String> {
     use std::path::Path;
 
@@ -2605,6 +2639,7 @@ pub fn run() {
       editor_settings::load_editor_settings,
       open_terminal,
       open_in_file_explorer,
+      open_webview_browser,
       save_clipboard_image_to_dir,
       read_clipboard_image_as_base64,
       load_doc_conversations,

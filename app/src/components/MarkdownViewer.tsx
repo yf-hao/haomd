@@ -10,7 +10,10 @@ import 'katex/dist/katex.min.css'
 import 'github-markdown-css/github-markdown.css'
 import './MarkdownViewer.css'
 import { getRenderer } from '../modules/markdown/plugins'
-import { invoke } from '@tauri-apps/api/core'
+import { DownloadOnClickUseCase, TauriWebviewOpener } from '../modules/download/handleMarkdownLinkClick'
+import { ExamAttachmentLinkClassifier } from '../modules/download/linkClassifier'
+import { FetchTextDownloadService } from '../modules/download/downloadService'
+import { TauriFileSaveService } from '../modules/download/fileSaveService'
 
 export type Renderer = (code: string) => React.ReactNode
 
@@ -78,6 +81,14 @@ const remarkPlugins = [remarkGfm, remarkMath, remarkMathLineAnchors]
 
 // 预览虚拟化开关：关闭时走浏览器原生滚动，体验更稳定
 const ENABLE_PREVIEW_VIRTUALIZATION = false
+
+// Markdown 链接点击用例：点击特定链接时触发下载并保存，其余链接走内置浏览器
+const markdownLinkClickHandler = new DownloadOnClickUseCase(
+  new ExamAttachmentLinkClassifier(),
+  new FetchTextDownloadService(),
+  new TauriFileSaveService(),
+  new TauriWebviewOpener(),
+)
 
 // KaTeX 渲染结果缓存，按内容去重
 const blockMathHtmlCache = new Map<string, string>()
@@ -389,13 +400,17 @@ function MarkdownViewerComponent(
       span: ({ className, children, ...rest }: any) => <span className={className} {...rest}>{children}</span>,
       math: StableMath,
       inlinemath: StableInlineMath,
-      a: ({ node, href, children, ...props }: any) => {
+      a: ({ href, children, ...props }: any) => {
         const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
           e.preventDefault()
           if (!href) return
-          void invoke('open_webview_browser', { url: href })
+          void markdownLinkClickHandler.handleClick(href)
         }
-        return <a href={href} onClick={handleClick} target="_blank" rel="noreferrer" {...props}>{children}</a>
+        return (
+          <a href={href} onClick={handleClick} {...props}>
+            {children}
+          </a>
+        )
       },
       img: (innerProps: any) => (
         <FilePathContext.Consumer>
