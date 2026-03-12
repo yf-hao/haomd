@@ -2,6 +2,12 @@
   padding: 5px 10px;
 }
 
+/* 应用内预览使用暗色背景，不影响导出 HTML（导出不带 gh-markdown 类） */
+.markdown-body.gh-markdown {
+  background: #0c0d16;
+  color: #e8ecf5;
+}
+
 /* 提高语义权重覆盖原始 */
 .markdown-body pre:not(.no-style) {
   padding: 6px 6px;

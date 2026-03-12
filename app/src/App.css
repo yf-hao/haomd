@@ -402,9 +402,10 @@
   overflow: hidden;
 }
 
-/* 针对编辑器区域，允许其内部滚动 */
+/* 针对编辑器区域，允许其内部滚动，并统一背景为编辑区色 */
 .pane.editor-pane {
   overflow: visible;
+  background: #10121d;
 }
 
 .pane.editor-pane > .code-editor {
@@ -911,7 +912,7 @@
   outline: none;
   resize: none;
   color: #e8ecf5;
-  background: transparent;
+  background: #10121d;
   font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
   font-size: 14px;
   line-height: 1.6;

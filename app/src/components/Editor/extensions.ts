@@ -44,7 +44,7 @@ const baseTheme = EditorView.theme(
       padding: '12px 14px 12px 14px',
     },
     '.cm-gutters': {
-      backgroundColor: 'rgba(5, 6, 10, 0.9) !important ',
+      backgroundColor: '#10121d',
       color: '#8fa1c7',
       borderRight: 'none',
       fontSize: 'var(--haomd-editor-gutter-font-size, 12px)',
@@ -74,6 +74,7 @@ const baseTheme = EditorView.theme(
       paddingLeft: '6px',
     },
     '.cm-scroller': {
+      backgroundColor: 'transparent',
       lineHeight: '1.6',
       padding: 0,
       // 在文档末尾预留一段“虚拟空白”，避免最后一行贴着底部
