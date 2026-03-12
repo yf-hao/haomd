@@ -33,7 +33,6 @@ import { createFolder, deleteFsEntry, deleteRecentRemote, listFolder, writeFile 
 import { listPdfRecent, deletePdfRecent, loadPdfFolders, savePdfFolders, updatePdfRecentFolder, type PdfFolder } from '../modules/pdf/pdfRecentService'
 import { useNativePaste } from '../hooks/useNativePaste'
 import { onNativePasteImage } from '../modules/platform/clipboardEvents'
-import type { EditorTab } from '../types/tabs'
 import { openTerminalAt } from '../modules/platform/terminalService'
 import { openInFileManager } from '../modules/platform/fileExplorerService'
 import { loadDefaultImagePathStrategyConfig, resolveImageTarget } from '../modules/images/imagePasteStrategy'
@@ -91,16 +90,6 @@ const DEFAULT_HUGE_DOC_CHUNK_CONTEXT_LINES = 200
 const DEFAULT_HUGE_DOC_CHUNK_MAX_LINES = 400
 
 const seed = ''
-const DEFAULT_TITLE = 'undefined.md'
-
-function formatWindowTitleFromTab(tab: EditorTab | null): string {
-  if (!tab) return DEFAULT_TITLE
-  const path = tab.path
-  const rawName = path ? path.split(/[/\\]/).pop() || path : tab.title || DEFAULT_TITLE
-  const name = rawName.replace(/\.md$/i, '')
-  const prefix = tab.dirty ? '*' : ''
-  return `${prefix}${name}`
-}
 
 export function WorkspaceShell({
   activeLeftPanel,
@@ -685,9 +674,9 @@ export function WorkspaceShell({
     }
   }, [activeId, tabs])
 
-  // Window Title
+  // Window Title：不再显示文件名，保持标题栏空白
   useEffect(() => {
-    const title = formatWindowTitleFromTab(activeTab ?? null)
+    const title = ''
     if (isTauriEnv()) {
       void invoke('set_title', { title }).catch(() => { })
     }

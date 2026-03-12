@@ -29,18 +29,9 @@ export function useNativeBridge(options: NativeBridgeOptions) {
         setConfirmDialog,
     } = options
 
-    // Window Title
+    // Window Title：不在标题栏显示任何文字
     useEffect(() => {
-        const DEFAULT_TITLE = 'undefined.md'
-        const formatWindowTitleFromTab = (tab: EditorTab | null): string => {
-            if (!tab) return DEFAULT_TITLE
-            const path = tab.path
-            const name = path ? path.split(/[/\\]/).pop() || path : tab.title || DEFAULT_TITLE
-            const prefix = tab.dirty ? '*' : ''
-            return `${prefix}${name}`
-        }
-
-        const title = formatWindowTitleFromTab(activeTab)
+        const title = ''
         if (isTauriEnv()) {
             void invoke('set_title', { title }).catch(() => { })
         }
