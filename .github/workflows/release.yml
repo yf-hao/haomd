@@ -32,40 +32,53 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform:
-          - macos-latest    # Apple Silicon (ARM64)
-          - macos-13        # Intel (x86_64)
-          - ubuntu-22.04
-          - windows-latest
+        include:
+          - platform: macos-latest
+            target: aarch64-apple-darwin   # Apple Silicon (ARM64)
+            args: '--target aarch64-apple-darwin'
+          - platform: macos-latest
+            target: x86_64-apple-darwin    # Intel (x86_64, cross-compiled)
+            args: '--target x86_64-apple-darwin'
+          - platform: ubuntu-22.04
+            target: ''
+            args: ''
+          - platform: windows-latest
+            target: ''
+            args: ''
 
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-          
+
+      - name: Add Rust target (macOS cross-compile)
+        if: matrix.target != ''
+        run: rustup target add ${{ matrix.target }}
+
       - name: Install dependencies (Ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-          
+
       - name: Install Node dependencies
         run: bun install
         working-directory: app
-        
+
       - name: Build and Release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: v__VERSION__ # tauri-action will replace this via package.json
+          tagName: v__VERSION__
           releaseName: 'HaoMD v__VERSION__'
           releaseBody: 'See the assets below to download.'
           releaseDraft: true
           prerelease: false
           projectPath: app
+          args: ${{ matrix.args }}
 
