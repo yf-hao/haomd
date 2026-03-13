@@ -11,9 +11,12 @@ type ResetHeadingImpl = (() => void | Promise<void>) | null
 
 type EmphasizeSelectionImpl = (() => void | Promise<void>) | null
 
+type InsertCodeBlockImpl = (() => void | Promise<void>) | null
+
 let applyHeadingImpl: ApplyHeadingImpl = null
 let resetHeadingImpl: ResetHeadingImpl = null
 let emphasizeSelectionImpl: EmphasizeSelectionImpl = null
+let insertCodeBlockImpl: InsertCodeBlockImpl = null
 
 export function registerApplyHeadingLevel(fn: (level: HeadingLevel) => void | Promise<void>): void {
   applyHeadingImpl = fn
@@ -54,4 +57,18 @@ export async function emphasizeSelection(): Promise<void> {
     return
   }
   await Promise.resolve(emphasizeSelectionImpl())
+}
+
+// ===== Code Block 插入 =====
+
+export function registerInsertCodeBlock(fn: () => void | Promise<void>): void {
+  insertCodeBlockImpl = fn
+}
+
+export async function insertCodeBlock(): Promise<void> {
+  if (!insertCodeBlockImpl) {
+    console.warn('[formatService] insertCodeBlock called but no implementation registered')
+    return
+  }
+  await Promise.resolve(insertCodeBlockImpl())
 }

@@ -38,7 +38,7 @@ import { openInFileManager } from '../modules/platform/fileExplorerService'
 import { loadDefaultImagePathStrategyConfig, resolveImageTarget } from '../modules/images/imagePasteStrategy'
 import { countLines, extractChunkAroundLine, applyChunkPatch, localToGlobalLine } from '../modules/editor/chunkEdit'
 import { getHugeDocSettings } from '../modules/settings/editorSettings'
-import { registerApplyHeadingLevel, registerResetHeadingToParagraph, registerEmphasizeSelection } from '../modules/editor/formatService'
+import { registerApplyHeadingLevel, registerResetHeadingToParagraph, registerEmphasizeSelection, registerInsertCodeBlock } from '../modules/editor/formatService'
 import type { RecentFile } from '../modules/files/types'
 // 改为从内部动态加载，优化编辑性能
 // import { exportToHtml } from '../modules/export/html'
@@ -1140,6 +1140,49 @@ export function WorkspaceShell({
       view.dispatch(state.update({
         changes: { from, to, insert: emphasized },
         selection: { anchor: from + emphasized.length },
+        scrollIntoView: true,
+      }))
+
+      syncEditorToReactState()
+    })
+
+    registerInsertCodeBlock(async () => {
+      const view = editorViewRef.current
+      if (!view) return
+
+      const { state } = view
+      const doc = state.doc
+      const sel = state.selection.main
+      const head = sel.head
+      const line = doc.lineAt(head)
+
+      const fenceRe = /^```(\S*)\s*$/
+      let lastLang: string | null = null
+
+      for (let lineNo = line.number; lineNo >= 1; lineNo--) {
+        const l = doc.line(lineNo)
+        const m = fenceRe.exec(l.text)
+        if (!m) continue
+
+        const langCandidate = m[1] || ''
+        if (langCandidate) {
+          lastLang = langCandidate
+          break
+        }
+        // 空 fence（```）不提供语言，继续向上寻找
+      }
+
+      const lang = lastLang ?? ''
+      const firstLine = lang ? '```' + lang : '```'
+      const snippet = firstLine + '\n\n```'
+
+      const insertFrom = sel.from
+      const insertTo = sel.to
+      const cursorPos = insertFrom + firstLine.length + 1
+
+      view.dispatch(state.update({
+        changes: { from: insertFrom, to: insertTo, insert: snippet },
+        selection: { anchor: cursorPos },
         scrollIntoView: true,
       }))
 

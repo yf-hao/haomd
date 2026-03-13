@@ -1,5 +1,5 @@
 import type { CommandRegistry } from './types'
-import { applyHeadingLevel, resetHeadingToParagraph, emphasizeSelection } from '../editor/formatService'
+import { applyHeadingLevel, resetHeadingToParagraph, emphasizeSelection, insertCodeBlock } from '../editor/formatService'
 
 export type FormatCommandContext = {
   setStatusMessage: (msg: string) => void
@@ -47,8 +47,9 @@ export function createFormatCommands(ctx: FormatCommandContext): CommandRegistry
         ctx.setStatusMessage('Insert Table 尚未实现')
       }
     },
-    format_insert_code_block: () => {
-      ctx.setStatusMessage('Insert Code Block 尚未实现')
+    format_insert_code_block: async () => {
+      await insertCodeBlock()
+      // ctx.setStatusMessage('已插入 Code Block')
     },
   }
 }

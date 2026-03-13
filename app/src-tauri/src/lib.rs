@@ -1818,8 +1818,9 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Insert Code Block")
+            &MenuItemBuilder::new("Code Block")
                 .id("format_insert_code_block")
+                .accelerator("CmdOrCtrl+Alt+C")
                 .build(app)?,
         )
         .build()?;
