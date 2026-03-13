@@ -218,7 +218,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     el.focus()
     el.setSelectionRange(el.value.length, el.value.length)
     autoResizeInput()
-  }, [open, providerType])
+  }, [open, providerType, entryMode, initialContext])
 
   const doSend = async () => {
     const contentToSend = input

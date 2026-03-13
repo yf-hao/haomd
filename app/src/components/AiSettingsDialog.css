@@ -148,6 +148,15 @@
   padding-bottom: 30px;
   display: flex;
   flex-direction: column;
+  /* 不显示滚动条，但保留滚动能力 */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.ai-chat-messages::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 /* AI Chat 额外拖拽 handle：底部 + 左右两侧 */

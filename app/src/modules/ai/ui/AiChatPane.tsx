@@ -93,7 +93,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
     el.focus()
     el.setSelectionRange(el.value.length, el.value.length)
     autoResizeInput()
-  }, [])
+  }, [entryMode, initialContext])
 
   useEffect(() => {
     if (!entryMode || !initialContext) {

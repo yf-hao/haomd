@@ -390,6 +390,7 @@
 .pane-group {
   display: grid;
   grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
   height: 100%;
   min-height: 0;
   position: relative;
@@ -868,6 +869,15 @@
   max-height: none;
   padding-bottom: 0;
   /* Dock 模式下不限制高度，由 pane 自己决定 */
+  /* 不显示滚动条，但保留滚动能力 */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.ai-chat-pane-body .ai-chat-messages::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 /* Dock 模式下去掉模态内容默认底部外边距，避免发送按钮下方空隙过大 */
