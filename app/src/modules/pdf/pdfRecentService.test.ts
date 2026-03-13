@@ -139,7 +139,7 @@ describe('pdf/pdfRecentService', () => {
 
     expect(mockInvoke).toHaveBeenCalledWith('update_pdf_recent_folder', {
       path: '/d.pdf',
-      folderId: 'folder-1',
+      folder_id: 'folder-1',
     })
   })
 
@@ -150,7 +150,7 @@ describe('pdf/pdfRecentService', () => {
 
     expect(mockInvoke).toHaveBeenCalledWith('update_pdf_recent_folder', {
       path: '/e.pdf',
-      folderId: null,
+      folder_id: null,
     })
   })
 })

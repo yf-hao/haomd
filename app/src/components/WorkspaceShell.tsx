@@ -2063,10 +2063,10 @@ export function WorkspaceShell({
             </div>
             <div className="pdf-panel-content">
               {creatingPdfFolder && (
-                <div className="pdf-folder-inline-create">
+                <div className="pdf-folder-inline-create sidebar-virtual-folder-inline-create">
                   <input
                     type="text"
-                    className="pdf-folder-inline-input"
+                    className="pdf-folder-inline-input sidebar-virtual-folder-inline-input"
                     placeholder="输入虚拟文件夹名称后按回车确认，Esc 取消"
                     autoFocus
                     value={creatingPdfFolderName}

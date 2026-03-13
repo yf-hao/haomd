@@ -253,6 +253,8 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
   const [collapsedFileVirtualFolders, setCollapsedFileVirtualFolders] = useState<Record<string, boolean>>({})
   const [creatingFileFolder, setCreatingFileFolder] = useState(false)
   const [creatingFileFolderName, setCreatingFileFolderName] = useState('')
+  const [renamingFileFolderId, setRenamingFileFolderId] = useState<string | null>(null)
+  const [renamingFileFolderName, setRenamingFileFolderName] = useState('')
   const [fileFolderMenuState, setFileFolderMenuState] = useState<{
     visible: boolean
     x: number
@@ -383,6 +385,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
     const id = `${name}-${Math.random().toString(16).slice(2, 8)}`
     const next = [...fileVirtualFolders, { id, name, order: nextOrder }]
     setFileVirtualFolders(next)
+    setCollapsedFileVirtualFolders((prev) => ({ ...prev, [id]: true }))
 
     void (async () => {
       const resp = await saveFileVirtualFolders(next)
@@ -396,6 +399,69 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
 
     setCreatingFileFolder(false)
     setCreatingFileFolderName('')
+  }
+
+  const startFileVirtualFolderRename = (folder: FileVirtualFolder) => {
+    setRenamingFileFolderId(folder.id)
+    setRenamingFileFolderName(folder.name)
+  }
+
+  const handleFileVirtualFolderRenameChange = (value: string) => {
+    setRenamingFileFolderName(value)
+  }
+
+  const handleFileVirtualFolderRenameCancel = () => {
+    setRenamingFileFolderId(null)
+    setRenamingFileFolderName('')
+  }
+
+  const handleFileVirtualFolderRenameConfirm = () => {
+    if (!renamingFileFolderId) return
+    const nextName = renamingFileFolderName.trim()
+    if (!nextName) {
+      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+        window.alert('虚拟文件夹名称不能为空')
+      }
+      return
+    }
+
+    const current = fileVirtualFolders.find((f) => f.id === renamingFileFolderId)
+    if (!current) {
+      setRenamingFileFolderId(null)
+      setRenamingFileFolderName('')
+      return
+    }
+
+    if (current.name === nextName) {
+      setRenamingFileFolderId(null)
+      setRenamingFileFolderName('')
+      return
+    }
+
+    if (fileVirtualFolders.some((f) => f.name === nextName && f.id !== renamingFileFolderId)) {
+      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+        window.alert('已存在同名虚拟文件夹')
+      }
+      return
+    }
+
+    const next = fileVirtualFolders.map((f) =>
+      f.id === renamingFileFolderId ? { ...f, name: nextName } : f,
+    )
+    setFileVirtualFolders(next)
+
+    void (async () => {
+      const resp = await saveFileVirtualFolders(next)
+      if (!resp.ok) {
+        console.error('[Sidebar] saveFileVirtualFolders(rename) failed', resp.error)
+        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+          window.alert(resp.error.message ?? '重命名虚拟文件夹失败')
+        }
+      }
+    })()
+
+    setRenamingFileFolderId(null)
+    setRenamingFileFolderName('')
   }
 
   useEffect(() => {
@@ -581,14 +647,48 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                 {fileVirtualFolders.map((folder) => {
                   const files = filesByFolderId.get(folder.id) ?? []
                   const isCollapsed = collapsedFileVirtualFolders[folder.id] ?? false
+                  const isRenaming = renamingFileFolderId === folder.id
                   return (
                     <div key={folder.id} className="sidebar-virtual-folder-section">
                       <div
                         className="sidebar-virtual-folder-header"
-                        onClick={() => toggleFileVirtualFolderCollapse(folder.id)}
+                        onClick={() => {
+                          if (!isRenaming) {
+                            toggleFileVirtualFolderCollapse(folder.id)
+                          }
+                        }}
                       >
                         <span className="sidebar-virtual-folder-toggle-icon">{isCollapsed ? '▸' : '▾'}</span>
-                        <span className="sidebar-virtual-folder-name">{folder.name}</span>
+                        {isRenaming ? (
+                          <input
+                            type="text"
+                            className="sidebar-virtual-folder-inline-input"
+                            autoFocus
+                            value={renamingFileFolderName}
+                            onChange={(e) => handleFileVirtualFolderRenameChange(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                                handleFileVirtualFolderRenameConfirm()
+                              } else if (e.key === 'Escape') {
+                                e.preventDefault()
+                                handleFileVirtualFolderRenameCancel()
+                              }
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            onBlur={() => handleFileVirtualFolderRenameCancel()}
+                          />
+                        ) : (
+                          <span
+                            className="sidebar-virtual-folder-name"
+                            onDoubleClick={(e) => {
+                              e.stopPropagation()
+                              startFileVirtualFolderRename(folder)
+                            }}
+                          >
+                            {folder.name}
+                          </span>
+                        )}
                         <button
                           type="button"
                           className="sidebar-virtual-folder-delete-btn"
