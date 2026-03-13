@@ -83,7 +83,8 @@ type WorkspaceConfig = {
   id: string
 }
 
-const WORKSPACE_CONFIG_BASENAME = '.haomd-workspace.json'
+const WORKSPACE_CONFIG_OLD_BASENAME = '.haomd-workspace.json'
+const WORKSPACE_CONFIG_NEW_RELATIVE_PATH = '.haomd/workspace.json'
 const workspaceIdCache = new Map<string, string>()
 
 function normalizeDirPath(dir: string): string {
@@ -146,15 +147,25 @@ async function resolveWorkspaceIdForDir(dir: string): Promise<{ workspaceId: str
   const current = normalizeDirPath(dir)
   if (!current || current === '/') return null
 
-  const configPath = joinPath(current, WORKSPACE_CONFIG_BASENAME)
-  const cached = workspaceIdCache.get(configPath)
+  const cached = workspaceIdCache.get(current)
   if (cached) {
     return { workspaceId: cached, workspaceRoot: current }
   }
 
-  const cfg = await readWorkspaceConfig(configPath)
+  const newConfigPath = joinPath(current, WORKSPACE_CONFIG_NEW_RELATIVE_PATH)
+  const oldConfigPath = joinPath(current, WORKSPACE_CONFIG_OLD_BASENAME)
+
+  let cfg = await readWorkspaceConfig(newConfigPath)
+  if (!cfg) {
+    cfg = await readWorkspaceConfig(oldConfigPath)
+    if (cfg && cfg.id) {
+      // 发现旧路径配置时，自动迁移一份到新路径，方便后续统一管理
+      await writeWorkspaceConfig(newConfigPath, cfg.id)
+    }
+  }
+
   if (cfg && cfg.id) {
-    workspaceIdCache.set(configPath, cfg.id)
+    workspaceIdCache.set(current, cfg.id)
     return { workspaceId: cfg.id, workspaceRoot: current }
   }
 
@@ -167,10 +178,10 @@ async function ensureWorkspaceIdForDir(dir: string): Promise<{ workspaceId: stri
 
   const rootDir = normalizeDirPath(dir)
   if (!rootDir || rootDir === '/') return null
-  const configPath = joinPath(rootDir, WORKSPACE_CONFIG_BASENAME)
+  const newConfigPath = joinPath(rootDir, WORKSPACE_CONFIG_NEW_RELATIVE_PATH)
   const newId = genWorkspaceId()
-  await writeWorkspaceConfig(configPath, newId)
-  workspaceIdCache.set(configPath, newId)
+  await writeWorkspaceConfig(newConfigPath, newId)
+  workspaceIdCache.set(rootDir, newId)
   return { workspaceId: newId, workspaceRoot: rootDir }
 }
 

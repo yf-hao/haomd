@@ -56,23 +56,18 @@ describe('docConversationService', () => {
         expect(payload[0].messages[0].content).toBe('hello')
     })
 
-    it('clearByDocPath should clear messages for a path', async () => {
-        // Initial state: 1 record
-        ; (mockInvoke as any).mockResolvedValue({
-            Ok: { data: [{ docPath: 'file.md', messages: [{}] }] }
-        })
+    it('clearByDocPath should clear messages for a path in workspace file', async () => {
+        ; (mockInvoke as any).mockResolvedValue({ Ok: { data: [] } })
             ; (filesService.readFile as any).mockResolvedValue({ ok: false, error: { code: 'NOT_FOUND' } })
 
         await docConversationService.clearByDocPath('/test/file.md')
 
-        expect(mockInvoke).toHaveBeenCalledWith('save_doc_conversations', expect.objectContaining({
-            records: expect.arrayContaining([
-                expect.objectContaining({
-                    docPath: expect.stringContaining('test'),
-                    messages: []
-                })
-            ])
-        }))
+        const writeCalls = (filesService.writeFile as any).mock.calls as any[]
+        const convoCall = writeCalls.find(([arg]: any[]) => typeof arg?.path === 'string' && arg.path.includes('doc_conversations.json'))
+        expect(convoCall).toBeDefined()
+        const payload = JSON.parse(convoCall[0].content)
+        expect(Array.isArray(payload)).toBe(true)
+        expect(payload[0].messages).toEqual([])
     })
 
     it('should use workspace ID if .haomd-workspace.json exists', async () => {
@@ -123,7 +118,7 @@ describe('docConversationService', () => {
         })
 
         expect(writeSpy).toHaveBeenCalledWith(expect.objectContaining({
-            path: expect.stringContaining('.haomd-workspace.json')
+            path: expect.stringContaining('.haomd/workspace.json')
         }))
     })
 })
