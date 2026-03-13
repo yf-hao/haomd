@@ -97,5 +97,6 @@ export async function savePdfFolders(folders: PdfFolder[]): Promise<void> {
  * @param folderId 目标虚拟文件夹 id，传 null 表示移回根列表
  */
 export async function updatePdfRecentFolder(path: string, folderId: string | null): Promise<void> {
-  await invoke('update_pdf_recent_folder', { path, folderId })
+  // 注意：后端命令参数名为 folder_id，这里保持一致，避免始终得到 None
+  await invoke('update_pdf_recent_folder', { path, folder_id: folderId })
 }

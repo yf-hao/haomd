@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FileTreeNode } from '../domain/sidebarTree'
 import { FileContextMenu } from './FileContextMenu'
+import type { FileVirtualFolder, FileVirtualAssignment } from '../modules/files/types'
+import { loadFileVirtualFolders, listFileVirtualAssignments, saveFileVirtualFolders, updateFileVirtualFolderForPath } from '../modules/files/service'
 import './Sidebar.css'
 
 export type StandaloneFileItem = {
@@ -49,6 +51,11 @@ export type SidebarProps = {
   panelWidth?: number
   highlightedPaths?: string[]
   onFileVisited?: (path: string) => void
+  /** 通过 WorkspaceShell 统一的 ConfirmDialog 删除 Files 虚拟文件夹 */
+  onRequestConfirmDeleteFileVirtualFolder?: (options: {
+    folder: FileVirtualFolder
+    onConfirm: () => void
+  }) => void
 }
 
 type TreeNodeProps = {
@@ -230,7 +237,7 @@ function InlineNewFileRow({ level, onConfirm, onCancel, isFolder }: InlineNewFil
 }
 
 
-export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, onToggle, onFileClick, onDirClick, onContextAction, onToolbarNewFileInCurrentFolder, onToolbarNewFolderInCurrentFolder, onToolbarRefreshCurrentFolder, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel, inlineNewFolderDir, onInlineNewFolderConfirm, onInlineNewFolderCancel, activePath, panelWidth, highlightedPaths, onFileVisited }: SidebarProps) {
+export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, onToggle, onFileClick, onDirClick, onContextAction, onToolbarNewFileInCurrentFolder, onToolbarNewFolderInCurrentFolder, onToolbarRefreshCurrentFolder, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel, inlineNewFolderDir, onInlineNewFolderConfirm, onInlineNewFolderCancel, activePath, panelWidth, highlightedPaths, onFileVisited, onRequestConfirmDeleteFileVirtualFolder }: SidebarProps) {
   const hasStandalone = standaloneFiles.length > 0
   const hasTree = folderRoots.some((rootPath) => (treesByRoot[rootPath]?.length ?? 0) > 0)
 
@@ -240,6 +247,18 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
     y: number
     target: { path: string; kind: SidebarContextTargetKind } | null
   }>({ visible: false, x: 0, y: 0, target: null })
+
+  const [fileVirtualFolders, setFileVirtualFolders] = useState<FileVirtualFolder[]>([])
+  const [fileVirtualAssignments, setFileVirtualAssignments] = useState<FileVirtualAssignment[]>([])
+  const [collapsedFileVirtualFolders, setCollapsedFileVirtualFolders] = useState<Record<string, boolean>>({})
+  const [creatingFileFolder, setCreatingFileFolder] = useState(false)
+  const [creatingFileFolderName, setCreatingFileFolderName] = useState('')
+  const [fileFolderMenuState, setFileFolderMenuState] = useState<{
+    visible: boolean
+    x: number
+    y: number
+    targetPath: string | null
+  }>({ visible: false, x: 0, y: 0, targetPath: null })
 
   const closeMenu = () => setMenuState({ visible: false, x: 0, y: 0, target: null })
 
@@ -262,6 +281,197 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
       y: event.clientY,
       target,
     })
+  }
+
+  const toggleFileVirtualFolderCollapse = (folderId: string) => {
+    setCollapsedFileVirtualFolders((prev) => ({
+      ...prev,
+      [folderId]: !prev[folderId],
+    }))
+  }
+
+  const handleDeleteFileVirtualFolder = (folder: FileVirtualFolder) => {
+    // 前端乐观更新：移除虚拟文件夹本身
+    setFileVirtualFolders((prev) => prev.filter((f) => f.id !== folder.id))
+
+    // 移除折叠状态缓存
+    setCollapsedFileVirtualFolders((prev) => {
+      const next = { ...prev }
+      delete next[folder.id]
+      return next
+    })
+
+    // 将该文件夹中的文件移回根列表（folderId 设为 null）
+    setFileVirtualAssignments((prev) => {
+      const now = Date.now()
+      return prev.map((item) =>
+        item.folderId === folder.id ? { ...item, folderId: null, updatedAt: now } : item,
+      )
+    })
+
+    // 持久化到后端：更新虚拟文件夹列表 & 每个文件的归属
+    void (async () => {
+      try {
+        const nextFolders = fileVirtualFolders.filter((f) => f.id !== folder.id)
+        const saveResp = await saveFileVirtualFolders(nextFolders)
+        if (!saveResp.ok) {
+          console.error('[Sidebar] saveFileVirtualFolders(delete) failed', saveResp.error)
+          if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+            window.alert(saveResp.error.message ?? '删除虚拟文件夹失败')
+          }
+          return
+        }
+
+        const affectedAssignments = fileVirtualAssignments.filter((item) => item.folderId === folder.id)
+        for (const item of affectedAssignments) {
+          const resp = await updateFileVirtualFolderForPath(item.path, null)
+          if (!resp.ok) {
+            console.error('[Sidebar] updateFileVirtualFolderForPath(delete) failed', resp.error)
+          }
+        }
+      } catch (e) {
+        console.error('[Sidebar] handleDeleteFileVirtualFolder failed', e)
+        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+          window.alert('删除虚拟文件夹失败')
+        }
+      }
+    })()
+  }
+
+  const handleCreateFileVirtualFolder = () => {
+    setCreatingFileFolder(true)
+    setCreatingFileFolderName('')
+  }
+
+  const requestDeleteFileVirtualFolder = (folder: FileVirtualFolder) => {
+    if (onRequestConfirmDeleteFileVirtualFolder) {
+      onRequestConfirmDeleteFileVirtualFolder({
+        folder,
+        onConfirm: () => handleDeleteFileVirtualFolder(folder),
+      })
+    } else {
+      handleDeleteFileVirtualFolder(folder)
+    }
+  }
+
+  const handleFileFolderInlineNameChange = (value: string) => {
+    setCreatingFileFolderName(value)
+  }
+
+  const handleFileFolderInlineCancel = () => {
+    setCreatingFileFolder(false)
+    setCreatingFileFolderName('')
+  }
+
+  const handleFileFolderInlineConfirm = () => {
+    const name = creatingFileFolderName.trim()
+    if (!name) {
+      setCreatingFileFolder(false)
+      setCreatingFileFolderName('')
+      return
+    }
+
+    if (fileVirtualFolders.some((f) => f.name === name)) {
+      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+        window.alert('已存在同名虚拟文件夹')
+      }
+      return
+    }
+
+    const maxOrder = fileVirtualFolders.reduce((max, f) => (f.order > max ? f.order : max), 0)
+    const nextOrder = fileVirtualFolders.length === 0 ? 0 : maxOrder + 1
+    const id = `${name}-${Math.random().toString(16).slice(2, 8)}`
+    const next = [...fileVirtualFolders, { id, name, order: nextOrder }]
+    setFileVirtualFolders(next)
+
+    void (async () => {
+      const resp = await saveFileVirtualFolders(next)
+      if (!resp.ok) {
+        console.error('[Sidebar] saveFileVirtualFolders failed', resp.error)
+        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+          window.alert(resp.error.message ?? '保存虚拟文件夹失败')
+        }
+      }
+    })()
+
+    setCreatingFileFolder(false)
+    setCreatingFileFolderName('')
+  }
+
+  useEffect(() => {
+    let cancelled = false
+
+    const load = async () => {
+      try {
+        console.log('[Sidebar][FilesVirtual] bootstrap start', {
+          standaloneFilesCount: standaloneFiles.length,
+        })
+
+        const [foldersResult, assignmentsResult] = await Promise.all([
+          loadFileVirtualFolders(),
+          listFileVirtualAssignments(),
+        ])
+        if (cancelled) return
+
+        console.log('[Sidebar][FilesVirtual] load results', {
+          foldersOk: foldersResult.ok,
+          foldersCount: foldersResult.ok ? foldersResult.data.length : undefined,
+          assignmentsOk: assignmentsResult.ok,
+          assignmentsCount: assignmentsResult.ok ? assignmentsResult.data.length : undefined,
+        })
+
+        if (foldersResult.ok) {
+          setFileVirtualFolders(foldersResult.data)
+        } else {
+          console.warn('[Sidebar] loadFileVirtualFolders error', foldersResult.error)
+          setFileVirtualFolders([])
+        }
+
+        if (assignmentsResult.ok) {
+          setFileVirtualAssignments(assignmentsResult.data)
+        } else {
+          console.warn('[Sidebar] listFileVirtualAssignments error', assignmentsResult.error)
+          setFileVirtualAssignments([])
+        }
+      } catch (e) {
+        if (cancelled) return
+        console.warn('[Sidebar] load file virtual state failed', e)
+        setFileVirtualFolders([])
+        setFileVirtualAssignments([])
+      }
+    }
+
+    void load()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    console.log('[Sidebar][FilesVirtual] state snapshot', {
+      standaloneFiles: standaloneFiles.map((f) => f.path),
+      fileVirtualFolders: fileVirtualFolders.map((f) => ({ id: f.id, name: f.name, order: f.order })),
+      fileVirtualAssignments,
+    })
+  }, [standaloneFiles, fileVirtualFolders, fileVirtualAssignments])
+
+  const assignmentsByPath = new Map<string, string | null>()
+  for (const item of fileVirtualAssignments) {
+    assignmentsByPath.set(item.path, item.folderId)
+  }
+
+  const rootFiles: StandaloneFileItem[] = []
+  const filesByFolderId = new Map<string, StandaloneFileItem[]>()
+  for (const file of standaloneFiles) {
+    const folderId = assignmentsByPath.get(file.path) ?? null
+    if (!folderId) {
+      rootFiles.push(file)
+    } else {
+      const list = filesByFolderId.get(folderId) ?? []
+      list.push(file)
+      filesByFolderId.set(folderId, list)
+    }
   }
 
   const asideStyle = panelWidth ? { width: panelWidth } : undefined
@@ -301,9 +511,49 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
       <div className="sidebar-body">
         {hasStandalone && (
           <section className="sidebar-section">
-            <div className="sidebar-section-title">Files</div>
+            <div className="sidebar-section-header">
+              <div className="sidebar-section-title">Files</div>
+              <div className="files-section-actions">
+                <button
+                  type="button"
+                  className="files-virtual-folder-add-btn"
+                  title="新建虚拟文件夹"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    e.preventDefault()
+                    handleCreateFileVirtualFolder()
+                  }}
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            {creatingFileFolder && (
+              <div className="sidebar-virtual-folder-inline-create">
+                <input
+                  type="text"
+                  className="sidebar-virtual-folder-inline-input"
+                  placeholder="输入虚拟文件夹名称后按回车确认，Esc 取消"
+                  autoFocus
+                  value={creatingFileFolderName}
+                  onChange={(e) => handleFileFolderInlineNameChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      handleFileFolderInlineConfirm()
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault()
+                      handleFileFolderInlineCancel()
+                    }
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+            )}
+
             <ul className="sidebar-file-list">
-              {standaloneFiles.map((file) => (
+              {rootFiles.map((file) => (
                 <li
                   key={file.path}
                   className={`sidebar-file-row tree-row file ${activePath === file.path ? 'active' : ''}`}
@@ -325,6 +575,69 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                 </li>
               ))}
             </ul>
+
+            {fileVirtualFolders.length > 0 && (
+              <div className="sidebar-virtual-folders">
+                {fileVirtualFolders.map((folder) => {
+                  const files = filesByFolderId.get(folder.id) ?? []
+                  const isCollapsed = collapsedFileVirtualFolders[folder.id] ?? false
+                  return (
+                    <div key={folder.id} className="sidebar-virtual-folder-section">
+                      <div
+                        className="sidebar-virtual-folder-header"
+                        onClick={() => toggleFileVirtualFolderCollapse(folder.id)}
+                      >
+                        <span className="sidebar-virtual-folder-toggle-icon">{isCollapsed ? '▸' : '▾'}</span>
+                        <span className="sidebar-virtual-folder-name">{folder.name}</span>
+                        <button
+                          type="button"
+                          className="sidebar-virtual-folder-delete-btn"
+                          title="删除虚拟文件夹"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            e.preventDefault()
+                            requestDeleteFileVirtualFolder(folder)
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                      {isCollapsed ? null : (
+                        files.length === 0 ? (
+                          <div className="sidebar-virtual-folder-empty">
+                            暂无文件，将文件移动到该虚拟文件夹后会显示在这里
+                          </div>
+                        ) : (
+                          <ul className="sidebar-file-list">
+                            {files.map((file) => (
+                              <li
+                                key={file.path}
+                                className={`sidebar-file-row tree-row file ${activePath === file.path ? 'active' : ''}`}
+                                onClick={() => onFileClick(file.path)}
+                                onContextMenu={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  setMenuState({
+                                    visible: true,
+                                    x: e.clientX,
+                                    y: e.clientY,
+                                    target: { path: file.path, kind: 'standalone-file' },
+                                  })
+                                }}
+                                title={file.path}
+                              >
+                                <span className="tree-icon">📄</span>
+                                <span className="tree-name">{file.name}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </section>
         )}
 
@@ -465,6 +778,23 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
             const isTreeDir = target.kind === 'tree-dir'
             const isFolderRoot = target.kind === 'folder-root'
 
+            if (isStandaloneFile && fileVirtualFolders.length > 0) {
+              items.push({
+                id: 'move-to-virtual-folder',
+                label: 'Move to Virtual Folder…',
+                onClick: () => {
+                  const offsetX = 180
+                  setFileFolderMenuState({
+                    visible: true,
+                    x: menuState.x + offsetX,
+                    y: menuState.y,
+                    targetPath: target.path,
+                  })
+                  closeMenu()
+                },
+              })
+            }
+
             if (isFileTarget || isTreeDir) {
               items.push({ id: 'delete', label: 'Delete…', onClick: () => triggerContextAction('delete') })
             }
@@ -477,6 +807,72 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
 
             return items
           })()}
+        />
+      )}
+
+      {fileFolderMenuState.visible && fileFolderMenuState.targetPath && fileVirtualFolders.length > 0 && (
+        <FileContextMenu
+          x={fileFolderMenuState.x}
+          y={fileFolderMenuState.y}
+          onRequestClose={() => setFileFolderMenuState({ visible: false, x: 0, y: 0, targetPath: null })}
+          items={[
+            {
+              id: 'move-to-root',
+              label: 'Move to Root (No Folder)',
+              onClick: () => {
+                const targetPath = fileFolderMenuState.targetPath!
+                // Move to Root 语义：删除该 path 的虚拟分配记录
+                setFileVirtualAssignments((prev) => prev.filter((item) => item.path !== targetPath))
+                void (async () => {
+                  const resp = await updateFileVirtualFolderForPath(targetPath, null)
+                  if (!resp.ok) {
+                    console.error('[Sidebar] updateFileVirtualFolderForPath(null) failed', resp.error)
+                    if (typeof window !== 'undefined') {
+                      window.alert(resp.error.message ?? '更新虚拟文件夹失败')
+                    }
+                  }
+                })()
+                setFileFolderMenuState({ visible: false, x: 0, y: 0, targetPath: null })
+              },
+            },
+            ...fileVirtualFolders.map((folder) => ({
+              id: `move-to-folder-${folder.id}`,
+              label: folder.name,
+              onClick: () => {
+                const targetPath = fileFolderMenuState.targetPath!
+                console.log('[Sidebar][FilesVirtual] moveToVirtualFolder clicked', {
+                  targetPath,
+                  folderId: folder.id,
+                  folderName: folder.name,
+                })
+                setFileVirtualAssignments((prev) => {
+                  const now = Date.now()
+                  const idx = prev.findIndex((item) => item.path === targetPath)
+                  if (idx >= 0) {
+                    const next = [...prev]
+                    next[idx] = { ...next[idx], folderId: folder.id, updatedAt: now }
+                    return next
+                  }
+                  return [...prev, { path: targetPath, folderId: folder.id, updatedAt: now }]
+                })
+                void (async () => {
+                  console.log('[Sidebar][FilesVirtual] call updateFileVirtualFolderForPath', {
+                    targetPath,
+                    folderId: folder.id,
+                  })
+                  const resp = await updateFileVirtualFolderForPath(targetPath, folder.id)
+                  console.log('[Sidebar][FilesVirtual] updateFileVirtualFolderForPath resp', resp)
+                  if (!resp.ok) {
+                    console.error('[Sidebar] updateFileVirtualFolderForPath failed', resp.error)
+                    if (typeof window !== 'undefined') {
+                      window.alert(resp.error.message ?? '更新虚拟文件夹失败')
+                    }
+                  }
+                })()
+                setFileFolderMenuState({ visible: false, x: 0, y: 0, targetPath: null })
+              },
+            })),
+          ]}
         />
       )}
     </aside>

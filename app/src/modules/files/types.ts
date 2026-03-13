@@ -53,3 +53,15 @@ export interface ServiceError {
 }
 
 export type Result<T> = { ok: true; data: T; traceId?: string } | { ok: false; error: ServiceError }
+
+export interface FileVirtualFolder {
+  id: string
+  name: string
+  order: number
+}
+
+export interface FileVirtualAssignment {
+  path: string
+  folderId: string | null
+  updatedAt: number
+}

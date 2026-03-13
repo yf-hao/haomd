@@ -2037,6 +2037,18 @@ export function WorkspaceShell({
             inlineNewFolderDir={inlineNewFolderDir}
             onInlineNewFolderConfirm={handleInlineNewFolderConfirm}
             onInlineNewFolderCancel={handleInlineNewFolderCancel}
+            onRequestConfirmDeleteFileVirtualFolder={({ folder, onConfirm }) => {
+              setConfirmDialog({
+                title: '删除虚拟文件夹',
+                message: `确认删除虚拟文件夹 “${folder.name}”？其中的文件会移回根列表。`,
+                confirmText: '删除',
+                cancelText: '取消',
+                onConfirm: () => {
+                  setConfirmDialog(null)
+                  onConfirm()
+                },
+              })
+            }}
           />
         )}
         {activeLeftPanel === 'outline' && (

@@ -170,6 +170,32 @@ fn pdf_folders_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
     Ok(dir.join("pdf_folders.json"))
 }
 
+fn file_virtual_folders_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
+    // 与 recent.json 相同策略：优先使用配置目录
+    if let Ok(mut dir) = app.path().config_dir() {
+        dir.push("haomd");
+        std::fs::create_dir_all(&dir)?;
+        return Ok(dir.join("file_virtual_folders.json"));
+    }
+
+    // 兜底：退回到当前工作目录
+    let dir = std::env::current_dir()?;
+    Ok(dir.join("file_virtual_folders.json"))
+}
+
+fn file_virtual_assignments_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
+    // 与 recent.json 相同策略：优先使用配置目录
+    if let Ok(mut dir) = app.path().config_dir() {
+        dir.push("haomd");
+        std::fs::create_dir_all(&dir)?;
+        return Ok(dir.join("file_virtual_assignments.json"));
+    }
+
+    // 兜底：退回到当前工作目录
+    let dir = std::env::current_dir()?;
+    Ok(dir.join("file_virtual_assignments.json"))
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct SidebarState {
     root: Option<String>,
@@ -453,6 +479,96 @@ async fn read_pdf_folders_store(app: &AppHandle) -> std::io::Result<Vec<PdfFolde
 
 async fn write_pdf_folders_store(app: &AppHandle, items: &[PdfFolder]) -> std::io::Result<()> {
     let path = pdf_folders_store_path(app)?;
+    let bytes = serde_json::to_vec_pretty(items)?;
+    fs::write(path, bytes).await
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct FileVirtualFolder {
+    id: String,
+    name: String,
+    order: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct FileVirtualAssignment {
+    path: String,
+    folder_id: Option<String>,
+    updated_at: u64,
+}
+
+async fn read_file_virtual_folders_store(app: &AppHandle) -> std::io::Result<Vec<FileVirtualFolder>> {
+    let path = file_virtual_folders_store_path(app)?;
+    match fs::read(&path).await {
+        Ok(bytes) => {
+            let items: Vec<FileVirtualFolder> = serde_json::from_slice(&bytes).unwrap_or_default();
+            log::info!(
+                "[tauri][FilesVirtual] read_file_virtual_folders_store: path={:?}, count={}",
+                &path,
+                items.len()
+            );
+            Ok(items)
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            log::info!(
+                "[tauri][FilesVirtual] read_file_virtual_folders_store: path={:?} not found, return empty",
+                &path
+            );
+            Ok(vec![])
+        }
+        Err(err) => Err(err),
+    }
+}
+
+async fn write_file_virtual_folders_store(
+    app: &AppHandle,
+    items: &[FileVirtualFolder],
+) -> std::io::Result<()> {
+    let path = file_virtual_folders_store_path(app)?;
+    log::info!(
+        "[tauri][FilesVirtual] write_file_virtual_folders_store: path={:?}, count={}",
+        &path,
+        items.len()
+    );
+    let bytes = serde_json::to_vec_pretty(items)?;
+    fs::write(path, bytes).await
+}
+
+async fn read_file_virtual_assignments_store(
+    app: &AppHandle,
+) -> std::io::Result<Vec<FileVirtualAssignment>> {
+    let path = file_virtual_assignments_store_path(app)?;
+    match fs::read(&path).await {
+        Ok(bytes) => {
+            let items: Vec<FileVirtualAssignment> = serde_json::from_slice(&bytes).unwrap_or_default();
+            log::info!(
+                "[tauri][FilesVirtual] read_file_virtual_assignments_store: path={:?}, count={}",
+                &path,
+                items.len()
+            );
+            Ok(items)
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            log::info!(
+                "[tauri][FilesVirtual] read_file_virtual_assignments_store: path={:?} not found, return empty",
+                &path
+            );
+            Ok(vec![])
+        }
+        Err(err) => Err(err),
+    }
+}
+
+async fn write_file_virtual_assignments_store(
+    app: &AppHandle,
+    items: &[FileVirtualAssignment],
+) -> std::io::Result<()> {
+    let path = file_virtual_assignments_store_path(app)?;
+    log::info!(
+        "[tauri][FilesVirtual] write_file_virtual_assignments_store: path={:?}, count={}",
+        &path,
+        items.len()
+    );
     let bytes = serde_json::to_vec_pretty(items)?;
     fs::write(path, bytes).await
 }
@@ -1083,6 +1199,160 @@ async fn update_pdf_recent_folder(
         Err(err) => err_payload(
             ErrorCode::IoError,
             format!("更新 PDF 最近文件分类失败: {err}"),
+            trace,
+        ),
+    }
+}
+
+#[tauri::command]
+async fn load_file_virtual_folders(
+    app: AppHandle,
+    trace_id: Option<String>,
+) -> ResultPayload<Vec<FileVirtualFolder>> {
+    let trace = trace_id.unwrap_or_else(new_trace_id);
+    match read_file_virtual_folders_store(&app).await {
+        Ok(list) => ok(list, trace),
+        Err(err) => err_payload(
+            ErrorCode::IoError,
+            format!("读取 Files 虚拟文件夹失败: {err}"),
+            trace,
+        ),
+    }
+}
+
+#[tauri::command]
+async fn save_file_virtual_folders(
+    app: AppHandle,
+    folders: Vec<FileVirtualFolder>,
+    trace_id: Option<String>,
+) -> ResultPayload<()> {
+    let trace = trace_id.unwrap_or_else(new_trace_id);
+    match write_file_virtual_folders_store(&app, &folders).await {
+        Ok(()) => ok((), trace),
+        Err(err) => err_payload(
+            ErrorCode::IoError,
+            format!("写入 Files 虚拟文件夹失败: {err}"),
+            trace,
+        ),
+    }
+}
+
+#[tauri::command]
+async fn list_file_virtual_assignments(
+    app: AppHandle,
+    trace_id: Option<String>,
+) -> ResultPayload<Vec<FileVirtualAssignment>> {
+    let trace = trace_id.unwrap_or_else(new_trace_id);
+    match read_file_virtual_assignments_store(&app).await {
+        Ok(mut list) => {
+            // 一次性 GC：移除旧版本产生的 folder_id == None 的记录，并回写 JSON
+            let original_len = list.len();
+            list.retain(|item| item.folder_id.is_some());
+            let removed = original_len.saturating_sub(list.len());
+            if removed > 0 {
+                log::info!(
+                    "[tauri][FilesVirtual] list_file_virtual_assignments: gc removed {} legacy items, remaining={}",
+                    removed,
+                    list.len()
+                );
+                if let Err(err) = write_file_virtual_assignments_store(&app, &list).await {
+                    log::warn!(
+                        "[tauri][FilesVirtual] list_file_virtual_assignments: gc write failed: {}",
+                        err
+                    );
+                }
+            } else {
+                log::info!(
+                    "[tauri][FilesVirtual] list_file_virtual_assignments: count={} (no legacy items)",
+                    list.len()
+                );
+            }
+            ok(list, trace)
+        }
+        Err(err) => err_payload(
+            ErrorCode::IoError,
+            format!("读取 Files 虚拟分组映射失败: {err}"),
+            trace,
+        ),
+    }
+}
+
+#[tauri::command]
+async fn update_file_virtual_folder_for_path(
+    app: AppHandle,
+    path: String,
+    folder_id: Option<String>,
+    trace_id: Option<String>,
+) -> ResultPayload<FileVirtualAssignment> {
+    let trace = trace_id.unwrap_or_else(new_trace_id);
+
+    // 先读取现有分配列表
+    let mut list = match read_file_virtual_assignments_store(&app).await {
+        Ok(list) => list,
+        Err(err) => {
+            return err_payload(
+                ErrorCode::IoError,
+                format!("读取 Files 虚拟分组映射失败: {err}"),
+                trace,
+            )
+        }
+    };
+
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+
+    // 以传入的参数为权威源：Some => upsert，None => 删除该 path 的分配记录
+    let result_entry;
+
+    if folder_id.is_none() {
+        // 删除该 path 的所有分配记录，将其视为“恢复到根（默认状态）”
+        let original_len = list.len();
+        list.retain(|item| item.path != path);
+        log::info!(
+            "[tauri][FilesVirtual] update_file_virtual_folder_for_path(delete): path={:?}, removed={}, total_assignments={}",
+            &path,
+            original_len.saturating_sub(list.len()),
+            list.len()
+        );
+
+        // 对于删除操作，仍然返回一个带当前时间戳的条目作为响应，方便前端更新本地状态
+        result_entry = FileVirtualAssignment {
+            path: path.clone(),
+            folder_id: None,
+            updated_at: now_ms,
+        };
+    } else {
+        let new_entry = FileVirtualAssignment {
+            path: path.clone(),
+            folder_id: folder_id.clone(),
+            updated_at: now_ms,
+        };
+
+        // 如果列表中已有同 path 条目，则整体替换；否则新增
+        if let Some(item) = list.iter_mut().find(|item| item.path == path) {
+            *item = new_entry.clone();
+        } else {
+            list.push(new_entry.clone());
+        }
+
+        log::info!(
+            "[tauri][FilesVirtual] update_file_virtual_folder_for_path: path={:?}, folder_id={:?}, total_assignments={}",
+            &path,
+            &folder_id,
+            list.len()
+        );
+
+        result_entry = new_entry;
+    }
+
+    // 写回持久化存储，并返回刚刚写入的条目（对于删除操作，则返回虚拟“删除结果”）
+    match write_file_virtual_assignments_store(&app, &list).await {
+        Ok(()) => ok(result_entry, trace),
+        Err(err) => err_payload(
+            ErrorCode::IoError,
+            format!("写入 Files 虚拟分组映射失败: {err}"),
             trace,
         ),
     }
@@ -2626,6 +2896,10 @@ pub fn run() {
       load_pdf_folders,
       save_pdf_folders,
       update_pdf_recent_folder,
+      load_file_virtual_folders,
+      save_file_virtual_folders,
+      list_file_virtual_assignments,
+      update_file_virtual_folder_for_path,
       load_sidebar_state,
       save_sidebar_state,
       list_folder,
