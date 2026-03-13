@@ -1,3 +1,7 @@
+:root {
+  --markdown-preview-bg: #0c0d16;
+}
+
 .app-shell {
   display: flex;
   flex-direction: column;
@@ -1288,6 +1292,8 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
+  /* 预览整体背景与 markdown-body.gh-markdown 保持一致 */
+  background: var(--markdown-preview-bg);
   /* 不显示滚动条，但保留滚动能力 */
   scrollbar-width: none;
   -ms-overflow-style: none;

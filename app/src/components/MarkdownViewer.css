@@ -4,7 +4,7 @@
 
 /* 应用内预览使用暗色背景，不影响导出 HTML（导出不带 gh-markdown 类） */
 .markdown-body.gh-markdown {
-  background: #0c0d16;
+  background: var(--markdown-preview-bg);
   color: #e8ecf5;
 }
 
