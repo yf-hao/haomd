@@ -1,4 +1,8 @@
 name: Release
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   push:
     branches:
@@ -11,6 +15,8 @@ jobs:
       is_new_version: ${{ steps.check.outputs.is_new_version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Check if version is bumped
         id: check
         run: |
@@ -49,6 +55,8 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -76,7 +84,16 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: 'HaoMD v__VERSION__'
-          releaseBody: 'See the assets below to download.'
+          releaseBody: |
+            ## Download
+
+            | Platform | File |
+            |---|---|
+            | 🍎 macOS (Apple Silicon / M1~M4) | `*_aarch64.dmg` |
+            | 🍎 macOS (Intel x86_64) | `*_x64.dmg` |
+            | 🪟 Windows | `*_x64-setup.exe` |
+            | 🐧 Linux (Debian/Ubuntu) | `*.deb` |
+            | 🐧 Linux (AppImage) | `*.AppImage` |
           releaseDraft: true
           prerelease: false
           projectPath: app

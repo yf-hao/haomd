@@ -102,13 +102,6 @@ function joinPath(dir: string, basename: string): string {
   return `${normalizedDir}/${basename}`
 }
 
-function getParentDir(dir: string): string | null {
-  const normalized = normalizeDirPath(dir)
-  if (!normalized || normalized === '/') return null
-  const idx = normalized.lastIndexOf('/')
-  if (idx <= 0) return '/'
-  return normalized.slice(0, idx)
-}
 
 function genWorkspaceId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -150,23 +143,19 @@ async function writeWorkspaceConfig(configPath: string, id: string): Promise<voi
 }
 
 async function resolveWorkspaceIdForDir(dir: string): Promise<{ workspaceId: string; workspaceRoot: string } | null> {
-  let current = normalizeDirPath(dir)
+  const current = normalizeDirPath(dir)
   if (!current || current === '/') return null
 
-  while (true) {
-    const configPath = joinPath(current, WORKSPACE_CONFIG_BASENAME)
-    const cached = workspaceIdCache.get(configPath)
-    if (cached) {
-      return { workspaceId: cached, workspaceRoot: current }
-    }
-    const cfg = await readWorkspaceConfig(configPath)
-    if (cfg && cfg.id) {
-      workspaceIdCache.set(configPath, cfg.id)
-      return { workspaceId: cfg.id, workspaceRoot: current }
-    }
-    const parent = getParentDir(current)
-    if (!parent || parent === current || parent === '/') break
-    current = parent
+  const configPath = joinPath(current, WORKSPACE_CONFIG_BASENAME)
+  const cached = workspaceIdCache.get(configPath)
+  if (cached) {
+    return { workspaceId: cached, workspaceRoot: current }
+  }
+
+  const cfg = await readWorkspaceConfig(configPath)
+  if (cfg && cfg.id) {
+    workspaceIdCache.set(configPath, cfg.id)
+    return { workspaceId: cfg.id, workspaceRoot: current }
   }
 
   return null
@@ -200,6 +189,214 @@ function getLastTwoDirNames(dir: string): string {
   if (parts.length === 1) return parts[0]
   const lastTwo = parts.slice(-2)
   return lastTwo.join('/')
+}
+
+async function resolveWorkspaceForDocPath(rawDocPath: string): Promise<{ workspaceId: string; workspaceRoot: string } | null> {
+  const dir = resolveDocDirForKey(rawDocPath)
+  if (!dir || dir === '/') return null
+  try {
+    return await ensureWorkspaceIdForDir(dir)
+  } catch (e) {
+    console.error('[docConversationService] resolveWorkspaceForDocPath failed', e)
+    return null
+  }
+}
+
+function getWorkspaceDocPathKey(workspaceId: string): string {
+  return workspaceId
+}
+
+type WorkspaceCache = {
+  records: DocConversationRecord[]
+  loaded: boolean
+  loadingPromise: Promise<void> | null
+}
+
+type WorkspaceContext = {
+  workspaceId: string
+  workspaceRoot: string
+  cache: WorkspaceCache
+  conversationFilePath: string
+}
+
+const workspaceCacheMap = new Map<string, WorkspaceCache>()
+
+function getOrCreateWorkspaceCache(workspaceId: string): WorkspaceCache {
+  let cache = workspaceCacheMap.get(workspaceId)
+  if (!cache) {
+    cache = {
+      records: [],
+      loaded: false,
+      loadingPromise: null,
+    }
+    workspaceCacheMap.set(workspaceId, cache)
+  }
+  return cache
+}
+
+function getWorkspaceConversationFilePath(workspaceRoot: string): string {
+  const root = normalizeDirPath(workspaceRoot)
+  if (!root || root === '/') {
+    return '/.haomd/doc_conversations.json'
+  }
+  return joinPath(root, '.haomd/doc_conversations.json')
+}
+
+async function readWorkspaceConversations(conversationFilePath: string): Promise<DocConversationRecord[]> {
+  try {
+    const resp = await readFile(conversationFilePath)
+    if (!resp.ok) {
+      if (resp.error.code !== 'NOT_FOUND') {
+        console.warn('[docConversationService] readWorkspaceConversations error', resp.error)
+      }
+      return []
+    }
+    const raw = resp.data.content
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed as DocConversationRecord[]
+  } catch (e) {
+    console.warn('[docConversationService] readWorkspaceConversations parse error', e)
+    return []
+  }
+}
+
+async function writeWorkspaceConversations(
+  conversationFilePath: string,
+  records: DocConversationRecord[],
+): Promise<void> {
+  try {
+    const content = JSON.stringify(records, null, 2)
+    const resp = await writeFile({ path: conversationFilePath, content })
+    if (!resp.ok) {
+      console.warn('[docConversationService] writeWorkspaceConversations failed', resp.error)
+    }
+  } catch (e) {
+    console.error('[docConversationService] writeWorkspaceConversations error', e)
+  }
+}
+
+function migrateLegacyRecordsForWorkspace(
+  workspaceId: string,
+  legacyRecords: DocConversationRecord[],
+): DocConversationRecord[] {
+  if (!legacyRecords || legacyRecords.length === 0) return []
+  const workspaceKey = getWorkspaceDocPathKey(workspaceId)
+
+  const candidates = legacyRecords.filter((rec) => {
+    if (rec.docPath === workspaceKey) return true
+    if (typeof rec.docPath === 'string' && rec.docPath.startsWith(`${workspaceId}::`)) return true
+    return false
+  })
+
+  if (candidates.length === 0) return []
+
+  let lastActiveAt = 0
+  let sessionId = candidates[0]?.sessionId ?? genSessionId()
+  let difyConversationId: string | undefined
+  let difyProviderConversations: Record<string, string> = {}
+  const byId = new Map<string, DocConversationMessage>()
+
+  for (const rec of candidates) {
+    if (rec.lastActiveAt > lastActiveAt) {
+      lastActiveAt = rec.lastActiveAt
+      sessionId = rec.sessionId
+      if (rec.difyConversationId) {
+        difyConversationId = rec.difyConversationId
+      }
+    }
+    if (rec.difyProviderConversations) {
+      difyProviderConversations = {
+        ...difyProviderConversations,
+        ...rec.difyProviderConversations,
+      }
+    }
+    for (const m of rec.messages) {
+      byId.set(m.id, m)
+    }
+  }
+
+  const messages = Array.from(byId.values()).sort((a, b) => a.timestamp - b.timestamp)
+
+  const merged: DocConversationRecord = {
+    docPath: workspaceKey,
+    sessionId,
+    lastActiveAt,
+    difyConversationId,
+    difyProviderConversations,
+    messages,
+  }
+
+  return [merged]
+}
+
+async function ensureLoadedForDocPath(docPath: string): Promise<WorkspaceContext | null> {
+  const workspace = await resolveWorkspaceForDocPath(docPath)
+  if (!workspace) {
+    await ensureLoaded()
+    return null
+  }
+
+  const cache = getOrCreateWorkspaceCache(workspace.workspaceId)
+  const conversationFilePath = getWorkspaceConversationFilePath(workspace.workspaceRoot)
+
+  if (cache.loaded) {
+    return { workspaceId: workspace.workspaceId, workspaceRoot: workspace.workspaceRoot, cache, conversationFilePath }
+  }
+
+  if (cache.loadingPromise) {
+    await cache.loadingPromise
+    return { workspaceId: workspace.workspaceId, workspaceRoot: workspace.workspaceRoot, cache, conversationFilePath }
+  }
+
+  cache.loadingPromise = (async () => {
+    try {
+      let records = await readWorkspaceConversations(conversationFilePath)
+      if (!records || records.length === 0) {
+        try {
+          const resp = await invoke<BackendResult<DocConversationRecordCfg[]>>('load_doc_conversations')
+          if ('Ok' in resp) {
+            const legacyRecords = (resp.Ok.data ?? []) as DocConversationRecord[]
+            const migrated = migrateLegacyRecordsForWorkspace(workspace.workspaceId, legacyRecords)
+            if (migrated.length > 0) {
+              records = migrated
+              await writeWorkspaceConversations(conversationFilePath, records)
+            }
+          } else {
+            console.warn(
+              '[docConversationService] load_doc_conversations for migration error',
+              resp.Err.error,
+            )
+          }
+        } catch (e) {
+          console.warn('[docConversationService] load_doc_conversations for migration failed', e)
+        }
+      }
+      cache.records = records
+    } finally {
+      cache.loaded = true
+      cache.loadingPromise = null
+    }
+  })()
+
+  await cache.loadingPromise
+  return { workspaceId: workspace.workspaceId, workspaceRoot: workspace.workspaceRoot, cache, conversationFilePath }
+}
+
+async function persistForDocPath(docPath: string, records: DocConversationRecord[]): Promise<void> {
+  const workspace = await resolveWorkspaceForDocPath(docPath)
+  if (!workspace) {
+    await persist(records)
+    return
+  }
+
+  const cache = getOrCreateWorkspaceCache(workspace.workspaceId)
+  cache.records = records
+  cache.loaded = true
+  cache.loadingPromise = null
+
+  const conversationFilePath = getWorkspaceConversationFilePath(workspace.workspaceRoot)
+  await writeWorkspaceConversations(conversationFilePath, records)
 }
 
 /**
@@ -239,13 +436,16 @@ async function toStableDocPathKey(rawDocPath: string): Promise<string> {
   }
 
   try {
-    // 仍然解析 workspaceId，以确保工作区配置文件存在，但不再将其纳入存储 key
-    await ensureWorkspaceIdForDir(dir)
-    return getLastTwoDirNames(dir)
+    const workspace = await resolveWorkspaceForDocPath(rawDocPath)
+    if (workspace && workspace.workspaceId) {
+      return getWorkspaceDocPathKey(workspace.workspaceId)
+    }
   } catch (e) {
     console.error('[docConversationService] toStableDocPathKey failed', e)
-    return getLastTwoDirNames(dir)
   }
+
+  // 兜底：保持与旧数据兼容
+  return getLastTwoDirNames(dir)
 }
 
 async function ensureLoaded(): Promise<void> {
@@ -304,9 +504,9 @@ export function createDocConversationService(): DocConversationService {
     },
 
     async getByDocPath(docPath: string): Promise<DocConversationRecord | null> {
-      await ensureLoaded()
       const stableKey = await toStableDocPathKey(docPath)
-      const records = getCache()
+      const workspaceContext = await ensureLoadedForDocPath(docPath)
+      const records = workspaceContext ? workspaceContext.cache.records : getCache()
       return (
         records.find((r) => r.docPath === stableKey) ??
         records.find((r) => r.docPath === docPath) ??
@@ -316,9 +516,9 @@ export function createDocConversationService(): DocConversationService {
 
     async upsertFromState(options): Promise<void> {
       const { docPath, state, providerType, modelName, providerId, difyConversationId } = options
-      await ensureLoaded()
-      const records = getCache()
       const stableKey = await toStableDocPathKey(docPath)
+      const workspaceContext = await ensureLoadedForDocPath(docPath)
+      const records = workspaceContext ? workspaceContext.cache.records : getCache()
       const nextMessages = toDocMessages(stableKey, state, providerType, modelName)
       const now = Date.now()
 
@@ -363,15 +563,15 @@ export function createDocConversationService(): DocConversationService {
         })
       }
 
-      await persist(records)
+      await persistForDocPath(docPath, records)
       emitDocConversationEvent({ type: 'updated', docPath })
     },
 
     async clearByDocPath(docPath: string): Promise<void> {
-      await ensureLoaded()
-      const records = getCache()
-      const now = Date.now()
       const stableKey = await toStableDocPathKey(docPath)
+      const workspaceContext = await ensureLoadedForDocPath(docPath)
+      const records = workspaceContext ? workspaceContext.cache.records : getCache()
+      const now = Date.now()
       const idx = records.findIndex((r) => {
         if (r.docPath === stableKey || r.docPath === docPath) return true
         if (typeof r.docPath === 'string' && r.docPath.endsWith(`::${stableKey}`)) return true
@@ -396,14 +596,14 @@ export function createDocConversationService(): DocConversationService {
         })
       }
 
-      await persist(records)
+      await persistForDocPath(docPath, records)
       emitDocConversationEvent({ type: 'cleared', docPath })
     },
 
     async compressByDocPath(docPath: string): Promise<void> {
-      await ensureLoaded()
-      const records = getCache()
       const stableKey = await toStableDocPathKey(docPath)
+      const workspaceContext = await ensureLoadedForDocPath(docPath)
+      const records = workspaceContext ? workspaceContext.cache.records : getCache()
       const idx = records.findIndex((r) => {
         if (r.docPath === stableKey || r.docPath === docPath) return true
         if (typeof r.docPath === 'string' && r.docPath.endsWith(`::${stableKey}`)) return true
@@ -425,7 +625,7 @@ export function createDocConversationService(): DocConversationService {
           docPath: stableKey,
         }
         records[idx] = merged
-        await persist(records)
+        await persistForDocPath(docPath, records)
         emitDocConversationEvent({ type: 'compressed', docPath })
 
         // 在压缩完成后，根据此次生成的摘要消息构建 SessionDigest 并入队

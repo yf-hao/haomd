@@ -30,8 +30,8 @@ describe('docConversationService', () => {
         expect(index[0].messageCount).toBe(2)
     })
 
-    it('upsertFromState should persist new messages', async () => {
-        // Mock workspace config lookup to return null (fallback to simple path)
+    it('upsertFromState should persist new messages into workspace file', async () => {
+        // Mock workspace config lookup to return NOT_FOUND so a new workspace is created
         ; (filesService.readFile as any).mockResolvedValue({ ok: false, error: { code: 'NOT_FOUND' } })
             ; (mockInvoke as any).mockResolvedValue({ Ok: { data: [] } })
 
@@ -48,16 +48,12 @@ describe('docConversationService', () => {
             modelName: 'gpt-4'
         })
 
-        expect(mockInvoke).toHaveBeenCalledWith('save_doc_conversations', expect.objectContaining({
-            records: expect.arrayContaining([
-                expect.objectContaining({
-                    docPath: expect.stringContaining('test'), // Match stable key format
-                    messages: expect.arrayContaining([
-                        expect.objectContaining({ content: 'hello' })
-                    ])
-                })
-            ])
-        }))
+        const writeCalls = (filesService.writeFile as any).mock.calls as any[]
+        const convoCall = writeCalls.find(([arg]: any[]) => typeof arg?.path === 'string' && arg.path.includes('doc_conversations.json'))
+        expect(convoCall).toBeDefined()
+        const payload = JSON.parse(convoCall[0].content)
+        expect(Array.isArray(payload)).toBe(true)
+        expect(payload[0].messages[0].content).toBe('hello')
     })
 
     it('clearByDocPath should clear messages for a path', async () => {
@@ -100,14 +96,12 @@ describe('docConversationService', () => {
             modelName: 'gpt-4'
         })
 
-        // Stable key should be "my-project/subdir" (workspace ID no longer participates in docPath key)
-        expect(mockInvoke).toHaveBeenCalledWith('save_doc_conversations', expect.objectContaining({
-            records: expect.arrayContaining([
-                expect.objectContaining({
-                    docPath: 'my-project/subdir'
-                })
-            ])
-        }))
+        const writeCalls = (filesService.writeFile as any).mock.calls as any[]
+        const convoCall = writeCalls.find(([arg]: any[]) => typeof arg?.path === 'string' && arg.path.includes('doc_conversations.json'))
+        expect(convoCall).toBeDefined()
+        const payload = JSON.parse(convoCall[0].content)
+        expect(Array.isArray(payload)).toBe(true)
+        expect(payload[0].docPath).toBe('ws-123')
     })
 
     it('should create workspace ID if not exists and valid directory', async () => {
