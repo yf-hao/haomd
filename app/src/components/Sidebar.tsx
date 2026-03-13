@@ -250,7 +250,20 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
 
   const [fileVirtualFolders, setFileVirtualFolders] = useState<FileVirtualFolder[]>([])
   const [fileVirtualAssignments, setFileVirtualAssignments] = useState<FileVirtualAssignment[]>([])
-  const [collapsedFileVirtualFolders, setCollapsedFileVirtualFolders] = useState<Record<string, boolean>>({})
+  const [collapsedFileVirtualFolders, setCollapsedFileVirtualFolders] = useState<Record<string, boolean>>(() => {
+    if (typeof localStorage === 'undefined') return {}
+    try {
+      const raw = localStorage.getItem('haomd:files:virtual:collapsed-folders')
+      if (!raw) return {}
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object') {
+        return parsed as Record<string, boolean>
+      }
+      return {}
+    } catch {
+      return {}
+    }
+  })
   const [creatingFileFolder, setCreatingFileFolder] = useState(false)
   const [creatingFileFolderName, setCreatingFileFolderName] = useState('')
   const [renamingFileFolderId, setRenamingFileFolderId] = useState<string | null>(null)
@@ -463,6 +476,15 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
     setRenamingFileFolderId(null)
     setRenamingFileFolderName('')
   }
+
+  useEffect(() => {
+    if (typeof localStorage === 'undefined') return
+    try {
+      localStorage.setItem('haomd:files:virtual:collapsed-folders', JSON.stringify(collapsedFileVirtualFolders))
+    } catch (e) {
+      console.warn('[Sidebar] persist collapsedFileVirtualFolders failed', e)
+    }
+  }, [collapsedFileVirtualFolders])
 
   useEffect(() => {
     let cancelled = false
@@ -705,7 +727,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                       {isCollapsed ? null : (
                         files.length === 0 ? (
                           <div className="sidebar-virtual-folder-empty">
-                            暂无文件，将文件移动到该虚拟文件夹后会显示在这里
+                            No files yet. Move files into this virtual folder to show them here.
                           </div>
                         ) : (
                           <ul className="sidebar-file-list">

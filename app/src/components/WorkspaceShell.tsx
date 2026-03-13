@@ -772,6 +772,7 @@ export function WorkspaceShell({
         next.sort((a, b) => a.name.localeCompare(b.name))
         await savePdfFolders(next)
         setPdfFolders(next)
+        setCollapsedPdfFolders((prev) => ({ ...prev, [id]: true }))
       } catch (e) {
         console.error('[WorkspaceShell] handlePdfFolderInlineConfirm failed', e)
         setStatusMessage((e as any)?.message ?? '创建虚拟文件夹失败')
@@ -2186,7 +2187,7 @@ export function WorkspaceShell({
                         {isCollapsed ? null : (
                           items.length === 0 ? (
                             <div className="pdf-folder-empty" style={{ padding: '4px 12px', fontSize: '12px', color: '#9ca3af' }}>
-                              暂无 PDF，将最近文件移动到该虚拟文件夹后会显示在这里
+                              No PDFs yet. Move recent files into this virtual folder to show them here.
                             </div>
                           ) : (
                             <ul className="pdf-recent-list">
