@@ -37,8 +37,10 @@ const parentPathOf = (path: string): string | null => {
 export function buildFileTree(root: string, entries: FileEntry[]): FileTreeNode[] {
   const normRoot = normalizePath(root)
 
-  // 仅保留 root 子树内的条目
-  const filtered = entries.filter((e) => isSubPath(normRoot, e.path) && normalizePath(e.path) !== normRoot)
+  // 仅保留 root 子树内的条目，同时在 UI 层隐藏以 "." 开头的隐藏目录/文件（例如 .haomd、.git 等）
+  const filtered = entries.filter(
+    (e) => isSubPath(normRoot, e.path) && normalizePath(e.path) !== normRoot && !e.name.startsWith('.'),
+  )
 
   const nodeMap = new Map<string, FileTreeNode>()
   const roots: FileTreeNode[] = []
