@@ -300,14 +300,13 @@ export function WorkspaceShell({
     event.stopPropagation()
   }, [aiChatDockSide, aiChatWidthLeft, aiChatWidthRight])
 
-  // AI Chat Persistence：使用 localStorage 记住模式 / 位置 / 打开状态 / 左右宽度
+  // AI Chat Persistence：使用 localStorage 记住模式 / 位置 / 左右宽度（不再记忆是否打开）
   useEffect(() => {
     try {
       if (typeof localStorage === 'undefined') return
 
       const storedMode = localStorage.getItem(STORAGE_AI_MODE)
       const storedDockSide = localStorage.getItem(STORAGE_AI_DOCK_SIDE)
-      const storedOpen = localStorage.getItem(STORAGE_AI_OPEN)
       const storedLeft = localStorage.getItem(STORAGE_AI_WIDTH_LEFT)
       const storedRight = localStorage.getItem(STORAGE_AI_WIDTH_RIGHT)
 
@@ -316,9 +315,6 @@ export function WorkspaceShell({
       }
       if (storedDockSide === 'left' || storedDockSide === 'right') {
         setAiChatDockSide(storedDockSide)
-      }
-      if (storedOpen != null) {
-        setAiChatOpen(storedOpen === 'true')
       }
       if (storedLeft != null) {
         const w = Number(storedLeft)
@@ -339,13 +335,12 @@ export function WorkspaceShell({
 
       localStorage.setItem(STORAGE_AI_MODE, aiChatMode)
       localStorage.setItem(STORAGE_AI_DOCK_SIDE, aiChatDockSide)
-      localStorage.setItem(STORAGE_AI_OPEN, String(aiChatOpen))
       localStorage.setItem(STORAGE_AI_WIDTH_LEFT, String(aiChatWidthLeft))
       localStorage.setItem(STORAGE_AI_WIDTH_RIGHT, String(aiChatWidthRight))
     } catch (e) {
       console.error('Failed to save AI Chat state to localStorage', e)
     }
-  }, [aiChatMode, aiChatDockSide, aiChatOpen, aiChatWidthLeft, aiChatWidthRight])
+  }, [aiChatMode, aiChatDockSide, aiChatWidthLeft, aiChatWidthRight])
 
   useEffect(() => {
     // 首次渲染只作为初始化，不写回 localStorage，避免用默认 400 覆盖已有值

@@ -4,7 +4,6 @@ import type { ChatEntryMode, EntryContext } from '../modules/ai/domain/chatSessi
 // AI Chat localStorage keys
 const STORAGE_AI_MODE = 'haomd:aiChat:mode'
 const STORAGE_AI_DOCK_SIDE = 'haomd:aiChat:dockSide'
-const STORAGE_AI_OPEN = 'haomd:aiChat:isOpen'
 const STORAGE_AI_WIDTH_LEFT = 'haomd:aiChat:widthLeft'
 const STORAGE_AI_WIDTH_RIGHT = 'haomd:aiChat:widthRight'
 
@@ -72,13 +71,12 @@ export function useAiChatManager({ activeTabId }: AiChatManagerOptions) {
 
             localStorage.setItem(STORAGE_AI_MODE, aiChatMode)
             localStorage.setItem(STORAGE_AI_DOCK_SIDE, aiChatDockSide)
-            localStorage.setItem(STORAGE_AI_OPEN, String(aiChatOpen))
             localStorage.setItem(STORAGE_AI_WIDTH_LEFT, String(aiChatWidthLeft))
             localStorage.setItem(STORAGE_AI_WIDTH_RIGHT, String(aiChatWidthRight))
         } catch (e) {
             console.error('Failed to save AI Chat state to localStorage', e)
         }
-    }, [aiChatMode, aiChatDockSide, aiChatOpen, aiChatWidthLeft, aiChatWidthRight])
+    }, [aiChatMode, aiChatDockSide, aiChatWidthLeft, aiChatWidthRight])
 
     useEffect(() => {
         // 首次渲染只作为初始化，不写回 localStorage，避免用默认 400 覆盖已有值
