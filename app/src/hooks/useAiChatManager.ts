@@ -32,14 +32,13 @@ export function useAiChatManager({ activeTabId }: AiChatManagerOptions) {
 
     const aiChatWidth = aiChatDockSide === 'left' ? aiChatWidthLeft : aiChatWidthRight
 
-    // AI Chat Persistence：使用 localStorage 记住模式 / 位置 / 打开状态 / 左右宽度
+    // AI Chat Persistence：使用 localStorage 记住模式 / 位置 / 左右宽度（不再记忆是否打开）
     useEffect(() => {
         try {
             if (typeof localStorage === 'undefined') return
 
             const storedMode = localStorage.getItem(STORAGE_AI_MODE)
             const storedDockSide = localStorage.getItem(STORAGE_AI_DOCK_SIDE)
-            const storedOpen = localStorage.getItem(STORAGE_AI_OPEN)
             const storedLeft = localStorage.getItem(STORAGE_AI_WIDTH_LEFT)
             const storedRight = localStorage.getItem(STORAGE_AI_WIDTH_RIGHT)
 
@@ -48,9 +47,6 @@ export function useAiChatManager({ activeTabId }: AiChatManagerOptions) {
             }
             if (storedDockSide === 'left' || storedDockSide === 'right') {
                 setAiChatDockSide(storedDockSide as 'left' | 'right')
-            }
-            if (storedOpen != null) {
-                setAiChatOpen(storedOpen === 'true')
             }
             if (storedLeft != null) {
                 const w = Number(storedLeft)

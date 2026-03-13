@@ -49,7 +49,7 @@
 .ai-chat-body {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0;
 }
 
 .modal.modal-ai-chat .modal-title {
@@ -181,8 +181,20 @@
 }
 
 .ai-chat-input {
-  margin-top: 12px;
+  margin-top: 0;
+  padding-top: 6px;
   padding-bottom: 20px;
+  position: relative;
+}
+
+.ai-chat-input::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: rgba(15, 23, 42, 0.96);
 }
 
 .ai-chat-input-row {

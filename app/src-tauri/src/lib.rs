@@ -497,7 +497,9 @@ struct FileVirtualAssignment {
     updated_at: u64,
 }
 
-async fn read_file_virtual_folders_store(app: &AppHandle) -> std::io::Result<Vec<FileVirtualFolder>> {
+async fn read_file_virtual_folders_store(
+    app: &AppHandle,
+) -> std::io::Result<Vec<FileVirtualFolder>> {
     let path = file_virtual_folders_store_path(app)?;
     match fs::read(&path).await {
         Ok(bytes) => {
@@ -540,7 +542,8 @@ async fn read_file_virtual_assignments_store(
     let path = file_virtual_assignments_store_path(app)?;
     match fs::read(&path).await {
         Ok(bytes) => {
-            let items: Vec<FileVirtualAssignment> = serde_json::from_slice(&bytes).unwrap_or_default();
+            let items: Vec<FileVirtualAssignment> =
+                serde_json::from_slice(&bytes).unwrap_or_default();
             log::info!(
                 "[tauri][FilesVirtual] read_file_virtual_assignments_store: path={:?}, count={}",
                 &path,

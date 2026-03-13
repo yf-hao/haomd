@@ -844,6 +844,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  background: rgba(15, 23, 42, 0.96);
 }
 
 /* Dock 模式下的 AI Chat 布局：上方消息滚动，下方输入固定 */
@@ -861,7 +862,7 @@
   width: 100%;
   overflow-y: auto;
   max-height: none;
-  padding-bottom: 30px;
+  padding-bottom: 0;
   /* Dock 模式下不限制高度，由 pane 自己决定 */
 }
 

@@ -46,7 +46,6 @@ import type { RecentFile } from '../modules/files/types'
 // AI Chat localStorage keys
 const STORAGE_AI_MODE = 'haomd:aiChat:mode'
 const STORAGE_AI_DOCK_SIDE = 'haomd:aiChat:dockSide'
-const STORAGE_AI_OPEN = 'haomd:aiChat:isOpen'
 const STORAGE_AI_WIDTH_LEFT = 'haomd:aiChat:widthLeft'
 const STORAGE_AI_WIDTH_RIGHT = 'haomd:aiChat:widthRight'
 
