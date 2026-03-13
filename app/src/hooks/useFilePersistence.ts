@@ -173,9 +173,47 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
         setStatusMessage('已取消保存')
         return { ok: false as const, error: { code: 'CANCELLED', message: '用户取消', traceId: undefined } }
       }
+
+      // 规则：
+      // - 用户在对话框里输入 demo       → demo.md
+      // - 用户在对话框里输入 demo.html → demo.html
+      // - 用户在对话框里输入 demo.md   → demo.md
+      const chosenPath = String(chosen)
+      const lastSep = Math.max(chosenPath.lastIndexOf('/'), chosenPath.lastIndexOf('\\'))
+      const dirPart = lastSep >= 0 ? chosenPath.slice(0, lastSep + 1) : ''
+      const namePart = lastSep >= 0 ? chosenPath.slice(lastSep + 1) : chosenPath
+
+      const trimmedName = namePart.trim()
+      const dotIndex = trimmedName.lastIndexOf('.')
+      const hasExt = dotIndex > 0 && dotIndex < trimmedName.length - 1
+
+      let finalName: string
+      if (!hasExt) {
+        // 没有扩展名时，默认补 .md
+        finalName = `${trimmedName}.md`
+      } else {
+        const lower = trimmedName.toLowerCase()
+        // 通用规则：兼容系统对话框在 Markdown 过滤器下自动追加 .md 的情况。
+        // 例如：用户输入 demo.html / demo.txt，最终路径可能变成 demo.html.md / demo.txt.md。
+        // 策略：如果文件名以 .md 结尾，且在此之前还包含一个点，则认为是“多加了一层 .md”，去掉最后的 .md。
+        if (lower.endsWith('.md')) {
+          const withoutMd = trimmedName.slice(0, trimmedName.length - 3)
+          const prevDot = withoutMd.lastIndexOf('.')
+          if (prevDot > 0) {
+            finalName = withoutMd
+          } else {
+            finalName = trimmedName
+          }
+        } else {
+          finalName = trimmedName
+        }
+      }
+
+      const finalPath = `${dirPart}${finalName}`
+
       setSaveStatus('saving')
       setStatusMessage('保存中...')
-      const resp = await handleSave(chosen)
+      const resp = await handleSave(finalPath)
       if (resp.ok) {
         // 已保存
       } else if (resp.error.code === 'CONFLICT') {

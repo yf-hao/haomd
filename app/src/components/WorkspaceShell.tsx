@@ -1338,8 +1338,16 @@ export function WorkspaceShell({
       return null
     }
 
-    const hasMdExt = /\.md$/i.test(trimmed)
-    const baseName = hasMdExt ? trimmed.replace(/\.md$/i, '') : trimmed
+    // 规则：
+    // - 输入 demo       → demo.md
+    // - 输入 demo.html → demo.html
+    // - 输入 demo.md   → demo.md
+    const fileName = trimmed
+    const dotIndex = fileName.lastIndexOf('.')
+    const hasExt = dotIndex > 0 && dotIndex < fileName.length - 1
+    const baseName = hasExt ? fileName.slice(0, dotIndex) : fileName
+    const ext = hasExt ? fileName.slice(dotIndex) : '.md'
+
     const normalizedFolder = normalizeDirPath(baseFolder)
 
     const resp = await listFolder(normalizedFolder)
@@ -1353,7 +1361,7 @@ export function WorkspaceShell({
     let index = 1
     let candidateName = ''
     while (true) {
-      candidateName = index === 1 ? `${baseName}.md` : `${baseName}${index}.md`
+      candidateName = index === 1 ? `${baseName}${ext}` : `${baseName}${index}${ext}`
       if (!usedNames.has(candidateName.toLowerCase())) break
       index += 1
     }
