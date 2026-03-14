@@ -1734,7 +1734,7 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .separator()
         .item(&PredefinedMenuItem::cut(app, None)?)
         .item(&PredefinedMenuItem::copy(app, None)?)
-        .item(&PredefinedMenuItem::paste(app, None)?)
+        .item(&MenuItemBuilder::new("Paste").id("paste").accelerator("CmdOrCtrl+v").build(app)?)
         .separator()
         .item(
             &MenuItemBuilder::new("Find")
