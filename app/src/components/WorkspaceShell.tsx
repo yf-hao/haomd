@@ -27,13 +27,12 @@ import { onOpenRecentFile } from '../modules/platform/menuEvents'
 import { createFolder, deleteFsEntry, listFolder, writeFile } from '../modules/files/service'
 import { usePdfPanel } from '../hooks/usePdfPanel'
 import { useAiChatPanel } from '../hooks/useAiChatPanel'
+import { useHugeDoc } from '../hooks/useHugeDoc'
 import { useNativePaste } from '../hooks/useNativePaste'
 import { onNativePasteImage } from '../modules/platform/clipboardEvents'
 import { openTerminalAt } from '../modules/platform/terminalService'
 import { openInFileManager } from '../modules/platform/fileExplorerService'
 import { loadDefaultImagePathStrategyConfig, resolveImageTarget } from '../modules/images/imagePasteStrategy'
-import { countLines, extractChunkAroundLine, applyChunkPatch, localToGlobalLine } from '../modules/editor/chunkEdit'
-import { getHugeDocSettings } from '../modules/settings/editorSettings'
 import { registerApplyHeadingLevel, registerResetHeadingToParagraph, registerEmphasizeSelection, registerInsertCodeBlock } from '../modules/editor/formatService'
 // 改为从内部动态加载，优化编辑性能
 // import { exportToHtml } from '../modules/export/html'
@@ -79,21 +78,6 @@ export interface WorkspaceShellProps {
   onDocumentStatsChange?: (stats: { charCount: number | null }) => void
 }
 
-type HugeDocState = {
-  enabled: boolean
-  threshold: number
-  currentChunk: {
-    from: number
-    to: number
-    value: string
-  } | null
-}
-
-const DEFAULT_HUGE_DOC_LINE_THRESHOLD = 1000
-const DEFAULT_ENABLE_HUGE_DOC_LOCAL_EDIT = true
-const DEFAULT_HUGE_DOC_CHUNK_CONTEXT_LINES = 200
-const DEFAULT_HUGE_DOC_CHUNK_MAX_LINES = 400
-
 // 仅当光标行变化达到该阈值时才更新记忆，避免小幅抖动频繁写入
 const CURSOR_UPDATE_MIN_DELTA = 5
 
@@ -136,7 +120,6 @@ export function WorkspaceShell({
   const [previewActiveLine, setPreviewActiveLine] = useState(1)
   const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null)
   const markdownRef = useRef(markdown)
-  const hugeDocStateRef = useRef(null as any) // 稍后在 Effect 中保持同步
   const lastActiveIdForPreviewRef = useRef<string | null>(null)
 
   const [aboutOpen, setAboutOpen] = useState(false)
@@ -208,11 +191,6 @@ export function WorkspaceShell({
   const [foldRegions, setFoldRegions] = useState<{ fromLine: number; toLine: number }[]>([])
   const [inlineNewFileDir, setInlineNewFileDir] = useState<string | null>(null)
   const [inlineNewFolderDir, setInlineNewFolderDir] = useState<string | null>(null)
-  const [hugeDocState, setHugeDocState] = useState<HugeDocState | null>(null)
-  const [hugeDocEnabled, setHugeDocEnabled] = useState(DEFAULT_ENABLE_HUGE_DOC_LOCAL_EDIT)
-  const [hugeDocLineThreshold, setHugeDocLineThreshold] = useState(DEFAULT_HUGE_DOC_LINE_THRESHOLD)
-  const [hugeDocChunkContextLines, setHugeDocChunkContextLines] = useState(DEFAULT_HUGE_DOC_CHUNK_CONTEXT_LINES)
-  const [hugeDocChunkMaxLines, setHugeDocChunkMaxLines] = useState(DEFAULT_HUGE_DOC_CHUNK_MAX_LINES)
   const [focusRequest, setFocusRequest] = useState<{ localLine: number; searchText?: string } | null>(null)
   const [previewSelectionText, setPreviewSelectionText] = useState<string | null>(null)
   const pdfSelectionGetterRef = useRef<(() => string | null) | null>(null)
@@ -320,9 +298,16 @@ export function WorkspaceShell({
     markdownRef.current = markdown
   }, [markdown])
 
-  useEffect(() => {
-    hugeDocStateRef.current = hugeDocState
-  }, [hugeDocState])
+  // HugeDoc hook
+  const {
+    hugeDocState,
+    hugeDocStateRef,
+    hugeDocEnabled,
+    applyChunkEdit,
+    getChunkContent,
+    localToGlobal,
+    focusOnGlobalLine,
+  } = useHugeDoc({ markdown, markdownRef, activeLine })
 
   const closeTabWithAiSession = useCallback((id: string) => {
     // 按 tab 维度清理 AI Chat 会话
@@ -372,73 +357,6 @@ export function WorkspaceShell({
   }, [isPdfActive, previewSelectionText])
 
   const outlineItems = useOutline(markdown)
-
-  useEffect(() => {
-    let cancelled = false
-      ; (async () => {
-        try {
-          const cfg = await getHugeDocSettings()
-          if (cancelled) return
-          // 关闭大文档局部编辑：始终使用整篇文档，不再按 chunk 裁剪编辑器内容
-          setHugeDocEnabled(false)
-          setHugeDocLineThreshold(cfg.lineThreshold)
-          setHugeDocChunkContextLines(cfg.chunkContextLines)
-          setHugeDocChunkMaxLines(cfg.chunkMaxLines)
-        } catch (e) {
-          console.error('[WorkspaceShell] load hugeDoc settings failed, using defaults', e)
-        }
-      })()
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  // Huge doc detection & initial chunk computation（只负责开启/关闭和首次初始化，不反复重算）
-  useEffect(() => {
-    if (!hugeDocEnabled) {
-      setHugeDocState(null)
-      return
-    }
-
-    const lineCount = countLines(markdown)
-    const enabled = lineCount >= hugeDocLineThreshold
-
-    if (!enabled) {
-      if (hugeDocState) {
-        console.debug('[HugeDoc] disabled for current document, lineCount =', lineCount)
-      }
-      setHugeDocState(null)
-      return
-    }
-
-    // 已经有有效 chunk，则不在这里自动重算，避免与程序性跳转互相覆盖
-    if (hugeDocState?.enabled && hugeDocState.currentChunk) {
-      return
-    }
-
-    try {
-      const centerLine = activeLine > 0 ? activeLine : 1
-      const chunk = extractChunkAroundLine(markdown, centerLine, {
-        contextLines: hugeDocChunkContextLines,
-        maxLines: hugeDocChunkMaxLines,
-      })
-
-      console.debug('[HugeDoc] enabled, lineCount =', lineCount, 'chunk =', {
-        from: chunk.from,
-        to: chunk.to,
-        length: chunk.value.length,
-      })
-
-      setHugeDocState({
-        enabled: true,
-        threshold: hugeDocLineThreshold,
-        currentChunk: chunk,
-      })
-    } catch (e) {
-      console.error('[HugeDoc] failed to compute chunk for huge doc, fallback to normal mode', e)
-      setHugeDocState(null)
-    }
-  }, [markdown, activeLine, hugeDocEnabled, hugeDocLineThreshold, hugeDocChunkContextLines, hugeDocChunkMaxLines, hugeDocState])
 
   // Sidebar Resize
   useEffect(() => {
@@ -591,16 +509,11 @@ export function WorkspaceShell({
   })
 
   const handleMarkdownChange = useCallback((val: string) => {
-    const currentMarkdown = markdownRef.current
-    const currentHugeDocState = hugeDocStateRef.current
-
-    if (hugeDocEnabled && currentHugeDocState?.enabled && currentHugeDocState.currentChunk) {
-      const { from, to } = currentHugeDocState.currentChunk
-      const nextFullDoc = applyChunkPatch(currentMarkdown, { from, to }, val)
-
-      setMarkdown(nextFullDoc)
+    const patchedDoc = applyChunkEdit(val)
+    if (patchedDoc !== null) {
+      setMarkdown(patchedDoc)
       markDirty()
-      updateActiveContent(nextFullDoc)
+      updateActiveContent(patchedDoc)
       return
     }
 
@@ -608,7 +521,7 @@ export function WorkspaceShell({
     setMarkdown(val)
     markDirty()
     updateActiveContent(val)
-  }, [hugeDocEnabled, markDirty, updateActiveContent])
+  }, [applyChunkEdit, markDirty, updateActiveContent])
 
   // 当前激活的 PDF 文件路径（仅在 isPdfActive 时有值）
   const activePdfPath = isPdfActive ? activeTab?.path ?? null : null
@@ -627,12 +540,8 @@ export function WorkspaceShell({
       return pdfNotes[activePdfPath] ?? ''
     }
 
-    if (hugeDocEnabled && hugeDocState?.enabled && hugeDocState.currentChunk) {
-      return hugeDocState.currentChunk.value
-    }
-
-    return markdown
-  }, [isPdfActive, activePdfPath, pdfNotes, hugeDocEnabled, hugeDocState, markdown])
+    return getChunkContent() ?? markdown
+  }, [isPdfActive, activePdfPath, pdfNotes, getChunkContent, markdown])
 
   // 统一的编辑器 onChange：
   // - PDF 标签：只更新 pdfNotes，不碰 markdown/tab 内容
@@ -1652,16 +1561,8 @@ export function WorkspaceShell({
     // 程序性滚动期间不更新 activeLine，避免触发大文档 effect 重算 chunk
     if (isProgrammaticScrollRef.current) return
 
-    const currentHugeDocState = hugeDocStateRef.current
-    let globalLine: number
-
-    if (hugeDocEnabled && currentHugeDocState?.enabled && currentHugeDocState.currentChunk) {
-      globalLine = localToGlobalLine(markdownRef.current, currentHugeDocState.currentChunk.from, localLine)
-      setActiveLine(globalLine)
-    } else {
-      globalLine = localLine
-      setActiveLine(localLine)
-    }
+    const globalLine = localToGlobal(localLine)
+    setActiveLine(globalLine)
 
     // 仅在 Markdown 标签下持久化光标行（PDF 标签不记录）
     if (isPdfActive) return
@@ -1684,54 +1585,14 @@ export function WorkspaceShell({
       scheduleSaveCursorMap(next)
       return next
     })
-  }, [hugeDocEnabled, isPdfActive, getCurrentFilePath, setActiveLine, scheduleSaveCursorMap])
+  }, [localToGlobal, isPdfActive, getCurrentFilePath, setActiveLine, scheduleSaveCursorMap])
 
   const focusEditorOnGlobalLine = useCallback((globalLine: number, searchText?: string) => {
     const safeGlobal = globalLine > 0 ? globalLine : 1
-
-    // 普通文档：直接用全局行号作为本地行号，通过 focusRequest 让 EditorPane 在视图就绪后跳转
-    if (!hugeDocEnabled) {
-      setActiveLine(safeGlobal)
-      setFocusRequest({ localLine: safeGlobal, searchText })
-      return
-    }
-
-    const totalLines = countLines(markdown)
-    if (totalLines < hugeDocLineThreshold) {
-      // 当前文档虽开启了大文档功能，但行数尚未达到阈值，退化为普通跳转
-      setHugeDocState(null)
-      setActiveLine(safeGlobal)
-      setFocusRequest({ localLine: safeGlobal, searchText })
-      return
-    }
-
-    try {
-      const chunk = extractChunkAroundLine(markdown, safeGlobal, {
-        contextLines: hugeDocChunkContextLines,
-        maxLines: hugeDocChunkMaxLines,
-      })
-
-      const chunkStartGlobalLine = localToGlobalLine(markdown, chunk.from, 1)
-      const totalLocalLines = countLines(chunk.value)
-      let localLine = safeGlobal - chunkStartGlobalLine + 1
-      if (localLine < 1) localLine = 1
-      if (localLine > totalLocalLines) localLine = totalLocalLines
-
-      setHugeDocState({
-        enabled: true,
-        threshold: hugeDocLineThreshold,
-        currentChunk: chunk,
-      })
-      setActiveLine(safeGlobal)
-      setFocusRequest({ localLine, searchText })
-    } catch (e) {
-      console.error('[HugeDoc] focusEditorOnGlobalLine failed, fallback to normal scroll', e)
-      // 兜底：回退到整篇文档模式，同样通过 focusRequest 触发跳转
-      setHugeDocState(null)
-      setActiveLine(safeGlobal)
-      setFocusRequest({ localLine: safeGlobal, searchText })
-    }
-  }, [markdown, hugeDocEnabled, hugeDocLineThreshold, hugeDocChunkContextLines, hugeDocChunkMaxLines, scrollEditorToLineCenter, setHugeDocState, setActiveLine, setFocusRequest])
+    const result = focusOnGlobalLine(safeGlobal, searchText)
+    setActiveLine(safeGlobal)
+    setFocusRequest(result)
+  }, [focusOnGlobalLine])
 
   function restoreCursorForPath(path: string | null) {
     if (!path || isPdfActive) return
