@@ -307,6 +307,10 @@ export function WorkspaceShell({
   const setConfirmDialogRef = useRef(setConfirmDialog)
   setConfirmDialogRef.current = setConfirmDialog
 
+  // restoreCursorForPath 在 useCursorMemory 中定义（位于下方），
+  // 这里用 ref 桥接，让 Sync Content effect 可以在不依赖其声明顺序的前提下调用。
+  const restoreCursorRef = useRef<((path: string | null) => void) | null>(null)
+
   // Sync Content：切换激活标签时，同步内容，并仅在 tab 变化时重置 activeLine
   useEffect(() => {
     if (!activeId) return
@@ -323,10 +327,10 @@ export function WorkspaceShell({
 
       if (isTabSwitch) {
         lastActiveIdForPreviewRef.current = activeId
-        restoreCursorForPath(tab.path ?? null)
+        restoreCursorRef.current?.(tab.path ?? null)
       }
     }
-  }, [activeId, tabs, restoreCursorForPath])
+  }, [activeId, tabs])
 
   // Window Title：不再显示文件名，保持标题栏空白
   useEffect(() => {
@@ -1500,6 +1504,7 @@ export function WorkspaceShell({
     getCurrentFilePath,
     focusEditorOnGlobalLine,
   })
+  restoreCursorRef.current = restoreCursorForPath
 
   const handlePreviewLineClick = useCallback((line: number) => {
     focusEditorOnGlobalLine(line)
