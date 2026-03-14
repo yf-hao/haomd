@@ -259,7 +259,7 @@ const MarkdownMedia = memo(({ node, filePath, encodeMediaPath, ...props }: any) 
   const isAudio = lowerAlt === 'audio' || lowerAlt === '音频' || /\.(mp3|wav|m4a|ogg|flac)$/i.test(src)
 
   if (isAudio) {
-    return <audio controls src={finalSrc} style={{ width: '100%' }}>您的浏览器不支持 audio 标签。</audio>
+    return <audio controls src={finalSrc} style={{ width: maxWidth, display: 'block', margin: '0 auto' }}>您的浏览器不支持 audio 标签。</audio>
   }
 
   const isVideo = lowerAlt === 'video' || lowerAlt === '视频' || /\.(mp4|webm|mov|ogg|ogv)$/i.test(src)
@@ -271,7 +271,7 @@ const MarkdownMedia = memo(({ node, filePath, encodeMediaPath, ...props }: any) 
       // 简化的 poster 路径逻辑
       posterUrl = finalSrc.substring(0, finalSrc.lastIndexOf('/') + 1) + encodeURIComponent(posterAlt)
     }
-    return <video controls preload="metadata" poster={posterUrl || undefined} src={finalSrc} style={{ maxWidth: '100%', height: 'auto' }}>您的浏览器不支持 video 标签。</video>
+    return <video controls preload="metadata" poster={posterUrl || undefined} src={finalSrc} style={{ width: maxWidth, maxWidth: '100%', height: 'auto', display: 'block', margin: '0 auto' }}>您的浏览器不支持 video 标签。</video>
   }
 
   return <img {...props} src={finalSrc} loading="lazy" alt={cleanAlt} style={{ maxWidth, height: 'auto', display: 'block', margin: '0 auto' }} />

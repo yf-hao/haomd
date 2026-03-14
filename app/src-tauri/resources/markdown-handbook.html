@@ -1,0 +1,3253 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Markdown从入门到进阶</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github.min.css">
+  <script>
+    function loadScriptLocalFirst(localSrc, cdnSrc) {
+      var s = document.createElement('script');
+      s.src = localSrc;
+      s.defer = true;
+      s.onerror = function () {
+        var cdn = document.createElement('script');
+        cdn.src = cdnSrc;
+        cdn.defer = true;
+        document.head.appendChild(cdn);
+      };
+      document.head.appendChild(s);
+    }
+    loadScriptLocalFirst('js/mermaid.min.js', 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js');
+  </script>
+  <script>
+    (function() {
+      const initMermaid = function() {
+        if (typeof mermaid !== 'undefined') {
+          mermaid.initialize({ startOnLoad: true, theme: 'default' });
+        }
+      };
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initMermaid);
+      } else {
+        initMermaid();
+      }
+    })();
+  </script>
+  <script>
+    (function() {
+      function toggleTocSections(expand) {
+        var sections = document.querySelectorAll('.md-toc-root details');
+        sections.forEach(function(section) {
+          if (expand) {
+            section.setAttribute('open', 'open');
+          } else {
+            section.removeAttribute('open');
+          }
+        });
+      }
+
+      function initTocToggle() {
+        var summary = document.querySelector('.md-toc-summary');
+        if (!summary) return;
+
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'md-toc-toggle-all';
+
+        var expanded = false;
+
+        function renderIcon() {
+          if (expanded) {
+            // 减号图标：当前为展开状态，可点击折叠
+            button.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.2"></circle><line x1="4" y1="8" x2="12" y2="8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"></line></svg>';
+            button.setAttribute('aria-label', '折叠三级标题');
+          } else {
+            // 加号图标：当前为折叠状态，可点击展开
+            button.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.2"></circle><line x1="4" y1="8" x2="12" y2="8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"></line><line x1="8" y1="4" x2="8" y2="12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"></line></svg>';
+            button.setAttribute('aria-label', '展开三级标题');
+          }
+        }
+
+        button.addEventListener('click', function(event) {
+          // 阻止触发外层 summary 的默认折叠行为，只控制三级目录
+          event.stopPropagation();
+          event.preventDefault();
+
+          expanded = !expanded;
+          toggleTocSections(expanded);
+          renderIcon();
+        });
+
+        renderIcon();
+        summary.appendChild(button);
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initTocToggle);
+      } else {
+        initTocToggle();
+      }
+    })();
+  </script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Source Han Sans CN', 'Segoe UI', Helvetica, Arial, sans-serif; padding: 20px; color: #1a1a1a; }
+    .markdown-body {
+      max-width: 800px;
+      margin: 0 auto;
+      line-height: 1.7;
+    }
+    /* 导出 HTML 中的 TOC 浮动目录容器与列表缩进（靠正文而非窗边） */
+    .markdown-body .md-toc-container {
+      position: fixed;
+      top: 40px;
+      /* 以正文居中线为基准，向左偏移：400(半宽) + 24(间距) + 220(目录宽) */
+      left: calc(50% - 400px - 60px - 220px);
+      width: 220px;
+      max-height: calc(100vh - 120px);
+      overflow-y: auto;
+      padding: 8px 12px;
+      border: 1px solid #e4e4e4;
+      border-radius: 4px;
+      background-color: #fafafa;
+      font-size: 0.9em;
+      z-index: 100;
+    }
+    .markdown-body .md-toc-summary {
+      cursor: pointer;
+      font-weight: 600;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .markdown-body .md-toc-toggle-all {
+      border: none;
+      background: transparent;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      color: #666;
+      cursor: pointer;
+    }
+    .markdown-body .md-toc-toggle-all:hover {
+      color: #111;
+    }
+    .markdown-body .md-toc-toggle-all svg {
+      width: 16px;
+      height: 16px;
+      display: block;
+    }
+    .markdown-body .md-toc-root {
+      margin: 0;
+      padding-left: 0;
+    }
+    .markdown-body .md-toc-root ul {
+      margin: 0;
+      padding-left: 0;
+    }
+    .markdown-body .md-toc-item {
+      list-style: none;
+      margin: 2px 0;
+    }
+    .markdown-body .md-toc-level-1 {
+      font-weight: 600;
+    }
+    .markdown-body .md-toc-level-2 {
+      padding-left: 16px;
+    }
+    .markdown-body .md-toc-level-3 {
+      padding-left: 32px;
+      font-size: 0.95em;
+    }
+    .markdown-body em {
+      font-style: italic;
+      display: inline-block;
+      transform: skewX(-8deg);
+      font-family: "Noto Serif SC", "Songti SC", "STSong", "Source Han Serif SC",
+                   system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    img { max-width: 100%; height: auto; }
+    pre { background-color: #f6f8fa; padding: 16px; border-radius: 6px; overflow: auto; }
+    pre.mermaid { background-color: transparent; padding: 0; }
+    code { font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace; font-size: 0.9em; }
+    .katex-display { overflow-x: auto; overflow-y: hidden; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #dfe2e5; padding: 6px 13px; }
+    th { background-color: #f6f8fa; }
+    blockquote { border-left: 4px solid #dfe2e5; margin: 0; padding-left: 16px; color: #6a737d; }
+    @media (max-width: 1100px) {
+      .markdown-body {
+        max-width: 800px;
+      }
+      .markdown-body .md-toc-container {
+        position: static;
+        left: auto;
+        width: auto;
+        max-height: none;
+        margin-bottom: 12px;
+      }
+    }
+    @media print {
+      body {
+        padding: 0;
+        font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Source Han Sans CN', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif !important;
+      }
+      .markdown-body { max-width: none; }
+      .page-break { page-break-before: always; }
+      /* 打印/导出为 PDF 时隐藏目录 TOC */
+      .markdown-body .md-toc-item {
+        display: none !important;
+      }
+      .markdown-body .md-toc-container {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="markdown-body"><details class="md-toc-container" open=""><summary class="md-toc-summary">目录</summary><ul class="md-toc-root">
+<li class="md-toc-item md-toc-level-1"><a href="#markdown-从入门到进阶">Markdown 从入门到进阶</a></li>
+<li class="md-toc-item md-toc-level-2">
+<details><summary><a href="#1-markdown-概述">1. Markdown 概述</a></summary><ul>
+<li class="md-toc-item md-toc-level-3"><a href="#11-什么是-markdown">1.1 什么是 Markdown</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#12-markdown-的设计理念">1.2 Markdown 的设计理念</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#13-markdown-的适用场景">1.3 Markdown 的适用场景</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#14-人工智能时代下-markdown-的核心作用">1.4 人工智能时代下 Markdown 的核心作用</a></li>
+</ul></details>
+</li>
+<li class="md-toc-item md-toc-level-2">
+<details><summary><a href="#2-markdown-基本语法">2. Markdown 基本语法</a></summary><ul>
+<li class="md-toc-item md-toc-level-3"><a href="#21-标题">2.1 标题</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#22-段落与换行">2.2 段落与换行</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#23-强调语法">2.3 强调语法</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#24-引用">2.4 引用</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#25-列表">2.5 列表</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#26-代码">2.6 代码</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#27-分隔线">2.7 分隔线</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#28-转义字符">2.8 转义字符</a></li>
+</ul></details>
+</li>
+<li class="md-toc-item md-toc-level-2">
+<details><summary><a href="#3-markdown-链接与资源">3. Markdown 链接与资源</a></summary><ul>
+<li class="md-toc-item md-toc-level-3"><a href="#31-行内链接">3.1 行内链接</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#32-参考式链接">3.2 参考式链接</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#33-自动链接">3.3 自动链接</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#34-图片">3.4 图片</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#35-链接与图片的组合用法">3.5 链接与图片的组合用法</a></li>
+</ul></details>
+</li>
+<li class="md-toc-item md-toc-level-2">
+<details><summary><a href="#4-markdown-表格">4. Markdown 表格</a></summary><ul>
+<li class="md-toc-item md-toc-level-3"><a href="#41-表格基本语法">4.1 表格基本语法</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#42-对齐方式">4.2 对齐方式</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#43-表格中的格式化">4.3 表格中的格式化</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#44-表格的常见限制">4.4 表格的常见限制</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#444-表格在-ai-场景中的特点">4.4.4 表格在 AI 场景中的特点</a></li>
+</ul></details>
+</li>
+<li class="md-toc-item md-toc-level-2">
+<details><summary><a href="#5-markdown-代码块进阶">5. Markdown 代码块进阶</a></summary><ul>
+<li class="md-toc-item md-toc-level-3"><a href="#51-行内代码">5.1 行内代码</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#52-围栏代码块">5.2 围栏代码块</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#53-代码高亮与语言标识">5.3 代码高亮与语言标识</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#54-代码块中的特殊字符处理">5.4 代码块中的特殊字符处理</a></li>
+</ul></details>
+</li>
+<li class="md-toc-item md-toc-level-2">
+<details><summary><a href="#6-markdown-高级语法">6. Markdown 高级语法</a></summary><ul>
+<li class="md-toc-item md-toc-level-3"><a href="#61-删除线">6.1 删除线</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#62-任务列表">6.2 任务列表</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#63-脚注">6.3 脚注</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#64-定义列表">6.4 定义列表</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#65-数学公式">6.5 数学公式</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#66-图表与流程图">6.6 图表与流程图</a></li>
+</ul></details>
+</li>
+<li class="md-toc-item md-toc-level-2">
+<details><summary><a href="#7-markdown-文档结构化写作">7. Markdown 文档结构化写作</a></summary><ul>
+<li class="md-toc-item md-toc-level-3"><a href="#71-目录生成">7.1 目录生成</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#72-文档分节与层级设计">7.2 文档分节与层级设计</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#73-长文档排版规范">7.3 长文档排版规范</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#72-注释与草稿管理">7.2 注释与草稿管理</a></li>
+</ul></details>
+</li>
+<li class="md-toc-item md-toc-level-2">
+<details><summary><a href="#8-markdown-扩展与兼容性">8. Markdown 扩展与兼容性</a></summary><ul>
+<li class="md-toc-item md-toc-level-3"><a href="#81-commonmark-规范">8.1 CommonMark 规范</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#82-github-flavored-markdown（gfm）">8.2 GitHub Flavored Markdown（GFM）</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#83-pandoc-扩展">8.3 Pandoc 扩展</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#兼容性对比总结">兼容性对比总结</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#本章小结">本章小结</a></li>
+</ul></details>
+</li>
+<li class="md-toc-item md-toc-level-2">
+<details><summary><a href="#9-markdown-编辑器与工具">9. Markdown 编辑器与工具</a></summary><ul>
+<li class="md-toc-item md-toc-level-3"><a href="#91-本地编辑器">9.1 本地编辑器</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#92-在线编辑器">9.2 在线编辑器</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#93-markdown-转换工具">9.3 Markdown 转换工具</a></li>
+</ul></details>
+</li>
+<li class="md-toc-item md-toc-level-2">
+<details><summary><a href="#10-markdown-与其他技术的结合">10. Markdown 与其他技术的结合</a></summary><ul>
+<li class="md-toc-item md-toc-level-3"><a href="#101-markdown-与-git">10.1 Markdown 与 Git</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#102-markdown-与静态站点生成器">10.2 Markdown 与静态站点生成器</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#103-markdown-与文档系统">10.3 Markdown 与文档系统</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#104-markdown-与知识管理工具">10.4 Markdown 与知识管理工具</a></li>
+</ul></details>
+</li>
+<li class="md-toc-item md-toc-level-2">
+<details><summary><a href="#11-markdown-写作规范与最佳实践">11. Markdown 写作规范与最佳实践</a></summary><ul>
+<li class="md-toc-item md-toc-level-3"><a href="#111-可读性原则">11.1 可读性原则</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#112-统一风格规范">11.2 统一风格规范</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#113-常见错误与规避方法">11.3 常见错误与规避方法</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#114-团队协作中的-markdown-规范">11.4 团队协作中的 Markdown 规范</a></li>
+</ul></details>
+</li>
+<li class="md-toc-item md-toc-level-2">
+<details><summary><a href="#12-markdown-进阶应用">12. Markdown 进阶应用</a></summary><ul>
+<li class="md-toc-item md-toc-level-3"><a href="#121-技术文档写作">12.1 技术文档写作</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#122-博客与文章发布">12.2 博客与文章发布</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#123-学术写作与笔记管理">12.3 学术写作与笔记管理</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#二、使用链接构建知识网络">二、使用链接构建知识网络</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#三、定期整理与重构笔记">三、定期整理与重构笔记</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#使用建议总结">使用建议总结</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#124-自动化文档生成">12.4 自动化文档生成</a></li>
+</ul></details>
+</li>
+<li class="md-toc-item md-toc-level-2">
+<details><summary><a href="#13-markdown-常见问题与排错">13. Markdown 常见问题与排错</a></summary><ul>
+<li class="md-toc-item md-toc-level-3"><a href="#131-渲染不一致问题">13.1 渲染不一致问题</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#132-语法冲突与兼容性问题">13.2 语法冲突与兼容性问题</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#133-平台差异问题">13.3 平台差异问题</a></li>
+<li class="md-toc-item md-toc-level-3"><a href="#134-性能与维护问题">13.4 性能与维护问题</a></li>
+</ul></details>
+</li>
+</ul></details>
+<h1 id="markdown-从入门到进阶">Markdown 从入门到进阶</h1>
+<h2 id="1-markdown-概述">1. Markdown 概述</h2>
+<h3 id="11-什么是-markdown">1.1 什么是 Markdown</h3>
+<p><strong>Markdown 是一种轻量级标记语言</strong>，用于将“纯文本”转换为结构化文档（如 HTML、PDF、Word 等）。</p>
+<p>核心特征可以概括为三点：</p>
+<ol>
+<li>
+<p><strong>可读性强</strong><br/>
+Markdown 文档在“未渲染状态下”依然像一篇正常文章，人可以直接阅读。</p>
+</li>
+<li>
+<p><strong>语法简单</strong><br/>
+使用少量、直观的符号来表示结构，例如：</p>
+<ul>
+<li><code node="[object Object]">#</code> 表示标题</li>
+<li><code node="[object Object]">*</code> 表示列表</li>
+<li><code node="[object Object]">`</code> 表示代码</li>
+</ul>
+</li>
+<li>
+<p><strong>纯文本格式</strong><br/>
+Markdown 文件本质上是 <code node="[object Object]">.md</code> 或 <code node="[object Object]">.markdown</code> 的普通文本文件，任何文本编辑器都可以打开和编辑。</p>
+</li>
+</ol>
+<p>从本质上讲，Markdown 做了一件事：</p>
+<blockquote>
+<p><strong>用最少的标记，表达清晰的文档结构。</strong></p>
+</blockquote>
+<hr/>
+<h3 id="12-markdown-的设计理念">1.2 Markdown 的设计理念</h3>
+<p>Markdown 由 <strong>John Gruber</strong> 于 2004 年提出，其设计理念可以总结为以下几个方面。</p>
+<h4>1.2.1 以人为中心，而非机器</h4>
+<p>传统标记语言（如 HTML）主要面向浏览器，而 Markdown 的第一目标是：</p>
+<blockquote>
+<p><strong>让人类读写更舒服，其次才是给机器解析。</strong></p>
+</blockquote>
+<p>对比示例：</p>
+<ul>
+<li>HTML 更关注结构标签</li>
+<li>Markdown 更接近自然书写</li>
+</ul>
+<p>这使 Markdown 非常适合：</p>
+<ul>
+<li>写作</li>
+<li>记录</li>
+<li>思考整理</li>
+</ul>
+<h4>1.2.2 标记即格式，所见即结构</h4>
+<p>Markdown 的语法设计遵循直觉：</p>
+<ul>
+<li><code node="[object Object]"># 标题</code> 一眼就能看出是标题</li>
+<li><code node="[object Object]">- 列表项</code> 一眼就能看出是列表</li>
+<li><code node="[object Object]">`代码`</code> 一眼就能看出是代码</li>
+</ul>
+<p>你不需要记忆复杂规则，只需理解“<strong>符号表达含义</strong>”。</p>
+<h4>1.2.3 不追求复杂排版能力</h4>
+<p>Markdown <strong>刻意避免</strong>复杂功能，例如：</p>
+<ul>
+<li>精细字体控制</li>
+<li>复杂表格布局</li>
+<li>浮动元素</li>
+</ul>
+<p>这是一个重要取舍：</p>
+<blockquote>
+<p><strong>Markdown 专注内容结构，而不是版式设计。</strong></p>
+</blockquote>
+<p>当需要复杂排版时，Markdown 通常与其他工具（如 HTML、LaTeX、CSS）结合使用。</p>
+<hr/>
+<h3 id="13-markdown-的适用场景">1.3 Markdown 的适用场景</h3>
+<p>Markdown 并不是“万能文档格式”，但在以下场景中极其合适。</p>
+<h4>1.3.1 技术与学习场景</h4>
+<p>这是 Markdown 使用最广泛的领域：</p>
+<ul>
+<li>技术文档（README、开发文档、接口说明）</li>
+<li>学习笔记</li>
+<li>算法与代码说明</li>
+<li>Git 仓库说明文件</li>
+</ul>
+<p>原因：</p>
+<ul>
+<li>能很好地表达标题、列表、代码、引用</li>
+<li>与 Git、版本控制天然契合</li>
+</ul>
+<h4>1.3.2 写作与内容创作</h4>
+<p>Markdown 非常适合：</p>
+<ul>
+<li>博客写作</li>
+<li>知识库文章</li>
+<li>教程与课程文档</li>
+<li>个人笔记系统</li>
+</ul>
+<p>优势在于：</p>
+<ul>
+<li>专注内容本身</li>
+<li>可随时转换为网页或 PDF</li>
+<li>不依赖特定软件</li>
+</ul>
+<h4>1.3.3 团队协作与文档管理</h4>
+<p>在团队中，Markdown 的优势尤为明显：</p>
+<ul>
+<li>所有人都能编辑</li>
+<li>文档冲突容易解决</li>
+<li>可与 Git 完整配合</li>
+<li>不依赖商业软件格式</li>
+</ul>
+<p>常见应用：</p>
+<ul>
+<li>项目说明文档</li>
+<li>设计文档</li>
+<li>规范与流程文档</li>
+</ul>
+<h4>1.3.4 不适合的场景</h4>
+<p>Markdown <strong>不适合</strong>以下情况：</p>
+<ul>
+<li>对排版要求极高的印刷出版</li>
+<li>复杂图文混排的商业宣传物料</li>
+<li>需要精细样式控制的文档</li>
+</ul>
+<p>在这些场景中，应考虑 Word、InDesign 或 LaTeX。</p>
+<hr/>
+<h3 id="14-人工智能时代下-markdown-的核心作用">1.4 人工智能时代下 Markdown 的核心作用</h3>
+<p>随着大语言模型（LLM）的快速发展，Markdown 的角色正在发生根本性变化。<br/>
+它不再只是“写文档的工具”，而正在成为 <strong>人类与人工智能之间的通用表达语言</strong>。</p>
+<h4>1.4.1 Markdown 是人类与 AI 的共同语言</h4>
+<p>在与 AI 交互的过程中，人类需要一种语言，既：</p>
+<ul>
+<li>对人类友好</li>
+<li>对模型可解析</li>
+<li>具备清晰结构</li>
+<li>不引入多余噪音</li>
+</ul>
+<p>Markdown 恰好满足这一切。</p>
+<p>它用极少的符号表达明确的语义结构，例如：</p>
+<ul>
+<li>标题表示层级与主题</li>
+<li>列表表示规则与约束</li>
+<li>代码块表示“不可被解释的原样内容”</li>
+</ul>
+<p>这种结构化但轻量的特性，使 Markdown 成为 <strong>人和 AI 都能自然理解的语言形式</strong>。</p>
+<hr/>
+<h4>1.4.2 Markdown 有助于 AI 理解上下文与意图</h4>
+<p>大语言模型并不是“真正理解”语言，而是基于上下文进行概率推理。<br/>
+上下文越清晰，输出越稳定。</p>
+<p>Markdown 通过显式结构，帮助 AI 更准确地判断：</p>
+<ul>
+<li>哪些是背景信息</li>
+<li>哪些是任务目标</li>
+<li>哪些是约束条件</li>
+<li>哪些是期望输出格式</li>
+</ul>
+<p>例如，在使用 Markdown 组织内容时，AI 更容易区分“说明”和“指令”，从而减少误解和偏差。</p>
+<hr/>
+<h4>1.4.3 Markdown 是高质量 Prompt 的基础载体</h4>
+<p>在实际使用 AI 的过程中，高质量 Prompt 往往具备明显特征：</p>
+<ul>
+<li>有清晰分节</li>
+<li>有明确角色与目标</li>
+<li>有可验证的输出结构</li>
+</ul>
+<p>而这些特征，几乎天然就是 Markdown 的写作方式。</p>
+<p>这使得 Markdown 成为：</p>
+<ul>
+<li>Prompt Engineering 的默认格式</li>
+<li>可复用 Prompt 的保存形式</li>
+<li>Prompt 版本管理的理想载体</li>
+</ul>
+<p>换句话说：</p>
+<blockquote>
+<p><strong>会写 Markdown，等于掌握了与 AI 高效沟通的基础能力。</strong></p>
+</blockquote>
+<hr/>
+<h4>1.4.4 Markdown 在 AI 工具链中的中枢地位</h4>
+<p>在真实的 AI 系统中，Markdown 往往处于核心位置：</p>
+<ul>
+<li>用户以 Markdown 形式提出问题</li>
+<li>AI 以 Markdown 形式组织回答</li>
+<li>系统再将 Markdown 渲染为网页、文档或界面</li>
+</ul>
+<p>这种模式使 Markdown 成为：</p>
+<ul>
+<li>人类输入的统一格式</li>
+<li>AI 输出的中间表示</li>
+<li>多种工具之间的桥梁</li>
+</ul>
+<p>尤其在知识库、自动文档生成、AI Agent 系统中，Markdown 已成为事实上的标准。</p>
+<hr/>
+<h4>1.4.5 学习 Markdown，就是为 AI 时代打基础</h4>
+<p>对于初学者而言，学习 Markdown 的意义已经不仅仅是：</p>
+<ul>
+<li>写笔记</li>
+<li>写文档</li>
+<li>写博客</li>
+</ul>
+<p>而是：</p>
+<ul>
+<li>学会结构化表达</li>
+<li>学会清晰拆解问题</li>
+<li>学会与 AI 协作</li>
+</ul>
+<p>在 AI 时代，<strong>表达方式本身就是能力的一部分</strong>，而 Markdown 正是这种能力最简单、最通用的体现。</p>
+<hr/>
+<h2 id="2-markdown-基本语法">2. Markdown 基本语法</h2>
+<h3 id="21-标题">2.1 标题</h3>
+<p>标题用于<strong>定义文档的层级结构</strong>，是 Markdown 中最重要、也最基础的语法之一。<br/>
+无论是给人阅读，还是给搜索引擎、AI 模型理解，标题都承担着“组织内容”的核心作用。</p>
+<hr/>
+<h4>2.1.1 标题的基本语法</h4>
+<p>Markdown 使用 <code node="[object Object]">#</code> 符号表示标题，不同数量的 <code node="[object Object]">#</code> 表示不同层级：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-section"># 一级标题</span>
+<span class="hljs-section">## 二级标题</span>
+<span class="hljs-section">### 三级标题</span>
+<span class="hljs-section">#### 四级标题</span>
+<span class="hljs-section">##### 五级标题</span>
+<span class="hljs-section">###### 六级标题</span>
+</code></pre>
+<p>规则说明：</p>
+<ul>
+<li><code node="[object Object]">#</code> 的数量决定标题级别</li>
+<li><code node="[object Object]">#</code> 后必须有一个空格</li>
+<li>最多支持六级标题</li>
+<li>标题本身不需要额外结束符号</li>
+</ul>
+<hr/>
+<h4>2.1.2 标题的语义含义</h4>
+<p>标题并不只是“字体变大”，而是<strong>语义结构</strong>：</p>
+<ul>
+<li>一级标题：文档的主题</li>
+<li>二级标题：章节</li>
+<li>三级标题：章节中的子主题</li>
+<li>更低级标题：细分内容</li>
+</ul>
+<p>在逻辑上，标题之间形成一种<strong>树状结构</strong>：</p>
+<pre node="[object Object]"><code class="hljs language-text" node="[object Object]">文档主题
+ ├─ 章节一
+ │   ├─ 子主题
+ │   └─ 子主题
+ └─ 章节二
+</code></pre>
+<p>这种结构对以下对象都非常重要：</p>
+<ul>
+<li>人类读者</li>
+<li>搜索引擎</li>
+<li>文档生成工具</li>
+<li>大语言模型（LLM）</li>
+</ul>
+<hr/>
+<h4>2.1.3 标题在 AI 理解中的作用</h4>
+<p>在 AI 时代，标题的意义进一步放大。</p>
+<p>当你使用 Markdown 编写内容时，AI 会通过标题来判断：</p>
+<ul>
+<li>当前讨论的主题是什么</li>
+<li>内容的上下文边界在哪里</li>
+<li>不同段落之间的逻辑关系</li>
+</ul>
+<p>标题结构清晰，AI 的回答通常更：</p>
+<ul>
+<li>聚焦</li>
+<li>连贯</li>
+<li>不跑题</li>
+</ul>
+<p>因此，<strong>写好标题，本质上是在为 AI 构建“思维地图”</strong>。</p>
+<hr/>
+<h4>2.1.4 标题的正确使用原则</h4>
+<p>在实际写作中，应遵循以下原则：</p>
+<ol>
+<li>
+<p><strong>层级连续</strong></p>
+<ul>
+<li>不要从一级标题直接跳到三级标题</li>
+<li>层级跳跃会破坏文档结构</li>
+</ul>
+</li>
+<li>
+<p><strong>一个层级只表达一个层次</strong></p>
+<ul>
+<li>标题用于“分组内容”，而不是装饰文本</li>
+</ul>
+</li>
+<li>
+<p><strong>标题要简短明确</strong></p>
+<ul>
+<li>避免冗长句子</li>
+<li>突出主题关键词</li>
+</ul>
+</li>
+<li>
+<p><strong>同级标题风格一致</strong></p>
+<ul>
+<li>命名方式保持统一</li>
+<li>避免混用疑问句、陈述句等不同风格</li>
+</ul>
+</li>
+</ol>
+<hr/>
+<h4>2.1.5 常见错误示例</h4>
+<p>以下写法应当避免：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-section">### 这是一个看起来像标题但其实是正文的句子，因为它太长了</span>
+</code></pre>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-section"># 一级标题</span>
+<span class="hljs-section">### 直接跳过二级标题</span>
+</code></pre>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-section">## 标题</span>
+<span class="hljs-strong">**这一行其实更像标题，但并不是标题**</span>
+</code></pre>
+<p>正确做法是：</p>
+<ul>
+<li>用标题表达结构</li>
+<li>用正文表达内容</li>
+<li>不用样式代替语义</li>
+</ul>
+<hr/>
+<h4>2.1.6 实际应用建议</h4>
+<p>对于初学者，推荐遵循一个简单模式：</p>
+<ul>
+<li>整篇文档只使用一个一级标题</li>
+<li>主要内容使用二级标题</li>
+<li>细分说明使用三级标题</li>
+<li>超过三级时，考虑是否需要拆分文档</li>
+</ul>
+<p>当你习惯用标题“先搭结构、再写内容”，Markdown 的价值就会真正体现出来。</p>
+<h3 id="22-段落与换行">2.2 段落与换行</h3>
+<p>段落与换行用于<strong>组织连续文本的阅读节奏</strong>。<br/>
+在 Markdown 中，看起来只是“空一行”或“换一行”，实际却有明确、严格的规则。</p>
+<p>理解这一点，可以避免大量“为什么显示和我想的不一样”的问题。</p>
+<hr/>
+<h4>2.2.1 什么是段落</h4>
+<p>在 Markdown 中，<strong>段落由一行或多行连续文本组成</strong>，段落之间必须使用<strong>至少一个空行</strong>进行分隔。</p>
+<p>示例：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">这是第一段文字。
+
+这是第二段文字。
+</code></pre>
+<p>渲染结果是两个独立段落，而不是简单的换行。</p>
+<p>规则总结：</p>
+<ul>
+<li>连续的文本行属于同一个段落</li>
+<li>空行表示“段落结束”</li>
+<li>段落是 Markdown 中最基本的文本单位</li>
+</ul>
+<hr/>
+<h4>2.2.2 行内换行与段落换行的区别</h4>
+<p>很多初学者容易混淆“换行”和“新段落”。</p>
+<p>对比如下：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">这是同一段中的第一行
+这是同一段中的第二行
+</code></pre>
+<p>渲染结果通常仍然是<strong>一个段落</strong>。</p>
+<p>而：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">这是第一段。
+
+这是第二段。
+</code></pre>
+<p>渲染结果是<strong>两个段落</strong>。</p>
+<p>核心区别在于：</p>
+<ul>
+<li><strong>换行</strong>：只是源码中的换行</li>
+<li><strong>空行</strong>：才表示新的段落</li>
+</ul>
+<hr/>
+<h4>2.2.3 强制换行的方法</h4>
+<p>在某些情况下，你可能希望在同一段中<strong>强制换行</strong>。</p>
+<p>常见方法有两种。</p>
+<p><strong>方法一：行尾两个空格</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">第一行文字␠␠
+第二行文字
+</code></pre>
+<p>说明：</p>
+<ul>
+<li>行尾必须是两个半角空格</li>
+<li>这是标准 Markdown 行为</li>
+<li>可读性较差，不推荐大量使用</li>
+</ul>
+<p><strong>方法二：使用 HTML 换行标签</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">第一行文字<span class="xml"><span class="hljs-tag">&lt;<span class="hljs-name">br</span>/&gt;</span></span>
+第二行文字
+</code></pre>
+<p>说明：</p>
+<ul>
+<li><code node="[object Object]">&lt;br/&gt;</code> 在大多数 Markdown 方言中有效</li>
+<li>更直观，常用于表格、注释等特殊场景</li>
+</ul>
+<hr/>
+<h4>2.2.4 段落与其他语法的关系</h4>
+<p>段落规则会影响多种 Markdown 语法的表现。</p>
+<p><strong>与标题</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-section">## 标题</span>
+正文内容
+</code></pre>
+<p>标题下方不需要空行，但加上空行可提升可读性。</p>
+<p><strong>与列表</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">这是一个说明段落。
+
+<span class="hljs-bullet">-</span> 列表项一
+<span class="hljs-bullet">-</span> 列表项二
+</code></pre>
+<p>段落与列表之间通常需要空行，否则可能渲染异常。</p>
+<p><strong>与代码块</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">这是说明文字。
+
+<span class="hljs-code">```python
+print(&quot;Hello&quot;)
+```</span>
+</code></pre>
+<p>段落与代码块之间必须有空行，这是一个常见约定。</p>
+<hr/>
+<h4>2.2.5 段落在 AI 理解中的作用</h4>
+<p>在 AI 时代，段落不仅影响“显示效果”，还影响<strong>语义切分</strong>。</p>
+<p>对大语言模型而言：</p>
+<ul>
+<li>一个段落通常对应一个语义单元</li>
+<li>空行是“语义边界”的重要信号</li>
+<li>合理分段有助于模型理解逻辑层次</li>
+</ul>
+<p>长文本如果不分段，容易导致：</p>
+<ul>
+<li>信息混杂</li>
+<li>重点不清</li>
+<li>AI 总结不准确</li>
+</ul>
+<p>因此，<strong>分段本质上是在帮助 AI 和读者一起理解内容</strong>。</p>
+<hr/>
+<h4>2.2.6 实际写作建议</h4>
+<p>对初学者，推荐以下习惯：</p>
+<ul>
+<li>每表达一个完整意思，就换一个段落</li>
+<li>不要害怕空行，空行是结构的一部分</li>
+<li>长段落应主动拆分</li>
+<li>不用连续换行模拟排版效果</li>
+</ul>
+<p>Markdown 强调的是<strong>语义结构，而不是视觉排版</strong>。<br/>
+当你用“段落”来组织思路，而不是用“回车键试效果”，Markdown 才会真正发挥价值。</p>
+<h3 id="23-强调语法">2.3 强调语法</h3>
+<p>强调语法用于<strong>突出文本中的重点信息</strong>，帮助读者快速抓住关键信息。在 Markdown 中，强调不仅影响显示效果，更具有明确的<strong>语义含义</strong>，对阅读理解和 AI 解析都非常重要。</p>
+<hr/>
+<h4>2.3.1 斜体（强调）</h4>
+<p>斜体通常用于<strong>轻度强调</strong>，表示语义上的“注意”或“次要重点”。</p>
+<p><strong>语法：</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-emphasis">*斜体文本*</span>
+<span class="hljs-emphasis">_斜体文本_</span>
+</code></pre>
+<p>说明：</p>
+<ul>
+<li><code node="[object Object]">*</code> 与 <code node="[object Object]">_</code> 都可以表示斜体</li>
+<li>推荐统一使用 <code node="[object Object]">*</code>，避免与下划线混淆</li>
+<li>符号与文本之间不能有空格</li>
+</ul>
+<hr/>
+<h4>2.3.2 粗体（强强调）</h4>
+<p>粗体用于<strong>强烈强调</strong>，通常表示关键概念、结论或必须注意的内容。</p>
+<p><strong>语法：</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-strong">**粗体文本**</span>
+<span class="hljs-strong">__粗体文本__</span>
+</code></pre>
+<p>说明：</p>
+<ul>
+<li>使用两个 <code node="[object Object]">*</code> 或两个 <code node="[object Object]">_</code></li>
+<li>推荐使用 <code node="[object Object]">**</code>，可读性更好</li>
+<li>粗体应有明确语义目的，不用于装饰</li>
+</ul>
+<hr/>
+<h4>2.3.3 粗斜体（组合强调）</h4>
+<p>当需要在一段文字中表达<strong>最高级别的强调</strong>时，可以组合使用粗体和斜体。</p>
+<p><strong>语法：</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-strong">**<span class="hljs-emphasis">*粗斜体文本*</span>**</span>
+</code></pre>
+<p>等价写法：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-strong">**<span class="hljs-emphasis">_粗斜体文本_</span>**</span>
+</code></pre>
+<p>使用场景应非常克制，例如：</p>
+<ul>
+<li>风险提示</li>
+<li>关键结论</li>
+<li>强约束条件</li>
+</ul>
+<hr/>
+<h4>2.3.4 强调语法的嵌套规则</h4>
+<p>Markdown 支持强调语法的嵌套，但必须注意结构清晰。</p>
+<p>示例：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-strong">**这是包含 <span class="hljs-emphasis">*斜体*</span> 的粗体文本**</span>
+</code></pre>
+<p>注意事项：</p>
+<ul>
+<li>内外符号必须成对出现</li>
+<li>不要交叉嵌套，避免歧义</li>
+<li>嵌套越深，可读性越差</li>
+</ul>
+<hr/>
+<h4>2.3.5 强调语法与普通符号的区别</h4>
+<p>在以下情况下，<code node="[object Object]">*</code> 不会被解析为强调：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">3 * 5 = 15
+</code></pre>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">文件名为 readme<span class="hljs-emphasis">_backup.md
+</span></code></pre>
+<p>Markdown 会根据上下文判断是否为强调语法，一般不需要手动转义。</p>
+<p>如果确实需要显示星号本身，可使用反斜杠转义：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">\<span class="hljs-emphasis">*这是星号\*</span>
+</code></pre>
+<hr/>
+<h4>2.3.6 强调语法在 AI 理解中的作用</h4>
+<p>在 AI 时代，强调语法不仅服务于读者，也影响模型的判断。</p>
+<p>对于大语言模型：</p>
+<ul>
+<li>粗体内容更可能被识别为“关键点”</li>
+<li>强调语法帮助区分主次信息</li>
+<li>有助于提高总结与提取的准确性</li>
+</ul>
+<p>在 Prompt 中，常见用法包括：</p>
+<ul>
+<li>用粗体标记必须遵守的规则</li>
+<li>用斜体提示补充说明</li>
+<li>用组合强调突出禁止事项</li>
+</ul>
+<hr/>
+<h4>2.3.7 使用强调语法的推荐原则</h4>
+<p>初学者应遵循以下原则：</p>
+<ol>
+<li><strong>强调用于语义，不用于美观</strong></li>
+<li><strong>同一段落中避免大量强调</strong></li>
+<li><strong>同一文档中保持风格一致</strong></li>
+<li><strong>能用标题表达结构，就不要用强调代替</strong></li>
+</ol>
+<p>记住：</p>
+<blockquote>
+<p><strong>强调是放大器，而不是结构工具。</strong></p>
+</blockquote>
+<p>合理使用强调语法，可以显著提升 Markdown 文档的可读性、专业性，以及在 AI 场景下的表达效果。</p>
+<h3 id="24-引用">2.4 引用</h3>
+<p>引用用于<strong>标识并区分“非当前作者的原始内容”或“被强调的背景信息”</strong>。<br/>
+在 Markdown 中，引用不仅是一种视觉样式，更是一种<strong>语义声明</strong>：这部分内容是被引入的观点、说明或上下文。</p>
+<hr/>
+<h4>2.4.1 引用的基本语法</h4>
+<p>Markdown 使用 <code node="[object Object]">&gt;</code> 符号表示引用。</p>
+<p><strong>单行引用：</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-quote">&gt; 这是一个引用。</span>
+</code></pre>
+<p><strong>多行引用：</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-quote">&gt; 这是第一行引用</span>
+<span class="hljs-quote">&gt; 这是第二行引用</span>
+</code></pre>
+<p>说明：</p>
+<ul>
+<li><code node="[object Object]">&gt;</code> 位于行首</li>
+<li><code node="[object Object]">&gt;</code> 后需有一个空格（推荐）</li>
+<li>连续的 <code node="[object Object]">&gt;</code> 行会被解析为同一个引用块</li>
+</ul>
+<hr/>
+<h4>2.4.2 引用与普通段落的区别</h4>
+<p>对比示例：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">这是一段普通文字。
+
+<span class="hljs-quote">&gt; 这是一段引用文字。</span>
+</code></pre>
+<p>语义差异在于：</p>
+<ul>
+<li>普通段落：作者当前叙述</li>
+<li>引用块：被引入的信息、观点或说明</li>
+</ul>
+<p>引用并不一定来自“他人”，也可以用于：</p>
+<ul>
+<li>规则说明</li>
+<li>提示信息</li>
+<li>背景定义</li>
+<li>强调结论</li>
+</ul>
+<hr/>
+<h4>2.4.3 引用的嵌套</h4>
+<p>Markdown 支持<strong>引用中再引用</strong>，用于表达多层关系，例如对话或观点层级。</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-quote">&gt; 第一层引用</span>
+&gt;&gt; 第二层引用
+&gt;&gt;&gt; 第三层引用
+</code></pre>
+<p>嵌套规则：</p>
+<ul>
+<li>每增加一层引用，多加一个 <code node="[object Object]">&gt;</code></li>
+<li>层级不宜过深，否则可读性迅速下降</li>
+<li>一般不超过三层</li>
+</ul>
+<hr/>
+<h4>2.4.4 引用中使用其他 Markdown 语法</h4>
+<p>引用块内部可以使用大多数 Markdown 语法。</p>
+<p>示例：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-quote">&gt; <span class="hljs-strong">**重点说明**</span></span>
+<span class="hljs-quote">&gt;
+&gt; - 条件一</span>
+<span class="hljs-quote">&gt; - 条件二</span>
+<span class="hljs-quote">&gt;
+&gt; `示例代码`</span>
+</code></pre>
+<p>注意：</p>
+<ul>
+<li>引用块中的空行也需要 <code node="[object Object]">&gt;</code></li>
+<li>所有内容都属于引用语义范围</li>
+</ul>
+<hr/>
+<h4>2.4.5 引用与代码块的区别</h4>
+<p>初学者常混淆引用与代码块，它们的语义完全不同。</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>语法</th><th>用途</th></tr></thead><tbody><tr><td>引用</td><td>引入观点、说明、上下文</td></tr><tr><td>代码块</td><td>原样展示内容，不参与解释</td></tr></tbody></table>
+<p>错误示例：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-quote">&gt; for i in range(10):</span>
+<span class="hljs-quote">&gt;     print(i)</span>
+</code></pre>
+<p>正确示例：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"> <span class="hljs-code">```python
+    for i in range(10):
+        print(i)
+```</span>
+</code></pre>
+<p>如果内容<strong>需要被解释或执行</strong>，应使用代码块，而不是引用。</p>
+<hr/>
+<h4>2.4.6 引用在 AI 理解中的作用</h4>
+<p>在 AI 时代，引用语法具有明确的语义信号。</p>
+<p>对大语言模型而言：</p>
+<ul>
+<li>引用块常被理解为“背景信息”</li>
+<li>与正文形成上下文分离</li>
+<li>有助于区分“条件”和“任务”</li>
+</ul>
+<p>在 Prompt 中，引用常用于：</p>
+<ul>
+<li>提供参考资料</li>
+<li>放置说明文本</li>
+<li>标注不可更改的前提条件</li>
+</ul>
+<p>合理使用引用，可以显著降低 AI 误解指令的概率。</p>
+<hr/>
+<h4>2.4.7 使用引用的推荐原则</h4>
+<p>对于初学者，建议遵循以下原则：</p>
+<ol>
+<li><strong>引用要有明确目的</strong></li>
+<li><strong>不要把正文当引用使用</strong></li>
+<li><strong>长引用应拆分或概括</strong></li>
+<li><strong>引用结束后恢复普通段落</strong></li>
+</ol>
+<p>记住：</p>
+<blockquote>
+<p><strong>引用是在告诉读者和 AI：这不是我当前的主要叙述，而是被引入的内容。</strong></p>
+</blockquote>
+<p>正确使用引用语法，可以让 Markdown 文档在逻辑层次、阅读体验和 AI 理解方面都更加清晰。</p>
+<h3 id="25-列表">2.5 列表</h3>
+<p>列表用于<strong>有序或无序地组织多个相关项</strong>，是 Markdown 中表达结构化信息的核心语法之一。<br/>
+当内容存在“并列关系”或“步骤关系”时，应优先使用列表，而不是连续段落。</p>
+<hr/>
+<h4>2.5.1 无序列表</h4>
+<p>无序列表用于<strong>不强调顺序</strong>的项目集合。</p>
+<p><strong>语法：</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-bullet">-</span> 列表项一
+<span class="hljs-bullet">-</span> 列表项二
+<span class="hljs-bullet">-</span> 列表项三
+</code></pre>
+<p>等价写法：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-bullet">*</span> 列表项
+<span class="hljs-bullet">+</span> 列表项
+</code></pre>
+<p>说明：</p>
+<ul>
+<li><code node="[object Object]">-</code>、<code node="[object Object]">*</code>、<code node="[object Object]">+</code> 都可以表示无序列表</li>
+<li>推荐统一使用 <code node="[object Object]">-</code></li>
+<li>符号后必须有一个空格</li>
+</ul>
+<hr/>
+<h4>2.5.2 有序列表</h4>
+<p>有序列表用于<strong>强调顺序或步骤</strong>的内容。</p>
+<p><strong>语法：</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-bullet">1.</span> 第一步
+<span class="hljs-bullet">2.</span> 第二步
+<span class="hljs-bullet">3.</span> 第三步
+</code></pre>
+<p>说明：</p>
+<ul>
+<li>数字本身不影响渲染顺序</li>
+<li>以下写法在视觉上等价：</li>
+</ul>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-bullet">1.</span> 第一步
+<span class="hljs-bullet">1.</span> 第二步
+<span class="hljs-bullet">1.</span> 第三步
+</code></pre>
+<p>这种写法便于后期增删步骤，常被推荐。</p>
+<hr/>
+<h4>2.5.3 列表的嵌套</h4>
+<p>列表可以进行嵌套，用于表达层级关系。</p>
+<p>示例：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-bullet">-</span> 一级项
+<span class="hljs-bullet">  -</span> 二级项
+<span class="hljs-bullet">    -</span> 三级项
+</code></pre>
+<p>规则说明：</p>
+<ul>
+<li>子列表需要缩进</li>
+<li>通常使用 <strong>2 或 4 个空格</strong></li>
+<li>同一层级缩进必须保持一致</li>
+</ul>
+<p>有序与无序列表可以混合嵌套。</p>
+<hr/>
+<h4>2.5.4 列表项中的段落</h4>
+<p>列表项中可以包含多行内容或独立段落。</p>
+<p>示例：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-bullet">-</span> 列表项标题
+
+  这是该列表项的说明文字，
+  可以写成一个完整段落。
+</code></pre>
+<p>注意：</p>
+<ul>
+<li>列表项内的段落需要额外缩进</li>
+<li>空行不可省略，否则可能渲染错误</li>
+</ul>
+<hr/>
+<h4>2.5.5 列表项中使用其他语法</h4>
+<p>列表项内部可以使用大多数 Markdown 语法。</p>
+<p>示例：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-bullet">-</span> <span class="hljs-strong">**重点内容**</span>
+<span class="hljs-bullet">-</span> <span class="hljs-code">`行内代码`</span>
+<span class="hljs-bullet">-</span> [<span class="hljs-string">链接</span>](<span class="hljs-link">https://example.com</span>)
+<span class="hljs-bullet">-</span> &gt; 引用说明
+</code></pre>
+<p>复杂示例：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-bullet">1.</span> 安装环境
+<span class="hljs-bullet">   -</span> 下载工具
+<span class="hljs-bullet">   -</span> 配置路径
+<span class="hljs-bullet">2.</span> 验证安装
+   <span class="hljs-code">```bash
+   tool --version
+   ```</span>
+</code></pre>
+<p>说明：</p>
+<ul>
+<li>子内容必须正确缩进</li>
+<li>代码块通常是最容易出错的部分</li>
+</ul>
+<hr/>
+<h4>2.5.6 列表与段落的选择原则</h4>
+<p>初学者常见问题是：什么时候该用列表？</p>
+<p>推荐判断标准：</p>
+<ul>
+<li>能用“并且 / 或者 / 同时”连接 → 无序列表</li>
+<li>能用“首先 / 然后 / 最后”连接 → 有序列表</li>
+<li>只有一项 → 不要用列表</li>
+</ul>
+<p>列表用于<strong>结构化信息</strong>，不是为了让页面更“好看”。</p>
+<hr/>
+<h4>2.5.7 列表在 AI 理解中的作用</h4>
+<p>在 AI 时代，列表语法非常重要。</p>
+<p>对大语言模型而言：</p>
+<ul>
+<li>列表天然表示“并列结构”</li>
+<li>有序列表表示“流程或步骤”</li>
+<li>列表项往往被视为独立语义单元</li>
+</ul>
+<p>在 Prompt 中，列表常用于：</p>
+<ul>
+<li>约束条件</li>
+<li>规则集合</li>
+<li>输出格式定义</li>
+</ul>
+<p>结构清晰的列表，可以显著提升 AI 输出的准确性与稳定性。</p>
+<hr/>
+<h4>2.5.8 使用列表的推荐原则</h4>
+<p>对于初学者，建议遵循以下原则：</p>
+<ol>
+<li>同一列表中不要混用符号</li>
+<li>列表项尽量简短明确</li>
+<li>嵌套不宜过深</li>
+<li>列表前后保留空行</li>
+<li>不要用列表代替段落叙述</li>
+</ol>
+<p>记住：</p>
+<blockquote>
+<p><strong>列表的本质，是把“杂乱的内容”变成“可枚举的结构”。</strong></p>
+</blockquote>
+<p>掌握列表语法，是写好 Markdown 文档的重要一步。</p>
+<h3 id="26-代码">2.6 代码</h3>
+<p>代码语法用于<strong>原样展示文本内容</strong>，使其不被 Markdown 解析。<br/>
+它是技术文档、教程与 AI 相关内容中<strong>最重要的语法之一</strong>。</p>
+<p>在 Markdown 中，代码意味着一句话：</p>
+<blockquote>
+<p><strong>这部分内容必须保持原样，不参与解释。</strong></p>
+</blockquote>
+<hr/>
+<h4>2.6.1 行内代码</h4>
+<p>行内代码用于在一句话中标出<strong>变量名、命令、文件名或关键字</strong>。</p>
+<p><strong>语法：</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">使用 <span class="hljs-code">`git status`</span> 查看当前状态。
+</code></pre>
+<p>说明：</p>
+<ul>
+<li>使用单个反引号 <code node="[object Object]">`</code></li>
+<li>内容不会被解析为其他 Markdown 语法</li>
+<li>行内代码应简短，不用于长文本</li>
+</ul>
+<hr/>
+<h4>2.6.2 围栏代码块</h4>
+<p>围栏代码块用于展示<strong>多行代码或原样文本</strong>。</p>
+<p><strong>基本语法：</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-code">```
+代码内容
+```</span>
+</code></pre>
+<p>说明：</p>
+<ul>
+<li>使用三个反引号作为边界</li>
+<li>代码块前后必须是独立行</li>
+<li>内容将完全按原样显示</li>
+</ul>
+<hr/>
+<h4>2.6.3 指定代码语言（代码高亮）</h4>
+<p>在开头的反引号后添加语言标识，可启用语法高亮。</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-code">```bash
+git status
+```</span>
+</code></pre>
+<p>常见语言标识包括：</p>
+<ul>
+<li><code node="[object Object]">bash</code></li>
+<li><code node="[object Object]">python</code></li>
+<li><code node="[object Object]">javascript</code></li>
+<li><code node="[object Object]">json</code></li>
+<li><code node="[object Object]">yaml</code></li>
+<li><code node="[object Object]">markdown</code></li>
+</ul>
+<p>语言标识不会影响代码本身，仅用于显示与理解。</p>
+<hr/>
+<h4>2.6.4 代码块与缩进代码块</h4>
+<p>Markdown 还支持<strong>缩进代码块</strong>：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-code">```
+    这是缩进代码块
+```</span>
+</code></pre>
+<p>说明：</p>
+<ul>
+<li>每行前 4 个空格或 1 个 Tab</li>
+<li>不支持语言标识</li>
+<li>易与列表、段落冲突</li>
+</ul>
+<p>因此，<strong>不推荐在现代 Markdown 中使用缩进代码块</strong>，应优先使用围栏代码块。</p>
+<hr/>
+<h4>2.6.5 代码块中的 Markdown 不会被解析</h4>
+<p>代码块的一个核心特性是：</p>
+<blockquote>
+<p><strong>内部内容完全失去 Markdown 语义。</strong></p>
+</blockquote>
+<p>示例：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-code">```markdown
+  # 这不是标题
+  - 这不是列表
+  **这不是加粗**
+```</span>
+</code></pre>
+<blockquote>
+<p>当 Markdown 代码块中还包含 Markdown 代码块时，外层必须使用更多数量的反引号包裹。</p>
+</blockquote>
+<p>这正是代码块用于“展示 Markdown 本身”的基础。</p>
+<hr/>
+<h4>2.6.6 包裹 Markdown 示例的反引号规则</h4>
+<p>当你需要<strong>展示一段 Markdown 示例，而示例中本身又包含代码块</strong>时，必须使用<strong>更多数量的反引号</strong>作为外层包裹。</p>
+<p><strong>推荐规则：</strong></p>
+<ul>
+<li>内层代码块：```（3 个反引号）</li>
+<li>外层展示代码块：`````（5 个反引号）</li>
+<li>外层语言标识使用 <code node="[object Object]">markdown</code></li>
+</ul>
+<p><strong>正确示例：</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-bullet">1.</span> 安装环境
+<span class="hljs-bullet">   -</span> 下载工具
+<span class="hljs-bullet">   -</span> 配置路径
+<span class="hljs-bullet">2.</span> 验证安装
+   <span class="hljs-code">```bash
+   tool --version
+   ```</span>
+</code></pre>
+<p>核心原则可表示为：</p>
+<span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>外层反引号数量</mtext><mo>&gt;</mo><mtext>内层反引号数量</mtext></mrow><annotation encoding="application/x-tex">\text{外层反引号数量} &gt; \text{内层反引号数量}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7224em;vertical-align:-0.0391em"></span><span class="mord text"><span class="mord cjk_fallback">外层反引号数量</span></span><span class="mspace" style="margin-right:0.2778em"></span><span class="mrel">&gt;</span><span class="mspace" style="margin-right:0.2778em"></span></span><span class="base"><span class="strut" style="height:0.6833em"></span><span class="mord text"><span class="mord cjk_fallback">内层反引号数量</span></span></span></span></span></span>
+<hr/>
+<h4>2.6.7 代码块与列表的组合</h4>
+<p>代码块常用于列表步骤中。</p>
+<p>正确写法示例：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-bullet">1.</span> 执行命令
+   <span class="hljs-code">```bash
+   tool --help
+   ```</span>
+</code></pre>
+<p>注意事项：</p>
+<ul>
+<li>代码块必须缩进到列表项内部</li>
+<li>代码块前后保持空行</li>
+<li>缩进不正确会导致列表断裂</li>
+</ul>
+<hr/>
+<h4>2.6.8 代码在 AI 场景中的意义</h4>
+<p>在 AI 时代，代码块具有明确语义信号：</p>
+<ul>
+<li>表示“不可改写内容”</li>
+<li>表示“示例或输入数据”</li>
+<li>表示“需要被原样理解的文本”</li>
+</ul>
+<p>在 Prompt 中，代码块常用于：</p>
+<ul>
+<li>提供上下文示例</li>
+<li>固定输入输出格式</li>
+<li>防止模型误解析普通文本</li>
+</ul>
+<p>结构清晰的代码块，可以显著提高 AI 输出的可靠性。</p>
+<hr/>
+<h4>2.6.9 使用代码语法的推荐原则</h4>
+<p>对初学者，建议遵循以下原则：</p>
+<ol>
+<li>技术内容一律使用代码块展示</li>
+<li>优先使用围栏代码块而非缩进代码块</li>
+<li>为代码块标注正确语言</li>
+<li>展示 Markdown 本身时，注意反引号数量</li>
+<li>不要在代码块中追求排版效果</li>
+</ol>
+<p>记住：</p>
+<blockquote>
+<p><strong>代码块的本质，是“冻结内容，阻止解释”。</strong></p>
+</blockquote>
+<p>掌握代码语法，是写好 Markdown 技术文档的关键一步。</p>
+<h3 id="27-分隔线">2.7 分隔线</h3>
+<p>分隔线用于<strong>在视觉和语义上划分内容区域</strong>，表示“主题已经发生切换”或“当前内容告一段落”。<br/>
+它不是装饰元素，而是一种<strong>结构信号</strong>。</p>
+<hr/>
+<h4>2.7.1 分隔线的基本语法</h4>
+<p>Markdown 中，分隔线由<strong>三个或以上</strong>的相同符号组成，单独占一行。</p>
+<p>常见写法：</p>
+<ol>
+<li>由三个以上连字符组成的分隔线</li>
+</ol>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">---
+</code></pre>
+<ol start="2">
+<li>由三个以上星号组成的分隔线</li>
+</ol>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-strong">***
+</span></code></pre>
+<ol start="3">
+<li>由三个以上下划线组成的分隔线</li>
+</ol>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-strong">___
+</span></code></pre>
+<p>说明：</p>
+<ul>
+<li>符号必须在同一行</li>
+<li>符号数量不少于 3 个</li>
+<li>行内不能包含其他字符</li>
+<li>推荐统一使用 <code node="[object Object]">---</code></li>
+</ul>
+<hr/>
+<h4>2.7.2 分隔线与标题的区别</h4>
+<p>分隔线常被误用为“标题下划线”，这是错误理解。</p>
+<p>对比示例：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-section">章节结束
+---</span>
+</code></pre>
+<p>语义含义是：<strong>内容分割</strong>，不是标题。</p>
+<p>而标题应使用：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-section">## 新章节</span>
+</code></pre>
+<p>总结区别：</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>用途</th><th>推荐语法</th></tr></thead><tbody><tr><td>表示结构层级</td><td>标题</td></tr><tr><td>表示内容断点</td><td>分隔线</td></tr></tbody></table>
+<p>分隔线<strong>不会产生层级结构</strong>。</p>
+<hr/>
+<h4>2.7.3 分隔线的语义含义</h4>
+<p>在语义层面，分隔线通常表示：</p>
+<ul>
+<li><strong>话题切换</strong></li>
+<li>内容阶段结束</li>
+<li>说明与正文的分隔</li>
+<li>补充信息的开始</li>
+</ul>
+<p>它告诉读者（也包括 AI）：</p>
+<blockquote>
+<p><strong>前后的内容在逻辑上是分开的。</strong></p>
+</blockquote>
+<hr/>
+<h4>2.7.4 分隔线与其他语法的冲突</h4>
+<p>分隔线的符号与其他语法存在潜在冲突。</p>
+<p><strong>与无序列表冲突</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">---
+</code></pre>
+<p>如果前后缺少空行，可能被误解析。</p>
+<p><strong>与加粗冲突</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-strong">***
+</span></code></pre>
+<p>在某些解析器中，可能被误认为是强调边界。</p>
+<p><strong>安全写法：</strong></p>
+<ul>
+<li>分隔线前后各保留一个空行</li>
+<li>单独成段</li>
+</ul>
+<hr/>
+<h4>2.7.5 分隔线在长文档中的作用</h4>
+<p>在较长文档中，分隔线常用于：</p>
+<ul>
+<li>区分正文与附录</li>
+<li>区分主要内容与补充说明</li>
+<li>区分说明与示例</li>
+</ul>
+<p>但要注意：</p>
+<ul>
+<li>不应频繁使用</li>
+<li>不应代替标题</li>
+</ul>
+<p>标题用于“结构”，分隔线用于“断点”。</p>
+<hr/>
+<h4>2.7.6 分隔线在 AI 理解中的作用</h4>
+<p>在 AI 场景中，分隔线是一种<strong>弱结构信号</strong>。</p>
+<p>对大语言模型而言：</p>
+<ul>
+<li>分隔线通常被理解为上下文边界</li>
+<li>有助于区分不同语义段落</li>
+<li>可用于分隔指令与示例</li>
+</ul>
+<p>在 Prompt 中，分隔线常用于：</p>
+<ul>
+<li>隔离规则与任务</li>
+<li>分隔输入与输出说明</li>
+</ul>
+<hr/>
+<h4>2.7.7 使用分隔线的推荐原则</h4>
+<p>对初学者，建议遵循以下原则：</p>
+<ol>
+<li>分隔线前后必须空行</li>
+<li>一次分隔线只表达一次切分</li>
+<li>不要连续使用多条分隔线</li>
+<li>不要用分隔线模拟版式</li>
+<li>能用标题解决的，不用分隔线</li>
+</ol>
+<p>记住：</p>
+<blockquote>
+<p><strong>分隔线不是“装饰线”，而是“逻辑断点”。</strong></p>
+</blockquote>
+<p>合理使用分隔线，可以让 Markdown 文档在结构感、可读性以及 AI 理解层面都更加清晰。</p>
+<h3 id="28-转义字符">2.8 转义字符</h3>
+<p>转义字符用于<strong>阻止 Markdown 将某些符号解析为语法</strong>，而是让它们<strong>按字面含义显示出来</strong>。<br/>
+当你需要“展示符号本身”，而不是“触发语法效果”时，就必须使用转义。</p>
+<hr/>
+<h4>2.8.1 什么是转义</h4>
+<p>在 Markdown 中，某些符号具有特殊含义，例如：</p>
+<ul>
+<li><code node="[object Object]">*</code> 表示强调</li>
+<li><code node="[object Object]">#</code> 表示标题</li>
+<li><code node="[object Object]">&gt;</code> 表示引用</li>
+<li><code node="[object Object]">-</code> 表示列表</li>
+</ul>
+<p>如果你只是想显示这些符号本身，就需要在它们前面加上 <strong>反斜杠 <code node="[object Object]">\</code></strong>。</p>
+<p>这就是转义。</p>
+<hr/>
+<h4>2.8.2 转义的基本语法</h4>
+<p><strong>语法规则：</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">\符号
+</code></pre>
+<p>示例：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">\* 不是斜体
+\# 不是标题
+\&gt; 不是引用
+</code></pre>
+<p>渲染结果是符号本身，而不会触发 Markdown 语法。</p>
+<hr/>
+<h4>2.8.3 常见可转义字符</h4>
+<p>以下字符在 Markdown 中通常需要转义：</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>符号</th><th>原本作用</th></tr></thead><tbody><tr><td><code node="[object Object]">\</code></td><td>转义符本身</td></tr><tr><td><code node="[object Object]">`</code></td><td>行内代码</td></tr><tr><td><code node="[object Object]">*</code></td><td>斜体 / 粗体</td></tr><tr><td><code node="[object Object]">_</code></td><td>斜体 / 粗体</td></tr><tr><td><code node="[object Object]">{ }</code></td><td>扩展语法</td></tr><tr><td><code node="[object Object]">[ ]</code></td><td>链接</td></tr><tr><td><code node="[object Object]">( )</code></td><td>链接</td></tr><tr><td><code node="[object Object]">#</code></td><td>标题</td></tr><tr><td><code node="[object Object]">+</code></td><td>列表</td></tr><tr><td><code node="[object Object]">-</code></td><td>列表 / 分隔线</td></tr><tr><td><code node="[object Object]">.</code></td><td>有序列表</td></tr><tr><td><code node="[object Object]">!</code></td><td>图片</td></tr></tbody></table>
+<p>示例：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">\# 一级标题
+\- 列表项
+\1. 不是有序列表
+</code></pre>
+<hr/>
+<h4>2.8.4 转义与代码语法的区别</h4>
+<p>初学者常混淆“转义”和“代码”。</p>
+<p><strong>转义：</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">\*
+</code></pre>
+<p>用于在普通文本中显示符号。</p>
+<p><strong>代码：</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-code">`*`</span>
+</code></pre>
+<p>用于将内容标记为“代码”，整体失去 Markdown 语义。</p>
+<p>区别总结：</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>场景</th><th>推荐方式</th></tr></thead><tbody><tr><td>只显示单个符号</td><td>转义</td></tr><tr><td>展示语法示例</td><td>行内代码</td></tr><tr><td>展示多行原样内容</td><td>代码块</td></tr></tbody></table>
+<hr/>
+<h4>2.8.5 转义在示例讲解中的作用</h4>
+<p>在写 Markdown 教程或技术文档时，转义非常常见。</p>
+<p>例如说明列表语法时：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">使用 \- 创建无序列表
+</code></pre>
+<p>否则 Markdown 会误认为你在写列表。</p>
+<p>转义让你可以<strong>一边解释语法，一边正常书写文档</strong>。</p>
+<hr/>
+<h4>2.8.6 转义在 AI 场景中的意义</h4>
+<p>在 AI 相关内容中，转义可以：</p>
+<ul>
+<li>防止 Prompt 被误解析</li>
+<li>明确表达“符号本身就是内容”</li>
+<li>减少模型对格式的错误理解</li>
+</ul>
+<p>在向 AI 说明 Markdown 规则、正则表达式或语法符号时，转义尤为重要。</p>
+<hr/>
+<h4>2.8.7 使用转义字符的推荐原则</h4>
+<p>对初学者，建议遵循以下原则：</p>
+<ol>
+<li>看到符号“显示不对”，先考虑转义</li>
+<li>讲语法时，多用转义或代码</li>
+<li>不要滥用转义，影响可读性</li>
+<li>大段内容优先使用代码块</li>
+<li>记住反斜杠本身也需要转义：<code node="[object Object]">\\</code></li>
+</ol>
+<p>记住一句话：</p>
+<blockquote>
+<p><strong>转义的本质，是告诉 Markdown：这个符号不是命令，而是内容。</strong></p>
+</blockquote>
+<p>掌握转义字符，可以让你在编写 Markdown 教程、技术文档和 AI Prompt 时更加得心应手。</p>
+<h2 id="3-markdown-链接与资源">3. Markdown 链接与资源</h2>
+<p>链接与资源用于<strong>在文档中指向外部或内部的信息</strong>，是 Markdown 从“纯文本”走向“可导航文档”的关键能力。<br/>
+在技术文档、教程以及 AI 相关内容中，链接承担着<strong>扩展上下文、引用来源、组织资源</strong>的重要作用。</p>
+<hr/>
+<h3 id="31-行内链接">3.1 行内链接</h3>
+<p>行内链接是 <strong>最常用、最直观</strong> 的链接写法，适合在正文中直接插入链接。</p>
+<h4>3.1.1 基本语法</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">[<span class="hljs-string">链接文字</span>](<span class="hljs-link">链接地址</span>)
+</code></pre>
+<p>示例：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">访问 [<span class="hljs-string">Markdown 官方网站</span>](<span class="hljs-link">https://www.markdownguide.org</span>) 学习更多内容。
+</code></pre>
+<p>说明：</p>
+<ul>
+<li><code node="[object Object]">[]</code> 中是<strong>可见文本</strong></li>
+<li><code node="[object Object]">()</code> 中是<strong>实际链接地址</strong></li>
+<li>链接文字应具有明确语义，避免使用“点这里”</li>
+</ul>
+<hr/>
+<h4>3.1.2 带标题的行内链接</h4>
+<p>可以为链接添加说明性标题，在鼠标悬停时显示。</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">[<span class="hljs-string">Markdown 教程</span>](<span class="hljs-link">https://www.markdownguide.org &quot;官方指南&quot;</span>)
+</code></pre>
+<p>说明：</p>
+<ul>
+<li>标题位于链接地址后</li>
+<li>使用英文双引号包裹</li>
+<li>属于可选内容</li>
+</ul>
+<hr/>
+<h4>3.1.3 行内链接的使用场景</h4>
+<p>适合用于：</p>
+<ul>
+<li>教程正文中的即时引用</li>
+<li>推荐阅读材料</li>
+<li>指向明确、一次性使用的链接</li>
+</ul>
+<p>不适合大量重复使用同一链接。</p>
+<hr/>
+<h3 id="32-参考式链接">3.2 参考式链接</h3>
+<p>参考式链接用于<strong>将链接定义与正文分离</strong>，提升长文档的可读性与可维护性。</p>
+<h4>3.2.1 基本语法</h4>
+<p>正文中：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">这是一个 [<span class="hljs-string">Markdown 教程</span>][<span class="hljs-symbol">guide</span>]。
+</code></pre>
+<p>文档任意位置（通常在末尾）：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">[<span class="hljs-symbol">guide</span>]: <span class="hljs-link">https://www.markdownguide.org</span>
+</code></pre>
+<p>说明：</p>
+<ul>
+<li><code node="[object Object]">[guide]</code> 是链接标识</li>
+<li>标识名不区分大小写</li>
+<li>定义位置不影响渲染结果</li>
+<li>必须单独一个段落</li>
+</ul>
+<hr/>
+<h4>3.2.2 带标题的参考式链接</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">[<span class="hljs-symbol">guide</span>]: <span class="hljs-link">https://www.markdownguide.org &quot;官方 Markdown 指南&quot;</span>
+</code></pre>
+<hr/>
+<h4>3.2.3 参考式链接的优势</h4>
+<ul>
+<li>正文更干净</li>
+<li>统一管理链接地址</li>
+<li>修改链接无需改正文</li>
+<li>特别适合教程、论文和知识库</li>
+</ul>
+<p>在 AI 生成或维护长文档时，参考式链接尤为推荐。</p>
+<hr/>
+<h3 id="33-自动链接">3.3 自动链接</h3>
+<p>自动链接用于<strong>直接展示网址或邮箱地址</strong>，无需自定义文字。</p>
+<h4>3.3.1 语法形式</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="xml">&lt;https://www.example.com&gt;</span>
+<span class="xml">&lt;user@example.com&gt;</span>
+</code></pre>
+<p>渲染后会自动变为可点击链接。</p>
+<hr/>
+<h4>3.3.2 自动链接的适用场景</h4>
+<p>适合：</p>
+<ul>
+<li>文档底部的联系方式</li>
+<li>需要明确展示地址本身的场合</li>
+<li>技术说明中的接口地址</li>
+</ul>
+<p>不适合正文叙述性内容。</p>
+<hr/>
+<h3 id="34-图片">3.4 图片</h3>
+<p>图片本质上是<strong>特殊形式的链接</strong>，用于引入视觉资源。</p>
+<h4>3.4.1 图片的基本语法</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">![<span class="hljs-string">替代文字</span>](<span class="hljs-link">图片地址</span>)
+</code></pre>
+<p>示例：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">![<span class="hljs-string">Markdown Logo</span>](<span class="hljs-link">https://example.com/logo.png</span>)
+</code></pre>
+<p>说明：</p>
+<ul>
+<li><code node="[object Object]">!</code> 表示这是图片而非普通链接</li>
+<li>替代文字用于图片无法加载时显示</li>
+<li>替代文字也对无障碍与 AI 理解很重要</li>
+</ul>
+<hr/>
+<h4>3.4.2 本地图片与网络图片</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">![<span class="hljs-string">本地图片</span>](<span class="hljs-link">images/example.png</span>)
+![<span class="hljs-string">网络图片</span>](<span class="hljs-link">https://example.com/example.png</span>)
+</code></pre>
+<p>建议：</p>
+<ul>
+<li>项目文档优先使用本地图片</li>
+<li>教程示例可使用网络图片</li>
+</ul>
+<hr/>
+<h4>3.4.3 图片标题</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">![<span class="hljs-string">示意图</span>](<span class="hljs-link">image.png &quot;结构示意图&quot;</span>)
+</code></pre>
+<p>标题属于可选内容。</p>
+<hr/>
+<h3 id="35-链接与图片的组合用法">3.5 链接与图片的组合用法</h3>
+<p>链接与图片可以组合使用，实现“可点击图片”。</p>
+<h4>3.5.1 图片作为链接</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">[<span class="hljs-string">![按钮图片</span>](<span class="hljs-link">button.png</span>)](<span class="hljs-link">https://example.com</span>)
+</code></pre>
+<p>效果：</p>
+<ul>
+<li>图片显示在页面中</li>
+<li>点击图片会跳转到链接地址</li>
+</ul>
+<hr/>
+<h4>3.5.2 常见应用场景</h4>
+<ul>
+<li>项目主页的徽章（Badge）</li>
+<li>跳转到文档或下载页面</li>
+<li>教程中的示意入口</li>
+</ul>
+<hr/>
+<h4>3.5.3 链接与图片在 AI 场景中的作用</h4>
+<p>对 AI 而言：</p>
+<ul>
+<li>链接是“可扩展上下文”的信号</li>
+<li>图片替代文字是重要语义信息</li>
+<li>结构清晰的资源引用有助于理解文档意图</li>
+</ul>
+<p>在 Prompt 或自动生成文档中：</p>
+<ul>
+<li>链接常用于引用背景资料</li>
+<li>图片替代文字可作为语义补充</li>
+</ul>
+<hr/>
+<p>通过合理使用链接与图片，Markdown 文档可以从“静态文本”升级为<strong>结构清晰、信息可延展的知识载体</strong>，这在现代技术写作和 AI 协作中尤为重要。</p>
+<h2 id="4-markdown-表格">4. Markdown 表格</h2>
+<p>表格用于<strong>以行和列的形式组织结构化数据</strong>，适合展示对比关系、参数说明和规则列表。<br/>
+在 Markdown 中，表格追求的是<strong>清晰表达</strong>，而不是复杂排版。</p>
+<hr/>
+<h3 id="41-表格基本语法">4.1 表格基本语法</h3>
+<p>Markdown 表格由三部分组成：</p>
+<ol>
+<li>表头行</li>
+<li>分隔行</li>
+<li>数据行</li>
+</ol>
+<h4>4.1.1 最基本的表格结构</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">| 名称 | 类型 | 说明 |
+| ---- | ---- | ---- |
+| id   | int  | 唯一标识 |
+| name | text | 用户名 |
+</code></pre>
+<p>说明：</p>
+<ul>
+<li><code node="[object Object]">|</code> 用于分隔列</li>
+<li>第二行用于定义表格结构</li>
+<li>表格前后建议保留空行</li>
+</ul>
+<hr/>
+<h4>4.1.2 简化写法</h4>
+<p>表格最左和最右的 <code node="[object Object]">|</code> 可以省略：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">名称 | 类型 | 说明
+---- | ---- | ----
+id   | int  | 唯一标识
+</code></pre>
+<p>但在实际写作中，<strong>不推荐省略</strong>，完整写法更清晰。</p>
+<hr/>
+<h4>4.1.3 表格的可读性原则</h4>
+<ul>
+<li>列数不宜过多</li>
+<li>表头必须清晰命名</li>
+<li>每一列表达同一类信息</li>
+</ul>
+<p>表格是“结构化表达”，不是“文本压缩工具”。</p>
+<hr/>
+<h3 id="42-对齐方式">4.2 对齐方式</h3>
+<p>Markdown 支持三种列对齐方式，通过分隔行中的冒号控制。</p>
+<h4>4.2.1 左对齐</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">| 名称 | 说明 |
+| :--- | :--- |
+| A    | 示例 |
+</code></pre>
+<p>或省略冒号（默认左对齐）：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">| 名称 | 说明 |
+| ---- | ---- |
+</code></pre>
+<hr/>
+<h4>4.2.2 居中对齐</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">| 名称 | 状态 |
+| :--: | :--: |
+| A    | 正常 |
+</code></pre>
+<hr/>
+<h4>4.2.3 右对齐</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">| 数值 | 单位 |
+| ---: | ---: |
+| 100  | ms   |
+</code></pre>
+<hr/>
+<h4>4.2.4 对齐方式的使用建议</h4>
+<ul>
+<li>文本类内容：左对齐</li>
+<li>状态或标识：居中对齐</li>
+<li>数值、金额：右对齐</li>
+</ul>
+<p>对齐是为了<strong>增强可读性，而不是美观</strong>。</p>
+<hr/>
+<h3 id="43-表格中的格式化">4.3 表格中的格式化</h3>
+<p>表格单元格中可以使用部分 Markdown 语法。</p>
+<h4>4.3.1 支持的常见格式</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">| 类型 | 示例 |
+| ---- | ---- |
+| 强调 | <span class="hljs-strong">**重点内容**</span> |
+| 代码 | <span class="hljs-code">`int`</span> |
+| 链接 | [<span class="hljs-string">官网</span>](<span class="hljs-link">https://example.com</span>) |
+</code></pre>
+<p>说明：</p>
+<ul>
+<li>行内代码非常适合参数、变量名</li>
+<li>链接常用于引用文档</li>
+</ul>
+<hr/>
+<h4>4.3.2 不支持或不推荐的格式</h4>
+<p>表格中通常<strong>不支持或不推荐</strong>：</p>
+<ul>
+<li>多段落</li>
+<li>列表</li>
+<li>代码块</li>
+<li>引用块</li>
+</ul>
+<p>例如：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">| 错误示例 |
+| -------- |
+| - 列表项 |
+</code></pre>
+<p>这类写法在不同解析器中表现不一致。</p>
+<hr/>
+<h4>4.3.3 表格与 <code node="[object Object]">&lt;br/&gt;</code> 的配合</h4>
+<p>如果需要在单元格内换行，可使用：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">第一行<span class="xml"><span class="hljs-tag">&lt;<span class="hljs-name">br</span>/&gt;</span></span>
+第二行
+</code></pre>
+<p>这是表格中<strong>最稳定的换行方式</strong>。</p>
+<hr/>
+<h3 id="44-表格的常见限制">4.4 表格的常见限制</h3>
+<p>Markdown 表格有明确的能力边界。</p>
+<h4>4.4.1 不能合并单元格</h4>
+<p>Markdown 表格<strong>不支持</strong>：</p>
+<ul>
+<li>行合并</li>
+<li>列合并</li>
+</ul>
+<p>如果必须合并单元格，应考虑：</p>
+<ul>
+<li>HTML 表格</li>
+<li>将表格拆分</li>
+<li>改用列表或段落</li>
+</ul>
+<hr/>
+<h4>4.4.2 不适合复杂布局</h4>
+<p>以下场景不适合使用 Markdown 表格：</p>
+<ul>
+<li>复杂嵌套结构</li>
+<li>大量文字说明</li>
+<li>强视觉排版需求</li>
+</ul>
+<p>Markdown 表格的定位是：</p>
+<blockquote>
+<p><strong>结构清晰，而非形式复杂。</strong></p>
+</blockquote>
+<hr/>
+<h4>4.4.3 不同平台渲染差异</h4>
+<p>不同 Markdown 方言对表格的支持程度不同：</p>
+<ul>
+<li>GFM 支持最完整</li>
+<li>严格 CommonMark 不包含表格</li>
+<li>部分编辑器存在渲染差异</li>
+</ul>
+<p>因此：</p>
+<ul>
+<li>教程与技术文档优先使用简单表格</li>
+<li>避免依赖边缘特性</li>
+</ul>
+<hr/>
+<h3 id="444-表格在-ai-场景中的特点">4.4.4 表格在 AI 场景中的特点</h3>
+<p>对 AI 而言，表格具有明显优势：</p>
+<ul>
+<li>列即“属性”</li>
+<li>行即“实例”</li>
+<li>结构非常利于信息抽取与总结</li>
+</ul>
+<p>但前提是：</p>
+<ul>
+<li>表头语义明确</li>
+<li>单元格内容简洁</li>
+</ul>
+<hr/>
+<p>合理使用 Markdown 表格，可以让复杂信息一目了然。<br/>
+当你发现“内容本质是对比关系”时，表格往往是最佳选择。</p>
+<h2 id="5-markdown-代码块进阶">5. Markdown 代码块进阶</h2>
+<p>Markdown 提供了多种方式用于表示代码，不同形式适用于不同使用场景。本节将系统讲解行内代码、围栏代码块、代码高亮以及特殊字符处理。</p>
+<hr/>
+<h3 id="51-行内代码">5.1 行内代码</h3>
+<p>行内代码用于在一行文本中<strong>标记变量名、命令、函数名或关键字</strong>，使其在语义和视觉上与普通文本区分。</p>
+<hr/>
+<h4>5.1.1 行内代码的基本语法</h4>
+<p>使用一对反引号 <code node="[object Object]">`</code> 包裹代码内容：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-code">`代码内容`</span>
+</code></pre>
+<hr/>
+<h4>5.1.2 示例</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">使用 <span class="hljs-code">`git status`</span> 查看仓库状态。
+</code></pre>
+<hr/>
+<h4>5.1.3 注意事项</h4>
+<ul>
+<li>适合短代码或单个标识符</li>
+<li>行内代码不解析 Markdown 语法</li>
+<li>必须使用反引号，不能使用引号或其他符号</li>
+</ul>
+<hr/>
+<h3 id="52-围栏代码块">5.2 围栏代码块</h3>
+<p>围栏代码块用于展示<strong>多行代码或完整代码示例</strong>，内容会被按原样输出。</p>
+<hr/>
+<h4>5.2.1 围栏代码块的基本语法</h4>
+<p>使用三条反引号包裹代码块：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-code">```
+代码内容
+```</span>
+</code></pre>
+<hr/>
+<h4>5.2.2 示例</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-code">```
+function add(a, b) {
+  return a + b;
+}
+```</span>
+</code></pre>
+<hr/>
+<h4>5.2.3 注意事项</h4>
+<ul>
+<li>起始和结束的反引号数量必须一致</li>
+<li>反引号必须单独占一行</li>
+<li>代码块内部不解析 Markdown 语法</li>
+</ul>
+<hr/>
+<h3 id="53-代码高亮与语言标识">5.3 代码高亮与语言标识</h3>
+<p>在围栏代码块中指定语言名称，可以启用语法高亮，提高代码可读性。</p>
+<hr/>
+<h4>5.3.1 语法格式</h4>
+<p>在开头反引号后直接写语言名：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-code">```语言名
+代码内容
+```</span>
+</code></pre>
+<hr/>
+<h4>5.3.2 示例</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-code">```js
+const sum = (a, b) =&gt; a + b;
+```</span>
+
+
+<span class="hljs-code">```python
+def add(a, b):
+    return a + b
+```</span>
+</code></pre>
+<hr/>
+<h4>5.3.3 注意事项</h4>
+<ul>
+<li>语言名称写错不会报错，但可能不高亮</li>
+<li>一次只能指定一个语言</li>
+<li>是否支持高亮取决于渲染环境</li>
+</ul>
+<hr/>
+<h3 id="54-代码块中的特殊字符处理">5.4 代码块中的特殊字符处理</h3>
+<p>在代码块中，所有字符都会被<strong>按字面含义显示</strong>，不会被 Markdown 解析。</p>
+<hr/>
+<h4>5.4.1 基本语法</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-code">```markdown
+**加粗文本**
+`行内代码`
+```</span>
+</code></pre>
+<hr/>
+<h4>5.4.2 示例</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-code">```html
+&lt;div class=&quot;box&quot;&gt;
+  &lt;p&gt;Hello&lt;/p&gt;
+&lt;/div&gt;
+```</span>
+</code></pre>
+<hr/>
+<h4>5.4.3 注意事项</h4>
+<ul>
+<li>不需要对 <code node="[object Object]">*</code>、<code node="[object Object]">#</code>、<code node="[object Object]">_</code> 等字符进行转义</li>
+<li>若代码中包含反引号，外层需使用更多反引号</li>
+<li>代码块支持直接复制粘贴使用</li>
+</ul>
+<h2 id="6-markdown-高级语法">6. Markdown 高级语法</h2>
+<p>Markdown 在基础语法之上，提供了一系列<strong>增强表达能力的高级语法</strong>，常用于技术文档、学术写作与项目说明。本章将系统讲解删除线、任务列表、脚注、定义列表、数学公式以及图表与流程图的写法。</p>
+<hr/>
+<h3 id="61-删除线">6.1 删除线</h3>
+<p>删除线用于表示<strong>已废弃、被否定或不再采用的内容</strong>。</p>
+<hr/>
+<h4>6.1.1 基本语法</h4>
+<p>使用两条波浪线 <code node="[object Object]">~~</code> 包裹文本：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">~~被删除的内容~~
+</code></pre>
+<hr/>
+<h4>6.1.2 示例</h4>
+<p>这个功能已经 <del>不再维护</del> 停止更新。</p>
+<hr/>
+<h4>6.1.3 注意事项</h4>
+<ul>
+<li>波浪线必须成对出现</li>
+<li>删除线可与加粗、斜体组合使用</li>
+<li>属于扩展语法，极少数解析器不支持</li>
+</ul>
+<hr/>
+<h3 id="62-任务列表">6.2 任务列表</h3>
+<p>任务列表用于表示<strong>待办事项或完成状态</strong>，常见于 README 和项目管理文档。</p>
+<hr/>
+<h4>6.2.1 基本语法</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-bullet">-</span> [ ] 未完成任务
+<span class="hljs-bullet">-</span> [x] 已完成任务
+</code></pre>
+<hr/>
+<h4>6.2.2 示例</h4>
+<ul class="contains-task-list">
+<li class="task-list-item"><input type="checkbox" disabled="" checked=""/> 初始化项目</li>
+<li class="task-list-item"><input type="checkbox" disabled=""/> 编写文档</li>
+<li class="task-list-item"><input type="checkbox" disabled=""/> 发布版本</li>
+</ul>
+<hr/>
+<h4>6.2.3 注意事项</h4>
+<ul>
+<li><code node="[object Object]">-</code> 后必须有空格</li>
+<li><code node="[object Object]">[ ]</code> 与 <code node="[object Object]">[x]</code> 区分大小写不敏感</li>
+<li>是否可交互取决于平台支持</li>
+</ul>
+<hr/>
+<h3 id="63-脚注">6.3 脚注</h3>
+<p>脚注用于对正文内容进行<strong>补充说明或引用来源</strong>，不打断正文阅读。</p>
+<hr/>
+<h4>6.3.1 基本语法</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">正文内容[^1]
+
+[<span class="hljs-symbol">^1</span>]: <span class="hljs-link">脚注说明文字</span>
+</code></pre>
+<hr/>
+<h4>6.3.2 示例</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">Markdown 是一种轻量级标记语言[^md]。
+
+[<span class="hljs-symbol">^md</span>]: <span class="hljs-link">由 John Gruber 于 2004 年提出。</span>
+</code></pre>
+<hr/>
+<h4>6.3.3 注意事项</h4>
+<ul>
+<li>脚注标识需一一对应</li>
+<li>脚注定义通常放在文档末尾</li>
+<li>属于扩展语法，并非所有解析器支持</li>
+</ul>
+<hr/>
+<h3 id="64-定义列表">6.4 定义列表</h3>
+<p>定义列表用于表示<strong>术语与解释</strong>的对应关系，常见于说明文档。</p>
+<hr/>
+<h4>6.4.1 基本语法</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">术语
+: 解释内容
+</code></pre>
+<hr/>
+<h4>6.4.2 示例</h4>
+<p>Markdown
+: 一种轻量级标记语言</p>
+<p>HTML
+: 超文本标记语言</p>
+<hr/>
+<h4>6.4.3 注意事项</h4>
+<ul>
+<li>冒号与解释内容之间需有空格</li>
+<li>一个术语可对应多个解释</li>
+<li>属于扩展语法，支持度因平台而异</li>
+</ul>
+<hr/>
+<h3 id="65-数学公式">6.5 数学公式</h3>
+<p>数学公式用于展示<strong>数学表达式与推导过程</strong>，常用于学术与技术文档。</p>
+<hr/>
+<h4>6.5.1 行内公式语法</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">$E = mc^2$
+</code></pre>
+<p>示例：</p>
+<p>质量与能量的关系为 <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>E</mi><mo>=</mo><mi>m</mi><msup><mi>c</mi><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">E = mc^2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em"></span><span class="mord mathnormal" style="margin-right:0.05764em">E</span><span class="mspace" style="margin-right:0.2778em"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em"></span></span><span class="base"><span class="strut" style="height:0.8141em"></span><span class="mord mathnormal">m</span><span class="mord"><span class="mord mathnormal">c</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em"><span style="top:-3.063em;margin-right:0.05em"><span class="pstrut" style="height:2.7em"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span>。</p>
+<hr/>
+<h4>6.5.2 块级公式语法</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">$$
+a^2 + b^2 = c^2
+$$
+</code></pre>
+<hr/>
+<h4>6.5.3 示例</h4>
+<span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><munderover><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover><mi>i</mi><mo>=</mo><mfrac><mrow><mi>n</mi><mo stretchy="false">(</mo><mi>n</mi><mo>+</mo><mn>1</mn><mo stretchy="false">)</mo></mrow><mn>2</mn></mfrac></mrow><annotation encoding="application/x-tex">\sum_{i=1}^{n} i = \frac{n(n+1)}{2}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:2.9291em;vertical-align:-1.2777em"></span><span class="mop op-limits"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.6514em"><span style="top:-1.8723em;margin-left:0em"><span class="pstrut" style="height:3.05em"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">i</span><span class="mrel mtight">=</span><span class="mord mtight">1</span></span></span></span><span style="top:-3.05em"><span class="pstrut" style="height:3.05em"></span><span><span class="mop op-symbol large-op">∑</span></span></span><span style="top:-4.3em;margin-left:0em"><span class="pstrut" style="height:3.05em"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">n</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.2777em"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em"></span><span class="mord mathnormal">i</span><span class="mspace" style="margin-right:0.2778em"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em"></span></span><span class="base"><span class="strut" style="height:2.113em;vertical-align:-0.686em"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.427em"><span style="top:-2.314em"><span class="pstrut" style="height:3em"></span><span class="mord"><span class="mord">2</span></span></span><span style="top:-3.23em"><span class="pstrut" style="height:3em"></span><span class="frac-line" style="border-bottom-width:0.04em"></span></span><span style="top:-3.677em"><span class="pstrut" style="height:3em"></span><span class="mord"><span class="mord mathnormal">n</span><span class="mopen">(</span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2222em"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em"></span><span class="mord">1</span><span class="mclose">)</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span>
+<hr/>
+<h4>6.5.4 注意事项</h4>
+<ul>
+<li>数学公式使用 LaTeX 语法</li>
+<li>是否支持取决于渲染环境</li>
+<li>行内公式不宜过长</li>
+</ul>
+<hr/>
+<h3 id="66-图表与流程图">6.6 图表与流程图</h3>
+<p>图表与流程图用于<strong>可视化结构与流程</strong>，提升文档表达能力。</p>
+<hr/>
+<h4>6.6.1 Mermaid 流程图</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-code">```mermaid
+flowchart TD
+    A[开始]
+    B[处理]
+    C[结束]
+    A --&gt; B
+    B --&gt; C
+```</span>
+</code></pre>
+<hr/>
+<h4>6.6.2 Mermaid 示例</h4>
+<pre node="[object Object]"><pre class="mermaid">flowchart TD
+    A[开始]
+    B[处理]
+    C[结束]
+    A --&gt; B
+    B --&gt; C</pre></pre>
+<hr/>
+<h4>6.6.3 注意事项</h4>
+<ul>
+<li>Mermaid 属于扩展功能</li>
+<li>是否支持取决于平台与编辑器</li>
+<li>语法错误会导致整体图表无法渲染</li>
+</ul>
+<hr/>
+<h2 id="7-markdown-文档结构化写作">7. Markdown 文档结构化写作</h2>
+<p>结构化写作的目标是<strong>让读者快速理解、让作者易于维护、让工具正确解析</strong>。本章围绕目录、分节、排版规范以及注释与草稿管理，系统讲解 Markdown 文档的结构化写作方法。</p>
+<hr/>
+<h3 id="71-目录生成">7.1 目录生成</h3>
+<p>目录用于展示文档整体结构，便于快速定位内容，尤其适合中大型文档。</p>
+<hr/>
+<h4>7.1.1 基于标题的目录原理</h4>
+<p>Markdown 的目录通常<strong>自动从标题生成</strong>，标题层级决定目录层级。</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-section"># 一级标题</span>
+<span class="hljs-section">## 二级标题</span>
+<span class="hljs-section">### 三级标题</span>
+</code></pre>
+<hr/>
+<h4>7.1.2 手动目录写法</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-bullet">-</span> [<span class="hljs-string">章节一</span>](<span class="hljs-link">#章节一</span>)
+<span class="hljs-bullet">-</span> [<span class="hljs-string">章节二</span>](<span class="hljs-link">#章节二</span>)
+<span class="hljs-bullet">  -</span> [<span class="hljs-string">子章节</span>](<span class="hljs-link">#子章节</span>)
+</code></pre>
+<hr/>
+<h4>7.1.3 自动目录语法（部分平台支持）</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">[TOC]
+</code></pre>
+<hr/>
+<h4>7.1.4 注意事项</h4>
+<ul>
+<li>标题必须规范、连续</li>
+<li>标题文本会影响锚点名称</li>
+<li>是否支持自动目录取决于平台</li>
+</ul>
+<hr/>
+<h3 id="72-文档分节与层级设计">7.2 文档分节与层级设计</h3>
+<p>合理的层级设计是结构化写作的核心。</p>
+<hr/>
+<h4>7.2.1 标题层级设计原则</h4>
+<pre node="[object Object]"><code class="hljs language-text" node="[object Object]"># 文档标题
+## 章节
+### 子章节
+#### 小节
+</code></pre>
+<hr/>
+<h4>7.2.2 层级设计规范</h4>
+<ul>
+<li>每个文档只能有一个一级标题</li>
+<li>不跳级使用标题（禁止 <code node="[object Object]">##</code> 之后直接用 <code node="[object Object]">####</code>）</li>
+<li>标题即内容摘要，避免无意义标题</li>
+</ul>
+<hr/>
+<h4>7.2.3 示例结构</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-section"># 用户手册</span>
+<span class="hljs-section">## 快速开始</span>
+<span class="hljs-section">### 安装</span>
+<span class="hljs-section">### 配置</span>
+<span class="hljs-section">## 进阶使用</span>
+</code></pre>
+<hr/>
+<h3 id="73-长文档排版规范">7.3 长文档排版规范</h3>
+<p>长文档需要统一的排版规范以提升可读性。</p>
+<hr/>
+<h4>7.3.1 段落与空行</h4>
+<p>段落是 Markdown 文档中<strong>最基本的结构单元</strong>。正确使用空行，可以确保段落被正确解析，并显著提升长文档的可读性。</p>
+<hr/>
+<p>基本规则</p>
+<ul>
+<li><strong>一个空行表示一个新段落</strong></li>
+<li>段落之间<strong>必须至少空一行</strong></li>
+<li>连续多行文本、且中间没有空行，会被视为<strong>同一段落</strong></li>
+</ul>
+<hr/>
+<p>基本语法</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">段落一内容。
+
+段落二内容。
+</code></pre>
+<hr/>
+<p>错误示例与对比</p>
+<p><strong>错误写法（缺少空行）：</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">段落一内容。
+段落二内容。
+</code></pre>
+<p>渲染效果：<br/>
+两行会被合并为同一段落。</p>
+<hr/>
+<h5>与其他元素的空行规范</h5>
+<ul>
+<li><strong>标题与正文之间</strong>：建议空一行</li>
+<li><strong>段落与列表之间</strong>：建议空一行</li>
+<li><strong>段落与代码块之间</strong>：必须空一行</li>
+</ul>
+<p>示例：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-section">## 示例标题</span>
+
+这是标题下的第一段内容。
+
+<span class="hljs-bullet">-</span> 列表项一
+<span class="hljs-bullet">-</span> 列表项二
+
+<span class="hljs-code">```js
+console.log(&quot;hello&quot;);
+```</span>
+</code></pre>
+<hr/>
+<h5>注意事项</h5>
+<ul>
+<li>多余空行不会产生多个空段落，但会降低可维护性</li>
+<li>不建议使用多个连续空行控制“视觉间距”</li>
+<li>行尾两个空格用于换行，与段落无关</li>
+</ul>
+<hr/>
+<h3 id="72-注释与草稿管理">7.2 注释与草稿管理</h3>
+<p>注释与草稿用于<strong>辅助写作和维护</strong>，不应影响最终渲染效果。</p>
+<hr/>
+<h4>7.2.1 HTML 注释</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">&lt;!-- 这是注释，不会被渲染 --&gt;
+</code></pre>
+<hr/>
+<h4>7.2.2 草稿内容隐藏</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">&lt;!--
+<span class="hljs-section">## 草稿章节</span>
+未完成内容
+--&gt;
+</code></pre>
+<hr/>
+<h4>7.2.3 使用建议</h4>
+<ul>
+<li>注释用于作者备注与 TODO</li>
+<li>草稿内容应明确标记</li>
+<li>发布前检查并清理无关注释</li>
+</ul>
+<hr/>
+<h2 id="8-markdown-扩展与兼容性">8. Markdown 扩展与兼容性</h2>
+<p>Markdown 并不是单一、统一的标准，而是由<strong>核心规范 + 不同平台扩展</strong>共同构成。理解主流规范及其差异，是编写<strong>可移植、可长期维护文档</strong>的关键。</p>
+<hr/>
+<h3 id="81-commonmark-规范">8.1 CommonMark 规范</h3>
+<p>CommonMark 是目前最权威、最严格的 Markdown 规范，目标是<strong>消除歧义、统一解析行为</strong>。</p>
+<hr/>
+<h4>8.1.1 CommonMark 的定位与目标</h4>
+<ul>
+<li>明确定义 Markdown 语法规则</li>
+<li>为解析器提供一致的行为标准</li>
+<li>作为各类扩展语法的基础规范</li>
+</ul>
+<hr/>
+<h4>8.1.2 CommonMark 支持的核心语法</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-section"># 标题</span>
+<span class="hljs-section">## 二级标题</span>
+
+<span class="hljs-bullet">-</span> 无序列表
+<span class="hljs-bullet">1.</span> 有序列表
+
+这是一个段落。
+
+<span class="hljs-code">`行内代码`</span>
+
+</code></pre>
+<p>代码块</p>
+<pre node="[object Object]"><code node="[object Object]"></code></pre>
+<hr/>
+<h4>8.1.3 CommonMark 不支持的语法</h4>
+<p>以下语法<strong>不属于 CommonMark 标准</strong>：</p>
+<ul>
+<li>表格</li>
+<li>任务列表</li>
+<li>删除线</li>
+<li>脚注</li>
+<li>数学公式</li>
+</ul>
+<hr/>
+<h4>8.1.4 使用建议</h4>
+<ul>
+<li>追求最大平台兼容性时，优先使用 CommonMark 语法</li>
+<li>公共文档、长期存档文档应避免依赖扩展语法</li>
+</ul>
+<hr/>
+<h3 id="82-github-flavored-markdown（gfm）">8.2 GitHub Flavored Markdown（GFM）</h3>
+<p>GFM 是 GitHub 在 CommonMark 基础上的官方扩展，也是目前<strong>事实上的工程文档标准</strong>。</p>
+<hr/>
+<h4>8.2.1 GFM 的扩展内容</h4>
+<p>在 CommonMark 基础上，GFM 增加了：</p>
+<ul>
+<li>表格</li>
+<li>任务列表</li>
+<li>删除线</li>
+<li>自动链接</li>
+<li>明确支持的围栏代码块与高亮</li>
+</ul>
+<hr/>
+<h4>8.2.2 常用 GFM 语法示例</h4>
+<p><strong>表格：</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">| 功能 | 状态 |
+| ---- | ---- |
+| 登录 | 完成 |
+| 注册 | 开发中 |
+</code></pre>
+<p><strong>任务列表：</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-bullet">-</span> [x] 初始化项目
+<span class="hljs-bullet">-</span> [ ] 编写文档
+</code></pre>
+<p><strong>删除线：</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">~~已废弃功能~~
+</code></pre>
+<hr/>
+<h4>8.2.3 使用场景</h4>
+<ul>
+<li>GitHub / GitLab 仓库文档</li>
+<li>README.md、ISSUE、PULL REQUEST</li>
+<li>技术项目协作说明</li>
+</ul>
+<hr/>
+<h4>8.2.4 注意事项</h4>
+<ul>
+<li>并非所有 GFM 扩展在其他平台都支持</li>
+<li>数学公式、流程图等支持程度有限</li>
+</ul>
+<hr/>
+<h3 id="83-pandoc-扩展">8.3 Pandoc 扩展</h3>
+<p>Pandoc 提供了<strong>最灵活、最强大的 Markdown 扩展体系</strong>，广泛用于学术与出版领域。</p>
+<hr/>
+<h4>8.3.1 Pandoc Markdown 的特点</h4>
+<ul>
+<li>高度模块化的扩展系统</li>
+<li>支持多种输入与输出格式</li>
+<li>可精细控制语法启用与禁用</li>
+</ul>
+<hr/>
+<h4>8.3.2 常见 Pandoc 扩展语法</h4>
+<p><strong>脚注：</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">正文内容[^1]
+
+[<span class="hljs-symbol">^1</span>]: <span class="hljs-link">脚注说明文字</span>
+</code></pre>
+<p><strong>定义列表：</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">术语
+: 解释内容
+</code></pre>
+<p><strong>数学公式（LaTeX）：</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">$$
+\int<span class="hljs-emphasis">_a^b f(x)\,dx
+$$
+</span></code></pre>
+<hr/>
+<h4>8.3.3 文档转换示例</h4>
+<pre node="[object Object]"><code class="hljs language-bash" node="[object Object]">pandoc input.md -o output.pdf
+</code></pre>
+<hr/>
+<h4>8.3.4 使用建议</h4>
+<ul>
+<li>需要导出 PDF、Word、LaTeX 时优先选择 Pandoc</li>
+<li>明确文档目标格式，避免无必要扩展</li>
+</ul>
+<hr/>
+<h3 id="兼容性对比总结">兼容性对比总结</h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>特性</th><th>CommonMark</th><th>GFM</th><th>Pandoc</th></tr></thead><tbody><tr><td>基础语法</td><td>✅</td><td>✅</td><td>✅</td></tr><tr><td>表格</td><td>❌</td><td>✅</td><td>✅</td></tr><tr><td>任务列表</td><td>❌</td><td>✅</td><td>✅</td></tr><tr><td>删除线</td><td>❌</td><td>✅</td><td>✅</td></tr><tr><td>脚注</td><td>❌</td><td>❌</td><td>✅</td></tr><tr><td>数学公式</td><td>❌</td><td>⚠️</td><td>✅</td></tr></tbody></table>
+<hr/>
+<h3 id="本章小结">本章小结</h3>
+<ul>
+<li><strong>CommonMark</strong>：最大兼容性与规范性</li>
+<li><strong>GFM</strong>：工程实践的事实标准</li>
+<li><strong>Pandoc</strong>：专业写作与格式转换首选</li>
+</ul>
+<h2 id="9-markdown-编辑器与工具">9. Markdown 编辑器与工具</h2>
+<p>高效使用 Markdown，离不开合适的编辑器与工具。本章从本地编辑、在线写作、格式转换以及预览与发布四个方面，系统介绍常见工具及其使用场景。</p>
+<hr/>
+<h3 id="91-本地编辑器">9.1 本地编辑器</h3>
+<p>本地编辑器适合<strong>离线写作、长期维护与高频编辑</strong>，功能通常最为完整。</p>
+<hr/>
+<h4>9.1.1 常见本地 Markdown 编辑器</h4>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>编辑器</th><th>平台</th><th>特点</th></tr></thead><tbody><tr><td>Typora</td><td>全平台</td><td>所见即所得，学习成本低</td></tr><tr><td>VS Code</td><td>全平台</td><td>插件生态丰富，适合开发者</td></tr><tr><td>Obsidian</td><td>全平台</td><td>知识图谱，适合笔记管理</td></tr><tr><td>MarkText</td><td>全平台</td><td>开源，界面简洁</td></tr><tr><td>HaoMD</td><td>全平台</td><td>开源，以“人与AI协作”为核心理念</td></tr></tbody></table>
+<hr/>
+<h4>9.1.2 Typora</h4>
+<ul>
+<li>即时渲染 Markdown</li>
+<li>原生支持数学公式、表格、流程图</li>
+<li>适合写作与学习笔记</li>
+</ul>
+<hr/>
+<h4>9.1.3 VS Code + Markdown</h4>
+<ul>
+<li>常用插件：Markdown Preview Enhanced、Markdown All in One</li>
+<li>支持代码高亮与语法检查</li>
+<li>适合技术文档与项目协作</li>
+</ul>
+<hr/>
+<h4>9.1.4 HaoMD</h4>
+<ul>
+<li>内置多种 <strong>AI 对话能力</strong>，支持写作、润色与内容生成等场景</li>
+<li>提供 <strong>AI 会话管理机制</strong>，将会话作为可复用资产进行持久化保存</li>
+<li><strong>界面布局灵活且可记忆</strong>，可根据个人习惯长期保持工作状态</li>
+<li>支持 <strong>丰富的多媒体内容</strong>，可直接嵌入和预览音频、视频</li>
+<li>通过 <strong>虚拟文件夹</strong> 统一管理本地零散文档，实现逻辑组织与快速检索</li>
+<li>原生支持 <strong>PDF 预览</strong>，便于资料查阅与对照写作</li>
+<li><strong>开源项目</strong>，透明可控，易于二次开发与长期使用</li>
+</ul>
+<h4>9.1.4 使用建议</h4>
+<ul>
+<li>初学者优先选择 Typora</li>
+<li>开发者或多人协作推荐 VS Code</li>
+<li>注重 人与 AI 协作写作、知识整理与长期资产沉淀 的用户，推荐使用 HaoMD</li>
+</ul>
+<hr/>
+<h3 id="92-在线编辑器">9.2 在线编辑器</h3>
+<p>在线编辑器适合<strong>快速写作、临时编辑与协作</strong>，无需安装软件。</p>
+<hr/>
+<h4>9.2.1 常见在线 Markdown 编辑器</h4>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>工具</th><th>特点</th></tr></thead><tbody><tr><td>StackEdit</td><td>云同步，支持多平台</td></tr><tr><td>Dillinger</td><td>界面简洁，快速预览</td></tr><tr><td>HackMD</td><td>实时协作，团队友好</td></tr><tr><td>CodiMD</td><td>开源协作版 Markdown</td></tr></tbody></table>
+<hr/>
+<h4>9.2.2 在线编辑器优势</h4>
+<ul>
+<li>即开即用</li>
+<li>支持实时预览</li>
+<li>便于多人协作</li>
+</ul>
+<hr/>
+<h4>9.2.3 注意事项</h4>
+<ul>
+<li>依赖网络环境</li>
+<li>长期文档需注意数据备份</li>
+<li>扩展语法支持度不一</li>
+</ul>
+<hr/>
+<h3 id="93-markdown-转换工具">9.3 Markdown 转换工具</h3>
+<p>转换工具用于将 Markdown 转为其他格式，如 PDF、HTML、Word。</p>
+<hr/>
+<h4>9.3.1 Pandoc</h4>
+<p>Pandoc 是最强大的 Markdown 转换工具。</p>
+<pre node="[object Object]"><code class="hljs language-bash" node="[object Object]">pandoc input.md -o output.html
+</code></pre>
+<p>支持格式：</p>
+<ul>
+<li>HTML</li>
+<li>PDF</li>
+<li>DOCX</li>
+<li>LaTeX</li>
+</ul>
+<hr/>
+<h4>9.3.2 其他转换工具</h4>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>工具</th><th>功能</th></tr></thead><tbody><tr><td>mdpdf</td><td>Markdown 转 PDF</td></tr><tr><td>grip</td><td>本地预览 GitHub 风格</td></tr><tr><td>markdown-it</td><td>Markdown 渲染引擎</td></tr></tbody></table>
+<hr/>
+<h4>9.3.3 使用建议</h4>
+<ul>
+<li>学术与正式文档优先使用 Pandoc</li>
+<li>简单预览或发布可用轻量工具</li>
+</ul>
+<hr/>
+<h2 id="10-markdown-与其他技术的结合">10. Markdown 与其他技术的结合</h2>
+<p>Markdown 的价值不仅在于语法简洁，更在于其<strong>可组合性</strong>。它可以与版本控制、静态站点、文档系统以及知识管理工具深度结合，形成完整的内容生产与管理体系。</p>
+<hr/>
+<h3 id="101-markdown-与-git">10.1 Markdown 与 Git</h3>
+<p>Git 是最常见的版本控制系统，Markdown 是其默认文档格式之一，两者天然契合。</p>
+<hr/>
+<h4>10.1.1 结合原理</h4>
+<ul>
+<li>Markdown 是纯文本，适合 Git 进行差异比较</li>
+<li>Git 可以精确记录文档的历史演变</li>
+<li>支持多人协作与回滚</li>
+</ul>
+<hr/>
+<h4>10.1.2 常见使用场景</h4>
+<ul>
+<li>项目 README.md</li>
+<li>技术文档与设计说明</li>
+<li>变更日志（CHANGELOG.md）</li>
+</ul>
+<hr/>
+<h4>10.1.3 基本工作流程</h4>
+<pre node="[object Object]"><code class="hljs language-bash" node="[object Object]">git add README.md
+git commit -m <span class="hljs-string">&quot;update documentation&quot;</span>
+git push
+</code></pre>
+<hr/>
+<h4>10.1.4 使用建议</h4>
+<ul>
+<li>一个文档对应一个清晰的提交记录</li>
+<li>提交信息应说明“改了什么文档、为什么改”</li>
+<li>避免在同一次提交中混合大量无关文档修改</li>
+</ul>
+<hr/>
+<h3 id="102-markdown-与静态站点生成器">10.2 Markdown 与静态站点生成器</h3>
+<p>静态站点生成器（SSG）将 Markdown 转换为 HTML，用于博客和文档网站。</p>
+<hr/>
+<h4>10.2.1 常见静态站点生成器</h4>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>工具</th><th>特点</th></tr></thead><tbody><tr><td>Hexo</td><td>适合个人博客</td></tr><tr><td>Hugo</td><td>构建速度快</td></tr><tr><td>Jekyll</td><td>GitHub Pages 原生支持</td></tr><tr><td>VitePress</td><td>现代化文档站点</td></tr></tbody></table>
+<hr/>
+<h4>10.2.2 基本工作原理</h4>
+<pre node="[object Object]"><code class="hljs language-text" node="[object Object]">Markdown 文件
+→ 模板渲染
+→ HTML 页面
+→ 静态网站
+</code></pre>
+<hr/>
+<h4>10.2.3 示例结构</h4>
+<pre node="[object Object]"><code class="hljs language-text" node="[object Object]">docs/
+├─ index.md
+├─ guide.md
+└─ api.md
+</code></pre>
+<hr/>
+<h4>10.2.4 使用建议</h4>
+<ul>
+<li>每个页面一个 Markdown 文件</li>
+<li>通过 Front Matter 管理元数据</li>
+<li>目录结构即网站结构</li>
+</ul>
+<hr/>
+<h3 id="103-markdown-与文档系统">10.3 Markdown 与文档系统</h3>
+<p>Markdown 是现代文档系统的核心内容格式。</p>
+<hr/>
+<h4>10.3.1 常见文档系统</h4>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>系统</th><th>使用场景</th></tr></thead><tbody><tr><td>GitBook</td><td>产品与技术文档</td></tr><tr><td>Docusaurus</td><td>开源项目文档</td></tr><tr><td>MkDocs</td><td>简洁文档站点</td></tr><tr><td>Confluence</td><td>企业内部文档</td></tr></tbody></table>
+<hr/>
+<h4>10.3.2 文档系统的优势</h4>
+<ul>
+<li>统一文档格式</li>
+<li>自动生成目录与导航</li>
+<li>支持搜索与版本管理</li>
+</ul>
+<hr/>
+<h4>10.3.3 使用建议</h4>
+<ul>
+<li>统一 Markdown 规范</li>
+<li>避免平台私有语法滥用</li>
+<li>文档结构先设计，再编写</li>
+</ul>
+<hr/>
+<h3 id="104-markdown-与知识管理工具">10.4 Markdown 与知识管理工具</h3>
+<p>Markdown 是个人与团队知识管理的事实标准。</p>
+<hr/>
+<h4>10.4.1 常见知识管理工具</h4>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>工具</th><th>特点</th></tr></thead><tbody><tr><td>Obsidian</td><td>双向链接与知识图谱</td></tr><tr><td>Logseq</td><td>大纲式知识管理</td></tr><tr><td>Notion</td><td>协作与数据库</td></tr><tr><td>HaoMD</td><td>人与 AI 协作的知识资产管理</td></tr></tbody></table>
+<hr/>
+<h4>10.4.2 使用建议</h4>
+<ul>
+<li>保持原子化笔记</li>
+<li>避免过度分类</li>
+<li>定期重构与整理知识结构</li>
+</ul>
+<hr/>
+<h2 id="11-markdown-写作规范与最佳实践">11. Markdown 写作规范与最佳实践</h2>
+<p>Markdown 写作的目标不是“能渲染”，而是<strong>长期可读、易维护、易协作</strong>。本章从可读性、风格统一、常见错误以及团队协作四个层面，总结 Markdown 写作的最佳实践。</p>
+<hr/>
+<h3 id="111-可读性原则">11.1 可读性原则</h3>
+<p>可读性是 Markdown 写作的第一原则，应同时面向<strong>人类读者与工具解析</strong>。</p>
+<hr/>
+<h4>11.1.1 内容优先原则</h4>
+<ul>
+<li>优先保证语义清晰，而非追求视觉效果</li>
+<li>使用最简单、最通用的语法表达内容</li>
+<li>避免过度嵌套与复杂结构</li>
+</ul>
+<hr/>
+<h4>11.1.2 合理使用标题</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-section">## 模块说明</span>
+
+这是模块的整体说明。
+
+<span class="hljs-section">### 功能一</span>
+
+功能一的详细描述。
+</code></pre>
+<ul>
+<li>标题即段落摘要</li>
+<li>读目录即可了解全文结构</li>
+</ul>
+<hr/>
+<h4>11.1.3 控制段落长度</h4>
+<ul>
+<li>每段聚焦一个观点</li>
+<li>长段落应拆分为多个短段</li>
+<li>技术文档中建议每段不超过 5 行</li>
+</ul>
+<hr/>
+<h3 id="112-统一风格规范">11.2 统一风格规范</h3>
+<p>统一的风格可以显著降低阅读和维护成本，尤其在多人协作中尤为重要。</p>
+<hr/>
+<h4>11.2.1 标题风格规范</h4>
+<ul>
+<li>使用 <code node="[object Object]">#</code> 风格标题</li>
+<li>标题后不加标点符号</li>
+<li>同级标题语义并列</li>
+</ul>
+<hr/>
+<h4>11.2.2 列表与空行规范</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-bullet">-</span> 列表项一
+<span class="hljs-bullet">-</span> 列表项二
+
+下一段内容。
+</code></pre>
+<ul>
+<li>列表前后留空行</li>
+<li>列表项语法保持一致（统一使用 <code node="[object Object]">-</code>）</li>
+</ul>
+<hr/>
+<h4>11.2.3 代码块规范</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-code">```js
+console.log(&quot;example&quot;);
+```</span>
+</code></pre>
+<ul>
+<li>优先使用围栏代码块</li>
+<li>必须标注语言类型</li>
+<li>示例代码保持最小可运行</li>
+</ul>
+<hr/>
+<h3 id="113-常见错误与规避方法">11.3 常见错误与规避方法</h3>
+<hr/>
+<h4>11.3.1 标题层级错误</h4>
+<p><strong>错误示例：</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-section">## 二级标题</span>
+<span class="hljs-section">#### 四级标题</span>
+</code></pre>
+<p><strong>规避方法：</strong></p>
+<ul>
+<li>标题逐级递进，不跳级</li>
+<li>结构优先于视觉效果</li>
+</ul>
+<hr/>
+<h4>11.3.2 空行缺失</h4>
+<p><strong>错误示例：</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">段落一
+段落二
+</code></pre>
+<p><strong>正确示例：</strong></p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">段落一。
+
+段落二。
+</code></pre>
+<hr/>
+<h3 id="114-团队协作中的-markdown-规范">11.4 团队协作中的 Markdown 规范</h3>
+<p>在团队环境中，Markdown 应当作为<strong>工程资产</strong>而非个人笔记。</p>
+<hr/>
+<h4>11.4.1 统一规范文档</h4>
+<p>团队应维护一份 Markdown 写作规范，例如：</p>
+<pre node="[object Object]"><code class="hljs language-text" node="[object Object]">docs/markdown-style-guide.md
+</code></pre>
+<p>内容包括：</p>
+<ul>
+<li>标题层级规则</li>
+<li>列表与代码块规范</li>
+<li>命名与文件结构约定</li>
+</ul>
+<hr/>
+<h4>11.4.2 版本控制与审查</h4>
+<ul>
+<li>所有 Markdown 文档纳入 Git 管理</li>
+<li>通过 Pull Request 进行文档评审</li>
+<li>文档修改与代码修改同等对待</li>
+</ul>
+<hr/>
+<h4>11.4.3 自动化检查</h4>
+<ul>
+<li>使用 Markdown lint 工具</li>
+<li>在 CI 中加入文档检查流程</li>
+<li>统一格式，减少人工纠错</li>
+</ul>
+<hr/>
+<h2 id="12-markdown-进阶应用">12. Markdown 进阶应用</h2>
+<p>当 Markdown 不再只是“记笔记工具”，而成为<strong>内容生产管道的核心格式</strong>时，它的价值才真正显现。本章从技术文档、博客发布、学术写作到自动化生成，系统讲解 Markdown 的进阶应用场景。</p>
+<hr/>
+<h3 id="121-技术文档写作">12.1 技术文档写作</h3>
+<p>技术文档强调<strong>结构清晰、可维护、可协作</strong>，Markdown 是最常用的文档格式。</p>
+<hr/>
+<h4>12.1.1 常见技术文档类型</h4>
+<ul>
+<li>README</li>
+<li>用户手册</li>
+<li>API 文档</li>
+<li>架构与设计说明</li>
+</ul>
+<hr/>
+<h4>12.1.2 推荐文档结构</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-section"># 项目名称</span>
+
+<span class="hljs-section">## 简介</span>
+<span class="hljs-section">## 快速开始</span>
+<span class="hljs-section">## 使用说明</span>
+<span class="hljs-section">## 配置说明</span>
+<span class="hljs-section">## 常见问题</span>
+</code></pre>
+<hr/>
+<h4>12.1.3 技术写作实践要点</h4>
+<ul>
+<li>标题即目录，先设计结构再写内容</li>
+<li>使用代码块而非截图展示示例</li>
+<li>示例代码保持最小可复现</li>
+</ul>
+<hr/>
+<h3 id="122-博客与文章发布">12.2 博客与文章发布</h3>
+<p>Markdown 是现代博客系统的核心写作格式。</p>
+<hr/>
+<h4>12.2.1 常见博客平台</h4>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>平台</th><th>特点</th></tr></thead><tbody><tr><td>Hexo / Hugo</td><td>静态博客</td></tr><tr><td>GitHub Pages</td><td>托管简单</td></tr><tr><td>VitePress</td><td>技术文档型博客</td></tr><tr><td>Notion</td><td>轻量发布</td></tr></tbody></table>
+<hr/>
+<h4>12.2.2 Front Matter 使用</h4>
+<p>Front Matter 是放置在 Markdown 文件开头的一段元数据区域，主要用于向博客系统或静态站点生成器提供文章的描述信息，而不是正文内容本身。</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">---
+title: Markdown 写作指南
+date: 2026-03-01
+<span class="hljs-section">tags: [Markdown, 写作]
+---</span>
+</code></pre>
+<hr/>
+<h4>12.2.3 博客写作建议</h4>
+<ul>
+<li>一篇文章聚焦一个主题</li>
+<li>合理使用小标题增强可读性</li>
+<li>避免过长代码块影响阅读节奏</li>
+</ul>
+<hr/>
+<h3 id="123-学术写作与笔记管理">12.3 学术写作与笔记管理</h3>
+<p>Markdown 在学术写作中常与 LaTeX、引用管理工具结合使用。</p>
+<hr/>
+<h4>12.3.1 学术写作场景</h4>
+<ul>
+<li>课程笔记</li>
+<li>论文草稿</li>
+<li>阅读笔记</li>
+<li>实验记录</li>
+</ul>
+<hr/>
+<h4>12.3.2 数学公式与引用</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">$$
+E = mc^2
+$$
+
+正文引用[^1]
+
+[<span class="hljs-symbol">^1</span>]: <span class="hljs-link">Einstein, 1905</span>
+</code></pre>
+<hr/>
+<h4>12.3.3 笔记管理实践</h4>
+<p>Markdown 在笔记管理中的核心价值，不在于“记录”，而在于<strong>长期可演化的知识结构</strong>。以下从文件拆分、链接使用以及整理重构三个方面，给出一套可落地的实践方法。</p>
+<hr/>
+<p>一条概念 = 一个 Markdown 文件</p>
+<h4>原则说明</h4>
+<ul>
+<li>每个 Markdown 文件只表达<strong>一个清晰概念</strong></li>
+<li>文件粒度以“能否用一句话概括”为判断标准</li>
+<li>避免在一个文件中混合多个无关主题</li>
+</ul>
+<h4>示例</h4>
+<pre node="[object Object]"><code class="hljs language-text" node="[object Object]">notes/
+├─ Markdown.md
+├─ 行内代码.md
+├─ 围栏代码块.md
+└─ 写作规范.md
+</code></pre>
+<p>每个文件内容示例：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-section"># 行内代码</span>
+
+行内代码用于在一行文本中标记变量名或命令。
+</code></pre>
+<h4>好处</h4>
+<ul>
+<li>易于复用与引用</li>
+<li>方便重组与迁移</li>
+<li>降低单个文件的维护成本</li>
+</ul>
+<hr/>
+<h3 id="二、使用链接构建知识网络">二、使用链接构建知识网络</h3>
+<p>链接是将“孤立笔记”连接成“知识体系”的关键。</p>
+<hr/>
+<h4>1. 基本文件链接</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">[<span class="hljs-string">代码块进阶</span>](<span class="hljs-link">围栏代码块.md</span>)
+</code></pre>
+<p>用于明确的引用关系。</p>
+<hr/>
+<h4>2. 双向链接（工具支持）</h4>
+<p>在支持双向链接的工具中（如 Obsidian、HaoMD）：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">[[围栏代码块]]
+</code></pre>
+<p>特点：</p>
+<ul>
+<li>自动指向同名文件</li>
+<li>支持反向链接</li>
+<li>有助于发现知识关联</li>
+</ul>
+<hr/>
+<h4>3. 概念内嵌引用</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]">Markdown 写作中，[[围栏代码块]] 是展示多行示例的标准方式。
+</code></pre>
+<p>让链接自然融入语义，而非作为附录存在。</p>
+<hr/>
+<h4>4. 索引型笔记</h4>
+<p>创建“索引笔记”作为主题入口：</p>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-section"># Markdown 知识索引</span>
+
+<span class="hljs-bullet">-</span> [[基础语法]]
+<span class="hljs-bullet">-</span> [[高级语法]]
+<span class="hljs-bullet">-</span> [[写作规范]]
+</code></pre>
+<p>索引笔记的作用：</p>
+<ul>
+<li>汇总同一主题下的概念</li>
+<li>替代复杂的文件夹层级</li>
+<li>作为长期维护的知识地图</li>
+</ul>
+<hr/>
+<h3 id="三、定期整理与重构笔记">三、定期整理与重构笔记</h3>
+<p>知识管理是<strong>持续过程</strong>，而非一次性工作。</p>
+<hr/>
+<h4>1. 发现问题信号</h4>
+<p>当出现以下情况时，说明需要重构：</p>
+<ul>
+<li>单个文件过长</li>
+<li>同一概念反复出现</li>
+<li>链接混乱或难以追踪</li>
+</ul>
+<hr/>
+<h4>2. 常见重构方式</h4>
+<ul>
+<li>拆分大文件为多个概念文件</li>
+<li>合并高度重复的笔记</li>
+<li>补充缺失的链接</li>
+<li>删除过时或无效内容</li>
+</ul>
+<hr/>
+<h4>3. 建议整理节奏</h4>
+<ul>
+<li>每周：简单回顾新增笔记</li>
+<li>每月：整理主题索引</li>
+<li>每季度：结构性重构</li>
+</ul>
+<hr/>
+<h3 id="使用建议总结">使用建议总结</h3>
+<ul>
+<li>文件粒度越小，组合能力越强</li>
+<li>链接优先于目录结构</li>
+<li>索引笔记用于“导航”，概念笔记用于“表达”</li>
+<li>重构不是返工，而是知识成熟的标志</li>
+</ul>
+<hr/>
+<p>一句话总结：</p>
+<blockquote>
+<p><strong>好的 Markdown 笔记系统，不是文件越来越多，而是理解越来越清晰。</strong></p>
+</blockquote>
+<hr/>
+<h3 id="124-自动化文档生成">12.4 自动化文档生成</h3>
+<p>Markdown 可作为<strong>自动化文档生成的中间格式</strong>。</p>
+<hr/>
+<h4>12.4.1 自动生成场景</h4>
+<ul>
+<li>API 文档生成</li>
+<li>配置说明同步</li>
+<li>代码注释转文档</li>
+</ul>
+<hr/>
+<h4>12.4.2 常见工具链</h4>
+<pre node="[object Object]"><code class="hljs language-text" node="[object Object]">源数据 / 注释
+→ Markdown
+→ HTML / PDF / DOCX
+</code></pre>
+<hr/>
+<h4>12.4.3 示例流程</h4>
+<pre node="[object Object]"><code class="hljs language-bash" node="[object Object]"><span class="hljs-comment"># 从注释生成 Markdown</span>
+tool generate-docs &gt; api.md
+
+<span class="hljs-comment"># 转换为 HTML</span>
+pandoc api.md -o api.html
+</code></pre>
+<hr/>
+<h4>12.4.4 使用建议</h4>
+<ul>
+<li>Markdown 作为统一中间格式</li>
+<li>自动生成内容与手写内容分离</li>
+<li>在 CI 中集成文档生成流程</li>
+</ul>
+<hr/>
+<h2 id="13-markdown-常见问题与排错">13. Markdown 常见问题与排错</h2>
+<p>在实际使用中，Markdown 的问题往往不来自“语法不会”，而来自<strong>不同解析器、不同行为预期以及长期维护带来的复杂性</strong>。本章按问题类型系统梳理常见故障与对应的排错思路。</p>
+<hr/>
+<h3 id="131-渲染不一致问题">13.1 渲染不一致问题</h3>
+<p>同一份 Markdown 在不同工具或平台中显示效果不同，是最常见的问题。</p>
+<hr/>
+<h4>13.1.1 常见表现</h4>
+<ul>
+<li>在编辑器中正常，在平台上错乱</li>
+<li>列表、代码块缩进异常</li>
+<li>表格或公式无法显示</li>
+</ul>
+<hr/>
+<h4>13.1.2 常见原因</h4>
+<ul>
+<li>使用了平台不支持的扩展语法</li>
+<li>空行或缩进不符合规范</li>
+<li>Markdown 方言不同（CommonMark / GFM 等）</li>
+</ul>
+<hr/>
+<h4>13.1.3 排错方法</h4>
+<ul>
+<li>使用最基础语法进行验证</li>
+<li>对照平台支持的 Markdown 规范</li>
+<li>在多个解析器中交叉预览</li>
+</ul>
+<hr/>
+<h4>13.1.4 规避建议</h4>
+<ul>
+<li>优先使用 CommonMark + GFM 子集</li>
+<li>关键文档避免依赖编辑器专属特性</li>
+<li>发布前进行平台实测</li>
+</ul>
+<hr/>
+<h3 id="132-语法冲突与兼容性问题">13.2 语法冲突与兼容性问题</h3>
+<p>Markdown 中部分符号在不同上下文中可能产生歧义。</p>
+<hr/>
+<h4>13.2.1 常见冲突场景</h4>
+<ul>
+<li><code node="[object Object]">*</code>、<code node="[object Object]">_</code> 同时用于强调和普通字符</li>
+<li><code node="[object Object]">#</code> 在标题与代码中混用</li>
+<li>HTML 与 Markdown 混写</li>
+</ul>
+<hr/>
+<h4>13.2.2 示例问题</h4>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-emphasis">_this_</span>is<span class="hljs-emphasis">_a_</span>test_
+</code></pre>
+<p>可能被解析为斜体，而非变量名。</p>
+<hr/>
+<h4>13.2.3 解决方式</h4>
+<ul>
+<li>使用行内代码包裹特殊文本</li>
+</ul>
+<pre node="[object Object]"><code class="hljs language-markdown" node="[object Object]"><span class="hljs-code">`_this_is_a_test_`</span>
+</code></pre>
+<ul>
+<li>在代码块中展示语法本身</li>
+<li>必要时使用转义字符 <code node="[object Object]">\</code></li>
+</ul>
+<hr/>
+<h4>13.2.4 使用建议</h4>
+<ul>
+<li>技术术语优先使用代码格式</li>
+<li>避免在正文中堆叠特殊符号</li>
+</ul>
+<hr/>
+<h3 id="133-平台差异问题">13.3 平台差异问题</h3>
+<p>不同平台对 Markdown 的支持范围差异明显。</p>
+<hr/>
+<h4>13.3.1 常见平台差异</h4>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>功能</th><th>GitHub</th><th>Typora</th><th>Notion</th><th>HaoMD</th></tr></thead><tbody><tr><td>表格</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr><tr><td>数学公式</td><td>⚠️</td><td>✅</td><td>✅</td><td>✅</td></tr><tr><td>Mermaid</td><td>✅</td><td>✅</td><td>❌</td><td>✅</td></tr><tr><td>脚注</td><td>❌</td><td>✅</td><td>✅</td><td>✅</td></tr></tbody></table>
+<hr/>
+<h4>13.3.2 应对策略</h4>
+<ul>
+<li>明确文档主要发布平台</li>
+<li>针对平台能力做语法取舍</li>
+<li>为高级语法准备降级版本</li>
+</ul>
+<hr/>
+<h4>13.3.3 实践建议</h4>
+<ul>
+<li>README 文档以 GitHub 支持为准</li>
+<li>学术笔记可使用 Typora / Pandoc</li>
+<li>团队文档避免依赖小众扩展</li>
+<li>需要 <strong>人与 AI 协作、长期知识沉淀与多语法支持</strong> 的场景，可选择 HaoMD</li>
+</ul>
+<hr/>
+<h3 id="134-性能与维护问题">13.4 性能与维护问题</h3>
+<p>随着文档规模扩大，Markdown 也会面临性能与维护挑战。</p>
+<hr/>
+<h4>13.4.1 常见问题</h4>
+<ul>
+<li><strong>单文件体量过大</strong>，加载和渲染速度变慢，影响编辑体验</li>
+<li><strong>链接关系逐渐复杂</strong>，缺乏统一索引，长期维护成本升高</li>
+<li><strong>内容重复分散</strong>，同一知识点多处出现，修改时难以同步更新</li>
+<li><strong>结构演进缺乏规划</strong>，早期随意记录，后期难以重构</li>
+<li><strong>历史内容过期</strong>，缺少清理机制，降低整体文档可信度</li>
+</ul>
+<hr/>
+<h4>13.4.2 解决思路</h4>
+<ul>
+<li>拆分大文件为多个小文件</li>
+<li>使用索引文件统一导航</li>
+<li>利用链接复用内容，而非复制</li>
+</ul>
+<hr/>
+<h4>13.4.3 长期维护建议</h4>
+<ul>
+<li>定期清理无效内容</li>
+<li>统一命名与目录规范</li>
+<li>将 Markdown 纳入版本控制</li>
+</ul>
+<hr/></div>
+</body>
+</html>

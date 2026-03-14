@@ -11,15 +11,51 @@ const MERMAID_CDN = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js
 // highlight.js CSS 主题（github 风格，与应用浅色主题一致）
 const HLJS_CSS_CDN = 'https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github.min.css'
 
+const EXPORT_ASSETS = {
+  katexCss: {
+    cdn: KATEX_CDN,
+    // 导出 HTML 所在目录下的 js/katex.min.css（用户可自行提供以支持离线样式）
+    local: 'js/katex.min.css',
+  },
+  hljsCss: {
+    cdn: HLJS_CSS_CDN,
+    // 对应 highlight.js github 主题 CSS 的本地版本文件名
+    local: 'js/highlight-github.min.css',
+  },
+  mermaid: {
+    cdn: MERMAID_CDN,
+    // 本地 mermaid UMD 版本脚本路径
+    local: 'js/mermaid.min.js',
+  },
+} as const
+
 export function generateHTMLTemplate(options: TemplateOptions): string {
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <title>${options.title}</title>
-  <link rel="stylesheet" href="${KATEX_CDN}">
-  <link rel="stylesheet" href="${HLJS_CSS_CDN}">
-  ${options.hasMermaid ? `<script src="${MERMAID_CDN}" defer></script>
+  <script>
+    function loadScriptLocalFirst(localSrc, cdnSrc) {
+      var s = document.createElement('script');
+      s.src = localSrc;
+      s.defer = true;
+      s.onerror = function () {
+        var cdn = document.createElement('script');
+        cdn.src = cdnSrc;
+        cdn.defer = true;
+        document.head.appendChild(cdn);
+      };
+      document.head.appendChild(s);
+    }
+  </script>
+  <link rel="stylesheet" href="${EXPORT_ASSETS.katexCss.cdn}">
+  <link rel="stylesheet" href="${EXPORT_ASSETS.katexCss.local}">
+  <link rel="stylesheet" href="${EXPORT_ASSETS.hljsCss.cdn}">
+  <link rel="stylesheet" href="${EXPORT_ASSETS.hljsCss.local}">
+  ${options.hasMermaid ? `<script>
+    loadScriptLocalFirst('${EXPORT_ASSETS.mermaid.local}', '${EXPORT_ASSETS.mermaid.cdn}');
+  </script>
   <script>
     (function() {
       const initMermaid = function() {

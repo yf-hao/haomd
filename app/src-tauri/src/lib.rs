@@ -1817,6 +1817,11 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
                 .build(app)?,
         )
         .item(
+            &MenuItemBuilder::new("Strikethrough")
+                .id("format_strikethrough")
+                .build(app)?,
+        )
+        .item(
             &MenuItemBuilder::new("Table")
                 .id("format_insert_table")
                 .accelerator("CmdOrCtrl+T")
@@ -2006,7 +2011,7 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .build()?;
 
     let help_menu = SubmenuBuilder::new(app, "Help")
-        .item(&MenuItemBuilder::new("Docs").id("help_docs").build(app)?)
+        .item(&MenuItemBuilder::new("Markdown Handbook").id("help_docs").build(app)?)
         .item(
             &MenuItemBuilder::new("Release Notes")
                 .id("help_release")
@@ -2224,6 +2229,59 @@ async fn open_in_file_explorer(target_path: String) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn open_markdown_handbook(app: &AppHandle) {
+    // dev 模式下 resource_dir 可能是 src-tauri 根目录；
+    // 打包后则是应用的 Resources 目录。
+    let resource_dir = match app.path().resource_dir() {
+        Ok(dir) => dir,
+        Err(err) => {
+            log::error!("[Help] failed to get resource_dir: {}", err);
+            return;
+        }
+    };
+
+    // 同时尝试两种常见布局：
+    // 1) resource_dir/markdown-handbook.html
+    // 2) resource_dir/resources/markdown-handbook.html
+    let candidates = [
+        resource_dir.join("markdown-handbook.html"),
+        resource_dir.join("resources").join("markdown-handbook.html"),
+    ];
+
+    let html_path = match candidates.iter().find(|p| p.exists()) {
+        Some(p) => p.clone(),
+        None => {
+            log::error!("[Help] markdown-handbook.html not found in resource_dir={:?}", resource_dir);
+            return;
+        }
+    };
+
+    #[cfg(target_os = "macos")]
+    {
+        if let Err(err) = Command::new("open").arg(&html_path).spawn() {
+            log::error!("[Help] failed to open handbook: {}", err);
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Err(err) = Command::new("cmd")
+            .args(["/C", "start"])
+            .arg(&html_path)
+            .spawn()
+        {
+            log::error!("[Help] failed to open handbook: {}", err);
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        if let Err(err) = Command::new("xdg-open").arg(&html_path).spawn() {
+            log::error!("[Help] failed to open handbook: {}", err);
+        }
+    }
 }
 
 #[tauri::command]
@@ -2799,6 +2857,14 @@ pub fn run() {
 
       app.on_menu_event(|app, event| {
         let action = event.id().as_ref();
+
+        if action == "help_docs" {
+          let app_handle = app.clone();
+          tauri::async_runtime::spawn(async move {
+            open_markdown_handbook(&app_handle);
+          });
+          return;
+        }
 
         // 最近文件原生子菜单：菜单项 id -> 文件路径
         if action.starts_with(RECENT_MENU_PREFIX) {
