@@ -10,6 +10,7 @@ import 'katex/dist/katex.min.css'
 import 'github-markdown-css/github-markdown.css'
 import './MarkdownViewer.css'
 import { getRenderer } from '../modules/markdown/plugins'
+import { remarkToc } from '../modules/markdown/remarkToc'
 import { DownloadOnClickUseCase, TauriWebviewOpener } from '../modules/download/handleMarkdownLinkClick'
 import { ExamAttachmentLinkClassifier } from '../modules/download/linkClassifier'
 import { FetchTextDownloadService } from '../modules/download/downloadService'
@@ -77,7 +78,7 @@ function remarkMathLineAnchors() {
   }
 }
 
-const remarkPlugins = [remarkGfm, remarkMath, remarkMathLineAnchors]
+const remarkPlugins = [remarkGfm, remarkMath, remarkMathLineAnchors, remarkToc]
 
 // 预览虚拟化开关：关闭时走浏览器原生滚动，体验更稳定
 const ENABLE_PREVIEW_VIRTUALIZATION = false

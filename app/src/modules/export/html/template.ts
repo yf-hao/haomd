@@ -37,6 +37,21 @@ export function generateHTMLTemplate(options: TemplateOptions): string {
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Source Han Sans CN', 'Segoe UI', Helvetica, Arial, sans-serif; padding: 20px; color: #1a1a1a; }
     .markdown-body { max-width: 800px; margin: 0 auto; line-height: 1.7; }
+    /* 导出 HTML 中的 TOC 列表缩进 */
+    .markdown-body .md-toc-item {
+      list-style: none;
+      margin: 2px 0;
+    }
+    .markdown-body .md-toc-level-1 {
+      font-weight: 600;
+    }
+    .markdown-body .md-toc-level-2 {
+      padding-left: 16px;
+    }
+    .markdown-body .md-toc-level-3 {
+      padding-left: 32px;
+      font-size: 0.95em;
+    }
     .markdown-body em {
       font-style: italic;
       display: inline-block;

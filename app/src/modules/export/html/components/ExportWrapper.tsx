@@ -4,6 +4,7 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import rehypeRaw from 'rehype-raw'
 import rehypeHighlight from 'rehype-highlight'
+import { remarkToc } from '../../../markdown/remarkToc'
 
 // 自定义 pre 包装器：如果子内容是 mermaid，直接透传，避免双重 <pre>
 function PreRenderer({ children, ...rest }: any) {
@@ -55,7 +56,7 @@ export function ExportWrapper({ markdown }: { markdown: string }) {
     return (
         <div className="markdown-body">
             <ReactMarkdown
-                remarkPlugins={[remarkGfm, remarkMath]}
+                remarkPlugins={[remarkGfm, remarkMath, remarkToc]}
                 rehypePlugins={[
                     // 1. rehype-raw：允许内嵌原始 HTML（mind SVG div）直接透传
                     rehypeRaw,

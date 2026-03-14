@@ -97,3 +97,51 @@
 .markdown-body .code-copy-button.copied {
   background-color: rgba(16, 185, 129, 0.85);
 }
+
+/* TOC 列表样式 */
+.markdown-body.gh-markdown .md-toc-item {
+  list-style: none;
+  margin: 2px 0;
+}
+
+.markdown-body.gh-markdown .md-toc-level-1 {
+  font-weight: 600;
+  text-align: center;
+}
+
+.markdown-body.gh-markdown .md-toc-level-2 {
+  padding-left: 16px;
+}
+
+.markdown-body.gh-markdown .md-toc-level-3 {
+  padding-left: 32px;
+  font-size: 0.95em;
+}
+
+.markdown-body.gh-markdown .md-toc-item a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.markdown-body.gh-markdown .md-toc-item a:hover {
+  text-decoration: underline;
+}
+
+/* 导出 HTML 使用的 TOC 缩进样式（容器只有 .markdown-body） */
+.markdown-body .md-toc-item {
+  list-style: none;
+  margin: 2px 0;
+}
+
+.markdown-body .md-toc-level-1 {
+  font-weight: 600;
+}
+
+.markdown-body .md-toc-level-2 {
+  padding-left: 16px;
+}
+
+.markdown-body .md-toc-level-3 {
+  padding-left: 32px;
+  font-size: 0.95em;
+}
