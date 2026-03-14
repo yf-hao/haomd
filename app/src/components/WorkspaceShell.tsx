@@ -15,10 +15,6 @@ import { SearchBar } from './Editor/SearchBar'
 import { useOutline } from '../hooks/useOutline'
 import type { OutlineItem } from '../modules/outline/parser'
 import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout'
-import { AiChatDialog } from '../modules/ai/ui/AiChatDialog'
-import { AiChatPane } from '../modules/ai/ui/AiChatPane'
-import { DocConversationHistoryDialog } from '../modules/ai/ui/DocConversationHistoryDialog'
-import { GlobalMemoryDialog } from '../modules/ai/ui/GlobalMemoryDialog'
 import { AiChatCommandBridgeContext } from '../modules/ai/ui/AiChatCommandBridgeContext'
 import type { ChatEntryMode, EntryContext } from '../modules/ai/domain/chatSession'
 import type { AiChatSessionKey } from '../modules/ai/application/aiChatSessionService'
@@ -59,6 +55,22 @@ const PreviewPaneLazy = lazy(() =>
 
 const PdfViewerLazy = lazy(() =>
   import('../modules/pdf/components/PdfViewer').then((m) => ({ default: m.PdfViewer }))
+)
+
+const AiChatPaneLazy = lazy(() =>
+  import('../modules/ai/ui/AiChatPane').then((m) => ({ default: m.AiChatPane }))
+)
+
+const AiChatDialogLazy = lazy(() =>
+  import('../modules/ai/ui/AiChatDialog').then((m) => ({ default: m.AiChatDialog }))
+)
+
+const DocConversationHistoryDialogLazy = lazy(() =>
+  import('../modules/ai/ui/DocConversationHistoryDialog').then((m) => ({ default: m.DocConversationHistoryDialog }))
+)
+
+const GlobalMemoryDialogLazy = lazy(() =>
+  import('../modules/ai/ui/GlobalMemoryDialog').then((m) => ({ default: m.GlobalMemoryDialog }))
 )
 
 export type LeftPanelId = 'files' | 'outline' | 'pdf' | 'sessions' | null
@@ -2539,14 +2551,16 @@ export function WorkspaceShell({
                 {aiChatMode === 'docked' && aiChatOpen && aiChatState && (
                   <>
                     {aiChatDockSide === 'left' && (
-                      <AiChatPane
-                        sessionKey={aiChatSessionKey}
-                        entryMode={aiChatState.entryMode}
-                        initialContext={aiChatState.initialContext}
-                        onClose={closeAiChatDialog}
-                        currentFilePath={aiChatFilePath}
-                        sourceTabId={activeTab?.id ?? null}
-                      />
+                      <Suspense fallback={null}>
+                        <AiChatPaneLazy
+                          sessionKey={aiChatSessionKey}
+                          entryMode={aiChatState.entryMode}
+                          initialContext={aiChatState.initialContext}
+                          onClose={closeAiChatDialog}
+                          currentFilePath={aiChatFilePath}
+                          sourceTabId={activeTab?.id ?? null}
+                        />
+                      </Suspense>
                     )}
                     <div className="divider-hotzone vertical" style={{ position: 'absolute', left: aiChatDockSide === 'left' ? aiChatWidth : `calc(100% - ${aiChatWidth}px)`, height: '100%', zIndex: 100, cursor: 'col-resize' }} onMouseDown={handleAiChatResizeStart}>
                       <div className="divider-rail"><span className="divider-handle" /></div>
@@ -2637,14 +2651,16 @@ export function WorkspaceShell({
                   )}
                 </section>
                 {aiChatMode === 'docked' && aiChatOpen && aiChatState && aiChatDockSide === 'right' && (
-                  <AiChatPane
-                    sessionKey={aiChatSessionKey}
-                    entryMode={aiChatState.entryMode}
-                    initialContext={aiChatState.initialContext}
-                    onClose={closeAiChatDialog}
-                    currentFilePath={aiChatFilePath}
-                    sourceTabId={activeTab?.id ?? null}
-                  />
+                  <Suspense fallback={null}>
+                    <AiChatPaneLazy
+                      sessionKey={aiChatSessionKey}
+                      entryMode={aiChatState.entryMode}
+                      initialContext={aiChatState.initialContext}
+                      onClose={closeAiChatDialog}
+                      currentFilePath={aiChatFilePath}
+                      sourceTabId={activeTab?.id ?? null}
+                    />
+                  </Suspense>
                 )}
               </main>
             </>
@@ -2670,30 +2686,36 @@ export function WorkspaceShell({
         />
 
         {aiChatMode === 'floating' && aiChatOpen && aiChatState?.open && (
-          <AiChatDialog
-            open={aiChatOpen}
-            entryMode={aiChatState.entryMode}
-            initialContext={aiChatState.initialContext}
-            onClose={closeAiChatDialog}
-            currentFilePath={aiChatFilePath}
-            tabId={aiChatState.tabId}
-          />
+          <Suspense fallback={null}>
+            <AiChatDialogLazy
+              open={aiChatOpen}
+              entryMode={aiChatState.entryMode}
+              initialContext={aiChatState.initialContext}
+              onClose={closeAiChatDialog}
+              currentFilePath={aiChatFilePath}
+              tabId={aiChatState.tabId}
+            />
+          </Suspense>
         )}
 
         {docHistoryState.open && docHistoryState.docPath && (
-          <DocConversationHistoryDialog
-            open={docHistoryState.open}
-            docPath={docHistoryState.docPath}
-            onClose={closeDocHistoryDialog}
-          />
+          <Suspense fallback={null}>
+            <DocConversationHistoryDialogLazy
+              open={docHistoryState.open}
+              docPath={docHistoryState.docPath}
+              onClose={closeDocHistoryDialog}
+            />
+          </Suspense>
         )}
 
         {globalMemoryState.open && (
-          <GlobalMemoryDialog
-            open={globalMemoryState.open}
-            initialTab={globalMemoryState.initialTab}
-            onClose={closeGlobalMemoryDialog}
-          />
+          <Suspense fallback={null}>
+            <GlobalMemoryDialogLazy
+              open={globalMemoryState.open}
+              initialTab={globalMemoryState.initialTab}
+              onClose={closeGlobalMemoryDialog}
+            />
+          </Suspense>
         )}
 
         <AboutDialog open={aboutOpen} onClose={closeAboutDialog} />
