@@ -16,7 +16,6 @@ import { useOutline } from '../hooks/useOutline'
 import type { OutlineItem } from '../modules/outline/parser'
 import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout'
 import { AiChatCommandBridgeContext } from '../modules/ai/ui/AiChatCommandBridgeContext'
-import type { ChatEntryMode, EntryContext } from '../modules/ai/domain/chatSession'
 import type { AiChatSessionKey } from '../modules/ai/application/aiChatSessionService'
 import { aiChatSessionManager } from '../modules/ai/application/localStorageAiChatSessionManager'
 import { registerEditorInsertBelow, registerEditorReplaceSelection, registerEditorCreateAndInsert, insertMarkdownAtCursorBelow } from '../modules/ai/platform/editorInsertService'
@@ -25,8 +24,9 @@ import { useTabs } from '../hooks/useTabs'
 import { useCommandSystem } from '../hooks/useCommandSystem'
 import { useSidebar } from '../hooks/useSidebar'
 import { onOpenRecentFile } from '../modules/platform/menuEvents'
-import { createFolder, deleteFsEntry, deleteRecentRemote, listFolder, writeFile } from '../modules/files/service'
-import { listPdfRecent, deletePdfRecent, loadPdfFolders, savePdfFolders, updatePdfRecentFolder, type PdfFolder } from '../modules/pdf/pdfRecentService'
+import { createFolder, deleteFsEntry, listFolder, writeFile } from '../modules/files/service'
+import { usePdfPanel } from '../hooks/usePdfPanel'
+import { useAiChatPanel } from '../hooks/useAiChatPanel'
 import { useNativePaste } from '../hooks/useNativePaste'
 import { onNativePasteImage } from '../modules/platform/clipboardEvents'
 import { openTerminalAt } from '../modules/platform/terminalService'
@@ -35,15 +35,8 @@ import { loadDefaultImagePathStrategyConfig, resolveImageTarget } from '../modul
 import { countLines, extractChunkAroundLine, applyChunkPatch, localToGlobalLine } from '../modules/editor/chunkEdit'
 import { getHugeDocSettings } from '../modules/settings/editorSettings'
 import { registerApplyHeadingLevel, registerResetHeadingToParagraph, registerEmphasizeSelection, registerInsertCodeBlock } from '../modules/editor/formatService'
-import type { RecentFile } from '../modules/files/types'
 // 改为从内部动态加载，优化编辑性能
 // import { exportToHtml } from '../modules/export/html'
-
-// AI Chat localStorage keys
-const STORAGE_AI_MODE = 'haomd:aiChat:mode'
-const STORAGE_AI_DOCK_SIDE = 'haomd:aiChat:dockSide'
-const STORAGE_AI_WIDTH_LEFT = 'haomd:aiChat:widthLeft'
-const STORAGE_AI_WIDTH_RIGHT = 'haomd:aiChat:widthRight'
 
 const EditorPaneLazy = lazy(() =>
   import('./EditorPane').then((m) => ({ default: m.EditorPane }))
@@ -146,25 +139,6 @@ export function WorkspaceShell({
   const hugeDocStateRef = useRef(null as any) // 稍后在 Effect 中保持同步
   const lastActiveIdForPreviewRef = useRef<string | null>(null)
 
-  // AI Chat States
-  const [aiChatState, setAiChatState] = useState<{
-    open: boolean
-    entryMode: ChatEntryMode
-    initialContext?: EntryContext
-    tabId: string
-  } | null>(null)
-
-  // AI History (doc-level) state
-  const [docHistoryState, setDocHistoryState] = useState<{
-    open: boolean
-    docPath: string | null
-  }>({ open: false, docPath: null })
-
-  // Global Memory dialog state
-  const [globalMemoryState, setGlobalMemoryState] = useState<{
-    open: boolean
-    initialTab: 'persona' | 'manage'
-  }>({ open: false, initialTab: 'persona' })
   const [aboutOpen, setAboutOpen] = useState(false)
   const [pendingCursorRestoreTabId, setPendingCursorRestoreTabId] = useState<string | null>(null)
 
@@ -203,18 +177,8 @@ export function WorkspaceShell({
       console.error('scheduleSaveCursorMap failed', err)
     }
   }, [])
-  const [aiChatMode, setAiChatMode] = useState<'floating' | 'docked'>('docked')
-  const [aiChatOpen, setAiChatOpen] = useState(false)
-  const [aiChatDockSide, setAiChatDockSide] = useState<'left' | 'right'>('right')
   const [isSearchOpen, setIsSearchOpen] = useState(false)
-  const [aiChatWidthLeft, setAiChatWidthLeft] = useState(400)
-  const [aiChatWidthRight, setAiChatWidthRight] = useState(400)
-  const [isAiChatResizing, setIsAiChatResizing] = useState(false)
   const aiChatSessionKey: AiChatSessionKey = 'global'
-
-  const aiChatResizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
-  const aiChatFirstSaveRef = useRef(true)
-  const aiChatPrevDockSideRef = useRef<'left' | 'right'>(aiChatDockSide)
 
   // Other States
   const [editorZoom, setEditorZoom] = useState(() => {
@@ -250,18 +214,6 @@ export function WorkspaceShell({
   const [hugeDocChunkContextLines, setHugeDocChunkContextLines] = useState(DEFAULT_HUGE_DOC_CHUNK_CONTEXT_LINES)
   const [hugeDocChunkMaxLines, setHugeDocChunkMaxLines] = useState(DEFAULT_HUGE_DOC_CHUNK_MAX_LINES)
   const [focusRequest, setFocusRequest] = useState<{ localLine: number; searchText?: string } | null>(null)
-  const [pdfRecent, setPdfRecent] = useState<RecentFile[]>([])
-  const [pdfFolders, setPdfFolders] = useState<PdfFolder[]>([])
-  const [collapsedPdfFolders, setCollapsedPdfFolders] = useState<Record<string, boolean>>({})
-  const [pdfRecentLoading, setPdfRecentLoading] = useState(false)
-  const [pdfRecentError, setPdfRecentError] = useState<string | null>(null)
-  const [pdfNotes, setPdfNotes] = useState<Record<string, string>>({})
-  const [pdfMenuState, setPdfMenuState] = useState<{ visible: boolean; x: number; y: number; targetPath: string | null }>({ visible: false, x: 0, y: 0, targetPath: null })
-  const [pdfFolderMenuState, setPdfFolderMenuState] = useState<{ visible: boolean; x: number; y: number; targetPath: string | null }>({ visible: false, x: 0, y: 0, targetPath: null })
-  const [creatingPdfFolder, setCreatingPdfFolder] = useState(false)
-  const [creatingPdfFolderName, setCreatingPdfFolderName] = useState('')
-  const [renamingPdfFolderId, setRenamingPdfFolderId] = useState<string | null>(null)
-  const [renamingPdfFolderName, setRenamingPdfFolderName] = useState('')
   const [previewSelectionText, setPreviewSelectionText] = useState<string | null>(null)
   const pdfSelectionGetterRef = useRef<(() => string | null) | null>(null)
   const isProgrammaticScrollRef = useRef(false)
@@ -338,6 +290,27 @@ export function WorkspaceShell({
 
   const isPdfActive = !!activeTab?.path && activeTab.path.toLowerCase().endsWith('.pdf')
 
+  // AI Chat hook
+  const {
+    aiChatState,
+    aiChatMode, setAiChatMode,
+    aiChatOpen,
+    aiChatDockSide, setAiChatDockSide,
+    aiChatWidthLeft, aiChatWidthRight,
+    isAiChatResizing,
+    docHistoryState,
+    globalMemoryState,
+    openAiChatDialog,
+    closeAiChatDialog,
+    openDocHistoryDialog,
+    closeDocHistoryDialog,
+    openGlobalMemoryDialog,
+    closeGlobalMemoryDialog,
+    handleAiChatResizeStart,
+    outerGridTemplateColumns,
+    aiChatWidth,
+  } = useAiChatPanel({ activeTabId: activeTab?.id })
+
   const activeIdRef = useRef<string | null>(null)
   useEffect(() => {
     activeIdRef.current = activeId
@@ -359,166 +332,6 @@ export function WorkspaceShell({
 
   const sidebar = useSidebar()
   const editorViewRef = useRef<EditorView | null>(null)
-
-  const aiChatWidth = aiChatDockSide === 'left' ? aiChatWidthLeft : aiChatWidthRight
-
-  const outerGridTemplateColumns = useMemo(() => {
-    const aiChatCol = `${aiChatWidth}px`
-    // 只有在 docked + 打开 + 有有效会话状态时，才为 AI Chat 预留布局空间
-    if (aiChatMode === 'docked' && aiChatOpen && aiChatState) {
-      if (aiChatDockSide === 'left') {
-        return `${aiChatCol} 1fr`
-      }
-      return `1fr ${aiChatCol}`
-    }
-    return '1fr'
-  }, [aiChatMode, aiChatOpen, aiChatDockSide, aiChatWidth, aiChatState])
-
-  const handleAiChatResizeStart = useCallback((event: any) => {
-    const currentWidth = aiChatDockSide === 'left' ? aiChatWidthLeft : aiChatWidthRight
-    aiChatResizeStateRef.current = { startX: event.clientX, startWidth: currentWidth }
-    setIsAiChatResizing(true)
-    event.preventDefault()
-    event.stopPropagation()
-  }, [aiChatDockSide, aiChatWidthLeft, aiChatWidthRight])
-
-  // AI Chat Persistence：使用 localStorage 记住模式 / 位置 / 左右宽度（不再记忆是否打开）
-  useEffect(() => {
-    try {
-      if (typeof localStorage === 'undefined') return
-
-      const storedMode = localStorage.getItem(STORAGE_AI_MODE)
-      const storedDockSide = localStorage.getItem(STORAGE_AI_DOCK_SIDE)
-      const storedLeft = localStorage.getItem(STORAGE_AI_WIDTH_LEFT)
-      const storedRight = localStorage.getItem(STORAGE_AI_WIDTH_RIGHT)
-
-      if (storedMode === 'floating' || storedMode === 'docked') {
-        setAiChatMode(storedMode)
-      }
-      if (storedDockSide === 'left' || storedDockSide === 'right') {
-        setAiChatDockSide(storedDockSide)
-      }
-      if (storedLeft != null) {
-        const w = Number(storedLeft)
-        if (!Number.isNaN(w)) setAiChatWidthLeft(w)
-      }
-      if (storedRight != null) {
-        const w = Number(storedRight)
-        if (!Number.isNaN(w)) setAiChatWidthRight(w)
-      }
-    } catch (e) {
-      console.error('Failed to load AI Chat state from localStorage', e)
-    }
-  }, [])
-
-  const saveAiStore = useCallback(async () => {
-    try {
-      if (typeof localStorage === 'undefined') return
-
-      localStorage.setItem(STORAGE_AI_MODE, aiChatMode)
-      localStorage.setItem(STORAGE_AI_DOCK_SIDE, aiChatDockSide)
-      localStorage.setItem(STORAGE_AI_WIDTH_LEFT, String(aiChatWidthLeft))
-      localStorage.setItem(STORAGE_AI_WIDTH_RIGHT, String(aiChatWidthRight))
-    } catch (e) {
-      console.error('Failed to save AI Chat state to localStorage', e)
-    }
-  }, [aiChatMode, aiChatDockSide, aiChatWidthLeft, aiChatWidthRight])
-
-  useEffect(() => {
-    // 首次渲染只作为初始化，不写回 localStorage，避免用默认 400 覆盖已有值
-    if (aiChatFirstSaveRef.current) {
-      aiChatFirstSaveRef.current = false
-      return
-    }
-    void saveAiStore()
-  }, [saveAiStore])
-
-  // 切换 dock 侧边时，沿用当前侧的宽度到新侧，避免左右宽度不一致的跳变
-  useEffect(() => {
-    const prevSide = aiChatPrevDockSideRef.current
-    if (prevSide === aiChatDockSide) return
-
-    if (aiChatDockSide === 'left') {
-      // 从右切到左：沿用当前右侧宽度
-      setAiChatWidthLeft(aiChatWidthRight)
-    } else {
-      // 从左切到右：沿用当前左侧宽度
-      setAiChatWidthRight(aiChatWidthLeft)
-    }
-
-    aiChatPrevDockSideRef.current = aiChatDockSide
-  }, [aiChatDockSide, aiChatWidthLeft, aiChatWidthRight])
-
-  useEffect(() => {
-    if (!isAiChatResizing) return
-
-    const handleMove = (e: MouseEvent) => {
-      const state = aiChatResizeStateRef.current
-      if (!state) return
-
-      let delta = e.clientX - state.startX
-      if (aiChatDockSide === 'right') {
-        delta = -delta
-      }
-
-      let next = state.startWidth + delta
-      const MIN_AI_WIDTH = 340
-      const MAX_AI_WIDTH = 800
-
-      if (next < MIN_AI_WIDTH) next = MIN_AI_WIDTH
-      if (next > MAX_AI_WIDTH) next = MAX_AI_WIDTH
-
-      if (aiChatDockSide === 'left') {
-        setAiChatWidthLeft(next)
-      } else {
-        setAiChatWidthRight(next)
-      }
-    }
-
-    const handleUp = () => {
-      setIsAiChatResizing(false)
-      aiChatResizeStateRef.current = null
-    }
-
-    window.addEventListener('mousemove', handleMove)
-    window.addEventListener('mouseup', handleUp)
-
-    return () => {
-      window.removeEventListener('mousemove', handleMove)
-      window.removeEventListener('mouseup', handleUp)
-    }
-  }, [isAiChatResizing, aiChatDockSide])
-
-  const openAiChatDialog = useCallback(
-    (options: { entryMode: ChatEntryMode; initialContext?: EntryContext }) => {
-      // 保持当前模式（floating/docked），只负责打开和设置会话参数
-      const tabId = activeTab?.id ?? 'global'
-      setAiChatOpen(true)
-      setAiChatState({ open: true, tabId, ...options })
-    },
-    [activeTab],
-  )
-
-  const closeAiChatDialog = useCallback(() => {
-    setAiChatOpen(false)
-    setAiChatState(null)
-  }, [])
-
-  const openDocHistoryDialog = useCallback((docPath: string) => {
-    setDocHistoryState({ open: true, docPath })
-  }, [])
-
-  const closeDocHistoryDialog = useCallback(() => {
-    setDocHistoryState((prev) => ({ ...prev, open: false }))
-  }, [])
-
-  const openGlobalMemoryDialog = useCallback((options: { initialTab: 'persona' | 'manage' }) => {
-    setGlobalMemoryState({ open: true, initialTab: options.initialTab })
-  }, [])
-
-  const closeGlobalMemoryDialog = useCallback(() => {
-    setGlobalMemoryState((prev) => ({ ...prev, open: false }))
-  }, [])
 
   const openAboutDialog = useCallback(() => {
     setAboutOpen(true)
@@ -559,73 +372,6 @@ export function WorkspaceShell({
   }, [isPdfActive, previewSelectionText])
 
   const outlineItems = useOutline(markdown)
-
-  const closePdfMenu = useCallback(() => {
-    setPdfMenuState({ visible: false, x: 0, y: 0, targetPath: null })
-  }, [])
-
-  const closePdfFolderMenu = useCallback(() => {
-    setPdfFolderMenuState({ visible: false, x: 0, y: 0, targetPath: null })
-  }, [])
-
-  const togglePdfFolderCollapse = useCallback((folderId: string) => {
-    setCollapsedPdfFolders((prev) => ({
-      ...prev,
-      [folderId]: !prev[folderId],
-    }))
-  }, [])
-
-  const refreshPdfRecent = useCallback(async () => {
-    console.log('[WorkspaceShell.refreshPdfRecent] called, isTauriEnv =', isTauriEnv())
-    if (!isTauriEnv()) {
-      setPdfRecent([])
-      setPdfRecentError('PDF 面板仅在桌面应用中可用')
-      return
-    }
-
-    setPdfRecentLoading(true)
-    setPdfRecentError(null)
-    try {
-      console.log('[WorkspaceShell.refreshPdfRecent] before listPdfRecent()')
-      const [items, folders] = await Promise.all([
-        listPdfRecent(),
-        loadPdfFolders(),
-      ])
-      console.log('[WorkspaceShell.refreshPdfRecent] listPdfRecent items =', items)
-      setPdfRecent(items)
-      setPdfFolders(folders)
-    } catch (e) {
-      console.error('[WorkspaceShell.refreshPdfRecent] listPdfRecent or loadPdfFolders failed', e)
-      setPdfRecent([])
-      setPdfFolders([])
-      setPdfRecentError((e as any)?.message ?? '加载 PDF 最近文件失败')
-    } finally {
-      console.log('[WorkspaceShell.refreshPdfRecent] finally, set loading = false')
-      setPdfRecentLoading(false)
-    }
-  }, [isTauriEnv])
-
-
-  // PDF 最近文件列表：仅在左侧 PDF 面板激活时从后端加载
-  useEffect(() => {
-    if (activeLeftPanel !== 'pdf') return
-
-    let cancelled = false
-
-    const load = async () => {
-      if (cancelled) return
-      console.log('[WorkspaceShell.pdfPanelEffect] activeLeftPanel === "pdf", calling refreshPdfRecent')
-      await refreshPdfRecent()
-    }
-
-    console.log('[WorkspaceShell.pdfPanelEffect] effect mounted, activeLeftPanel =', activeLeftPanel)
-    void load()
-
-    return () => {
-      cancelled = true
-      console.log('[WorkspaceShell.pdfPanelEffect] cleanup, cancelled = true')
-    }
-  }, [activeLeftPanel, refreshPdfRecent])
 
   useEffect(() => {
     let cancelled = false
@@ -814,201 +560,35 @@ export function WorkspaceShell({
     }
   })
 
-  const handleCreatePdfFolder = useCallback(() => {
-    if (!isTauriEnv()) {
-      setStatusMessage('虚拟文件夹仅在桌面应用中可用')
-      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-        window.alert('虚拟文件夹仅在桌面应用中可用')
-      }
-      return
-    }
-
-    setCreatingPdfFolder(true)
-    setCreatingPdfFolderName('')
-  }, [isTauriEnv, setStatusMessage])
-
-  const handlePdfFolderInlineNameChange = useCallback((value: string) => {
-    setCreatingPdfFolderName(value)
-  }, [])
-
-  const handlePdfFolderInlineCancel = useCallback(() => {
-    setCreatingPdfFolder(false)
-    setCreatingPdfFolderName('')
-  }, [])
-
-  const handlePdfFolderInlineConfirm = useCallback(() => {
-    const name = creatingPdfFolderName.trim()
-    if (!name) {
-      setCreatingPdfFolder(false)
-      setCreatingPdfFolderName('')
-      return
-    }
-
-    void (async () => {
-      try {
-        if (pdfFolders.some((f) => f.name === name)) {
-          setStatusMessage('已存在同名虚拟文件夹')
-          return
-        }
-        const id = `${name}-${Math.random().toString(16).slice(2, 8)}`
-        const next = [...pdfFolders, { id, name }]
-        next.sort((a, b) => a.name.localeCompare(b.name))
-        await savePdfFolders(next)
-        setPdfFolders(next)
-        setCollapsedPdfFolders((prev) => ({ ...prev, [id]: true }))
-      } catch (e) {
-        console.error('[WorkspaceShell] handlePdfFolderInlineConfirm failed', e)
-        setStatusMessage((e as any)?.message ?? '创建虚拟文件夹失败')
-      } finally {
-        setCreatingPdfFolder(false)
-        setCreatingPdfFolderName('')
-      }
-    })()
-  }, [creatingPdfFolderName, pdfFolders, setStatusMessage])
-
-  const startPdfFolderRename = useCallback((folder: PdfFolder) => {
-    setRenamingPdfFolderId(folder.id)
-    setRenamingPdfFolderName(folder.name)
-  }, [])
-
-  const handlePdfFolderRenameChange = useCallback((value: string) => {
-    setRenamingPdfFolderName(value)
-  }, [])
-
-  const handlePdfFolderRenameCancel = useCallback(() => {
-    setRenamingPdfFolderId(null)
-    setRenamingPdfFolderName('')
-  }, [])
-
-  const handlePdfFolderRenameConfirm = useCallback(() => {
-    if (!renamingPdfFolderId) return
-    const nextName = renamingPdfFolderName.trim()
-    if (!nextName) {
-      setStatusMessage('虚拟文件夹名称不能为空')
-      return
-    }
-
-    const current = pdfFolders.find((f) => f.id === renamingPdfFolderId)
-    if (!current) {
-      setRenamingPdfFolderId(null)
-      setRenamingPdfFolderName('')
-      return
-    }
-
-    if (current.name === nextName) {
-      setRenamingPdfFolderId(null)
-      setRenamingPdfFolderName('')
-      return
-    }
-
-    if (pdfFolders.some((f) => f.name === nextName && f.id !== renamingPdfFolderId)) {
-      setStatusMessage('已存在同名虚拟文件夹')
-      return
-    }
-
-    void (async () => {
-      try {
-        const next = pdfFolders.map((f) => (f.id === renamingPdfFolderId ? { ...f, name: nextName } : f))
-        next.sort((a, b) => a.name.localeCompare(b.name))
-        await savePdfFolders(next)
-        setPdfFolders(next)
-      } catch (e) {
-        console.error('[WorkspaceShell] handlePdfFolderRenameConfirm failed', e)
-        setStatusMessage((e as any)?.message ?? '重命名虚拟文件夹失败')
-      } finally {
-        setRenamingPdfFolderId(null)
-        setRenamingPdfFolderName('')
-      }
-    })()
-  }, [pdfFolders, renamingPdfFolderId, renamingPdfFolderName, setStatusMessage])
-
-  const handleDeletePdfFolder = useCallback((folder: PdfFolder) => {
-    if (!isTauriEnv()) {
-      setStatusMessage('虚拟文件夹仅在桌面应用中可用')
-      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-        window.alert('虚拟文件夹仅在桌面应用中可用')
-      }
-      return
-    }
-
-    const folderId = folder.id
-
-    setConfirmDialog({
-      title: '删除虚拟文件夹',
-      message: `确认删除虚拟文件夹 “${folder.name}”？其中的 PDF 会移到根列表。`,
-      confirmText: '删除',
-      cancelText: '取消',
-      onConfirm: () => {
-        setConfirmDialog(null)
-
-        // 前端乐观更新：移除该虚拟文件夹，并把其中的 PDF 移到根列表
-        setPdfFolders((prevFolders) => {
-          const nextFolders = prevFolders.filter((f) => f.id !== folderId)
-
-          void (async () => {
-            try {
-              await savePdfFolders(nextFolders)
-            } catch (e) {
-              console.error('[WorkspaceShell] handleDeletePdfFolder.savePdfFolders failed', e)
-              setStatusMessage((e as any)?.message ?? '删除虚拟文件夹失败')
-            }
-          })()
-
-          return nextFolders
-        })
-
-        setCollapsedPdfFolders((prev) => {
-          const next = { ...prev }
-          delete next[folderId]
-          return next
-        })
-
-        setPdfRecent((prevItems) => {
-          const itemsToUpdate = prevItems.filter((item) => item.folderId === folderId)
-          const nextItems = prevItems.map((item) => (
-            item.folderId === folderId ? { ...item, folderId: undefined } : item
-          ))
-
-          void (async () => {
-            try {
-              for (const item of itemsToUpdate) {
-                await updatePdfRecentFolder(item.path, null)
-              }
-            } catch (e) {
-              console.error('[WorkspaceShell] handleDeletePdfFolder.updatePdfRecentFolder failed', e)
-              setStatusMessage((e as any)?.message ?? '删除虚拟文件夹失败')
-            }
-          })()
-
-          return nextItems
-        })
-      },
-    })
-  }, [isTauriEnv, savePdfFolders, setConfirmDialog, setStatusMessage, updatePdfRecentFolder])
-
-  const movePdfToFolder = useCallback((path: string, folderId: string | null) => {
-    if (!isTauriEnv()) {
-      setStatusMessage('虚拟文件夹仅在桌面应用中可用')
-      return
-    }
-
-    // 前端乐观更新：先立即更新本地状态，让 UI 立刻反映移动结果
-    setPdfRecent((prev) => prev.map((item) => (
-      item.path === path
-        ? { ...item, folderId: folderId ?? undefined }
-        : item
-    )))
-
-    void (async () => {
-      try {
-        await updatePdfRecentFolder(path, folderId)
-        // 后端成功后，下一次打开 PDF 面板或刷新时会从后端重新加载，保持一致
-      } catch (e) {
-        console.error('[WorkspaceShell] movePdfToFolder failed', e)
-        setStatusMessage((e as any)?.message ?? '更新 PDF 虚拟文件夹失败')
-      }
-    })()
-  }, [isTauriEnv, setStatusMessage])
+  // PDF Panel hook
+  const {
+    pdfRecent, pdfFolders, collapsedPdfFolders,
+    pdfRecentLoading, pdfRecentError,
+    pdfNotes, setPdfNotes,
+    pdfMenuState, setPdfMenuState,
+    pdfFolderMenuState, setPdfFolderMenuState,
+    creatingPdfFolder, creatingPdfFolderName,
+    renamingPdfFolderId, renamingPdfFolderName,
+    closePdfMenu, closePdfFolderMenu,
+    togglePdfFolderCollapse,
+    refreshPdfRecent,
+    handleCreatePdfFolder,
+    handlePdfFolderInlineNameChange,
+    handlePdfFolderInlineCancel,
+    handlePdfFolderInlineConfirm,
+    startPdfFolderRename,
+    handlePdfFolderRenameChange,
+    handlePdfFolderRenameCancel,
+    handlePdfFolderRenameConfirm,
+    handleDeletePdfFolder,
+    movePdfToFolder,
+    handleRemovePdfFromRecent,
+  } = usePdfPanel({
+    isTauriEnv,
+    setStatusMessage,
+    setConfirmDialog,
+    activeLeftPanel,
+  })
 
   const handleMarkdownChange = useCallback((val: string) => {
     const currentMarkdown = markdownRef.current
@@ -2484,20 +2064,7 @@ export function WorkspaceShell({
                       id: 'remove-from-recent',
                       label: 'Remove from Recent',
                       onClick: () => {
-                        void (async () => {
-                          const targetPath = pdfMenuState.targetPath!
-                          const resp = await deleteRecentRemote(targetPath)
-                          if (!resp.ok) {
-                            setStatusMessage(resp.error.message)
-                          } else {
-                            try {
-                              await deletePdfRecent(targetPath)
-                            } catch (err) {
-                              console.warn('[WorkspaceShell] deletePdfRecent failed', err)
-                            }
-                            await refreshPdfRecent()
-                          }
-                        })()
+                        handleRemovePdfFromRecent(pdfMenuState.targetPath!)
                         closePdfMenu()
                       },
                     },
