@@ -11,6 +11,18 @@
   overflow: auto;
   /* 预览整体背景与 markdown-body.gh-markdown 保持一致 */
   background: var(--markdown-preview-bg);
-  /* 与编辑区保持一致，在预览末尾预留一段“虚拟空白”，避免最后一行贴底 */
+  /* 与编辑区保持一致，在预览末尾预留一段“虚拟空白”，避免最后一行贴底（仅 markdown 使用） */
   padding-bottom: 25vh;
+}
+
+/* HTML 预览：不需要额外底部留白，让 iframe 占满整个预览区域 */
+.preview-body-html {
+  padding-bottom: 0;
+}
+
+.html-preview-frame {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: white;
 }

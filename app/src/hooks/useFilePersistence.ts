@@ -380,7 +380,7 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
           multiple: false,
           directory: false,
           filters: [
-            { name: 'Markdown', extensions: ['md', 'markdown', 'mdx'] },
+            { name: 'Markdown/HTML', extensions: ['md', 'markdown', 'mdx', 'html', 'htm'] },
             { name: 'PDF', extensions: ['pdf'] },
           ],
         })

@@ -182,7 +182,7 @@ describe('command registry - file commands', () => {
     const registry = createCommandRegistry(ctx)
     await registry.open_folder()
 
-    expect(ctx.openFolderInSidebar).not.toHaveBeenCalled()
+    expect(ctx.openFolderInSidebar).toHaveBeenCalledTimes(1)
 
     ctx.hasUnsavedChanges = () => false
     ctx.openFolderInSidebar = undefined
