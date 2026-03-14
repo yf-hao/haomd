@@ -2011,7 +2011,11 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .build()?;
 
     let help_menu = SubmenuBuilder::new(app, "Help")
-        .item(&MenuItemBuilder::new("Markdown Handbook").id("help_docs").build(app)?)
+        .item(
+            &MenuItemBuilder::new("Markdown Handbook")
+                .id("help_docs")
+                .build(app)?,
+        )
         .item(
             &MenuItemBuilder::new("Release Notes")
                 .id("help_release")
@@ -2247,13 +2251,18 @@ fn open_markdown_handbook(app: &AppHandle) {
     // 2) resource_dir/resources/markdown-handbook.html
     let candidates = [
         resource_dir.join("markdown-handbook.html"),
-        resource_dir.join("resources").join("markdown-handbook.html"),
+        resource_dir
+            .join("resources")
+            .join("markdown-handbook.html"),
     ];
 
     let html_path = match candidates.iter().find(|p| p.exists()) {
         Some(p) => p.clone(),
         None => {
-            log::error!("[Help] markdown-handbook.html not found in resource_dir={:?}", resource_dir);
+            log::error!(
+                "[Help] markdown-handbook.html not found in resource_dir={:?}",
+                resource_dir
+            );
             return;
         }
     };
