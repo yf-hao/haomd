@@ -88,6 +88,23 @@ const DEFAULT_ENABLE_HUGE_DOC_LOCAL_EDIT = true
 const DEFAULT_HUGE_DOC_CHUNK_CONTEXT_LINES = 200
 const DEFAULT_HUGE_DOC_CHUNK_MAX_LINES = 400
 
+// 仅当光标行变化达到该阈值时才更新记忆，避免小幅抖动频繁写入
+const CURSOR_UPDATE_MIN_DELTA = 20
+
+const STORAGE_CURSOR_MAP = 'haomd:editor:lastCursor:v1'
+
+type LastCursorLocation = {
+  line: number
+  updatedAt: number
+}
+
+type CursorMap = Record<string, LastCursorLocation>
+
+const normalizeCursorPath = (p: string | null | undefined): string | null => {
+  if (!p) return null
+  return p.replace(/\\/g, '/')
+}
+
 const seed = ''
 
 export function WorkspaceShell({
@@ -128,6 +145,43 @@ export function WorkspaceShell({
     initialTab: 'persona' | 'manage'
   }>({ open: false, initialTab: 'persona' })
   const [aboutOpen, setAboutOpen] = useState(false)
+  const [pendingCursorRestoreTabId, setPendingCursorRestoreTabId] = useState<string | null>(null)
+
+  const [lastCursorMap, setLastCursorMap] = useState<CursorMap>(() => {
+    try {
+      if (typeof localStorage === 'undefined') return {}
+      const raw = localStorage.getItem(STORAGE_CURSOR_MAP)
+      if (!raw) return {}
+      const parsed = JSON.parse(raw)
+      if (!parsed || typeof parsed !== 'object') return {}
+      return parsed as CursorMap
+    } catch (e) {
+      console.error('Failed to load cursor map from localStorage', e)
+      return {}
+    }
+  })
+  const lastCursorMapRef = useRef<CursorMap>(lastCursorMap)
+  useEffect(() => {
+    lastCursorMapRef.current = lastCursorMap
+  }, [lastCursorMap])
+  const saveCursorMapTimeoutRef = useRef<number | null>(null)
+  const scheduleSaveCursorMap = useCallback((next: CursorMap) => {
+    try {
+      if (typeof localStorage === 'undefined') return
+      if (saveCursorMapTimeoutRef.current != null) {
+        window.clearTimeout(saveCursorMapTimeoutRef.current)
+      }
+      saveCursorMapTimeoutRef.current = window.setTimeout(() => {
+        try {
+          localStorage.setItem(STORAGE_CURSOR_MAP, JSON.stringify(next))
+        } catch (err) {
+          console.error('Failed to save cursor map to localStorage', err)
+        }
+      }, 800)
+    } catch (err) {
+      console.error('scheduleSaveCursorMap failed', err)
+    }
+  }, [])
   const [aiChatMode, setAiChatMode] = useState<'floating' | 'docked'>('docked')
   const [aiChatOpen, setAiChatOpen] = useState(false)
   const [aiChatDockSide, setAiChatDockSide] = useState<'left' | 'right'>('right')
@@ -663,10 +717,10 @@ export function WorkspaceShell({
 
       if (isTabSwitch) {
         lastActiveIdForPreviewRef.current = activeId
-        setActiveLine(1)
+        restoreCursorForPath(tab.path ?? null)
       }
     }
-  }, [activeId, tabs])
+  }, [activeId, tabs, restoreCursorForPath])
 
   // Window Title：不再显示文件名，保持标题栏空白
   useEffect(() => {
@@ -1330,10 +1384,11 @@ export function WorkspaceShell({
       updateTabContent(tab.id, resp.data.content, { markDirty: false })
       setMarkdown(resp.data.content)
       setPreviewValue(resp.data.content)
-      setActiveLine(1)
+      // 标记该标签页需要在编辑器就绪时恢复光标位置
+      setPendingCursorRestoreTabId(tab.id)
     }
     return resp
-  }, [isCreatingTab, openFromPath, createTab, updateTabContent, setMarkdown, setPreviewValue, setActiveLine, setActiveTab])
+  }, [isCreatingTab, openFromPath, createTab, updateTabContent, setMarkdown, setPreviewValue, setActiveTab])
 
   const openFileFromSidebar = useCallback(async (path: string) => {
     if (isCreatingTab) return { ok: false } as any
@@ -1964,28 +2019,59 @@ export function WorkspaceShell({
     if (isProgrammaticScrollRef.current) return
 
     const currentHugeDocState = hugeDocStateRef.current
+    let globalLine: number
+
     if (hugeDocEnabled && currentHugeDocState?.enabled && currentHugeDocState.currentChunk) {
-      const globalLine = localToGlobalLine(markdownRef.current, currentHugeDocState.currentChunk.from, localLine)
+      globalLine = localToGlobalLine(markdownRef.current, currentHugeDocState.currentChunk.from, localLine)
       setActiveLine(globalLine)
+    } else {
+      globalLine = localLine
+      setActiveLine(localLine)
+    }
+
+    // 仅在 Markdown 标签下持久化光标行（PDF 标签不记录）
+    if (isPdfActive) return
+
+    const path = getCurrentFilePath()
+    const key = normalizeCursorPath(path)
+    if (!key || !globalLine || globalLine < 1) return
+
+    const prevSaved = lastCursorMapRef.current[key]
+    if (prevSaved && Math.abs(globalLine - prevSaved.line) < CURSOR_UPDATE_MIN_DELTA) {
       return
     }
-    setActiveLine(localLine)
-  }, [hugeDocEnabled, setActiveLine])
+
+    setLastCursorMap((prev) => {
+      const next: CursorMap = {
+        ...prev,
+        [key]: { line: globalLine, updatedAt: Date.now() },
+      }
+      lastCursorMapRef.current = next
+      scheduleSaveCursorMap(next)
+      return next
+    })
+  }, [hugeDocEnabled, isPdfActive, getCurrentFilePath, setActiveLine, scheduleSaveCursorMap])
 
   const focusEditorOnGlobalLine = useCallback((globalLine: number, searchText?: string) => {
+    const safeGlobal = globalLine > 0 ? globalLine : 1
+
+    // 普通文档：直接用全局行号作为本地行号，通过 focusRequest 让 EditorPane 在视图就绪后跳转
     if (!hugeDocEnabled) {
-      scrollEditorToLineCenter(globalLine, searchText)
+      setActiveLine(safeGlobal)
+      setFocusRequest({ localLine: safeGlobal, searchText })
       return
     }
 
     const totalLines = countLines(markdown)
     if (totalLines < hugeDocLineThreshold) {
-      scrollEditorToLineCenter(globalLine, searchText)
+      // 当前文档虽开启了大文档功能，但行数尚未达到阈值，退化为普通跳转
+      setHugeDocState(null)
+      setActiveLine(safeGlobal)
+      setFocusRequest({ localLine: safeGlobal, searchText })
       return
     }
 
     try {
-      const safeGlobal = globalLine > 0 ? globalLine : 1
       const chunk = extractChunkAroundLine(markdown, safeGlobal, {
         contextLines: hugeDocChunkContextLines,
         maxLines: hugeDocChunkMaxLines,
@@ -2006,9 +2092,33 @@ export function WorkspaceShell({
       setFocusRequest({ localLine, searchText })
     } catch (e) {
       console.error('[HugeDoc] focusEditorOnGlobalLine failed, fallback to normal scroll', e)
-      scrollEditorToLineCenter(globalLine, searchText)
+      // 兜底：回退到整篇文档模式，同样通过 focusRequest 触发跳转
+      setHugeDocState(null)
+      setActiveLine(safeGlobal)
+      setFocusRequest({ localLine: safeGlobal, searchText })
     }
-  }, [markdown, hugeDocEnabled, hugeDocLineThreshold, hugeDocChunkContextLines, hugeDocChunkMaxLines, scrollEditorToLineCenter, setHugeDocState, setActiveLine])
+  }, [markdown, hugeDocEnabled, hugeDocLineThreshold, hugeDocChunkContextLines, hugeDocChunkMaxLines, scrollEditorToLineCenter, setHugeDocState, setActiveLine, setFocusRequest])
+
+  function restoreCursorForPath(path: string | null) {
+    if (!path || isPdfActive) return
+    const key = normalizeCursorPath(path)
+    if (!key) return
+    const saved = lastCursorMapRef.current[key]
+    const line = saved && saved.line > 0 ? saved.line : 1
+    focusEditorOnGlobalLine(line)
+  }
+
+  const handleEditorReady = useCallback(() => {
+    // 编辑器初始化完成，如果当前标签页需要恢复光标，则进行恢复
+    if (pendingCursorRestoreTabId && pendingCursorRestoreTabId === activeId) {
+      const tab = tabs.find(t => t.id === activeId)
+      if (tab?.path) {
+        restoreCursorForPath(tab.path)
+      }
+      setPendingCursorRestoreTabId(null)
+    }
+  }, [pendingCursorRestoreTabId, activeId, tabs, restoreCursorForPath])
+
   const handlePreviewLineClick = useCallback((line: number) => {
     focusEditorOnGlobalLine(line)
   }, [focusEditorOnGlobalLine])
@@ -2442,6 +2552,7 @@ export function WorkspaceShell({
                         onProgrammaticScrollStart={() => { isProgrammaticScrollRef.current = true }}
                         onProgrammaticScrollEnd={() => { isProgrammaticScrollRef.current = false }}
                         editorZoom={editorZoom}
+                        onEditorReady={handleEditorReady}
                       />
                     </Suspense>
                   </section>

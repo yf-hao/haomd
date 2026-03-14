@@ -21,6 +21,7 @@ export type EditorPaneProps = {
   onProgrammaticScrollStart?: () => void
   onProgrammaticScrollEnd?: () => void
   editorZoom: number
+  onEditorReady?: () => void
 }
 
 export function EditorPane(props: EditorPaneProps) {
@@ -35,6 +36,7 @@ export function EditorPane(props: EditorPaneProps) {
     onProgrammaticScrollStart,
     onProgrammaticScrollEnd,
     editorZoom,
+    onEditorReady,
   } = props
 
   useEffect(() => {
@@ -87,6 +89,7 @@ export function EditorPane(props: EditorPaneProps) {
       editorZoom={editorZoom}
       onViewReady={(view) => {
         editorViewRef.current = view
+        onEditorReady?.()
       }}
       onFoldRegionsChange={onFoldRegionsChange}
     />
