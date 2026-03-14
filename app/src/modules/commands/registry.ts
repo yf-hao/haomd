@@ -297,8 +297,7 @@ function createFileCommands(ctx: FileCommandContext): CommandRegistry {
       }
     },
     open_folder: async () => {
-      // 只有在确实存在未保存变更时才弹确认，避免「空文档」也被拦截
-      if (ctx.hasUnsavedChanges() && !ctx.confirmLoseChanges()) return
+      // 打开文件夹不会直接丢失当前文档内容，这里不再拦截未保存变更
       if (!ctx.openFolderInSidebar) {
         ctx.setStatusMessage('当前版本暂不支持 Sidebar 打开文件夹')
         return

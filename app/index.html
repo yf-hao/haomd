@@ -16,6 +16,13 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // 在内联深色样式已生效、React 尚未加载时就显示窗口，
+      // 既消除白屏闪烁，又避免等待 React 渲染导致感觉启动慢
+      if (window.__TAURI_INTERNALS__) {
+        window.__TAURI_INTERNALS__.invoke('plugin:window|show', { label: 'main' }).catch(function() {})
+      }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
