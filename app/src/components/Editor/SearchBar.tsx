@@ -42,30 +42,27 @@ export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose }) => {
     const updateIndex = useCallback(() => {
         if (!view || !searchText) return;
         const query = new SearchQuery({ search: searchText, caseSensitive, wholeWord, regexp });
-        let cursor = query.getCursor(view.state) as any;
+        const cursor = query.getCursor(view.state) as any;
+        const head = view.state.selection.main.head;
         let count = 0;
+        let foundIndex = 0;
+
         while (!cursor.next().done) {
             count++;
-        }
-        setMatchCount(count);
-
-        if (count > 0) {
-            let index = 1;
-            const head = view.state.selection.main.head;
-            cursor = query.getCursor(view.state) as any;
-            while (!cursor.next().done) {
+            if (!foundIndex) {
                 const matchFrom = cursor.value?.from ?? cursor.from;
                 const matchTo = cursor.value?.to ?? cursor.to;
                 if (matchFrom >= head || (matchFrom < head && matchTo >= head)) {
-                    break;
+                    foundIndex = count;
                 }
-                index++;
             }
-            setCurrentMatchIndex(Math.min(index, count));
-        } else {
-            setCurrentMatchIndex(0);
         }
+
+        setMatchCount(count);
+        setCurrentMatchIndex(count > 0 ? (foundIndex || count) : 0);
     }, [view, searchText, caseSensitive, wholeWord, regexp]);
+
+    const updateIndexTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     // Update query and count matches
     useEffect(() => {
@@ -78,7 +75,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose }) => {
             regexp,
         })
 
-        // Apply query to CodeMirror (this handles highlighting)
+        // Apply query to CodeMirror (this handles highlighting) — 立即执行，保证视觉反馈
         view.dispatch({
             effects: [
                 setSearchQuery.of(query),
@@ -86,12 +83,23 @@ export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose }) => {
             ]
         })
 
-        // Count matches manually for the UI
+        // Count matches — debounce 150ms，避免大文档每次按键都遍历全文
+        if (updateIndexTimerRef.current != null) {
+            clearTimeout(updateIndexTimerRef.current)
+        }
         if (searchText) {
-            updateIndex();
+            updateIndexTimerRef.current = setTimeout(() => {
+                updateIndex()
+            }, 150)
         } else {
             setMatchCount(0)
             setCurrentMatchIndex(0)
+        }
+
+        return () => {
+            if (updateIndexTimerRef.current != null) {
+                clearTimeout(updateIndexTimerRef.current)
+            }
         }
     }, [view, searchText, caseSensitive, wholeWord, regexp, updateIndex])
 
