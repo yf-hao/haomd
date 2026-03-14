@@ -471,8 +471,45 @@ function MarkdownViewerComponent(
       inlinemath: StableInlineMath,
       a: ({ href, children, ...props }: any) => {
         const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
-          e.preventDefault()
           if (!href) return
+
+          const el = e.currentTarget as HTMLAnchorElement
+
+          // 预览内部锚点（例如 TOC 链接）：在预览滚动容器中平滑滚动到对应标题
+          if (href.startsWith('#')) {
+            e.preventDefault()
+            const container = containerRef.current
+            if (!container) return
+
+            let targetEl: HTMLElement | null = null
+
+            const targetLine = el.dataset.targetLine
+            if (targetLine) {
+              targetEl = container.querySelector<HTMLElement>(`[data-line-start="${targetLine}"]`)
+            }
+
+            if (!targetEl) {
+              const id = href.slice(1)
+              targetEl = container.querySelector<HTMLElement>(`#${id}`) || document.getElementById(id)
+            }
+
+            if (!targetEl) return
+
+            const scrollParent = container.closest('.preview-body') as HTMLElement | null
+            if (!scrollParent) return
+
+            const parentRect = scrollParent.getBoundingClientRect()
+            const targetRect = targetEl.getBoundingClientRect()
+            const currentTop = scrollParent.scrollTop
+            const delta = targetRect.top - parentRect.top
+            const offset = currentTop + delta - parentRect.height / 8
+
+            scrollParent.scrollTo({ top: offset, behavior: 'smooth' })
+            return
+          }
+
+          // 其他链接仍然走下载 / 外部打开逻辑
+          e.preventDefault()
           void markdownLinkClickHandler.handleClick(href)
         }
         return (

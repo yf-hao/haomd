@@ -137,47 +137,165 @@ export function remarkToc() {
       return { ...h, id }
     })
 
-    // 4. 构造 TOC list AST
-    const listChildren = tocHeadings.map((h) => ({
-      type: 'listItem',
-      spread: false,
-      data: {
-        hProperties: {
-          className: ['md-toc-item', `md-toc-level-${h.depth}`],
-        },
-      },
-      children: [
-        {
-          type: 'paragraph',
-          children: [
-            {
-              type: 'link',
-              url: `#${h.id}`,
-              data: {
-                hProperties: {
-                  href: `#${h.id}`,
-                },
-              },
-              children: [
-                {
-                  type: 'text',
-                  value: h.text || '',
-                },
-              ],
-            },
-          ],
-        },
-      ],
-    }))
+    // 4. 构造 TOC list AST（为二级标题添加可折叠结构）
+    const createLinkNode = (h: { id: string; text: string; node: any }) => {
+      const pos = (h.node as any)?.position
+      const startLine = pos?.start?.line
 
-    const tocList = {
+      const hProps: any = {
+        href: `#${h.id}`,
+      }
+      if (typeof startLine === 'number') {
+        hProps['data-target-line'] = String(startLine)
+      }
+
+      return {
+        type: 'link',
+        url: `#${h.id}`,
+        data: {
+          hProperties: hProps,
+        },
+        children: [
+          {
+            type: 'text',
+            value: h.text || '',
+          },
+        ],
+      }
+    }
+
+    const listChildren: any[] = []
+
+    for (let i = 0; i < tocHeadings.length; i += 1) {
+      const h = tocHeadings[i]
+
+      // 仅当当前是二级标题时，尝试把后续更深层级（>2）的标题归为它的子项
+      if (h.depth === 2) {
+        const childHeadings: typeof tocHeadings = []
+        let j = i + 1
+        while (j < tocHeadings.length && tocHeadings[j].depth > 2) {
+          childHeadings.push(tocHeadings[j])
+          j += 1
+        }
+
+        if (childHeadings.length > 0) {
+          // 有子项：构造一个包含 <details> 的 listItem，使子标题可折叠
+          const childListItems = childHeadings.map((ch) => ({
+            type: 'listItem',
+            spread: false,
+            data: {
+              hProperties: {
+                className: ['md-toc-item', `md-toc-level-${ch.depth}`],
+              },
+            },
+            children: [
+              {
+                type: 'paragraph',
+                children: [createLinkNode(ch)],
+              },
+            ],
+          }))
+
+          const nestedList = {
+            type: 'list',
+            ordered: false,
+            spread: false,
+            children: childListItems,
+          }
+
+          listChildren.push({
+            type: 'listItem',
+            spread: false,
+            data: {
+              hProperties: {
+                className: ['md-toc-item', `md-toc-level-${h.depth}`],
+              },
+            },
+            children: [
+              {
+                // 使用 details + summary 包裹当前二级标题及其子项
+                type: 'paragraph',
+                data: {
+                  hName: 'details',
+                  hProperties: {},
+                },
+                children: [
+                  {
+                    type: 'paragraph',
+                    data: {
+                      hName: 'summary',
+                    },
+                    children: [createLinkNode(h)],
+                  },
+                  nestedList,
+                ],
+              },
+            ],
+          })
+
+          // 跳过已经作为子项处理的 heading
+          i = j - 1
+          continue
+        }
+      }
+
+      // 默认分支：没有子项的二级标题，或其他层级，保持原有的平铺结构
+      listChildren.push({
+        type: 'listItem',
+        spread: false,
+        data: {
+          hProperties: {
+            className: ['md-toc-item', `md-toc-level-${h.depth}`],
+          },
+        },
+        children: [
+          {
+            type: 'paragraph',
+            children: [createLinkNode(h)],
+          },
+        ],
+      })
+    }
+
+    const tocList: any = {
       type: 'list',
       ordered: false,
       spread: false,
       children: listChildren,
     }
 
-    // 5. 用 list 替换原来的 [TOC] 段落
-    children.splice(tocIndex, 1, tocList)
+    const tocDetailsNode = {
+      type: 'paragraph',
+      data: {
+        hName: 'details',
+        hProperties: {
+          className: ['md-toc-container'],
+          open: true,
+        },
+      },
+      children: [
+        {
+          type: 'paragraph',
+          data: {
+            hName: 'summary',
+            hProperties: { className: ['md-toc-summary'] },
+          },
+          children: [{ type: 'text', value: '目录' }],
+        },
+        {
+          ...tocList,
+          data: {
+            ...(tocList as any).data,
+            hProperties: {
+              ...((tocList as any).data?.hProperties ?? {}),
+              className: ['md-toc-root'],
+            },
+          },
+        },
+      ],
+    }
+
+    // 5. 用 details+summary+list 替换原来的 [TOC] 段落
+    children.splice(tocIndex, 1, tocDetailsNode)
   }
 }

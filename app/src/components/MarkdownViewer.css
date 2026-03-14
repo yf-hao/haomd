@@ -106,7 +106,6 @@
 
 .markdown-body.gh-markdown .md-toc-level-1 {
   font-weight: 600;
-  text-align: center;
 }
 
 .markdown-body.gh-markdown .md-toc-level-2 {
@@ -125,6 +124,29 @@
 
 .markdown-body.gh-markdown .md-toc-item a:hover {
   text-decoration: underline;
+}
+
+.markdown-body.gh-markdown .md-toc-container {
+  margin: 8px 0 12px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  background-color: rgba(15, 23, 42, 0.6);
+}
+
+.markdown-body.gh-markdown .md-toc-summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.markdown-body.gh-markdown .md-toc-root {
+  margin: 0;
+  padding-left: 0;
+}
+
+.markdown-body.gh-markdown .md-toc-root ul {
+  margin: 0;
+  padding-left: 0;
 }
 
 /* 导出 HTML 使用的 TOC 缩进样式（容器只有 .markdown-body） */
