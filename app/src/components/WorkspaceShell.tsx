@@ -825,6 +825,8 @@ export function WorkspaceShell({
     return await saveAs()
   }, [isPdfActive, saveAs, setStatusMessage])
 
+  const markPendingRestoreRef = useRef<((tabId: string) => void) | null>(null)
+
   const openFileInNewTab = useCallback(async (path: string) => {
     if (isCreatingTab) return { ok: false } as any
 
@@ -845,7 +847,7 @@ export function WorkspaceShell({
       setMarkdown(resp.data.content)
       setPreviewValue(resp.data.content)
       // 标记该标签页需要在编辑器就绪时恢复光标位置
-      markPendingRestore(tab.id)
+      markPendingRestoreRef.current?.(tab.id)
     }
     return resp
   }, [isCreatingTab, openFromPath, createTab, updateTabContent, setMarkdown, setPreviewValue, setActiveTab])
@@ -1474,6 +1476,8 @@ export function WorkspaceShell({
     })
   }, [])
 
+  const saveCursorPositionRef = useRef<((globalLine: number) => void) | null>(null)
+
   const handleCursorChange = useCallback((localLine: number) => {
     // 程序性滚动期间不更新 activeLine，避免触发大文档 effect 重算 chunk
     if (isProgrammaticScrollRef.current) return
@@ -1481,8 +1485,8 @@ export function WorkspaceShell({
     const globalLine = localToGlobal(localLine)
     setActiveLine(globalLine)
 
-    saveCursorPosition(globalLine)
-  }, [localToGlobal, setActiveLine, saveCursorPosition])
+    saveCursorPositionRef.current?.(globalLine)
+  }, [localToGlobal, setActiveLine])
 
   const focusEditorOnGlobalLine = useCallback((globalLine: number, searchText?: string) => {
     const safeGlobal = globalLine > 0 ? globalLine : 1
@@ -1505,6 +1509,8 @@ export function WorkspaceShell({
     focusEditorOnGlobalLine,
   })
   restoreCursorRef.current = restoreCursorForPath
+  saveCursorPositionRef.current = saveCursorPosition
+  markPendingRestoreRef.current = markPendingRestore
 
   const handlePreviewLineClick = useCallback((line: number) => {
     focusEditorOnGlobalLine(line)
