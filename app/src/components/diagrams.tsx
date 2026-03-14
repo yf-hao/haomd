@@ -1,15 +1,44 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import mermaid from 'mermaid'
-import MindElixir, { SIDE } from 'mind-elixir'
-import 'mind-elixir/style'
 import { mermaidConfig } from '../config/renderers'
 
-mermaid.initialize({
-  startOnLoad: false,
-  securityLevel: mermaidConfig.securityLevel,
-  theme: mermaidConfig.theme,
-  fontFamily: mermaidConfig.fontFamily,
-})
+// --- mermaid 动态加载 ---
+let mermaidInstance: typeof import('mermaid').default | null = null
+let mermaidInitPromise: Promise<typeof import('mermaid').default> | null = null
+
+function loadMermaid() {
+  if (mermaidInstance) return Promise.resolve(mermaidInstance)
+  if (mermaidInitPromise) return mermaidInitPromise
+  mermaidInitPromise = import('mermaid').then((m) => {
+    const lib = m.default
+    lib.initialize({
+      startOnLoad: false,
+      securityLevel: mermaidConfig.securityLevel,
+      theme: mermaidConfig.theme,
+      fontFamily: mermaidConfig.fontFamily,
+    })
+    mermaidInstance = lib
+    return lib
+  })
+  return mermaidInitPromise
+}
+
+// --- mind-elixir 动态加载 ---
+let MindElixirCtor: typeof import('mind-elixir').default | null = null
+let SIDE_VALUE: number | null = null
+let mindLoadPromise: Promise<void> | null = null
+
+function loadMindElixir() {
+  if (MindElixirCtor) return Promise.resolve()
+  if (mindLoadPromise) return mindLoadPromise
+  mindLoadPromise = Promise.all([
+    import('mind-elixir'),
+    import('mind-elixir/style'),
+  ]).then(([mod]) => {
+    MindElixirCtor = mod.default
+    SIDE_VALUE = mod.SIDE
+  })
+  return mindLoadPromise
+}
 
 const mermaidCache = new Map<string, string>()
 const mindCache = new Map<string, MindElixirData>()
@@ -73,12 +102,15 @@ export const MermaidBlock = memo(function MermaidBlock({ code }: Readonly<{ code
     setSvg('加载中…')
 
     const timer = window.setTimeout(() => {
-      mermaid
-        .render(idRef.current, code)
-        .then(({ svg: rendered }) => {
+      loadMermaid()
+        .then((lib) => {
           if (cancelled || currentRun !== runIdRef.current) return
-          mermaidCache.set(cacheKey, rendered)
-          setSvg(rendered)
+          return lib.render(idRef.current, code)
+        })
+        .then((result) => {
+          if (cancelled || currentRun !== runIdRef.current || !result) return
+          mermaidCache.set(cacheKey, result.svg)
+          setSvg(result.svg)
         })
         .catch((err) => {
           if (cancelled || currentRun !== runIdRef.current) return
@@ -138,7 +170,7 @@ function toMindElixirData(root: MindNode): MindElixirData {
   })
   return {
     nodeData: walk(root),
-    direction: SIDE,
+    direction: (SIDE_VALUE ?? 2) as MindElixirData['direction'],
   }
 }
 
@@ -191,6 +223,7 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
   const isHandlingResizeRef = useRef(false)
   const lastResizeWidthRef = useRef<number>(-1)
   const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
   const codeHash = useMemo(() => hashString(code), [code])
 
   const data = useMemo(() => {
@@ -248,9 +281,9 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
         // 重新清空容器，确保 init 时是干净的
         el.innerHTML = ''
 
-        const mind = new MindElixir({
+        const mind = new MindElixirCtor!({
           el,
-          direction: data.direction ?? SIDE,
+          direction: data.direction ?? (SIDE_VALUE as any),
           editable: false,
           contextMenu: false,
           toolBar: false,
@@ -275,7 +308,17 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
       }
     }
 
-    const timer = window.setTimeout(init, 200)
+    let timer: number | undefined
+
+    loadMindElixir()
+      .then(() => {
+        setLoading(false)
+        timer = window.setTimeout(init, 200)
+      })
+      .catch((e) => {
+        setLoading(false)
+        setError(e instanceof Error ? `思维导图加载失败：${e.message}` : '思维导图加载失败')
+      })
 
     const resizeHandler = () => {
       const el = containerRef.current
@@ -346,6 +389,9 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
           <pre className="code-inline">{code}</pre>
         </div>
       )}
+      {!error && loading && (
+        <div className="diagram-placeholder">加载思维导图…</div>
+      )}
       {!error && (
         <div
           ref={containerRef}
@@ -374,4 +420,3 @@ export default function DiagramRenderer(props: Readonly<DiagramRendererProps>) {
     <pre className="diagram-placeholder">不支持的图表类型：{props.lang}</pre>
   )
 }
-
