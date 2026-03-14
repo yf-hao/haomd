@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import type { FileTreeNode } from '../domain/sidebarTree'
 import { FileContextMenu } from './FileContextMenu'
 import type { FileVirtualFolder, FileVirtualAssignment } from '../modules/files/types'
@@ -77,7 +77,7 @@ type TreeNodeProps = {
   onInlineNewFolderCancel?: () => void
 }
 
-function TreeNode({ node, level, expanded, onToggle, onFileClick, onDirClick, activePath, highlightedPaths, onFileVisited, onContextMenu, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel, inlineNewFolderDir, onInlineNewFolderConfirm, onInlineNewFolderCancel }: TreeNodeProps) {
+const TreeNode = memo(function TreeNode({ node, level, expanded, onToggle, onFileClick, onDirClick, activePath, highlightedPaths, onFileVisited, onContextMenu, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel, inlineNewFolderDir, onInlineNewFolderConfirm, onInlineNewFolderCancel }: TreeNodeProps) {
   const isExpanded = !!expanded[node.path]
   const isActive = activePath === node.path
   const isHighlighted = highlightedPaths?.includes(node.path.replace(/\\/g, '/')) ?? false
@@ -174,7 +174,7 @@ function TreeNode({ node, level, expanded, onToggle, onFileClick, onDirClick, ac
       <span className="tree-name">{node.name}</span>
     </div>
   )
-}
+})
 
 type InlineNewFileRowProps = {
   level: number

@@ -71,6 +71,7 @@ export interface WorkspaceShellProps {
   initialOpenRecentPath?: string | null
   initialOpenRecentIsFolder?: boolean | null
   onInitialActionHandled?: () => void
+  onDocumentStatsChange?: (stats: { charCount: number | null }) => void
 }
 
 type HugeDocState = {
@@ -105,6 +106,13 @@ const normalizeCursorPath = (p: string | null | undefined): string | null => {
   return p.replace(/\\/g, '/')
 }
 
+const countDocumentChars = (text: string): number => {
+  if (!text) return 0
+  // 简单实现：统计非空白字符数，汉字/字母/数字/标点都计入
+  const noWhitespace = text.replace(/\s/g, '')
+  return noWhitespace.length
+}
+
 const seed = ''
 
 export function WorkspaceShell({
@@ -114,6 +122,7 @@ export function WorkspaceShell({
   initialOpenRecentPath,
   initialOpenRecentIsFolder,
   onInitialActionHandled,
+  onDocumentStatsChange,
 }: WorkspaceShellProps) {
   const [markdown, setMarkdown] = useState(seed)
   const [previewValue, setPreviewValue] = useState(seed)
@@ -1341,6 +1350,31 @@ export function WorkspaceShell({
     }
     prevIsPreviewVisibleRef.current = isPreviewVisible
   }, [isPreviewVisible, markdown])
+
+  // 轻量节流的字数统计：在用户停止输入一小段时间后上报当前文档的总字数
+  useEffect(() => {
+    if (!onDocumentStatsChange) return
+
+    // PDF 标签：当前编辑器内容对应的是笔记，而不是正文，这里不统计
+    if (isPdfActive) {
+      onDocumentStatsChange({ charCount: null })
+      return
+    }
+
+    const textForCount = markdown
+    let cancelled = false
+
+    const timer = window.setTimeout(() => {
+      if (cancelled) return
+      const count = countDocumentChars(textForCount)
+      onDocumentStatsChange({ charCount: count })
+    }, 500)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [markdown, isPdfActive, onDocumentStatsChange])
 
   const applyOpenedContent = useCallback((content: string) => {
     setMarkdown(content)

@@ -16,6 +16,7 @@ function App() {
   const [isAiSettingsOpen, setAiSettingsOpen] = useState(false)
   const [isPromptSettingsOpen, setPromptSettingsOpen] = useState(false)
   const [isStatusBarVisible, setStatusBarVisible] = useState(true)
+  const [docCharCount, setDocCharCount] = useState<number | null>(null)
 
   const handleLeftPanelToggle = useCallback(
     (id: LeftPanelId) => {
@@ -112,13 +113,16 @@ function App() {
           initialOpenRecentPath={initialOpenRecentPath}
           initialOpenRecentIsFolder={initialOpenRecentIsFolder}
           onInitialActionHandled={handleInitialActionHandled}
+          onDocumentStatsChange={(stats) => setDocCharCount(stats.charCount)}
         />
       </div>
 
       {isStatusBarVisible && (
         <div className="status-bar">
           <div className="status-bar-left">HaoMD · AI Markdown</div>
-          <div className="status-bar-right">&nbsp;</div>
+          <div className="status-bar-right">
+            {docCharCount != null ? `${docCharCount.toLocaleString()} 字` : '\u00A0'}
+          </div>
         </div>
       )}
 

@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import type { EditorTab } from '../types/tabs'
 
 import './TabBar.css'
@@ -10,7 +11,7 @@ export type TabBarProps = {
   onRequestSaveAndClose?: (id: string) => void
 }
 
-export function TabBar({ tabs, activeId, onTabClick, onTabClose, onRequestSaveAndClose }: TabBarProps) {
+export const TabBar = memo(function TabBar({ tabs, activeId, onTabClick, onTabClose, onRequestSaveAndClose }: TabBarProps) {
   return (
     <div className="tab-bar">
       {tabs.map((tab) => (
@@ -74,4 +75,4 @@ export function TabBar({ tabs, activeId, onTabClick, onTabClose, onRequestSaveAn
       ))}
     </div>
   )
-}
+})

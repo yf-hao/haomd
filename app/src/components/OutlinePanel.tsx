@@ -1,5 +1,5 @@
 import type { OutlineItem } from '../modules/outline/parser'
-import { useState } from 'react'
+import { memo, useState } from 'react'
 
 export type OutlinePanelProps = {
   items: OutlineItem[]
@@ -8,7 +8,7 @@ export type OutlinePanelProps = {
   panelWidth?: number
 }
 
-export function OutlinePanel({ items, activeId, onSelect, panelWidth }: OutlinePanelProps) {
+export const OutlinePanel = memo(function OutlinePanel({ items, activeId, onSelect, panelWidth }: OutlinePanelProps) {
   const hasItems = items.length > 0
   const style = panelWidth ? { width: panelWidth } : undefined
   
@@ -84,4 +84,4 @@ export function OutlinePanel({ items, activeId, onSelect, panelWidth }: OutlineP
       )}
     </aside>
   )
-}
+})
