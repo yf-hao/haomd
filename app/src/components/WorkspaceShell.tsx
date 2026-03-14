@@ -102,7 +102,7 @@ const DEFAULT_HUGE_DOC_CHUNK_CONTEXT_LINES = 200
 const DEFAULT_HUGE_DOC_CHUNK_MAX_LINES = 400
 
 // 仅当光标行变化达到该阈值时才更新记忆，避免小幅抖动频繁写入
-const CURSOR_UPDATE_MIN_DELTA = 20
+const CURSOR_UPDATE_MIN_DELTA = 5
 
 const STORAGE_CURSOR_MAP = 'haomd:editor:lastCursor:v1'
 
@@ -267,14 +267,22 @@ export function WorkspaceShell({
   const isProgrammaticScrollRef = useRef(false)
   const sidebarResizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
 
-  // 将编辑器的实时行号节流后再传给预览，减少大文档频繁重渲染
+  // 将编辑器的实时行号节流后再传给预览，使用 rAF 节流（~16ms）降低重渲染频率
+  const previewLineRafRef = useRef<number | null>(null)
   useEffect(() => {
-    const timer = setTimeout(() => {
+    if (previewLineRafRef.current != null) {
+      cancelAnimationFrame(previewLineRafRef.current)
+    }
+    previewLineRafRef.current = requestAnimationFrame(() => {
+      previewLineRafRef.current = null
       setPreviewActiveLine((prev) => (prev !== activeLine ? activeLine : prev))
-    }, 1000)
+    })
 
     return () => {
-      clearTimeout(timer)
+      if (previewLineRafRef.current != null) {
+        cancelAnimationFrame(previewLineRafRef.current)
+        previewLineRafRef.current = null
+      }
     }
   }, [activeLine])
 
@@ -1351,7 +1359,7 @@ export function WorkspaceShell({
   useEffect(() => {
     if (!isPreviewVisible) return
 
-    const timer = setTimeout(() => setPreviewValue(markdown), 320)
+    const timer = setTimeout(() => setPreviewValue(markdown), 150)
     return () => clearTimeout(timer)
   }, [markdown, isPreviewVisible])
 
