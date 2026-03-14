@@ -29,6 +29,7 @@ import { usePdfPanel } from '../hooks/usePdfPanel'
 import { useAiChatPanel } from '../hooks/useAiChatPanel'
 import { useHugeDoc } from '../hooks/useHugeDoc'
 import { useCursorMemory } from '../hooks/useCursorMemory'
+import { useSidebarResize } from '../hooks/useSidebarResize'
 import { useNativePaste } from '../hooks/useNativePaste'
 import { onNativePasteImage } from '../modules/platform/clipboardEvents'
 import { openTerminalAt } from '../modules/platform/terminalService'
@@ -132,8 +133,6 @@ export function WorkspaceShell({
     }
   }, [editorZoom])
   const [activeOutlineId, setActiveOutlineId] = useState<string | null>(null)
-  const [sidebarWidth, setSidebarWidth] = useState(260)
-  const [isSidebarResizing, setIsSidebarResizing] = useState(false)
   const [isCreatingTab, setIsCreatingTab] = useState(false)
   const [foldRegions, setFoldRegions] = useState<{ fromLine: number; toLine: number }[]>([])
   const [inlineNewFileDir, setInlineNewFileDir] = useState<string | null>(null)
@@ -142,7 +141,6 @@ export function WorkspaceShell({
   const [previewSelectionText, setPreviewSelectionText] = useState<string | null>(null)
   const pdfSelectionGetterRef = useRef<(() => string | null) | null>(null)
   const isProgrammaticScrollRef = useRef(false)
-  const sidebarResizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
 
   // 将编辑器的实时行号节流后再传给预览，使用 rAF 节流（~16ms）降低重渲染频率
   const previewLineRafRef = useRef<number | null>(null)
@@ -179,19 +177,15 @@ export function WorkspaceShell({
   const isPreviewVisible = effectiveLayout !== 'editor-only'
   const prevIsPreviewVisibleRef = useRef(isPreviewVisible)
 
-  const MIN_SIDEBAR_WIDTH = 150
-  const MAX_SIDEBAR_WIDTH = 400
+  // Sidebar resize hook
+  const {
+    sidebarWidth,
+    isSidebarResizing,
+    handleSidebarResizeStart,
+  } = useSidebarResize({ activeLeftPanel })
 
   // Register closeCurrentTab callback
   const closeCurrentTabRef = useRef<(() => void) | null>(null)
-
-  const handleSidebarResizeStart = useCallback((event: any) => {
-    if (!activeLeftPanel) return
-    sidebarResizeStateRef.current = { startX: event.clientX, startWidth: sidebarWidth }
-    setIsSidebarResizing(true)
-    event.preventDefault()
-    event.stopPropagation()
-  }, [activeLeftPanel, sidebarWidth])
 
   const {
     tabs,
@@ -304,34 +298,6 @@ export function WorkspaceShell({
   }, [isPdfActive, previewSelectionText])
 
   const outlineItems = useOutline(markdown)
-
-  // Sidebar Resize
-  useEffect(() => {
-    if (!isSidebarResizing) return
-    const handleMove = (e: MouseEvent) => {
-      const state = sidebarResizeStateRef.current
-      if (!state) return
-      const delta = e.clientX - state.startX
-      let next = state.startWidth + delta
-      if (next < MIN_SIDEBAR_WIDTH) next = MIN_SIDEBAR_WIDTH
-      if (next > MAX_SIDEBAR_WIDTH) next = MAX_SIDEBAR_WIDTH
-      setSidebarWidth(next)
-    }
-    const handleUp = () => {
-      setIsSidebarResizing(false)
-      sidebarResizeStateRef.current = null
-    }
-    window.addEventListener('mousemove', handleMove)
-    window.addEventListener('mouseup', handleUp)
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
-    return () => {
-      window.removeEventListener('mousemove', handleMove)
-      window.removeEventListener('mouseup', handleUp)
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-    }
-  }, [isSidebarResizing, MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH])
 
   const [confirmDialog, setConfirmDialog] = useState<any>(null)
   const [quitConfirmDialog, setQuitConfirmDialog] = useState<any>(null)
