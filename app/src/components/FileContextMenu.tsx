@@ -87,7 +87,7 @@ export function FileContextMenu({ x, y, items, onRequestClose }: FileContextMenu
     <div
       ref={menuRef}
       className="app-overlay-menu sidebar-context-menu"
-      style={{ left: position.left, top: position.top, position: 'fixed', zIndex: 9999999999 }}
+      style={{ left: position.left, top: position.top, position: 'fixed' }}
       role="menu"
       onClick={(e) => e.stopPropagation()}
     >

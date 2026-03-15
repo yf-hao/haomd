@@ -1,5 +1,14 @@
 :root {
   --markdown-preview-bg: #0c0d16;
+
+  /* z-index 分层规范 */
+  --z-content: 1;          /* 内容层：复制按钮、拖拽手柄等 */
+  --z-panel-control: 100;  /* 面板控件：分隔热区 */
+  --z-panel-overlay: 200;  /* 面板浮层：搜索栏、斜杠命令 */
+  --z-toast: 500;          /* Toast 通知 */
+  --z-modal-overlay: 600;  /* 模态遮罩层 */
+  --z-modal: 700;          /* 模态对话框 */
+  --z-popover: 800;        /* 右键菜单、全局浮层 */
 }
 
 /* 全局 disabled 按钮样式 */
@@ -904,7 +913,7 @@ button:disabled {
   position: absolute;
   top: 12px;
   right: 12px;
-  z-index: 5;
+  z-index: var(--z-content);
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.06);
   color: #e8ecf5;
@@ -955,7 +964,7 @@ button:disabled {
 .app-overlay-menu {
   position: fixed;
   /* 全局浮层：用于各种右键菜单、悬浮面板，确保压过预览等内容 */
-  z-index: 9999999999;
+  z-index: var(--z-popover);
 }
 
 .sidebar-context-menu {
@@ -1077,7 +1086,7 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 10000;
+  z-index: var(--z-modal);
   animation: fadeIn 0.15s ease;
 }
 
@@ -1536,8 +1545,7 @@ button:disabled {
     0 12px 32px rgba(0, 0, 0, 0.7),
     0 0 0 1px rgba(15, 23, 42, 0.9);
   backdrop-filter: blur(10px);
-  z-index: 20;
-  max-height: 220px;
+  z-index: var(--z-panel-overlay);  max-height: 220px;
   overflow-y: auto;
 }
 
@@ -1588,7 +1596,7 @@ button:disabled {
   cursor: col-resize;
   pointer-events: auto;
   background: transparent;
-  z-index: 100;
+  z-index: var(--z-panel-control);
   opacity: 0;
   transition: opacity 0.2s ease;
   display: flex;

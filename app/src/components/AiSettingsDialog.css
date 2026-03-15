@@ -65,7 +65,7 @@
   align-items: center;
   justify-content: center;
   min-height: 32px;
-  z-index: 20;
+  z-index: var(--z-content);
 }
 
 .ai-chat-close-button {
@@ -162,7 +162,7 @@
 /* AI Chat 额外拖拽 handle：底部 + 左右两侧 */
 .ai-chat-drag-handle {
   position: absolute;
-  z-index: 10;
+  z-index: var(--z-content);
   cursor: move;
 }
 
@@ -777,7 +777,7 @@ button.ghost.ghost-subtle:hover {
   justify-content: center;
   background: rgba(15, 23, 42, 0.75);
   backdrop-filter: blur(2px);
-  z-index: 9999;
+  z-index: var(--z-modal-overlay);
   /* 覆盖主设置模态窗 */
 }
 
