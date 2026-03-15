@@ -947,6 +947,7 @@ async fn save_text_with_dialog(
     let dialog = app.dialog().file().set_title("Save AI History as Markdown");
     let dialog = dialog
         .add_filter("Markdown", &["md"])
+        .add_filter("Text", &["txt"])
         .set_file_name(&default_file_name);
 
     let content_to_write = content.clone();

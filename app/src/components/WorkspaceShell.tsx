@@ -809,8 +809,10 @@ export function WorkspaceShell({
     setMarkdown(content)
     setPreviewValue(content)
     setActiveLine(1)
-    updateActiveContent(content, { markDirty: false })
-  }, [updateActiveContent])
+    // 注意：不再调用 updateActiveContent。调用方 (open_file 命令) 在此之前已通过
+    // createTab({ path, content }) 创建了新标签并设置了内容。而 updateActiveContent
+    // 闭包中的 activeId 仍指向旧标签，会误将旧标签内容覆写为新文件内容。
+  }, [])
 
   const saveWithPdfGuard = useCallback(async () => {
     if (isPdfActive) {

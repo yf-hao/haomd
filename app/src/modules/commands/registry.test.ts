@@ -156,7 +156,9 @@ describe('command registry - file commands', () => {
     expect(ctx.createTab).toHaveBeenCalledWith({ path: '/doc.md', content: 'hello world' })
     expect(ctx.applyOpenedContent).toHaveBeenCalledWith('hello world')
     expect(ctx.setFilePath).toHaveBeenCalledWith('/doc.md')
-    expect(ctx.updateActiveMeta).toHaveBeenCalledWith('/doc.md', false)
+    // updateActiveMeta 不应被调用：createTab 已设置 path/title，
+    // 且 updateActiveMeta 闭包中的 activeId 指向旧标签会导致两个重复标签
+    expect(ctx.updateActiveMeta).not.toHaveBeenCalled()
   })
 
   it('open_file should handle pdf specially and refresh recent pdf list', async () => {

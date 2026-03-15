@@ -284,11 +284,13 @@ function createFileCommands(ctx: FileCommandContext): CommandRegistry {
         }
 
         const content = data.content as string
-        // 文本文件：保持原有行为，为每个打开的文件创建独立标签，并同步编辑器内容
+        // 文本文件：createTab 已设置 path/title/content，只需同步编辑器与持久化状态。
+        // 注意：不能调用 updateActiveMeta / updateActiveContent，因为 createTab 内部
+        // 通过 setActiveId 切换了激活标签，但这些回调闭包中的 activeId 仍指向旧标签，
+        // 会把旧标签的 path/title/content 覆写为新文件的，从而产生两个相同标签。
         ctx.createTab({ path, content })
         ctx.applyOpenedContent(content)
         ctx.setFilePath(path)
-        ctx.updateActiveMeta(path, false)
         if (ctx.addStandaloneFile) {
           ctx.addStandaloneFile(path)
         }

@@ -166,7 +166,10 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
       const suggested = pathRef.current && pathRef.current !== DEFAULT_PATH ? pathRef.current : '文稿.md'
       const chosen = await saveDialog({
         defaultPath: suggested,
-        filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdx'] }],
+        filters: [
+          { name: 'Markdown', extensions: ['md', 'markdown', 'mdx'] },
+          { name: 'Text', extensions: ['txt'] },
+        ],
       })
       if (!chosen) {
         setSaveStatus('idle')
@@ -380,7 +383,7 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
           multiple: false,
           directory: false,
           filters: [
-            { name: 'Markdown/HTML', extensions: ['md', 'markdown', 'mdx', 'html', 'htm'] },
+            { name: 'Markdown/HTML/Text', extensions: ['md', 'markdown', 'mdx', 'html', 'htm', 'txt'] },
             { name: 'PDF', extensions: ['pdf'] },
           ],
         })
