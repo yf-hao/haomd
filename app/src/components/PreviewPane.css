@@ -15,6 +15,17 @@
   padding-bottom: 25vh;
 }
 
+/* 编辑器光标定位到预览区时的闪烁高亮 */
+@keyframes highlight-flash {
+  0%, 100% { background-color: transparent; }
+  50% { background-color: rgba(59, 180, 230, 0.35); }
+}
+
+.active-block {
+  animation: highlight-flash 0.5s ease-in-out 2;
+  border-radius: 4px;
+}
+
 /* HTML 预览：不需要额外底部留白，让 iframe 占满整个预览区域 */
 .preview-body-html {
   padding-bottom: 0;

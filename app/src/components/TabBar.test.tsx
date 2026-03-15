@@ -20,7 +20,10 @@ describe('TabBar', () => {
         )
 
         expect(screen.getByText('Tab 1')).toBeDefined()
-        expect(screen.getByText('● Tab 2')).toBeDefined()
+        const tab2Title = screen.getByText('Tab 2')
+        expect(tab2Title).toBeDefined()
+        // 脏标记现在使用独立的 dot 元素，而不是直接渲染 "● Tab 2" 文本
+        expect(tab2Title.closest('.tab-item')?.querySelector('.tab-dirty-dot')).not.toBeNull()
     })
 
     it('should mark active tab', () => {
@@ -48,7 +51,7 @@ describe('TabBar', () => {
             />
         )
 
-        fireEvent.click(screen.getByText('● Tab 2'))
+        fireEvent.click(screen.getByText('Tab 2'))
         expect(onTabClick).toHaveBeenCalledWith('2')
     })
 
