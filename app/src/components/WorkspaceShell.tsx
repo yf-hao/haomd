@@ -215,8 +215,8 @@ export function WorkspaceShell({
     aiChatMode, setAiChatMode,
     aiChatOpen,
     aiChatDockSide, setAiChatDockSide,
-    aiChatWidthLeft, aiChatWidthRight,
-    isAiChatResizing,
+    aiChatWidthLeft: _aiChatWidthLeft, aiChatWidthRight: _aiChatWidthRight,
+    isAiChatResizing: _isAiChatResizing,
     docHistoryState,
     globalMemoryState,
     openAiChatDialog,
@@ -241,9 +241,9 @@ export function WorkspaceShell({
 
   // HugeDoc hook
   const {
-    hugeDocState,
-    hugeDocStateRef,
-    hugeDocEnabled,
+    hugeDocState: _hugeDocState,
+    hugeDocStateRef: _hugeDocStateRef,
+    hugeDocEnabled: _hugeDocEnabled,
     applyChunkEdit,
     getChunkContent,
     localToGlobal,
@@ -1456,25 +1456,6 @@ export function WorkspaceShell({
       unlisten()
     }
   }, [editorViewRef, filePath, setStatusMessage])
-
-  const scrollEditorToLineCenter = useCallback((line: number, searchText?: string) => {
-    const view = editorViewRef.current
-    if (!view) return
-    const doc = view.state.doc
-    let pos = 0
-    if (searchText) {
-      for (let i = 1; i <= doc.lines; i++) {
-        const l = doc.line(i)
-        if (l.text.includes(searchText)) { pos = l.from; break; }
-      }
-    }
-    if (!pos) pos = doc.line(Math.min(line, doc.lines)).from
-    view.dispatch({
-      selection: { anchor: pos },
-      effects: EditorView.scrollIntoView(pos, { y: 'center' }),
-      scrollIntoView: true,
-    })
-  }, [])
 
   const saveCursorPositionRef = useRef<((globalLine: number) => void) | null>(null)
 

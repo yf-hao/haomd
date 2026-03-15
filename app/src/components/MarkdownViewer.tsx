@@ -1,12 +1,8 @@
-import React, { memo, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import React, { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeRaw from 'rehype-raw'
-import katex from 'katex'
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import 'katex/dist/katex.min.css'
 import 'github-markdown-css/github-markdown.css'
 import './MarkdownViewer.css'
 import { getRenderer } from '../modules/markdown/plugins'
@@ -46,6 +42,21 @@ const FilePathContext = React.createContext<string | null>(null)
 
 const useLineRange = () => React.useContext(LineRangeContext)
 const useFoldRegions = () => React.useContext(FoldContext)
+
+// KaTeX 按需加载：单例 Promise + Context
+type KatexModule = { renderToString: (tex: string, options?: any) => string }
+const KatexContext = React.createContext<KatexModule | null>(null)
+
+let katexPromise: Promise<KatexModule> | null = null
+function loadKatex(): Promise<KatexModule> {
+  if (!katexPromise) {
+    katexPromise = Promise.all([
+      import('katex'),
+      import('katex/dist/katex.min.css'),
+    ]).then(([mod]) => mod.default)
+  }
+  return katexPromise
+}
 
 // 为 math / inlineMath 节点打上 data-line-start / data-line-end 属性，便于后续按行号折叠
 function remarkMathLineAnchors() {
@@ -95,13 +106,14 @@ const markdownLinkClickHandler = new DownloadOnClickUseCase(
 const blockMathHtmlCache = new Map<string, string>()
 const inlineMathHtmlCache = new Map<string, string>()
 
-function renderBlockMathHtml(tex: string): string {
+function renderBlockMathHtml(tex: string, katexInstance: KatexModule | null): string {
+  if (!katexInstance) return tex
   const key = tex
   const cached = blockMathHtmlCache.get(key)
   if (cached) return cached
   let html = ''
   try {
-    html = katex.renderToString(tex, { displayMode: true, throwOnError: false })
+    html = katexInstance.renderToString(tex, { displayMode: true, throwOnError: false })
   } catch {
     html = tex
   }
@@ -109,13 +121,14 @@ function renderBlockMathHtml(tex: string): string {
   return html
 }
 
-function renderInlineMathHtml(tex: string): string {
+function renderInlineMathHtml(tex: string, katexInstance: KatexModule | null): string {
+  if (!katexInstance) return tex
   const key = tex
   const cached = inlineMathHtmlCache.get(key)
   if (cached) return cached
   let html = ''
   try {
-    html = katex.renderToString(tex, { displayMode: false, throwOnError: false })
+    html = katexInstance.renderToString(tex, { displayMode: false, throwOnError: false })
   } catch {
     html = tex
   }
@@ -218,11 +231,6 @@ type DiagramBlockProps = {
   code: string
 }
 
-type CodeBlockProps = React.ComponentProps<typeof SyntaxHighlighter> & {
-  lang?: string
-  content: string
-}
-
 // 提取稳定的媒体组件，避免受 foldRegions 变动影响导致视频重刷
 const MarkdownMedia = memo(({ node, filePath, encodeMediaPath, ...props }: any) => {
   const altText = props.alt || ''
@@ -286,91 +294,7 @@ const DiagramBlock = memo(
   (prev, next) => prev.lang === next.lang && prev.code === next.code,
 )
 
-async function copyTextToClipboard(text: string): Promise<boolean> {
-  if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-    try {
-      await navigator.clipboard.writeText(text)
-      return true
-    } catch {
-      // ignore and fallback to execCommand
-    }
-  }
-
-  if (typeof document === 'undefined') {
-    return false
-  }
-
-  const textarea = document.createElement('textarea')
-  textarea.value = text
-  textarea.setAttribute('readonly', 'true')
-  textarea.style.position = 'fixed'
-  textarea.style.top = '-9999px'
-  textarea.style.left = '-9999px'
-  document.body.appendChild(textarea)
-
-  const selection = document.getSelection()
-  const originalRange = selection && selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null
-
-  textarea.select()
-
-  let ok = false
-  try {
-    ok = document.execCommand('copy')
-  } catch {
-    ok = false
-  }
-
-  document.body.removeChild(textarea)
-
-  if (originalRange && selection) {
-    selection.removeAllRanges()
-    selection.addRange(originalRange)
-  }
-
-  return ok
-}
-
-const CodeBlock = memo(
-  ({ lang, content, ...rest }: CodeBlockProps) => {
-    const [copied, setCopied] = React.useState(false)
-
-    const handleCopy = async (event: React.MouseEvent<HTMLButtonElement>) => {
-      event.stopPropagation()
-      const ok = await copyTextToClipboard(content)
-      if (!ok) return
-      setCopied(true)
-      window.setTimeout(() => {
-        setCopied(false)
-      }, 1200)
-    }
-
-    return (
-      <div className="code-block-wrapper">
-        <button
-          type="button"
-          className={`code-copy-button${copied ? ' copied' : ''}`}
-          onClick={handleCopy}
-          aria-label={copied ? '已复制代码' : '复制代码'}
-        >
-          {copied ? '已复制' : '复制'}
-        </button>
-        <SyntaxHighlighter
-          language={lang}
-          style={oneDark}
-          showLineNumbers
-          wrapLines
-          {...rest}
-        >
-          {content}
-        </SyntaxHighlighter>
-      </div>
-    )
-  },
-  (prev, next) =>
-    prev.lang === next.lang &&
-    prev.content === next.content &&
-    prev.className === next.className,
-)
+const LazyCodeBlock = React.lazy(() => import('./CodeBlockHighlighted'))
 
 const StableCode = memo(({ inline, className, children, node, ...rest }: any) => {
   const regions = useFoldRegions()
@@ -386,7 +310,11 @@ const StableCode = memo(({ inline, className, children, node, ...rest }: any) =>
     const renderer = getRenderer(lang)
     if (renderer) return renderer(content)
     if (lang === 'mermaid' || lang === 'mind') return <DiagramBlock lang={lang} code={content} />
-    return <CodeBlock lang={lang} content={content} {...rest} />
+    return (
+      <React.Suspense fallback={<pre><code className={className}>{content}</code></pre>}>
+        <LazyCodeBlock lang={lang} content={content} {...rest} />
+      </React.Suspense>
+    )
   }
 
   const isMultiline = content.includes('\n')
@@ -396,13 +324,14 @@ const StableCode = memo(({ inline, className, children, node, ...rest }: any) =>
 
 const StableMath = memo(({ node, value, ...rest }: any) => {
   const regions = useFoldRegions()
+  const katex = React.useContext(KatexContext)
   const start = node?.position?.start?.line as number | undefined
   const end = (node?.position?.end?.line ?? start) as number | undefined
 
   if (isBlockFolded(regions, start, end)) return null
 
   const tex = (value ?? (node as any).value ?? '').trim()
-  const html = renderBlockMathHtml(tex)
+  const html = renderBlockMathHtml(tex, katex)
   const dataProps = start ? { 'data-line-start': start, 'data-line-end': end } : undefined
   const lineRange: LineRange = { start, end }
 
@@ -415,6 +344,7 @@ const StableMath = memo(({ node, value, ...rest }: any) => {
 
 const StableInlineMath = memo(({ node, value, ...rest }: any) => {
   const regions = useFoldRegions()
+  const katex = React.useContext(KatexContext)
   const lineRange = useLineRange()
   let start = lineRange?.start
   let end = lineRange?.end ?? start
@@ -428,7 +358,7 @@ const StableInlineMath = memo(({ node, value, ...rest }: any) => {
   if (isBlockFolded(regions, start, end)) return null
 
   const tex = (value ?? (node as any).value ?? '').trim()
-  const html = renderInlineMathHtml(tex)
+  const html = renderInlineMathHtml(tex, katex)
 
   return <span {...rest} dangerouslySetInnerHTML={{ __html: html }} />
 })
@@ -451,6 +381,15 @@ function MarkdownViewerComponent(
   const [virtualize, setVirtualize] = React.useState(false)
 
   const { value, activeLine, previewWidth, filePath, foldRegions, mode = 'rendered', onLineClick, onSelectionChange } = props
+
+  // KaTeX 按需加载：检测文档是否包含数学公式
+  const hasMath = useMemo(() => /\$/.test(value), [value])
+  const [katexLib, setKatexLib] = useState<KatexModule | null>(null)
+  useEffect(() => {
+    if (hasMath && !katexLib) {
+      loadKatex().then(setKatexLib)
+    }
+  }, [hasMath, katexLib])
 
   const components = useMemo(() => {
     return {
@@ -817,6 +756,7 @@ function MarkdownViewerComponent(
   return (
     <FilePathContext.Provider value={filePath ?? null}>
       <FoldContext.Provider value={foldRegions ?? []}>
+        <KatexContext.Provider value={katexLib}>
         <div className="markdown-body gh-markdown" ref={containerRef} data-preview-width={previewWidth}>
           <div ref={topSpacerRef} aria-hidden="true" />
           {mode === 'rendered' ? (
@@ -835,6 +775,7 @@ function MarkdownViewerComponent(
           )}
           <div ref={bottomSpacerRef} aria-hidden="true" />
         </div>
+        </KatexContext.Provider>
       </FoldContext.Provider>
     </FilePathContext.Provider>
   )

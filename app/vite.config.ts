@@ -18,7 +18,6 @@ const chunksMap: Record<string, string[]> = {
     'remark-math',
     'rehype-raw',
     'rehype-sanitize',
-    'rehype-katex',
   ],
   'vendor-diagram': ['mermaid', 'mind-elixir'],
   'vendor-pdf': ['pdfjs-dist'],
