@@ -5,6 +5,7 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { ConflictModal } from './ConflictModal'
 import { ConfirmDialog } from './ConfirmDialog'
 import Toast from './Toast'
+import PreviewErrorBoundary from './PreviewErrorBoundary'
 import { InsertTableDialog } from './InsertTableDialog'
 import { AboutDialog } from './AboutDialog'
 import { TabBar } from './TabBar'
@@ -1922,6 +1923,7 @@ export function WorkspaceShell({
                     </Suspense>
                   </section>
 
+                  <PreviewErrorBoundary>
                   <Suspense fallback={<section className="pane preview"><div className="preview-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13 }}>加载预览…</div></section>}>
                     {isPdfActive ? (
                       <section
@@ -1960,6 +1962,7 @@ export function WorkspaceShell({
                       />
                     )}
                   </Suspense>
+                  </PreviewErrorBoundary>
 
                   {(effectiveLayout === 'preview-left' || effectiveLayout === 'preview-right') && (
                     <div className={`divider-hotzone ${dragging ? 'active' : ''}`} style={{ left: effectiveLayout === 'preview-left' ? `${previewWidthForRender}%` : `${100 - previewWidthForRender}%` }} onMouseDown={startDragging}>
