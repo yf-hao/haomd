@@ -875,15 +875,22 @@ button:disabled {
   max-height: none;
   padding-bottom: 0;
   /* Dock 模式下不限制高度，由 pane 自己决定 */
-  /* 不显示滚动条，但保留滚动能力 */
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
 }
 
 .ai-chat-pane-body .ai-chat-messages::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-  display: none;
+  width: 6px;
+}
+.ai-chat-pane-body .ai-chat-messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ai-chat-pane-body .ai-chat-messages::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.3);
+  border-radius: 3px;
+}
+.ai-chat-pane-body .ai-chat-messages::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(148, 163, 184, 0.5);
 }
 
 /* Dock 模式下去掉模态内容默认底部外边距，避免发送按钮下方空隙过大 */
@@ -1310,17 +1317,24 @@ button:disabled {
   overflow: auto;
   /* 预览整体背景与 markdown-body.gh-markdown 保持一致 */
   background: var(--markdown-preview-bg);
-  /* 不显示滚动条，但保留滚动能力 */
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-  /* 与编辑区保持一致，在预览末尾预留一段“虚拟空白”，避免最后一行贴底 */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
+  /* 与编辑区保持一致，在预览末尾预留一段”虚拟空白”，避免最后一行贴底 */
   padding-bottom: 25vh;
 }
 
 .preview-body::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-  display: none;
+  width: 6px;
+}
+.preview-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+.preview-body::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.3);
+  border-radius: 3px;
+}
+.preview-body::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(148, 163, 184, 0.5);
 }
 
 .markdown-body {
