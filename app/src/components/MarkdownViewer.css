@@ -8,6 +8,12 @@
   color: #e8ecf5;
 }
 
+/* 预览虚拟化：浏览器自动跳过离屏块的渲染，大幅提升长文档滚动性能 */
+.markdown-body.gh-markdown > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 50px;
+}
+
 /* 提高语义权重覆盖原始 */
 .markdown-body pre:not(.no-style) {
   padding: 6px 6px;
