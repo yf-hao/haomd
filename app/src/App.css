@@ -2,6 +2,12 @@
   --markdown-preview-bg: #0c0d16;
 }
 
+/* 全局 disabled 按钮样式 */
+button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .app-shell {
   display: flex;
   flex-direction: column;
