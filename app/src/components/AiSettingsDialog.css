@@ -138,9 +138,8 @@
 .ai-chat-messages {
   width: 100%;
   /* border-radius: 10px; */
-  border: 1px solid rgba(148, 163, 184, 0.35);
   background: rgba(15, 23, 42, 0.9);
-  padding: 8px 10px;
+  padding: 8px 0px;
   min-height: 300px;
   /* 起始固定高度，避免只有一条空提示时塌缩 */
   max-height: 720px;
@@ -654,30 +653,40 @@
   color: #e5e7eb;
 }
 
-/* AI Chat Loading Spinner - 一半白一半灰 */
+/* AI Chat 打字指示器 - 三个跳动圆点 */
 .ai-chat-loading-indicator {
   display: flex;
   justify-content: center;
+  align-items: center;
+  gap: 5px;
   padding: 12px 0;
 }
 
-.ai-chat-spinner {
+.ai-typing-dot {
   display: inline-block;
-  width: 20px;
-  height: 20px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  /* 使用 conic-gradient 实现一半白一半灰 */
-  background: conic-gradient(#e5e7eb 0deg 180deg,
-      rgba(148, 163, 184, 0.4) 180deg 360deg);
-  /* 添加中心空洞形成圆环效果 */
-  mask: radial-gradient(circle, transparent 45%, black 50%);
-  -webkit-mask: radial-gradient(circle, transparent 45%, black 50%);
-  animation: ai-chat-spin 0.8s linear infinite;
+  background: rgba(148, 163, 184, 0.7);
+  animation: ai-typing-bounce 1.2s ease-in-out infinite;
 }
 
-@keyframes ai-chat-spin {
-  to {
-    transform: rotate(360deg);
+.ai-typing-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.ai-typing-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes ai-typing-bounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-6px);
+    opacity: 1;
   }
 }
 
@@ -1045,7 +1054,7 @@ button.ghost.ghost-subtle:hover {
 }
 
 .ai-chat-message {
-  padding: 8px 12px;
+  padding: 8px 2px;
   border-radius: 12px;
   max-width: 100%;
   position: relative;

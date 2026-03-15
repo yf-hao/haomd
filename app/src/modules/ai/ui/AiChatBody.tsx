@@ -346,7 +346,9 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
         {/* 加载指示器：loading 且当前正在流式传输的助手消息还没有内容时显示 */}
         {loading && messages.some((m) => m.role === 'assistant' && m.streaming && m.content.length === 0) && (
           <div className="ai-chat-loading-indicator">
-            <span className="ai-chat-spinner" aria-hidden="true" />
+            <span className="ai-typing-dot" />
+            <span className="ai-typing-dot" />
+            <span className="ai-typing-dot" />
           </div>
         )}
       </div>
