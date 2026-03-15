@@ -131,9 +131,6 @@ export function usePdfPanel({
   const handleCreatePdfFolder = useCallback(() => {
     if (!isTauriEnv()) {
       setStatusMessage('虚拟文件夹仅在桌面应用中可用')
-      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-        window.alert('虚拟文件夹仅在桌面应用中可用')
-      }
       return
     }
 
@@ -239,9 +236,6 @@ export function usePdfPanel({
   const handleDeletePdfFolder = useCallback((folder: PdfFolder) => {
     if (!isTauriEnv()) {
       setStatusMessage('虚拟文件夹仅在桌面应用中可用')
-      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-        window.alert('虚拟文件夹仅在桌面应用中可用')
-      }
       return
     }
 

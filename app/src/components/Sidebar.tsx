@@ -56,6 +56,7 @@ export type SidebarProps = {
     folder: FileVirtualFolder
     onConfirm: () => void
   }) => void
+  onNotify?: (msg: string) => void
 }
 
 type TreeNodeProps = {
@@ -237,7 +238,7 @@ function InlineNewFileRow({ level, onConfirm, onCancel, isFolder }: InlineNewFil
 }
 
 
-export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, onToggle, onFileClick, onDirClick, onContextAction, onToolbarNewFileInCurrentFolder, onToolbarNewFolderInCurrentFolder, onToolbarRefreshCurrentFolder, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel, inlineNewFolderDir, onInlineNewFolderConfirm, onInlineNewFolderCancel, activePath, panelWidth, highlightedPaths, onFileVisited, onRequestConfirmDeleteFileVirtualFolder }: SidebarProps) {
+export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, onToggle, onFileClick, onDirClick, onContextAction, onToolbarNewFileInCurrentFolder, onToolbarNewFolderInCurrentFolder, onToolbarRefreshCurrentFolder, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel, inlineNewFolderDir, onInlineNewFolderConfirm, onInlineNewFolderCancel, activePath, panelWidth, highlightedPaths, onFileVisited, onRequestConfirmDeleteFileVirtualFolder, onNotify }: SidebarProps) {
   const hasStandalone = standaloneFiles.length > 0
   const hasTree = folderRoots.some((rootPath) => (treesByRoot[rootPath]?.length ?? 0) > 0)
 
@@ -332,7 +333,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
         if (!saveResp.ok) {
           console.error('[Sidebar] saveFileVirtualFolders(delete) failed', saveResp.error)
           if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-            window.alert(saveResp.error.message ?? '删除虚拟文件夹失败')
+            onNotify?.(saveResp.error.message ?? '删除虚拟文件夹失败')
           }
           return
         }
@@ -347,7 +348,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
       } catch (e) {
         console.error('[Sidebar] handleDeleteFileVirtualFolder failed', e)
         if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-          window.alert('删除虚拟文件夹失败')
+          onNotify?.('删除虚拟文件夹失败')
         }
       }
     })()
@@ -388,7 +389,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
 
     if (fileVirtualFolders.some((f) => f.name === name)) {
       if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-        window.alert('已存在同名虚拟文件夹')
+        onNotify?.('已存在同名虚拟文件夹')
       }
       return
     }
@@ -405,7 +406,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
       if (!resp.ok) {
         console.error('[Sidebar] saveFileVirtualFolders failed', resp.error)
         if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-          window.alert(resp.error.message ?? '保存虚拟文件夹失败')
+          onNotify?.(resp.error.message ?? '保存虚拟文件夹失败')
         }
       }
     })()
@@ -433,7 +434,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
     const nextName = renamingFileFolderName.trim()
     if (!nextName) {
       if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-        window.alert('虚拟文件夹名称不能为空')
+        onNotify?.('虚拟文件夹名称不能为空')
       }
       return
     }
@@ -453,7 +454,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
 
     if (fileVirtualFolders.some((f) => f.name === nextName && f.id !== renamingFileFolderId)) {
       if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-        window.alert('已存在同名虚拟文件夹')
+        onNotify?.('已存在同名虚拟文件夹')
       }
       return
     }
@@ -468,7 +469,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
       if (!resp.ok) {
         console.error('[Sidebar] saveFileVirtualFolders(rename) failed', resp.error)
         if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-          window.alert(resp.error.message ?? '重命名虚拟文件夹失败')
+          onNotify?.(resp.error.message ?? '重命名虚拟文件夹失败')
         }
       }
     })()
@@ -950,7 +951,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                   if (!resp.ok) {
                     console.error('[Sidebar] updateFileVirtualFolderForPath(null) failed', resp.error)
                     if (typeof window !== 'undefined') {
-                      window.alert(resp.error.message ?? '更新虚拟文件夹失败')
+                      onNotify?.(resp.error.message ?? '更新虚拟文件夹失败')
                     }
                   }
                 })()
@@ -987,7 +988,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                   if (!resp.ok) {
                     console.error('[Sidebar] updateFileVirtualFolderForPath failed', resp.error)
                     if (typeof window !== 'undefined') {
-                      window.alert(resp.error.message ?? '更新虚拟文件夹失败')
+                      onNotify?.(resp.error.message ?? '更新虚拟文件夹失败')
                     }
                   }
                 })()

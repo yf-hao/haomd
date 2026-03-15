@@ -1,0 +1,26 @@
+.toast-notification {
+  position: fixed;
+  bottom: 40px;
+  right: 16px;
+  max-width: 400px;
+  padding: 10px 16px;
+  border-radius: 6px;
+  background: rgba(30, 30, 40, 0.92);
+  color: #e8ecf5;
+  font-size: 13px;
+  line-height: 1.4;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 9000;
+  pointer-events: auto;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.toast-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.toast-hidden {
+  opacity: 0;
+  transform: translateY(8px);
+}

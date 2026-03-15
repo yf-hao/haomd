@@ -325,7 +325,6 @@ function createFileCommands(ctx: FileCommandContext): CommandRegistry {
       }
     },
     export_pdf: async () => {
-      alert('[Registry] export_pdf command triggered')
       if (ctx.exportPdf) {
         await ctx.exportPdf()
       } else {

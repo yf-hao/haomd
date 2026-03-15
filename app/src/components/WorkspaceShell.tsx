@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { ConflictModal } from './ConflictModal'
 import { ConfirmDialog } from './ConfirmDialog'
+import Toast from './Toast'
 import { InsertTableDialog } from './InsertTableDialog'
 import { AboutDialog } from './AboutDialog'
 import { TabBar } from './TabBar'
@@ -353,6 +354,7 @@ export function WorkspaceShell({
   const {
     filePath,
     setFilePath,
+    statusMessage,
     setStatusMessage,
     conflictError,
     setConflictError,
@@ -1269,7 +1271,6 @@ export function WorkspaceShell({
   }, [setStatusMessage, getCurrentMarkdown, getCurrentFileName])
 
   const handleExportPdf = useCallback(async () => {
-    alert('[WorkspaceShell] handleExportPdf called')
     console.log('[WorkspaceShell] 预备导出 PDF...')
     // 防重入
     if (isExportingPdfRef.current) {
@@ -1579,6 +1580,7 @@ export function WorkspaceShell({
                 },
               })
             }}
+            onNotify={setStatusMessage}
           />
         )}
         {activeLeftPanel === 'outline' && (
@@ -2034,6 +2036,7 @@ export function WorkspaceShell({
         )}
 
         <AboutDialog open={aboutOpen} onClose={closeAboutDialog} />
+        <Toast message={statusMessage} onDismiss={() => setStatusMessage('')} />
       </>
     </AiChatCommandBridgeContext.Provider>
   )
