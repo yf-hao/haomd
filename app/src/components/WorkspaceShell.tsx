@@ -1868,7 +1868,7 @@ export function WorkspaceShell({
                 {aiChatMode === 'docked' && aiChatOpen && aiChatState && (
                   <>
                     {aiChatDockSide === 'left' && (
-                      <Suspense fallback={null}>
+                      <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13, height: '100%' }}>加载 AI 面板…</div>}>
                         <AiChatPaneLazy
                           sessionKey={aiChatSessionKey}
                           entryMode={aiChatState.entryMode}
@@ -1897,7 +1897,7 @@ export function WorkspaceShell({
                             : { gridColumn: '1/-1' }
                     }
                   >
-                    <Suspense fallback={<div className="code-editor" />}>
+                    <Suspense fallback={<div className="code-editor" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13 }}>加载编辑器…</div>}>
                       {isSearchOpen && (
                         <SearchBar
                           view={editorViewRef.current}
@@ -1922,7 +1922,7 @@ export function WorkspaceShell({
                     </Suspense>
                   </section>
 
-                  <Suspense fallback={<section className="pane preview"><div className="preview-body" /></section>}>
+                  <Suspense fallback={<section className="pane preview"><div className="preview-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13 }}>加载预览…</div></section>}>
                     {isPdfActive ? (
                       <section
                         className="pane preview"
@@ -1968,7 +1968,7 @@ export function WorkspaceShell({
                   )}
                 </section>
                 {aiChatMode === 'docked' && aiChatOpen && aiChatState && aiChatDockSide === 'right' && (
-                  <Suspense fallback={null}>
+                  <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13, height: '100%' }}>加载 AI 面板…</div>}>
                     <AiChatPaneLazy
                       sessionKey={aiChatSessionKey}
                       entryMode={aiChatState.entryMode}
