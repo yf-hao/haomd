@@ -29,7 +29,7 @@ export const TabBar = memo(function TabBar({ tabs, activeId, onTabClick, onTabCl
           }}
         >
           <span className="tab-title">
-            {tab.dirty ? '● ' : ''}
+            {tab.dirty && <span className="tab-dirty-dot" />}
             {tab.title}
           </span>
           <button

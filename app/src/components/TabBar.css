@@ -43,10 +43,21 @@
 }
 
 .tab-title {
+  display: flex;
+  align-items: center;
   max-width: 160px;
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
+}
+
+.tab-dirty-dot {
+  width: 8px;
+  height: 8px;
+  min-width: 8px;
+  border-radius: 50%;
+  background: #f59e0b;
+  margin-right: 6px;
 }
 
 .tab-close {
