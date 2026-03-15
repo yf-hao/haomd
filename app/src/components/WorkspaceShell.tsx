@@ -304,6 +304,7 @@ export function WorkspaceShell({
   const [confirmDialog, setConfirmDialog] = useState<any>(null)
   const [quitConfirmDialog, setQuitConfirmDialog] = useState<any>(null)
   const [isInsertTableDialogOpen, setIsInsertTableDialogOpen] = useState(false)
+  const [recentDialogOpen, setRecentDialogOpen] = useState(false)
 
   // 用于在 useEffect 中访问最新的 setConfirmDialog
   const setConfirmDialogRef = useRef(setConfirmDialog)
@@ -1347,7 +1348,7 @@ export function WorkspaceShell({
     createTab, updateActiveMeta, openFolderInSidebar, closeCurrentTab,
     openSearch: () => setIsSearchOpen(true),
     openInsertTableDialog,
-    openAiChatDialog: options => openAiChatDialog(options as any),
+    openAiChatDialog: (options: any) => openAiChatDialog(options as any),
     closeAiChatDialog,
     openGlobalMemoryDialog,
     openAboutDialog,
@@ -1359,7 +1360,8 @@ export function WorkspaceShell({
     refreshPdfRecent,
     exportHtml: handleExportHtml,
     exportPdf: handleExportPdf,
-  })
+    openRecentDialog: () => setRecentDialogOpen(true),
+  } as any)
 
   const aiChatCommandBridge = useMemo(
     () => ({
@@ -2016,6 +2018,19 @@ export function WorkspaceShell({
               onClose={closeAiChatDialog}
               currentFilePath={aiChatFilePath}
               tabId={aiChatState.tabId}
+            />
+          </Suspense>
+        )}
+
+        {recentDialogOpen && (
+          <Suspense fallback={null}>
+            <RecentFilesDialogLazy
+              open={recentDialogOpen}
+              onClose={() => setRecentDialogOpen(false)}
+              onOpenFile={(path: string) => {
+                void openRecentFileInNewTab(path)
+                setRecentDialogOpen(false)
+              }}
             />
           </Suspense>
         )}

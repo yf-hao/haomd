@@ -21,6 +21,10 @@ export type CommandSystemParams = CommandContext & {
    */
   openInsertTableDialog?: () => void
   /**
+   * 打开最近文件模态窗的 UI 回调，由 WorkspaceShell 提供。
+   */
+  openRecentDialog?: () => void
+  /**
    * 可选的 AI 客户端实现，默认使用基于 AI Settings 的实现。
    */
   aiClient?: IAiClient
@@ -73,6 +77,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     openSearch,
     closeAiChatDialog,
     openInsertTableDialog,
+    openRecentDialog,
   } = params
 
   const aiClient = useMemo<IAiClient>(() => {
@@ -126,6 +131,7 @@ export function useCommandSystem(params: CommandSystemParams) {
         openSearch,
         openInsertTableDialog,
         closeAiChatDialog,
+        openRecentDialog,
       }),
     [
       layout,

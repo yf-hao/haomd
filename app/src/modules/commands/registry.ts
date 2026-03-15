@@ -57,6 +57,8 @@ export type FileCommandContext = StatusContext & {
   /** 导出命令 */
   exportHtml?: () => Promise<void>
   exportPdf?: () => Promise<void>
+  /** 打开最近文件模态窗的回调，由 WorkspaceShell 提供 */
+  openRecentDialog?: () => void
 }
 
 /**
@@ -312,6 +314,13 @@ function createFileCommands(ctx: FileCommandContext): CommandRegistry {
         return
       }
       await ctx.handleShowRecent()
+    },
+    open_recent_dialog: () => {
+      if (ctx.openRecentDialog) {
+        ctx.openRecentDialog()
+      } else {
+        ctx.setStatusMessage('当前版本未挂载最近文件模态窗')
+      }
     },
     clear_recent: async () => {
       const resp = await ctx.clearRecentAll()

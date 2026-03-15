@@ -1597,12 +1597,6 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         &recent[start..std::cmp::min(end, total)]
     };
 
-    let page_label = if total == 0 {
-        "Page 0 / 0".to_string()
-    } else {
-        format!("Page {} / {}", current_page + 1, max_page + 1)
-    };
-
     // HaoMD 菜单
     let haomd_menu = SubmenuBuilder::new(app, "HaoMD")
         .item(
@@ -1618,7 +1612,7 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         )
         .build()?;
 
-    // Open Recent 原生子菜单
+    // Open Recent 原生子菜单：展示前若干最近文件 + Clear Recent + More...
     let mut open_recent_builder = SubmenuBuilder::new(app, "Open Recent");
     {
         let mut map = RECENT_MENU_MAP.lock().unwrap();
@@ -1640,34 +1634,21 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         }
     }
 
-    // 分页控制：仅在总页数大于 1 时展示
-    open_recent_builder = if max_page > 0 {
-        open_recent_builder
-            .separator()
-            .item(
-                &MenuItemBuilder::new(&page_label)
-                    .id("recent_page_info")
-                    .build(app)?,
-            )
-            .item(
-                &MenuItemBuilder::new("Previous Page")
-                    .id("recent_prev_page")
-                    .build(app)?,
-            )
-            .item(
-                &MenuItemBuilder::new("Next Page")
-                    .id("recent_next_page")
-                    .build(app)?,
-            )
-            .separator()
-    } else {
-        // 只有一页（或无记录）时，不展示分页信息和按钮
-        open_recent_builder.separator()
-    };
+    if !slice.is_empty() {
+        open_recent_builder = open_recent_builder.separator();
+    }
 
+    // 清空最近：仍然保留在菜单层
     open_recent_builder = open_recent_builder.item(
         &MenuItemBuilder::new("Clear Recent")
             .id("clear_recent")
+            .build(app)?,
+    );
+
+    // More...：打开前端最近文件模态窗（open_recent_dialog 命令）
+    open_recent_builder = open_recent_builder.item(
+        &MenuItemBuilder::new("More...")
+            .id("open_recent_dialog")
             .build(app)?,
     );
 
@@ -2888,38 +2869,9 @@ pub fn run() {
           return;
         }
 
-        // 最近文件分页控制：上一页 / 下一页
-        if action == "recent_prev_page" || action == "recent_next_page" {
-          let app_handle = app.clone();
-          let action_id = action.to_string();
-          tauri::async_runtime::spawn(async move {
-            if let Ok(list) = read_recent_store(&app_handle).await {
-              let total = list.len();
-              let page_size = RECENT_PAGE_SIZE as u32;
-              let max_page = if total == 0 {
-                0
-              } else {
-                ((total.saturating_sub(1)) as u32) / page_size
-              };
-
-              {
-                let mut page = RECENT_PAGE.lock().unwrap();
-                if action_id == "recent_prev_page" && *page > 0 {
-                  *page -= 1;
-                } else if action_id == "recent_next_page"
-                  && *page < max_page {
-                    *page += 1;
-                  }
-              }
-
-              refresh_app_menu(&app_handle).await;
-            }
-          });
-          return;
-        }
-
-        // 分页信息项：点击时忽略
-        if action == "recent_page_info" {
+        // File → Open Recent: More... 打开前端最近文件模态窗
+        if action == "open_recent_dialog" {
+          let _ = app.emit("menu://action", "open_recent_dialog".to_string());
           return;
         }
 
