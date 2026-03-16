@@ -39,6 +39,7 @@ export function EditorPane(props: EditorPaneProps) {
     onEditorReady,
   } = props
 
+  // 处理外部聚焦请求：滚动到指定行或包含特定文本
   useEffect(() => {
     if (!focusRequest) return
     const view = editorViewRef.current

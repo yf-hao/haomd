@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, forwardRef } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import type { Extension } from '@codemirror/state'
 import type { EditorView } from '@codemirror/view'
@@ -17,7 +17,10 @@ export type CodeEditorProps = {
   editorZoom?: number
 }
 
-export function CodeEditor(props: Readonly<CodeEditorProps>) {
+export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(function CodeEditor(
+  props,
+  ref,
+) {
   const { value, onChange, onCursorChange, readOnly, extensions, className, placeholder, onViewReady, onFoldRegionsChange, editorZoom } = props
 
   const mergedExtensions = useMemo(() => {
@@ -40,6 +43,7 @@ export function CodeEditor(props: Readonly<CodeEditorProps>) {
 
   return (
     <div
+      ref={ref}
       className={className}
       style={{
         '--haomd-editor-font-size': `${fontSizePx}px`,
@@ -62,6 +66,6 @@ export function CodeEditor(props: Readonly<CodeEditorProps>) {
       />
     </div>
   )
-}
+})
 
 export default CodeEditor

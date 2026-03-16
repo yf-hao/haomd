@@ -42,6 +42,10 @@ const baseTheme = EditorView.theme(
     '.cm-content': {
       caretColor: '#7ad7ff',
       padding: '12px 14px 12px 14px',
+      flex: '1 1 0',
+      minHeight: '100%',
+      // 在文档末尾预留一段"虚拟空白"，避免最后一行贴着底部
+      paddingBottom: '25vh',
     },
     '.cm-gutters': {
       backgroundColor: '#10121d',
@@ -78,8 +82,6 @@ const baseTheme = EditorView.theme(
       backgroundColor: 'transparent',
       lineHeight: '1.6',
       padding: 0,
-      // 在文档末尾预留一段“虚拟空白”，避免最后一行贴着底部
-      paddingBottom: '25vh',
     },
     '&.cm-editor.cm-focused': {
       outline: 'none',

@@ -69,6 +69,10 @@ const GlobalMemoryDialogLazy = lazy(() =>
   import('../modules/ai/ui/GlobalMemoryDialog').then((m) => ({ default: m.GlobalMemoryDialog }))
 )
 
+const RecentFilesDialogLazy = lazy(() =>
+  import('./RecentFilesDialog').then((m) => ({ default: m.RecentFilesDialog }))
+)
+
 export type LeftPanelId = 'files' | 'outline' | 'pdf' | 'sessions' | null
 export type InitialWorkspaceAction = 'new' | 'open' | 'open_folder' | 'open_recent' | null
 
@@ -178,6 +182,39 @@ export function WorkspaceShell({
 
   const isPreviewVisible = effectiveLayout !== 'editor-only'
   const prevIsPreviewVisibleRef = useRef(isPreviewVisible)
+
+  // 在 editor/preview 区域统一处理滚轮：如果鼠标横坐标落在编辑器列内，就把滚动量转发给编辑器的 .cm-scroller
+  useEffect(() => {
+    const root = workspaceRef.current as HTMLElement | null
+    if (!root) return
+
+    const handleWheel = (e: WheelEvent) => {
+      const editorPane = root.querySelector<HTMLElement>('.pane.editor-pane')
+      if (!editorPane) return
+
+      const rect = editorPane.getBoundingClientRect()
+      const x = e.clientX
+
+      // 只有当鼠标在编辑器这一列（包括右侧空白、分割线附近）时才处理
+      if (x < rect.left || x > rect.right) return
+
+      const scroller = editorPane.querySelector<HTMLElement>('.cm-scroller')
+      if (!scroller) return
+
+      if (e.deltaY === 0) return
+      const prevTop = scroller.scrollTop
+      scroller.scrollTop += e.deltaY
+      if (scroller.scrollTop !== prevTop) {
+        e.preventDefault()
+      }
+    }
+
+    root.addEventListener('wheel', handleWheel, { passive: false })
+
+    return () => {
+      root.removeEventListener('wheel', handleWheel as EventListener)
+    }
+  }, [workspaceRef])
 
   // Sidebar resize hook
   const {

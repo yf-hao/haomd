@@ -20,6 +20,12 @@
   width: 100%;
 }
 
+.code-editor .cm-root {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
 .code-editor .cm-editor {
   height: 100%;
   width: 100%;
@@ -44,7 +50,9 @@
   height: 0;
 }
 
-/* 可选：给内容留一点右侧内边距，避免文字贴边 */
+/* cm-content 的 flex/min-height 已在 extensions.ts theme 中设置 */
 .code-editor .cm-content {
   padding-right: 8px;
+  flex: 1 1 0 !important;
+  min-height: 100% !important;
 }
