@@ -36,6 +36,7 @@ export function RecentFilesDialog({ open, onClose, onOpenFile }: RecentFilesDial
   const [selectedIndex, setSelectedIndex] = useState(0)
 
   const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const listRef = useRef<HTMLUListElement | null>(null)
 
   const loadRecent = useCallback(async () => {
     setLoading(true)
@@ -108,6 +109,18 @@ export function RecentFilesDialog({ open, onClose, onOpenFile }: RecentFilesDial
     })
   }, [pageItems.length])
 
+  // 选中项变化时，自动滚动到可视区域
+  useEffect(() => {
+    if (!open) return
+    if (!pageItems.length) return
+    if (selectedIndex < 0 || selectedIndex >= pageItems.length) return
+    const listEl = listRef.current
+    if (!listEl) return
+    const itemEl = listEl.children[selectedIndex] as HTMLElement | undefined
+    if (!itemEl) return
+    itemEl.scrollIntoView({ block: 'nearest' })
+  }, [open, pageItems.length, selectedIndex])
+
   const handleClose = useCallback(() => {
     onClose()
   }, [onClose])
@@ -133,6 +146,24 @@ export function RecentFilesDialog({ open, onClose, onOpenFile }: RecentFilesDial
       return
     }
 
+    // 左右键：翻页
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault()
+      if (e.key === 'ArrowLeft') {
+        if (currentPage > 1) {
+          setCurrentPage((prev) => (prev > 1 ? prev - 1 : prev))
+          setSelectedIndex(0)
+        }
+      } else {
+        if (currentPage < totalPages) {
+          setCurrentPage((prev) => (prev < totalPages ? prev + 1 : prev))
+          setSelectedIndex(0)
+        }
+      }
+      return
+    }
+
+    // 上下键：在当前页内移动高亮项
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       e.preventDefault()
       if (!pageItems.length) return
@@ -144,6 +175,21 @@ export function RecentFilesDialog({ open, onClose, onOpenFile }: RecentFilesDial
         if (next >= pageItems.length) return pageItems.length - 1
         return next
       })
+    }
+  }
+
+  const handleSearchKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (
+      e.key === 'Escape' ||
+      e.key === 'Enter' ||
+      e.key === 'ArrowUp' ||
+      e.key === 'ArrowDown' ||
+      e.key === 'ArrowLeft' ||
+      e.key === 'ArrowRight'
+    ) {
+      // 复用同一套键盘逻辑，但阻止事件继续冒泡，避免重复处理
+      handleKeyDown(e as unknown as KeyboardEvent<HTMLDivElement>)
+      e.stopPropagation()
     }
   }
 
@@ -159,36 +205,36 @@ export function RecentFilesDialog({ open, onClose, onOpenFile }: RecentFilesDial
         tabIndex={0}
         onKeyDown={handleKeyDown}
       >
-        <div className="modal-title">最近文件</div>
+        <div className="modal-title">Recent files</div>
         <div className="modal-content recent-dialog-content">
           <div className="recent-dialog-toolbar">
             <input
               ref={searchInputRef}
               type="text"
               className="recent-dialog-search-input"
-              placeholder="按文件名或路径搜索…"
+              placeholder="Search by name or path…"
               value={query}
               onChange={(e) => {
                 setQuery(e.target.value)
                 setCurrentPage(1)
                 setSelectedIndex(0)
               }}
+              onKeyDown={handleSearchKeyDown}
             />
-            <div className="recent-dialog-hint">↑/↓ 选择，Enter 打开，Esc 关闭</div>
           </div>
 
           <div className="recent-dialog-list">
             {loading && (
-              <div className="recent-dialog-status">正在加载最近文件…</div>
+              <div className="recent-dialog-status">Loading recent files…</div>
             )}
             {!loading && error && (
               <div className="recent-dialog-status recent-dialog-error">{error}</div>
             )}
             {!loading && !error && pageItems.length === 0 && (
-              <div className="recent-dialog-status">没有匹配的最近文件</div>
+              <div className="recent-dialog-status">No matching recent files</div>
             )}
             {!loading && !error && pageItems.length > 0 && (
-              <ul>
+              <ul ref={listRef}>
                 {pageItems.map((item, index) => {
                   const name = item.displayName || item.path.split(/[/\\]/).pop() || item.path
                   const isActive = index === selectedIndex
@@ -222,9 +268,9 @@ export function RecentFilesDialog({ open, onClose, onOpenFile }: RecentFilesDial
               }}
               disabled={currentPage <= 1}
             >
-              上一页
+              Prev
             </Button>
-            <span className="recent-dialog-page-label">Page {pageLabel}</span>
+            <span className="recent-dialog-page-label">{pageLabel}</span>
             <Button
               variant="tertiary"
               onClick={() => {
@@ -233,12 +279,12 @@ export function RecentFilesDialog({ open, onClose, onOpenFile }: RecentFilesDial
               }}
               disabled={currentPage >= totalPages}
             >
-              下一页
+              Next
             </Button>
           </div>
           <div className="recent-dialog-actions-right">
             <Button variant="tertiary" onClick={handleClose}>
-              关闭
+              Close
             </Button>
           </div>
         </div>

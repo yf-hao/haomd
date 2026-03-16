@@ -1114,6 +1114,117 @@ button:disabled {
   animation: slideIn 0.2s ease;
 }
 
+/* 最近文件弹窗：高度不超过屏幕，高内容时内部滚动 */
+.modal.modal-recent {
+  /* 高度始终为视口高度减去上下留白 */
+  height: calc(100vh - 96px);
+  width: 640px;
+  max-width: calc(100vw - 64px);
+  display: flex;
+  flex-direction: column;
+}
+
+.modal.modal-recent .modal-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 最近文件列表：去掉 ul 默认圆点和缩进 */
+.recent-dialog-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.recent-dialog-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* 最近文件弹窗顶部工具栏与搜索框 */
+.recent-dialog-toolbar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.recent-dialog-search-input {
+  flex: 1;
+  height: 32px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  background: rgba(15, 23, 42, 0.95);
+  color: #e5e7eb;
+  font-size: 13px;
+  outline: none;
+}
+
+.recent-dialog-search-input::placeholder {
+  color: #6b7280;
+}
+
+.recent-dialog-search-input:focus {
+  border-color: rgba(59, 130, 246, 0.9);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.5);
+}
+
+/* 最近文件列表项样式与高亮态 */
+.recent-dialog-item {
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.recent-dialog-item:hover {
+  background: rgba(148, 163, 184, 0.18);
+}
+
+.recent-dialog-item.active {
+  background: rgba(59, 130, 246, 0.35);
+  color: #f9fafb;
+}
+
+.recent-dialog-item-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recent-dialog-item-path {
+  font-size: 11px;
+  color: #9ca3af;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recent-dialog-item.active .recent-dialog-item-path {
+  color: #e5e7eb;
+}
+
+.recent-dialog-pagination {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.recent-dialog-page-label {
+  font-size: 13px;
+  color: #9ca3af;
+}
+
 .modal-confirm {
   min-width: 240px;
   max-width: 340px;
