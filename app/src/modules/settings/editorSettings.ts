@@ -41,8 +41,8 @@ const defaultHugeDoc: Required<HugeDocSettings> = {
 }
 
 const defaultAiChatUi: AiChatUiSettings = {
-  maxVisibleMessagesDialog: 10,
-  maxVisibleMessagesPane: 10,
+  maxVisibleMessagesDialog: 50,
+  maxVisibleMessagesPane: 50,
 }
 
 let cachedSettings: EditorSettings | null = null
