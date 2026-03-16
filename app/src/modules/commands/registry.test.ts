@@ -331,7 +331,6 @@ describe('command registry - ai commands', () => {
 
     expect(ctx.setStatusMessage).toHaveBeenCalledWith('chat ok')
     expect(ctx.setStatusMessage).toHaveBeenCalledWith('file ok')
-    expect(ctx.setStatusMessage).toHaveBeenCalledWith('sel ok')
     expect(ctx.openAiChatDialog).toHaveBeenCalled()
   })
 
@@ -344,13 +343,14 @@ describe('command registry - ai commands', () => {
     expect(ctx.setStatusMessage).toHaveBeenCalledWith('AI Chat 未配置：AI 客户端未初始化')
   })
 
-  it('ai_ask_selection should show message when no selection text', async () => {
+  it('ai_ask_selection should do nothing when no selection text', async () => {
     const ctx = createMockCtx()
     ctx.getCurrentSelectionText = vi.fn().mockReturnValue('  ')
     const registry = createCommandRegistry(ctx)
 
     await registry.ai_ask_selection()
-    expect(ctx.setStatusMessage).toHaveBeenCalledWith('当前没有选中的文本')
+    expect(ctx.openAiChatDialog).not.toHaveBeenCalled()
+    expect(ctx.setStatusMessage).not.toHaveBeenCalled()
   })
 
   it('ai_session_globalMemory commands should call openGlobalMemoryDialog or show fallback', () => {
