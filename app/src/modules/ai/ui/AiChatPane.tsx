@@ -151,24 +151,19 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
       if (!text) return
       const el = inputRef.current
       if (!el) return
-
       if (typeof document !== 'undefined') {
         const active = document.activeElement
         if (active !== el) return
       }
-
       const start = el.selectionStart ?? el.value.length
       const end = el.selectionEnd ?? el.value.length
       const value = el.value
-
       const next = value.slice(0, start) + text + value.slice(end)
       el.value = next
       setInput(next)
-
       const pos = start + text.length
       el.setSelectionRange(pos, pos)
     })
-
     return () => {
       unPaste()
     }

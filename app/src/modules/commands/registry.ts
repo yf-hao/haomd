@@ -514,22 +514,12 @@ function createAiCommands(ctx: AiCommandContext): CommandRegistry {
       })
     },
     ai_ask_selection: async () => {
-      if (!ctx.aiClient) {
-        ctx.setStatusMessage('Ask AI About Selection 未配置：AI 客户端未初始化')
-        return
-      }
+      if (!ctx.aiClient) return
       const resp = await ctx.aiClient.askAboutSelection()
-      ctx.setStatusMessage(resp.message)
       if (!resp.ok) return
-      if (!ctx.openAiChatDialog || !ctx.getCurrentSelectionText) {
-        ctx.setStatusMessage('当前编辑器状态不可用，无法发起 Ask AI About Selection')
-        return
-      }
+      if (!ctx.openAiChatDialog || !ctx.getCurrentSelectionText) return
       const selection = ctx.getCurrentSelectionText()?.trim()
-      if (!selection) {
-        ctx.setStatusMessage('当前没有选中的文本')
-        return
-      }
+      if (!selection) return
       ctx.openAiChatDialog({
         entryMode: 'selection',
         initialContext: { type: 'selection', content: selection },

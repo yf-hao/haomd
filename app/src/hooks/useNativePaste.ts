@@ -19,8 +19,9 @@ export function useNativePaste(
         const active = document.activeElement
 
         // 焦点在可编辑输入控件上（如 search-bar 输入框）：优先将文本粘贴到该输入内
+        // textarea 由各组件自行处理（通过 onNativePaste + setInput），此处仅处理 input
         if (active && !(view && view.dom.contains(active))) {
-          if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
+          if (active instanceof HTMLInputElement) {
             const el = active
             const start = el.selectionStart ?? el.value.length
             const end = el.selectionEnd ?? el.value.length
@@ -36,7 +37,6 @@ export function useNativePaste(
               // 某些类型的输入控件可能不支持 setSelectionRange，忽略即可
             }
 
-            // 触发 input 事件，通知 React 等上层受控逻辑
             el.dispatchEvent(new Event('input', { bubbles: true }))
             console.log('[native://paste] inserted into active input outside editor')
             return
