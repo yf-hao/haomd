@@ -16,21 +16,27 @@ export type AutoSaveHandle = {
   cancel: () => void
 }
 
-export function createAutoSaver(options: AutoSaveCallbacks & { debounceMs?: number; idleMs?: number; enabled?: boolean }): AutoSaveHandle {
+export function createAutoSaver(
+  options: AutoSaveCallbacks & { debounceMs?: number; idleMs?: number; enabled?: boolean; forceIntervalMs?: number },
+): AutoSaveHandle {
   const debounceMs = options.debounceMs ?? filesConfig.autoSave.debounceMs
   const idleMs = options.idleMs ?? filesConfig.autoSave.idleMs
   const enabled = options.enabled ?? filesConfig.autoSave.enabled
+  const forceIntervalMs = options.forceIntervalMs
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
   let idleTimer: ReturnType<typeof setTimeout> | null = null
+  let intervalTimer: ReturnType<typeof setInterval> | null = null
   let running = false
   let cancelled = false
 
   const clearTimers = () => {
     if (debounceTimer) clearTimeout(debounceTimer)
     if (idleTimer) clearTimeout(idleTimer)
+    if (intervalTimer) clearInterval(intervalTimer)
     debounceTimer = null
     idleTimer = null
+    intervalTimer = null
   }
 
   const doSave = async () => {
@@ -61,6 +67,13 @@ export function createAutoSaver(options: AutoSaveCallbacks & { debounceMs?: numb
     idleTimer = setTimeout(() => {
       void doSave()
     }, idleMs)
+  }
+
+  // 强制间隔保存：不依赖外部调用 schedule，每隔指定时间尝试保存一次
+  if (forceIntervalMs && enabled && !cancelled) {
+    intervalTimer = setInterval(() => {
+      void doSave()
+    }, forceIntervalMs)
   }
 
   const flush = async () => {

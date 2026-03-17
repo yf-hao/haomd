@@ -269,6 +269,7 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
       enabled: filePath !== DEFAULT_PATH,
       debounceMs: 120000,
       idleMs: 120000,
+      forceIntervalMs: 120000,
       onStart: () => {
         setSaveStatus('saving')
         setStatusMessage('自动保存中...')
