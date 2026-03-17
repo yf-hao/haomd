@@ -12,7 +12,7 @@ export type StandaloneFileItem = {
 
 export type SidebarContextTargetKind = 'standalone-file' | 'folder-root' | 'tree-file' | 'tree-dir'
 
-export type SidebarContextAction = 'open' | 'remove' | 'delete' | 'open-terminal' | 'open-in-file-manager'
+export type SidebarContextAction = 'open' | 'remove' | 'delete' | 'rename' | 'open-terminal' | 'open-in-file-manager'
 
 export type SidebarContextActionPayload = {
   path: string
@@ -929,7 +929,6 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                   const name = rootPath.split(/[/\\]/).pop() ?? rootPath
                   const isExpandedRoot = !!expanded[rootPath]
                   const isActiveRoot = activePath === rootPath
-                  const isRenamingRoot = inlineRenamePath === rootPath
                   const children = treesByRoot[rootPath] ?? []
                   return (
                     <li key={rootPath}>
