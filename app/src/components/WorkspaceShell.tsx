@@ -4,7 +4,6 @@ import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { ConflictModal } from './ConflictModal'
 import { ConfirmDialog } from './ConfirmDialog'
-import Toast from './Toast'
 import PreviewErrorBoundary from './PreviewErrorBoundary'
 import { InsertTableDialog } from './InsertTableDialog'
 import { AboutDialog } from './AboutDialog'
@@ -84,6 +83,8 @@ export interface WorkspaceShellProps {
   initialOpenRecentIsFolder?: boolean | null
   onInitialActionHandled?: () => void
   onDocumentStatsChange?: (stats: { charCount: number | null }) => void
+  /** 将 WorkspaceShell 内部的 statusMessage 透出给上层 App 用于状态栏展示 */
+  onStatusMessageChange?: (msg: string) => void
 }
 
 const countDocumentChars = (text: string): number => {
@@ -103,6 +104,7 @@ export function WorkspaceShell({
   initialOpenRecentIsFolder,
   onInitialActionHandled,
   onDocumentStatsChange,
+  onStatusMessageChange,
 }: WorkspaceShellProps) {
   const [markdown, setMarkdown] = useState(seed)
   const [previewValue, setPreviewValue] = useState(seed)
@@ -435,6 +437,13 @@ export function WorkspaceShell({
       }
     }
   })
+
+  // 将内部 statusMessage 同步到上层 App 的状态栏
+  useEffect(() => {
+    if (typeof onStatusMessageChange === 'function') {
+      onStatusMessageChange(statusMessage)
+    }
+  }, [statusMessage, onStatusMessageChange])
 
   // PDF Panel hook
   const {
@@ -2093,7 +2102,6 @@ export function WorkspaceShell({
         )}
 
         <AboutDialog open={aboutOpen} onClose={closeAboutDialog} />
-        <Toast message={statusMessage} onDismiss={() => setStatusMessage('')} />
       </>
     </AiChatCommandBridgeContext.Provider>
   )
