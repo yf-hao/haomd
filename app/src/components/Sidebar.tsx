@@ -47,6 +47,12 @@ export type SidebarProps = {
   onInlineNewFolderConfirm?: (name: string) => void
   /** 行内新建文件夹：取消命名 */
   onInlineNewFolderCancel?: () => void
+  /** 行内重命名：当前处于重命名状态的文件或文件夹完整路径 */
+  inlineRenamePath?: string | null
+  /** 行内重命名：确认新名称 */
+  onInlineRenameConfirm?: (name: string) => void
+  /** 行内重命名：取消 */
+  onInlineRenameCancel?: () => void
   activePath?: string | null
   panelWidth?: number
   highlightedPaths?: string[]
@@ -76,38 +82,53 @@ type TreeNodeProps = {
   inlineNewFolderDir?: string | null
   onInlineNewFolderConfirm?: (name: string) => void
   onInlineNewFolderCancel?: () => void
+  inlineRenamePath?: string | null
+  onInlineRenameConfirm?: (name: string) => void
+  onInlineRenameCancel?: () => void
 }
 
-const TreeNode = memo(function TreeNode({ node, level, expanded, onToggle, onFileClick, onDirClick, activePath, highlightedPaths, onFileVisited, onContextMenu, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel, inlineNewFolderDir, onInlineNewFolderConfirm, onInlineNewFolderCancel }: TreeNodeProps) {
+const TreeNode = memo(function TreeNode({ node, level, expanded, onToggle, onFileClick, onDirClick, activePath, highlightedPaths, onFileVisited, onContextMenu, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel, inlineNewFolderDir, onInlineNewFolderConfirm, onInlineNewFolderCancel, inlineRenamePath, onInlineRenameConfirm, onInlineRenameCancel }: TreeNodeProps) {
   const isExpanded = !!expanded[node.path]
   const isActive = activePath === node.path
   const isHighlighted = highlightedPaths?.includes(node.path.replace(/\\/g, '/')) ?? false
 
   const paddingLeft = 8 + level * 12
 
+  const isRenamingThisNode = inlineRenamePath === node.path
+
   if (node.kind === 'dir') {
     return (
       <div>
-        <div
-          className={`tree-row dir ${isActive ? 'active' : ''}`}
-          style={{ paddingLeft }}
-          onClick={() => {
-            onToggle(node.path)
-            onDirClick?.(node.path)
-          }}
-          onContextMenu={(e) => {
-            if (!onContextMenu) return
-            e.preventDefault()
-            e.stopPropagation()
-            onContextMenu(e, { path: node.path, kind: 'tree-dir' })
-          }}
-        >
-          <span
-            className={`tree-icon tree-icon-chevron ${isExpanded ? 'expanded' : 'collapsed'}`}
-            aria-hidden="true"
+        {isRenamingThisNode ? (
+          <InlineRenameRow
+            level={level}
+            isFolder={true}
+            initialName={node.name}
+            onConfirm={onInlineRenameConfirm}
+            onCancel={onInlineRenameCancel}
           />
-          <span className="tree-name">{node.name}</span>
-        </div>
+        ) : (
+          <div
+            className={`tree-row dir ${isActive ? 'active' : ''}`}
+            style={{ paddingLeft }}
+            onClick={() => {
+              onToggle(node.path)
+              onDirClick?.(node.path)
+            }}
+            onContextMenu={(e) => {
+              if (!onContextMenu) return
+              e.preventDefault()
+              e.stopPropagation()
+              onContextMenu(e, { path: node.path, kind: 'tree-dir' })
+            }}
+          >
+            <span
+              className={`tree-icon tree-icon-chevron ${isExpanded ? 'expanded' : 'collapsed'}`}
+              aria-hidden="true"
+            />
+            <span className="tree-name">{node.name}</span>
+          </div>
+        )}
         {isExpanded && (
           <>
             {inlineNewFileDir === node.path && (
@@ -144,6 +165,9 @@ const TreeNode = memo(function TreeNode({ node, level, expanded, onToggle, onFil
                 inlineNewFolderDir={inlineNewFolderDir}
                 onInlineNewFolderConfirm={onInlineNewFolderConfirm}
                 onInlineNewFolderCancel={onInlineNewFolderCancel}
+                inlineRenamePath={inlineRenamePath}
+                onInlineRenameConfirm={onInlineRenameConfirm}
+                onInlineRenameCancel={onInlineRenameCancel}
               />
             ))}
           </>
@@ -153,6 +177,18 @@ const TreeNode = memo(function TreeNode({ node, level, expanded, onToggle, onFil
   }
 
   const className = `tree-row file ${isActive ? 'active' : ''} ${isHighlighted ? 'highlighted' : ''}`.trim()
+
+  if (isRenamingThisNode) {
+    return (
+      <InlineRenameRow
+        level={level}
+        isFolder={false}
+        initialName={node.name}
+        onConfirm={onInlineRenameConfirm}
+        onCancel={onInlineRenameCancel}
+      />
+    )
+  }
 
   return (
     <div
@@ -238,7 +274,75 @@ function InlineNewFileRow({ level, onConfirm, onCancel, isFolder }: InlineNewFil
 }
 
 
-export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, onToggle, onFileClick, onDirClick, onContextAction, onToolbarNewFileInCurrentFolder, onToolbarNewFolderInCurrentFolder, onToolbarRefreshCurrentFolder, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel, inlineNewFolderDir, onInlineNewFolderConfirm, onInlineNewFolderCancel, activePath, panelWidth, highlightedPaths, onFileVisited, onRequestConfirmDeleteFileVirtualFolder, onNotify }: SidebarProps) {
+type InlineRenameRowProps = {
+  level: number
+  isFolder: boolean
+  initialName: string
+  onConfirm?: (name: string) => void
+  onCancel?: () => void
+}
+
+function InlineRenameRow({ level, isFolder, initialName, onConfirm, onCancel }: InlineRenameRowProps) {
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  const paddingLeft = 8 + level * 12
+
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.focus()
+      inputRef.current.select()
+    }
+  }, [])
+
+  const finish = (commit: boolean, value: string) => {
+    const name = value.trim()
+    if (!commit || !name) {
+      onCancel?.()
+    } else {
+      onConfirm?.(name)
+    }
+
+    // 重命名结束后，将焦点主动留在 Sidebar，方便继续按 Enter
+    if (inputRef.current) {
+      const sidebarEl = inputRef.current.closest('.sidebar') as HTMLElement | null
+      if (sidebarEl && typeof sidebarEl.focus === 'function') {
+        sidebarEl.focus()
+      }
+    }
+  }
+
+  const icon = isFolder ? '📁' : '📄'
+  const rowClass = isFolder ? 'tree-row dir rename-editing' : 'tree-row file rename-editing'
+
+  return (
+    <div
+      className={rowClass}
+      style={{ paddingLeft }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <span className="tree-icon">{icon}</span>
+      <input
+        ref={inputRef}
+        className="tree-name-input"
+        defaultValue={initialName}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            finish(true, e.currentTarget.value)
+          } else if (e.key === 'Escape') {
+            e.preventDefault()
+            finish(false, e.currentTarget.value)
+          }
+        }}
+        onBlur={(e) => {
+          finish(true, e.currentTarget.value)
+        }}
+      />
+    </div>
+  )
+}
+
+
+export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, onToggle, onFileClick, onDirClick, onContextAction, onToolbarNewFileInCurrentFolder, onToolbarNewFolderInCurrentFolder, onToolbarRefreshCurrentFolder, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel, inlineNewFolderDir, onInlineNewFolderConfirm, onInlineNewFolderCancel, inlineRenamePath, onInlineRenameConfirm, onInlineRenameCancel, activePath, panelWidth, highlightedPaths, onFileVisited, onRequestConfirmDeleteFileVirtualFolder, onNotify }: SidebarProps) {
   const hasStandalone = standaloneFiles.length > 0
   const hasTree = folderRoots.some((rootPath) => (treesByRoot[rootPath]?.length ?? 0) > 0)
 
@@ -588,6 +692,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
     <aside
       className="sidebar"
       style={asideStyle}
+      tabIndex={-1}
       onClick={closeMenu}
       onContextMenu={(e) => {
         e.preventDefault()
@@ -642,27 +747,44 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
             )}
 
             <ul className="sidebar-file-list">
-              {rootFiles.map((file) => (
-                <li
-                  key={file.path}
-                  className={`sidebar-file-row tree-row file ${activePath === file.path ? 'active' : ''}`}
-                  onClick={() => onFileClick(file.path)}
-                  onContextMenu={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    setMenuState({
-                      visible: true,
-                      x: e.clientX,
-                      y: e.clientY,
-                      target: { path: file.path, kind: 'standalone-file' },
-                    })
-                  }}
-                  title={file.path}
-                >
-                  <span className="tree-icon">📄</span>
-                  <span className="tree-name">{file.name}</span>
-                </li>
-              ))}
+              {rootFiles.map((file) => {
+                const isActive = activePath === file.path
+                const isRenaming = inlineRenamePath === file.path
+                if (isRenaming) {
+                  return (
+                    <li key={file.path} className="sidebar-file-row">
+                      <InlineRenameRow
+                        level={0}
+                        isFolder={false}
+                        initialName={file.name}
+                        onConfirm={onInlineRenameConfirm}
+                        onCancel={onInlineRenameCancel}
+                      />
+                    </li>
+                  )
+                }
+                return (
+                  <li
+                    key={file.path}
+                    className={`sidebar-file-row tree-row file ${isActive ? 'active' : ''}`}
+                    onClick={() => onFileClick(file.path)}
+                    onContextMenu={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setMenuState({
+                        visible: true,
+                        x: e.clientX,
+                        y: e.clientY,
+                        target: { path: file.path, kind: 'standalone-file' },
+                      })
+                    }}
+                    title={file.path}
+                  >
+                    <span className="tree-icon">📄</span>
+                    <span className="tree-name">{file.name}</span>
+                  </li>
+                )
+              })}
             </ul>
 
             {fileVirtualFolders.length > 0 && (
@@ -807,6 +929,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                   const name = rootPath.split(/[/\\]/).pop() ?? rootPath
                   const isExpandedRoot = !!expanded[rootPath]
                   const isActiveRoot = activePath === rootPath
+                  const isRenamingRoot = inlineRenamePath === rootPath
                   const children = treesByRoot[rootPath] ?? []
                   return (
                     <li key={rootPath}>
@@ -870,6 +993,9 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                               inlineNewFolderDir={inlineNewFolderDir}
                               onInlineNewFolderConfirm={onInlineNewFolderConfirm}
                               onInlineNewFolderCancel={onInlineNewFolderCancel}
+                              inlineRenamePath={inlineRenamePath}
+                              onInlineRenameConfirm={onInlineRenameConfirm}
+                              onInlineRenameCancel={onInlineRenameCancel}
                             />
                           ))}
                         </div>
@@ -919,6 +1045,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
             }
 
             if (isFileTarget || isTreeDir) {
+              items.push({ id: 'rename', label: 'Rename', onClick: () => triggerContextAction('rename') })
               items.push({ id: 'delete', label: 'Delete…', onClick: () => triggerContextAction('delete') })
             }
             if (isStandaloneFile) {

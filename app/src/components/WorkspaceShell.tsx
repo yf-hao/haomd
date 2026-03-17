@@ -25,7 +25,7 @@ import { useTabs } from '../hooks/useTabs'
 import { useCommandSystem } from '../hooks/useCommandSystem'
 import { useSidebar } from '../hooks/useSidebar'
 import { onOpenRecentFile } from '../modules/platform/menuEvents'
-import { createFolder, deleteFsEntry, listFolder, writeFile } from '../modules/files/service'
+import { createFolder, deleteFsEntry, listFolder, writeFile, renameFsEntry } from '../modules/files/service'
 import { usePdfPanel } from '../hooks/usePdfPanel'
 import { useAiChatPanel } from '../hooks/useAiChatPanel'
 import { useHugeDoc } from '../hooks/useHugeDoc'
@@ -145,6 +145,7 @@ export function WorkspaceShell({
   const [foldRegions, setFoldRegions] = useState<{ fromLine: number; toLine: number }[]>([])
   const [inlineNewFileDir, setInlineNewFileDir] = useState<string | null>(null)
   const [inlineNewFolderDir, setInlineNewFolderDir] = useState<string | null>(null)
+  const [inlineRenamePath, setInlineRenamePath] = useState<string | null>(null)
   const [focusRequest, setFocusRequest] = useState<{ localLine: number; searchText?: string } | null>(null)
   const [previewSelectionText, setPreviewSelectionText] = useState<string | null>(null)
   const pdfSelectionGetterRef = useRef<(() => string | null) | null>(null)
@@ -240,6 +241,7 @@ export function WorkspaceShell({
     updateTabContent,
     updateActiveContent,
     updateActiveMeta,
+    updateTabsPathByPath,
   } = useTabs({
     onRequestCloseCurrentTab: () => {
       if (closeCurrentTabRef.current) {
@@ -1196,6 +1198,144 @@ export function WorkspaceShell({
     setInlineNewFolderDir(null)
   }, [])
 
+  const startFsEntryInlineRename = useCallback(() => {
+    // 行内新建文件/文件夹时不再触发重命名，避免交叉状态
+    if (inlineNewFileDir || inlineNewFolderDir) {
+      return
+    }
+
+    const targetPath = selectedFolderPath ?? activeTab?.path ?? null
+    if (!targetPath) {
+      setStatusMessage('请先在左侧 File Browser 中选中文件或文件夹')
+      return
+    }
+
+    const normalizedTarget = targetPath.replace(/\\/g, '/')
+    const isRoot = sidebar.folderRoots.some((root) => {
+      const rootNorm = root.replace(/\\/g, '/')
+      return rootNorm === normalizedTarget
+    })
+    if (isRoot) {
+      setStatusMessage('暂不支持在 HaoMD 中重命名根目录，请在系统文件管理器中操作')
+      return
+    }
+
+    setInlineRenamePath(targetPath)
+  }, [inlineNewFileDir, inlineNewFolderDir, selectedFolderPath, activeTab?.path, sidebar.folderRoots, setStatusMessage])
+
+  const handleInlineRenameCancel = useCallback(() => {
+    setInlineRenamePath(null)
+  }, [])
+
+  const handleInlineRenameConfirm = useCallback((rawName: string) => {
+    const targetPath = inlineRenamePath
+    if (!targetPath) return
+
+    const name = rawName.trim()
+    if (!name) {
+      setStatusMessage('名称不能为空')
+      setInlineRenamePath(null)
+      return
+    }
+
+    if (/[\\/]/.test(name)) {
+      setStatusMessage('名称中不能包含路径分隔符')
+      return
+    }
+
+    const hasBackslash = targetPath.includes('\\')
+    const normalized = targetPath.replace(/\\/g, '/')
+    const lastSlash = normalized.lastIndexOf('/')
+    let baseDir: string | null = null
+    if (lastSlash >= 0) {
+      baseDir = normalized.slice(0, lastSlash)
+    }
+    const originalName = lastSlash >= 0 ? normalized.slice(lastSlash + 1) : normalized
+
+    const isDirTarget = !!selectedFolderPath && selectedFolderPath === targetPath
+
+    // 文件重命名时，如果用户未显式输入扩展名，则继承原扩展名
+    let finalName = name
+    if (!isDirTarget) {
+      const originalDot = originalName.lastIndexOf('.')
+      const originalHasExt = originalDot > 0 && originalDot < originalName.length - 1
+      const originalExt = originalHasExt ? originalName.slice(originalDot) : ''
+
+      const newDot = name.lastIndexOf('.')
+      const userHasExt = newDot > 0 && newDot < name.length - 1
+
+      if (!userHasExt && originalHasExt) {
+        finalName = `${name}${originalExt}`
+      }
+    }
+
+    const newPathNormalized = baseDir ? `${baseDir}/${finalName}` : finalName
+    let newPath = newPathNormalized
+    if (hasBackslash) {
+      newPath = newPath.replace(/\//g, '\\')
+    }
+
+    if (newPath === targetPath) {
+      setInlineRenamePath(null)
+      return
+    }
+
+    const normalizedDir = isDirTarget ? normalized : null
+
+    // 对目录：如果存在打开的子文件，暂不支持重命名，避免路径不一致
+    if (isDirTarget && normalizedDir) {
+      const hasOpenedUnderDir = tabs.some((t) => {
+        if (!t.path) return false
+        const tabNorm = t.path.replace(/\\/g, '/')
+        return tabNorm === normalizedDir || tabNorm.startsWith(normalizedDir + '/')
+      })
+      if (hasOpenedUnderDir) {
+        setStatusMessage('当前目录下存在已打开的文件，暂不支持重命名目录，请先关闭相关标签')
+        setInlineRenamePath(null)
+        return
+      }
+    }
+
+    void (async () => {
+      const resp = await renameFsEntry(targetPath, newPath)
+      if (!resp.ok) {
+        setStatusMessage(resp.error.message)
+        setInlineRenamePath(null)
+        return
+      }
+
+      // 更新选中目录
+      if (isDirTarget) {
+        setSelectedFolderPath(newPath)
+      }
+
+      const normalizedNew = newPath.replace(/\\/g, '/')
+      const parentRoot = sidebar.folderRoots.find((rootPath) => {
+        const rootNorm = rootPath.replace(/\\/g, '/')
+        return normalizedNew === rootNorm || normalizedNew.startsWith(rootNorm + '/')
+      }) ?? null
+
+      if (parentRoot) {
+        await sidebar.refreshFolderTree(parentRoot)
+      } else {
+        // 独立文件：从列表中移除旧路径并添加新路径
+        sidebar.removeStandaloneFile(targetPath)
+        sidebar.addStandaloneFile(newPath)
+      }
+
+      // 如果是文件：更新所有对应标签的路径和标题
+      if (!isDirTarget) {
+        updateTabsPathByPath(targetPath, newPath)
+        // 如果是当前活动标签对应的文件，同时同步 filePath
+        if (activeTab?.path === targetPath) {
+          setFilePath(newPath)
+        }
+      }
+
+      setInlineRenamePath(null)
+    })()
+  }, [inlineRenamePath, selectedFolderPath, tabs, setStatusMessage, setSelectedFolderPath, sidebar, activeTab, updateTabsPathByPath, setFilePath])
+
   const handleToolbarRefreshCurrentFolder = useCallback(() => {
     const baseFolder = getCurrentFolderForNewFile()
     if (!baseFolder) return
@@ -1270,8 +1410,35 @@ export function WorkspaceShell({
       if (!result.ok && result.message) {
         setStatusMessage(result.message)
       }
+    } else if (action === 'rename') {
+      // 禁止重命名根目录，保持与键盘 Enter 行为一致
+      if (kind === 'folder-root') {
+        setStatusMessage('暂不支持在 HaoMD 中重命名根目录，请在系统文件管理器中操作')
+        return
+      }
+
+      // 行内新建文件/文件夹时不再触发重命名，避免交叉状态
+      if (inlineNewFileDir || inlineNewFolderDir) {
+        return
+      }
+
+      // 对目录：同步更新选中的目录路径，便于后续逻辑判断目录重命名
+      if (kind === 'tree-dir') {
+        setSelectedFolderPath(path)
+      }
+
+      setInlineRenamePath(path)
     }
-  }, [openFileFromSidebar, sidebar, closeTabsByPath, setStatusMessage])
+  }, [
+    openFileFromSidebar,
+    sidebar,
+    closeTabsByPath,
+    setStatusMessage,
+    inlineNewFileDir,
+    inlineNewFolderDir,
+    setSelectedFolderPath,
+    setInlineRenamePath,
+  ])
 
   useEffect(() => {
     const unlisten = onOpenRecentFile(({ path, isFolder }) => {
@@ -1283,6 +1450,36 @@ export function WorkspaceShell({
     })
     return () => unlisten()
   }, [openRecentFileInNewTab, sidebar])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter') return
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return
+      if (activeLeftPanel !== 'files') return
+
+      if (typeof document !== 'undefined') {
+        const active = document.activeElement as HTMLElement | null
+        const sidebarEl = document.querySelector('.sidebar') as HTMLElement | null
+        if (!active || !sidebarEl || !sidebarEl.contains(active)) {
+          return
+        }
+      }
+
+      // 行内新建/重命名过程中不再触发新的重命名
+      if (inlineNewFileDir || inlineNewFolderDir || inlineRenamePath) {
+        return
+      }
+
+      e.preventDefault()
+      e.stopPropagation()
+      startFsEntryInlineRename()
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [activeLeftPanel, inlineNewFileDir, inlineNewFolderDir, inlineRenamePath, startFsEntryInlineRename])
 
   const isExportingHtmlRef = useRef(false)
   const isExportingPdfRef = useRef(false)
@@ -1619,6 +1816,9 @@ export function WorkspaceShell({
             inlineNewFolderDir={inlineNewFolderDir}
             onInlineNewFolderConfirm={handleInlineNewFolderConfirm}
             onInlineNewFolderCancel={handleInlineNewFolderCancel}
+            inlineRenamePath={inlineRenamePath}
+            onInlineRenameConfirm={handleInlineRenameConfirm}
+            onInlineRenameCancel={handleInlineRenameCancel}
             onRequestConfirmDeleteFileVirtualFolder={({ folder, onConfirm }) => {
               setConfirmDialog({
                 title: '删除虚拟文件夹',

@@ -148,6 +148,31 @@ export function useTabs(options?: UseTabsOptions) {
     [activeId],
   )
 
+  const updateTabsPathByPath = useCallback(
+    (oldPath: string, newPath: string) => {
+      if (!oldPath || !newPath) return
+      setTabs((prev) =>
+        prev.map((t) => {
+          if (t.path !== oldPath) return t
+          const nextTitle = deriveTitleFromPath(newPath)
+          if (import.meta.env.DEV) {
+            console.log('[useTabs.updateTabsPathByPath]', {
+              id: t.id,
+              old: { path: t.path, title: t.title },
+              next: { path: newPath, title: nextTitle },
+            })
+          }
+          return {
+            ...t,
+            path: newPath,
+            title: nextTitle,
+          }
+        }),
+      )
+    },
+    [],
+  )
+
   const closeCurrentTab = useCallback(
     () => {
       if (import.meta.env.DEV) {
@@ -225,5 +250,6 @@ export function useTabs(options?: UseTabsOptions) {
     updateTabContent,
     updateActiveContent,
     updateActiveMeta,
+    updateTabsPathByPath,
   }
 }

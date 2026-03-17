@@ -301,6 +301,27 @@ export async function deleteFsEntry(path: string, traceId = makeTraceId()): Prom
   }
 }
 
+export async function renameFsEntry(oldPath: string, newPath: string, traceId = makeTraceId()): Promise<Result<null>> {
+  if (!isTauri()) return notAvailable(traceId)
+  try {
+    const resp = await invoke<BackendResult<unknown>>('rename_fs_entry', {
+      // 同时传 camelCase 和 snake_case，兼容不同版本的后端签名
+      oldPath,
+      newPath,
+      traceId,
+      old_path: oldPath,
+      new_path: newPath,
+      trace_id: traceId,
+    })
+    if ('Ok' in resp) {
+      return { ok: true, data: null, traceId: resp.Ok.trace_id }
+    }
+    return { ok: false, error: toError(resp.Err.error, traceId) }
+  } catch (error) {
+    return normalizeInvokeError(error, traceId)
+  }
+}
+
 export async function createFolder(path: string, traceId = makeTraceId()): Promise<Result<null>> {
   if (!isTauri()) return notAvailable(traceId)
   try {

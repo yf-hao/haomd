@@ -1465,6 +1465,42 @@ async fn delete_fs_entry(
 }
 
 #[tauri::command]
+async fn rename_fs_entry(
+    _app: AppHandle,
+    old_path: String,
+    new_path: String,
+    trace_id: Option<String>,
+) -> ResultPayload<()> {
+    let trace = trace_id.unwrap_or_else(new_trace_id);
+
+    let src = match normalize_path(&old_path) {
+        Ok(p) => p,
+        Err(e) => return ResultPayload::Err { error: e },
+    };
+    let dst = match normalize_path(&new_path) {
+        Ok(p) => p,
+        Err(e) => return ResultPayload::Err { error: e },
+    };
+
+    if src == dst {
+        return ok((), trace);
+    }
+
+    match fs::rename(&src, &dst).await {
+        Ok(()) => ok((), trace),
+        Err(err) => {
+            use std::io::ErrorKind;
+            let code = match err.kind() {
+                ErrorKind::NotFound => ErrorCode::NotFound,
+                ErrorKind::AlreadyExists => ErrorCode::CONFLICT,
+                _ => ErrorCode::IoError,
+            };
+            err_payload(code, format!("重命名失败: {err}"), trace)
+        }
+    }
+}
+
+#[tauri::command]
 async fn create_folder(
     _app: AppHandle,
     path: String,
@@ -2977,6 +3013,7 @@ pub fn run() {
       create_folder,
       set_title,
       delete_fs_entry,
+      rename_fs_entry,
       quit_app,
       load_ai_settings,
       save_ai_settings,
