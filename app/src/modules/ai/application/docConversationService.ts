@@ -502,6 +502,15 @@ export type DocConversationService = {
     providerId?: string
     difyConversationId?: string
   }): Promise<void>
+  /**
+   * 将一批已构造好的 DocConversationMessage 追加到指定 docPath 对应的会话记录中。
+   * - 不覆盖现有消息，只做去重合并并按 timestamp 排序；
+   * - 如不存在记录，则创建一条新的记录。
+   */
+  appendImportedMessagesForDoc(options: {
+    docPath: string
+    messages: DocConversationMessage[]
+  }): Promise<void>
   clearByDocPath(docPath: string, kind?: DocConversationKind): Promise<void>
   compressByDocPath(docPath: string, kind?: DocConversationKind): Promise<void>
   getIndex(): Promise<ConversationIndexEntry[]>
@@ -571,6 +580,67 @@ export function createDocConversationService(): DocConversationService {
           difyConversationId,
           difyProviderConversations: providerId && difyConversationId ? { [providerId]: difyConversationId } : {},
           messages: nextMessages,
+        })
+      }
+
+      await persistForDocPath(docPath, records)
+      emitDocConversationEvent({ type: 'updated', docPath })
+    },
+
+    async appendImportedMessagesForDoc(options: {
+      docPath: string
+      messages: DocConversationMessage[]
+    }): Promise<void> {
+      const { docPath, messages } = options
+      if (!messages || messages.length === 0) {
+        return
+      }
+
+      const stableKey = await toStableDocPathKey(docPath)
+      const workspaceContext = await ensureLoadedForDocPath(docPath)
+      const records = workspaceContext ? workspaceContext.cache.records : getCache()
+
+      const idx = records.findIndex((r) => {
+        if (r.docPath === stableKey || r.docPath === docPath) return true
+        if (typeof r.docPath === 'string' && r.docPath.endsWith(`::${stableKey}`)) return true
+        return false
+      })
+
+      // 防御性：确保导入消息的 docPath 与稳定 key 对齐
+      const normalizedMessages: DocConversationMessage[] = messages.map((m) => ({
+        ...m,
+        docPath: stableKey,
+      }))
+
+      const now = Date.now()
+      const importedMaxTs = normalizedMessages.reduce((max, m) => (m.timestamp > max ? m.timestamp : max), 0)
+      const lastActiveAt = importedMaxTs || now
+
+      if (idx >= 0) {
+        const existing = records[idx]
+        const byId = new Map<string, DocConversationMessage>()
+        for (const m of existing.messages) {
+          byId.set(m.id, m)
+        }
+        for (const m of normalizedMessages) {
+          byId.set(m.id, m)
+        }
+        const mergedMessages = Array.from(byId.values()).sort((a, b) => a.timestamp - b.timestamp)
+
+        records[idx] = {
+          ...existing,
+          docPath: stableKey,
+          lastActiveAt: Math.max(existing.lastActiveAt, lastActiveAt),
+          messages: mergedMessages,
+        }
+      } else {
+        records.push({
+          docPath: stableKey,
+          sessionId: genSessionId(),
+          lastActiveAt,
+          difyConversationId: undefined,
+          difyProviderConversations: {},
+          messages: normalizedMessages,
         })
       }
 

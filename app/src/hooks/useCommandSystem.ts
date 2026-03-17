@@ -278,6 +278,22 @@ export function useCommandSystem(params: CommandSystemParams) {
       } else if (key === 'f') {
         e.preventDefault()
         void dispatchAction('find')
+      } else if (key === '=' || key === '+') {
+        // Zoom In: Ctrl+=  (Windows/Linux 下原生菜单加速键不稳定，需 JS 兜底；
+        // 同时 preventDefault 阻止 WebView2 默认缩放)
+        if (isTauri && isMac) return
+        e.preventDefault()
+        void dispatchAction('zoom_in')
+      } else if (key === '-') {
+        // Zoom Out: Ctrl+-
+        if (isTauri && isMac) return
+        e.preventDefault()
+        void dispatchAction('zoom_out')
+      } else if (key === '0' && e.shiftKey) {
+        // Reset Zoom: Ctrl+Shift+0
+        if (isTauri && isMac) return
+        e.preventDefault()
+        void dispatchAction('zoom_reset')
       }
     }
 

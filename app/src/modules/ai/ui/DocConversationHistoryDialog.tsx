@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import type { DocConversationMessage, DocConversationRecord } from '../domain/docConversations'
 import { docConversationService } from '../application/docConversationService'
+import { aiSessionExportService } from '../export/AiSessionExportService'
+import { aiSessionImportService } from '../import/AiSessionImportService'
 
 export type DocConversationHistoryDialogProps = {
   open: boolean
@@ -285,6 +287,36 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
     }
   }, [record, groups, docPath])
 
+  const handleExportJson = useCallback(async () => {
+    try {
+      await aiSessionExportService.exportDocSessionsToJson(docPath)
+    } catch (e) {
+      console.error('[DocConversationHistoryDialog] export JSON failed', e)
+    }
+  }, [docPath])
+
+  const handleImportJson = useCallback(async () => {
+    try {
+      const summary = await aiSessionImportService.importDocSessionsFromJsonForDoc(docPath)
+      if (summary.importedSessions > 0) {
+        // 导入成功后重新加载会话记录，以反映最新状态
+        const rec = await docConversationService.getByDocPath(docPath)
+        setRecord(rec)
+        if (rec && rec.messages.length) {
+          const built = buildConversationGroups(rec.messages)
+          setGroups(built)
+          const total = Math.max(1, Math.ceil(built.length / pageSize))
+          setPageIndex(total - 1)
+        } else {
+          setGroups([])
+          setPageIndex(0)
+        }
+      }
+    } catch (e) {
+      console.error('[DocConversationHistoryDialog] import JSON failed', e)
+    }
+  }, [docPath, pageSize])
+
   const summaryLine = (() => {
     if (!record || !record.messages.length) return '当前目录暂无 AI 会话历史'
     const lastTs = new Date(record.lastActiveAt).toLocaleString()
@@ -314,6 +346,20 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
               onClick={handleExportMarkdown}
             >
               导出 Markdown
+            </button>
+            <button
+              type="button"
+              className="ai-history-export-button"
+              onClick={handleExportJson}
+            >
+              Export JSON
+            </button>
+            <button
+              type="button"
+              className="ai-history-export-button"
+              onClick={handleImportJson}
+            >
+              Import JSON
             </button>
           </div>
         </div>

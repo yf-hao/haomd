@@ -20,7 +20,8 @@
         "fullscreen": false,
         "maximized": true,
         "visible": false,
-        "backgroundColor": "#05060a"
+        "backgroundColor": "#05060a",
+        "zoomHotkeysEnabled": false
       }
     ],
     "security": {
