@@ -3,6 +3,7 @@ import './App.css'
 import WorkspaceShell, { type LeftPanelId, type InitialWorkspaceAction } from './components/WorkspaceShell'
 import { AiSettingsDialog } from './components/AiSettingsDialog'
 import { PromptSettingsDialog } from './components/PromptSettingsDialog'
+import { SettingsDialog } from './components/SettingsDialog'
 import { onMenuAction } from './modules/platform/menuEvents'
 import { isTauriEnv } from './modules/platform/runtime'
 
@@ -15,6 +16,7 @@ function App() {
   const [initialOpenRecentIsFolder, setInitialOpenRecentIsFolder] = useState<boolean | null>(null)
   const [isAiSettingsOpen, setAiSettingsOpen] = useState(false)
   const [isPromptSettingsOpen, setPromptSettingsOpen] = useState(false)
+  const [isSettingsOpen, setSettingsOpen] = useState(false)
   const [isStatusBarVisible, setStatusBarVisible] = useState(true)
   const [docCharCount, setDocCharCount] = useState<number | null>(null)
   const [statusMessage, setStatusMessage] = useState('')
@@ -37,6 +39,10 @@ function App() {
     if (!isTauriEnv()) return
 
     const unlistenAction = onMenuAction((actionId) => {
+      if (actionId === 'haomd_settings') {
+        setSettingsOpen(true)
+        return
+      }
       if (actionId === 'ai_settings') {
         setAiSettingsOpen(true)
         return
@@ -135,6 +141,7 @@ function App() {
 
       <AiSettingsDialog open={isAiSettingsOpen} onClose={() => setAiSettingsOpen(false)} />
       <PromptSettingsDialog open={isPromptSettingsOpen} onClose={() => setPromptSettingsOpen(false)} />
+      <SettingsDialog open={isSettingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   )
 }

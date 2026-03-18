@@ -305,7 +305,7 @@ export function useCommandSystem(params: CommandSystemParams) {
   useEffect(() => {
     const unlisten = onMenuAction((actionId) => {
       // 这些菜单在 App 层或其他地方单独处理，这里忽略
-      if (actionId === 'ai_settings' || actionId === 'ai_prompt_settings' || actionId === 'toggle_status_bar') return
+      if (actionId === 'haomd_settings' || actionId === 'ai_settings' || actionId === 'ai_prompt_settings' || actionId === 'toggle_status_bar') return
       console.log('[useCommandSystem] Native menu action triggered:', actionId)
       void dispatchAction(actionId)
     })

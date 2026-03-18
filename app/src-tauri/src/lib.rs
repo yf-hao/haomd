@@ -1674,6 +1674,14 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
                 .id("haomd_about")
                 .build(app)?,
         )
+        .separator()
+        .item(
+            &MenuItemBuilder::new("Settings...")
+                .id("haomd_settings")
+                .accelerator("CmdOrCtrl+,")
+                .build(app)?,
+        )
+        .separator()
         .item(
             &MenuItemBuilder::new("Quit")
                 .id("quit")
@@ -2033,7 +2041,6 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .item(
             &MenuItemBuilder::new("Provider Settings")
                 .id("ai_settings")
-                .accelerator("CmdOrCtrl+,")
                 .build(app)?,
         )
         .item(
