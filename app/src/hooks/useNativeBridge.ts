@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { EditorView } from '@codemirror/view'
 import { onOpenRecentFile } from '../modules/platform/menuEvents'
 import { onNativePasteImage } from '../modules/platform/clipboardEvents'
+import { onExternalOpenFile, type ExternalOpenPayload } from '../modules/platform/externalOpenEvents'
 import { loadDefaultImagePathStrategyConfig, resolveImageTarget } from '../modules/images/imagePasteStrategy'
 import type { EditorTab } from '../types/tabs'
 
@@ -48,6 +49,39 @@ export function useNativeBridge(options: NativeBridgeOptions) {
         })
         return () => unlisten()
     }, [openRecentFileInNewTab, sidebar])
+
+    useEffect(() => {
+        if (!isTauriEnv()) return
+
+        const recentHandled = new Map<string, number>()
+        const dedupeWindowMs = 1500
+
+        const handleExternalOpen = async ({ path, isFolder }: ExternalOpenPayload) => {
+            const now = Date.now()
+            const key = `${isFolder ? 'dir' : 'file'}:${path}`
+            const lastHandledAt = recentHandled.get(key)
+            if (lastHandledAt && now - lastHandledAt < dedupeWindowMs) return
+            recentHandled.set(key, now)
+
+            if (isFolder) {
+                await sidebar.openFolderAsRoot(path)
+            } else {
+                await openRecentFileInNewTab(path)
+            }
+        }
+
+        const unlisten = onExternalOpenFile((payload) => {
+            void handleExternalOpen(payload)
+        })
+
+        void invoke<ExternalOpenPayload[]>('take_pending_external_open_items')
+            .then((items) => Promise.all(items.map((item) => handleExternalOpen(item))))
+            .catch((err) => {
+                console.warn('[useNativeBridge] take_pending_external_open_items failed', err)
+            })
+
+        return () => unlisten()
+    }, [isTauriEnv, openRecentFileInNewTab, sidebar])
 
     // Paste Image
     useEffect(() => {

@@ -31,6 +31,7 @@ import { useAiChatPanel } from '../hooks/useAiChatPanel'
 import { useHugeDoc } from '../hooks/useHugeDoc'
 import { useCursorMemory } from '../hooks/useCursorMemory'
 import { useSidebarResize } from '../hooks/useSidebarResize'
+import { useNativeBridge } from '../hooks/useNativeBridge'
 import { useNativePaste } from '../hooks/useNativePaste'
 import { onNativePasteImage } from '../modules/platform/clipboardEvents'
 import { openTerminalAt } from '../modules/platform/terminalService'
@@ -438,6 +439,17 @@ export function WorkspaceShell({
         sidebar.addStandaloneFile(path)
       }
     }
+  })
+
+  useNativeBridge({
+    activeTab,
+    isTauriEnv,
+    sidebar,
+    openRecentFileInNewTab: async (path: string) => await openRecentFileInNewTab(path),
+    editorViewRef,
+    filePath,
+    setStatusMessage,
+    setConfirmDialog,
   })
 
   // 将内部 statusMessage 同步到上层 App 的状态栏
@@ -1543,6 +1555,26 @@ export function WorkspaceShell({
     }
   }, [setStatusMessage, getCurrentMarkdown, getCurrentFileName])
 
+  const handleExportWord = useCallback(async () => {
+    if (isPdfActive) {
+      setStatusMessage('当前为 PDF 标签，暂不支持导出为 Word')
+      return
+    }
+
+    try {
+      const { exportToWord: dynamicWordExport } = await import('../modules/export/word')
+      await dynamicWordExport({
+        setStatusMessage,
+        getCurrentMarkdown,
+        getCurrentFileName,
+        getFilePath: () => activeTabPathRef.current,
+      })
+    } catch (e) {
+      console.error('[Export Word] 动态加载失败:', e)
+      setStatusMessage('Word 导出功能加载失败，请重试')
+    }
+  }, [isPdfActive, setStatusMessage, getCurrentMarkdown, getCurrentFileName])
+
   const openInsertTableDialog = useCallback(() => {
     if (isPdfActive) {
       setStatusMessage('当前为 PDF 标签，暂不支持插入 Markdown 表格')
@@ -1603,6 +1635,7 @@ export function WorkspaceShell({
     refreshPdfRecent,
     exportHtml: handleExportHtml,
     exportPdf: handleExportPdf,
+    exportWord: handleExportWord,
     openRecentDialog: () => setRecentDialogOpen(true),
   } as any)
 

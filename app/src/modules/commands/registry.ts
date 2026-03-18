@@ -57,6 +57,7 @@ export type FileCommandContext = StatusContext & {
   /** 导出命令 */
   exportHtml?: () => Promise<void>
   exportPdf?: () => Promise<void>
+  exportWord?: () => Promise<void>
   /** 打开最近文件模态窗的回调，由 WorkspaceShell 提供 */
   openRecentDialog?: () => void
 }
@@ -340,6 +341,13 @@ function createFileCommands(ctx: FileCommandContext): CommandRegistry {
         await ctx.exportPdf()
       } else {
         ctx.setStatusMessage('当前版本 PDF 导出功能未挂载')
+      }
+    },
+    export_word: async () => {
+      if (ctx.exportWord) {
+        await ctx.exportWord()
+      } else {
+        ctx.setStatusMessage('当前版本 Word 导出功能未挂载')
       }
     },
   }

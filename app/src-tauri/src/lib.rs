@@ -19,10 +19,12 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::http::{Request, Response};
 use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
-use tauri::{AppHandle, Emitter, Manager, UriSchemeContext};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, UriSchemeContext};
 use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_opener::OpenerExt;
 use tokio::fs;
 use tokio::sync::Mutex;
+use url::Url;
 
 const MAX_FILE_BYTES: u64 = 500 * 1024 * 1024; // 500MB
 const MAX_RECENT_ITEMS: usize = 100; // 最近文件最大条数
@@ -37,6 +39,8 @@ static RECENT_MENU_MAP: Lazy<std::sync::Mutex<HashMap<String, RecentMenuPayload>
 
 // 最近文件分页状态：当前页（从 0 开始）
 static RECENT_PAGE: Lazy<std::sync::Mutex<u32>> = Lazy::new(|| std::sync::Mutex::new(0));
+static PENDING_EXTERNAL_OPEN_ITEMS: Lazy<std::sync::Mutex<Vec<ExternalOpenItem>>> =
+    Lazy::new(|| std::sync::Mutex::new(Vec::new()));
 
 const RECENT_MENU_PREFIX: &str = "recent_item_";
 
@@ -206,6 +210,132 @@ struct SidebarState {
     folder_roots: Vec<String>,
     #[serde(default)]
     highlighted_files: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct ExternalOpenItem {
+    path: String,
+    is_folder: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct WordDocPayloadCfg {
+    title: String,
+    blocks: Vec<WordBlockCfg>,
+    assets: Vec<WordAssetCfg>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(tag = "type", rename_all = "lowercase")]
+enum WordBlockCfg {
+    Heading {
+        level: u8,
+        text: Vec<WordInlineRunCfg>,
+    },
+    Paragraph {
+        text: Vec<WordInlineRunCfg>,
+    },
+    Blockquote {
+        children: Vec<WordBlockCfg>,
+    },
+    Code {
+        language: Option<String>,
+        content: String,
+    },
+    List {
+        ordered: bool,
+        items: Vec<Vec<WordBlockCfg>>,
+    },
+    Table {
+        rows: Vec<WordTableRowCfg>,
+    },
+    Image {
+        #[serde(rename = "assetId")]
+        asset_id: String,
+        alt: Option<String>,
+        #[serde(rename = "widthPx")]
+        width_px: Option<u32>,
+        #[serde(rename = "heightPx")]
+        height_px: Option<u32>,
+    },
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct WordTableRowCfg {
+    cells: Vec<Vec<WordBlockCfg>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(tag = "type", rename_all = "lowercase")]
+enum WordInlineRunCfg {
+    Text {
+        value: String,
+        #[serde(default)]
+        bold: Option<bool>,
+        #[serde(default)]
+        italic: Option<bool>,
+        #[serde(default)]
+        code: Option<bool>,
+        #[serde(default)]
+        strike: Option<bool>,
+    },
+    Link {
+        value: String,
+        href: String,
+    },
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+enum WordAssetCfg {
+    Image {
+        id: String,
+        #[serde(rename = "sourcePath")]
+        source_path: String,
+        #[serde(default)]
+        #[serde(rename = "mimeType")]
+        mime_type: Option<String>,
+        #[serde(default)]
+        #[serde(rename = "widthPx")]
+        width_px: Option<u32>,
+        #[serde(default)]
+        #[serde(rename = "heightPx")]
+        height_px: Option<u32>,
+    },
+    EmbeddedImage {
+        id: String,
+        #[serde(rename = "fileName")]
+        file_name: String,
+        #[serde(rename = "mimeType")]
+        mime_type: String,
+        #[serde(rename = "base64Data")]
+        base64_data: String,
+        #[serde(default)]
+        #[serde(rename = "widthPx")]
+        width_px: Option<u32>,
+        #[serde(default)]
+        #[serde(rename = "heightPx")]
+        height_px: Option<u32>,
+    },
+}
+
+#[derive(Debug, Clone)]
+struct WordAssetRuntime {
+    rel_id: String,
+    target: String,
+    width_px: u32,
+    height_px: u32,
+}
+
+#[derive(Debug, Default)]
+struct WordRenderState {
+    next_rel_id: u32,
+    next_doc_pr_id: u32,
+    image_assets: std::collections::HashMap<String, WordAssetRuntime>,
+    hyperlinks: Vec<(String, String)>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -1007,6 +1137,919 @@ async fn save_ai_sessions_json_with_dialog(
 }
 
 #[tauri::command]
+async fn export_word_docx(payload_json: String, output_path: String) -> Result<(), String> {
+    let payload: WordDocPayloadCfg =
+        serde_json::from_str(&payload_json).map_err(|e| format!("解析导出数据失败: {e}"))?;
+    let output = PathBuf::from(&output_path);
+    if let Some(parent) = output.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("创建输出目录失败: {e}"))?;
+    }
+
+    let work_dir = std::env::temp_dir().join(format!(
+        "haomd-word-export-{}",
+        new_trace_id().replace("trace_", "")
+    ));
+    if work_dir.exists() {
+        let _ = std::fs::remove_dir_all(&work_dir);
+    }
+
+    let result = (|| -> Result<(), String> {
+        build_word_export_workspace(&work_dir, &payload)?;
+        package_docx_workspace(&work_dir, &output)?;
+        Ok(())
+    })();
+
+    let _ = std::fs::remove_dir_all(&work_dir);
+    result
+}
+
+fn build_word_export_workspace(dir: &Path, payload: &WordDocPayloadCfg) -> Result<(), String> {
+    std::fs::create_dir_all(dir.join("_rels")).map_err(|e| format!("创建 _rels 目录失败: {e}"))?;
+    std::fs::create_dir_all(dir.join("docProps"))
+        .map_err(|e| format!("创建 docProps 目录失败: {e}"))?;
+    std::fs::create_dir_all(dir.join("word").join("_rels"))
+        .map_err(|e| format!("创建 word/_rels 目录失败: {e}"))?;
+    std::fs::create_dir_all(dir.join("word").join("media"))
+        .map_err(|e| format!("创建 word/media 目录失败: {e}"))?;
+
+    let mut content_type_defaults = std::collections::BTreeMap::<String, String>::new();
+    content_type_defaults.insert("rels".to_string(), "application/vnd.openxmlformats-package.relationships+xml".to_string());
+    content_type_defaults.insert("xml".to_string(), "application/xml".to_string());
+
+    let mut render_state = WordRenderState {
+        next_rel_id: 3,
+        next_doc_pr_id: 1,
+        ..Default::default()
+    };
+
+    prepare_word_assets(
+        &dir.join("word").join("media"),
+        &payload.assets,
+        &mut render_state,
+        &mut content_type_defaults,
+    )?;
+
+    let document_xml = build_document_xml(payload, &mut render_state)?;
+    let document_rels_xml = build_document_relationships_xml(&render_state);
+    let styles_xml = build_word_styles_xml();
+    let numbering_xml = build_word_numbering_xml();
+    let content_types_xml = build_content_types_xml(&content_type_defaults);
+    let root_rels_xml = build_root_relationships_xml();
+    let core_xml = build_core_props_xml(&payload.title);
+    let app_xml = build_app_props_xml();
+
+    std::fs::write(dir.join("[Content_Types].xml"), content_types_xml)
+        .map_err(|e| format!("写入 [Content_Types].xml 失败: {e}"))?;
+    std::fs::write(dir.join("_rels").join(".rels"), root_rels_xml)
+        .map_err(|e| format!("写入根 relationships 失败: {e}"))?;
+    std::fs::write(dir.join("docProps").join("core.xml"), core_xml)
+        .map_err(|e| format!("写入 core.xml 失败: {e}"))?;
+    std::fs::write(dir.join("docProps").join("app.xml"), app_xml)
+        .map_err(|e| format!("写入 app.xml 失败: {e}"))?;
+    std::fs::write(dir.join("word").join("document.xml"), document_xml)
+        .map_err(|e| format!("写入 document.xml 失败: {e}"))?;
+    std::fs::write(dir.join("word").join("styles.xml"), styles_xml)
+        .map_err(|e| format!("写入 styles.xml 失败: {e}"))?;
+    std::fs::write(dir.join("word").join("numbering.xml"), numbering_xml)
+        .map_err(|e| format!("写入 numbering.xml 失败: {e}"))?;
+    std::fs::write(
+        dir.join("word").join("_rels").join("document.xml.rels"),
+        document_rels_xml,
+    )
+    .map_err(|e| format!("写入 document.xml.rels 失败: {e}"))?;
+
+    Ok(())
+}
+
+fn prepare_word_assets(
+    media_dir: &Path,
+    assets: &[WordAssetCfg],
+    render_state: &mut WordRenderState,
+    content_type_defaults: &mut std::collections::BTreeMap<String, String>,
+) -> Result<(), String> {
+    for asset in assets {
+        match asset {
+            WordAssetCfg::Image {
+                id,
+                source_path,
+                mime_type,
+                width_px,
+                height_px,
+            } => {
+                if source_path.starts_with("http://")
+                    || source_path.starts_with("https://")
+                    || source_path.starts_with("data:")
+                {
+                    return Err(format!("Word 导出暂不支持远程图片: {source_path}"));
+                }
+                let src = PathBuf::from(source_path);
+                let ext = detect_asset_extension(mime_type.as_deref(), Some(&src), None);
+                let file_name = format!("{id}.{ext}");
+                let dest = media_dir.join(&file_name);
+                std::fs::copy(&src, &dest)
+                    .map_err(|e| format!("复制图片资源失败 {:?}: {e}", &src))?;
+                content_type_defaults
+                    .entry(ext.clone())
+                    .or_insert_with(|| mime_for_extension(&ext).to_string());
+                let rel_id = next_relationship_id(render_state);
+                render_state.image_assets.insert(
+                    id.clone(),
+                    WordAssetRuntime {
+                        rel_id,
+                        target: format!("media/{file_name}"),
+                        width_px: width_px.unwrap_or(800),
+                        height_px: height_px.unwrap_or(600),
+                    },
+                );
+            }
+            WordAssetCfg::EmbeddedImage {
+                id,
+                file_name,
+                mime_type,
+                base64_data,
+                width_px,
+                height_px,
+            } => {
+                let ext = detect_asset_extension(Some(mime_type.as_str()), None, Some(file_name));
+                let final_name = if file_name.contains('.') {
+                    file_name.clone()
+                } else {
+                    format!("{file_name}.{ext}")
+                };
+                let dest = media_dir.join(&final_name);
+                let bytes =
+                    base64::decode(base64_data).map_err(|e| format!("解析内嵌图片 base64 失败: {e}"))?;
+                std::fs::write(&dest, bytes)
+                    .map_err(|e| format!("写入内嵌图片资源失败 {:?}: {e}", &dest))?;
+                content_type_defaults
+                    .entry(ext.clone())
+                    .or_insert_with(|| mime_for_extension(&ext).to_string());
+                let rel_id = next_relationship_id(render_state);
+                render_state.image_assets.insert(
+                    id.clone(),
+                    WordAssetRuntime {
+                        rel_id,
+                        target: format!("media/{final_name}"),
+                        width_px: width_px.unwrap_or(800),
+                        height_px: height_px.unwrap_or(600),
+                    },
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+fn package_docx_workspace(work_dir: &Path, output_path: &Path) -> Result<(), String> {
+    if output_path.exists() {
+        std::fs::remove_file(output_path).map_err(|e| format!("删除旧输出文件失败: {e}"))?;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let command = format!(
+            "Compress-Archive -Path '[Content_Types].xml','_rels','docProps','word' -DestinationPath '{}' -Force",
+            output_path.display()
+        );
+        let status = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &command])
+            .current_dir(work_dir)
+            .status()
+            .map_err(|e| format!("执行 Compress-Archive 失败: {e}"))?;
+        if !status.success() {
+            return Err(format!("打包 docx 失败，退出码: {:?}", status.code()));
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let status = Command::new("zip")
+            .args([
+                "-qr",
+                output_path
+                    .to_str()
+                    .ok_or_else(|| "输出路径包含无效 UTF-8".to_string())?,
+                "[Content_Types].xml",
+                "_rels",
+                "docProps",
+                "word",
+            ])
+            .current_dir(work_dir)
+            .status()
+            .map_err(|e| format!("执行 zip 失败: {e}"))?;
+        if !status.success() {
+            return Err(format!("打包 docx 失败，退出码: {:?}", status.code()));
+        }
+    }
+
+    Ok(())
+}
+
+fn build_document_xml(
+    payload: &WordDocPayloadCfg,
+    render_state: &mut WordRenderState,
+) -> Result<String, String> {
+    let body = render_word_blocks(&payload.blocks, render_state, 0, None)?;
+    Ok(format!(
+        concat!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+            r#"<w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas" "#,
+            r#"xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" "#,
+            r#"xmlns:o="urn:schemas-microsoft-com:office:office" "#,
+            r#"xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" "#,
+            r#"xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" "#,
+            r#"xmlns:v="urn:schemas-microsoft-com:vml" "#,
+            r#"xmlns:wp14="http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing" "#,
+            r#"xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" "#,
+            r#"xmlns:w10="urn:schemas-microsoft-com:office:word" "#,
+            r#"xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" "#,
+            r#"xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" "#,
+            r#"xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" "#,
+            r#"xmlns:wpi="http://schemas.microsoft.com/office/word/2010/wordprocessingInk" "#,
+            r#"xmlns:wne="http://schemas.microsoft.com/office/word/2006/wordml" "#,
+            r#"xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" "#,
+            r#"xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" "#,
+            r#"xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" "#,
+            r#"mc:Ignorable="w14 wp14"><w:body>{}"#,
+            r#"<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>"#,
+            r#"</w:body></w:document>"#
+        ),
+        body
+    ))
+}
+
+fn render_word_blocks(
+    blocks: &[WordBlockCfg],
+    render_state: &mut WordRenderState,
+    quote_depth: usize,
+    list_info: Option<(bool, usize)>,
+) -> Result<String, String> {
+    let mut xml = String::new();
+    let mut first_list_consumed = false;
+    for block in blocks {
+        let current_list = if !first_list_consumed { list_info } else { None };
+        if current_list.is_some() {
+            first_list_consumed = true;
+        }
+        xml.push_str(&render_word_block(block, render_state, quote_depth, current_list)?);
+    }
+    Ok(xml)
+}
+
+fn render_word_block(
+    block: &WordBlockCfg,
+    render_state: &mut WordRenderState,
+    quote_depth: usize,
+    list_info: Option<(bool, usize)>,
+) -> Result<String, String> {
+    match block {
+        WordBlockCfg::Heading { level, text } => Ok(render_paragraph_xml(
+            render_inline_runs_xml(text, render_state),
+            Some(format!("Heading{}", (*level).clamp(1, 6))),
+            quote_depth,
+            list_info,
+            false,
+        )),
+        WordBlockCfg::Paragraph { text } => Ok(render_paragraph_xml(
+            render_inline_runs_xml(text, render_state),
+            None,
+            quote_depth,
+            list_info,
+            false,
+        )),
+        WordBlockCfg::Code { language, content } => {
+            let prefix = language
+                .as_ref()
+                .map(|lang| format!("{lang}\n"))
+                .unwrap_or_default();
+            let runs = render_code_runs_xml(&(prefix + content));
+            Ok(render_paragraph_xml(runs, None, quote_depth, list_info, true))
+        }
+        WordBlockCfg::Image {
+            asset_id,
+            alt,
+            width_px,
+            height_px,
+        } => Ok(render_image_paragraph_xml(
+            asset_id,
+            alt.as_deref(),
+            *width_px,
+            *height_px,
+            render_state,
+            quote_depth,
+            list_info,
+        )?),
+        WordBlockCfg::Blockquote { children } => {
+            render_word_blocks(children, render_state, quote_depth + 1, list_info)
+        }
+        WordBlockCfg::List { ordered, items } => {
+            let mut xml = String::new();
+            for item in items {
+                xml.push_str(&render_word_blocks(
+                    item,
+                    render_state,
+                    quote_depth,
+                    Some((*ordered, quote_depth)),
+                )?);
+            }
+            Ok(xml)
+        }
+        WordBlockCfg::Table { rows } => render_table_xml(rows, render_state, quote_depth),
+    }
+}
+
+fn render_table_xml(
+    rows: &[WordTableRowCfg],
+    render_state: &mut WordRenderState,
+    quote_depth: usize,
+) -> Result<String, String> {
+    let mut rows_xml = String::new();
+    for row in rows {
+        if row.cells.is_empty() {
+            continue;
+        }
+
+        let mut normalized_cells = String::new();
+        for cell in &row.cells {
+            let cell_content = render_word_blocks(cell, render_state, quote_depth, None)?;
+            let content = if cell_content.trim().is_empty() {
+                "<w:p/>".to_string()
+            } else {
+                cell_content
+            };
+            normalized_cells.push_str(&format!("<w:tc><w:tcPr/>{}</w:tc>", content));
+        }
+        rows_xml.push_str(&format!("<w:tr>{}</w:tr>", normalized_cells));
+    }
+
+    Ok(format!(
+        concat!(
+            "<w:tbl>",
+            r#"<w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblBorders>"#,
+            r#"<w:top w:val="single" w:sz="4" w:space="0" w:color="D9D9D9"/>"#,
+            r#"<w:left w:val="single" w:sz="4" w:space="0" w:color="D9D9D9"/>"#,
+            r#"<w:bottom w:val="single" w:sz="4" w:space="0" w:color="D9D9D9"/>"#,
+            r#"<w:right w:val="single" w:sz="4" w:space="0" w:color="D9D9D9"/>"#,
+            r#"<w:insideH w:val="single" w:sz="4" w:space="0" w:color="D9D9D9"/>"#,
+            r#"<w:insideV w:val="single" w:sz="4" w:space="0" w:color="D9D9D9"/></w:tblBorders></w:tblPr>"#,
+            "{}",
+            "</w:tbl>"
+        ),
+        rows_xml
+    ))
+}
+
+fn render_paragraph_xml(
+    content_xml: String,
+    style: Option<String>,
+    quote_depth: usize,
+    list_info: Option<(bool, usize)>,
+    code_block: bool,
+) -> String {
+    let mut ppr = String::new();
+    if let Some(style_id) = style {
+        ppr.push_str(&format!(r#"<w:pStyle w:val="{}"/>"#, style_id));
+    }
+    if let Some((ordered, level)) = list_info {
+        ppr.push_str(&format!(
+            r#"<w:numPr><w:ilvl w:val="{}"/><w:numId w:val="{}"/></w:numPr>"#,
+            level,
+            if ordered { 2 } else { 1 }
+        ));
+    }
+    if quote_depth > 0 || code_block {
+        let left = (quote_depth as i32 * 720 + if code_block { 360 } else { 0 }).max(0);
+        ppr.push_str(&format!(r#"<w:ind w:left="{}"/>"#, left));
+    }
+    if quote_depth > 0 {
+        ppr.push_str(
+            r#"<w:pBdr><w:left w:val="single" w:sz="8" w:space="8" w:color="C9CDD1"/></w:pBdr>"#,
+        );
+    }
+    if code_block {
+        ppr.push_str(r#"<w:shd w:val="clear" w:color="auto" w:fill="F6F8FA"/>"#);
+    }
+    let ppr_xml = if ppr.is_empty() {
+        String::new()
+    } else {
+        format!("<w:pPr>{}</w:pPr>", ppr)
+    };
+    format!("<w:p>{}{}</w:p>", ppr_xml, content_xml)
+}
+
+fn render_inline_runs_xml(runs: &[WordInlineRunCfg], render_state: &mut WordRenderState) -> String {
+    let mut xml = String::new();
+    for run in runs {
+        match run {
+            WordInlineRunCfg::Text {
+                value,
+                bold,
+                italic,
+                code,
+                strike,
+            } => {
+                xml.push_str(&render_text_run_xml(
+                    value,
+                    bold.unwrap_or(false),
+                    italic.unwrap_or(false),
+                    code.unwrap_or(false),
+                    strike.unwrap_or(false),
+                ));
+            }
+            WordInlineRunCfg::Link { value, href } => {
+                let rel_id = next_relationship_id(render_state);
+                render_state.hyperlinks.push((rel_id.clone(), href.clone()));
+                xml.push_str(&format!(
+                    r#"<w:hyperlink r:id="{}" w:history="1"><w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t xml:space="preserve">{}</w:t></w:r></w:hyperlink>"#,
+                    rel_id,
+                    escape_xml_text(value)
+                ));
+            }
+        }
+    }
+    xml
+}
+
+fn render_text_run_xml(
+    value: &str,
+    bold: bool,
+    italic: bool,
+    code: bool,
+    strike: bool,
+) -> String {
+    let mut rpr = String::new();
+    if bold {
+        rpr.push_str("<w:b/>");
+    }
+    if italic {
+        rpr.push_str("<w:i/>");
+    }
+    if strike {
+        rpr.push_str("<w:strike/>");
+    }
+    if code {
+        rpr.push_str(r#"<w:rFonts w:ascii="Menlo" w:hAnsi="Menlo" w:cs="Menlo"/><w:sz w:val="20"/><w:shd w:val="clear" w:color="auto" w:fill="F6F8FA"/>"#);
+    }
+    let rpr_xml = if rpr.is_empty() {
+        String::new()
+    } else {
+        format!("<w:rPr>{}</w:rPr>", rpr)
+    };
+    let mut body = String::new();
+    let segments: Vec<&str> = value.split('\n').collect();
+    for (idx, segment) in segments.iter().enumerate() {
+        if idx > 0 {
+            body.push_str("<w:br/>");
+        }
+        body.push_str(&format!(
+            r#"<w:t xml:space="preserve">{}</w:t>"#,
+            escape_xml_text(segment)
+        ));
+    }
+    format!("<w:r>{}{}</w:r>", rpr_xml, body)
+}
+
+fn render_code_runs_xml(content: &str) -> String {
+    render_text_run_xml(content, false, false, true, false)
+}
+
+fn render_image_paragraph_xml(
+    asset_id: &str,
+    alt: Option<&str>,
+    width_px: Option<u32>,
+    height_px: Option<u32>,
+    render_state: &mut WordRenderState,
+    quote_depth: usize,
+    list_info: Option<(bool, usize)>,
+) -> Result<String, String> {
+    let asset = render_state
+        .image_assets
+        .get(asset_id)
+        .ok_or_else(|| format!("缺少图片资源: {asset_id}"))?;
+    let width = width_px.unwrap_or(asset.width_px).max(1);
+    let height = height_px.unwrap_or(asset.height_px).max(1);
+    let cx = width as u64 * 9525;
+    let cy = height as u64 * 9525;
+    let doc_pr_id = render_state.next_doc_pr_id;
+    render_state.next_doc_pr_id += 1;
+
+    let drawing = format!(
+        concat!(
+            r#"<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">"#,
+            r#"<wp:extent cx="{}" cy="{}"/><wp:effectExtent l="0" t="0" r="0" b="0"/>"#,
+            r#"<wp:docPr id="{}" name="{}" descr="{}"/>"#,
+            r#"<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>"#,
+            r#"<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">"#,
+            r#"<pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="{}"/><pic:cNvPicPr/></pic:nvPicPr>"#,
+            r#"<pic:blipFill><a:blip r:embed="{}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>"#,
+            r#"<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="{}" cy="{}"/></a:xfrm>"#,
+            r#"<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>"#,
+            r#"</a:graphicData></a:graphic></wp:inline></w:drawing></w:r>"#
+        ),
+        cx,
+        cy,
+        doc_pr_id,
+        escape_xml_attr(alt.unwrap_or(asset_id)),
+        escape_xml_attr(alt.unwrap_or(asset_id)),
+        escape_xml_attr(alt.unwrap_or(asset_id)),
+        asset.rel_id,
+        cx,
+        cy
+    );
+
+    Ok(render_paragraph_xml(drawing, None, quote_depth, list_info, false))
+}
+
+fn build_document_relationships_xml(render_state: &WordRenderState) -> String {
+    let mut xml = String::from(
+        concat!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+            r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#,
+            r#"<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>"#,
+            r#"<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>"#
+        ),
+    );
+    for asset in render_state.image_assets.values() {
+        xml.push_str(&format!(
+            r#"<Relationship Id="{}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="{}"/>"#,
+            asset.rel_id, asset.target
+        ));
+    }
+    for (rel_id, href) in &render_state.hyperlinks {
+        xml.push_str(&format!(
+            r#"<Relationship Id="{}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="{}" TargetMode="External"/>"#,
+            rel_id,
+            escape_xml_attr(href)
+        ));
+    }
+    xml.push_str("</Relationships>");
+    xml
+}
+
+fn build_content_types_xml(
+    defaults: &std::collections::BTreeMap<String, String>,
+) -> String {
+    let mut defaults_xml = String::new();
+    for (ext, mime) in defaults {
+        defaults_xml.push_str(&format!(
+            r#"<Default Extension="{}" ContentType="{}"/>"#,
+            escape_xml_attr(ext),
+            escape_xml_attr(mime)
+        ));
+    }
+    format!(
+        concat!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+            r#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">"#,
+            "{}",
+            r#"<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>"#,
+            r#"<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>"#,
+            r#"<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>"#,
+            r#"<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>"#,
+            r#"<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>"#,
+            r#"</Types>"#
+        ),
+        defaults_xml
+    )
+}
+
+fn build_root_relationships_xml() -> String {
+    concat!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+        r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#,
+        r#"<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>"#,
+        r#"<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>"#,
+        r#"<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>"#,
+        r#"</Relationships>"#
+    )
+    .to_string()
+}
+
+fn build_core_props_xml(title: &str) -> String {
+    let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ");
+    format!(
+        concat!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+            r#"<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" "#,
+            r#"xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" "#,
+            r#"xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">"#,
+            r#"<dc:title>{}</dc:title><dc:creator>HaoMD</dc:creator><cp:lastModifiedBy>HaoMD</cp:lastModifiedBy>"#,
+            r#"<dcterms:created xsi:type="dcterms:W3CDTF">{}</dcterms:created>"#,
+            r#"<dcterms:modified xsi:type="dcterms:W3CDTF">{}</dcterms:modified>"#,
+            r#"</cp:coreProperties>"#
+        ),
+        escape_xml_text(title),
+        now,
+        now
+    )
+}
+
+fn build_app_props_xml() -> String {
+    concat!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+        r#"<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">"#,
+        r#"<Application>HaoMD</Application><DocSecurity>0</DocSecurity><ScaleCrop>false</ScaleCrop>"#,
+        r#"<HeadingPairs><vt:vector size="2" baseType="variant"><vt:variant><vt:lpstr>Title</vt:lpstr></vt:variant><vt:variant><vt:i4>1</vt:i4></vt:variant></vt:vector></HeadingPairs>"#,
+        r#"<TitlesOfParts><vt:vector size="1" baseType="lpstr"><vt:lpstr>Document</vt:lpstr></vt:vector></TitlesOfParts>"#,
+        r#"<Company></Company><LinksUpToDate>false</LinksUpToDate><SharedDoc>false</SharedDoc><HyperlinksChanged>false</HyperlinksChanged><AppVersion>1.0</AppVersion>"#,
+        r#"</Properties>"#
+    )
+    .to_string()
+}
+
+fn build_word_styles_xml() -> String {
+    concat!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+        r#"<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">"#,
+        r#"<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>"#,
+        r#"<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style>"#,
+        r#"<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr><w:b/><w:sz w:val="28"/></w:rPr></w:style>"#,
+        r#"<w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr><w:b/><w:sz w:val="24"/></w:rPr></w:style>"#,
+        r#"<w:style w:type="paragraph" w:styleId="Heading4"><w:name w:val="heading 4"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr><w:b/><w:sz w:val="22"/></w:rPr></w:style>"#,
+        r#"<w:style w:type="paragraph" w:styleId="Heading5"><w:name w:val="heading 5"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr><w:b/><w:sz w:val="20"/></w:rPr></w:style>"#,
+        r#"<w:style w:type="paragraph" w:styleId="Heading6"><w:name w:val="heading 6"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr><w:b/><w:sz w:val="18"/></w:rPr></w:style>"#,
+        r#"<w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:basedOn w:val="DefaultParagraphFont"/><w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:rPr><w:color w:val="0563C1"/><w:u w:val="single"/></w:rPr></w:style>"#,
+        r#"</w:styles>"#
+    )
+    .to_string()
+}
+
+fn build_word_numbering_xml() -> String {
+    concat!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+        r#"<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">"#,
+        r#"<w:abstractNum w:abstractNumId="0"><w:multiLevelType w:val="hybridMultilevel"/>"#,
+        r#"<w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl>"#,
+        r#"<w:lvl w:ilvl="1"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="◦"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="1440" w:hanging="360"/></w:pPr></w:lvl>"#,
+        r#"<w:lvl w:ilvl="2"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="▪"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="2160" w:hanging="360"/></w:pPr></w:lvl>"#,
+        r#"</w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>"#,
+        r#"<w:abstractNum w:abstractNumId="1"><w:multiLevelType w:val="hybridMultilevel"/>"#,
+        r#"<w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl>"#,
+        r#"<w:lvl w:ilvl="1"><w:start w:val="1"/><w:numFmt w:val="lowerLetter"/><w:lvlText w:val="%2."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="1440" w:hanging="360"/></w:pPr></w:lvl>"#,
+        r#"<w:lvl w:ilvl="2"><w:start w:val="1"/><w:numFmt w:val="lowerRoman"/><w:lvlText w:val="%3."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="2160" w:hanging="360"/></w:pPr></w:lvl>"#,
+        r#"</w:abstractNum><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>"#
+    )
+    .to_string()
+}
+
+fn detect_asset_extension(mime: Option<&str>, source_path: Option<&Path>, file_name: Option<&str>) -> String {
+    if let Some(name) = file_name {
+        if let Some(ext) = Path::new(name).extension().and_then(|v| v.to_str()) {
+            return ext.to_lowercase();
+        }
+    }
+    if let Some(path) = source_path {
+        if let Some(ext) = path.extension().and_then(|v| v.to_str()) {
+            return ext.to_lowercase();
+        }
+    }
+    match mime.unwrap_or("application/octet-stream") {
+        "image/png" => "png",
+        "image/jpeg" => "jpg",
+        "image/gif" => "gif",
+        "image/webp" => "webp",
+        "image/svg+xml" => "svg",
+        _ => "bin",
+    }
+    .to_string()
+}
+
+fn mime_for_extension(ext: &str) -> &'static str {
+    match ext {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        _ => "application/octet-stream",
+    }
+}
+
+fn next_relationship_id(render_state: &mut WordRenderState) -> String {
+    let id = format!("rId{}", render_state.next_rel_id);
+    render_state.next_rel_id += 1;
+    id
+}
+
+fn escape_xml_text(input: &str) -> String {
+    html_escape::encode_text(input).to_string()
+}
+
+fn escape_xml_attr(input: &str) -> String {
+    html_escape::encode_double_quoted_attribute(input).to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn unique_test_path(prefix: &str, ext: Option<&str>) -> std::path::PathBuf {
+        let mut path = std::env::temp_dir().join(format!(
+            "{prefix}-{}",
+            new_trace_id().replace("trace_", "")
+        ));
+        if let Some(ext) = ext {
+            path.set_extension(ext);
+        }
+        path
+    }
+
+    #[test]
+    fn should_build_minimal_docx_package() {
+        let work_dir = unique_test_path("haomd-word-test", None);
+        let output_path = unique_test_path("haomd-word-test", Some("docx"));
+
+        let payload = WordDocPayloadCfg {
+            title: "Sample".to_string(),
+            blocks: vec![
+                WordBlockCfg::Heading {
+                    level: 1,
+                    text: vec![WordInlineRunCfg::Text {
+                        value: "Hello".to_string(),
+                        bold: Some(true),
+                        italic: None,
+                        code: None,
+                        strike: None,
+                    }],
+                },
+                WordBlockCfg::Paragraph {
+                    text: vec![WordInlineRunCfg::Text {
+                        value: "World".to_string(),
+                        bold: None,
+                        italic: None,
+                        code: None,
+                        strike: None,
+                    }],
+                },
+                WordBlockCfg::Image {
+                    asset_id: "asset_0".to_string(),
+                    alt: Some("tiny".to_string()),
+                    width_px: Some(1),
+                    height_px: Some(1),
+                },
+            ],
+            assets: vec![WordAssetCfg::EmbeddedImage {
+                id: "asset_0".to_string(),
+                file_name: "tiny.png".to_string(),
+                mime_type: "image/png".to_string(),
+                base64_data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9l9WQAAAAASUVORK5CYII=".to_string(),
+                width_px: Some(1),
+                height_px: Some(1),
+            }],
+        };
+
+        build_word_export_workspace(&work_dir, &payload).expect("workspace should build");
+        package_docx_workspace(&work_dir, &output_path).expect("docx package should build");
+
+        let bytes = std::fs::read(&output_path).expect("docx should exist");
+        assert!(bytes.starts_with(&[0x50, 0x4b]), "docx should be a zip package");
+
+        let _ = std::fs::remove_dir_all(&work_dir);
+        let _ = std::fs::remove_file(&output_path);
+    }
+
+    #[test]
+    fn should_generate_editable_word_xml_for_core_blocks() {
+        let work_dir = unique_test_path("haomd-word-xml", None);
+        let payload = WordDocPayloadCfg {
+            title: "Regression".to_string(),
+            blocks: vec![
+                WordBlockCfg::Heading {
+                    level: 2,
+                    text: vec![WordInlineRunCfg::Text {
+                        value: "Section".to_string(),
+                        bold: None,
+                        italic: None,
+                        code: None,
+                        strike: None,
+                    }],
+                },
+                WordBlockCfg::Paragraph {
+                    text: vec![
+                        WordInlineRunCfg::Text {
+                            value: "Visit ".to_string(),
+                            bold: None,
+                            italic: None,
+                            code: None,
+                            strike: None,
+                        },
+                        WordInlineRunCfg::Link {
+                            value: "OpenAI".to_string(),
+                            href: "https://openai.com".to_string(),
+                        },
+                    ],
+                },
+                WordBlockCfg::List {
+                    ordered: false,
+                    items: vec![vec![WordBlockCfg::Paragraph {
+                        text: vec![WordInlineRunCfg::Text {
+                            value: "Item one".to_string(),
+                            bold: None,
+                            italic: None,
+                            code: None,
+                            strike: None,
+                        }],
+                    }]],
+                },
+                WordBlockCfg::Table {
+                    rows: vec![
+                        WordTableRowCfg {
+                            cells: vec![
+                                vec![WordBlockCfg::Paragraph {
+                                    text: vec![WordInlineRunCfg::Text {
+                                        value: "Name".to_string(),
+                                        bold: None,
+                                        italic: None,
+                                        code: None,
+                                        strike: None,
+                                    }],
+                                }],
+                                vec![WordBlockCfg::Paragraph {
+                                    text: vec![WordInlineRunCfg::Text {
+                                        value: "Value".to_string(),
+                                        bold: None,
+                                        italic: None,
+                                        code: None,
+                                        strike: None,
+                                    }],
+                                }],
+                            ],
+                        },
+                    ],
+                },
+                WordBlockCfg::Image {
+                    asset_id: "asset_0".to_string(),
+                    alt: Some("tiny".to_string()),
+                    width_px: Some(1),
+                    height_px: Some(1),
+                },
+            ],
+            assets: vec![WordAssetCfg::EmbeddedImage {
+                id: "asset_0".to_string(),
+                file_name: "tiny.png".to_string(),
+                mime_type: "image/png".to_string(),
+                base64_data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9l9WQAAAAASUVORK5CYII=".to_string(),
+                width_px: Some(1),
+                height_px: Some(1),
+            }],
+        };
+
+        build_word_export_workspace(&work_dir, &payload).expect("workspace should build");
+
+        let document_xml =
+            fs::read_to_string(work_dir.join("word").join("document.xml")).expect("document xml should exist");
+        let rels_xml = fs::read_to_string(
+            work_dir.join("word").join("_rels").join("document.xml.rels"),
+        )
+        .expect("relationships xml should exist");
+
+        assert!(document_xml.contains(r#"<w:pStyle w:val="Heading2"/>"#));
+        assert!(document_xml.contains(r#"<w:hyperlink r:id=""#));
+        assert!(document_xml.contains(r#"<w:numId w:val="1"/>"#));
+        assert!(document_xml.contains("<w:tbl>"));
+        assert!(document_xml.contains("Item one"));
+        assert!(document_xml.contains("OpenAI"));
+        assert!(document_xml.contains("tiny"));
+
+        assert!(rels_xml.contains(
+            r#"Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink""#,
+        ));
+        assert!(rels_xml.contains(
+            r#"Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image""#,
+        ));
+
+        let _ = std::fs::remove_dir_all(&work_dir);
+    }
+
+    #[test]
+    fn should_reject_remote_images_for_word_export() {
+        let work_dir = unique_test_path("haomd-word-remote", None);
+        let payload = WordDocPayloadCfg {
+            title: "Remote".to_string(),
+            blocks: vec![WordBlockCfg::Image {
+                asset_id: "asset_0".to_string(),
+                alt: Some("remote".to_string()),
+                width_px: None,
+                height_px: None,
+            }],
+            assets: vec![WordAssetCfg::Image {
+                id: "asset_0".to_string(),
+                source_path: "https://example.com/remote.png".to_string(),
+                mime_type: Some("image/png".to_string()),
+                width_px: Some(10),
+                height_px: Some(10),
+            }],
+        };
+
+        let error = build_word_export_workspace(&work_dir, &payload).expect_err("remote image should fail");
+        assert!(error.contains("暂不支持远程图片"));
+
+        let _ = std::fs::remove_dir_all(&work_dir);
+    }
+}
+
+#[tauri::command]
 async fn list_recent(
     app: AppHandle,
     offset: Option<u32>,
@@ -1739,6 +2782,11 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
                 .id("export_pdf")
                 .build(app)?,
         )
+        .item(
+            &MenuItemBuilder::new("Word (.docx)")
+                .id("export_word")
+                .build(app)?,
+        )
         .build()?;
 
     // File 菜单
@@ -2326,62 +3374,22 @@ fn open_markdown_handbook(app: &AppHandle) {
         }
     };
 
-    #[cfg(target_os = "macos")]
-    {
-        if let Err(err) = Command::new("open").arg(&html_path).spawn() {
-            log::error!("[Help] failed to open handbook: {}", err);
-        }
-    }
+    let html_path = html_path.to_string_lossy().into_owned();
 
-    #[cfg(target_os = "windows")]
-    {
-        if let Err(err) = Command::new("cmd")
-            .args(["/C", "start"])
-            .arg(&html_path)
-            .spawn()
-        {
-            log::error!("[Help] failed to open handbook: {}", err);
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        if let Err(err) = Command::new("xdg-open").arg(&html_path).spawn() {
-            log::error!("[Help] failed to open handbook: {}", err);
-        }
+    if let Err(err) = app.opener().open_path(html_path, None::<&str>) {
+        log::error!("[Help] failed to open handbook: {}", err);
     }
 }
 
 #[tauri::command]
-async fn open_webview_browser(url: String) -> Result<(), String> {
+async fn open_webview_browser(app: AppHandle, url: String) -> Result<(), String> {
     if url.trim().is_empty() {
         return Err("url is empty".to_string());
     }
 
-    #[cfg(target_os = "macos")]
-    {
-        Command::new("open")
-            .arg(&url)
-            .spawn()
-            .map_err(|e| format!("无法打开浏览器: {e}"))?;
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        Command::new("cmd")
-            .args(["/C", "start"])
-            .arg(&url)
-            .spawn()
-            .map_err(|e| format!("无法打开浏览器: {e}"))?;
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        Command::new("xdg-open")
-            .arg(&url)
-            .spawn()
-            .map_err(|e| format!("无法打开浏览器: {e}"))?;
-    }
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|e| format!("无法打开浏览器: {e}"))?;
 
     Ok(())
 }
@@ -2760,9 +3768,44 @@ async fn save_doc_conversations(
     }
 }
 
+fn external_open_item_from_url(url: &Url) -> Option<ExternalOpenItem> {
+    if url.scheme() != "file" {
+        return None;
+    }
+
+    let path = url.to_file_path().ok()?;
+    let metadata = std::fs::metadata(&path).ok()?;
+
+    Some(ExternalOpenItem {
+        path: path.to_string_lossy().to_string(),
+        is_folder: metadata.is_dir(),
+    })
+}
+
+fn queue_external_open_items(items: Vec<ExternalOpenItem>) {
+    if items.is_empty() {
+        return;
+    }
+
+    let mut pending = PENDING_EXTERNAL_OPEN_ITEMS.lock().unwrap();
+    pending.extend(items);
+}
+
+fn emit_external_open_items(app: &AppHandle, items: &[ExternalOpenItem]) {
+    for item in items {
+        let _ = app.emit("native://open_external_file", item);
+    }
+}
+
+#[tauri::command]
+fn take_pending_external_open_items() -> Vec<ExternalOpenItem> {
+    let mut pending = PENDING_EXTERNAL_OPEN_ITEMS.lock().unwrap();
+    std::mem::take(&mut *pending)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
     // 自定义协议 haomd:// 用于访问本地 markdown 图片等用户文件
     .register_uri_scheme_protocol("haomd", move |_context: UriSchemeContext<tauri::Wry>, _request: Request<Vec<u8>>| {
       // 从 request 中获取 uri
@@ -2915,6 +3958,7 @@ pub fn run() {
         .build();
       handle.plugin(log_plugin)?;
       handle.plugin(tauri_plugin_dialog::init())?;
+      handle.plugin(tauri_plugin_opener::init())?;
 
       // 构建原生菜单（参考 VS Code）
       tauri::async_runtime::block_on(async {
@@ -3030,13 +4074,40 @@ pub fn run() {
       open_terminal,
       open_in_file_explorer,
       open_webview_browser,
+      export_word_docx,
       save_clipboard_image_to_dir,
       read_clipboard_image_as_base64,
       load_doc_conversations,
       save_doc_conversations,
+      take_pending_external_open_items,
       save_text_with_dialog,
       save_ai_sessions_json_with_dialog,
     ])
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+    .build(tauri::generate_context!())
+    .expect("error while building tauri application");
+
+    for arg in std::env::args().skip(1) {
+        if arg.starts_with('-') {
+            continue;
+        }
+        let path = PathBuf::from(&arg);
+        if let Ok(metadata) = std::fs::metadata(&path) {
+            queue_external_open_items(vec![ExternalOpenItem {
+                path: path.to_string_lossy().to_string(),
+                is_folder: metadata.is_dir(),
+            }]);
+        }
+    }
+
+    app.run(|app_handle, event| {
+        #[cfg(target_os = "macos")]
+        if let RunEvent::Opened { urls } = event {
+            let items: Vec<ExternalOpenItem> =
+                urls.iter().filter_map(external_open_item_from_url).collect();
+            if !items.is_empty() {
+                queue_external_open_items(items.clone());
+                emit_external_open_items(app_handle, &items);
+            }
+        }
+    });
 }
