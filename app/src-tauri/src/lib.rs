@@ -1187,7 +1187,10 @@ fn build_word_export_workspace(dir: &Path, payload: &WordDocPayloadCfg) -> Resul
         .map_err(|e| format!("创建 word/media 目录失败: {e}"))?;
 
     let mut content_type_defaults = std::collections::BTreeMap::<String, String>::new();
-    content_type_defaults.insert("rels".to_string(), "application/vnd.openxmlformats-package.relationships+xml".to_string());
+    content_type_defaults.insert(
+        "rels".to_string(),
+        "application/vnd.openxmlformats-package.relationships+xml".to_string(),
+    );
     content_type_defaults.insert("xml".to_string(), "application/xml".to_string());
 
     let mut render_state = WordRenderState {
@@ -1291,8 +1294,8 @@ fn prepare_word_assets(
                     format!("{file_name}.{ext}")
                 };
                 let dest = media_dir.join(&final_name);
-                let bytes =
-                    base64::decode(base64_data).map_err(|e| format!("解析内嵌图片 base64 失败: {e}"))?;
+                let bytes = base64::decode(base64_data)
+                    .map_err(|e| format!("解析内嵌图片 base64 失败: {e}"))?;
                 std::fs::write(&dest, bytes)
                     .map_err(|e| format!("写入内嵌图片资源失败 {:?}: {e}", &dest))?;
                 content_type_defaults
@@ -1401,11 +1404,20 @@ fn render_word_blocks(
     let mut xml = String::new();
     let mut first_list_consumed = false;
     for block in blocks {
-        let current_list = if !first_list_consumed { list_info } else { None };
+        let current_list = if !first_list_consumed {
+            list_info
+        } else {
+            None
+        };
         if current_list.is_some() {
             first_list_consumed = true;
         }
-        xml.push_str(&render_word_block(block, render_state, quote_depth, current_list)?);
+        xml.push_str(&render_word_block(
+            block,
+            render_state,
+            quote_depth,
+            current_list,
+        )?);
     }
     Ok(xml)
 }
@@ -1447,7 +1459,14 @@ fn render_word_block(
                 .map(|lang| format!("{lang}\n"))
                 .unwrap_or_default();
             let runs = render_code_runs_xml(&(prefix + content));
-            Ok(render_paragraph_xml(runs, None, quote_depth, list_info, true, false))
+            Ok(render_paragraph_xml(
+                runs,
+                None,
+                quote_depth,
+                list_info,
+                true,
+                false,
+            ))
         }
         WordBlockCfg::Image {
             asset_id,
@@ -1601,13 +1620,7 @@ fn render_inline_runs_xml(runs: &[WordInlineRunCfg], render_state: &mut WordRend
     xml
 }
 
-fn render_text_run_xml(
-    value: &str,
-    bold: bool,
-    italic: bool,
-    code: bool,
-    strike: bool,
-) -> String {
+fn render_text_run_xml(value: &str, bold: bool, italic: bool, code: bool, strike: bool) -> String {
     let mut rpr = String::new();
     if bold {
         rpr.push_str("<w:b/>");
@@ -1751,7 +1764,11 @@ fn find_math_expression_root<'a>(node: &'a MathMlNode) -> &'a MathMlNode {
                     .iter()
                     .find(|child| child.name != "annotation")
             })
-            .or_else(|| node.children.iter().find(|child| child.name != "annotation"))
+            .or_else(|| {
+                node.children
+                    .iter()
+                    .find(|child| child.name != "annotation")
+            })
             .unwrap_or(node),
         "semantics" => node
             .children
@@ -1774,27 +1791,69 @@ fn convert_mathml_node(node: &MathMlNode) -> String {
         "annotation" => String::new(),
         "mi" | "mn" | "mo" | "mtext" => render_omml_text_run(&collect_mathml_text(node)),
         "msup" => {
-            let base = node.children.first().map(convert_mathml_node).unwrap_or_default();
-            let sup = node.children.get(1).map(convert_mathml_node).unwrap_or_default();
-            format!(r#"<m:sSup><m:e>{}</m:e><m:sup>{}</m:sup></m:sSup>"#, base, sup)
+            let base = node
+                .children
+                .first()
+                .map(convert_mathml_node)
+                .unwrap_or_default();
+            let sup = node
+                .children
+                .get(1)
+                .map(convert_mathml_node)
+                .unwrap_or_default();
+            format!(
+                r#"<m:sSup><m:e>{}</m:e><m:sup>{}</m:sup></m:sSup>"#,
+                base, sup
+            )
         }
         "msub" => {
-            let base = node.children.first().map(convert_mathml_node).unwrap_or_default();
-            let sub = node.children.get(1).map(convert_mathml_node).unwrap_or_default();
-            format!(r#"<m:sSub><m:e>{}</m:e><m:sub>{}</m:sub></m:sSub>"#, base, sub)
+            let base = node
+                .children
+                .first()
+                .map(convert_mathml_node)
+                .unwrap_or_default();
+            let sub = node
+                .children
+                .get(1)
+                .map(convert_mathml_node)
+                .unwrap_or_default();
+            format!(
+                r#"<m:sSub><m:e>{}</m:e><m:sub>{}</m:sub></m:sSub>"#,
+                base, sub
+            )
         }
         "msubsup" => {
-            let base = node.children.first().map(convert_mathml_node).unwrap_or_default();
-            let sub = node.children.get(1).map(convert_mathml_node).unwrap_or_default();
-            let sup = node.children.get(2).map(convert_mathml_node).unwrap_or_default();
+            let base = node
+                .children
+                .first()
+                .map(convert_mathml_node)
+                .unwrap_or_default();
+            let sub = node
+                .children
+                .get(1)
+                .map(convert_mathml_node)
+                .unwrap_or_default();
+            let sup = node
+                .children
+                .get(2)
+                .map(convert_mathml_node)
+                .unwrap_or_default();
             format!(
                 r#"<m:sSubSup><m:e>{}</m:e><m:sub>{}</m:sub><m:sup>{}</m:sup></m:sSubSup>"#,
                 base, sub, sup
             )
         }
         "mfrac" => {
-            let num = node.children.first().map(convert_mathml_node).unwrap_or_default();
-            let den = node.children.get(1).map(convert_mathml_node).unwrap_or_default();
+            let num = node
+                .children
+                .first()
+                .map(convert_mathml_node)
+                .unwrap_or_default();
+            let den = node
+                .children
+                .get(1)
+                .map(convert_mathml_node)
+                .unwrap_or_default();
             format!(r#"<m:f><m:num>{}</m:num><m:den>{}</m:den></m:f>"#, num, den)
         }
         "msqrt" => {
@@ -1804,12 +1863,26 @@ fn convert_mathml_node(node: &MathMlNode) -> String {
                 .map(convert_mathml_node)
                 .collect::<Vec<_>>()
                 .join("");
-            format!(r#"<m:rad><m:degHide m:val="1"/><m:e>{}</m:e></m:rad>"#, body)
+            format!(
+                r#"<m:rad><m:degHide m:val="1"/><m:e>{}</m:e></m:rad>"#,
+                body
+            )
         }
         "mroot" => {
-            let body = node.children.first().map(convert_mathml_node).unwrap_or_default();
-            let degree = node.children.get(1).map(convert_mathml_node).unwrap_or_default();
-            format!(r#"<m:rad><m:deg>{}</m:deg><m:e>{}</m:e></m:rad>"#, degree, body)
+            let body = node
+                .children
+                .first()
+                .map(convert_mathml_node)
+                .unwrap_or_default();
+            let degree = node
+                .children
+                .get(1)
+                .map(convert_mathml_node)
+                .unwrap_or_default();
+            format!(
+                r#"<m:rad><m:deg>{}</m:deg><m:e>{}</m:e></m:rad>"#,
+                degree, body
+            )
         }
         "munderover" => render_nary_or_limit(node, true, true, &[]),
         "munder" => render_nary_or_limit(node, true, false, &[]),
@@ -1862,7 +1935,10 @@ fn render_nary_or_limit(
 
     if is_nary {
         let sub = if has_sub {
-            node.children.get(1).map(convert_mathml_node).unwrap_or_default()
+            node.children
+                .get(1)
+                .map(convert_mathml_node)
+                .unwrap_or_default()
         } else {
             String::new()
         };
@@ -1896,18 +1972,30 @@ fn render_nary_or_limit(
         (true, true) => format!(
             r#"<m:sSubSup><m:e>{}</m:e><m:sub>{}</m:sub><m:sup>{}</m:sup></m:sSubSup>"#,
             base_xml,
-            node.children.get(1).map(convert_mathml_node).unwrap_or_default(),
-            node.children.get(2).map(convert_mathml_node).unwrap_or_default()
+            node.children
+                .get(1)
+                .map(convert_mathml_node)
+                .unwrap_or_default(),
+            node.children
+                .get(2)
+                .map(convert_mathml_node)
+                .unwrap_or_default()
         ),
         (true, false) => format!(
             r#"<m:sSub><m:e>{}</m:e><m:sub>{}</m:sub></m:sSub>"#,
             base_xml,
-            node.children.get(1).map(convert_mathml_node).unwrap_or_default()
+            node.children
+                .get(1)
+                .map(convert_mathml_node)
+                .unwrap_or_default()
         ),
         (false, true) => format!(
             r#"<m:sSup><m:e>{}</m:e><m:sup>{}</m:sup></m:sSup>"#,
             base_xml,
-            node.children.get(1).map(convert_mathml_node).unwrap_or_default()
+            node.children
+                .get(1)
+                .map(convert_mathml_node)
+                .unwrap_or_default()
         ),
         (false, false) => base_xml,
     }
@@ -2029,14 +2117,12 @@ fn fit_image_to_page_width(
 }
 
 fn build_document_relationships_xml(render_state: &WordRenderState) -> String {
-    let mut xml = String::from(
-        concat!(
-            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
-            r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#,
-            r#"<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>"#,
-            r#"<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>"#
-        ),
-    );
+    let mut xml = String::from(concat!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+        r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#,
+        r#"<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>"#,
+        r#"<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>"#
+    ));
     for asset in render_state.image_assets.values() {
         xml.push_str(&format!(
             r#"<Relationship Id="{}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="{}"/>"#,
@@ -2054,9 +2140,7 @@ fn build_document_relationships_xml(render_state: &WordRenderState) -> String {
     xml
 }
 
-fn build_content_types_xml(
-    defaults: &std::collections::BTreeMap<String, String>,
-) -> String {
+fn build_content_types_xml(defaults: &std::collections::BTreeMap<String, String>) -> String {
     let mut defaults_xml = String::new();
     for (ext, mime) in defaults {
         defaults_xml.push_str(&format!(
@@ -2160,7 +2244,11 @@ fn build_word_numbering_xml() -> String {
     .to_string()
 }
 
-fn detect_asset_extension(mime: Option<&str>, source_path: Option<&Path>, file_name: Option<&str>) -> String {
+fn detect_asset_extension(
+    mime: Option<&str>,
+    source_path: Option<&Path>,
+    file_name: Option<&str>,
+) -> String {
     if let Some(name) = file_name {
         if let Some(ext) = Path::new(name).extension().and_then(|v| v.to_str()) {
             return ext.to_lowercase();
@@ -2213,10 +2301,8 @@ mod tests {
     use std::fs;
 
     fn unique_test_path(prefix: &str, ext: Option<&str>) -> std::path::PathBuf {
-        let mut path = std::env::temp_dir().join(format!(
-            "{prefix}-{}",
-            new_trace_id().replace("trace_", "")
-        ));
+        let mut path =
+            std::env::temp_dir().join(format!("{prefix}-{}", new_trace_id().replace("trace_", "")));
         if let Some(ext) = ext {
             path.set_extension(ext);
         }
@@ -2271,7 +2357,10 @@ mod tests {
         package_docx_workspace(&work_dir, &output_path).expect("docx package should build");
 
         let bytes = std::fs::read(&output_path).expect("docx should exist");
-        assert!(bytes.starts_with(&[0x50, 0x4b]), "docx should be a zip package");
+        assert!(
+            bytes.starts_with(&[0x50, 0x4b]),
+            "docx should be a zip package"
+        );
 
         let _ = std::fs::remove_dir_all(&work_dir);
         let _ = std::fs::remove_file(&output_path);
@@ -2365,10 +2454,13 @@ mod tests {
 
         build_word_export_workspace(&work_dir, &payload).expect("workspace should build");
 
-        let document_xml =
-            fs::read_to_string(work_dir.join("word").join("document.xml")).expect("document xml should exist");
+        let document_xml = fs::read_to_string(work_dir.join("word").join("document.xml"))
+            .expect("document xml should exist");
         let rels_xml = fs::read_to_string(
-            work_dir.join("word").join("_rels").join("document.xml.rels"),
+            work_dir
+                .join("word")
+                .join("_rels")
+                .join("document.xml.rels"),
         )
         .expect("relationships xml should exist");
 
@@ -2410,7 +2502,8 @@ mod tests {
             }],
         };
 
-        let error = build_word_export_workspace(&work_dir, &payload).expect_err("remote image should fail");
+        let error =
+            build_word_export_workspace(&work_dir, &payload).expect_err("remote image should fail");
         assert!(error.contains("暂不支持远程图片"));
 
         let _ = std::fs::remove_dir_all(&work_dir);
@@ -2457,8 +2550,8 @@ mod tests {
         };
 
         build_word_export_workspace(&work_dir, &payload).expect("workspace should build");
-        let document_xml =
-            fs::read_to_string(work_dir.join("word").join("document.xml")).expect("document xml should exist");
+        let document_xml = fs::read_to_string(work_dir.join("word").join("document.xml"))
+            .expect("document xml should exist");
 
         assert!(document_xml.contains("<m:oMath>"));
         assert!(document_xml.contains("<m:sSup>"));
@@ -4526,8 +4619,10 @@ pub fn run() {
     app.run(|app_handle, event| {
         #[cfg(target_os = "macos")]
         if let RunEvent::Opened { urls } = event {
-            let items: Vec<ExternalOpenItem> =
-                urls.iter().filter_map(external_open_item_from_url).collect();
+            let items: Vec<ExternalOpenItem> = urls
+                .iter()
+                .filter_map(external_open_item_from_url)
+                .collect();
             if !items.is_empty() {
                 queue_external_open_items(items.clone());
                 emit_external_open_items(app_handle, &items);

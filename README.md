@@ -130,9 +130,9 @@ HaoMD 支持多种 AI 提供商，可在应用内配置：
 
 ### 支持的提供商
 
-- **Dify**：自定义 AI 工作流和智能体平台（默认）
+- **Dify**：自定义 AI 工作流和智能体平台（默认）。支持 GPT-5.2-chat, GPT-5.1-chat, GPT-5-mini-2, GPT-4.1, GPT-4o-mini, qwen3-32b-awq, DeepSeek-V3.2 等模型。
 - **OpenAI 兼容**：任何兼容 OpenAI 格式的 API（GPT-4、GPT-3.5、o1 等）
-- **视觉支持**：任何支持视觉能力的 AI 提供商，用于图片分析
+- **视觉支持**：支持视觉能力的 AI 提供商，用于图片分析
 
 ### AI 功能
 

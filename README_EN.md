@@ -130,9 +130,9 @@ HaoMD supports multiple AI providers, configurable within the app:
 
 ### Supported Providers
 
-- **Dify**: Custom AI workflows and agent building platform (default)
+- **Dify**: Custom AI workflows and agent building platform (default). Supports GPT-5.2-chat, GPT-5.1-chat, GPT-5-mini-2, GPT-4.1, GPT-4o-mini, qwen3-32b-awq, and DeepSeek-V3.2 models.
 - **OpenAI-compatible**: Any API compatible with OpenAI's format (GPT-4, GPT-3.5, o1, etc.)
-- **Vision Support**: Any AI provider with vision capabilities for image analysis
+- **Vision Support**:  AI provider with vision capabilities for image analysis
 
 ### AI Features
 
