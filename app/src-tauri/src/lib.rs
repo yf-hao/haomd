@@ -1409,12 +1409,14 @@ fn render_word_block(
             quote_depth,
             list_info,
             false,
+            false,
         )),
         WordBlockCfg::Paragraph { text } => Ok(render_paragraph_xml(
             render_inline_runs_xml(text, render_state),
             None,
             quote_depth,
             list_info,
+            false,
             false,
         )),
         WordBlockCfg::Code { language, content } => {
@@ -1423,7 +1425,7 @@ fn render_word_block(
                 .map(|lang| format!("{lang}\n"))
                 .unwrap_or_default();
             let runs = render_code_runs_xml(&(prefix + content));
-            Ok(render_paragraph_xml(runs, None, quote_depth, list_info, true))
+            Ok(render_paragraph_xml(runs, None, quote_depth, list_info, true, false))
         }
         WordBlockCfg::Image {
             asset_id,
@@ -1505,6 +1507,7 @@ fn render_paragraph_xml(
     quote_depth: usize,
     list_info: Option<(bool, usize)>,
     code_block: bool,
+    center: bool,
 ) -> String {
     let mut ppr = String::new();
     if let Some(style_id) = style {
@@ -1528,6 +1531,9 @@ fn render_paragraph_xml(
     }
     if code_block {
         ppr.push_str(r#"<w:shd w:val="clear" w:color="auto" w:fill="F6F8FA"/>"#);
+    }
+    if center {
+        ppr.push_str(r#"<w:jc w:val="center"/>"#);
     }
     let ppr_xml = if ppr.is_empty() {
         String::new()
@@ -1613,6 +1619,12 @@ fn render_code_runs_xml(content: &str) -> String {
     render_text_run_xml(content, false, false, true, false)
 }
 
+const WORD_PAGE_WIDTH_TWIPS: u32 = 11906;
+const WORD_PAGE_MARGIN_TWIPS: u32 = 1440;
+const WORD_IMAGE_WIDTH_RATIO_NUM: u32 = 92;
+const WORD_IMAGE_WIDTH_RATIO_DEN: u32 = 100;
+const TWIPS_PER_PX_AT_96_DPI: u32 = 15;
+
 fn render_image_paragraph_xml(
     asset_id: &str,
     alt: Option<&str>,
@@ -1626,8 +1638,12 @@ fn render_image_paragraph_xml(
         .image_assets
         .get(asset_id)
         .ok_or_else(|| format!("缺少图片资源: {asset_id}"))?;
-    let width = width_px.unwrap_or(asset.width_px).max(1);
-    let height = height_px.unwrap_or(asset.height_px).max(1);
+    let (width, height) = fit_image_to_page_width(
+        width_px.unwrap_or(asset.width_px).max(1),
+        height_px.unwrap_or(asset.height_px).max(1),
+        quote_depth,
+        list_info.map(|(_, level)| level),
+    );
     let cx = width as u64 * 9525;
     let cy = height as u64 * 9525;
     let doc_pr_id = render_state.next_doc_pr_id;
@@ -1657,7 +1673,42 @@ fn render_image_paragraph_xml(
         cy
     );
 
-    Ok(render_paragraph_xml(drawing, None, quote_depth, list_info, false))
+    Ok(render_paragraph_xml(
+        drawing,
+        None,
+        quote_depth,
+        list_info,
+        false,
+        true,
+    ))
+}
+
+fn fit_image_to_page_width(
+    width_px: u32,
+    height_px: u32,
+    quote_depth: usize,
+    list_level: Option<usize>,
+) -> (u32, u32) {
+    let page_body_twips = WORD_PAGE_WIDTH_TWIPS.saturating_sub(WORD_PAGE_MARGIN_TWIPS * 2);
+    let quote_indent_twips = (quote_depth as u32).saturating_mul(720);
+    let list_indent_twips = list_level
+        .map(|level| ((level as u32) + 1).saturating_mul(720))
+        .unwrap_or(0);
+    let available_twips = page_body_twips
+        .saturating_sub(quote_indent_twips)
+        .saturating_sub(list_indent_twips);
+    let safe_twips =
+        available_twips.saturating_mul(WORD_IMAGE_WIDTH_RATIO_NUM) / WORD_IMAGE_WIDTH_RATIO_DEN;
+    let max_width_px = (safe_twips / TWIPS_PER_PX_AT_96_DPI).max(1);
+
+    if width_px <= max_width_px {
+        return (width_px, height_px);
+    }
+
+    let scaled_height = ((height_px as u64) * (max_width_px as u64) / (width_px as u64))
+        .max(1)
+        .min(u32::MAX as u64) as u32;
+    (max_width_px, scaled_height)
 }
 
 fn build_document_relationships_xml(render_state: &WordRenderState) -> String {
@@ -2046,6 +2097,17 @@ mod tests {
         assert!(error.contains("暂不支持远程图片"));
 
         let _ = std::fs::remove_dir_all(&work_dir);
+    }
+
+    #[test]
+    fn should_scale_large_images_to_fit_page_width() {
+        let (width, height) = fit_image_to_page_width(2000, 1000, 0, None);
+        assert_eq!(width, 553);
+        assert_eq!(height, 276);
+
+        let (nested_width, nested_height) = fit_image_to_page_width(2000, 1000, 1, Some(1));
+        assert!(nested_width < width);
+        assert!(nested_height < height);
     }
 }
 

@@ -249,6 +249,24 @@ Export to PDF using the system print dialog with optimized formatting:
 
 Export to clean, self-contained HTML with embedded styles.
 
+### Word Export
+
+HaoMD now includes `File -> Export -> Word (.docx)`.
+
+Current Word export support includes:
+
+- Editable headings, paragraphs, lists, tables, code blocks, and links
+- Embedded local images
+- Mermaid diagrams exported as PNG
+- Mind maps exported as PNG
+- Automatic downscaling for oversized images to fit the page width
+
+#### Notes
+
+- Mermaid and mind maps are inserted into Word as PNG images, while the document body remains editable
+- Remote images are not currently supported by the Word exporter; prefer local image files
+- If export output looks wrong, validate with `npm run tauri:dev` first instead of testing an older installed app
+
 ---
 
 ## Contributing
@@ -281,7 +299,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [ ] Collaborative Editing
 - [ ] Cloud Sync
 - [ ] Plugin System
-- [ ] Word Export
+- [x] Word Export
 - [ ] More Diagram Types (PlantUML, Graphviz)
 - [ ] Custom Themes
 - [ ] Mobile Support
@@ -304,4 +322,3 @@ For questions, suggestions, or issues, please feel free to open an issue on GitH
 - [KaTeX](https://katex.org/) - Math rendering
 - [Mermaid](https://mermaid-js.github.io/) - Diagram rendering
 - [Mind Elixir](https://github.com/awehook/remark-mindmap) - Mind map rendering
-
