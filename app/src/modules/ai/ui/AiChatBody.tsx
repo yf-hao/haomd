@@ -12,6 +12,7 @@ import type { ChatMessageView } from '../domain/chatSession'
 import type { VisionMode, UploadedFileRef } from '../domain/types'
 import { useAiSlashCommandHints } from './hooks/useAiSlashCommandHints'
 import { AiSlashCommandHintPanel } from './AiSlashCommandHintPanel'
+import { BadgeSelect } from './BadgeSelect'
 
 type MessageViewMode = 'rendered' | 'source'
 
@@ -451,38 +452,22 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
               >
                 <span className="ai-chat-icon-plus" aria-hidden="true" />
               </button>
-              <div className="ai-chat-input-badge ai-chat-role-badge">
-                <span className="ai-chat-icon-chevron-up" aria-hidden="true" />
-                <select
-                  className="ai-chat-role-select-inline"
-                  value={activeModelId ?? ''}
-                  onChange={(e) => onChangeModel?.(e.target.value)}
-                >
-                  {models?.map((m) => (
-                    <option
-                      key={m.id}
-                      value={m.id}
-                      data-vision={m.visionMode === 'enabled' ? 'enabled' : 'disabled'}
-                    >
-                      {getModelDisplayName(m.id)} ({m.providerName}){m.visionMode === 'enabled' ? '  👁' : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="ai-chat-input-badge ai-chat-role-badge">
-                <span className="ai-chat-icon-chevron-up" aria-hidden="true" />
-                <select
-                  className="ai-chat-role-select-inline"
-                  value={activeRoleId ?? ''}
-                  onChange={(e) => onChangeRole?.(e.target.value)}
-                >
-                  {roles?.map((role) => (
-                    <option key={role.id} value={role.id}>
-                      {role.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <BadgeSelect
+                options={(models ?? []).map((m) => ({
+                  value: m.id,
+                  label: `${getModelDisplayName(m.id)} (${m.providerName})${m.visionMode === 'enabled' ? '  👁' : ''}`,
+                }))}
+                value={activeModelId ?? ''}
+                onChange={(v) => onChangeModel?.(v)}
+              />
+              <BadgeSelect
+                options={(roles ?? []).map((role) => ({
+                  value: role.id,
+                  label: role.name,
+                }))}
+                value={activeRoleId ?? ''}
+                onChange={(v) => onChangeRole?.(v)}
+              />
             </div>
             <div className="ai-chat-input-tools-right">
               <button
