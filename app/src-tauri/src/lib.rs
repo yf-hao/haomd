@@ -14,6 +14,8 @@ use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba};
 use log::info;
 use once_cell::sync::Lazy;
 use percent_encoding::percent_decode_str;
+use quick_xml::events::Event;
+use quick_xml::Reader;
 use rand::{distributions::Alphanumeric, Rng};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -240,6 +242,12 @@ enum WordBlockCfg {
     Blockquote {
         children: Vec<WordBlockCfg>,
     },
+    Math {
+        content: String,
+        #[serde(default)]
+        #[serde(rename = "mathMl")]
+        math_ml: Option<String>,
+    },
     Code {
         language: Option<String>,
         content: String,
@@ -281,6 +289,12 @@ enum WordInlineRunCfg {
         code: Option<bool>,
         #[serde(default)]
         strike: Option<bool>,
+    },
+    Math {
+        value: String,
+        #[serde(default)]
+        #[serde(rename = "mathMl")]
+        math_ml: Option<String>,
     },
     Link {
         value: String,
@@ -1419,6 +1433,14 @@ fn render_word_block(
             false,
             false,
         )),
+        WordBlockCfg::Math { content, math_ml } => Ok(render_paragraph_xml(
+            render_math_run_xml(content, math_ml.as_deref(), true),
+            None,
+            quote_depth,
+            list_info,
+            false,
+            true,
+        )),
         WordBlockCfg::Code { language, content } => {
             let prefix = language
                 .as_ref()
@@ -1562,6 +1584,9 @@ fn render_inline_runs_xml(runs: &[WordInlineRunCfg], render_state: &mut WordRend
                     strike.unwrap_or(false),
                 ));
             }
+            WordInlineRunCfg::Math { value, math_ml } => {
+                xml.push_str(&render_math_run_xml(value, math_ml.as_deref(), false));
+            }
             WordInlineRunCfg::Link { value, href } => {
                 let rel_id = next_relationship_id(render_state);
                 render_state.hyperlinks.push((rel_id.clone(), href.clone()));
@@ -1617,6 +1642,298 @@ fn render_text_run_xml(
 
 fn render_code_runs_xml(content: &str) -> String {
     render_text_run_xml(content, false, false, true, false)
+}
+
+#[derive(Debug, Clone, Default)]
+struct MathMlNode {
+    name: String,
+    text: String,
+    children: Vec<MathMlNode>,
+}
+
+fn render_math_run_xml(value: &str, math_ml: Option<&str>, display_mode: bool) -> String {
+    if let Some(math_ml) = math_ml {
+        if let Ok(omml) = mathml_to_omml(math_ml) {
+            return format!(r#"<m:oMath>{}</m:oMath>"#, omml);
+        }
+    }
+
+    let mut rpr = String::from(
+        r#"<w:rFonts w:ascii="Cambria Math" w:hAnsi="Cambria Math" w:cs="Cambria Math"/>"#,
+    );
+    if display_mode {
+        rpr.push_str(r#"<w:sz w:val="24"/>"#);
+    }
+    let rpr_xml = format!("<w:rPr>{}</w:rPr>", rpr);
+    format!(
+        r#"<w:r>{}<w:t xml:space="preserve">{}</w:t></w:r>"#,
+        rpr_xml,
+        escape_xml_text(value)
+    )
+}
+
+fn mathml_to_omml(math_ml: &str) -> Result<String, String> {
+    let root = parse_mathml(math_ml)?;
+    let math_root = find_math_expression_root(&root);
+    Ok(convert_mathml_node(math_root))
+}
+
+fn parse_mathml(math_ml: &str) -> Result<MathMlNode, String> {
+    let mut reader = Reader::from_str(math_ml);
+    reader.config_mut().trim_text(true);
+    let mut buf = Vec::new();
+    let mut stack: Vec<MathMlNode> = Vec::new();
+    let mut root: Option<MathMlNode> = None;
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(event)) => {
+                stack.push(MathMlNode {
+                    name: String::from_utf8_lossy(event.local_name().as_ref()).to_string(),
+                    ..Default::default()
+                });
+            }
+            Ok(Event::Empty(event)) => {
+                let node = MathMlNode {
+                    name: String::from_utf8_lossy(event.local_name().as_ref()).to_string(),
+                    ..Default::default()
+                };
+                if let Some(parent) = stack.last_mut() {
+                    parent.children.push(node);
+                } else {
+                    root = Some(node);
+                }
+            }
+            Ok(Event::Text(event)) => {
+                if let Some(current) = stack.last_mut() {
+                    let text = event
+                        .decode()
+                        .map_err(|e| format!("解析 MathML 文本失败: {e}"))?;
+                    current.text.push_str(&text);
+                }
+            }
+            Ok(Event::CData(event)) => {
+                if let Some(current) = stack.last_mut() {
+                    let text = event
+                        .decode()
+                        .map_err(|e| format!("解析 MathML CDATA 失败: {e}"))?;
+                    current.text.push_str(&text);
+                }
+            }
+            Ok(Event::End(_)) => {
+                if let Some(node) = stack.pop() {
+                    if let Some(parent) = stack.last_mut() {
+                        parent.children.push(node);
+                    } else {
+                        root = Some(node);
+                    }
+                }
+            }
+            Ok(Event::Eof) => break,
+            Ok(_) => {}
+            Err(err) => return Err(format!("解析 MathML 失败: {err}")),
+        }
+        buf.clear();
+    }
+
+    root.ok_or_else(|| "MathML 为空".to_string())
+}
+
+fn find_math_expression_root<'a>(node: &'a MathMlNode) -> &'a MathMlNode {
+    match node.name.as_str() {
+        "math" => node
+            .children
+            .iter()
+            .find(|child| child.name == "semantics")
+            .and_then(|semantics| {
+                semantics
+                    .children
+                    .iter()
+                    .find(|child| child.name != "annotation")
+            })
+            .or_else(|| node.children.iter().find(|child| child.name != "annotation"))
+            .unwrap_or(node),
+        "semantics" => node
+            .children
+            .iter()
+            .find(|child| child.name != "annotation")
+            .unwrap_or(node),
+        _ => node,
+    }
+}
+
+fn convert_mathml_node(node: &MathMlNode) -> String {
+    match node.name.as_str() {
+        "math" | "semantics" => node
+            .children
+            .iter()
+            .map(convert_mathml_node)
+            .collect::<Vec<_>>()
+            .join(""),
+        "mrow" => convert_mathml_row(node),
+        "annotation" => String::new(),
+        "mi" | "mn" | "mo" | "mtext" => render_omml_text_run(&collect_mathml_text(node)),
+        "msup" => {
+            let base = node.children.first().map(convert_mathml_node).unwrap_or_default();
+            let sup = node.children.get(1).map(convert_mathml_node).unwrap_or_default();
+            format!(r#"<m:sSup><m:e>{}</m:e><m:sup>{}</m:sup></m:sSup>"#, base, sup)
+        }
+        "msub" => {
+            let base = node.children.first().map(convert_mathml_node).unwrap_or_default();
+            let sub = node.children.get(1).map(convert_mathml_node).unwrap_or_default();
+            format!(r#"<m:sSub><m:e>{}</m:e><m:sub>{}</m:sub></m:sSub>"#, base, sub)
+        }
+        "msubsup" => {
+            let base = node.children.first().map(convert_mathml_node).unwrap_or_default();
+            let sub = node.children.get(1).map(convert_mathml_node).unwrap_or_default();
+            let sup = node.children.get(2).map(convert_mathml_node).unwrap_or_default();
+            format!(
+                r#"<m:sSubSup><m:e>{}</m:e><m:sub>{}</m:sub><m:sup>{}</m:sup></m:sSubSup>"#,
+                base, sub, sup
+            )
+        }
+        "mfrac" => {
+            let num = node.children.first().map(convert_mathml_node).unwrap_or_default();
+            let den = node.children.get(1).map(convert_mathml_node).unwrap_or_default();
+            format!(r#"<m:f><m:num>{}</m:num><m:den>{}</m:den></m:f>"#, num, den)
+        }
+        "msqrt" => {
+            let body = node
+                .children
+                .iter()
+                .map(convert_mathml_node)
+                .collect::<Vec<_>>()
+                .join("");
+            format!(r#"<m:rad><m:degHide m:val="1"/><m:e>{}</m:e></m:rad>"#, body)
+        }
+        "mroot" => {
+            let body = node.children.first().map(convert_mathml_node).unwrap_or_default();
+            let degree = node.children.get(1).map(convert_mathml_node).unwrap_or_default();
+            format!(r#"<m:rad><m:deg>{}</m:deg><m:e>{}</m:e></m:rad>"#, degree, body)
+        }
+        "munderover" => render_nary_or_limit(node, true, true, &[]),
+        "munder" => render_nary_or_limit(node, true, false, &[]),
+        "mover" => render_nary_or_limit(node, false, true, &[]),
+        _ => {
+            if !node.children.is_empty() {
+                node.children
+                    .iter()
+                    .map(convert_mathml_node)
+                    .collect::<Vec<_>>()
+                    .join("")
+            } else {
+                render_omml_text_run(&collect_mathml_text(node))
+            }
+        }
+    }
+}
+
+fn convert_mathml_row(node: &MathMlNode) -> String {
+    let mut xml = String::new();
+    let mut index = 0;
+    while index < node.children.len() {
+        let child = &node.children[index];
+        if is_nary_node(child) {
+            let body_nodes = &node.children[index + 1..];
+            xml.push_str(&render_nary_or_limit(
+                child,
+                matches!(child.name.as_str(), "munderover" | "munder"),
+                matches!(child.name.as_str(), "munderover" | "mover"),
+                body_nodes,
+            ));
+            break;
+        }
+
+        xml.push_str(&convert_mathml_node(child));
+        index += 1;
+    }
+    xml
+}
+
+fn render_nary_or_limit(
+    node: &MathMlNode,
+    has_sub: bool,
+    has_sup: bool,
+    body_nodes: &[MathMlNode],
+) -> String {
+    let base = node.children.first().cloned().unwrap_or_default();
+    let operator = collect_mathml_text(&base);
+    let is_nary = matches!(operator.as_str(), "∑" | "∏" | "∫" | "⋂" | "⋃");
+
+    if is_nary {
+        let sub = if has_sub {
+            node.children.get(1).map(convert_mathml_node).unwrap_or_default()
+        } else {
+            String::new()
+        };
+        let sup = if has_sup {
+            let sup_index = if has_sub { 2 } else { 1 };
+            node.children
+                .get(sup_index)
+                .map(convert_mathml_node)
+                .unwrap_or_default()
+        } else {
+            String::new()
+        };
+        return format!(
+            concat!(
+                r#"<m:nary><m:naryPr><m:chr m:val="{}"/><m:limLoc m:val="undOvr"/></m:naryPr>"#,
+                r#"<m:sub>{}</m:sub><m:sup>{}</m:sup><m:e>{}</m:e></m:nary>"#
+            ),
+            escape_xml_attr(&operator),
+            sub,
+            sup,
+            body_nodes
+                .iter()
+                .map(convert_mathml_node)
+                .collect::<Vec<_>>()
+                .join("")
+        );
+    }
+
+    let base_xml = convert_mathml_node(&base);
+    match (has_sub, has_sup) {
+        (true, true) => format!(
+            r#"<m:sSubSup><m:e>{}</m:e><m:sub>{}</m:sub><m:sup>{}</m:sup></m:sSubSup>"#,
+            base_xml,
+            node.children.get(1).map(convert_mathml_node).unwrap_or_default(),
+            node.children.get(2).map(convert_mathml_node).unwrap_or_default()
+        ),
+        (true, false) => format!(
+            r#"<m:sSub><m:e>{}</m:e><m:sub>{}</m:sub></m:sSub>"#,
+            base_xml,
+            node.children.get(1).map(convert_mathml_node).unwrap_or_default()
+        ),
+        (false, true) => format!(
+            r#"<m:sSup><m:e>{}</m:e><m:sup>{}</m:sup></m:sSup>"#,
+            base_xml,
+            node.children.get(1).map(convert_mathml_node).unwrap_or_default()
+        ),
+        (false, false) => base_xml,
+    }
+}
+
+fn is_nary_node(node: &MathMlNode) -> bool {
+    matches!(node.name.as_str(), "munderover" | "munder" | "mover")
+        && matches!(
+            collect_mathml_text(node.children.first().unwrap_or(&MathMlNode::default())).as_str(),
+            "∑" | "∏" | "∫" | "⋂" | "⋃"
+        )
+}
+
+fn collect_mathml_text(node: &MathMlNode) -> String {
+    let mut text = node.text.clone();
+    for child in &node.children {
+        text.push_str(&collect_mathml_text(child));
+    }
+    text
+}
+
+fn render_omml_text_run(text: &str) -> String {
+    if text.is_empty() {
+        return String::new();
+    }
+    format!(r#"<m:r><m:t>{}</m:t></m:r>"#, escape_xml_text(text))
 }
 
 const WORD_PAGE_WIDTH_TWIPS: u32 = 11906;
@@ -2108,6 +2425,51 @@ mod tests {
         let (nested_width, nested_height) = fit_image_to_page_width(2000, 1000, 1, Some(1));
         assert!(nested_width < width);
         assert!(nested_height < height);
+    }
+
+    #[test]
+    fn should_include_math_content_in_document_xml() {
+        let work_dir = unique_test_path("haomd-word-math", None);
+        let payload = WordDocPayloadCfg {
+            title: "Math".to_string(),
+            blocks: vec![
+                WordBlockCfg::Paragraph {
+                    text: vec![
+                        WordInlineRunCfg::Text {
+                            value: "Energy: ".to_string(),
+                            bold: None,
+                            italic: None,
+                            code: None,
+                            strike: None,
+                        },
+                        WordInlineRunCfg::Math {
+                            value: "E = mc^2".to_string(),
+                            math_ml: Some("<math xmlns=\"http://www.w3.org/1998/Math/MathML\"><semantics><mrow><mi>E</mi><mo>=</mo><mi>m</mi><msup><mi>c</mi><mn>2</mn></msup></mrow></semantics></math>".to_string()),
+                        },
+                    ],
+                },
+                WordBlockCfg::Math {
+                    content: "\\frac{a}{b}".to_string(),
+                    math_ml: Some("<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\"><semantics><mrow><munderover><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover><msup><mi>x</mi><mi>i</mi></msup><mo>+</mo><mfrac><mi>a</mi><mi>b</mi></mfrac></mrow></semantics></math>".to_string()),
+                },
+            ],
+            assets: vec![],
+        };
+
+        build_word_export_workspace(&work_dir, &payload).expect("workspace should build");
+        let document_xml =
+            fs::read_to_string(work_dir.join("word").join("document.xml")).expect("document xml should exist");
+
+        assert!(document_xml.contains("<m:oMath>"));
+        assert!(document_xml.contains("<m:sSup>"));
+        assert!(document_xml.contains("<m:nary>"));
+        assert!(document_xml.contains("<m:f>"));
+        assert!(document_xml.contains("E"));
+        assert!(document_xml.contains("∑"));
+        assert!(document_xml.contains(r#"<m:e><m:sSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sup><m:r><m:t>i</m:t></m:r></m:sup></m:sSup>"#));
+        assert!(document_xml.contains(r#"<w:jc w:val="center"/>"#));
+
+        let _ = std::fs::remove_dir_all(&work_dir);
     }
 }
 

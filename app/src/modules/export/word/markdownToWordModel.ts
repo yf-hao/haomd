@@ -1,6 +1,8 @@
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import katex from 'katex'
 import type { Root, Content, Image, List, ListItem, PhrasingContent, TableCell, TableRow } from 'mdast'
 import { toString } from 'mdast-util-to-string'
 import type { InlineRun, WordAsset, WordBlock, WordDocPayload } from './types'
@@ -18,6 +20,7 @@ export function markdownToWordModel(markdown: string, title: string): WordDocPay
   const tree = unified()
     .use(remarkParse)
     .use(remarkGfm)
+    .use(remarkMath)
     .parse(markdown) as Root
 
   const ctx: ParseContext = {
@@ -34,6 +37,21 @@ export function markdownToWordModel(markdown: string, title: string): WordDocPay
     title,
     blocks,
     assets: ctx.assets,
+  }
+}
+
+export function plainTextToWordModel(text: string, title: string): WordDocPayload {
+  const normalized = text.replace(/\r\n/g, '\n')
+  const lines = normalized.split('\n')
+  const blocks: WordBlock[] = lines.map((line) => ({
+    type: 'paragraph',
+    text: line ? [{ type: 'text', value: line }] : [],
+  }))
+
+  return {
+    title,
+    blocks,
+    assets: [],
   }
 }
 
@@ -68,6 +86,12 @@ function transformBlock(node: Content, ctx: ParseContext): WordBlock[] {
       return [{
         type: 'blockquote',
         children: node.children.flatMap((child) => transformBlock(child, ctx)),
+      }]
+    case 'math':
+      return [{
+        type: 'math',
+        content: node.value,
+        mathMl: renderMathMl(node.value, true),
       }]
     case 'code':
       return [{
@@ -153,6 +177,9 @@ function transformInline(nodes: PhrasingContent[], ctx: ParseContext, marks: Tex
         break
       case 'inlineCode':
         runs.push({ type: 'text', value: node.value, ...marks, code: true })
+        break
+      case 'inlineMath':
+        runs.push({ type: 'math', value: node.value, mathMl: renderMathMl(node.value, false) })
         break
       case 'break':
         runs.push({ type: 'text', value: '\n', ...marks })
@@ -253,4 +280,18 @@ function normalizeIdentifier(value: string): string {
 function clampHeadingLevel(level: number): 1 | 2 | 3 | 4 | 5 | 6 {
   const safe = Math.min(6, Math.max(1, level))
   return safe as 1 | 2 | 3 | 4 | 5 | 6
+}
+
+function renderMathMl(expression: string, displayMode: boolean): string | undefined {
+  try {
+    const html = katex.renderToString(expression, {
+      displayMode,
+      throwOnError: false,
+      output: 'mathml',
+    })
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    return doc.querySelector('math')?.outerHTML
+  } catch {
+    return undefined
+  }
 }

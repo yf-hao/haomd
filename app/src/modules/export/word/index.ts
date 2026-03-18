@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { save } from '@tauri-apps/plugin-dialog'
 import { collectWordAssets } from './collectAssets'
-import { markdownToWordModel } from './markdownToWordModel'
+import { markdownToWordModel, plainTextToWordModel } from './markdownToWordModel'
 import { renderWordDiagramAssets } from './renderDiagramAssets'
 
 export async function exportToWord(ctx: {
@@ -12,8 +12,10 @@ export async function exportToWord(ctx: {
 }) {
   try {
     const rawTitle = ctx.getCurrentFileName() || 'Document'
-    const title = rawTitle.replace(/\.md$/i, '')
+    const title = buildWordExportBaseName(rawTitle)
     const filePath = ctx.getFilePath ? ctx.getFilePath() : null
+    const markdown = ctx.getCurrentMarkdown()
+    const isPlainText = /\.txt$/i.test(rawTitle) || /\.txt$/i.test(filePath || '')
 
     const outputPath = await save({
       defaultPath: `${title}.docx`,
@@ -22,7 +24,9 @@ export async function exportToWord(ctx: {
     if (!outputPath) return false
 
     ctx.setStatusMessage('正在解析 Markdown 结构...')
-    let payload = markdownToWordModel(ctx.getCurrentMarkdown(), title)
+    let payload = isPlainText
+      ? plainTextToWordModel(markdown, title)
+      : markdownToWordModel(markdown, title)
 
     ctx.setStatusMessage('正在收集文档资源...')
     payload = await collectWordAssets({ payload, filePath })
@@ -45,4 +49,10 @@ export async function exportToWord(ctx: {
     ctx.setStatusMessage('Word 导出失败: ' + (error as Error).message)
     return false
   }
+}
+
+export function buildWordExportBaseName(fileName: string | null): string {
+  const raw = (fileName || 'Document').trim()
+  if (!raw) return 'Document'
+  return raw.replace(/\.[^./\\]+$/i, '')
 }

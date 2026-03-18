@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { markdownToWordModel } from './markdownToWordModel'
+import { markdownToWordModel, plainTextToWordModel } from './markdownToWordModel'
 
 describe('export/word - markdownToWordModel', () => {
   it('should map core markdown structures into a word payload', () => {
@@ -112,5 +112,44 @@ describe('export/word - markdownToWordModel', () => {
         { type: 'text', value: '.' },
       ],
     })
+  })
+
+  it('should preserve blank lines for plain text export', () => {
+    const payload = plainTextToWordModel('first\n\nthird\n', 'Plain')
+
+    expect(payload.blocks).toEqual([
+      { type: 'paragraph', text: [{ type: 'text', value: 'first' }] },
+      { type: 'paragraph', text: [] },
+      { type: 'paragraph', text: [{ type: 'text', value: 'third' }] },
+      { type: 'paragraph', text: [] },
+    ])
+  })
+
+  it('should parse block math and inline math nodes', () => {
+    const markdown = [
+      'Inline math $E = mc^2$ in a sentence.',
+      '',
+      '$$',
+      '\\frac{a}{b}',
+      '$$',
+    ].join('\n')
+
+    const payload = markdownToWordModel(markdown, 'Math')
+
+    expect(payload.blocks[0]).toEqual({
+      type: 'paragraph',
+      text: [
+        { type: 'text', value: 'Inline math ' },
+        expect.objectContaining({ type: 'math', value: 'E = mc^2', mathMl: expect.stringContaining('<math') }),
+        { type: 'text', value: ' in a sentence.' },
+      ],
+    })
+    expect(payload.blocks[1]).toEqual(
+      expect.objectContaining({
+        type: 'math',
+        content: '\\frac{a}{b}',
+        mathMl: expect.stringContaining('<mfrac>'),
+      }),
+    )
   })
 })

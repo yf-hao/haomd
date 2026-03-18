@@ -15,6 +15,7 @@ dependencies = [
  "mime_guess",
  "once_cell",
  "percent-encoding",
+ "quick-xml",
  "rand 0.8.5",
  "serde",
  "serde_json",

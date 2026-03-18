@@ -8,6 +8,7 @@ export type WordBlock =
   | { type: 'heading'; level: 1 | 2 | 3 | 4 | 5 | 6; text: InlineRun[] }
   | { type: 'paragraph'; text: InlineRun[] }
   | { type: 'blockquote'; children: WordBlock[] }
+  | { type: 'math'; content: string; mathMl?: string }
   | { type: 'code'; language?: string; content: string }
   | { type: 'list'; ordered: boolean; items: WordBlock[][] }
   | { type: 'table'; rows: { cells: WordBlock[][] }[] }
@@ -15,6 +16,7 @@ export type WordBlock =
 
 export type InlineRun =
   | { type: 'text'; value: string; bold?: boolean; italic?: boolean; code?: boolean; strike?: boolean }
+  | { type: 'math'; value: string; mathMl?: string }
   | { type: 'link'; value: string; href: string }
 
 export type WordAsset =
