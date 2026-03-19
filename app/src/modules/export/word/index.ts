@@ -3,6 +3,7 @@ import { save } from '@tauri-apps/plugin-dialog'
 import { collectWordAssets } from './collectAssets'
 import { markdownToWordModel, plainTextToWordModel } from './markdownToWordModel'
 import { renderWordDiagramAssets } from './renderDiagramAssets'
+import { getWordExportStyleSettings } from '../../settings/editorSettings'
 
 export async function exportToWord(ctx: {
   setStatusMessage: (msg: string) => void
@@ -16,6 +17,7 @@ export async function exportToWord(ctx: {
     const filePath = ctx.getFilePath ? ctx.getFilePath() : null
     const markdown = ctx.getCurrentMarkdown()
     const isPlainText = /\.txt$/i.test(rawTitle) || /\.txt$/i.test(filePath || '')
+    const styleSettings = await getWordExportStyleSettings()
 
     const outputPath = await save({
       defaultPath: `${title}.docx`,
@@ -27,6 +29,7 @@ export async function exportToWord(ctx: {
     let payload = isPlainText
       ? plainTextToWordModel(markdown, title)
       : markdownToWordModel(markdown, title)
+    payload.styleSettings = styleSettings
 
     ctx.setStatusMessage('正在收集文档资源...')
     payload = await collectWordAssets({ payload, filePath })

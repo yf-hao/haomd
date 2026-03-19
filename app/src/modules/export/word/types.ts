@@ -2,6 +2,20 @@ export type WordDocPayload = {
   title: string
   blocks: WordBlock[]
   assets: WordAsset[]
+  styleSettings?: WordExportStyleSettings
+}
+
+export type WordExportStyleSettings = {
+  bodyFontFamily: string
+  bodyFontSizePt: number
+  headingFontFamily: string
+  heading1SizePt: number
+  heading2SizePt: number
+  heading3SizePt: number
+  paragraphSpacingAfterPt: number
+  lineSpacing: number
+  codeFontSizePt: number
+  pageMarginCm: number
 }
 
 export type WordBlock =

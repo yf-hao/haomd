@@ -20,10 +20,24 @@ export type AiChatUiSettings = {
   maxVisibleMessagesPane: number
 }
 
+export type WordExportStyleSettings = {
+  bodyFontFamily: string
+  bodyFontSizePt: number
+  headingFontFamily: string
+  heading1SizePt: number
+  heading2SizePt: number
+  heading3SizePt: number
+  paragraphSpacingAfterPt: number
+  lineSpacing: number
+  codeFontSizePt: number
+  pageMarginCm: number
+}
+
 export type EditorSettings = {
   aiCompression?: Partial<AiCompressionSettings>
   hugeDoc?: HugeDocSettings
   aiChat?: Partial<AiChatUiSettings>
+  wordExport?: Partial<WordExportStyleSettings>
 }
 
 const defaultCompression: AiCompressionSettings = {
@@ -43,6 +57,19 @@ const defaultHugeDoc: Required<HugeDocSettings> = {
 const defaultAiChatUi: AiChatUiSettings = {
   maxVisibleMessagesDialog: 50,
   maxVisibleMessagesPane: 50,
+}
+
+const defaultWordExport: WordExportStyleSettings = {
+  bodyFontFamily: 'Times New Roman',
+  bodyFontSizePt: 12,
+  headingFontFamily: 'Calibri',
+  heading1SizePt: 16,
+  heading2SizePt: 14,
+  heading3SizePt: 13,
+  paragraphSpacingAfterPt: 8,
+  lineSpacing: 1.25,
+  codeFontSizePt: 10,
+  pageMarginCm: 2.54,
 }
 
 let cachedSettings: EditorSettings | null = null
@@ -97,8 +124,36 @@ export async function getAiChatUiSettings(): Promise<AiChatUiSettings> {
   }
 }
 
+export async function getWordExportStyleSettings(): Promise<WordExportStyleSettings> {
+  const settings = await loadEditorSettings()
+  const cfg = settings.wordExport ?? {}
+  return {
+    bodyFontFamily: cfg.bodyFontFamily ?? defaultWordExport.bodyFontFamily,
+    bodyFontSizePt: cfg.bodyFontSizePt ?? defaultWordExport.bodyFontSizePt,
+    headingFontFamily: cfg.headingFontFamily ?? defaultWordExport.headingFontFamily,
+    heading1SizePt: cfg.heading1SizePt ?? defaultWordExport.heading1SizePt,
+    heading2SizePt: cfg.heading2SizePt ?? defaultWordExport.heading2SizePt,
+    heading3SizePt: cfg.heading3SizePt ?? defaultWordExport.heading3SizePt,
+    paragraphSpacingAfterPt: cfg.paragraphSpacingAfterPt ?? defaultWordExport.paragraphSpacingAfterPt,
+    lineSpacing: cfg.lineSpacing ?? defaultWordExport.lineSpacing,
+    codeFontSizePt: cfg.codeFontSizePt ?? defaultWordExport.codeFontSizePt,
+    pageMarginCm: cfg.pageMarginCm ?? defaultWordExport.pageMarginCm,
+  }
+}
+
+export async function saveEditorSettings(settings: EditorSettings): Promise<void> {
+  const resp = await invoke<BackendResult<null>>('save_editor_settings', { cfg: settings })
+  if ('Err' in resp) {
+    throw new Error(resp.Err.error.message || 'Failed to save settings')
+  }
+  cachedSettings = settings
+}
+
+export function getDefaultWordExportStyleSettings(): WordExportStyleSettings {
+  return { ...defaultWordExport }
+}
+
 /** 仅供测试使用：清除单例缓存 */
 export function resetSettingsCache() {
   cachedSettings = null
 }
-

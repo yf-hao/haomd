@@ -227,6 +227,9 @@ struct WordDocPayloadCfg {
     title: String,
     blocks: Vec<WordBlockCfg>,
     assets: Vec<WordAssetCfg>,
+    #[serde(default)]
+    #[serde(rename = "styleSettings")]
+    style_settings: Option<WordExportStyleSettingsCfg>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -344,12 +347,39 @@ struct WordAssetRuntime {
     height_px: u32,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone)]
+struct WordExportStyleSettingsResolved {
+    body_font_family: String,
+    body_font_size_half_points: u32,
+    heading_font_family: String,
+    heading1_size_half_points: u32,
+    heading2_size_half_points: u32,
+    heading3_size_half_points: u32,
+    paragraph_spacing_after_twips: u32,
+    line_spacing_twips: u32,
+    code_font_size_half_points: u32,
+    page_margin_twips: u32,
+}
+
+#[derive(Debug)]
 struct WordRenderState {
     next_rel_id: u32,
     next_doc_pr_id: u32,
     image_assets: std::collections::HashMap<String, WordAssetRuntime>,
     hyperlinks: Vec<(String, String)>,
+    style_settings: WordExportStyleSettingsResolved,
+}
+
+impl Default for WordRenderState {
+    fn default() -> Self {
+        Self {
+            next_rel_id: 0,
+            next_doc_pr_id: 0,
+            image_assets: std::collections::HashMap::new(),
+            hyperlinks: Vec::new(),
+            style_settings: resolve_word_export_style_settings(None),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -445,6 +475,31 @@ struct AiChatUiCfg {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+struct WordExportStyleSettingsCfg {
+    #[serde(default)]
+    body_font_family: Option<String>,
+    #[serde(default)]
+    body_font_size_pt: Option<f32>,
+    #[serde(default)]
+    heading_font_family: Option<String>,
+    #[serde(default)]
+    heading1_size_pt: Option<f32>,
+    #[serde(default)]
+    heading2_size_pt: Option<f32>,
+    #[serde(default)]
+    heading3_size_pt: Option<f32>,
+    #[serde(default)]
+    paragraph_spacing_after_pt: Option<f32>,
+    #[serde(default)]
+    line_spacing: Option<f32>,
+    #[serde(default)]
+    code_font_size_pt: Option<f32>,
+    #[serde(default)]
+    page_margin_cm: Option<f32>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 struct EditorSettingsCfg {
     #[serde(default)]
     ai_compression: Option<AiCompressionCfg>,
@@ -452,6 +507,8 @@ struct EditorSettingsCfg {
     huge_doc: Option<HugeDocCfg>,
     #[serde(default)]
     ai_chat: Option<AiChatUiCfg>,
+    #[serde(default)]
+    word_export: Option<WordExportStyleSettingsCfg>,
     /// 预留扩展位：保存未来新增的配置项，避免在写回文件时丢失
     #[serde(flatten)]
     extra: std::collections::HashMap<String, serde_json::Value>,
@@ -475,8 +532,100 @@ fn default_editor_settings() -> EditorSettingsCfg {
             max_visible_messages_dialog: Some(10),
             max_visible_messages_pane: Some(10),
         }),
+        word_export: Some(default_word_export_style_settings_cfg()),
         extra: std::collections::HashMap::new(),
     }
+}
+
+fn default_word_export_style_settings_cfg() -> WordExportStyleSettingsCfg {
+    WordExportStyleSettingsCfg {
+        body_font_family: Some("Times New Roman".to_string()),
+        body_font_size_pt: Some(12.0),
+        heading_font_family: Some("Calibri".to_string()),
+        heading1_size_pt: Some(16.0),
+        heading2_size_pt: Some(14.0),
+        heading3_size_pt: Some(13.0),
+        paragraph_spacing_after_pt: Some(8.0),
+        line_spacing: Some(1.25),
+        code_font_size_pt: Some(10.0),
+        page_margin_cm: Some(2.54),
+    }
+}
+
+fn resolve_word_export_style_settings(
+    cfg: Option<&WordExportStyleSettingsCfg>,
+) -> WordExportStyleSettingsResolved {
+    let default_cfg = default_word_export_style_settings_cfg();
+    let cfg = cfg.cloned().unwrap_or(default_cfg.clone());
+    let body_font_family = cfg
+        .body_font_family
+        .filter(|v| !v.trim().is_empty())
+        .or(default_cfg.body_font_family)
+        .unwrap_or_else(|| "Times New Roman".to_string());
+    let heading_font_family = cfg
+        .heading_font_family
+        .filter(|v| !v.trim().is_empty())
+        .or(default_cfg.heading_font_family)
+        .unwrap_or_else(|| "Calibri".to_string());
+
+    WordExportStyleSettingsResolved {
+        body_font_family,
+        body_font_size_half_points: pt_to_half_points(
+            cfg.body_font_size_pt
+                .or(default_cfg.body_font_size_pt)
+                .unwrap_or(12.0),
+        ),
+        heading_font_family,
+        heading1_size_half_points: pt_to_half_points(
+            cfg.heading1_size_pt
+                .or(default_cfg.heading1_size_pt)
+                .unwrap_or(16.0),
+        ),
+        heading2_size_half_points: pt_to_half_points(
+            cfg.heading2_size_pt
+                .or(default_cfg.heading2_size_pt)
+                .unwrap_or(14.0),
+        ),
+        heading3_size_half_points: pt_to_half_points(
+            cfg.heading3_size_pt
+                .or(default_cfg.heading3_size_pt)
+                .unwrap_or(13.0),
+        ),
+        paragraph_spacing_after_twips: pt_to_twips(
+            cfg.paragraph_spacing_after_pt
+                .or(default_cfg.paragraph_spacing_after_pt)
+                .unwrap_or(8.0),
+        ),
+        line_spacing_twips: line_spacing_to_twips(
+            cfg.line_spacing.or(default_cfg.line_spacing).unwrap_or(1.25),
+        ),
+        code_font_size_half_points: pt_to_half_points(
+            cfg.code_font_size_pt
+                .or(default_cfg.code_font_size_pt)
+                .unwrap_or(10.0),
+        ),
+        page_margin_twips: cm_to_twips(
+            cfg.page_margin_cm
+                .or(default_cfg.page_margin_cm)
+                .unwrap_or(2.54),
+        ),
+    }
+}
+
+fn pt_to_half_points(value: f32) -> u32 {
+    (value.clamp(8.0, 48.0) * 2.0).round() as u32
+}
+
+fn pt_to_twips(value: f32) -> u32 {
+    (value.clamp(0.0, 72.0) * 20.0).round() as u32
+}
+
+fn line_spacing_to_twips(value: f32) -> u32 {
+    (value.clamp(1.0, 3.0) * 240.0).round() as u32
+}
+
+fn cm_to_twips(value: f32) -> u32 {
+    ((value.clamp(1.0, 5.0) / 2.54) * 1440.0).round() as u32
 }
 
 // 内置默认 AI 配置，来源于 src-tauri/ai_settings.default.json
@@ -1196,6 +1345,7 @@ fn build_word_export_workspace(dir: &Path, payload: &WordDocPayloadCfg) -> Resul
     let mut render_state = WordRenderState {
         next_rel_id: 3,
         next_doc_pr_id: 1,
+        style_settings: resolve_word_export_style_settings(payload.style_settings.as_ref()),
         ..Default::default()
     };
 
@@ -1208,7 +1358,7 @@ fn build_word_export_workspace(dir: &Path, payload: &WordDocPayloadCfg) -> Resul
 
     let document_xml = build_document_xml(payload, &mut render_state)?;
     let document_rels_xml = build_document_relationships_xml(&render_state);
-    let styles_xml = build_word_styles_xml();
+    let styles_xml = build_word_styles_xml(&render_state.style_settings);
     let numbering_xml = build_word_numbering_xml();
     let content_types_xml = build_content_types_xml(&content_type_defaults);
     let root_rels_xml = build_root_relationships_xml();
@@ -1367,6 +1517,7 @@ fn build_document_xml(
     render_state: &mut WordRenderState,
 ) -> Result<String, String> {
     let body = render_word_blocks(&payload.blocks, render_state, 0, None)?;
+    let margin = render_state.style_settings.page_margin_twips;
     Ok(format!(
         concat!(
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
@@ -1388,10 +1539,10 @@ fn build_document_xml(
             r#"xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" "#,
             r#"xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" "#,
             r#"mc:Ignorable="w14 wp14"><w:body>{}"#,
-            r#"<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>"#,
+            r#"<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="{}" w:right="{}" w:bottom="{}" w:left="{}" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>"#,
             r#"</w:body></w:document>"#
         ),
-        body
+        body, margin, margin, margin, margin
     ))
 }
 
@@ -1458,7 +1609,10 @@ fn render_word_block(
                 .as_ref()
                 .map(|lang| format!("{lang}\n"))
                 .unwrap_or_default();
-            let runs = render_code_runs_xml(&(prefix + content));
+            let runs = render_code_runs_xml(
+                &(prefix + content),
+                render_state.style_settings.code_font_size_half_points,
+            );
             Ok(render_paragraph_xml(
                 runs,
                 None,
@@ -1601,6 +1755,7 @@ fn render_inline_runs_xml(runs: &[WordInlineRunCfg], render_state: &mut WordRend
                     italic.unwrap_or(false),
                     code.unwrap_or(false),
                     strike.unwrap_or(false),
+                    render_state.style_settings.code_font_size_half_points,
                 ));
             }
             WordInlineRunCfg::Math { value, math_ml } => {
@@ -1620,7 +1775,14 @@ fn render_inline_runs_xml(runs: &[WordInlineRunCfg], render_state: &mut WordRend
     xml
 }
 
-fn render_text_run_xml(value: &str, bold: bool, italic: bool, code: bool, strike: bool) -> String {
+fn render_text_run_xml(
+    value: &str,
+    bold: bool,
+    italic: bool,
+    code: bool,
+    strike: bool,
+    code_font_size_half_points: u32,
+) -> String {
     let mut rpr = String::new();
     if bold {
         rpr.push_str("<w:b/>");
@@ -1632,7 +1794,10 @@ fn render_text_run_xml(value: &str, bold: bool, italic: bool, code: bool, strike
         rpr.push_str("<w:strike/>");
     }
     if code {
-        rpr.push_str(r#"<w:rFonts w:ascii="Menlo" w:hAnsi="Menlo" w:cs="Menlo"/><w:sz w:val="20"/><w:shd w:val="clear" w:color="auto" w:fill="F6F8FA"/>"#);
+        rpr.push_str(&format!(
+            r#"<w:rFonts w:ascii="Menlo" w:hAnsi="Menlo" w:cs="Menlo"/><w:sz w:val="{}"/><w:shd w:val="clear" w:color="auto" w:fill="F6F8FA"/>"#,
+            code_font_size_half_points
+        ));
     }
     let rpr_xml = if rpr.is_empty() {
         String::new()
@@ -1653,8 +1818,15 @@ fn render_text_run_xml(value: &str, bold: bool, italic: bool, code: bool, strike
     format!("<w:r>{}{}</w:r>", rpr_xml, body)
 }
 
-fn render_code_runs_xml(content: &str) -> String {
-    render_text_run_xml(content, false, false, true, false)
+fn render_code_runs_xml(content: &str, code_font_size_half_points: u32) -> String {
+    render_text_run_xml(
+        content,
+        false,
+        false,
+        true,
+        false,
+        code_font_size_half_points,
+    )
 }
 
 #[derive(Debug, Clone, Default)]
@@ -2025,7 +2197,6 @@ fn render_omml_text_run(text: &str) -> String {
 }
 
 const WORD_PAGE_WIDTH_TWIPS: u32 = 11906;
-const WORD_PAGE_MARGIN_TWIPS: u32 = 1440;
 const WORD_IMAGE_WIDTH_RATIO_NUM: u32 = 92;
 const WORD_IMAGE_WIDTH_RATIO_DEN: u32 = 100;
 const TWIPS_PER_PX_AT_96_DPI: u32 = 15;
@@ -2048,6 +2219,7 @@ fn render_image_paragraph_xml(
         height_px.unwrap_or(asset.height_px).max(1),
         quote_depth,
         list_info.map(|(_, level)| level),
+        render_state.style_settings.page_margin_twips,
     );
     let cx = width as u64 * 9525;
     let cy = height as u64 * 9525;
@@ -2093,8 +2265,9 @@ fn fit_image_to_page_width(
     height_px: u32,
     quote_depth: usize,
     list_level: Option<usize>,
+    page_margin_twips: u32,
 ) -> (u32, u32) {
-    let page_body_twips = WORD_PAGE_WIDTH_TWIPS.saturating_sub(WORD_PAGE_MARGIN_TWIPS * 2);
+    let page_body_twips = WORD_PAGE_WIDTH_TWIPS.saturating_sub(page_margin_twips * 2);
     let quote_indent_twips = (quote_depth as u32).saturating_mul(720);
     let list_indent_twips = list_level
         .map(|level| ((level as u32) + 1).saturating_mul(720))
@@ -2209,21 +2382,54 @@ fn build_app_props_xml() -> String {
     .to_string()
 }
 
-fn build_word_styles_xml() -> String {
-    concat!(
-        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
-        r#"<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">"#,
-        r#"<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>"#,
-        r#"<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style>"#,
-        r#"<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr><w:b/><w:sz w:val="28"/></w:rPr></w:style>"#,
-        r#"<w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr><w:b/><w:sz w:val="24"/></w:rPr></w:style>"#,
-        r#"<w:style w:type="paragraph" w:styleId="Heading4"><w:name w:val="heading 4"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr><w:b/><w:sz w:val="22"/></w:rPr></w:style>"#,
-        r#"<w:style w:type="paragraph" w:styleId="Heading5"><w:name w:val="heading 5"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr><w:b/><w:sz w:val="20"/></w:rPr></w:style>"#,
-        r#"<w:style w:type="paragraph" w:styleId="Heading6"><w:name w:val="heading 6"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr><w:b/><w:sz w:val="18"/></w:rPr></w:style>"#,
-        r#"<w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:basedOn w:val="DefaultParagraphFont"/><w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:rPr><w:color w:val="0563C1"/><w:u w:val="single"/></w:rPr></w:style>"#,
-        r#"</w:styles>"#
+fn build_word_styles_xml(settings: &WordExportStyleSettingsResolved) -> String {
+    format!(
+        concat!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+            r#"<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">"#,
+            r#"<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/>"#,
+            r#"<w:pPr><w:spacing w:after="{}" w:line="{}" w:lineRule="auto"/></w:pPr>"#,
+            r#"<w:rPr><w:rFonts w:ascii="{}" w:hAnsi="{}" w:cs="{}"/><w:sz w:val="{}"/></w:rPr></w:style>"#,
+            r#"<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr><w:rFonts w:ascii="{}" w:hAnsi="{}" w:cs="{}"/><w:b/><w:sz w:val="{}"/></w:rPr></w:style>"#,
+            r#"<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr><w:rFonts w:ascii="{}" w:hAnsi="{}" w:cs="{}"/><w:b/><w:sz w:val="{}"/></w:rPr></w:style>"#,
+            r#"<w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr><w:rFonts w:ascii="{}" w:hAnsi="{}" w:cs="{}"/><w:b/><w:sz w:val="{}"/></w:rPr></w:style>"#,
+            r#"<w:style w:type="paragraph" w:styleId="Heading4"><w:name w:val="heading 4"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr><w:rFonts w:ascii="{}" w:hAnsi="{}" w:cs="{}"/><w:b/><w:sz w:val="{}"/></w:rPr></w:style>"#,
+            r#"<w:style w:type="paragraph" w:styleId="Heading5"><w:name w:val="heading 5"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr><w:rFonts w:ascii="{}" w:hAnsi="{}" w:cs="{}"/><w:b/><w:sz w:val="{}"/></w:rPr></w:style>"#,
+            r#"<w:style w:type="paragraph" w:styleId="Heading6"><w:name w:val="heading 6"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr><w:rFonts w:ascii="{}" w:hAnsi="{}" w:cs="{}"/><w:b/><w:sz w:val="{}"/></w:rPr></w:style>"#,
+            r#"<w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:basedOn w:val="DefaultParagraphFont"/><w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:rPr><w:color w:val="0563C1"/><w:u w:val="single"/></w:rPr></w:style>"#,
+            r#"</w:styles>"#
+        ),
+        settings.paragraph_spacing_after_twips,
+        settings.line_spacing_twips,
+        escape_xml_attr(&settings.body_font_family),
+        escape_xml_attr(&settings.body_font_family),
+        escape_xml_attr(&settings.body_font_family),
+        settings.body_font_size_half_points,
+        escape_xml_attr(&settings.heading_font_family),
+        escape_xml_attr(&settings.heading_font_family),
+        escape_xml_attr(&settings.heading_font_family),
+        settings.heading1_size_half_points,
+        escape_xml_attr(&settings.heading_font_family),
+        escape_xml_attr(&settings.heading_font_family),
+        escape_xml_attr(&settings.heading_font_family),
+        settings.heading2_size_half_points,
+        escape_xml_attr(&settings.heading_font_family),
+        escape_xml_attr(&settings.heading_font_family),
+        escape_xml_attr(&settings.heading_font_family),
+        settings.heading3_size_half_points,
+        escape_xml_attr(&settings.heading_font_family),
+        escape_xml_attr(&settings.heading_font_family),
+        escape_xml_attr(&settings.heading_font_family),
+        settings.heading3_size_half_points,
+        escape_xml_attr(&settings.heading_font_family),
+        escape_xml_attr(&settings.heading_font_family),
+        escape_xml_attr(&settings.heading_font_family),
+        settings.heading3_size_half_points,
+        escape_xml_attr(&settings.heading_font_family),
+        escape_xml_attr(&settings.heading_font_family),
+        escape_xml_attr(&settings.heading_font_family),
+        settings.heading3_size_half_points.saturating_sub(2),
     )
-    .to_string()
 }
 
 fn build_word_numbering_xml() -> String {
@@ -2351,6 +2557,7 @@ mod tests {
                 width_px: Some(1),
                 height_px: Some(1),
             }],
+            style_settings: None,
         };
 
         build_word_export_workspace(&work_dir, &payload).expect("workspace should build");
@@ -2450,6 +2657,7 @@ mod tests {
                 width_px: Some(1),
                 height_px: Some(1),
             }],
+            style_settings: None,
         };
 
         build_word_export_workspace(&work_dir, &payload).expect("workspace should build");
@@ -2500,6 +2708,7 @@ mod tests {
                 width_px: Some(10),
                 height_px: Some(10),
             }],
+            style_settings: None,
         };
 
         let error =
@@ -2511,11 +2720,11 @@ mod tests {
 
     #[test]
     fn should_scale_large_images_to_fit_page_width() {
-        let (width, height) = fit_image_to_page_width(2000, 1000, 0, None);
+        let (width, height) = fit_image_to_page_width(2000, 1000, 0, None, 1440);
         assert_eq!(width, 553);
         assert_eq!(height, 276);
 
-        let (nested_width, nested_height) = fit_image_to_page_width(2000, 1000, 1, Some(1));
+        let (nested_width, nested_height) = fit_image_to_page_width(2000, 1000, 1, Some(1), 1440);
         assert!(nested_width < width);
         assert!(nested_height < height);
     }
@@ -2547,6 +2756,7 @@ mod tests {
                 },
             ],
             assets: vec![],
+            style_settings: None,
         };
 
         build_word_export_workspace(&work_dir, &payload).expect("workspace should build");
@@ -2561,6 +2771,67 @@ mod tests {
         assert!(document_xml.contains("∑"));
         assert!(document_xml.contains(r#"<m:e><m:sSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sup><m:r><m:t>i</m:t></m:r></m:sup></m:sSup>"#));
         assert!(document_xml.contains(r#"<w:jc w:val="center"/>"#));
+
+        let _ = std::fs::remove_dir_all(&work_dir);
+    }
+
+    #[test]
+    fn should_apply_custom_word_style_settings_to_styles_and_layout() {
+        let work_dir = unique_test_path("haomd-word-style", None);
+        let payload = WordDocPayloadCfg {
+            title: "Styled".to_string(),
+            blocks: vec![
+                WordBlockCfg::Heading {
+                    level: 1,
+                    text: vec![WordInlineRunCfg::Text {
+                        value: "Heading".to_string(),
+                        bold: None,
+                        italic: None,
+                        code: None,
+                        strike: None,
+                    }],
+                },
+                WordBlockCfg::Paragraph {
+                    text: vec![WordInlineRunCfg::Text {
+                        value: "Body".to_string(),
+                        bold: None,
+                        italic: None,
+                        code: None,
+                        strike: None,
+                    }],
+                },
+                WordBlockCfg::Code {
+                    language: Some("ts".to_string()),
+                    content: "const value = 1;".to_string(),
+                },
+            ],
+            assets: vec![],
+            style_settings: Some(WordExportStyleSettingsCfg {
+                body_font_family: Some("Calibri".to_string()),
+                body_font_size_pt: Some(11.0),
+                heading_font_family: Some("Times New Roman".to_string()),
+                heading1_size_pt: Some(20.0),
+                heading2_size_pt: Some(18.0),
+                heading3_size_pt: Some(16.0),
+                paragraph_spacing_after_pt: Some(12.0),
+                line_spacing: Some(1.5),
+                code_font_size_pt: Some(9.0),
+                page_margin_cm: Some(3.0),
+            }),
+        };
+
+        build_word_export_workspace(&work_dir, &payload).expect("workspace should build");
+
+        let styles_xml =
+            fs::read_to_string(work_dir.join("word").join("styles.xml")).expect("styles xml");
+        let document_xml = fs::read_to_string(work_dir.join("word").join("document.xml"))
+            .expect("document xml should exist");
+
+        assert!(styles_xml.contains(r#"<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/><w:sz w:val="22"/>"#));
+        assert!(styles_xml.contains(r#"<w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:b/><w:sz w:val="40"/>"#));
+        assert!(styles_xml.contains(r#"<w:spacing w:after="240" w:line="360" w:lineRule="auto"/>"#));
+        assert!(document_xml.contains(r#"<w:pgMar w:top="1701" w:right="1701" w:bottom="1701" w:left="1701""#));
+        assert!(document_xml.contains(r#"<w:rFonts w:ascii="Menlo" w:hAnsi="Menlo" w:cs="Menlo"/><w:sz w:val="18"/>"#));
 
         let _ = std::fs::remove_dir_all(&work_dir);
     }
@@ -4588,6 +4859,7 @@ pub fn run() {
       load_prompt_settings,
       save_prompt_settings,
       editor_settings::load_editor_settings,
+      editor_settings::save_editor_settings,
       open_terminal,
       open_in_file_explorer,
       open_webview_browser,

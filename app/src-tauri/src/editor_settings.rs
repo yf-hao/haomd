@@ -39,6 +39,10 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::Editor
                 cfg.ai_chat = default_cfg.ai_chat.clone();
                 changed = true;
             }
+            if cfg.word_export.is_none() {
+                cfg.word_export = default_cfg.word_export.clone();
+                changed = true;
+            }
 
             // 为 huge_doc 填充新增字段的默认值，避免写回时丢失
             if let Some(ref mut huge) = cfg.huge_doc {
@@ -76,6 +80,54 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::Editor
                 }
             }
 
+            // 为 word_export 填充新增字段的默认值，避免写回时丢失
+            if let Some(ref mut word_export) = cfg.word_export {
+                if let Some(ref default_word_export) = default_cfg.word_export {
+                    if word_export.body_font_family.is_none() {
+                        word_export.body_font_family = default_word_export.body_font_family.clone();
+                        changed = true;
+                    }
+                    if word_export.body_font_size_pt.is_none() {
+                        word_export.body_font_size_pt = default_word_export.body_font_size_pt;
+                        changed = true;
+                    }
+                    if word_export.heading_font_family.is_none() {
+                        word_export.heading_font_family =
+                            default_word_export.heading_font_family.clone();
+                        changed = true;
+                    }
+                    if word_export.heading1_size_pt.is_none() {
+                        word_export.heading1_size_pt = default_word_export.heading1_size_pt;
+                        changed = true;
+                    }
+                    if word_export.heading2_size_pt.is_none() {
+                        word_export.heading2_size_pt = default_word_export.heading2_size_pt;
+                        changed = true;
+                    }
+                    if word_export.heading3_size_pt.is_none() {
+                        word_export.heading3_size_pt = default_word_export.heading3_size_pt;
+                        changed = true;
+                    }
+                    if word_export.paragraph_spacing_after_pt.is_none() {
+                        word_export.paragraph_spacing_after_pt =
+                            default_word_export.paragraph_spacing_after_pt;
+                        changed = true;
+                    }
+                    if word_export.line_spacing.is_none() {
+                        word_export.line_spacing = default_word_export.line_spacing;
+                        changed = true;
+                    }
+                    if word_export.code_font_size_pt.is_none() {
+                        word_export.code_font_size_pt = default_word_export.code_font_size_pt;
+                        changed = true;
+                    }
+                    if word_export.page_margin_cm.is_none() {
+                        word_export.page_margin_cm = default_word_export.page_margin_cm;
+                        changed = true;
+                    }
+                }
+            }
+
             if changed {
                 if let Ok(bytes) = serde_json::to_vec_pretty(&cfg) {
                     let _ = fs::write(&path, bytes).await;
@@ -94,6 +146,44 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::Editor
         Err(err) => err_payload(
             ErrorCode::IoError,
             format!("读取 editor_settings 失败: {err}"),
+            trace,
+        ),
+    }
+}
+
+#[tauri::command]
+pub async fn save_editor_settings(
+    app: AppHandle,
+    cfg: crate::EditorSettingsCfg,
+) -> ResultPayload<()> {
+    let trace = new_trace_id();
+    let path: PathBuf = match editor_settings_path(&app) {
+        Ok(p) => p,
+        Err(err) => {
+            return err_payload(
+                ErrorCode::IoError,
+                format!("获取 editor_settings 路径失败: {err}"),
+                trace,
+            );
+        }
+    };
+
+    let bytes = match serde_json::to_vec_pretty(&cfg) {
+        Ok(v) => v,
+        Err(err) => {
+            return err_payload(
+                ErrorCode::UNKNOWN,
+                format!("序列化 editor_settings 失败: {err}"),
+                trace,
+            );
+        }
+    };
+
+    match fs::write(&path, bytes).await {
+        Ok(()) => ok((), trace),
+        Err(err) => err_payload(
+            ErrorCode::IoError,
+            format!("保存 editor_settings 失败: {err}"),
             trace,
         ),
     }

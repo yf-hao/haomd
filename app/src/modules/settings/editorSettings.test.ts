@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { getAiCompressionSettings, getHugeDocSettings, resetSettingsCache } from './editorSettings'
+import {
+  getAiCompressionSettings,
+  getHugeDocSettings,
+  getWordExportStyleSettings,
+  resetSettingsCache,
+  saveEditorSettings,
+} from './editorSettings'
 import { mockInvoke } from '../../../vitest.setup'
 
 describe('editorSettings', () => {
@@ -43,5 +49,52 @@ describe('editorSettings', () => {
         const settings = await getHugeDocSettings()
         expect(settings.enabled).toBe(true)
         expect(settings.lineThreshold).toBe(1000)
+    })
+
+    it('should merge word export settings with defaults', async () => {
+        vi.mocked(mockInvoke).mockResolvedValue({
+            Ok: {
+                data: {
+                    wordExport: {
+                        bodyFontFamily: 'Calibri',
+                        lineSpacing: 1.5,
+                    }
+                }
+            }
+        })
+
+        const settings = await getWordExportStyleSettings()
+        expect(settings.bodyFontFamily).toBe('Calibri')
+        expect(settings.lineSpacing).toBe(1.5)
+        expect(settings.bodyFontSizePt).toBe(12)
+        expect(settings.pageMarginCm).toBe(2.54)
+    })
+
+    it('should save editor settings through backend command', async () => {
+        vi.mocked(mockInvoke).mockResolvedValue({ Ok: { data: null } })
+
+        await saveEditorSettings({
+            wordExport: {
+                bodyFontFamily: 'Calibri',
+                bodyFontSizePt: 11,
+            }
+        })
+
+        expect(mockInvoke).toHaveBeenCalledWith('save_editor_settings', {
+            cfg: {
+                wordExport: {
+                    bodyFontFamily: 'Calibri',
+                    bodyFontSizePt: 11,
+                }
+            }
+        })
+    })
+
+    it('should throw when save_editor_settings returns an error', async () => {
+        vi.mocked(mockInvoke).mockResolvedValue({
+            Err: { error: { message: 'save failed', code: 'UNKNOWN' } }
+        })
+
+        await expect(saveEditorSettings({})).rejects.toThrow('save failed')
     })
 })
