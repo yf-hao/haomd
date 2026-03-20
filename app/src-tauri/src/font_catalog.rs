@@ -176,22 +176,24 @@ mod tests {
         std::fs::write(nested.join("NotoSansSC.otf"), b"dummy").expect("write nested font");
         std::fs::write(root.join("README.txt"), b"ignore").expect("write non-font");
 
-        let fonts = scan_font_directories(&[root.clone()], &MockFontMetadataParser);
+        let mut fonts = scan_font_directories(&[root.clone()], &MockFontMetadataParser);
         std::fs::remove_dir_all(&root).expect("cleanup font test dir");
 
-        assert_eq!(
-            fonts,
-            vec![
-                DiscoveredFont {
-                    family: "Inter Regular".to_string(),
-                    display_name: "Inter Regular".to_string(),
-                },
-                DiscoveredFont {
-                    family: "NotoSansSC".to_string(),
-                    display_name: "NotoSansSC".to_string(),
-                },
-            ]
-        );
+        fonts.sort_by(|a, b| a.family.cmp(&b.family));
+
+        let mut expected = vec![
+            DiscoveredFont {
+                family: "Inter Regular".to_string(),
+                display_name: "Inter Regular".to_string(),
+            },
+            DiscoveredFont {
+                family: "NotoSansSC".to_string(),
+                display_name: "NotoSansSC".to_string(),
+            },
+        ];
+        expected.sort_by(|a, b| a.family.cmp(&b.family));
+
+        assert_eq!(fonts, expected);
     }
 
     #[test]
