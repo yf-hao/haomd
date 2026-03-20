@@ -267,16 +267,6 @@ function mergeMarks(...markSets: TextMarks[]): TextMarks {
   return Object.assign({}, ...markSets)
 }
 
-function updateHtmlMarks(current: TextMarks, key: keyof TextMarks, enabled: boolean): TextMarks {
-  if (enabled) {
-    return { ...current, [key]: true }
-  }
-
-  const next = { ...current }
-  delete next[key]
-  return next
-}
-
 function clearHtmlMarks(current: TextMarks, removing: TextMarks): TextMarks {
   const next = { ...current }
   for (const key of Object.keys(removing) as (keyof TextMarks)[]) {

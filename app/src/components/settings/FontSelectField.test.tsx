@@ -11,7 +11,7 @@ describe('FontSelectField', () => {
   it('should load fonts and allow selecting a system font', async () => {
     const onChange = vi.fn()
     vi.spyOn(fontCatalogService, 'loadAvailableFonts').mockResolvedValue([
-      { family: 'Calibri', displayName: 'Calibri', source: 'builtin' },
+      { family: 'Calibri', displayName: 'Calibri', source: 'system' },
       { family: 'Source Han Sans SC', displayName: 'Source Han Sans SC', source: 'system' },
     ])
 
@@ -20,7 +20,7 @@ describe('FontSelectField', () => {
     fireEvent.click(screen.getByRole('button', { name: /times new roman/i }))
 
     await waitFor(() => {
-      expect(screen.getByText('Source Han Sans SC')).toBeInTheDocument()
+      expect(screen.getByText('Source Han Sans SC')).toBeTruthy()
     })
 
     fireEvent.click(screen.getByRole('button', { name: /source han sans sc/i }))
@@ -29,7 +29,7 @@ describe('FontSelectField', () => {
 
   it('should filter fonts by search keyword', async () => {
     vi.spyOn(fontCatalogService, 'loadAvailableFonts').mockResolvedValue([
-      { family: 'Calibri', displayName: 'Calibri', source: 'builtin' },
+      { family: 'Calibri', displayName: 'Calibri', source: 'system' },
       { family: 'Source Han Sans SC', displayName: 'Source Han Sans SC', source: 'system' },
     ])
 
@@ -38,21 +38,21 @@ describe('FontSelectField', () => {
     fireEvent.click(screen.getByRole('button', { name: /^calibri$/i }))
 
     await waitFor(() => {
-      expect(screen.getByText('Source Han Sans SC')).toBeInTheDocument()
+      expect(screen.getByText('Source Han Sans SC')).toBeTruthy()
     })
 
     fireEvent.change(screen.getByPlaceholderText('Search fonts'), {
       target: { value: 'source han' },
     })
 
-    expect(screen.queryByRole('button', { name: /^calibri builtin$/i })).not.toBeInTheDocument()
-    expect(screen.getByText('Source Han Sans SC')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^calibri system$/i })).toBeNull()
+    expect(screen.getByText('Source Han Sans SC')).toBeTruthy()
   })
 
   it('should support keyboard selection from search input', async () => {
     const onChange = vi.fn()
     vi.spyOn(fontCatalogService, 'loadAvailableFonts').mockResolvedValue([
-      { family: 'Calibri', displayName: 'Calibri', source: 'builtin' },
+      { family: 'Calibri', displayName: 'Calibri', source: 'system' },
       { family: 'Source Han Sans SC', displayName: 'Source Han Sans SC', source: 'system' },
     ])
 
@@ -62,7 +62,7 @@ describe('FontSelectField', () => {
 
     const searchInput = await screen.findByPlaceholderText('Search fonts')
     await waitFor(() => {
-      expect(screen.getByText('Source Han Sans SC')).toBeInTheDocument()
+      expect(screen.getByText('Source Han Sans SC')).toBeTruthy()
     })
     fireEvent.keyDown(searchInput, { key: 'ArrowDown' })
     fireEvent.keyDown(searchInput, { key: 'Enter' })

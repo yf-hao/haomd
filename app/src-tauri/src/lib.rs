@@ -1742,17 +1742,17 @@ fn render_word_block(
             height_px,
             width_percent,
             max_width_percent,
-        } => Ok(render_image_paragraph_xml(
+        } => Ok(render_image_paragraph_xml(RenderImageParagraphOptions {
             asset_id,
-            alt.as_deref(),
-            *width_px,
-            *height_px,
-            *width_percent,
-            *max_width_percent,
+            alt: alt.as_deref(),
+            width_px: *width_px,
+            height_px: *height_px,
+            width_percent: *width_percent,
+            max_width_percent: *max_width_percent,
             render_state,
             quote_depth,
             list_info,
-        )?),
+        })?),
         WordBlockCfg::Blockquote { children } => {
             render_word_blocks(children, render_state, quote_depth + 1, list_info)
         }
@@ -2143,9 +2143,7 @@ fn table_cell_style_to_paragraph_style(
         .filter(|value| matches!(*value, "left" | "center" | "right" | "justify"))
         .map(|value| value.to_string());
 
-    if align.is_none() {
-        return None;
-    }
+    align.as_ref()?;
 
     Some(WordParagraphStyleCfg {
         align,
@@ -2267,7 +2265,7 @@ fn render_paragraph_xml(
             ppr.push_str(&border_xml);
         }
     }
-    if center && ppr.contains("<w:jc") == false {
+    if center && !ppr.contains("<w:jc") {
         ppr.push_str(r#"<w:jc w:val="center"/>"#);
     }
     let ppr_xml = if ppr.is_empty() {
@@ -2372,19 +2370,21 @@ fn render_inline_runs_xml(runs: &[WordInlineRunCfg], render_state: &mut WordRend
                 font_size_pt,
                 font_family,
             } => {
-                xml.push_str(&render_text_run_xml(
+                xml.push_str(&render_text_run_xml(RenderTextRunOptions {
                     value,
-                    bold.unwrap_or(false),
-                    italic.unwrap_or(false),
-                    code.unwrap_or(false),
-                    strike.unwrap_or(false),
-                    underline.unwrap_or(false),
-                    color.as_deref(),
-                    background_color.as_deref(),
-                    *font_size_pt,
-                    font_family.as_deref(),
-                    render_state.style_settings.code_font_size_half_points,
-                ));
+                    bold: bold.unwrap_or(false),
+                    italic: italic.unwrap_or(false),
+                    code: code.unwrap_or(false),
+                    strike: strike.unwrap_or(false),
+                    underline: underline.unwrap_or(false),
+                    color: color.as_deref(),
+                    background_color: background_color.as_deref(),
+                    font_size_pt: *font_size_pt,
+                    font_family: font_family.as_deref(),
+                    code_font_size_half_points: render_state
+                        .style_settings
+                        .code_font_size_half_points,
+                }));
             }
             WordInlineRunCfg::Math { value, math_ml } => {
                 xml.push_str(&render_math_run_xml(value, math_ml.as_deref(), false));
@@ -2403,19 +2403,34 @@ fn render_inline_runs_xml(runs: &[WordInlineRunCfg], render_state: &mut WordRend
     xml
 }
 
-fn render_text_run_xml(
-    value: &str,
+struct RenderTextRunOptions<'a> {
+    value: &'a str,
     bold: bool,
     italic: bool,
     code: bool,
     strike: bool,
     underline: bool,
-    color: Option<&str>,
-    background_color: Option<&str>,
+    color: Option<&'a str>,
+    background_color: Option<&'a str>,
     font_size_pt: Option<f32>,
-    font_family: Option<&str>,
+    font_family: Option<&'a str>,
     code_font_size_half_points: u32,
-) -> String {
+}
+
+fn render_text_run_xml(options: RenderTextRunOptions<'_>) -> String {
+    let RenderTextRunOptions {
+        value,
+        bold,
+        italic,
+        code,
+        strike,
+        underline,
+        color,
+        background_color,
+        font_size_pt,
+        font_family,
+        code_font_size_half_points,
+    } = options;
     let mut rpr = String::new();
     if bold {
         rpr.push_str("<w:b/>");
@@ -2474,19 +2489,19 @@ fn render_text_run_xml(
 }
 
 fn render_code_runs_xml(content: &str, code_font_size_half_points: u32) -> String {
-    render_text_run_xml(
-        content,
-        false,
-        false,
-        true,
-        false,
-        false,
-        None,
-        None,
-        None,
-        None,
+    render_text_run_xml(RenderTextRunOptions {
+        value: content,
+        bold: false,
+        italic: false,
+        code: true,
+        strike: false,
+        underline: false,
+        color: None,
+        background_color: None,
+        font_size_pt: None,
+        font_family: None,
         code_font_size_half_points,
-    )
+    })
 }
 
 fn font_size_pt_to_half_points(size_pt: Option<f32>) -> Option<u32> {
@@ -2592,7 +2607,7 @@ fn parse_mathml(math_ml: &str) -> Result<MathMlNode, String> {
     root.ok_or_else(|| "MathML 为空".to_string())
 }
 
-fn find_math_expression_root<'a>(node: &'a MathMlNode) -> &'a MathMlNode {
+fn find_math_expression_root(node: &MathMlNode) -> &MathMlNode {
     match node.name.as_str() {
         "math" => node
             .children
@@ -2869,17 +2884,30 @@ const WORD_IMAGE_WIDTH_RATIO_NUM: u32 = 92;
 const WORD_IMAGE_WIDTH_RATIO_DEN: u32 = 100;
 const TWIPS_PER_PX_AT_96_DPI: u32 = 15;
 
-fn render_image_paragraph_xml(
-    asset_id: &str,
-    alt: Option<&str>,
+struct RenderImageParagraphOptions<'a> {
+    asset_id: &'a str,
+    alt: Option<&'a str>,
     width_px: Option<u32>,
     height_px: Option<u32>,
     width_percent: Option<f32>,
     max_width_percent: Option<f32>,
-    render_state: &mut WordRenderState,
+    render_state: &'a mut WordRenderState,
     quote_depth: usize,
     list_info: Option<(bool, usize)>,
-) -> Result<String, String> {
+}
+
+fn render_image_paragraph_xml(options: RenderImageParagraphOptions<'_>) -> Result<String, String> {
+    let RenderImageParagraphOptions {
+        asset_id,
+        alt,
+        width_px,
+        height_px,
+        width_percent,
+        max_width_percent,
+        render_state,
+        quote_depth,
+        list_info,
+    } = options;
     let asset = render_state
         .image_assets
         .get(asset_id)
@@ -3760,19 +3788,19 @@ mod tests {
 
     #[test]
     fn should_render_text_run_color_and_underline_styles() {
-        let run_xml = render_text_run_xml(
-            "Styled",
-            false,
-            false,
-            false,
-            false,
-            true,
-            Some("1D4ED8"),
-            Some("FFF59D"),
-            Some(13.5),
-            Some("Microsoft YaHei"),
-            21,
-        );
+        let run_xml = render_text_run_xml(RenderTextRunOptions {
+            value: "Styled",
+            bold: false,
+            italic: false,
+            code: false,
+            strike: false,
+            underline: true,
+            color: Some("1D4ED8"),
+            background_color: Some("FFF59D"),
+            font_size_pt: Some(13.5),
+            font_family: Some("Microsoft YaHei"),
+            code_font_size_half_points: 21,
+        });
 
         assert!(run_xml.contains(r#"<w:u w:val="single"/>"#));
         assert!(run_xml.contains(r#"<w:color w:val="1D4ED8"/>"#));

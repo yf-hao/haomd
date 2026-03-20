@@ -16,8 +16,8 @@ describe('FontSelectField fallback', () => {
     fireEvent.click(screen.getByRole('button', { name: /times new roman/i }))
 
     await waitFor(() => {
-      expect(screen.getByText('font error')).toBeInTheDocument()
+      expect(screen.getByText('font error')).toBeTruthy()
     })
-    expect(screen.getByText('No fonts matched your search.')).toBeInTheDocument()
+    expect(screen.getByText('No fonts matched your search.')).toBeTruthy()
   })
 })

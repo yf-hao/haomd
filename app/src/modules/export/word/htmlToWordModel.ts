@@ -416,13 +416,6 @@ function tableStyleOrUndefined<T extends object>(style: T): T | undefined {
   return Object.keys(style).length > 0 ? style : undefined
 }
 
-function parseTableCellColSpan(element: HTMLElement): number | undefined {
-  const value = element.getAttribute('colspan')
-  if (!value) return undefined
-  const parsed = Number.parseInt(value, 10)
-  return Number.isFinite(parsed) && parsed > 1 ? parsed : undefined
-}
-
 function parseTableCellSpanValue(value: string | null): number {
   if (!value) return 1
   const parsed = Number.parseInt(value, 10)
