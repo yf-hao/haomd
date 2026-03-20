@@ -1,26 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { mermaidConfig } from '../config/renderers'
-
-// --- mermaid 动态加载 ---
-let mermaidInstance: typeof import('mermaid').default | null = null
-let mermaidInitPromise: Promise<typeof import('mermaid').default> | null = null
-
-function loadMermaid() {
-  if (mermaidInstance) return Promise.resolve(mermaidInstance)
-  if (mermaidInitPromise) return mermaidInitPromise
-  mermaidInitPromise = import('mermaid').then((m) => {
-    const lib = m.default
-    lib.initialize({
-      startOnLoad: false,
-      securityLevel: mermaidConfig.securityLevel,
-      theme: mermaidConfig.theme,
-      fontFamily: mermaidConfig.fontFamily,
-    })
-    mermaidInstance = lib
-    return lib
-  })
-  return mermaidInitPromise
-}
+import { renderMermaidToSvg } from '../modules/visualization/mermaidRenderer'
 
 // --- mind-elixir 动态加载 ---
 let MindElixirCtor: typeof import('mind-elixir').default | null = null
@@ -102,15 +81,11 @@ export const MermaidBlock = memo(function MermaidBlock({ code }: Readonly<{ code
     setSvg('加载中…')
 
     const timer = window.setTimeout(() => {
-      loadMermaid()
-        .then((lib) => {
+      renderMermaidToSvg(code, idRef.current)
+        .then((svg) => {
           if (cancelled || currentRun !== runIdRef.current) return
-          return lib.render(idRef.current, code)
-        })
-        .then((result) => {
-          if (cancelled || currentRun !== runIdRef.current || !result) return
-          mermaidCache.set(cacheKey, result.svg)
-          setSvg(result.svg)
+          mermaidCache.set(cacheKey, svg)
+          setSvg(svg)
         })
         .catch((err) => {
           if (cancelled || currentRun !== runIdRef.current) return

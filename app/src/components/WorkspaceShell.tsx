@@ -1804,7 +1804,7 @@ export function WorkspaceShell({
   useEffect(() => {
     if (!initialAction || initialActionHandledRef.current) return
     if (initialAction === 'new') createTab()
-    else if (initialAction === 'open') openFile()
+    else if (initialAction === 'open') void dispatchAction('open_file')
     else if (initialAction === 'open_folder') openFolderInSidebar()
     else if (initialAction === 'open_recent' && initialOpenRecentPath) {
       if (initialOpenRecentIsFolder) {
@@ -1820,7 +1820,7 @@ export function WorkspaceShell({
     initialOpenRecentPath,
     initialOpenRecentIsFolder,
     createTab,
-    openFile,
+    dispatchAction,
     openFolderInSidebar,
     openRecentFileInNewTab,
     sidebar,
@@ -2136,7 +2136,7 @@ export function WorkspaceShell({
           {tabs.length === 0 ? (
             <Welcome
               onNewFile={() => createTab()}
-              onOpenFile={() => openFile()}
+              onOpenFile={() => void dispatchAction('open_file')}
               onOpenAiChat={() => {
                 // 在没有任何标签时，优先使用浮窗模式打开 AI Chat
                 if (aiChatMode !== 'floating') {

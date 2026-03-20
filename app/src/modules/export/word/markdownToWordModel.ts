@@ -6,9 +6,11 @@ import katex from 'katex'
 import type { Root, Content, Image, List, ListItem, PhrasingContent, TableCell, TableRow } from 'mdast'
 import { toString } from 'mdast-util-to-string'
 import type { InlineRun, WordAsset, WordBlock, WordDocPayload } from './types'
+import { htmlFragmentToBlocks, htmlFragmentToInlineRuns, type HtmlWordModelContext } from './htmlToWordModel'
+import { parseHtmlTextStyle } from './htmlStyleParser'
 
 type TextRun = Extract<InlineRun, { type: 'text' }>
-type TextMarks = Pick<TextRun, 'bold' | 'italic' | 'code' | 'strike'>
+type TextMarks = Pick<TextRun, 'bold' | 'italic' | 'code' | 'strike' | 'underline' | 'color' | 'backgroundColor' | 'fontSizePt' | 'fontFamily'>
 
 type ParseContext = {
   definitions: Map<string, string>
@@ -112,10 +114,7 @@ function transformBlock(node: Content, ctx: ParseContext): WordBlock[] {
         text: [{ type: 'text', value: '----------------' }],
       }]
     case 'html':
-      return [{
-        type: 'paragraph',
-        text: [{ type: 'text', value: node.value }],
-      }]
+      return htmlFragmentToBlocks(node.value, htmlContextFromParseContext(ctx))
     case 'definition':
       return []
     default: {
@@ -143,9 +142,9 @@ function listItemToBlocks(node: ListItem, ctx: ParseContext): WordBlock[] {
   return fallback ? [{ type: 'paragraph', text: [{ type: 'text', value: fallback }] }] : []
 }
 
-function tableRowToModel(row: TableRow, ctx: ParseContext): { cells: WordBlock[][] } {
+function tableRowToModel(row: TableRow, ctx: ParseContext): { cells: { blocks: WordBlock[] }[] } {
   return {
-    cells: row.children.map((cell) => tableCellToBlocks(cell, ctx)),
+    cells: row.children.map((cell) => ({ blocks: tableCellToBlocks(cell, ctx) })),
   }
 }
 
@@ -158,31 +157,37 @@ function tableCellToBlocks(cell: TableCell, ctx: ParseContext): WordBlock[] {
 
 function transformInline(nodes: PhrasingContent[], ctx: ParseContext, marks: TextMarks = {}): InlineRun[] {
   const runs: InlineRun[] = []
+  let htmlMarks: TextMarks = {}
+  let htmlLinkHref: string | null = null
 
   for (const node of nodes) {
     switch (node.type) {
       case 'text':
         if (node.value) {
-          runs.push({ type: 'text', value: node.value, ...marks })
+          if (htmlLinkHref) {
+            runs.push({ type: 'link', value: node.value, href: htmlLinkHref })
+          } else {
+            runs.push({ type: 'text', value: node.value, ...mergeMarks(marks, htmlMarks) })
+          }
         }
         break
       case 'strong':
-        runs.push(...transformInline(node.children, ctx, { ...marks, bold: true }))
+        runs.push(...transformInline(node.children, ctx, mergeMarks(marks, htmlMarks, { bold: true })))
         break
       case 'emphasis':
-        runs.push(...transformInline(node.children, ctx, { ...marks, italic: true }))
+        runs.push(...transformInline(node.children, ctx, mergeMarks(marks, htmlMarks, { italic: true })))
         break
       case 'delete':
-        runs.push(...transformInline(node.children, ctx, { ...marks, strike: true }))
+        runs.push(...transformInline(node.children, ctx, mergeMarks(marks, htmlMarks, { strike: true })))
         break
       case 'inlineCode':
-        runs.push({ type: 'text', value: node.value, ...marks, code: true })
+        runs.push({ type: 'text', value: node.value, ...mergeMarks(marks, htmlMarks, { code: true }) })
         break
       case 'inlineMath':
         runs.push({ type: 'math', value: node.value, mathMl: renderMathMl(node.value, false) })
         break
       case 'break':
-        runs.push({ type: 'text', value: '\n', ...marks })
+        runs.push({ type: 'text', value: '\n', ...mergeMarks(marks, htmlMarks) })
         break
       case 'link': {
         const value = flattenInlineText(node.children, ctx)
@@ -210,14 +215,45 @@ function transformInline(nodes: PhrasingContent[], ctx: ParseContext, marks: Tex
         const href = ctx.definitions.get(normalizeIdentifier(node.identifier))
         const fallback = node.alt || href || node.identifier
         if (fallback) {
-          runs.push({ type: 'text', value: fallback, ...marks })
+          runs.push({ type: 'text', value: fallback, ...mergeMarks(marks, htmlMarks) })
         }
+        break
+      }
+      case 'html': {
+        const token = parseSimpleInlineHtmlTag(node.value)
+        if (token) {
+          if (token.kind === 'self' && token.tag === 'br') {
+            runs.push({ type: 'text', value: '\n', ...mergeMarks(marks, htmlMarks) })
+            break
+          }
+
+          if (token.tag === 'a') {
+            htmlLinkHref = token.kind === 'open' ? token.attrs.href || null : null
+            break
+          }
+
+          const tokenMarks = parseHtmlTextStyle(token.tag, token.attrs)
+          if (Object.keys(tokenMarks).length > 0) {
+            htmlMarks = token.kind === 'open'
+              ? mergeMarks(htmlMarks, tokenMarks)
+              : clearHtmlMarks(htmlMarks, tokenMarks)
+            break
+          }
+        }
+
+        runs.push(
+          ...htmlFragmentToInlineRuns(
+            node.value,
+            htmlContextFromParseContext(ctx),
+            mergeMarks(marks, htmlMarks),
+          ),
+        )
         break
       }
       default: {
         const value = toString(node)
         if (value) {
-          runs.push({ type: 'text', value, ...marks })
+          runs.push({ type: 'text', value, ...mergeMarks(marks, htmlMarks) })
         }
         break
       }
@@ -227,10 +263,70 @@ function transformInline(nodes: PhrasingContent[], ctx: ParseContext, marks: Tex
   return mergeAdjacentTextRuns(runs)
 }
 
+function mergeMarks(...markSets: TextMarks[]): TextMarks {
+  return Object.assign({}, ...markSets)
+}
+
+function updateHtmlMarks(current: TextMarks, key: keyof TextMarks, enabled: boolean): TextMarks {
+  if (enabled) {
+    return { ...current, [key]: true }
+  }
+
+  const next = { ...current }
+  delete next[key]
+  return next
+}
+
+function clearHtmlMarks(current: TextMarks, removing: TextMarks): TextMarks {
+  const next = { ...current }
+  for (const key of Object.keys(removing) as (keyof TextMarks)[]) {
+    delete next[key]
+  }
+  return next
+}
+
+function parseSimpleInlineHtmlTag(value: string): {
+  kind: 'open' | 'close' | 'self'
+  tag: string
+  attrs: Record<string, string>
+} | null {
+  const trimmed = value.trim()
+  const match = /^<\s*(\/)?\s*([a-zA-Z0-9]+)([^>]*)>$/.exec(trimmed)
+  if (!match) return null
+
+  const [, closingSlash, rawTag, rawAttrs] = match
+  const tag = rawTag.toLowerCase()
+  const attrs = closingSlash ? {} : parseHtmlAttributes(rawAttrs || '')
+  const selfClosing = /\/\s*>$/.test(trimmed) || tag === 'br'
+
+  return {
+    kind: closingSlash ? 'close' : selfClosing ? 'self' : 'open',
+    tag,
+    attrs,
+  }
+}
+
+function parseHtmlAttributes(raw: string): Record<string, string> {
+  const attrs: Record<string, string> = {}
+  for (const match of raw.matchAll(/([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) {
+    attrs[match[1].toLowerCase()] = match[2] || match[3] || ''
+  }
+  return attrs
+}
+
 function flattenInlineText(nodes: PhrasingContent[], ctx: ParseContext): string {
   return transformInline(nodes, ctx)
     .map((run) => run.value)
     .join('')
+}
+
+function htmlContextFromParseContext(ctx: ParseContext): HtmlWordModelContext {
+  return {
+    addAsset: (asset) => {
+      ctx.assets.push(asset)
+    },
+    nextAssetId: () => `asset_${ctx.assetCounter++}`,
+  }
 }
 
 function imageNodeToBlock(node: Image, ctx: ParseContext): WordBlock | null {

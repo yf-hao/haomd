@@ -3,6 +3,16 @@
   width: 820px;
   min-width: 680px;
   padding: 20px 24px 18px;
+  display: flex;
+  flex-direction: column;
+  max-height: 85vh;
+  overflow: hidden;
+}
+
+.modal.modal-settings .modal-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
 }
 
 .settings-layout {

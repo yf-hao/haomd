@@ -1,6 +1,6 @@
-import mermaid from 'mermaid'
 import MindElixir, { SIDE } from 'mind-elixir'
 import type { WordBlock, WordDocPayload } from './types'
+import { renderMermaidToSvg } from '../../visualization/mermaidRenderer'
 
 type MindNode = { title: string; children?: MindNode[] }
 type MindElixirData = {
@@ -21,10 +21,11 @@ export async function renderWordDiagramAssets(options: {
     for (const block of blocks) {
       if (block.type === 'code' && block.language) {
         const lang = block.language.trim().toLowerCase()
+        const normalizedContent = block.content.trim()
         if (lang === 'mermaid') {
           setStatusMessage?.('正在渲染 Mermaid 图表...')
-          const rendered = await renderMermaidBlockToPng(block.content)
-          if (!rendered) throw new Error(`Mermaid 图表渲染失败: ${summarizeDiagramBlock(block.content)}`)
+          const rendered = await renderMermaidBlockToPng(normalizedContent)
+          if (!rendered) throw new Error(`Mermaid 图表渲染失败: ${summarizeDiagramBlock(normalizedContent)}`)
 
           const assetId = `asset_${assetCounter++}`
           nextAssets.push({
@@ -47,8 +48,8 @@ export async function renderWordDiagramAssets(options: {
         }
         if (lang === 'mind') {
           setStatusMessage?.('正在渲染思维导图...')
-          const rendered = await renderMindBlockToPng(block.content)
-          if (!rendered) throw new Error(`思维导图渲染失败: ${summarizeDiagramBlock(block.content)}`)
+          const rendered = await renderMindBlockToPng(normalizedContent)
+          if (!rendered) throw new Error(`思维导图渲染失败: ${summarizeDiagramBlock(normalizedContent)}`)
 
           const assetId = `asset_${assetCounter++}`
           nextAssets.push({
@@ -92,7 +93,10 @@ export async function renderWordDiagramAssets(options: {
           ...block,
           rows: await Promise.all(
             block.rows.map(async (row) => ({
-              cells: await Promise.all(row.cells.map((cell) => replaceBlocks(cell))),
+              cells: await Promise.all(row.cells.map(async (cell) => ({
+                ...cell,
+                blocks: await replaceBlocks(cell.blocks),
+              }))),
             })),
           ),
         })
@@ -127,53 +131,16 @@ async function renderMermaidBlockToPng(code: string): Promise<{ base64Data: stri
     return await svgToPng(svg)
   } catch (error) {
     console.warn('[WordExport] Mermaid render failed', error)
-    throw new Error(`Mermaid 图表渲染失败: ${(error as Error).message || '未知错误'}`)
+    throw new Error(`Mermaid 图表渲染失败: ${extractErrorMessage(error)}`)
   }
 }
 
 async function renderMermaidBlockToSvg(code: string): Promise<string | null> {
-  const id = `mermaid-export-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-  mermaid.initialize({
-    startOnLoad: false,
-    theme: 'default',
-    securityLevel: 'loose',
-  })
-
-  const container = document.createElement('div')
-  container.style.cssText = [
-    'position:fixed',
-    'left:-9999px',
-    'top:-9999px',
-    'width:1400px',
-    'visibility:hidden',
-    'pointer-events:none',
-  ].join(';')
-
-  const host = document.createElement('div')
-  host.id = id
-  host.className = 'mermaid'
-  host.textContent = code
-  container.appendChild(host)
-  document.body.appendChild(container)
-
-  try {
-    if (typeof mermaid.render === 'function') {
-      const rendered = await mermaid.render(`${id}-render`, code, host)
-      if (rendered?.svg) {
-        return rendered.svg
-      }
-    }
-
-    if (typeof mermaid.run === 'function') {
-      await mermaid.run({ nodes: [host] })
-      const svg = host.querySelector('svg')
-      if (svg) return svg.outerHTML
-    }
-
-    return null
-  } finally {
-    container.remove()
-  }
+  return await renderMermaidToSvg(
+    code,
+    `mermaid-export-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    { profile: 'export' },
+  )
 }
 
 async function renderMindBlockToPng(code: string): Promise<{ base64Data: string; widthPx: number; heightPx: number } | null> {
@@ -187,11 +154,59 @@ async function renderMindBlockToPng(code: string): Promise<{ base64Data: string;
   }
 }
 
+function extractErrorMessage(error: unknown): string {
+  if (!error) return '未知错误'
+  if (typeof error === 'string') return error
+  if (error instanceof Error && error.message) return error.message
+
+  if (typeof error === 'object') {
+    const record = error as Record<string, unknown>
+
+    const directMessage = firstNonEmptyString(
+      record.message,
+      record.error,
+      record.str,
+      record.details,
+    )
+    if (directMessage) return directMessage
+
+    const hash = record.hash
+    if (hash && typeof hash === 'object') {
+      const hashRecord = hash as Record<string, unknown>
+      const hashMessage = firstNonEmptyString(
+        hashRecord.message,
+        hashRecord.text,
+        hashRecord.str,
+      )
+      if (hashMessage) return hashMessage
+    }
+
+    try {
+      const serialized = JSON.stringify(error)
+      if (serialized && serialized !== '{}') return serialized
+    } catch {
+      // ignore and fall through to String(error)
+    }
+  }
+
+  const fallback = String(error)
+  return fallback && fallback !== '[object Object]' ? fallback : '未知错误'
+}
+
+function firstNonEmptyString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return null
+}
+
 async function svgToPng(svgMarkup: string): Promise<{ base64Data: string; widthPx: number; heightPx: number }> {
-  const svgUrl = svgMarkupToDataUrl(svgMarkup)
-  const image = await loadImage(svgUrl)
-  const width = Math.max(1, image.naturalWidth || parseSvgWidth(svgMarkup) || 1200)
-  const height = Math.max(1, image.naturalHeight || parseSvgHeight(svgMarkup) || 800)
+  // Strip foreignObject (which taints canvas) and replace with SVG <text>
+  const cleanSvg = replaceForeignObjectWithText(svgMarkup)
+  const normalized = normalizeSvgForRasterization(cleanSvg)
+
+  const width = Math.round(parseSvgWidth(normalized) ?? 1200)
+  const height = Math.round(parseSvgHeight(normalized) ?? 800)
   const scale = 2
 
   const canvas = document.createElement('canvas')
@@ -202,7 +217,21 @@ async function svgToPng(svgMarkup: string): Promise<{ base64Data: string; widthP
   ctx.scale(scale, scale)
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, width, height)
-  ctx.drawImage(image, 0, 0, width, height)
+
+  const blob = new Blob([normalized], { type: 'image/svg+xml;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = () => reject(new Error('SVG 光栅化失败'))
+      img.src = url
+    })
+    ctx.drawImage(image, 0, 0, width, height)
+  } finally {
+    URL.revokeObjectURL(url)
+  }
 
   const dataUrl = canvas.toDataURL('image/png')
   return {
@@ -212,22 +241,80 @@ async function svgToPng(svgMarkup: string): Promise<{ base64Data: string; widthP
   }
 }
 
-function loadImage(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const image = new Image()
-    image.crossOrigin = 'anonymous'
-    image.onload = () => resolve(image)
-    image.onerror = reject
-    image.src = url
-  })
+/**
+ * Replace <foreignObject> blocks with SVG <text> using regex.
+ * DOMParser can't reliably handle mixed HTML-in-SVG, so we use regex instead.
+ */
+function replaceForeignObjectWithText(svgMarkup: string): string {
+  return svgMarkup.replace(
+    /<foreignObject([^>]*)>([\s\S]*?)<\/foreignObject>/gi,
+    (_match, attrs: string, innerHtml: string) => {
+      const x = parseFloat(attrs.match(/\bx="([^"]*)"/)?.[1] || '0')
+      const y = parseFloat(attrs.match(/\by="([^"]*)"/)?.[1] || '0')
+      const w = parseFloat(attrs.match(/\bwidth="([^"]*)"/)?.[1] || '100')
+      const h = parseFloat(attrs.match(/\bheight="([^"]*)"/)?.[1] || '20')
+
+      // Extract visible text, strip HTML tags
+      const text = innerHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+      if (!text) return ''
+
+      // Detect font-size from inline styles
+      const sizeMatch = innerHtml.match(/font-size:\s*([\d.]+)/)
+      const fontSize = sizeMatch ? sizeMatch[1] : '14'
+
+      const cx = x + w / 2
+      const cy = y + h / 2
+
+      return `<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-size="${fontSize}" fill="#333" font-family="Inter, system-ui, sans-serif">${escapeXml(text)}</text>`
+    },
+  )
 }
 
-function svgMarkupToDataUrl(svgMarkup: string): string {
-  const normalized = svgMarkup
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function normalizeSvgForRasterization(svgMarkup: string): string {
+  let normalized = svgMarkup
     .replace(/[\n\r\t]+/g, ' ')
     .replace(/\s{2,}/g, ' ')
     .trim()
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(normalized)}`
+  const width = parseSvgWidth(normalized) ?? 1200
+  const height = parseSvgHeight(normalized) ?? 800
+
+  if (!/\bxmlns=/.test(normalized)) {
+    normalized = normalized.replace(
+      /<svg\b/i,
+      '<svg xmlns="http://www.w3.org/2000/svg"',
+    )
+  }
+
+  if (!/\bxmlns:xlink=/.test(normalized)) {
+    normalized = normalized.replace(
+      /<svg\b/i,
+      '<svg xmlns:xlink="http://www.w3.org/1999/xlink"',
+    )
+  }
+
+  if (/\bwidth="[^"]*%"/i.test(normalized) || !/\bwidth="/i.test(normalized)) {
+    normalized = normalized.replace(/\bwidth="[^"]*"/i, '')
+    normalized = normalized.replace(/<svg\b/i, `<svg width="${width}"`)
+  }
+
+  if (/\bheight="[^"]*%"/i.test(normalized) || !/\bheight="/i.test(normalized)) {
+    normalized = normalized.replace(/\bheight="[^"]*"/i, '')
+    normalized = normalized.replace(/<svg\b/i, `<svg height="${height}"`)
+  }
+
+  if (!/\bviewBox="/i.test(normalized)) {
+    normalized = normalized.replace(/<svg\b/i, `<svg viewBox="0 0 ${width} ${height}"`)
+  }
+
+  return normalized
 }
 
 function parseSvgWidth(svg: string): number | null {

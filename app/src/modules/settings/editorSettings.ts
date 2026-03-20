@@ -64,11 +64,11 @@ const defaultWordExport: WordExportStyleSettings = {
   bodyFontSizePt: 12,
   headingFontFamily: 'Calibri',
   heading1SizePt: 16,
-  heading2SizePt: 14,
-  heading3SizePt: 13,
+  heading2SizePt: 15,
+  heading3SizePt: 14,
   paragraphSpacingAfterPt: 8,
   lineSpacing: 1.25,
-  codeFontSizePt: 10,
+  codeFontSizePt: 10.5,
   pageMarginCm: 2.54,
 }
 

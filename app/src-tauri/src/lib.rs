@@ -5,6 +5,7 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 mod editor_settings;
+mod font_catalog;
 mod fs_types;
 
 use arboard::Clipboard;
@@ -238,9 +239,13 @@ enum WordBlockCfg {
     Heading {
         level: u8,
         text: Vec<WordInlineRunCfg>,
+        #[serde(default)]
+        style: Option<WordParagraphStyleCfg>,
     },
     Paragraph {
         text: Vec<WordInlineRunCfg>,
+        #[serde(default)]
+        style: Option<WordParagraphStyleCfg>,
     },
     Blockquote {
         children: Vec<WordBlockCfg>,
@@ -261,6 +266,8 @@ enum WordBlockCfg {
     },
     Table {
         rows: Vec<WordTableRowCfg>,
+        #[serde(default)]
+        style: Option<WordTableStyleCfg>,
     },
     Image {
         #[serde(rename = "assetId")]
@@ -270,13 +277,104 @@ enum WordBlockCfg {
         width_px: Option<u32>,
         #[serde(rename = "heightPx")]
         height_px: Option<u32>,
+        #[serde(default)]
+        #[serde(rename = "widthPercent")]
+        width_percent: Option<f32>,
+        #[serde(default)]
+        #[serde(rename = "maxWidthPercent")]
+        max_width_percent: Option<f32>,
     },
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+struct WordParagraphStyleCfg {
+    #[serde(default)]
+    align: Option<String>,
+    #[serde(default)]
+    line_height: Option<f32>,
+    #[serde(default)]
+    spacing_after_pt: Option<f32>,
+    #[serde(default)]
+    background_color: Option<String>,
+    #[serde(default)]
+    border_color: Option<String>,
+    #[serde(default)]
+    border_top_color: Option<String>,
+    #[serde(default)]
+    border_right_color: Option<String>,
+    #[serde(default)]
+    border_bottom_color: Option<String>,
+    #[serde(default)]
+    border_left_color: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 struct WordTableRowCfg {
-    cells: Vec<Vec<WordBlockCfg>>,
+    cells: Vec<WordTableCellCfg>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct WordTableStyleCfg {
+    #[serde(default)]
+    align: Option<String>,
+    #[serde(default)]
+    width_percent: Option<f32>,
+    #[serde(default)]
+    width_px: Option<u32>,
+    #[serde(default)]
+    max_width_percent: Option<f32>,
+    #[serde(default)]
+    layout: Option<String>,
+    #[serde(default)]
+    column_widths: Option<Vec<WordTableColumnWidthCfg>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct WordTableColumnWidthCfg {
+    #[serde(default)]
+    width_percent: Option<f32>,
+    #[serde(default)]
+    width_px: Option<u32>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct WordTableCellStyleCfg {
+    #[serde(default)]
+    background_color: Option<String>,
+    #[serde(default)]
+    align: Option<String>,
+    #[serde(default)]
+    border_color: Option<String>,
+    #[serde(default)]
+    border_top_color: Option<String>,
+    #[serde(default)]
+    border_right_color: Option<String>,
+    #[serde(default)]
+    border_bottom_color: Option<String>,
+    #[serde(default)]
+    border_left_color: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct WordTableCellCfg {
+    blocks: Vec<WordBlockCfg>,
+    #[serde(default)]
+    style: Option<WordTableCellStyleCfg>,
+    #[serde(default)]
+    #[serde(rename = "colSpan")]
+    col_span: Option<u32>,
+    #[serde(default)]
+    #[serde(rename = "rowSpan")]
+    row_span: Option<u32>,
+    #[serde(default)]
+    #[serde(rename = "mergeContinue")]
+    merge_continue: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -292,6 +390,16 @@ enum WordInlineRunCfg {
         code: Option<bool>,
         #[serde(default)]
         strike: Option<bool>,
+        #[serde(default)]
+        underline: Option<bool>,
+        #[serde(default)]
+        color: Option<String>,
+        #[serde(default)]
+        background_color: Option<String>,
+        #[serde(default)]
+        font_size_pt: Option<f32>,
+        #[serde(default)]
+        font_family: Option<String>,
     },
     Math {
         value: String,
@@ -543,11 +651,11 @@ fn default_word_export_style_settings_cfg() -> WordExportStyleSettingsCfg {
         body_font_size_pt: Some(12.0),
         heading_font_family: Some("Calibri".to_string()),
         heading1_size_pt: Some(16.0),
-        heading2_size_pt: Some(14.0),
-        heading3_size_pt: Some(13.0),
+        heading2_size_pt: Some(15.0),
+        heading3_size_pt: Some(14.0),
         paragraph_spacing_after_pt: Some(8.0),
         line_spacing: Some(1.25),
-        code_font_size_pt: Some(10.0),
+        code_font_size_pt: Some(10.5),
         page_margin_cm: Some(2.54),
     }
 }
@@ -1580,17 +1688,19 @@ fn render_word_block(
     list_info: Option<(bool, usize)>,
 ) -> Result<String, String> {
     match block {
-        WordBlockCfg::Heading { level, text } => Ok(render_paragraph_xml(
+        WordBlockCfg::Heading { level, text, style } => Ok(render_paragraph_xml(
             render_inline_runs_xml(text, render_state),
             Some(format!("Heading{}", (*level).clamp(1, 6))),
+            style.as_ref(),
             quote_depth,
             list_info,
             false,
             false,
         )),
-        WordBlockCfg::Paragraph { text } => Ok(render_paragraph_xml(
+        WordBlockCfg::Paragraph { text, style } => Ok(render_paragraph_xml(
             render_inline_runs_xml(text, render_state),
             None,
+            style.as_ref(),
             quote_depth,
             list_info,
             false,
@@ -1599,22 +1709,23 @@ fn render_word_block(
         WordBlockCfg::Math { content, math_ml } => Ok(render_paragraph_xml(
             render_math_run_xml(content, math_ml.as_deref(), true),
             None,
+            None,
             quote_depth,
             list_info,
             false,
             true,
         )),
-        WordBlockCfg::Code { language, content } => {
-            let prefix = language
-                .as_ref()
-                .map(|lang| format!("{lang}\n"))
-                .unwrap_or_default();
+        WordBlockCfg::Code {
+            language: _,
+            content,
+        } => {
             let runs = render_code_runs_xml(
-                &(prefix + content),
+                content,
                 render_state.style_settings.code_font_size_half_points,
             );
             Ok(render_paragraph_xml(
                 runs,
+                None,
                 None,
                 quote_depth,
                 list_info,
@@ -1627,11 +1738,15 @@ fn render_word_block(
             alt,
             width_px,
             height_px,
+            width_percent,
+            max_width_percent,
         } => Ok(render_image_paragraph_xml(
             asset_id,
             alt.as_deref(),
             *width_px,
             *height_px,
+            *width_percent,
+            *max_width_percent,
             render_state,
             quote_depth,
             list_info,
@@ -1651,12 +1766,13 @@ fn render_word_block(
             }
             Ok(xml)
         }
-        WordBlockCfg::Table { rows } => render_table_xml(rows, render_state, quote_depth),
+        WordBlockCfg::Table { rows, style } => render_table_xml(rows, style.as_ref(), render_state, quote_depth),
     }
 }
 
 fn render_table_xml(
     rows: &[WordTableRowCfg],
+    table_style: Option<&WordTableStyleCfg>,
     render_state: &mut WordRenderState,
     quote_depth: usize,
 ) -> Result<String, String> {
@@ -1668,13 +1784,24 @@ fn render_table_xml(
 
         let mut normalized_cells = String::new();
         for cell in &row.cells {
-            let cell_content = render_word_blocks(cell, render_state, quote_depth, None)?;
+            let cell_content = render_table_cell_blocks_xml(
+                &cell.blocks,
+                cell.style.as_ref(),
+                render_state,
+                quote_depth,
+            )?;
             let content = if cell_content.trim().is_empty() {
                 "<w:p/>".to_string()
             } else {
                 cell_content
             };
-            normalized_cells.push_str(&format!("<w:tc><w:tcPr/>{}</w:tc>", content));
+            let tc_pr = render_table_cell_properties_xml(
+                cell.style.as_ref(),
+                cell.col_span,
+                cell.row_span,
+                cell.merge_continue,
+            );
+            normalized_cells.push_str(&format!("<w:tc>{}{}</w:tc>", tc_pr, content));
         }
         rows_xml.push_str(&format!("<w:tr>{}</w:tr>", normalized_cells));
     }
@@ -1682,7 +1809,7 @@ fn render_table_xml(
     Ok(format!(
         concat!(
             "<w:tbl>",
-            r#"<w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblBorders>"#,
+            r#"<w:tblPr>{}<w:tblBorders>"#,
             r#"<w:top w:val="single" w:sz="4" w:space="0" w:color="D9D9D9"/>"#,
             r#"<w:left w:val="single" w:sz="4" w:space="0" w:color="D9D9D9"/>"#,
             r#"<w:bottom w:val="single" w:sz="4" w:space="0" w:color="D9D9D9"/>"#,
@@ -1690,15 +1817,371 @@ fn render_table_xml(
             r#"<w:insideH w:val="single" w:sz="4" w:space="0" w:color="D9D9D9"/>"#,
             r#"<w:insideV w:val="single" w:sz="4" w:space="0" w:color="D9D9D9"/></w:tblBorders></w:tblPr>"#,
             "{}",
+            "{}",
             "</w:tbl>"
         ),
+        render_table_properties_xml(table_style, render_state.style_settings.page_margin_twips).0,
+        render_table_grid_xml(table_style, render_state.style_settings.page_margin_twips),
         rows_xml
     ))
+}
+
+fn render_table_properties_xml(
+    style: Option<&WordTableStyleCfg>,
+    page_margin_twips: u32,
+) -> (String, u32) {
+    let mut tbl_pr = String::new();
+    let (table_width, resolved_width_twips) = resolve_table_width_xml(style, page_margin_twips);
+    tbl_pr.push_str(&table_width);
+
+    if let Some(align) = style
+        .and_then(|style| style.align.as_deref())
+        .filter(|value| matches!(*value, "left" | "center" | "right"))
+    {
+        tbl_pr.push_str(&format!(r#"<w:jc w:val="{}"/>"#, align));
+    }
+
+    if let Some(layout) = style
+        .and_then(|style| style.layout.as_deref())
+        .filter(|value| matches!(*value, "fixed" | "auto"))
+    {
+        let layout = if layout == "auto" { "autofit" } else { "fixed" };
+        tbl_pr.push_str(&format!(r#"<w:tblLayout w:type="{}"/>"#, layout));
+    }
+
+    (tbl_pr, resolved_width_twips)
+}
+
+fn resolve_table_width_xml(style: Option<&WordTableStyleCfg>, page_margin_twips: u32) -> (String, u32) {
+    let Some(style) = style else {
+        let body_twips = WORD_PAGE_WIDTH_TWIPS.saturating_sub(page_margin_twips * 2);
+        return (r#"<w:tblW w:w="0" w:type="auto"/>"#.to_string(), body_twips);
+    };
+
+    let body_twips = WORD_PAGE_WIDTH_TWIPS.saturating_sub(page_margin_twips * 2);
+    let max_percent = style
+        .max_width_percent
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .map(|value| value.min(100.0));
+
+    if let Some(width_percent) = style
+        .width_percent
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .map(|value| value.min(100.0))
+    {
+        let width_percent = max_percent.map(|max| width_percent.min(max)).unwrap_or(width_percent);
+        let pct = ((width_percent * 50.0).round() as u32).max(1);
+        let resolved = ((body_twips as f32) * (width_percent / 100.0)).round() as u32;
+        return (format!(r#"<w:tblW w:w="{}" w:type="pct"/>"#, pct), resolved.max(1));
+    }
+
+    if let Some(width_px) = style.width_px.filter(|value| *value > 0) {
+        let mut width_twips = width_px.saturating_mul(TWIPS_PER_PX_AT_96_DPI);
+        if let Some(max_percent) = max_percent {
+            let max_twips = ((body_twips as f32) * (max_percent / 100.0)).round() as u32;
+            width_twips = width_twips.min(max_twips.max(1));
+        }
+        let width_twips = width_twips.max(1);
+        return (format!(r#"<w:tblW w:w="{}" w:type="dxa"/>"#, width_twips), width_twips);
+    }
+
+    (r#"<w:tblW w:w="0" w:type="auto"/>"#.to_string(), body_twips)
+}
+
+fn render_table_grid_xml(style: Option<&WordTableStyleCfg>, page_margin_twips: u32) -> String {
+    let Some(style) = style else {
+        return String::new();
+    };
+    let Some(column_widths) = style.column_widths.as_ref().filter(|widths| !widths.is_empty()) else {
+        return String::new();
+    };
+
+    let (_, table_width_twips) = resolve_table_width_xml(Some(style), page_margin_twips);
+    let mut cols_xml = String::new();
+    let mut has_any = false;
+    for width in column_widths {
+        if let Some(grid_width) = resolve_table_column_width_twips(width, table_width_twips) {
+            has_any = true;
+            cols_xml.push_str(&format!(r#"<w:gridCol w:w="{}"/>"#, grid_width.max(1)));
+        }
+    }
+
+    if has_any {
+        format!("<w:tblGrid>{}</w:tblGrid>", cols_xml)
+    } else {
+        String::new()
+    }
+}
+
+fn resolve_table_column_width_twips(
+    width: &WordTableColumnWidthCfg,
+    table_width_twips: u32,
+) -> Option<u32> {
+    if let Some(width_percent) = width
+        .width_percent
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .map(|value| value.min(100.0))
+    {
+        let twips = ((table_width_twips as f32) * (width_percent / 100.0)).round() as u32;
+        return Some(twips.max(1));
+    }
+
+    width.width_px
+        .filter(|value| *value > 0)
+        .map(|value| value.saturating_mul(TWIPS_PER_PX_AT_96_DPI).max(1))
+}
+
+fn render_table_cell_blocks_xml(
+    blocks: &[WordBlockCfg],
+    cell_style: Option<&WordTableCellStyleCfg>,
+    render_state: &mut WordRenderState,
+    quote_depth: usize,
+) -> Result<String, String> {
+    let mut xml = String::new();
+    for block in blocks {
+        xml.push_str(&render_word_block_in_table_cell(
+            block,
+            cell_style,
+            render_state,
+            quote_depth,
+            None,
+        )?);
+    }
+    Ok(xml)
+}
+
+fn render_word_block_in_table_cell(
+    block: &WordBlockCfg,
+    cell_style: Option<&WordTableCellStyleCfg>,
+    render_state: &mut WordRenderState,
+    quote_depth: usize,
+    list_info: Option<(bool, usize)>,
+) -> Result<String, String> {
+    let cell_paragraph_style = cell_style.and_then(table_cell_style_to_paragraph_style);
+    match block {
+        WordBlockCfg::Heading { level, text, style } => {
+            let merged_style = merge_paragraph_style(style.as_ref(), cell_paragraph_style.as_ref());
+            Ok(render_paragraph_xml(
+                render_inline_runs_xml(text, render_state),
+                Some(format!("Heading{}", (*level).clamp(1, 6))),
+                merged_style.as_ref(),
+                quote_depth,
+                list_info,
+                false,
+                false,
+            ))
+        }
+        WordBlockCfg::Paragraph { text, style } => {
+            let merged_style = merge_paragraph_style(style.as_ref(), cell_paragraph_style.as_ref());
+            Ok(render_paragraph_xml(
+                render_inline_runs_xml(text, render_state),
+                None,
+                merged_style.as_ref(),
+                quote_depth,
+                list_info,
+                false,
+                false,
+            ))
+        }
+        WordBlockCfg::Blockquote { children } => {
+            let mut xml = String::new();
+            for child in children {
+                xml.push_str(&render_word_block_in_table_cell(
+                    child,
+                    cell_style,
+                    render_state,
+                    quote_depth + 1,
+                    list_info,
+                )?);
+            }
+            Ok(xml)
+        }
+        WordBlockCfg::List { ordered, items } => {
+            let mut xml = String::new();
+            for item in items {
+                for child in item {
+                    xml.push_str(&render_word_block_in_table_cell(
+                        child,
+                        cell_style,
+                        render_state,
+                        quote_depth,
+                        Some((*ordered, quote_depth)),
+                    )?);
+                }
+            }
+            Ok(xml)
+        }
+        _ => render_word_block(block, render_state, quote_depth, list_info),
+    }
+}
+
+fn render_table_cell_properties_xml(
+    style: Option<&WordTableCellStyleCfg>,
+    col_span: Option<u32>,
+    row_span: Option<u32>,
+    merge_continue: Option<bool>,
+) -> String {
+    let mut tc_pr = String::new();
+    if let Some(col_span) = col_span.filter(|value| *value > 1) {
+        tc_pr.push_str(&format!(r#"<w:gridSpan w:val="{}"/>"#, col_span));
+    }
+    if merge_continue.unwrap_or(false) {
+        tc_pr.push_str(r#"<w:vMerge/>"#);
+    } else if row_span.unwrap_or(1) > 1 {
+        tc_pr.push_str(r#"<w:vMerge w:val="restart"/>"#);
+    }
+    if let Some(style) = style {
+        if let Some(background_color) = style
+            .background_color
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+        {
+            tc_pr.push_str(&format!(
+                r#"<w:shd w:val="clear" w:color="auto" w:fill="{}"/>"#,
+                escape_xml_attr(background_color)
+            ));
+        }
+        if let Some(border_color) = style
+            .border_color
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+        {
+            let border_color = escape_xml_attr(border_color);
+            tc_pr.push_str(&format!(
+                concat!(
+                    r#"<w:tcBorders>"#,
+                    r#"<w:top w:val="single" w:sz="4" w:space="0" w:color="{0}"/>"#,
+                    r#"<w:left w:val="single" w:sz="4" w:space="0" w:color="{0}"/>"#,
+                    r#"<w:bottom w:val="single" w:sz="4" w:space="0" w:color="{0}"/>"#,
+                    r#"<w:right w:val="single" w:sz="4" w:space="0" w:color="{0}"/>"#,
+                    r#"</w:tcBorders>"#
+                ),
+                border_color
+            ));
+        } else {
+            let top = style
+                .border_top_color
+                .as_deref()
+                .filter(|value| !value.trim().is_empty());
+            let right = style
+                .border_right_color
+                .as_deref()
+                .filter(|value| !value.trim().is_empty());
+            let bottom = style
+                .border_bottom_color
+                .as_deref()
+                .filter(|value| !value.trim().is_empty());
+            let left = style
+                .border_left_color
+                .as_deref()
+                .filter(|value| !value.trim().is_empty());
+
+            if top.is_some() || right.is_some() || bottom.is_some() || left.is_some() {
+                tc_pr.push_str("<w:tcBorders>");
+                if let Some(color) = top {
+                    tc_pr.push_str(&format!(
+                        r#"<w:top w:val="single" w:sz="4" w:space="0" w:color="{}"/>"#,
+                        escape_xml_attr(color)
+                    ));
+                }
+                if let Some(color) = left {
+                    tc_pr.push_str(&format!(
+                        r#"<w:left w:val="single" w:sz="4" w:space="0" w:color="{}"/>"#,
+                        escape_xml_attr(color)
+                    ));
+                }
+                if let Some(color) = bottom {
+                    tc_pr.push_str(&format!(
+                        r#"<w:bottom w:val="single" w:sz="4" w:space="0" w:color="{}"/>"#,
+                        escape_xml_attr(color)
+                    ));
+                }
+                if let Some(color) = right {
+                    tc_pr.push_str(&format!(
+                        r#"<w:right w:val="single" w:sz="4" w:space="0" w:color="{}"/>"#,
+                        escape_xml_attr(color)
+                    ));
+                }
+                tc_pr.push_str("</w:tcBorders>");
+            }
+        }
+    }
+
+    if tc_pr.is_empty() {
+        "<w:tcPr/>".to_string()
+    } else {
+        format!("<w:tcPr>{}</w:tcPr>", tc_pr)
+    }
+}
+
+fn table_cell_style_to_paragraph_style(style: &WordTableCellStyleCfg) -> Option<WordParagraphStyleCfg> {
+    let align = style
+        .align
+        .as_deref()
+        .filter(|value| matches!(*value, "left" | "center" | "right" | "justify"))
+        .map(|value| value.to_string());
+
+    if align.is_none() {
+        return None;
+    }
+
+    Some(WordParagraphStyleCfg {
+        align,
+        line_height: None,
+        spacing_after_pt: None,
+        background_color: None,
+        border_color: None,
+        border_top_color: None,
+        border_right_color: None,
+        border_bottom_color: None,
+        border_left_color: None,
+    })
+}
+
+fn merge_paragraph_style(
+    base: Option<&WordParagraphStyleCfg>,
+    fallback: Option<&WordParagraphStyleCfg>,
+) -> Option<WordParagraphStyleCfg> {
+    match (base, fallback) {
+        (None, None) => None,
+        (Some(base), None) => Some(base.clone()),
+        (None, Some(fallback)) => Some(fallback.clone()),
+        (Some(base), Some(fallback)) => Some(WordParagraphStyleCfg {
+            align: base.align.clone().or_else(|| fallback.align.clone()),
+            line_height: base.line_height.or(fallback.line_height),
+            spacing_after_pt: base.spacing_after_pt.or(fallback.spacing_after_pt),
+            background_color: base
+                .background_color
+                .clone()
+                .or_else(|| fallback.background_color.clone()),
+            border_color: base
+                .border_color
+                .clone()
+                .or_else(|| fallback.border_color.clone()),
+            border_top_color: base
+                .border_top_color
+                .clone()
+                .or_else(|| fallback.border_top_color.clone()),
+            border_right_color: base
+                .border_right_color
+                .clone()
+                .or_else(|| fallback.border_right_color.clone()),
+            border_bottom_color: base
+                .border_bottom_color
+                .clone()
+                .or_else(|| fallback.border_bottom_color.clone()),
+            border_left_color: base
+                .border_left_color
+                .clone()
+                .or_else(|| fallback.border_left_color.clone()),
+        }),
+    }
 }
 
 fn render_paragraph_xml(
     content_xml: String,
     style: Option<String>,
+    paragraph_style: Option<&WordParagraphStyleCfg>,
     quote_depth: usize,
     list_info: Option<(bool, usize)>,
     code_block: bool,
@@ -1727,7 +2210,42 @@ fn render_paragraph_xml(
     if code_block {
         ppr.push_str(r#"<w:shd w:val="clear" w:color="auto" w:fill="F6F8FA"/>"#);
     }
-    if center {
+    if let Some(paragraph_style) = paragraph_style {
+        if let Some(align) = paragraph_style.align.as_deref() {
+            if matches!(align, "left" | "center" | "right" | "justify") {
+                ppr.push_str(&format!(r#"<w:jc w:val="{}"/>"#, align));
+            }
+        }
+        if paragraph_style.line_height.is_some() || paragraph_style.spacing_after_pt.is_some() {
+            let after = paragraph_style
+                .spacing_after_pt
+                .map(pt_to_twips)
+                .unwrap_or(render_state_default_spacing_after_twips());
+            let line = paragraph_style
+                .line_height
+                .map(line_spacing_to_twips)
+                .unwrap_or(render_state_default_line_spacing_twips());
+            ppr.push_str(&format!(
+                r#"<w:spacing w:after="{}" w:line="{}" w:lineRule="auto"/>"#,
+                after, line
+            ));
+        }
+        if let Some(background_color) = paragraph_style
+            .background_color
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+        {
+            ppr.push_str(&format!(
+                r#"<w:shd w:val="clear" w:color="auto" w:fill="{}"/>"#,
+                escape_xml_attr(background_color)
+            ));
+        }
+        let border_xml = render_paragraph_border_xml(paragraph_style);
+        if !border_xml.is_empty() {
+            ppr.push_str(&border_xml);
+        }
+    }
+    if center && ppr.contains("<w:jc") == false {
         ppr.push_str(r#"<w:jc w:val="center"/>"#);
     }
     let ppr_xml = if ppr.is_empty() {
@@ -1736,6 +2254,84 @@ fn render_paragraph_xml(
         format!("<w:pPr>{}</w:pPr>", ppr)
     };
     format!("<w:p>{}{}</w:p>", ppr_xml, content_xml)
+}
+
+fn render_state_default_spacing_after_twips() -> u32 {
+    pt_to_twips(8.0)
+}
+
+fn render_state_default_line_spacing_twips() -> u32 {
+    line_spacing_to_twips(1.25)
+}
+
+fn render_paragraph_border_xml(style: &WordParagraphStyleCfg) -> String {
+    if let Some(border_color) = style
+        .border_color
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        let border_color = escape_xml_attr(border_color);
+        return format!(
+            concat!(
+                r#"<w:pBdr>"#,
+                r#"<w:top w:val="single" w:sz="4" w:space="0" w:color="{0}"/>"#,
+                r#"<w:left w:val="single" w:sz="4" w:space="0" w:color="{0}"/>"#,
+                r#"<w:bottom w:val="single" w:sz="4" w:space="0" w:color="{0}"/>"#,
+                r#"<w:right w:val="single" w:sz="4" w:space="0" w:color="{0}"/>"#,
+                r#"</w:pBdr>"#
+            ),
+            border_color
+        );
+    }
+
+    let top = style
+        .border_top_color
+        .as_deref()
+        .filter(|value| !value.trim().is_empty());
+    let right = style
+        .border_right_color
+        .as_deref()
+        .filter(|value| !value.trim().is_empty());
+    let bottom = style
+        .border_bottom_color
+        .as_deref()
+        .filter(|value| !value.trim().is_empty());
+    let left = style
+        .border_left_color
+        .as_deref()
+        .filter(|value| !value.trim().is_empty());
+
+    if top.is_none() && right.is_none() && bottom.is_none() && left.is_none() {
+        return String::new();
+    }
+
+    let mut xml = String::from("<w:pBdr>");
+    if let Some(color) = top {
+        xml.push_str(&format!(
+            r#"<w:top w:val="single" w:sz="4" w:space="0" w:color="{}"/>"#,
+            escape_xml_attr(color)
+        ));
+    }
+    if let Some(color) = left {
+        xml.push_str(&format!(
+            r#"<w:left w:val="single" w:sz="4" w:space="0" w:color="{}"/>"#,
+            escape_xml_attr(color)
+        ));
+    }
+    if let Some(color) = bottom {
+        xml.push_str(&format!(
+            r#"<w:bottom w:val="single" w:sz="4" w:space="0" w:color="{}"/>"#,
+            escape_xml_attr(color)
+        ));
+    }
+    if let Some(color) = right {
+        xml.push_str(&format!(
+            r#"<w:right w:val="single" w:sz="4" w:space="0" w:color="{}"/>"#,
+            escape_xml_attr(color)
+        ));
+    }
+    xml.push_str("</w:pBdr>");
+    xml
 }
 
 fn render_inline_runs_xml(runs: &[WordInlineRunCfg], render_state: &mut WordRenderState) -> String {
@@ -1748,6 +2344,11 @@ fn render_inline_runs_xml(runs: &[WordInlineRunCfg], render_state: &mut WordRend
                 italic,
                 code,
                 strike,
+                underline,
+                color,
+                background_color,
+                font_size_pt,
+                font_family,
             } => {
                 xml.push_str(&render_text_run_xml(
                     value,
@@ -1755,6 +2356,11 @@ fn render_inline_runs_xml(runs: &[WordInlineRunCfg], render_state: &mut WordRend
                     italic.unwrap_or(false),
                     code.unwrap_or(false),
                     strike.unwrap_or(false),
+                    underline.unwrap_or(false),
+                    color.as_deref(),
+                    background_color.as_deref(),
+                    *font_size_pt,
+                    font_family.as_deref(),
                     render_state.style_settings.code_font_size_half_points,
                 ));
             }
@@ -1781,6 +2387,11 @@ fn render_text_run_xml(
     italic: bool,
     code: bool,
     strike: bool,
+    underline: bool,
+    color: Option<&str>,
+    background_color: Option<&str>,
+    font_size_pt: Option<f32>,
+    font_family: Option<&str>,
     code_font_size_half_points: u32,
 ) -> String {
     let mut rpr = String::new();
@@ -1792,6 +2403,28 @@ fn render_text_run_xml(
     }
     if strike {
         rpr.push_str("<w:strike/>");
+    }
+    if underline {
+        rpr.push_str(r#"<w:u w:val="single"/>"#);
+    }
+    if let Some(color) = color.filter(|value| !value.trim().is_empty()) {
+        rpr.push_str(&format!(r#"<w:color w:val="{}"/>"#, escape_xml_attr(color)));
+    }
+    if let Some(background_color) = background_color.filter(|value| !value.trim().is_empty()) {
+        rpr.push_str(&format!(
+            r#"<w:shd w:val="clear" w:color="auto" w:fill="{}"/>"#,
+            escape_xml_attr(background_color)
+        ));
+    }
+    if let Some(font_family) = font_family.filter(|value| !value.trim().is_empty()) {
+        let font_family = escape_xml_attr(font_family);
+        rpr.push_str(&format!(
+            r#"<w:rFonts w:ascii="{0}" w:hAnsi="{0}" w:cs="{0}"/>"#,
+            font_family
+        ));
+    }
+    if let Some(font_size_half_points) = font_size_pt_to_half_points(font_size_pt) {
+        rpr.push_str(&format!(r#"<w:sz w:val="{}"/>"#, font_size_half_points));
     }
     if code {
         rpr.push_str(&format!(
@@ -1825,8 +2458,21 @@ fn render_code_runs_xml(content: &str, code_font_size_half_points: u32) -> Strin
         false,
         true,
         false,
+        false,
+        None,
+        None,
+        None,
+        None,
         code_font_size_half_points,
     )
+}
+
+fn font_size_pt_to_half_points(size_pt: Option<f32>) -> Option<u32> {
+    let value = size_pt?;
+    if !value.is_finite() || value <= 0.0 {
+        return None;
+    }
+    Some((value * 2.0).round() as u32)
 }
 
 #[derive(Debug, Clone, Default)]
@@ -2206,6 +2852,8 @@ fn render_image_paragraph_xml(
     alt: Option<&str>,
     width_px: Option<u32>,
     height_px: Option<u32>,
+    width_percent: Option<f32>,
+    max_width_percent: Option<f32>,
     render_state: &mut WordRenderState,
     quote_depth: usize,
     list_info: Option<(bool, usize)>,
@@ -2214,9 +2862,11 @@ fn render_image_paragraph_xml(
         .image_assets
         .get(asset_id)
         .ok_or_else(|| format!("缺少图片资源: {asset_id}"))?;
-    let (width, height) = fit_image_to_page_width(
+    let (width, height) = resolve_image_dimensions(
         width_px.unwrap_or(asset.width_px).max(1),
         height_px.unwrap_or(asset.height_px).max(1),
+        width_percent,
+        max_width_percent,
         quote_depth,
         list_info.map(|(_, level)| level),
         render_state.style_settings.page_margin_twips,
@@ -2253,6 +2903,7 @@ fn render_image_paragraph_xml(
     Ok(render_paragraph_xml(
         drawing,
         None,
+        None,
         quote_depth,
         list_info,
         false,
@@ -2267,6 +2918,66 @@ fn fit_image_to_page_width(
     list_level: Option<usize>,
     page_margin_twips: u32,
 ) -> (u32, u32) {
+    let (_, _, max_width_px) = image_layout_constraints(quote_depth, list_level, page_margin_twips);
+
+    if width_px <= max_width_px {
+        return (width_px, height_px);
+    }
+
+    let scaled_height = ((height_px as u64) * (max_width_px as u64) / (width_px as u64))
+        .max(1)
+        .min(u32::MAX as u64) as u32;
+    (max_width_px, scaled_height)
+}
+
+fn resolve_image_dimensions(
+    width_px: u32,
+    height_px: u32,
+    width_percent: Option<f32>,
+    max_width_percent: Option<f32>,
+    quote_depth: usize,
+    list_level: Option<usize>,
+    page_margin_twips: u32,
+) -> (u32, u32) {
+    let (_, _, max_width_px) =
+        image_layout_constraints(quote_depth, list_level, page_margin_twips);
+
+    if let Some(percent) = width_percent.filter(|value| value.is_finite() && *value > 0.0) {
+        let target_width = (((max_width_px as f32) * (percent.min(100.0) / 100.0)).round() as u32)
+            .clamp(1, max_width_px.max(1));
+        let target_height = ((height_px as u64) * (target_width as u64) / (width_px as u64))
+            .max(1)
+            .min(u32::MAX as u64) as u32;
+        return (target_width, target_height);
+    }
+
+    let (fit_width, fit_height) = fit_image_to_page_width(
+        width_px,
+        height_px,
+        quote_depth,
+        list_level,
+        page_margin_twips,
+    );
+
+    if let Some(percent) = max_width_percent.filter(|value| value.is_finite() && *value > 0.0) {
+        let clamp_width = (((max_width_px as f32) * (percent.min(100.0) / 100.0)).round() as u32)
+            .max(1);
+        if fit_width > clamp_width {
+            let target_height = ((fit_height as u64) * (clamp_width as u64) / (fit_width as u64))
+                .max(1)
+                .min(u32::MAX as u64) as u32;
+            return (clamp_width, target_height);
+        }
+    }
+
+    (fit_width, fit_height)
+}
+
+fn image_layout_constraints(
+    quote_depth: usize,
+    list_level: Option<usize>,
+    page_margin_twips: u32,
+) -> (u32, u32, u32) {
     let page_body_twips = WORD_PAGE_WIDTH_TWIPS.saturating_sub(page_margin_twips * 2);
     let quote_indent_twips = (quote_depth as u32).saturating_mul(720);
     let list_indent_twips = list_level
@@ -2278,15 +2989,7 @@ fn fit_image_to_page_width(
     let safe_twips =
         available_twips.saturating_mul(WORD_IMAGE_WIDTH_RATIO_NUM) / WORD_IMAGE_WIDTH_RATIO_DEN;
     let max_width_px = (safe_twips / TWIPS_PER_PX_AT_96_DPI).max(1);
-
-    if width_px <= max_width_px {
-        return (width_px, height_px);
-    }
-
-    let scaled_height = ((height_px as u64) * (max_width_px as u64) / (width_px as u64))
-        .max(1)
-        .min(u32::MAX as u64) as u32;
-    (max_width_px, scaled_height)
+    (available_twips, safe_twips, max_width_px)
 }
 
 fn build_document_relationships_xml(render_state: &WordRenderState) -> String {
@@ -2531,7 +3234,13 @@ mod tests {
                         italic: None,
                         code: None,
                         strike: None,
+                        underline: None,
+                        color: None,
+                        background_color: None,
+                        font_size_pt: None,
+                        font_family: None,
                     }],
+                    style: None,
                 },
                 WordBlockCfg::Paragraph {
                     text: vec![WordInlineRunCfg::Text {
@@ -2540,13 +3249,21 @@ mod tests {
                         italic: None,
                         code: None,
                         strike: None,
+                        underline: None,
+                        color: None,
+                        background_color: None,
+                        font_size_pt: None,
+                        font_family: None,
                     }],
+                    style: None,
                 },
                 WordBlockCfg::Image {
                     asset_id: "asset_0".to_string(),
                     alt: Some("tiny".to_string()),
                     width_px: Some(1),
                     height_px: Some(1),
+                    width_percent: None,
+                    max_width_percent: None,
                 },
             ],
             assets: vec![WordAssetCfg::EmbeddedImage {
@@ -2587,7 +3304,13 @@ mod tests {
                         italic: None,
                         code: None,
                         strike: None,
+                        underline: None,
+                        color: None,
+                        background_color: None,
+                        font_size_pt: None,
+                        font_family: None,
                     }],
+                    style: None,
                 },
                 WordBlockCfg::Paragraph {
                     text: vec![
@@ -2597,12 +3320,18 @@ mod tests {
                             italic: None,
                             code: None,
                             strike: None,
+                            underline: None,
+                            color: None,
+                            background_color: None,
+                            font_size_pt: None,
+                            font_family: None,
                         },
                         WordInlineRunCfg::Link {
                             value: "OpenAI".to_string(),
                             href: "https://openai.com".to_string(),
                         },
                     ],
+                    style: None,
                 },
                 WordBlockCfg::List {
                     ordered: false,
@@ -2613,31 +3342,111 @@ mod tests {
                             italic: None,
                             code: None,
                             strike: None,
+                            underline: None,
+                            color: None,
+                            background_color: None,
+                            font_size_pt: None,
+                            font_family: None,
                         }],
+                        style: None,
                     }]],
                 },
                 WordBlockCfg::Table {
+                    style: Some(WordTableStyleCfg {
+                        align: Some("center".to_string()),
+                        width_percent: Some(80.0),
+                        width_px: None,
+                        max_width_percent: Some(90.0),
+                        layout: Some("fixed".to_string()),
+                        column_widths: Some(vec![
+                            WordTableColumnWidthCfg {
+                                width_percent: Some(30.0),
+                                width_px: None,
+                            },
+                            WordTableColumnWidthCfg {
+                                width_percent: Some(70.0),
+                                width_px: None,
+                            },
+                        ]),
+                    }),
                     rows: vec![
                         WordTableRowCfg {
                             cells: vec![
-                                vec![WordBlockCfg::Paragraph {
-                                    text: vec![WordInlineRunCfg::Text {
-                                        value: "Name".to_string(),
-                                        bold: None,
-                                        italic: None,
-                                        code: None,
-                                        strike: None,
+                                WordTableCellCfg {
+                                    blocks: vec![WordBlockCfg::Paragraph {
+                                        text: vec![WordInlineRunCfg::Text {
+                                            value: "Name".to_string(),
+                                            bold: None,
+                                            italic: None,
+                                            code: None,
+                                            strike: None,
+                                            underline: None,
+                                            color: None,
+                                            background_color: None,
+                                            font_size_pt: None,
+                                            font_family: None,
+                                        }],
+                                        style: None,
                                     }],
-                                }],
-                                vec![WordBlockCfg::Paragraph {
-                                    text: vec![WordInlineRunCfg::Text {
-                                        value: "Value".to_string(),
-                                        bold: None,
-                                        italic: None,
-                                        code: None,
-                                        strike: None,
+                                    style: Some(WordTableCellStyleCfg {
+                                        background_color: Some("E0F2FE".to_string()),
+                                        align: Some("center".to_string()),
+                                        border_color: None,
+                                        border_top_color: Some("D1D5DB".to_string()),
+                                        border_right_color: Some("111827".to_string()),
+                                        border_bottom_color: Some("9CA3AF".to_string()),
+                                        border_left_color: Some("2563EB".to_string()),
+                                    }),
+                                    col_span: Some(2),
+                                    row_span: None,
+                                    merge_continue: None,
+                                },
+                            ],
+                        },
+                        WordTableRowCfg {
+                            cells: vec![
+                                WordTableCellCfg {
+                                    blocks: vec![WordBlockCfg::Paragraph {
+                                        text: vec![WordInlineRunCfg::Text {
+                                            value: "HTML".to_string(),
+                                            bold: None,
+                                            italic: None,
+                                            code: None,
+                                            strike: None,
+                                            underline: None,
+                                            color: None,
+                                            background_color: None,
+                                            font_size_pt: None,
+                                            font_family: None,
+                                        }],
+                                        style: None,
                                     }],
-                                }],
+                                    style: None,
+                                    col_span: None,
+                                    row_span: None,
+                                    merge_continue: None,
+                                },
+                                WordTableCellCfg {
+                                    blocks: vec![WordBlockCfg::Paragraph {
+                                        text: vec![WordInlineRunCfg::Text {
+                                            value: "Value".to_string(),
+                                            bold: None,
+                                            italic: None,
+                                            code: None,
+                                            strike: None,
+                                            underline: None,
+                                            color: None,
+                                            background_color: None,
+                                            font_size_pt: None,
+                                            font_family: None,
+                                        }],
+                                        style: None,
+                                    }],
+                                    style: None,
+                                    col_span: None,
+                                    row_span: None,
+                                    merge_continue: None,
+                                },
                             ],
                         },
                     ],
@@ -2647,6 +3456,8 @@ mod tests {
                     alt: Some("tiny".to_string()),
                     width_px: Some(1),
                     height_px: Some(1),
+                    width_percent: None,
+                    max_width_percent: None,
                 },
             ],
             assets: vec![WordAssetCfg::EmbeddedImage {
@@ -2676,6 +3487,16 @@ mod tests {
         assert!(document_xml.contains(r#"<w:hyperlink r:id=""#));
         assert!(document_xml.contains(r#"<w:numId w:val="1"/>"#));
         assert!(document_xml.contains("<w:tbl>"));
+        assert!(document_xml.contains(r#"<w:gridSpan w:val="2"/>"#));
+        assert!(document_xml.contains(r#"<w:tblW w:w="4000" w:type="pct"/>"#));
+        assert!(document_xml.contains(r#"<w:tblLayout w:type="fixed"/>"#));
+        assert!(document_xml.contains(r#"<w:tblGrid><w:gridCol w:w="2166"/><w:gridCol w:w="5055"/></w:tblGrid>"#));
+        assert!(document_xml.contains(r#"<w:shd w:val="clear" w:color="auto" w:fill="E0F2FE"/>"#));
+        assert!(document_xml.contains(r#"<w:top w:val="single" w:sz="4" w:space="0" w:color="D1D5DB"/>"#));
+        assert!(document_xml.contains(r#"<w:right w:val="single" w:sz="4" w:space="0" w:color="111827"/>"#));
+        assert!(document_xml.contains(r#"<w:bottom w:val="single" w:sz="4" w:space="0" w:color="9CA3AF"/>"#));
+        assert!(document_xml.contains(r#"<w:left w:val="single" w:sz="4" w:space="0" w:color="2563EB"/>"#));
+        assert!(document_xml.contains(r#"<w:jc w:val="center"/>"#));
         assert!(document_xml.contains("Item one"));
         assert!(document_xml.contains("OpenAI"));
         assert!(document_xml.contains("tiny"));
@@ -2700,6 +3521,8 @@ mod tests {
                 alt: Some("remote".to_string()),
                 width_px: None,
                 height_px: None,
+                width_percent: None,
+                max_width_percent: None,
             }],
             assets: vec![WordAssetCfg::Image {
                 id: "asset_0".to_string(),
@@ -2730,6 +3553,67 @@ mod tests {
     }
 
     #[test]
+    fn should_resolve_percentage_based_image_widths() {
+        let (width, height) =
+            resolve_image_dimensions(2000, 1000, Some(50.0), None, 0, None, 1440);
+        assert_eq!(width, 277);
+        assert_eq!(height, 138);
+
+        let (clamped_width, clamped_height) =
+            resolve_image_dimensions(2000, 1000, None, Some(40.0), 0, None, 1440);
+        assert_eq!(clamped_width, 221);
+        assert_eq!(clamped_height, 110);
+    }
+
+    #[test]
+    fn should_render_rowspan_as_vertical_merge() {
+        let tc_start = render_table_cell_properties_xml(
+            None,
+            None,
+            Some(2),
+            None,
+        );
+        let tc_continue = render_table_cell_properties_xml(
+            None,
+            None,
+            None,
+            Some(true),
+        );
+
+        assert!(tc_start.contains(r#"<w:vMerge w:val="restart"/>"#));
+        assert!(tc_continue.contains(r#"<w:vMerge/>"#));
+    }
+
+    #[test]
+    fn should_render_table_layout_modes() {
+        let (fixed_xml, _) = render_table_properties_xml(
+            Some(&WordTableStyleCfg {
+                align: None,
+                width_percent: None,
+                width_px: None,
+                max_width_percent: None,
+                layout: Some("fixed".to_string()),
+                column_widths: None,
+            }),
+            1440,
+        );
+        let (auto_xml, _) = render_table_properties_xml(
+            Some(&WordTableStyleCfg {
+                align: None,
+                width_percent: None,
+                width_px: None,
+                max_width_percent: None,
+                layout: Some("auto".to_string()),
+                column_widths: None,
+            }),
+            1440,
+        );
+
+        assert!(fixed_xml.contains(r#"<w:tblLayout w:type="fixed"/>"#));
+        assert!(auto_xml.contains(r#"<w:tblLayout w:type="autofit"/>"#));
+    }
+
+    #[test]
     fn should_include_math_content_in_document_xml() {
         let work_dir = unique_test_path("haomd-word-math", None);
         let payload = WordDocPayloadCfg {
@@ -2743,12 +3627,18 @@ mod tests {
                             italic: None,
                             code: None,
                             strike: None,
+                            underline: None,
+                            color: None,
+                            background_color: None,
+                            font_size_pt: None,
+                            font_family: None,
                         },
                         WordInlineRunCfg::Math {
                             value: "E = mc^2".to_string(),
                             math_ml: Some("<math xmlns=\"http://www.w3.org/1998/Math/MathML\"><semantics><mrow><mi>E</mi><mo>=</mo><mi>m</mi><msup><mi>c</mi><mn>2</mn></msup></mrow></semantics></math>".to_string()),
                         },
                     ],
+                    style: None,
                 },
                 WordBlockCfg::Math {
                     content: "\\frac{a}{b}".to_string(),
@@ -2789,7 +3679,13 @@ mod tests {
                         italic: None,
                         code: None,
                         strike: None,
+                        underline: None,
+                        color: None,
+                        background_color: None,
+                        font_size_pt: None,
+                        font_family: None,
                     }],
+                    style: None,
                 },
                 WordBlockCfg::Paragraph {
                     text: vec![WordInlineRunCfg::Text {
@@ -2798,7 +3694,13 @@ mod tests {
                         italic: None,
                         code: None,
                         strike: None,
+                        underline: None,
+                        color: None,
+                        background_color: None,
+                        font_size_pt: None,
+                        font_family: None,
                     }],
+                    style: None,
                 },
                 WordBlockCfg::Code {
                     language: Some("ts".to_string()),
@@ -2834,6 +3736,60 @@ mod tests {
         assert!(document_xml.contains(r#"<w:rFonts w:ascii="Menlo" w:hAnsi="Menlo" w:cs="Menlo"/><w:sz w:val="18"/>"#));
 
         let _ = std::fs::remove_dir_all(&work_dir);
+    }
+
+    #[test]
+    fn should_render_text_run_color_and_underline_styles() {
+        let run_xml = render_text_run_xml(
+            "Styled",
+            false,
+            false,
+            false,
+            false,
+            true,
+            Some("1D4ED8"),
+            Some("FFF59D"),
+            Some(13.5),
+            Some("Microsoft YaHei"),
+            21,
+        );
+
+        assert!(run_xml.contains(r#"<w:u w:val="single"/>"#));
+        assert!(run_xml.contains(r#"<w:color w:val="1D4ED8"/>"#));
+        assert!(run_xml.contains(r#"<w:shd w:val="clear" w:color="auto" w:fill="FFF59D"/>"#));
+        assert!(run_xml.contains(r#"<w:rFonts w:ascii="Microsoft YaHei" w:hAnsi="Microsoft YaHei" w:cs="Microsoft YaHei"/>"#));
+        assert!(run_xml.contains(r#"<w:sz w:val="27"/>"#));
+        assert!(run_xml.contains("Styled"));
+    }
+
+    #[test]
+    fn should_render_paragraph_alignment_and_spacing_styles() {
+        let paragraph_xml = render_paragraph_xml(
+            "<w:r><w:t>Styled paragraph</w:t></w:r>".to_string(),
+            None,
+            Some(&WordParagraphStyleCfg {
+                align: Some("center".to_string()),
+                line_height: Some(1.5),
+                spacing_after_pt: Some(12.0),
+                background_color: Some("FFF59D".to_string()),
+                border_color: None,
+                border_top_color: Some("111827".to_string()),
+                border_right_color: None,
+                border_bottom_color: None,
+                border_left_color: Some("EF4444".to_string()),
+            }),
+            0,
+            None,
+            false,
+            false,
+        );
+
+        assert!(paragraph_xml.contains(r#"<w:jc w:val="center"/>"#));
+        assert!(paragraph_xml.contains(r#"<w:spacing w:after="240" w:line="360" w:lineRule="auto"/>"#));
+        assert!(paragraph_xml.contains(r#"<w:shd w:val="clear" w:color="auto" w:fill="FFF59D"/>"#));
+        assert!(paragraph_xml.contains(r#"<w:pBdr>"#));
+        assert!(paragraph_xml.contains(r#"<w:top w:val="single" w:sz="4" w:space="0" w:color="111827"/>"#));
+        assert!(paragraph_xml.contains(r#"<w:left w:val="single" w:sz="4" w:space="0" w:color="EF4444"/>"#));
     }
 }
 
@@ -4860,6 +5816,7 @@ pub fn run() {
       save_prompt_settings,
       editor_settings::load_editor_settings,
       editor_settings::save_editor_settings,
+      font_catalog::list_system_fonts,
       open_terminal,
       open_in_file_explorer,
       open_webview_browser,

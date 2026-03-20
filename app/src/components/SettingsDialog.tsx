@@ -1,6 +1,7 @@
 import { type ChangeEvent, type FC, useEffect, useState } from 'react'
 import './SettingsDialog.css'
 import { Button } from './Button'
+import { FontSelectField } from './settings/FontSelectField'
 import {
   getDefaultWordExportStyleSettings,
   getWordExportStyleSettings,
@@ -66,15 +67,12 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({ open, onClose }) => {
         }))
       }
 
-  const updateText =
-    (key: keyof WordExportStyleSettings) =>
-      (event: ChangeEvent<HTMLInputElement>) => {
-        const value = event.target.value
-        setWordExport((prev) => ({
-          ...prev,
-          [key]: value,
-        }))
-      }
+  const updateFontFamily = (key: 'bodyFontFamily' | 'headingFontFamily') => (value: string) => {
+    setWordExport((prev) => ({
+      ...prev,
+      [key]: value,
+    }))
+  }
 
   const handleReset = () => {
     setWordExport(getDefaultWordExportStyleSettings())
@@ -130,7 +128,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({ open, onClose }) => {
                   <div style={{ display: 'grid', gap: 14 }}>
                     <div style={fieldGridStyle}>
                       <label className="settings-field-label">Body Font</label>
-                      <input className="field-input" value={wordExport.bodyFontFamily} onChange={updateText('bodyFontFamily')} />
+                      <FontSelectField value={wordExport.bodyFontFamily} onChange={updateFontFamily('bodyFontFamily')} />
                     </div>
                     <div style={fieldGridStyle}>
                       <label className="settings-field-label">Body Size (pt)</label>
@@ -138,7 +136,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({ open, onClose }) => {
                     </div>
                     <div style={fieldGridStyle}>
                       <label className="settings-field-label">Heading Font</label>
-                      <input className="field-input" value={wordExport.headingFontFamily} onChange={updateText('headingFontFamily')} />
+                      <FontSelectField value={wordExport.headingFontFamily} onChange={updateFontFamily('headingFontFamily')} />
                     </div>
                     <div style={fieldGridStyle}>
                       <label className="settings-field-label">Heading 1 Size (pt)</label>
