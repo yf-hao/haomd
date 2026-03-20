@@ -32,4 +32,3 @@ fn macos_font_directories() -> Vec<PathBuf> {
 
     directories
 }
-

@@ -19,7 +19,10 @@ impl FontCatalogProvider for LinuxFontCatalogProvider {
             return Ok(fc_list_fonts);
         }
 
-        Ok(scan_font_directories(&linux_font_directories(), self.parser.as_ref()))
+        Ok(scan_font_directories(
+            &linux_font_directories(),
+            self.parser.as_ref(),
+        ))
     }
 }
 

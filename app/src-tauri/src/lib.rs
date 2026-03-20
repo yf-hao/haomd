@@ -705,7 +705,9 @@ fn resolve_word_export_style_settings(
                 .unwrap_or(8.0),
         ),
         line_spacing_twips: line_spacing_to_twips(
-            cfg.line_spacing.or(default_cfg.line_spacing).unwrap_or(1.25),
+            cfg.line_spacing
+                .or(default_cfg.line_spacing)
+                .unwrap_or(1.25),
         ),
         code_font_size_half_points: pt_to_half_points(
             cfg.code_font_size_pt
@@ -1766,7 +1768,9 @@ fn render_word_block(
             }
             Ok(xml)
         }
-        WordBlockCfg::Table { rows, style } => render_table_xml(rows, style.as_ref(), render_state, quote_depth),
+        WordBlockCfg::Table { rows, style } => {
+            render_table_xml(rows, style.as_ref(), render_state, quote_depth)
+        }
     }
 }
 
@@ -1852,7 +1856,10 @@ fn render_table_properties_xml(
     (tbl_pr, resolved_width_twips)
 }
 
-fn resolve_table_width_xml(style: Option<&WordTableStyleCfg>, page_margin_twips: u32) -> (String, u32) {
+fn resolve_table_width_xml(
+    style: Option<&WordTableStyleCfg>,
+    page_margin_twips: u32,
+) -> (String, u32) {
     let Some(style) = style else {
         let body_twips = WORD_PAGE_WIDTH_TWIPS.saturating_sub(page_margin_twips * 2);
         return (r#"<w:tblW w:w="0" w:type="auto"/>"#.to_string(), body_twips);
@@ -1869,10 +1876,15 @@ fn resolve_table_width_xml(style: Option<&WordTableStyleCfg>, page_margin_twips:
         .filter(|value| value.is_finite() && *value > 0.0)
         .map(|value| value.min(100.0))
     {
-        let width_percent = max_percent.map(|max| width_percent.min(max)).unwrap_or(width_percent);
+        let width_percent = max_percent
+            .map(|max| width_percent.min(max))
+            .unwrap_or(width_percent);
         let pct = ((width_percent * 50.0).round() as u32).max(1);
         let resolved = ((body_twips as f32) * (width_percent / 100.0)).round() as u32;
-        return (format!(r#"<w:tblW w:w="{}" w:type="pct"/>"#, pct), resolved.max(1));
+        return (
+            format!(r#"<w:tblW w:w="{}" w:type="pct"/>"#, pct),
+            resolved.max(1),
+        );
     }
 
     if let Some(width_px) = style.width_px.filter(|value| *value > 0) {
@@ -1882,7 +1894,10 @@ fn resolve_table_width_xml(style: Option<&WordTableStyleCfg>, page_margin_twips:
             width_twips = width_twips.min(max_twips.max(1));
         }
         let width_twips = width_twips.max(1);
-        return (format!(r#"<w:tblW w:w="{}" w:type="dxa"/>"#, width_twips), width_twips);
+        return (
+            format!(r#"<w:tblW w:w="{}" w:type="dxa"/>"#, width_twips),
+            width_twips,
+        );
     }
 
     (r#"<w:tblW w:w="0" w:type="auto"/>"#.to_string(), body_twips)
@@ -1892,7 +1907,11 @@ fn render_table_grid_xml(style: Option<&WordTableStyleCfg>, page_margin_twips: u
     let Some(style) = style else {
         return String::new();
     };
-    let Some(column_widths) = style.column_widths.as_ref().filter(|widths| !widths.is_empty()) else {
+    let Some(column_widths) = style
+        .column_widths
+        .as_ref()
+        .filter(|widths| !widths.is_empty())
+    else {
         return String::new();
     };
 
@@ -1926,7 +1945,8 @@ fn resolve_table_column_width_twips(
         return Some(twips.max(1));
     }
 
-    width.width_px
+    width
+        .width_px
         .filter(|value| *value > 0)
         .map(|value| value.saturating_mul(TWIPS_PER_PX_AT_96_DPI).max(1))
 }
@@ -2114,7 +2134,9 @@ fn render_table_cell_properties_xml(
     }
 }
 
-fn table_cell_style_to_paragraph_style(style: &WordTableCellStyleCfg) -> Option<WordParagraphStyleCfg> {
+fn table_cell_style_to_paragraph_style(
+    style: &WordTableCellStyleCfg,
+) -> Option<WordParagraphStyleCfg> {
     let align = style
         .align
         .as_deref()
@@ -2939,8 +2961,7 @@ fn resolve_image_dimensions(
     list_level: Option<usize>,
     page_margin_twips: u32,
 ) -> (u32, u32) {
-    let (_, _, max_width_px) =
-        image_layout_constraints(quote_depth, list_level, page_margin_twips);
+    let (_, _, max_width_px) = image_layout_constraints(quote_depth, list_level, page_margin_twips);
 
     if let Some(percent) = width_percent.filter(|value| value.is_finite() && *value > 0.0) {
         let target_width = (((max_width_px as f32) * (percent.min(100.0) / 100.0)).round() as u32)
@@ -2960,8 +2981,8 @@ fn resolve_image_dimensions(
     );
 
     if let Some(percent) = max_width_percent.filter(|value| value.is_finite() && *value > 0.0) {
-        let clamp_width = (((max_width_px as f32) * (percent.min(100.0) / 100.0)).round() as u32)
-            .max(1);
+        let clamp_width =
+            (((max_width_px as f32) * (percent.min(100.0) / 100.0)).round() as u32).max(1);
         if fit_width > clamp_width {
             let target_height = ((fit_height as u64) * (clamp_width as u64) / (fit_width as u64))
                 .max(1)
@@ -3490,12 +3511,17 @@ mod tests {
         assert!(document_xml.contains(r#"<w:gridSpan w:val="2"/>"#));
         assert!(document_xml.contains(r#"<w:tblW w:w="4000" w:type="pct"/>"#));
         assert!(document_xml.contains(r#"<w:tblLayout w:type="fixed"/>"#));
-        assert!(document_xml.contains(r#"<w:tblGrid><w:gridCol w:w="2166"/><w:gridCol w:w="5055"/></w:tblGrid>"#));
+        assert!(document_xml
+            .contains(r#"<w:tblGrid><w:gridCol w:w="2166"/><w:gridCol w:w="5055"/></w:tblGrid>"#));
         assert!(document_xml.contains(r#"<w:shd w:val="clear" w:color="auto" w:fill="E0F2FE"/>"#));
-        assert!(document_xml.contains(r#"<w:top w:val="single" w:sz="4" w:space="0" w:color="D1D5DB"/>"#));
-        assert!(document_xml.contains(r#"<w:right w:val="single" w:sz="4" w:space="0" w:color="111827"/>"#));
-        assert!(document_xml.contains(r#"<w:bottom w:val="single" w:sz="4" w:space="0" w:color="9CA3AF"/>"#));
-        assert!(document_xml.contains(r#"<w:left w:val="single" w:sz="4" w:space="0" w:color="2563EB"/>"#));
+        assert!(document_xml
+            .contains(r#"<w:top w:val="single" w:sz="4" w:space="0" w:color="D1D5DB"/>"#));
+        assert!(document_xml
+            .contains(r#"<w:right w:val="single" w:sz="4" w:space="0" w:color="111827"/>"#));
+        assert!(document_xml
+            .contains(r#"<w:bottom w:val="single" w:sz="4" w:space="0" w:color="9CA3AF"/>"#));
+        assert!(document_xml
+            .contains(r#"<w:left w:val="single" w:sz="4" w:space="0" w:color="2563EB"/>"#));
         assert!(document_xml.contains(r#"<w:jc w:val="center"/>"#));
         assert!(document_xml.contains("Item one"));
         assert!(document_xml.contains("OpenAI"));
@@ -3554,8 +3580,7 @@ mod tests {
 
     #[test]
     fn should_resolve_percentage_based_image_widths() {
-        let (width, height) =
-            resolve_image_dimensions(2000, 1000, Some(50.0), None, 0, None, 1440);
+        let (width, height) = resolve_image_dimensions(2000, 1000, Some(50.0), None, 0, None, 1440);
         assert_eq!(width, 277);
         assert_eq!(height, 138);
 
@@ -3567,18 +3592,8 @@ mod tests {
 
     #[test]
     fn should_render_rowspan_as_vertical_merge() {
-        let tc_start = render_table_cell_properties_xml(
-            None,
-            None,
-            Some(2),
-            None,
-        );
-        let tc_continue = render_table_cell_properties_xml(
-            None,
-            None,
-            None,
-            Some(true),
-        );
+        let tc_start = render_table_cell_properties_xml(None, None, Some(2), None);
+        let tc_continue = render_table_cell_properties_xml(None, None, None, Some(true));
 
         assert!(tc_start.contains(r#"<w:vMerge w:val="restart"/>"#));
         assert!(tc_continue.contains(r#"<w:vMerge/>"#));
@@ -3729,11 +3744,16 @@ mod tests {
         let document_xml = fs::read_to_string(work_dir.join("word").join("document.xml"))
             .expect("document xml should exist");
 
-        assert!(styles_xml.contains(r#"<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/><w:sz w:val="22"/>"#));
+        assert!(styles_xml.contains(
+            r#"<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/><w:sz w:val="22"/>"#
+        ));
         assert!(styles_xml.contains(r#"<w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:b/><w:sz w:val="40"/>"#));
         assert!(styles_xml.contains(r#"<w:spacing w:after="240" w:line="360" w:lineRule="auto"/>"#));
-        assert!(document_xml.contains(r#"<w:pgMar w:top="1701" w:right="1701" w:bottom="1701" w:left="1701""#));
-        assert!(document_xml.contains(r#"<w:rFonts w:ascii="Menlo" w:hAnsi="Menlo" w:cs="Menlo"/><w:sz w:val="18"/>"#));
+        assert!(document_xml
+            .contains(r#"<w:pgMar w:top="1701" w:right="1701" w:bottom="1701" w:left="1701""#));
+        assert!(document_xml.contains(
+            r#"<w:rFonts w:ascii="Menlo" w:hAnsi="Menlo" w:cs="Menlo"/><w:sz w:val="18"/>"#
+        ));
 
         let _ = std::fs::remove_dir_all(&work_dir);
     }
@@ -3785,11 +3805,15 @@ mod tests {
         );
 
         assert!(paragraph_xml.contains(r#"<w:jc w:val="center"/>"#));
-        assert!(paragraph_xml.contains(r#"<w:spacing w:after="240" w:line="360" w:lineRule="auto"/>"#));
+        assert!(
+            paragraph_xml.contains(r#"<w:spacing w:after="240" w:line="360" w:lineRule="auto"/>"#)
+        );
         assert!(paragraph_xml.contains(r#"<w:shd w:val="clear" w:color="auto" w:fill="FFF59D"/>"#));
         assert!(paragraph_xml.contains(r#"<w:pBdr>"#));
-        assert!(paragraph_xml.contains(r#"<w:top w:val="single" w:sz="4" w:space="0" w:color="111827"/>"#));
-        assert!(paragraph_xml.contains(r#"<w:left w:val="single" w:sz="4" w:space="0" w:color="EF4444"/>"#));
+        assert!(paragraph_xml
+            .contains(r#"<w:top w:val="single" w:sz="4" w:space="0" w:color="111827"/>"#));
+        assert!(paragraph_xml
+            .contains(r#"<w:left w:val="single" w:sz="4" w:space="0" w:color="EF4444"/>"#));
     }
 }
 

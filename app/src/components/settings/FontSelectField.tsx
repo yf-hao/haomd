@@ -65,6 +65,11 @@ export function FontSelectField({
     [groupedFonts.system],
   )
 
+  const updateHighlightedIndex = (nextIndex: number) => {
+    highlightedIndexRef.current = nextIndex
+    setHighlightedIndex(nextIndex)
+  }
+
   useEffect(() => {
     if (!selectableFonts.length) {
       updateHighlightedIndex(0)
@@ -79,11 +84,6 @@ export function FontSelectField({
   const handleSelectFont = (family: string) => {
     onChange(family)
     setIsExpanded(false)
-  }
-
-  const updateHighlightedIndex = (nextIndex: number) => {
-    highlightedIndexRef.current = nextIndex
-    setHighlightedIndex(nextIndex)
   }
 
   const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -118,16 +118,15 @@ export function FontSelectField({
     }
   }
 
-  let optionCursor = -1
-  const renderFontGroup = (title: string, items: FontOption[]) => {
+  const renderFontGroup = (title: string, items: FontOption[], startIndex: number) => {
     if (!items.length) return null
     return (
       <div className="font-select-group">
         <div className="font-select-group-title">{title}</div>
         <div className="font-select-group-list">
-          {items.map((font) => {
-            optionCursor += 1
-            const isHighlighted = highlightedIndex === optionCursor
+          {items.map((font, index) => {
+            const optionIndex = startIndex + index
+            const isHighlighted = highlightedIndex === optionIndex
             return (
               <button
                 key={`${font.source}:${font.family}`}
@@ -170,7 +169,7 @@ export function FontSelectField({
           {!loading && error && <div className="font-select-state font-select-state-error">{error}</div>}
           {!loading && (
             <>
-              {renderFontGroup('System Fonts', groupedFonts.system)}
+              {renderFontGroup('System Fonts', groupedFonts.system, 0)}
               {!groupedFonts.system.length && (
                 <div className="font-select-state">No fonts matched your search.</div>
               )}

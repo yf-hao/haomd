@@ -145,7 +145,9 @@ pub async fn list_system_fonts() -> ResultPayload<Vec<FontOptionCfg>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_to_font_options, scan_font_directories, DiscoveredFont, FontMetadataParser};
+    use super::{
+        normalize_to_font_options, scan_font_directories, DiscoveredFont, FontMetadataParser,
+    };
     use std::path::Path;
 
     #[derive(Default)]

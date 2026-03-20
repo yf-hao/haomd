@@ -82,7 +82,11 @@ fn trim_style_suffixes(input: &str) -> &str {
         }
     }
 
-    if parts.is_empty() { input } else { &input[..parts.join(" ").len()] }
+    if parts.is_empty() {
+        input
+    } else {
+        &input[..parts.join(" ").len()]
+    }
 }
 
 #[cfg(test)]
@@ -99,7 +103,10 @@ mod tests {
     #[test]
     fn should_trim_known_style_suffixes() {
         assert_eq!(trim_style_suffixes("Inter Regular"), "Inter");
-        assert_eq!(trim_style_suffixes("Noto Sans CJK SC Bold"), "Noto Sans CJK SC");
+        assert_eq!(
+            trim_style_suffixes("Noto Sans CJK SC Bold"),
+            "Noto Sans CJK SC"
+        );
         assert_eq!(trim_style_suffixes("PingFang SC"), "PingFang SC");
     }
 }

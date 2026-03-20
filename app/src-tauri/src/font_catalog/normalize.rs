@@ -64,4 +64,3 @@ mod tests {
         assert_eq!(fonts[1].family, "Times New Roman");
     }
 }
-
