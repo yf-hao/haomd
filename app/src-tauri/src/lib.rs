@@ -27,10 +27,11 @@ use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 use tokio::fs;
 use tokio::sync::Mutex;
-use url::Url;
 
 #[cfg(target_os = "macos")]
 use tauri::RunEvent;
+#[cfg(target_os = "macos")]
+use url::Url;
 
 const MAX_FILE_BYTES: u64 = 500 * 1024 * 1024; // 500MB
 const MAX_RECENT_ITEMS: usize = 100; // 最近文件最大条数
