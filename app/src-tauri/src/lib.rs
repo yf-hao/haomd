@@ -22,12 +22,15 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::http::{Request, Response};
 use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
-use tauri::{AppHandle, Emitter, Manager, RunEvent, UriSchemeContext};
+use tauri::{AppHandle, Emitter, Manager, UriSchemeContext};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 use tokio::fs;
 use tokio::sync::Mutex;
 use url::Url;
+
+#[cfg(target_os = "macos")]
+use tauri::RunEvent;
 
 const MAX_FILE_BYTES: u64 = 500 * 1024 * 1024; // 500MB
 const MAX_RECENT_ITEMS: usize = 100; // 最近文件最大条数
@@ -5564,6 +5567,7 @@ async fn save_doc_conversations(
     }
 }
 
+#[cfg(target_os = "macos")]
 fn external_open_item_from_url(url: &Url) -> Option<ExternalOpenItem> {
     if url.scheme() != "file" {
         return None;
@@ -5587,6 +5591,7 @@ fn queue_external_open_items(items: Vec<ExternalOpenItem>) {
     pending.extend(items);
 }
 
+#[cfg(target_os = "macos")]
 fn emit_external_open_items(app: &AppHandle, items: &[ExternalOpenItem]) {
     for item in items {
         let _ = app.emit("native://open_external_file", item);
@@ -5897,16 +5902,16 @@ pub fn run() {
         }
     }
 
-    app.run(|app_handle, event| {
+    app.run(|_app_handle, _event| {
         #[cfg(target_os = "macos")]
-        if let RunEvent::Opened { urls } = event {
+        if let RunEvent::Opened { urls } = _event {
             let items: Vec<ExternalOpenItem> = urls
                 .iter()
                 .filter_map(external_open_item_from_url)
                 .collect();
             if !items.is_empty() {
                 queue_external_open_items(items.clone());
-                emit_external_open_items(app_handle, &items);
+                emit_external_open_items(_app_handle, &items);
             }
         }
     });

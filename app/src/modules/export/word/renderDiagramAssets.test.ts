@@ -91,8 +91,8 @@ describe('export/word - renderWordDiagramAssets', () => {
         type: 'image',
         assetId: 'asset_0',
         alt: 'Mermaid Diagram',
-        widthPx: 320,
-        heightPx: 180,
+        widthPx: 240,
+        heightPx: 120,
       },
     ])
     expect(result.assets).toEqual([
