@@ -693,11 +693,11 @@ fn default_theme_settings_cfg() -> ThemeSettingsCfg {
         editor_background: Some(ThemeEditorBackgroundCfg {
             enabled: Some(false),
             path: None,
-            opacity: Some(0.1),
+            opacity: Some(0.3),
             overlay_opacity: Some(0.0),
-            blur_px: Some(8.0),
+            blur_px: Some(1.0),
             brightness: Some(100.0),
-            size: Some("cover".to_string()),
+            size: Some("height-fill".to_string()),
             position_x: Some(50.0),
             position_y: Some(50.0),
         }),
@@ -844,6 +844,97 @@ fn editor_settings_path(app: &AppHandle) -> std::io::Result<PathBuf> {
 
     let dir = std::env::current_dir()?;
     Ok(dir.join("editor_settings.json"))
+}
+
+fn editor_backgrounds_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
+    if let Ok(mut dir) = app.path().config_dir() {
+        dir.push("haomd");
+        dir.push("editor-backgrounds");
+        std::fs::create_dir_all(&dir)?;
+        return Ok(dir);
+    }
+
+    let dir = std::env::current_dir()?.join("editor-backgrounds");
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir)
+}
+
+fn should_cleanup_managed_editor_background(
+    backgrounds_dir: &Path,
+    previous_path: &Path,
+    new_path: &Path,
+) -> bool {
+    if previous_path == new_path {
+        return false;
+    }
+    previous_path.starts_with(backgrounds_dir) && previous_path.is_file()
+}
+
+fn clamp_image_to_long_edge(width: u32, height: u32, max_long_edge: u32) -> (u32, u32) {
+    if width == 0 || height == 0 || max_long_edge == 0 {
+        return (width.max(1), height.max(1));
+    }
+
+    let long_edge = width.max(height);
+    if long_edge <= max_long_edge {
+        return (width, height);
+    }
+
+    let scale = max_long_edge as f32 / long_edge as f32;
+    let next_width = ((width as f32) * scale).round().max(1.0) as u32;
+    let next_height = ((height as f32) * scale).round().max(1.0) as u32;
+    (next_width, next_height)
+}
+
+fn sanitize_file_stem(input: &str) -> String {
+    let sanitized: String = input
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_lowercase()
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let collapsed = sanitized.trim_matches('_').to_string();
+    if collapsed.is_empty() {
+        "background".to_string()
+    } else {
+        collapsed
+    }
+}
+
+fn import_editor_background_image_sync(
+    backgrounds_dir: &Path,
+    source_path: &Path,
+) -> Result<PathBuf, String> {
+    let bytes = std::fs::read(source_path)
+        .map_err(|err| format!("读取图片失败: {err}"))?;
+    let original =
+        image::load_from_memory(&bytes).map_err(|err| format!("解析图片失败: {err}"))?;
+    let (width, height) = (original.width(), original.height());
+    let (target_width, target_height) = clamp_image_to_long_edge(width, height, 1080);
+    let processed = if target_width == width && target_height == height {
+        original
+    } else {
+        original.resize(target_width, target_height, image::imageops::FilterType::Lanczos3)
+    };
+
+    let stem = source_path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .map(sanitize_file_stem)
+        .unwrap_or_else(|| "background".to_string());
+    let digest = hash_bytes(&bytes);
+    let file_name = format!("{stem}-{}.webp", &digest[..12]);
+    let output_path = backgrounds_dir.join(file_name);
+
+    processed
+        .save_with_format(&output_path, ImageFormat::WebP)
+        .map_err(|err| format!("保存导入图片失败: {err}"))?;
+
+    Ok(output_path)
 }
 
 async fn read_sidebar_state(app: &AppHandle) -> std::io::Result<SidebarState> {
@@ -1469,7 +1560,10 @@ async fn save_ai_sessions_json_with_dialog(
 }
 
 #[tauri::command]
-async fn pick_editor_background_image(app: AppHandle) -> Result<Option<String>, String> {
+async fn pick_editor_background_image(
+    app: AppHandle,
+    current_path: Option<String>,
+) -> Result<Option<String>, String> {
     let (tx, rx) = tokio::sync::oneshot::channel::<Option<String>>();
     let tx = std::sync::Arc::new(std::sync::Mutex::new(Some(tx)));
 
@@ -1487,8 +1581,38 @@ async fn pick_editor_background_image(app: AppHandle) -> Result<Option<String>, 
             }
         });
 
-    rx.await
-        .map_err(|err| format!("等待图片选择结果失败: {err}"))
+    let selected = rx
+        .await
+        .map_err(|err| format!("等待图片选择结果失败: {err}"))?;
+
+    let Some(selected) = selected else {
+        return Ok(None);
+    };
+
+    let backgrounds_dir =
+        editor_backgrounds_dir(&app).map_err(|err| format!("创建背景图目录失败: {err}"))?;
+    let source_path = PathBuf::from(selected);
+    let previous_path = current_path
+        .as_deref()
+        .map(PathBuf::from)
+        .filter(|path| !path.as_os_str().is_empty());
+    let imported = tokio::task::spawn_blocking(move || {
+        let imported = import_editor_background_image_sync(&backgrounds_dir, &source_path)?;
+        if let Some(previous_path) = previous_path {
+            if should_cleanup_managed_editor_background(
+                &backgrounds_dir,
+                &previous_path,
+                &imported,
+            ) {
+                let _ = std::fs::remove_file(&previous_path);
+            }
+        }
+        Ok::<PathBuf, String>(imported)
+    })
+    .await
+    .map_err(|err| format!("导入背景图任务失败: {err}"))??;
+
+    Ok(Some(imported.to_string_lossy().to_string()))
 }
 
 #[tauri::command]
@@ -3686,6 +3810,59 @@ mod tests {
         let (nested_width, nested_height) = fit_image_to_page_width(2000, 1000, 1, Some(1), 1440);
         assert!(nested_width < width);
         assert!(nested_height < height);
+    }
+
+    #[test]
+    fn should_clamp_editor_background_to_1080_long_edge() {
+        let (landscape_w, landscape_h) = clamp_image_to_long_edge(4000, 2000, 1080);
+        assert_eq!(landscape_w, 1080);
+        assert_eq!(landscape_h, 540);
+
+        let (portrait_w, portrait_h) = clamp_image_to_long_edge(1200, 2400, 1080);
+        assert_eq!(portrait_w, 540);
+        assert_eq!(portrait_h, 1080);
+
+        let (small_w, small_h) = clamp_image_to_long_edge(900, 600, 1080);
+        assert_eq!(small_w, 900);
+        assert_eq!(small_h, 600);
+    }
+
+    #[test]
+    fn should_only_cleanup_managed_editor_background_files() {
+        let backgrounds_dir = std::env::temp_dir().join(format!(
+            "haomd-editor-backgrounds-{}",
+            new_trace_id().replace("trace_", "")
+        ));
+        let managed = backgrounds_dir.join("old.png");
+        let next = backgrounds_dir.join("new.png");
+        let external = std::env::temp_dir().join(format!(
+            "haomd-external-bg-{}.png",
+            new_trace_id().replace("trace_", "")
+        ));
+
+        fs::create_dir_all(&backgrounds_dir).expect("background dir");
+        fs::write(&managed, b"old").expect("managed");
+        fs::write(&next, b"new").expect("next");
+        fs::write(&external, b"external").expect("external");
+
+        assert!(should_cleanup_managed_editor_background(
+            &backgrounds_dir,
+            &managed,
+            &next
+        ));
+        assert!(!should_cleanup_managed_editor_background(
+            &backgrounds_dir,
+            &external,
+            &next
+        ));
+        assert!(!should_cleanup_managed_editor_background(
+            &backgrounds_dir,
+            &next,
+            &next
+        ));
+
+        let _ = fs::remove_dir_all(&backgrounds_dir);
+        let _ = fs::remove_file(&external);
     }
 
     #[test]

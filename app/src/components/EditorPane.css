@@ -49,6 +49,21 @@
   object-fit: fill;
 }
 
+.editor-pane-frame.editor-bg-fit-width-fill .editor-pane-background {
+  width: 100%;
+  min-height: 100%;
+  height: auto;
+  max-height: none;
+  left: var(--editor-bg-position-x, 50%);
+  top: var(--editor-bg-position-y, 50%);
+  transform: translate(
+      calc(-1 * var(--editor-bg-position-x, 50%)),
+      calc(-1 * var(--editor-bg-position-y, 50%))
+    )
+    scale(1.04);
+  object-fit: fill;
+}
+
 .editor-pane-frame.editor-bg-fit-auto .editor-pane-background {
   object-fit: none;
 }

@@ -106,9 +106,9 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
         originalThemeRef.current = loadedTheme
         themePreviewReadyRef.current = true
         setWordExport(loadedWordExport)
-        setEditorBackgroundOpacityInput(String(loadedTheme.editorBackground?.opacity ?? getDefaultThemeSettings().editorBackground?.opacity ?? 0.2))
+        setEditorBackgroundOpacityInput(String(loadedTheme.editorBackground?.opacity ?? getDefaultThemeSettings().editorBackground?.opacity ?? 0.3))
         setEditorBackgroundOverlayOpacityInput(String(loadedTheme.editorBackground?.overlayOpacity ?? getDefaultThemeSettings().editorBackground?.overlayOpacity ?? 0))
-        setEditorBackgroundBlurInput(String(loadedTheme.editorBackground?.blurPx ?? getDefaultThemeSettings().editorBackground?.blurPx ?? 6))
+        setEditorBackgroundBlurInput(String(loadedTheme.editorBackground?.blurPx ?? getDefaultThemeSettings().editorBackground?.blurPx ?? 1))
         setEditorBackgroundBrightnessInput(String(loadedTheme.editorBackground?.brightness ?? getDefaultThemeSettings().editorBackground?.brightness ?? 100))
         setError(null)
       } catch (err) {
@@ -128,9 +128,9 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   }, [open, theme, onThemeSettingsChange])
 
   useEffect(() => {
-    setEditorBackgroundOpacityInput(String(theme.editorBackground?.opacity ?? getDefaultThemeSettings().editorBackground?.opacity ?? 0.2))
+    setEditorBackgroundOpacityInput(String(theme.editorBackground?.opacity ?? getDefaultThemeSettings().editorBackground?.opacity ?? 0.3))
     setEditorBackgroundOverlayOpacityInput(String(theme.editorBackground?.overlayOpacity ?? getDefaultThemeSettings().editorBackground?.overlayOpacity ?? 0))
-    setEditorBackgroundBlurInput(String(theme.editorBackground?.blurPx ?? getDefaultThemeSettings().editorBackground?.blurPx ?? 6))
+    setEditorBackgroundBlurInput(String(theme.editorBackground?.blurPx ?? getDefaultThemeSettings().editorBackground?.blurPx ?? 1))
     setEditorBackgroundBrightnessInput(String(theme.editorBackground?.brightness ?? getDefaultThemeSettings().editorBackground?.brightness ?? 100))
   }, [theme.editorBackground?.opacity, theme.editorBackground?.overlayOpacity, theme.editorBackground?.blurPx, theme.editorBackground?.brightness])
 
@@ -187,7 +187,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
           patch.blurPx
           ?? prev.editorBackground?.blurPx
           ?? getDefaultThemeSettings().editorBackground?.blurPx
-          ?? 6,
+          ?? 1,
         brightness:
           patch.brightness
           ?? prev.editorBackground?.brightness
@@ -214,14 +214,22 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
 
   const handleSelectEditorBackground = async () => {
     try {
-      const selected = await invoke<string | null>('pick_editor_background_image')
+      const selected = await invoke<string | null>('pick_editor_background_image', {
+        currentPath: editorBackground.path,
+      })
       if (!selected) return
       updateEditorBackground({
         enabled: true,
         path: selected,
       })
     } catch (err) {
-      setError((err as Error).message || 'Failed to choose editor background image')
+      const message =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'string'
+            ? err
+            : String(err)
+      setError(message || 'Failed to choose editor background image')
     }
   }
 
@@ -289,7 +297,12 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
 
   const handleReset = () => {
     if (activeSection === 'theme') {
-      setTheme(getDefaultThemeSettings())
+      if (activeThemeTab === 'editor-background') {
+        setTheme((prev) => ({
+          ...prev,
+          editorBackground: getDefaultThemeSettings().editorBackground,
+        }))
+      }
       return
     }
     setWordExport(getDefaultWordExportStyleSettings())
@@ -380,7 +393,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   }
 
   return (
-    <div className="modal-backdrop modal-backdrop-settings-plain" onClick={handleCloseWithoutSave}>
+    <div className="modal-backdrop modal-backdrop-settings-plain">
       <div
         ref={modalRef}
         className="modal modal-settings"
@@ -576,14 +589,15 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                           <label className="settings-field-label">Image Fit</label>
                           <select
                             className="field-select"
-                            value={editorBackground.size}
-                            onChange={updateEditorBackgroundSize}
-                          >
-                            <option value="cover">Cover</option>
-                            <option value="height-fill">Height Fill</option>
-                            <option value="contain">Contain</option>
-                            <option value="auto">Original</option>
-                          </select>
+                          value={editorBackground.size}
+                          onChange={updateEditorBackgroundSize}
+                        >
+                          <option value="cover">Cover</option>
+                          <option value="height-fill">Height Fill</option>
+                          <option value="width-fill">Width Fill</option>
+                          <option value="contain">Contain</option>
+                          <option value="auto">Original</option>
+                        </select>
                         </div>
 
                         <div style={fieldGridStyle}>

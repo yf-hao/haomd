@@ -34,11 +34,12 @@ button:disabled {
 }
 
 .activity-bar {
+  --activity-surface: color-mix(in srgb, var(--theme-surface-sidebar) 78%, var(--theme-surface-preview) 22%);
   width: 44px;
   min-width: 44px;
   max-width: 44px;
   border-right: 1px solid var(--theme-border-subtle);
-  background: var(--theme-surface-sidebar);
+  background: var(--activity-surface);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -86,7 +87,7 @@ button:disabled {
   width: 8px;
   height: 8px;
   border-radius: 2px;
-  background: var(--theme-surface-sidebar);
+  background: var(--activity-surface);
   border-left: 1.5px solid currentColor;
   border-bottom: 1.5px solid currentColor;
   transform: translate(-1px, 1px) rotate(0deg);
@@ -137,7 +138,7 @@ button:disabled {
   width: 8px;
   height: 8px;
   border-radius: 2px;
-  background: var(--theme-surface-sidebar);
+  background: var(--activity-surface);
   border-left: 1.5px solid currentColor;
   border-bottom: 1.5px solid currentColor;
   transform: translate(-1px, 1px) rotate(0deg);
@@ -223,8 +224,8 @@ button:disabled {
 
 /* PDF Panel */
 .pdf-panel {
-  /* 与文件浏览器 Sidebar 保持一致的深色毛玻璃风格 */
-  background: var(--theme-surface-panel);
+  --sidebar-panel-surface: color-mix(in srgb, var(--theme-surface-sidebar) 72%, var(--theme-surface-preview) 28%);
+  background: var(--sidebar-panel-surface);
   border-right: 1px solid var(--theme-border-subtle);
   backdrop-filter: blur(8px);
   display: flex;
@@ -234,13 +235,15 @@ button:disabled {
 }
 
 .pdf-panel-header {
-  padding: 12px 16px;
+  min-height: var(--theme-component-tabbar-height);
+  box-sizing: border-box;
+  padding: 0 16px;
   border-bottom: 1px solid var(--theme-border-subtle);
   font-size: 12px;
   font-weight: 600;
   color: var(--theme-text-subtle);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.04em;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -249,9 +252,9 @@ button:disabled {
 
 .pdf-folder-add-btn {
   background: transparent;
-  border: 1px solid var(--theme-border-input-strong);
-  border-radius: 4px;
-  color: var(--theme-text-accent);
+  border: 1px solid var(--theme-border-subtle);
+  border-radius: 8px;
+  color: var(--theme-text-muted);
   font-size: 12px;
   width: 20px;
   height: 20px;
@@ -262,6 +265,7 @@ button:disabled {
 
 .pdf-folder-add-btn:hover {
   background: var(--theme-component-sidebar-hover);
+  color: var(--theme-text-default);
 }
 
 .pdf-folder-section {
@@ -269,19 +273,24 @@ button:disabled {
 }
 
 .pdf-folder-header {
-  padding: 4px 12px 2px 16px;
+  padding: 6px 12px 6px 16px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--theme-text-default);
-  background: var(--theme-surface-card);
+  color: var(--theme-text-muted);
+  background: var(--theme-surface-editor);
+  border: 1px solid var(--theme-border-subtle);
+  border-radius: 8px;
   display: flex;
   align-items: center;
   gap: 6px;
   cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .pdf-folder-header:hover {
-  background: var(--theme-surface-card-active);
+  background: var(--theme-component-sidebar-hover);
+  color: var(--theme-text-default);
+  border-color: var(--theme-border-input-strong);
 }
 
 .pdf-folder-toggle-icon {
@@ -297,20 +306,20 @@ button:disabled {
 
 .pdf-folder-rename-input {
   width: 100%;
-  background: var(--theme-surface-input);
-  border-radius: 4px;
-  border: 1px solid var(--theme-border-input-strong);
+  background: var(--theme-surface-editor);
+  border-radius: 8px;
+  border: 1px solid var(--theme-border-subtle);
   color: var(--theme-text-default);
   font-size: 12px;
-  padding: 2px 6px;
+  padding: 4px 8px;
   outline: none;
 }
 
 .pdf-folder-delete-btn {
   width: 18px;
   height: 18px;
-  border-radius: 999px;
-  border: none;
+  border-radius: 8px;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--theme-text-muted);
   font-size: 11px;
@@ -323,13 +332,14 @@ button:disabled {
 }
 
 .pdf-folder-delete-btn:hover {
-  background: var(--theme-accent-soft-danger-bg);
+  background: var(--theme-component-sidebar-hover);
+  border-color: var(--theme-border-subtle);
   color: var(--theme-accent-soft-danger-fg);
 }
 
 .pdf-folder-rename-input:focus {
-  border-color: var(--theme-accent-primary-soft);
-  box-shadow: 0 0 0 1px var(--theme-component-focus-ring);
+  border-color: var(--theme-border-input-strong);
+  box-shadow: inset 0 0 0 1px var(--theme-border-input-strong);
 }
 
 .pdf-panel-content {
@@ -344,23 +354,26 @@ button:disabled {
 }
 
 .pdf-recent-item {
-  padding: 6px 12px;
-  border-radius: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 13px;
-  color: var(--theme-text-accent);
+  font-size: 12px;
+  color: var(--theme-text-muted);
   display: flex;
   flex-direction: column;
   gap: 2px;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .pdf-recent-item:hover {
-  background: var(--theme-surface-card);
+  background: var(--theme-component-sidebar-hover);
+  color: var(--theme-text-default);
 }
 
 .pdf-recent-item.active {
-  background: var(--theme-accent-soft-accent-bg);
+  background: var(--theme-component-sidebar-active);
   color: var(--theme-text-default);
+  box-shadow: inset 2px 0 0 var(--theme-accent-success);
 }
 
 .pdf-recent-title {
@@ -439,12 +452,12 @@ button:disabled {
 }
 
 .sidebar {
+  --sidebar-panel-surface: color-mix(in srgb, var(--theme-surface-sidebar) 72%, var(--theme-surface-preview) 28%);
   width: 260px;
   min-width: 200px;
   max-width: 320px;
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
-  
-  background: rgba(5, 7, 12, 0.96);
+  border-right: 1px solid var(--theme-border-subtle);
+  background: var(--sidebar-panel-surface);
   backdrop-filter: blur(8px);
   padding: 8px 8px 8px 12px;
   display: flex;
@@ -455,9 +468,8 @@ button:disabled {
   width: 220px;
   min-width: 180px;
   max-width: 260px;
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
-  
-  background: rgba(5, 7, 12, 0.96);
+  border-right: 1px solid var(--theme-border-subtle);
+  background: var(--sidebar-panel-surface);
   backdrop-filter: blur(8px);
   padding: 8px 8px 8px 8px;
   display: flex;
@@ -465,13 +477,18 @@ button:disabled {
 }
 
 .outline-header {
-  font-size: 11px;
+  min-height: var(--theme-component-tabbar-height);
+  box-sizing: border-box;
+  font-size: 12px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #8fa1c7;
-  margin-bottom: 4px;
-  padding: 4px 4px 8px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+  letter-spacing: 0.04em;
+  color: var(--theme-text-subtle);
+  margin-bottom: 6px;
+  padding: 0 4px;
+  border-bottom: 1px solid var(--theme-border-subtle);
+  display: flex;
+  align-items: center;
 }
 
 .outline-list {
@@ -492,7 +509,7 @@ button:disabled {
   justify-content: center;
   text-align: center;
   padding: 12px;
-  color: #9ca3af;
+  color: var(--theme-text-muted);
 }
 
 .outline-empty-title {
@@ -511,38 +528,34 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 6px;
-  border-radius: 6px;
+  padding: 4px 8px;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 13px;
-  color: #c4ccee;
+  font-size: 12px;
+  color: var(--theme-text-muted);
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .outline-item:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--theme-component-sidebar-hover);
+  color: var(--theme-text-default);
 }
 
 .outline-item.active {
-  background: rgba(59, 130, 246, 0.18);
-  color: #e8ecf5;
+  background: var(--theme-component-sidebar-active);
+  color: var(--theme-text-default);
+  box-shadow: inset 2px 0 0 var(--theme-accent-success);
 }
 
 .outline-item.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 3px;
-  bottom: 3px;
-  width: 2px;
-  border-radius: 999px;
-  background: linear-gradient(to bottom, #60a5fa, #22c55e);
+  content: none;
 }
 
 .outline-item-icon {
   width: 14px;
   height: 14px;
   border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.6);
+  border: 1px solid var(--theme-border-input-strong);
 }
 
 .outline-item-text {
@@ -1784,8 +1797,8 @@ button:disabled {
   /* 几乎只保留文字本身的高度 */
   font-size: 12px;
   line-height: 1.2;
-  border-top: 1px solid var(--theme-border-strong);
-  background: var(--theme-surface-status);
+  border-top: 1px solid var(--theme-border-subtle);
+  background: color-mix(in srgb, var(--theme-surface-preview) 72%, var(--theme-surface-editor) 28%);
   color: var(--theme-text-muted);
 }
 

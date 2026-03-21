@@ -13,6 +13,8 @@
   flex-direction: column;
   max-height: 85vh;
   overflow: hidden;
+  background: var(--theme-surface-preview);
+  border: 1px solid var(--theme-border-subtle);
 }
 
 .settings-dialog-drag-handle {
@@ -65,12 +67,12 @@
 }
 
 .settings-sidebar-item:hover {
-  background: var(--theme-surface-card);
+  background: var(--theme-surface-editor);
   color: var(--theme-text-default);
 }
 
 .settings-sidebar-item.active {
-  background: var(--theme-surface-card-active);
+  background: var(--theme-surface-editor);
   color: var(--theme-text-default);
   font-weight: 600;
 }
@@ -83,7 +85,7 @@
   bottom: 8px;
   width: 3px;
   border-radius: 999px;
-  background: var(--theme-accent-primary-soft);
+  background: var(--theme-border-input-strong);
 }
 
 .settings-panel {
@@ -119,7 +121,7 @@
   padding: 4px;
   border: 1px solid var(--theme-border-subtle);
   border-radius: 12px;
-  background: var(--theme-surface-card);
+  background: var(--theme-surface-editor);
   flex-shrink: 0;
 }
 
@@ -140,9 +142,9 @@
 }
 
 .settings-panel-tab.active {
-  background: var(--theme-surface-card-active);
+  background: var(--theme-surface-preview);
   color: var(--theme-text-default);
-  box-shadow: 0 0 0 1px var(--theme-component-focus-ring);
+  box-shadow: inset 0 0 0 1px var(--theme-border-input-strong);
 }
 
 .settings-field-label {
@@ -166,11 +168,12 @@
 .field-select {
   width: 100%;
   border-radius: 8px;
-  border: 1px solid var(--theme-border-input-strong);
-  background: var(--theme-surface-input);
+  border: 1px solid var(--theme-border-subtle);
+  background: var(--theme-surface-editor);
   color: var(--theme-text-default);
   padding: 7px 10px;
   font-size: 13px;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
 .field-select {
@@ -190,14 +193,14 @@
 .field-input:focus,
 .field-textarea:focus {
   outline: none;
-  border-color: var(--theme-accent-primary-soft);
-  box-shadow: 0 0 0 1px var(--theme-component-focus-ring);
+  border-color: var(--theme-border-input-strong);
+  box-shadow: inset 0 0 0 1px var(--theme-border-input-strong);
 }
 
 .field-select:focus {
   outline: none;
   border-color: var(--theme-border-input-strong);
-  box-shadow: none;
+  box-shadow: inset 0 0 0 1px var(--theme-border-input-strong);
 }
 
 .form-error {
@@ -222,20 +225,20 @@
   padding: 14px 16px;
   border-radius: 12px;
   border: 1px solid var(--theme-border-subtle);
-  background: var(--theme-surface-card);
+  background: var(--theme-surface-editor);
   color: var(--theme-text-default);
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
 }
 
 .theme-option-card:hover {
-  background: var(--theme-surface-card-active);
+  background: var(--theme-surface-preview);
 }
 
 .theme-option-card.active {
-  border-color: var(--theme-accent-primary-soft);
-  background: var(--theme-surface-card-active);
-  box-shadow: 0 0 0 1px var(--theme-component-focus-ring);
+  border-color: var(--theme-border-input-strong);
+  background: var(--theme-surface-preview);
+  box-shadow: inset 0 0 0 1px var(--theme-border-input-strong);
 }
 
 .theme-option-card-title {
@@ -362,6 +365,21 @@
   object-fit: fill;
 }
 
+.settings-image-position-preview.fit-width-fill {
+  width: 100%;
+  min-height: 100%;
+  height: auto;
+  max-height: none;
+  position: absolute;
+  left: var(--settings-image-position-x, 50%);
+  top: var(--settings-image-position-y, 50%);
+  transform: translate(
+      calc(-1 * var(--settings-image-position-x, 50%)),
+      calc(-1 * var(--settings-image-position-y, 50%))
+    );
+  object-fit: fill;
+}
+
 .settings-image-position-preview.fit-auto {
   object-fit: none;
 }
@@ -386,7 +404,7 @@
   margin-top: -8px;
   border-radius: 999px;
   border: 2px solid var(--theme-text-inverse);
-  box-shadow: 0 0 0 1px var(--theme-accent-primary), 0 0 0 6px var(--theme-accent-soft-accent-bg);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55), 0 0 0 6px rgba(255, 255, 255, 0.14);
   pointer-events: none;
 }
 

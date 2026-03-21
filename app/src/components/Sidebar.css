@@ -1,10 +1,10 @@
 .sidebar {
+  --sidebar-panel-surface: color-mix(in srgb, var(--theme-surface-sidebar) 72%, var(--theme-surface-preview) 28%);
   width: 260px;
-
   border-right: 1px solid var(--theme-border-subtle);
-  background: var(--theme-surface-panel);
+  background: var(--sidebar-panel-surface);
   backdrop-filter: blur(8px);
-  padding: 8px 8px 8px 12px;
+  padding: 0 8px 8px 12px;
   display: flex;
   flex-direction: column;
 }
@@ -22,29 +22,36 @@
 }
 
 .outline-panel {
+  --sidebar-panel-surface: color-mix(in srgb, var(--theme-surface-sidebar) 72%, var(--theme-surface-preview) 28%);
   width: 220px;
   min-width: 180px;
   border-right: 1px solid var(--theme-border-subtle);
-  background: var(--theme-surface-panel);
+  background: var(--sidebar-panel-surface);
   backdrop-filter: blur(8px);
-  padding: 8px 8px 8px 8px;
+  padding: 0 8px 8px 8px;
   display: flex;
   flex-direction: column;
 }
 
 .outline-header {
-  font-size: 11px;
+  min-height: var(--theme-component-tabbar-height);
+  box-sizing: border-box;
+  font-size: 12px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
   color: var(--theme-text-subtle);
-  margin-bottom: 4px;
-  padding: 4px 4px 8px;
+  margin-bottom: 0;
+  padding: 0 4px;
+  border-bottom: 1px solid var(--theme-border-subtle);
+  display: flex;
+  align-items: center;
 }
 
 .outline-list {
   list-style: none;
   margin: 0;
-  padding: 2px 0 0;
+  padding: 8px 0 0;
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -78,35 +85,31 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 6px;
-  border-radius: 6px;
+  padding: 4px 8px;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--theme-text-muted);
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .outline-item:hover {
-  background: var(--theme-surface-card);
+  background: var(--theme-component-sidebar-hover);
+  color: var(--theme-text-default);
 }
 
 .outline-item.active {
   background: var(--theme-component-sidebar-active);
   color: var(--theme-text-default);
+  box-shadow: inset 2px 0 0 var(--theme-accent-success);
 }
 
 .outline-item.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 2px;
-  bottom: 2px;
-  width: 2px;
-  border-radius: 999px;
-  background: var(--theme-accent-success);
+  content: none;
 }
 
 .outline-item.level-1 {
-  padding-left: 6px;
+  padding-left: 8px;
   font-weight: 600;
 }
 
@@ -199,7 +202,7 @@
 
 .outline-toggle:hover {
   color: var(--theme-text-default);
-  background: var(--theme-surface-card);
+  background: var(--theme-component-sidebar-hover);
   border-radius: 4px;
 }
 
@@ -325,8 +328,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 0 8px;
-  border-bottom: 1px solid var(--theme-border-strong);
+  min-height: var(--theme-component-tabbar-height);
+  box-sizing: border-box;
+  padding: 0;
+  border-bottom: 1px solid var(--theme-border-subtle);
 }
 
 /* File Browser 顶部标题样式，略小一号 */
@@ -335,7 +340,7 @@
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--theme-text-default);
+  color: var(--theme-text-subtle);
 }
 
 .sidebar-header-toolbar {
@@ -360,7 +365,7 @@
 }
 
 .sidebar-header-toolbar .toolbar-btn:hover {
-  background: var(--theme-surface-card);
+  background: var(--theme-component-sidebar-hover);
   color: var(--theme-text-default);
 }
 
@@ -368,6 +373,7 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
+  padding-top: 8px;
   padding-right: 4px;
   /* 侧边栏文件区域统一使用手型光标，避免点击后短暂退回箭头 */
   cursor: pointer;
@@ -414,9 +420,9 @@
 }
 
 .folder-action-btn:hover {
-  background: var(--theme-accent-soft-accent-bg);
+  background: var(--theme-component-sidebar-hover);
   color: var(--theme-text-default);
-  box-shadow: 0 0 0 1px var(--theme-component-focus-ring);
+  box-shadow: none;
 }
 
 /* New File 图标：文档 + 右下角加号 */
@@ -528,15 +534,17 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 4px;
-  border-radius: 6px;
+  padding: 4px 8px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 12px;
-  color: var(--theme-text-default);
+  color: var(--theme-text-muted);
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .sidebar-folder-row:hover {
-  background: var(--theme-surface-card);
+  background: var(--theme-component-sidebar-hover);
+  color: var(--theme-text-default);
 }
 
 .sidebar-folder-row.active {
@@ -549,16 +557,18 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 4px;
-  border-radius: 6px;
+  padding: 4px 8px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 12px;
-  color: var(--theme-text-default);
+  color: var(--theme-text-muted);
   user-select: none;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .tree-row:hover {
-  background: var(--theme-surface-card);
+  background: var(--theme-component-sidebar-hover);
+  color: var(--theme-text-default);
 }
 
 .tree-row.dir .tree-icon,
@@ -635,7 +645,7 @@
 }
 
 .tree-row.file.highlighted {
-  background: rgba(235, 37, 37, 0.604);
+  background: color-mix(in srgb, var(--theme-accent-danger) 22%, transparent);
   color: var(--theme-text-default);
   box-shadow: none;
 }
@@ -719,9 +729,9 @@
 }
 
 .files-virtual-folder-add-btn:hover {
-  background: var(--theme-accent-soft-accent-bg);
+  background: var(--theme-component-sidebar-hover);
   color: var(--theme-text-default);
-  box-shadow: 0 0 0 1px var(--theme-component-focus-ring);
+  box-shadow: none;
 }
 
 .sidebar-virtual-folder-inline-create {
@@ -748,9 +758,9 @@
 }
 
 .sidebar-virtual-folder-section {
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 2px 0 4px;
-  background: var(--theme-surface-card);
+  background: var(--theme-surface-editor);
   border: 1px solid var(--theme-border-subtle);
 }
 

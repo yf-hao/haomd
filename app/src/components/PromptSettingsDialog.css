@@ -143,3 +143,79 @@
     padding-left: 0;
   }
 }
+
+/* Align Prompt Settings with the Settings dialog surface hierarchy */
+.modal.modal-prompt-settings {
+  background: var(--theme-surface-preview);
+  border: 1px solid var(--theme-border-subtle);
+}
+
+.prompt-settings-column-left {
+  border-right-color: var(--theme-border-subtle);
+}
+
+.prompt-role-item-builtin {
+  border-color: var(--theme-border-input-strong);
+}
+
+.prompt-role-item-builtin .provider-name::after,
+.provider-drag-handle {
+  color: var(--theme-text-muted);
+}
+
+.prompt-role-item-insert-target {
+  box-shadow: inset 0 0 0 1px var(--theme-border-input-strong);
+  background: var(--theme-surface-editor);
+}
+
+.prompt-role-item-insert-target::before {
+  background: var(--theme-border-input-strong);
+  box-shadow: none;
+}
+
+.prompt-preview {
+  background: var(--theme-surface-editor);
+  border-color: var(--theme-border-subtle);
+}
+
+.modal.modal-prompt-settings .field-input,
+.modal.modal-prompt-settings .field-textarea,
+.modal.modal-prompt-settings .field-select {
+  border-color: var(--theme-border-subtle);
+  background: var(--theme-surface-editor);
+  color: var(--theme-text-default);
+  box-shadow: none;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.modal.modal-prompt-settings .field-input:focus,
+.modal.modal-prompt-settings .field-textarea:focus,
+.modal.modal-prompt-settings .field-select:focus {
+  border-color: var(--theme-border-input-strong);
+  box-shadow: inset 0 0 0 1px var(--theme-border-input-strong);
+}
+
+.modal.modal-prompt-settings .modal-btn.secondary {
+  background: var(--theme-surface-editor);
+  border: 1px solid var(--theme-border-subtle);
+  color: var(--theme-text-default);
+}
+
+.modal.modal-prompt-settings .modal-btn.tertiary {
+  background: transparent;
+  border: 1px solid var(--theme-border-subtle);
+  color: var(--theme-text-default);
+}
+
+.modal.modal-prompt-settings .modal-btn.secondary:hover,
+.modal.modal-prompt-settings .modal-btn.tertiary:hover {
+  background: var(--theme-surface-card-active);
+  border-color: var(--theme-border-input-strong);
+  box-shadow: none;
+}
+
+@media (max-width: 960px) {
+  .prompt-settings-column-left {
+    border-bottom-color: var(--theme-border-subtle);
+  }
+}

@@ -27,7 +27,7 @@ export type ThemeSettings = {
   editorBackground?: ThemeEditorBackgroundSettings
 }
 
-export type ThemeEditorBackgroundSize = 'cover' | 'contain' | 'auto' | 'height-fill'
+export type ThemeEditorBackgroundSize = 'cover' | 'contain' | 'auto' | 'height-fill' | 'width-fill'
 
 export type ThemeEditorBackgroundSettings = {
   enabled: boolean
@@ -87,11 +87,11 @@ const defaultTheme: ThemeSettings = {
   editorBackground: {
     enabled: false,
     path: null,
-    opacity: 0.2,
+    opacity: 0.3,
     overlayOpacity: 0,
-    blurPx: 6,
+    blurPx: 1,
     brightness: 100,
-    size: 'cover',
+    size: 'height-fill',
     positionX: 50,
     positionY: 50,
   },
@@ -171,11 +171,11 @@ export async function getThemeSettings(): Promise<ThemeSettings> {
     editorBackground: {
       enabled: cfg.editorBackground?.enabled ?? defaultTheme.editorBackground?.enabled ?? false,
       path: cfg.editorBackground?.path ?? defaultTheme.editorBackground?.path ?? null,
-      opacity: cfg.editorBackground?.opacity ?? defaultTheme.editorBackground?.opacity ?? 0.2,
+      opacity: cfg.editorBackground?.opacity ?? defaultTheme.editorBackground?.opacity ?? 0.3,
       overlayOpacity: cfg.editorBackground?.overlayOpacity ?? defaultTheme.editorBackground?.overlayOpacity ?? 0,
-      blurPx: cfg.editorBackground?.blurPx ?? defaultTheme.editorBackground?.blurPx ?? 6,
+      blurPx: cfg.editorBackground?.blurPx ?? defaultTheme.editorBackground?.blurPx ?? 1,
       brightness: cfg.editorBackground?.brightness ?? defaultTheme.editorBackground?.brightness ?? 100,
-      size: cfg.editorBackground?.size ?? defaultTheme.editorBackground?.size ?? 'cover',
+      size: cfg.editorBackground?.size ?? defaultTheme.editorBackground?.size ?? 'height-fill',
       positionX: cfg.editorBackground?.positionX ?? defaultTheme.editorBackground?.positionX ?? 50,
       positionY: cfg.editorBackground?.positionY ?? defaultTheme.editorBackground?.positionY ?? 50,
     },

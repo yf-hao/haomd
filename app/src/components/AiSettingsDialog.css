@@ -745,17 +745,19 @@ button.ghost.ghost-subtle:hover {
 
 /* Provider list action buttons: Edit / Delete Provider */
 .provider-actions .ghost {
-  padding: 4px 10px;
+  padding: 6px 10px;
   font-size: 12px;
-  border-radius: 999px;
-  border: 1px solid var(--theme-border-input-strong);
-  background: var(--theme-surface-input);
+  border-radius: 10px;
+  border: 1px solid var(--theme-border-subtle);
+  background: var(--theme-surface-editor);
   color: var(--theme-text-default);
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
 .provider-actions .ghost.primary {
-  border-color: var(--theme-accent-primary-soft);
-  background: var(--theme-accent-primary);
+  border-color: var(--theme-accent-primary-alt);
+  background: linear-gradient(135deg, var(--theme-accent-primary-alt), var(--theme-accent-primary-alt-soft));
+  color: #0a0c12;
 }
 
 .provider-actions .ghost.danger {
@@ -765,16 +767,18 @@ button.ghost.ghost-subtle:hover {
 }
 
 .provider-actions .ghost:not(:disabled):hover {
-  background: var(--theme-accent-soft-accent-bg);
-  border-color: var(--theme-accent-primary-soft);
+  background: var(--theme-surface-card-active);
+  border-color: var(--theme-border-input-strong);
+  box-shadow: none;
 }
 
 .provider-actions .ghost.primary:not(:disabled):hover {
-  background: var(--theme-accent-primary-soft);
+  background: linear-gradient(135deg, var(--theme-accent-primary-alt-soft), var(--theme-accent-primary-soft));
+  border-color: var(--theme-accent-primary-soft);
 }
 
 .provider-actions .ghost.danger:not(:disabled):hover {
-  background: var(--theme-accent-danger);
+  background: color-mix(in srgb, var(--theme-accent-soft-danger-bg) 82%, white 18%);
   border-color: var(--theme-accent-danger);
 }
 
@@ -854,12 +858,12 @@ button.ghost.ghost-subtle:hover {
 
 .ai-settings-submodal .submodal-actions .ghost.primary {
   border: 1px solid var(--theme-accent-primary-alt);
-  color: var(--theme-accent-primary-alt);
-  background: var(--theme-accent-soft-accent-bg);
+  color: #0a0c12;
+  background: linear-gradient(135deg, var(--theme-accent-primary-alt), var(--theme-accent-primary-alt-soft));
 }
 
 .ai-settings-submodal .submodal-actions .ghost.primary:hover {
-  background: var(--theme-surface-card-active);
+  background: linear-gradient(135deg, var(--theme-accent-primary-alt-soft), var(--theme-accent-primary-soft));
 }
 
 @media (max-width: 960px) {
@@ -2484,4 +2488,87 @@ button.ghost.ghost-subtle:hover,
 .form-error {
   background: var(--theme-accent-soft-danger-bg);
   border-color: var(--theme-accent-danger);
+}
+
+/* Align Provider Settings with the Settings dialog surface hierarchy */
+.modal.modal-ai-settings {
+  background: var(--theme-surface-preview);
+  border-color: var(--theme-border-subtle);
+}
+
+.ai-settings-column-left {
+  border-right-color: var(--theme-border-subtle);
+}
+
+.field-input,
+.field-textarea,
+.field-select,
+.provider-model-select,
+.provider-model-row,
+.provider-models,
+.provider-item,
+.provider-details,
+.providers-empty {
+  background: var(--theme-surface-editor);
+}
+
+.ai-chat-input-container,
+.provider-item,
+.provider-models,
+.provider-model-row,
+.provider-model-select,
+.providers-empty,
+.field-input,
+.field-textarea,
+.field-select,
+.ai-history-page-size select,
+.ai-global-memory-search-input {
+  border-color: var(--theme-border-subtle);
+}
+
+.ai-chat-input-container,
+.field-input,
+.field-textarea,
+.field-select,
+.provider-model-select,
+.ai-history-page-size select,
+.ai-global-memory-search-input {
+  background: var(--theme-surface-editor);
+  box-shadow: none;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.provider-model-row:hover {
+  background: var(--theme-surface-preview);
+  border-color: var(--theme-border-input-strong);
+}
+
+.field-input:focus,
+.field-textarea:focus,
+.field-select:focus,
+.provider-model-select:focus,
+.ai-history-page-size select:focus,
+.ai-global-memory-search-input:focus,
+.ai-chat-input-container:focus-within {
+  border-color: var(--theme-border-input-strong);
+  box-shadow: inset 0 0 0 1px var(--theme-border-input-strong);
+}
+
+.modal.modal-ai-settings .modal-btn.secondary {
+  background: var(--theme-surface-editor);
+  border: 1px solid var(--theme-border-subtle);
+  color: var(--theme-text-default);
+}
+
+.modal.modal-ai-settings .modal-btn.tertiary {
+  background: transparent;
+  border: 1px solid var(--theme-border-subtle);
+  color: var(--theme-text-default);
+}
+
+.modal.modal-ai-settings .modal-btn.secondary:hover,
+.modal.modal-ai-settings .modal-btn.tertiary:hover {
+  background: var(--theme-surface-card-active);
+  border-color: var(--theme-border-input-strong);
+  box-shadow: none;
 }
