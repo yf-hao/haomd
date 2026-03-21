@@ -473,11 +473,6 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                           description: 'Use the current macOS, Windows, or Linux appearance.',
                         },
                         {
-                          mode: 'dark',
-                          title: 'Dark',
-                          description: 'Use the dark HaoMD theme.',
-                        },
-                        {
                           mode: 'light',
                           title: 'Light',
                           description: 'Use the light HaoMD theme.',
@@ -486,6 +481,46 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                           mode: 'romantic',
                           title: 'Romantic',
                           description: 'Use a softer warm preset with rose accents and paper-like surfaces.',
+                        },
+                        {
+                          mode: 'paper',
+                          title: 'Paper',
+                          description: 'Use a warm reading preset with softer paper-like surfaces for long-form writing.',
+                        },
+                        {
+                          mode: 'high-contrast',
+                          title: 'High Contrast',
+                          description: 'Use a stronger readability preset with clearer borders and higher text contrast.',
+                        },
+                        {
+                          mode: 'dark',
+                          title: 'Dark',
+                          description: 'Use the dark HaoMD theme.',
+                        },
+                        {
+                          mode: 'electric-mint',
+                          title: 'Electric Mint',
+                          description: 'Use a vibrant mint-and-cyan preset with fresh dark surfaces and a crisp youthful accent palette.',
+                        },
+                        {
+                          mode: 'neon-pop',
+                          title: 'Neon Pop',
+                          description: 'Use a high-energy neon preset with punchy pink, cyan, and violet highlights on dark surfaces.',
+                        },
+                        {
+                          mode: 'velvet-rose',
+                          title: 'Velvet Rose',
+                          description: 'Use a dark romantic preset with velvet berry surfaces and plum accents.',
+                        },
+                        {
+                          mode: 'focus',
+                          title: 'Focus',
+                          description: 'Use a quieter low-distraction dark preset for long working sessions.',
+                        },
+                        {
+                          mode: 'ai-console',
+                          title: 'AI Console',
+                          description: 'Use a deep neutral workspace preset with restrained contrast and console-style surfaces.',
                         },
                       ] as const).map((option) => (
                         <button

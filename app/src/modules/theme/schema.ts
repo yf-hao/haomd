@@ -1,4 +1,14 @@
-export type BuiltinThemeId = 'light' | 'dark' | 'romantic'
+export type BuiltinThemeId =
+  | 'light'
+  | 'dark'
+  | 'romantic'
+  | 'electric-mint'
+  | 'neon-pop'
+  | 'ai-console'
+  | 'paper'
+  | 'focus'
+  | 'high-contrast'
+  | 'velvet-rose'
 
 export type ThemeMode = 'system' | BuiltinThemeId | 'custom'
 

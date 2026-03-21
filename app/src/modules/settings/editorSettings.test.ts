@@ -103,8 +103,8 @@ describe('editorSettings', () => {
         expect(settings.editorBackground?.path).toBe('/tmp/romantic-bg.png')
         expect(settings.editorBackground?.opacity).toBe(0.16)
         expect(settings.editorBackground?.overlayOpacity).toBe(0)
-        expect(settings.editorBackground?.blurPx).toBe(8)
-        expect(settings.editorBackground?.size).toBe('cover')
+        expect(settings.editorBackground?.blurPx).toBe(1)
+        expect(settings.editorBackground?.size).toBe('height-fill')
     })
 
     it('should save editor settings through backend command', async () => {
