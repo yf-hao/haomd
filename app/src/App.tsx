@@ -118,6 +118,7 @@ function App() {
     <ThemeModeProvider
       value={{
         selectedMode: themeSettings.mode,
+        themeSettings,
         resolvedMode: resolvedThemeMode,
         activeTheme,
       }}

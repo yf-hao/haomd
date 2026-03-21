@@ -21,6 +21,7 @@ if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined')
 const mockInvoke = vi.fn()
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: mockInvoke,
+  convertFileSrc: vi.fn((path: string) => `asset://${path}`),
 }))
 
 // Mock legacy Tauri API
@@ -42,4 +43,3 @@ globalThis.ResizeObserver = vi.fn().mockImplementation(() => ({
 }))
 
 export { mockInvoke }
-

@@ -1,3 +1,63 @@
+.editor-pane-frame {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+  background: var(--theme-surface-editor);
+}
+
+.editor-pane-frame.has-editor-background {
+  background: transparent;
+}
+
+.editor-pane-background-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.editor-pane-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: var(--editor-bg-opacity, 0);
+  filter: blur(var(--editor-bg-blur, 0px)) brightness(var(--editor-bg-brightness, 100%));
+  transform: scale(1.04);
+  object-position: var(--editor-bg-position-x, 50%) var(--editor-bg-position-y, 50%);
+  object-fit: cover;
+}
+
+.editor-pane-frame.editor-bg-fit-contain .editor-pane-background {
+  object-fit: contain;
+}
+
+.editor-pane-frame.editor-bg-fit-height-fill .editor-pane-background {
+  width: auto;
+  min-width: 100%;
+  height: 100%;
+  max-width: none;
+  left: var(--editor-bg-position-x, 50%);
+  top: var(--editor-bg-position-y, 50%);
+  transform: translate(
+      calc(-1 * var(--editor-bg-position-x, 50%)),
+      calc(-1 * var(--editor-bg-position-y, 50%))
+    )
+    scale(1.04);
+  object-fit: fill;
+}
+
+.editor-pane-frame.editor-bg-fit-auto .editor-pane-background {
+  object-fit: none;
+}
+
+.editor-pane-background-overlay {
+  background: #000;
+  opacity: var(--editor-bg-overlay-opacity, 1);
+}
+
 .editor {
   width: 100%;
   height: 100%;
@@ -14,6 +74,8 @@
 }
 
 .code-editor {
+  position: relative;
+  z-index: 1;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -24,12 +86,13 @@
   flex: 1;
   min-height: 0;
   width: 100%;
+  background: transparent;
 }
 
 .code-editor .cm-editor {
   height: 100%;
   width: 100%;
-  background: var(--theme-surface-editor);
+  background: transparent;
   border: none;
   border-radius: 0;
   box-shadow: none;
@@ -55,4 +118,9 @@
   padding-right: 8px;
   flex: 1 1 0 !important;
   min-height: 100% !important;
+}
+
+.editor-pane-frame.has-editor-background .code-editor .cm-gutters,
+.editor-pane-frame.has-editor-background .code-editor .cm-scroller {
+  background: transparent;
 }

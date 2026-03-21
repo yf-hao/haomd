@@ -8,6 +8,7 @@ const systemThemeQuery = '(prefers-color-scheme: dark)'
 export function resolveThemeMode(mode: ThemeMode, prefersDark: boolean): ResolvedThemeMode {
   if (mode === 'system') return prefersDark ? 'dark' : 'light'
   if (mode === 'custom') return prefersDark ? 'dark' : 'light'
+  if (mode === 'romantic') return 'light'
   return mode
 }
 
@@ -28,6 +29,7 @@ export function subscribeSystemThemePreference(onChange: (prefersDark: boolean) 
 }
 
 export function resolveActiveTheme(mode: ThemeMode, prefersDark: boolean): ThemeDefinition {
+  if (mode === 'romantic') return getBuiltinThemeDefinition('romantic')
   const resolvedMode = resolveThemeMode(mode, prefersDark)
   return getBuiltinThemeDefinition(resolvedMode)
 }

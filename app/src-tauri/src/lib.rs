@@ -587,9 +587,36 @@ struct AiChatUiCfg {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+struct ThemeEditorBackgroundCfg {
+    #[serde(default)]
+    enabled: Option<bool>,
+    #[serde(default)]
+    path: Option<String>,
+    #[serde(default)]
+    opacity: Option<f32>,
+    #[serde(default)]
+    overlay_opacity: Option<f32>,
+    #[serde(default)]
+    blur_px: Option<f32>,
+    #[serde(default)]
+    brightness: Option<f32>,
+    #[serde(default)]
+    size: Option<String>,
+    #[serde(default)]
+    position_x: Option<f32>,
+    #[serde(default)]
+    position_y: Option<f32>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 struct ThemeSettingsCfg {
     #[serde(default)]
     mode: Option<String>,
+    #[serde(default)]
+    custom_theme_id: Option<String>,
+    #[serde(default)]
+    editor_background: Option<ThemeEditorBackgroundCfg>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -662,6 +689,18 @@ fn default_editor_settings() -> EditorSettingsCfg {
 fn default_theme_settings_cfg() -> ThemeSettingsCfg {
     ThemeSettingsCfg {
         mode: Some("system".to_string()),
+        custom_theme_id: None,
+        editor_background: Some(ThemeEditorBackgroundCfg {
+            enabled: Some(false),
+            path: None,
+            opacity: Some(0.1),
+            overlay_opacity: Some(0.0),
+            blur_px: Some(8.0),
+            brightness: Some(100.0),
+            size: Some("cover".to_string()),
+            position_x: Some(50.0),
+            position_y: Some(50.0),
+        }),
     }
 }
 
@@ -1427,6 +1466,29 @@ async fn save_ai_sessions_json_with_dialog(
     });
 
     Ok(())
+}
+
+#[tauri::command]
+async fn pick_editor_background_image(app: AppHandle) -> Result<Option<String>, String> {
+    let (tx, rx) = tokio::sync::oneshot::channel::<Option<String>>();
+    let tx = std::sync::Arc::new(std::sync::Mutex::new(Some(tx)));
+
+    app.dialog()
+        .file()
+        .set_title("Choose Editor Background Image")
+        .add_filter("Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])
+        .pick_file(move |file_path| {
+            let selected = file_path
+                .and_then(|path| path.as_path().map(|value| value.to_string_lossy().to_string()));
+            if let Ok(mut guard) = tx.lock() {
+                if let Some(sender) = guard.take() {
+                    let _ = sender.send(selected);
+                }
+            }
+        });
+
+    rx.await
+        .map_err(|err| format!("等待图片选择结果失败: {err}"))
 }
 
 #[tauri::command]
@@ -5894,6 +5956,7 @@ pub fn run() {
       open_terminal,
       open_in_file_explorer,
       open_webview_browser,
+      pick_editor_background_image,
       export_word_docx,
       save_clipboard_image_to_dir,
       read_clipboard_image_as_base64,

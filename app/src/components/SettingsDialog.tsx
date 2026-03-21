@@ -1,4 +1,5 @@
-import { type ChangeEvent, type FC, useEffect, useState } from 'react'
+import { type ChangeEvent, type FC, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { invoke } from '@tauri-apps/api/core'
 import './SettingsDialog.css'
 import { Button } from './Button'
 import { FontSelectField } from './settings/FontSelectField'
@@ -11,6 +12,7 @@ import {
   saveEditorSettings,
   type EditorSettings,
   type ThemeSettings,
+  type ThemeEditorBackgroundSize,
   type WordExportStyleSettings,
 } from '../modules/settings/editorSettings'
 import type { ThemeMode } from '../modules/theme/schema'
@@ -22,12 +24,32 @@ export type SettingsDialogProps = {
 }
 
 type SettingsSectionId = 'theme' | 'word-export'
+type ThemePanelTabId = 'theme-preset' | 'editor-background'
 
 const fieldGridStyle: React.CSSProperties = {
   display: 'grid',
   gridTemplateColumns: '180px minmax(0, 1fr)',
   gap: 12,
   alignItems: 'center',
+}
+
+const settingsImagePreviewUrlCache = new Map<string, string>()
+
+function encodeSettingsImagePreviewPath(absPath: string): string {
+  const isWindows = absPath.includes('\\') || navigator.userAgent.includes('Windows')
+  const cacheKey = `${isWindows ? 'win' : 'unix'}|${absPath}`
+  const cached = settingsImagePreviewUrlCache.get(cacheKey)
+  if (cached) return cached
+
+  const pathParts = absPath.split(/([/\\])/)
+  const encodedParts = pathParts.map((part) => {
+    if (part === '/' || part === '\\') return part
+    return encodeURIComponent(part)
+  })
+  const encoded = encodedParts.join('')
+  const finalUrl = isWindows ? `https://haomd.localhost${encoded}` : `haomd://localhost${encoded}`
+  settingsImagePreviewUrlCache.set(cacheKey, finalUrl)
+  return finalUrl
 }
 
 export const SettingsDialog: FC<SettingsDialogProps> = ({
@@ -39,11 +61,37 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const [theme, setTheme] = useState<ThemeSettings>(getDefaultThemeSettings())
   const [wordExport, setWordExport] = useState<WordExportStyleSettings>(getDefaultWordExportStyleSettings())
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('theme')
+  const [activeThemeTab, setActiveThemeTab] = useState<ThemePanelTabId>('theme-preset')
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [editorBackgroundOpacityInput, setEditorBackgroundOpacityInput] = useState('')
+  const [editorBackgroundOverlayOpacityInput, setEditorBackgroundOverlayOpacityInput] = useState('')
+  const [editorBackgroundBlurInput, setEditorBackgroundBlurInput] = useState('')
+  const [editorBackgroundBrightnessInput, setEditorBackgroundBrightnessInput] = useState('')
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
+  const previewDragRef = useRef(false)
+  const modalRef = useRef<HTMLDivElement | null>(null)
+  const originalThemeRef = useRef<ThemeSettings>(getDefaultThemeSettings())
+  const themePreviewReadyRef = useRef(false)
+  const dialogDragRef = useRef<{
+    active: boolean
+    pointerId: number | null
+    startX: number
+    startY: number
+    originX: number
+    originY: number
+  }>({
+    active: false,
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+    originX: 0,
+    originY: 0,
+  })
 
   useEffect(() => {
     if (!open) return
+    setDragOffset({ x: 0, y: 0 })
     let cancelled = false
     ;(async () => {
       try {
@@ -55,7 +103,13 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
         if (cancelled) return
         setSettings(loadedSettings)
         setTheme(loadedTheme)
+        originalThemeRef.current = loadedTheme
+        themePreviewReadyRef.current = true
         setWordExport(loadedWordExport)
+        setEditorBackgroundOpacityInput(String(loadedTheme.editorBackground?.opacity ?? getDefaultThemeSettings().editorBackground?.opacity ?? 0.2))
+        setEditorBackgroundOverlayOpacityInput(String(loadedTheme.editorBackground?.overlayOpacity ?? getDefaultThemeSettings().editorBackground?.overlayOpacity ?? 0))
+        setEditorBackgroundBlurInput(String(loadedTheme.editorBackground?.blurPx ?? getDefaultThemeSettings().editorBackground?.blurPx ?? 6))
+        setEditorBackgroundBrightnessInput(String(loadedTheme.editorBackground?.brightness ?? getDefaultThemeSettings().editorBackground?.brightness ?? 100))
         setError(null)
       } catch (err) {
         if (cancelled) return
@@ -64,8 +118,21 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     })()
     return () => {
       cancelled = true
+      themePreviewReadyRef.current = false
     }
   }, [open])
+
+  useEffect(() => {
+    if (!open || !themePreviewReadyRef.current) return
+    onThemeSettingsChange?.(theme)
+  }, [open, theme, onThemeSettingsChange])
+
+  useEffect(() => {
+    setEditorBackgroundOpacityInput(String(theme.editorBackground?.opacity ?? getDefaultThemeSettings().editorBackground?.opacity ?? 0.2))
+    setEditorBackgroundOverlayOpacityInput(String(theme.editorBackground?.overlayOpacity ?? getDefaultThemeSettings().editorBackground?.overlayOpacity ?? 0))
+    setEditorBackgroundBlurInput(String(theme.editorBackground?.blurPx ?? getDefaultThemeSettings().editorBackground?.blurPx ?? 6))
+    setEditorBackgroundBrightnessInput(String(theme.editorBackground?.brightness ?? getDefaultThemeSettings().editorBackground?.brightness ?? 100))
+  }, [theme.editorBackground?.opacity, theme.editorBackground?.overlayOpacity, theme.editorBackground?.blurPx, theme.editorBackground?.brightness])
 
   if (!open) return null
 
@@ -87,7 +154,137 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   }
 
   const updateThemeMode = (mode: ThemeMode) => {
-    setTheme({ mode })
+    setTheme((prev) => ({ ...prev, mode }))
+  }
+
+  const updateEditorBackground = (
+    patch: Partial<NonNullable<ThemeSettings['editorBackground']>>,
+  ) => {
+    setTheme((prev) => ({
+      ...prev,
+      editorBackground: {
+        enabled:
+          patch.enabled
+          ?? prev.editorBackground?.enabled
+          ?? getDefaultThemeSettings().editorBackground?.enabled
+          ?? false,
+        path:
+          patch.path
+          ?? prev.editorBackground?.path
+          ?? getDefaultThemeSettings().editorBackground?.path
+          ?? null,
+        opacity:
+          patch.opacity
+          ?? prev.editorBackground?.opacity
+          ?? getDefaultThemeSettings().editorBackground?.opacity
+          ?? 0.1,
+        overlayOpacity:
+          patch.overlayOpacity
+          ?? prev.editorBackground?.overlayOpacity
+          ?? getDefaultThemeSettings().editorBackground?.overlayOpacity
+          ?? 0,
+        blurPx:
+          patch.blurPx
+          ?? prev.editorBackground?.blurPx
+          ?? getDefaultThemeSettings().editorBackground?.blurPx
+          ?? 6,
+        brightness:
+          patch.brightness
+          ?? prev.editorBackground?.brightness
+          ?? getDefaultThemeSettings().editorBackground?.brightness
+          ?? 100,
+        size:
+          patch.size
+          ?? prev.editorBackground?.size
+          ?? getDefaultThemeSettings().editorBackground?.size
+          ?? 'cover',
+        positionX:
+          patch.positionX
+          ?? prev.editorBackground?.positionX
+          ?? getDefaultThemeSettings().editorBackground?.positionX
+          ?? 50,
+        positionY:
+          patch.positionY
+          ?? prev.editorBackground?.positionY
+          ?? getDefaultThemeSettings().editorBackground?.positionY
+          ?? 50,
+      },
+    }))
+  }
+
+  const handleSelectEditorBackground = async () => {
+    try {
+      const selected = await invoke<string | null>('pick_editor_background_image')
+      if (!selected) return
+      updateEditorBackground({
+        enabled: true,
+        path: selected,
+      })
+    } catch (err) {
+      setError((err as Error).message || 'Failed to choose editor background image')
+    }
+  }
+
+  const clearEditorBackground = () => {
+    updateEditorBackground({
+      enabled: false,
+      path: null,
+    })
+  }
+
+  const commitEditorBackgroundNumber = (key: 'opacity' | 'overlayOpacity' | 'blurPx' | 'brightness', rawValue: string) => {
+    const trimmed = rawValue.trim()
+    if (!trimmed) {
+      updateEditorBackground({ [key]: 0 } as Pick<NonNullable<ThemeSettings['editorBackground']>, typeof key>)
+      if (key === 'opacity') {
+        setEditorBackgroundOpacityInput('')
+      } else if (key === 'overlayOpacity') {
+        setEditorBackgroundOverlayOpacityInput('')
+      } else if (key === 'brightness') {
+        setEditorBackgroundBrightnessInput('')
+      } else {
+        setEditorBackgroundBlurInput('')
+      }
+      return
+    }
+
+    const value = Number(trimmed)
+    if (!Number.isFinite(value)) return
+    const normalizedValue = key === 'opacity'
+      ? Math.min(Math.max(value, 0), 0.4)
+      : key === 'overlayOpacity'
+        ? Math.min(Math.max(value, 0), 1)
+      : key === 'brightness'
+        ? Math.min(Math.max(value, 0), 200)
+        : value
+
+    updateEditorBackground({ [key]: normalizedValue } as Pick<NonNullable<ThemeSettings['editorBackground']>, typeof key>)
+    if (key === 'opacity') {
+      setEditorBackgroundOpacityInput(String(normalizedValue))
+    } else if (key === 'overlayOpacity') {
+      setEditorBackgroundOverlayOpacityInput(String(normalizedValue))
+    } else if (key === 'brightness') {
+      setEditorBackgroundBrightnessInput(String(normalizedValue))
+    } else {
+      setEditorBackgroundBlurInput(String(normalizedValue))
+    }
+  }
+
+  const updateEditorBackgroundSize = (event: ChangeEvent<HTMLSelectElement>) => {
+    updateEditorBackground({ size: event.target.value as ThemeEditorBackgroundSize })
+  }
+
+  const updateEditorBackgroundPositionFromPointer = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    if (!rect.width || !rect.height) return
+    const x = ((event.clientX - rect.left) / rect.width) * 100
+    const y = ((event.clientY - rect.top) / rect.height) * 100
+    updateEditorBackground({
+      positionX: Math.min(Math.max(Number(x.toFixed(2)), 0), 100),
+      positionY: Math.min(Math.max(Number(y.toFixed(2)), 0), 100),
+    })
   }
 
   const handleReset = () => {
@@ -109,7 +306,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
       }
       await saveEditorSettings(nextSettings)
       setSettings(nextSettings)
-      onThemeSettingsChange?.(theme)
+      originalThemeRef.current = theme
       onClose()
     } catch (err) {
       setError((err as Error).message || 'Failed to save settings')
@@ -118,10 +315,87 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     }
   }
 
+  const handleCloseWithoutSave = () => {
+    if (themePreviewReadyRef.current) {
+      onThemeSettingsChange?.(originalThemeRef.current)
+    }
+    onClose()
+  }
+
+  const editorBackground = theme.editorBackground ?? getDefaultThemeSettings().editorBackground!
+  const selectedImageName = editorBackground.path
+    ? editorBackground.path.split(/[\\/]/).pop()
+    : 'No image selected'
+  const editorBackgroundPreviewUrl = editorBackground.path
+    ? encodeSettingsImagePreviewPath(editorBackground.path)
+    : null
+
+  const clampDialogOffset = (nextX: number, nextY: number) => {
+    const modal = modalRef.current
+    if (!modal || typeof window === 'undefined') return { x: nextX, y: nextY }
+
+    const rect = modal.getBoundingClientRect()
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+    const margin = 24
+
+    const maxX = Math.max((viewportWidth - margin * 2 - rect.width) / 2, 0)
+    const maxY = Math.max((viewportHeight - margin * 2 - rect.height) / 2, 0)
+
+    return {
+      x: Math.min(Math.max(nextX, -maxX), maxX),
+      y: Math.min(Math.max(nextY, -maxY), maxY),
+    }
+  }
+
+  const handleDialogPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return
+    dialogDragRef.current = {
+      active: true,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: dragOffset.x,
+      originY: dragOffset.y,
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  const handleDialogPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!dialogDragRef.current.active) return
+    const deltaX = event.clientX - dialogDragRef.current.startX
+    const deltaY = event.clientY - dialogDragRef.current.startY
+    setDragOffset(clampDialogOffset(
+      dialogDragRef.current.originX + deltaX,
+      dialogDragRef.current.originY + deltaY,
+    ))
+  }
+
+  const handleDialogPointerEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (dialogDragRef.current.pointerId != null && event.currentTarget.hasPointerCapture(dialogDragRef.current.pointerId)) {
+      event.currentTarget.releasePointerCapture(dialogDragRef.current.pointerId)
+    }
+    dialogDragRef.current.active = false
+    dialogDragRef.current.pointerId = null
+  }
+
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal modal-settings" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-title">Settings</div>
+    <div className="modal-backdrop modal-backdrop-settings-plain" onClick={handleCloseWithoutSave}>
+      <div
+        ref={modalRef}
+        className="modal modal-settings"
+        style={{ transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)` }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          className="modal-title settings-dialog-drag-handle"
+          onPointerDown={handleDialogPointerDown}
+          onPointerMove={handleDialogPointerMove}
+          onPointerUp={handleDialogPointerEnd}
+          onPointerCancel={handleDialogPointerEnd}
+        >
+          Settings
+        </div>
         <div className="modal-content" style={{ paddingTop: 8 }}>
           <div className="settings-layout">
             <div className="settings-sidebar">
@@ -148,42 +422,235 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
               {activeSection === 'theme' && (
                 <>
                   <div className="settings-panel-header">
-                    <div className="settings-panel-title">Theme</div>
-                    <div className="settings-panel-description">
-                      Choose how HaoMD should appear. `System` follows the OS appearance.
+                    <div className="settings-panel-header-top">
+                      <div className="settings-panel-tabs" role="tablist" aria-label="Theme settings sections">
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={activeThemeTab === 'theme-preset'}
+                          className={`settings-panel-tab ${activeThemeTab === 'theme-preset' ? 'active' : ''}`}
+                          onClick={() => setActiveThemeTab('theme-preset')}
+                        >
+                          Theme
+                        </button>
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={activeThemeTab === 'editor-background'}
+                          className={`settings-panel-tab ${activeThemeTab === 'editor-background' ? 'active' : ''}`}
+                          onClick={() => setActiveThemeTab('editor-background')}
+                        >
+                          Editor Background
+                        </button>
+                      </div>
                     </div>
+                    {activeThemeTab === 'theme-preset' ? (
+                      <div className="settings-panel-description">
+                        Choose how HaoMD should appear. `System` follows the OS appearance.
+                      </div>
+                    ) : null}
                   </div>
 
-                  <div className="theme-option-group">
-                    {([
-                      {
-                        mode: 'system',
-                        title: 'System',
-                        description: 'Use the current macOS, Windows, or Linux appearance.',
-                      },
-                      {
-                        mode: 'dark',
-                        title: 'Dark',
-                        description: 'Use the dark HaoMD theme.',
-                      },
-                      {
-                        mode: 'light',
-                        title: 'Light',
-                        description: 'Use the light HaoMD theme.',
-                      },
-                    ] as const).map((option) => (
-                      <button
-                        key={option.mode}
-                        type="button"
-                        className={`theme-option-card ${theme.mode === option.mode ? 'active' : ''}`}
-                        onClick={() => updateThemeMode(option.mode)}
-                        aria-pressed={theme.mode === option.mode}
-                      >
-                        <span className="theme-option-card-title">{option.title}</span>
-                        <span className="theme-option-card-description">{option.description}</span>
-                      </button>
-                    ))}
-                  </div>
+                  {activeThemeTab === 'theme-preset' ? (
+                    <div className="theme-option-group">
+                      {([
+                        {
+                          mode: 'system',
+                          title: 'System',
+                          description: 'Use the current macOS, Windows, or Linux appearance.',
+                        },
+                        {
+                          mode: 'dark',
+                          title: 'Dark',
+                          description: 'Use the dark HaoMD theme.',
+                        },
+                        {
+                          mode: 'light',
+                          title: 'Light',
+                          description: 'Use the light HaoMD theme.',
+                        },
+                        {
+                          mode: 'romantic',
+                          title: 'Romantic',
+                          description: 'Use a softer warm preset with rose accents and paper-like surfaces.',
+                        },
+                      ] as const).map((option) => (
+                        <button
+                          key={option.mode}
+                          type="button"
+                          className={`theme-option-card ${theme.mode === option.mode ? 'active' : ''}`}
+                          onClick={() => updateThemeMode(option.mode)}
+                          aria-pressed={theme.mode === option.mode}
+                        >
+                          <span className="theme-option-card-title">{option.title}</span>
+                          <span className="theme-option-card-description">{option.description}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="settings-subsection settings-subsection-standalone">
+                      <div className="settings-checkbox-row">
+                        <label className="settings-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={editorBackground.enabled}
+                            onChange={(event) => updateEditorBackground({ enabled: event.target.checked })}
+                          />
+                          <span>Enable editor background image</span>
+                        </label>
+                      </div>
+
+                      <div style={{ display: 'grid', gap: 14 }}>
+                        <div style={fieldGridStyle}>
+                          <label className="settings-field-label">Image</label>
+                          <div className="settings-inline-actions">
+                            <div className="settings-inline-meta">{selectedImageName}</div>
+                            <div className="settings-inline-buttons">
+                              <Button variant="secondary" type="button" onClick={() => void handleSelectEditorBackground()}>
+                                Choose Image
+                              </Button>
+                              <Button variant="tertiary" type="button" onClick={clearEditorBackground} disabled={!editorBackground.path}>
+                                Clear
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={fieldGridStyle}>
+                          <label className="settings-field-label">Image Opacity</label>
+                          <input
+                            className="field-input settings-number-input"
+                            type="number"
+                            min={0.02}
+                            max={0.4}
+                            step={0.01}
+                            value={editorBackgroundOpacityInput}
+                            onChange={(event) => setEditorBackgroundOpacityInput(event.target.value)}
+                            onBlur={(event) => commitEditorBackgroundNumber('opacity', event.target.value)}
+                          />
+                        </div>
+
+                        <div style={fieldGridStyle}>
+                          <label className="settings-field-label">Blur (px)</label>
+                          <input
+                            className="field-input settings-number-input"
+                            type="number"
+                            min={0}
+                            max={24}
+                            step={1}
+                            value={editorBackgroundBlurInput}
+                            onChange={(event) => setEditorBackgroundBlurInput(event.target.value)}
+                            onBlur={(event) => commitEditorBackgroundNumber('blurPx', event.target.value)}
+                          />
+                        </div>
+
+                        <div style={fieldGridStyle}>
+                          <label className="settings-field-label">Overlay Opacity</label>
+                          <input
+                            className="field-input settings-number-input"
+                            type="number"
+                            min={0}
+                            max={1}
+                            step={0.01}
+                            value={editorBackgroundOverlayOpacityInput}
+                            onChange={(event) => setEditorBackgroundOverlayOpacityInput(event.target.value)}
+                            onBlur={(event) => commitEditorBackgroundNumber('overlayOpacity', event.target.value)}
+                          />
+                        </div>
+
+                        <div style={fieldGridStyle}>
+                          <label className="settings-field-label">Brightness (%)</label>
+                          <input
+                            className="field-input settings-number-input"
+                            type="number"
+                            min={0}
+                            max={200}
+                            step={1}
+                            value={editorBackgroundBrightnessInput}
+                            onChange={(event) => setEditorBackgroundBrightnessInput(event.target.value)}
+                            onBlur={(event) => commitEditorBackgroundNumber('brightness', event.target.value)}
+                          />
+                        </div>
+
+                        <div style={fieldGridStyle}>
+                          <label className="settings-field-label">Image Fit</label>
+                          <select
+                            className="field-select"
+                            value={editorBackground.size}
+                            onChange={updateEditorBackgroundSize}
+                          >
+                            <option value="cover">Cover</option>
+                            <option value="height-fill">Height Fill</option>
+                            <option value="contain">Contain</option>
+                            <option value="auto">Original</option>
+                          </select>
+                        </div>
+
+                        <div style={fieldGridStyle}>
+                          <label className="settings-field-label">Image Position</label>
+                          <div style={{ display: 'grid', gap: 10 }}>
+                            <div
+                              className={`settings-image-position-picker ${editorBackground.path ? '' : 'disabled'}`}
+                              onPointerDown={(event) => {
+                                if (!editorBackground.path) return
+                                previewDragRef.current = true
+                                event.currentTarget.setPointerCapture(event.pointerId)
+                                updateEditorBackgroundPositionFromPointer(event)
+                              }}
+                              onPointerMove={(event) => {
+                                if (!previewDragRef.current || !editorBackground.path) return
+                                updateEditorBackgroundPositionFromPointer(event)
+                              }}
+                              onPointerUp={(event) => {
+                                previewDragRef.current = false
+                                if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                                  event.currentTarget.releasePointerCapture(event.pointerId)
+                                }
+                              }}
+                              onPointerCancel={() => {
+                                previewDragRef.current = false
+                              }}
+                            >
+                              {editorBackground.path ? (
+                                <img
+                                  className={`settings-image-position-preview fit-${editorBackground.size}`}
+                                  src={editorBackgroundPreviewUrl ?? ''}
+                                  alt=""
+                                  aria-hidden="true"
+                                  style={{
+                                    objectPosition: `${editorBackground.positionX}% ${editorBackground.positionY}%`,
+                                    opacity: Math.min(Math.max(editorBackground.opacity, 0), 0.4),
+                                    filter: `blur(${Math.min(Math.max(editorBackground.blurPx, 0), 24)}px) brightness(${Math.min(Math.max(editorBackground.brightness, 0), 200)}%)`,
+                                    ['--settings-image-position-x' as string]: `${editorBackground.positionX}%`,
+                                    ['--settings-image-position-y' as string]: `${editorBackground.positionY}%`,
+                                  }}
+                                />
+                              ) : (
+                                <div className="settings-image-position-empty">Choose an image to enable dragging.</div>
+                              )}
+                              <div
+                                className="settings-image-position-preview-overlay"
+                                aria-hidden="true"
+                                style={{
+                                  opacity: Math.min(Math.max(editorBackground.overlayOpacity ?? 0, 0), 1),
+                                }}
+                              />
+                              <div
+                                className="settings-image-position-crosshair"
+                                style={{
+                                  left: `${editorBackground.positionX}%`,
+                                  top: `${editorBackground.positionY}%`,
+                                }}
+                              />
+                            </div>
+                            <div className="settings-inline-meta">
+                              X {Math.round(editorBackground.positionX)}% · Y {Math.round(editorBackground.positionY)}%
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
 
@@ -250,10 +717,12 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
           </div>
         </div>
         <div className="modal-actions">
-          <Button variant="tertiary" type="button" onClick={handleReset} disabled={isSaving}>
-            Reset
-          </Button>
-          <Button variant="secondary" type="button" onClick={onClose} disabled={isSaving}>
+          {activeSection === 'word-export' || (activeSection === 'theme' && activeThemeTab === 'editor-background') ? (
+            <Button variant="tertiary" type="button" onClick={handleReset} disabled={isSaving}>
+              Reset
+            </Button>
+          ) : null}
+          <Button variant="secondary" type="button" onClick={handleCloseWithoutSave} disabled={isSaving}>
             Cancel
           </Button>
           <Button variant="primary" type="button" onClick={handleSave} disabled={isSaving} loading={isSaving}>

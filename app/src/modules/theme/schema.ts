@@ -1,4 +1,4 @@
-export type BuiltinThemeId = 'light' | 'dark'
+export type BuiltinThemeId = 'light' | 'dark' | 'romantic'
 
 export type ThemeMode = 'system' | BuiltinThemeId | 'custom'
 

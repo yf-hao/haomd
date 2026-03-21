@@ -76,6 +76,35 @@ describe('editorSettings', () => {
 
         const settings = await getThemeSettings()
         expect(settings.mode).toBe('system')
+        expect(settings.customThemeId).toBeNull()
+    })
+
+    it('should preserve theme preset metadata from backend', async () => {
+        vi.mocked(mockInvoke).mockResolvedValue({
+            Ok: {
+                data: {
+                    theme: {
+                        mode: 'romantic',
+                        customThemeId: 'romantic',
+                        editorBackground: {
+                            enabled: true,
+                            path: '/tmp/romantic-bg.png',
+                            opacity: 0.16,
+                        }
+                    }
+                }
+            }
+        })
+
+        const settings = await getThemeSettings()
+        expect(settings.mode).toBe('romantic')
+        expect(settings.customThemeId).toBe('romantic')
+        expect(settings.editorBackground?.enabled).toBe(true)
+        expect(settings.editorBackground?.path).toBe('/tmp/romantic-bg.png')
+        expect(settings.editorBackground?.opacity).toBe(0.16)
+        expect(settings.editorBackground?.overlayOpacity).toBe(0)
+        expect(settings.editorBackground?.blurPx).toBe(8)
+        expect(settings.editorBackground?.size).toBe('cover')
     })
 
     it('should save editor settings through backend command', async () => {

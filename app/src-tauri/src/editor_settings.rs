@@ -90,6 +90,60 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::Editor
                         theme.mode = default_theme.mode.clone();
                         changed = true;
                     }
+                    if theme.custom_theme_id.is_none() {
+                        theme.custom_theme_id = default_theme.custom_theme_id.clone();
+                        changed = true;
+                    }
+                    if theme.editor_background.is_none() {
+                        theme.editor_background = default_theme.editor_background.clone();
+                        changed = true;
+                    }
+                }
+            }
+
+            if let Some(ref mut theme) = cfg.theme {
+                if let Some(ref default_theme) = default_cfg.theme {
+                    if let Some(ref mut editor_background) = theme.editor_background {
+                        if let Some(ref default_editor_background) = default_theme.editor_background {
+                            if editor_background.enabled.is_none() {
+                                editor_background.enabled = default_editor_background.enabled;
+                                changed = true;
+                            }
+                            if editor_background.path.is_none() {
+                                editor_background.path = default_editor_background.path.clone();
+                                changed = true;
+                            }
+                            if editor_background.opacity.is_none() {
+                                editor_background.opacity = default_editor_background.opacity;
+                                changed = true;
+                            }
+                            if editor_background.overlay_opacity.is_none() {
+                                editor_background.overlay_opacity =
+                                    default_editor_background.overlay_opacity;
+                                changed = true;
+                            }
+                            if editor_background.blur_px.is_none() {
+                                editor_background.blur_px = default_editor_background.blur_px;
+                                changed = true;
+                            }
+                            if editor_background.brightness.is_none() {
+                                editor_background.brightness = default_editor_background.brightness;
+                                changed = true;
+                            }
+                            if editor_background.size.is_none() {
+                                editor_background.size = default_editor_background.size.clone();
+                                changed = true;
+                            }
+                            if editor_background.position_x.is_none() {
+                                editor_background.position_x = default_editor_background.position_x;
+                                changed = true;
+                            }
+                            if editor_background.position_y.is_none() {
+                                editor_background.position_y = default_editor_background.position_y;
+                                changed = true;
+                            }
+                        }
+                    }
                 }
             }
 

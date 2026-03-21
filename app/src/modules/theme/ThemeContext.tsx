@@ -1,9 +1,11 @@
 import { createContext, useContext, type ReactNode } from 'react'
 import type { ThemeMode, ThemeDefinition } from './schema'
+import type { ThemeSettings } from '../settings/editorSettings'
 import type { ResolvedThemeMode } from './themeResolver'
 
 export type ThemeContextValue = {
   selectedMode: ThemeMode
+  themeSettings: ThemeSettings
   resolvedMode: ResolvedThemeMode
   activeTheme: ThemeDefinition
 }
