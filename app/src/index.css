@@ -44,6 +44,113 @@
 
   /* 设计 Tokens：阴影 */
   --z-shadow-elevated: 0 10px 30px rgba(0, 0, 0, 0.4);
+
+  /* 主题语义 Tokens */
+  --haomd-shell-bg: radial-gradient(circle at 10% 10%, #10131a, #06070b 35%), #05060a;
+  --haomd-sidebar-bg: rgba(5, 7, 12, 0.98);
+  --haomd-sidebar-hover: rgba(148, 163, 184, 0.2);
+  --haomd-sidebar-active: rgba(59, 130, 246, 0.35);
+  --haomd-panel-bg: rgba(5, 7, 12, 0.96);
+  --haomd-status-bg: rgba(7, 9, 15, 0.98);
+  --haomd-overlay-bg: rgba(0, 0, 0, 0.7);
+  --haomd-modal-bg: rgba(15, 23, 42, 0.98);
+  --haomd-modal-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.8),
+    0 0 0 1px rgba(148, 163, 184, 0.2);
+  --haomd-input-bg: rgba(15, 23, 42, 0.96);
+  --haomd-input-bg-soft: rgba(15, 23, 42, 0.82);
+  --haomd-input-bg-soft-hover: rgba(30, 41, 59, 0.9);
+  --haomd-input-border: rgba(148, 163, 184, 0.3);
+  --haomd-input-border-strong: rgba(148, 163, 184, 0.6);
+  --haomd-focus-ring: rgba(96, 165, 250, 0.6);
+  --haomd-selection-ring: rgba(125, 211, 252, 0.9);
+  --haomd-card-bg: rgba(30, 41, 59, 0.38);
+  --haomd-card-bg-active: rgba(30, 41, 59, 0.72);
+  --haomd-card-border: rgba(148, 163, 184, 0.18);
+  --haomd-card-shadow: 0 16px 36px rgba(2, 6, 23, 0.52);
+  --haomd-editor-bg: #10121d;
+  --haomd-editor-gutter-bg: #10121d;
+  --haomd-editor-gutter-fg: #8fa1c7;
+  --haomd-editor-caret: #7ad7ff;
+  --haomd-editor-active-gutter-bg: rgba(37, 99, 235, 0.55);
+  --haomd-editor-active-line-marker: #4ade80;
+  --haomd-preview-bg: #0c0d16;
+  --haomd-toolbar-bg: linear-gradient(to bottom, rgba(15, 23, 42, 0.98), rgba(15, 23, 42, 0.94));
+  --haomd-toolbar-btn-bg: radial-gradient(circle at 0% 0%, rgba(37, 99, 235, 0.3), rgba(15, 23, 42, 0.98));
+  --haomd-toolbar-btn-bg-strong: radial-gradient(circle at 0% 0%, rgba(37, 99, 235, 0.45), rgba(15, 23, 42, 0.98));
+  --haomd-toolbar-btn-bg-hover: radial-gradient(circle at 0% 0%, rgba(59, 130, 246, 0.5), rgba(15, 23, 42, 0.98));
+  --haomd-toolbar-btn-border: rgba(148, 163, 184, 0.4);
+  --haomd-toolbar-btn-border-hover: rgba(59, 130, 246, 0.85);
+  --haomd-toolbar-btn-fg: #e5e7eb;
+  --haomd-toolbar-btn-muted: #9ca3af;
+  --haomd-soft-danger-bg: rgba(248, 113, 113, 0.18);
+  --haomd-soft-danger-fg: #fecaca;
+  --haomd-soft-accent-bg: rgba(59, 130, 246, 0.28);
+}
+
+:root[data-theme='light'] {
+  --z-color-bg-app: #edf2f7;
+  --z-color-bg-elevated: rgba(255, 255, 255, 0.96);
+  --z-color-bg-elevated-soft: rgba(255, 255, 255, 0.78);
+  --z-color-bg-surface: rgba(15, 23, 42, 0.03);
+
+  --z-color-fg-default: #0f172a;
+  --z-color-fg-muted: #475569;
+  --z-color-fg-subtle: #64748b;
+  --z-color-fg-accent: #1d4ed8;
+
+  --z-color-border-subtle: rgba(15, 23, 42, 0.08);
+  --z-color-border-strong: rgba(71, 85, 105, 0.28);
+
+  --z-color-accent-primary: #2563eb;
+  --z-color-accent-primary-soft: #3b82f6;
+  --z-color-accent-primary-alt: #2563eb;
+  --z-color-accent-primary-alt-soft: #60a5fa;
+  --z-color-accent-success: #0f9f6e;
+  --z-color-danger: #dc2626;
+
+  --z-shadow-elevated: 0 10px 30px rgba(15, 23, 42, 0.12);
+
+  --haomd-shell-bg: radial-gradient(circle at 10% 10%, #ffffff, #edf2f7 42%), #e2e8f0;
+  --haomd-sidebar-bg: rgba(248, 250, 252, 0.98);
+  --haomd-sidebar-hover: rgba(148, 163, 184, 0.18);
+  --haomd-sidebar-active: rgba(59, 130, 246, 0.16);
+  --haomd-panel-bg: rgba(255, 255, 255, 0.96);
+  --haomd-status-bg: rgba(248, 250, 252, 0.98);
+  --haomd-overlay-bg: rgba(15, 23, 42, 0.32);
+  --haomd-modal-bg: rgba(255, 255, 255, 0.98);
+  --haomd-modal-shadow:
+    0 20px 48px rgba(15, 23, 42, 0.16),
+    0 0 0 1px rgba(148, 163, 184, 0.12);
+  --haomd-input-bg: rgba(255, 255, 255, 0.98);
+  --haomd-input-bg-soft: rgba(248, 250, 252, 0.95);
+  --haomd-input-bg-soft-hover: rgba(241, 245, 249, 0.98);
+  --haomd-input-border: rgba(148, 163, 184, 0.35);
+  --haomd-input-border-strong: rgba(100, 116, 139, 0.48);
+  --haomd-focus-ring: rgba(59, 130, 246, 0.32);
+  --haomd-selection-ring: rgba(59, 130, 246, 0.56);
+  --haomd-card-bg: rgba(248, 250, 252, 0.96);
+  --haomd-card-bg-active: rgba(219, 234, 254, 0.8);
+  --haomd-card-border: rgba(148, 163, 184, 0.24);
+  --haomd-card-shadow: 0 16px 32px rgba(15, 23, 42, 0.12);
+  --haomd-editor-bg: #ffffff;
+  --haomd-editor-gutter-bg: #f8fafc;
+  --haomd-editor-gutter-fg: #64748b;
+  --haomd-editor-caret: #2563eb;
+  --haomd-editor-active-gutter-bg: rgba(59, 130, 246, 0.16);
+  --haomd-editor-active-line-marker: #22c55e;
+  --haomd-preview-bg: #ffffff;
+  --haomd-toolbar-bg: linear-gradient(to bottom, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94));
+  --haomd-toolbar-btn-bg: radial-gradient(circle at 0% 0%, rgba(191, 219, 254, 0.9), rgba(255, 255, 255, 0.98));
+  --haomd-toolbar-btn-bg-strong: radial-gradient(circle at 0% 0%, rgba(147, 197, 253, 0.95), rgba(255, 255, 255, 0.98));
+  --haomd-toolbar-btn-bg-hover: radial-gradient(circle at 0% 0%, rgba(96, 165, 250, 0.35), rgba(255, 255, 255, 0.98));
+  --haomd-toolbar-btn-border: rgba(148, 163, 184, 0.38);
+  --haomd-toolbar-btn-border-hover: rgba(59, 130, 246, 0.6);
+  --haomd-toolbar-btn-fg: #0f172a;
+  --haomd-toolbar-btn-muted: #64748b;
+  --haomd-soft-danger-bg: rgba(220, 38, 38, 0.12);
+  --haomd-soft-danger-fg: #b91c1c;
+  --haomd-soft-accent-bg: rgba(59, 130, 246, 0.16);
 }
 
 * {
@@ -68,5 +175,3 @@ a {
 button {
   font-family: inherit;
 }
-
-

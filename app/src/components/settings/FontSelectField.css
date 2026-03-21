@@ -6,7 +6,7 @@
 
 .font-select-helper {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--z-color-fg-subtle);
 }
 
 .font-select-toggle {
@@ -16,9 +16,9 @@
   justify-content: space-between;
   gap: 16px;
   border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  background: rgba(15, 23, 42, 0.92);
-  color: #e5e7eb;
+  border: 1px solid var(--haomd-input-border);
+  background: var(--haomd-input-bg);
+  color: var(--z-color-fg-default);
   padding: 10px 12px;
   cursor: pointer;
   text-align: left;
@@ -27,19 +27,19 @@
 
 .font-select-toggle:hover,
 .font-select-toggle.expanded {
-  border-color: rgba(96, 165, 250, 0.7);
-  background: rgba(30, 41, 59, 0.9);
+  border-color: var(--z-color-accent-primary-soft);
+  background: var(--haomd-input-bg-soft-hover);
 }
 
 .font-select-toggle-label {
   font-size: 12px;
   font-weight: 600;
-  color: #cbd5e1;
+  color: var(--z-color-fg-muted);
 }
 
 .font-select-toggle-value {
   font-size: 13px;
-  color: #f8fafc;
+  color: var(--z-color-fg-default);
 }
 
 .font-select-search {
@@ -55,9 +55,9 @@
   max-height: 85vh;
   overflow: auto;
   border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.3);
-  background: rgba(2, 6, 23, 0.96);
-  box-shadow: 0 16px 36px rgba(2, 6, 23, 0.52);
+  border: 1px solid var(--haomd-card-border);
+  background: var(--haomd-modal-bg);
+  box-shadow: var(--haomd-card-shadow);
   padding: 10px;
   display: grid;
   gap: 12px;
@@ -72,7 +72,7 @@
   font-size: 11px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #94a3b8;
+  color: var(--z-color-fg-subtle);
 }
 
 .font-select-group-list {
@@ -86,10 +86,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
+  border: 1px solid var(--haomd-input-border);
   border-radius: 8px;
-  background: rgba(15, 23, 42, 0.82);
-  color: #e5e7eb;
+  background: var(--haomd-input-bg-soft);
+  color: var(--z-color-fg-default);
   padding: 8px 10px;
   cursor: pointer;
   text-align: left;
@@ -97,34 +97,34 @@
 }
 
 .font-select-option:hover {
-  border-color: rgba(96, 165, 250, 0.45);
-  background: rgba(15, 23, 42, 0.96);
+  border-color: var(--z-color-accent-primary-soft);
+  background: var(--haomd-input-bg-soft-hover);
 }
 
 .font-select-option.active {
-  border-color: rgba(96, 165, 250, 0.88);
-  background: rgba(30, 41, 59, 0.92);
+  border-color: var(--z-color-accent-primary-soft);
+  background: var(--haomd-card-bg-active);
 }
 
 .font-select-option.highlighted {
   outline: none;
-  box-shadow: 0 0 0 1px rgba(125, 211, 252, 0.9);
+  box-shadow: 0 0 0 1px var(--haomd-selection-ring);
 }
 
 .font-select-option-name {
   font-size: 13px;
-  color: #f8fafc;
+  color: var(--z-color-fg-default);
 }
 
 .font-select-option-source {
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--z-color-fg-subtle);
   text-transform: uppercase;
 }
 
 .font-select-state {
   font-size: 12px;
-  color: #cbd5e1;
+  color: var(--z-color-fg-muted);
 }
 
 .font-select-state-error {

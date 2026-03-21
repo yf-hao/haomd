@@ -39,6 +39,10 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::Editor
                 cfg.ai_chat = default_cfg.ai_chat.clone();
                 changed = true;
             }
+            if cfg.theme.is_none() {
+                cfg.theme = default_cfg.theme.clone();
+                changed = true;
+            }
             if cfg.word_export.is_none() {
                 cfg.word_export = default_cfg.word_export.clone();
                 changed = true;
@@ -75,6 +79,15 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::Editor
                     }
                     if chat.max_visible_messages_pane.is_none() {
                         chat.max_visible_messages_pane = default_chat.max_visible_messages_pane;
+                        changed = true;
+                    }
+                }
+            }
+
+            if let Some(ref mut theme) = cfg.theme {
+                if let Some(ref default_theme) = default_cfg.theme {
+                    if theme.mode.is_none() {
+                        theme.mode = default_theme.mode.clone();
                         changed = true;
                     }
                 }

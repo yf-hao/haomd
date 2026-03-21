@@ -84,7 +84,7 @@
 }
 
 .ai-chat-close-button:hover {
-  background: rgba(31, 41, 55, 0.9);
+  background: var(--haomd-card-bg-active);
 }
 
 .ai-chat-close-icon {
@@ -102,7 +102,7 @@
   width: 12px;
   height: 1.5px;
   border-radius: 999px;
-  background: rgba(226, 232, 240, 0.9);
+  background: var(--z-color-fg-default);
   transform-origin: center;
 }
 
@@ -117,7 +117,7 @@
 .ai-chat-title .modal-title-text {
   font-weight: 600;
   font-size: 14px;
-  color: #e5e7eb;
+  color: var(--z-color-fg-default);
 }
 
 .ai-chat-title .ai-chat-role {
@@ -138,7 +138,7 @@
 .ai-chat-messages {
   width: 100%;
   /* border-radius: 10px; */
-  background: rgba(15, 23, 42, 0.9);
+  background: var(--haomd-panel-bg);
   padding: 8px 12px;
   min-height: 300px;
   /* 起始固定高度，避免只有一条空提示时塌缩 */
@@ -202,7 +202,7 @@
   left: 0;
   right: 0;
   height: 6px;
-  background: rgba(15, 23, 42, 0.96);
+  background: var(--haomd-panel-bg);
 }
 
 .ai-chat-input-row {
@@ -219,15 +219,15 @@
 .ai-chat-input-container {
   position: relative;
   border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.7);
-  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid var(--haomd-input-border-strong);
+  background: var(--haomd-input-bg);
   /* 允许 slash-panel 浮动在输入框上方，不被裁剪 */
   overflow: visible;
 }
 
 .ai-chat-input-container:focus-within {
-  border-color: rgba(96, 165, 250, 0.9);
-  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.6);
+  border-color: var(--z-color-accent-primary-soft);
+  box-shadow: 0 0 0 1px var(--haomd-focus-ring);
 }
 
 .ai-chat-textarea {
@@ -237,7 +237,7 @@
   resize: none;
   border: none;
   background: transparent;
-  color: #e5e7eb;
+  color: var(--z-color-fg-default);
   padding: 8px 10px;
   font-size: 13px;
   line-height: 1.5;
@@ -288,7 +288,7 @@
 
 .ai-chat-hint {
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--z-color-fg-muted);
 }
 
 .ai-chat-footer-actions {
@@ -330,7 +330,7 @@
 
 .ai-settings-column-left {
   flex: 0 0 calc(50% - 80px);
-  border-right: 1px solid rgba(148, 163, 184, 0.3);
+  border-right: 1px solid var(--z-color-border-strong);
   padding-right: 16px;
 }
 
@@ -356,7 +356,7 @@
 .field-label {
   font-size: 12px;
   font-weight: 500;
-  color: #9ca3af;
+  color: var(--z-color-fg-muted);
 }
 
 .field-input,
@@ -364,9 +364,9 @@
 .field-select {
   width: 100%;
   border-radius: 8px;
-  border: 1px solid rgba(148, 163, 184, 0.6);
-  background: rgba(15, 23, 42, 0.96);
-  color: #e5e7eb;
+  border: 1px solid var(--haomd-input-border-strong);
+  background: var(--haomd-input-bg);
+  color: var(--z-color-fg-default);
   padding: 6px 8px;
   font-size: 13px;
 }
@@ -381,6 +381,13 @@
   appearance: none;
 }
 
+.field-select option,
+.provider-model-select option,
+.provider-model-vision-select option {
+  background: var(--haomd-modal-bg);
+  color: var(--z-color-fg-default);
+}
+
 .field-textarea {
   min-height: 60px;
   resize: vertical;
@@ -389,14 +396,14 @@
 .field-input:focus,
 .field-textarea:focus {
   outline: none;
-  border-color: rgba(96, 165, 250, 0.9);
-  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.6);
+  border-color: var(--z-color-accent-primary-soft);
+  box-shadow: 0 0 0 1px var(--haomd-focus-ring);
 }
 
 /* Select 使用更加扁平的风格：仅轻微加深边框，不加光晕 */
 .field-select:focus {
   outline: none;
-  border-color: rgba(148, 163, 184, 0.9);
+  border-color: var(--haomd-input-border-strong);
   box-shadow: none;
 }
 
@@ -404,8 +411,8 @@
   margin-top: 4px;
   padding: 6px 8px;
   border-radius: 8px;
-  background: rgba(248, 113, 113, 0.16);
-  color: #fecaca;
+  background: var(--haomd-soft-danger-bg);
+  color: var(--haomd-soft-danger-fg);
   font-size: 12px;
   white-space: pre-wrap;
 }
@@ -426,22 +433,49 @@
   gap: 8px;
 }
 
+.ai-settings-form-actions .modal-btn.primary,
+.provider-actions .ghost.primary,
+.modal.modal-ai-settings > .modal-actions .modal-btn.primary {
+  color: #ffffff;
+  border-color: var(--z-color-accent-primary-soft);
+  background: linear-gradient(
+    135deg,
+    var(--z-color-accent-primary),
+    var(--z-color-accent-primary-soft)
+  );
+}
+
+.ai-settings-form-actions .modal-btn.primary:hover,
+.provider-actions .ghost.primary:not(:disabled):hover,
+.modal.modal-ai-settings > .modal-actions .modal-btn.primary:hover {
+  background: linear-gradient(
+    135deg,
+    var(--z-color-accent-primary-soft),
+    var(--z-color-accent-primary-alt-soft)
+  );
+  box-shadow: var(--z-shadow-elevated);
+}
+
+.provider-actions .ghost.primary {
+  box-shadow: none;
+}
+
 .providers-header {
   font-size: 12px;
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #8fa1c7;
+  color: var(--z-color-fg-subtle);
   margin-bottom: 6px;
 }
 
 .providers-empty {
   padding: 10px;
   border-radius: 8px;
-  background: rgba(15, 23, 42, 0.9);
-  border: 1px dashed rgba(148, 163, 184, 0.6);
+  background: var(--haomd-card-bg);
+  border: 1px dashed var(--haomd-input-border-strong);
   font-size: 13px;
-  color: #9ca3af;
+  color: var(--z-color-fg-muted);
 }
 
 .providers-list {
@@ -450,7 +484,7 @@
   gap: 8px;
   /* 滚动由对话框主体承担，这里只负责排列 */
   scrollbar-width: thin;
-  scrollbar-color: rgba(148, 163, 184, 0.5) transparent;
+  scrollbar-color: var(--haomd-input-border-strong) transparent;
 }
 
 /* Webkit 滚动条样式 */
@@ -463,18 +497,18 @@
 }
 
 .providers-list::-webkit-scrollbar-thumb {
-  background-color: rgba(148, 163, 184, 0.5);
+  background-color: var(--haomd-input-border-strong);
   border-radius: 4px;
 }
 
 .providers-list::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(148, 163, 184, 0.7);
+  background-color: var(--z-color-border-strong);
 }
 
 .provider-item {
   border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.5);
-  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid var(--haomd-input-border);
+  background: var(--haomd-card-bg);
   /* 保证展开详情时，内部更深色的背景不会“戳破”圆角 */
   overflow: hidden;
 }
@@ -501,14 +535,14 @@
 .provider-name {
   font-size: 13px;
   font-weight: 500;
-  color: #e5e7eb;
+  color: var(--z-color-fg-default);
 }
 
 .provider-default-model {
   font-size: 11px;
-  color: #9ca3af;
-  background: rgba(96, 165, 250, 0.15);
-  border: 1px solid rgba(96, 165, 250, 0.3);
+  color: var(--z-color-fg-muted);
+  background: var(--haomd-soft-accent-bg);
+  border: 1px solid var(--haomd-focus-ring);
   border-radius: 4px;
   padding: 2px 6px;
   white-space: nowrap;
@@ -516,7 +550,7 @@
 
 .provider-sub {
   font-size: 11px;
-  color: #64748b;
+  color: var(--z-color-fg-subtle);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -526,9 +560,9 @@
   width: 18px;
   height: 18px;
   border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.7);
+  border: 1px solid var(--haomd-input-border-strong);
   background: transparent;
-  color: #9ca3af;
+  color: var(--z-color-fg-muted);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -537,26 +571,26 @@
 }
 
 .provider-default-dot[aria-pressed='true'] {
-  border-color: rgba(90, 216, 166, 0.9);
-  color: #5ad8a6;
+  border-color: var(--z-color-accent-success);
+  color: var(--z-color-accent-success);
 }
 
 .provider-toggle {
   border: none;
   background: transparent;
-  color: #9ca3af;
+  color: var(--z-color-fg-muted);
   cursor: pointer;
 }
 
 .provider-details {
   padding: 6px 10px 8px;
-  border-top: 1px solid rgba(15, 23, 42, 0.9);
-  background: rgba(15, 23, 42, 0.96);
+  border-top: 1px solid var(--z-color-border-subtle);
+  background: var(--haomd-panel-bg);
 }
 
 .provider-detail-row {
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--z-color-fg-muted);
   margin-bottom: 3px;
 }
 
@@ -569,12 +603,12 @@
   gap: 4px;
   max-height: 160px;
   overflow-y: auto;
-  background: rgba(30, 41, 59, 0.6);
+  background: var(--haomd-card-bg);
   border-radius: 6px;
-  border: 1px solid rgba(71, 85, 105, 0.4);
+  border: 1px solid var(--haomd-input-border);
   /* 自定义滚动条样式 */
   scrollbar-width: thin;
-  scrollbar-color: rgba(148, 163, 184, 0.5) transparent;
+  scrollbar-color: var(--haomd-input-border-strong) transparent;
 }
 
 /* Webkit 滚动条样式 */
@@ -587,12 +621,12 @@
 }
 
 .provider-models::-webkit-scrollbar-thumb {
-  background-color: rgba(148, 163, 184, 0.5);
+  background-color: var(--haomd-input-border-strong);
   border-radius: 3px;
 }
 
 .provider-models::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(148, 163, 184, 0.7);
+  background-color: var(--z-color-border-strong);
 }
 
 .provider-model-row {
@@ -601,20 +635,20 @@
   align-items: center;
   gap: 6px;
   padding: 6px 8px;
-  background: rgba(15, 23, 42, 0.4);
+  background: var(--z-color-bg-surface);
   border-radius: 4px;
-  border: 1px solid rgba(71, 85, 105, 0.2);
+  border: 1px solid var(--z-color-border-subtle);
   transition: background 0.15s, border-color 0.15s;
 }
 
 .provider-model-row:hover {
-  background: rgba(30, 64, 175, 0.15);
-  border-color: rgba(59, 130, 246, 0.3);
+  background: var(--haomd-soft-accent-bg);
+  border-color: var(--haomd-focus-ring);
 }
 
 .provider-model-id {
   font-size: 12px;
-  color: #e5e7eb;
+  color: var(--z-color-fg-default);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -647,10 +681,10 @@
   width: 100%;
   font-size: 12px;
   padding: 4px 8px;
-  background: rgba(30, 41, 59, 0.6);
-  border: 1px solid rgba(71, 85, 105, 0.4);
+  background: var(--haomd-card-bg);
+  border: 1px solid var(--haomd-input-border);
   border-radius: 4px;
-  color: #e5e7eb;
+  color: var(--z-color-fg-default);
 }
 
 /* AI Chat 打字指示器 - 三个跳动圆点 */
@@ -667,7 +701,7 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: rgba(148, 163, 184, 0.7);
+  background: var(--z-color-fg-subtle);
   animation: ai-typing-bounce 1.2s ease-in-out infinite;
 }
 
@@ -692,14 +726,14 @@
 
 /* 更柔和的删除按钮，和整体 Ghost 风格一致 */
 button.ghost.ghost-subtle {
-  border-color: rgba(148, 163, 184, 0.5);
-  background: rgba(15, 23, 42, 0.85);
-  color: #e5e7eb;
+  border-color: var(--haomd-input-border);
+  background: var(--haomd-input-bg);
+  color: var(--z-color-fg-default);
 }
 
 button.ghost.ghost-subtle:hover {
-  background: rgba(30, 64, 175, 0.6);
-  border-color: rgba(129, 140, 248, 0.9);
+  background: var(--haomd-soft-accent-bg);
+  border-color: var(--z-color-accent-primary-soft);
 }
 
 .provider-actions {
@@ -714,34 +748,34 @@ button.ghost.ghost-subtle:hover {
   padding: 4px 10px;
   font-size: 12px;
   border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.6);
-  background: rgba(15, 23, 42, 0.96);
-  color: #e5e7eb;
+  border: 1px solid var(--haomd-input-border-strong);
+  background: var(--haomd-input-bg);
+  color: var(--z-color-fg-default);
 }
 
 .provider-actions .ghost.primary {
-  border-color: rgba(96, 165, 250, 0.9);
-  background: rgba(37, 99, 235, 0.9);
+  border-color: var(--z-color-accent-primary-soft);
+  background: var(--z-color-accent-primary);
 }
 
 .provider-actions .ghost.danger {
-  border-color: rgba(248, 113, 113, 0.8);
-  color: #fecaca;
-  background: rgba(127, 29, 29, 0.8);
+  border-color: var(--z-color-danger);
+  color: var(--haomd-soft-danger-fg);
+  background: var(--haomd-soft-danger-bg);
 }
 
 .provider-actions .ghost:not(:disabled):hover {
-  background: rgba(30, 64, 175, 0.6);
-  border-color: rgba(129, 140, 248, 0.9);
+  background: var(--haomd-soft-accent-bg);
+  border-color: var(--z-color-accent-primary-soft);
 }
 
 .provider-actions .ghost.primary:not(:disabled):hover {
-  background: #3b82f6;
+  background: var(--z-color-accent-primary-soft);
 }
 
 .provider-actions .ghost.danger:not(:disabled):hover {
-  background: rgba(220, 38, 38, 0.95);
-  border-color: rgba(252, 165, 165, 0.95);
+  background: var(--z-color-danger);
+  border-color: var(--z-color-danger);
 }
 
 .field-group.inline {
@@ -759,9 +793,9 @@ button.ghost.ghost-subtle:hover {
 .default-summary {
   margin-top: 10px;
   padding-top: 8px;
-  border-top: 1px solid rgba(148, 163, 184, 0.35);
+  border-top: 1px solid var(--z-color-border-strong);
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--z-color-fg-muted);
 }
 
 /* AI Chat 模态窗使用的无遮罩容器：背景透明并允许点击穿透到文档 */
@@ -784,7 +818,7 @@ button.ghost.ghost-subtle:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(15, 23, 42, 0.75);
+  background: var(--haomd-overlay-bg);
   backdrop-filter: blur(2px);
   z-index: var(--z-modal-overlay);
   /* 覆盖主设置模态窗 */
@@ -795,9 +829,9 @@ button.ghost.ghost-subtle:hover {
   max-width: 480px;
   padding: 16px 18px 14px;
   border-radius: 10px;
-  background: rgba(15, 23, 42, 0.98);
-  border: 1px solid rgba(148, 163, 184, 0.6);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+  background: var(--haomd-modal-bg);
+  border: 1px solid var(--z-color-border-strong);
+  box-shadow: var(--haomd-modal-shadow);
 }
 
 .ai-settings-submodal .submodal-title {
@@ -809,7 +843,7 @@ button.ghost.ghost-subtle:hover {
 .ai-settings-submodal .submodal-body {
   font-size: 13px;
   line-height: 1.6;
-  color: #e5e7eb;
+  color: var(--z-color-fg-default);
   margin-bottom: 12px;
 }
 
@@ -819,13 +853,13 @@ button.ghost.ghost-subtle:hover {
 }
 
 .ai-settings-submodal .submodal-actions .ghost.primary {
-  border: 1px solid rgba(92, 124, 250, 0.7);
-  color: #5c7cfa;
-  background: rgba(92, 124, 250, 0.1);
+  border: 1px solid var(--z-color-accent-primary-alt);
+  color: var(--z-color-accent-primary-alt);
+  background: var(--haomd-soft-accent-bg);
 }
 
 .ai-settings-submodal .submodal-actions .ghost.primary:hover {
-  background: rgba(92, 124, 250, 0.2);
+  background: var(--haomd-card-bg-active);
 }
 
 @media (max-width: 960px) {
@@ -846,7 +880,7 @@ button.ghost.ghost-subtle:hover {
 
   .ai-settings-column-left {
     border-right: none;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+    border-bottom: 1px solid var(--z-color-border-strong);
     padding-right: 0;
     padding-bottom: 12px;
     margin-bottom: 8px;
@@ -863,7 +897,7 @@ button.ghost.ghost-subtle:hover {
   align-items: center;
   justify-content: space-between;
   padding: 6px 10px 8px;
-  background: rgba(15, 23, 42, 0.5);
+  background: var(--z-color-bg-surface);
   flex-wrap: wrap;
   gap: 8px;
   min-height: 44px;
@@ -886,7 +920,7 @@ button.ghost.ghost-subtle:hover {
 .ai-chat-tool-btn {
   background: transparent;
   border: none;
-  color: #9ca3af;
+  color: var(--z-color-fg-muted);
   cursor: pointer;
   padding: 4px;
   display: flex;
@@ -897,17 +931,17 @@ button.ghost.ghost-subtle:hover {
 }
 
 .ai-chat-tool-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #e5e7eb;
+  background: var(--z-color-bg-surface);
+  color: var(--z-color-fg-default);
 }
 
 .ai-chat-input-badge {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--z-color-bg-surface);
+  border: 1px solid var(--z-color-border-subtle);
   border-radius: 6px;
   padding: 2px 8px;
   font-size: 11px;
-  color: #9ca3af;
+  color: var(--z-color-fg-muted);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -915,8 +949,8 @@ button.ghost.ghost-subtle:hover {
 }
 
 .ai-chat-input-badge:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #e5e7eb;
+  background: var(--haomd-card-bg);
+  color: var(--z-color-fg-default);
 }
 
 .ai-chat-role-badge {
@@ -940,10 +974,10 @@ button.ghost.ghost-subtle:hover {
   min-width: 160px;
   max-height: 240px;
   overflow-y: auto;
-  background: #1e293b;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--haomd-modal-bg);
+  border: 1px solid var(--z-color-border-subtle);
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--z-shadow-elevated);
   z-index: 100;
   padding: 4px 0;
 }
@@ -951,20 +985,20 @@ button.ghost.ghost-subtle:hover {
 .badge-select-option {
   padding: 6px 12px;
   font-size: 12px;
-  color: #d1d5db;
+  color: var(--z-color-fg-default);
   cursor: pointer;
   white-space: nowrap;
   user-select: none;
 }
 
 .badge-select-option:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #f3f4f6;
+  background: var(--z-color-bg-surface);
+  color: var(--z-color-fg-default);
 }
 
 .badge-select-option.active {
-  background: rgba(59, 130, 246, 0.2);
-  color: #93c5fd;
+  background: var(--haomd-soft-accent-bg);
+  color: var(--z-color-fg-accent);
 }
 
 .ai-chat-role-select-inline {
@@ -2239,3 +2273,196 @@ button.ghost.ghost-subtle:hover {
   border-color: rgba(129, 140, 248, 0.9);
 }
 
+/* Theme overrides */
+.ai-chat-title .modal-title-text,
+.ai-settings-submodal .submodal-body,
+.provider-name,
+.provider-model-id,
+.provider-model-select,
+.ai-chat-role-select-inline option,
+.ai-chat-message-assistant,
+.ai-history-group-title,
+.ai-history-message-content,
+.ai-global-memory-section-title,
+.ai-global-memory-persona-summary,
+.ai-global-memory-preference-value,
+.ai-global-memory-preference-label,
+.ai-global-memory-item-title,
+.ai-global-memory-item-content,
+.ai-global-memory-footer-meta-value,
+.ai-global-memory-footer-button,
+.ai-global-memory-item-action-button {
+  color: var(--z-color-fg-default);
+}
+
+.ai-chat-messages,
+.provider-details,
+.ai-history-body,
+.ai-chat-history-body,
+.ai-global-memory-section,
+.ai-global-memory-filter-bar,
+.ai-global-memory-item,
+.ai-settings-submodal {
+  background: var(--haomd-panel-bg);
+  border-color: var(--z-color-border-strong);
+}
+
+.ai-chat-input::before,
+.ai-chat-input-footer,
+.ai-chat-message-assistant,
+.provider-model-row,
+.badge-select-dropdown,
+.providers-empty,
+.providers-list,
+.provider-models,
+.ai-history-message-system,
+.ai-global-memory-badge.badge-muted {
+  background: var(--z-color-bg-surface);
+}
+
+.ai-chat-input-container,
+.field-input,
+.field-textarea,
+.field-select,
+.provider-actions .ghost,
+button.ghost.ghost-subtle,
+.ai-chat-icon-button,
+.ai-chat-history-prev,
+.ai-chat-history-next,
+.ai-history-page-button,
+.ai-history-page-size select,
+.ai-global-memory-search-input,
+.ai-global-memory-item-action-button,
+.ai-global-memory-footer-button {
+  background: var(--haomd-input-bg);
+  border-color: var(--haomd-input-border-strong);
+  color: var(--z-color-fg-default);
+}
+
+.field-label,
+.ai-chat-hint,
+.provider-detail-row,
+.provider-sub,
+.provider-toggle,
+.provider-default-dot,
+.default-summary,
+.ai-chat-tool-btn,
+.ai-chat-input-badge,
+.ai-history-summary,
+.ai-history-message-meta,
+.ai-history-empty,
+.ai-history-status,
+.ai-history-page-info,
+.ai-history-page-size,
+.ai-global-memory-empty-text,
+.ai-global-memory-meta-label,
+.ai-global-memory-filter-summary,
+.ai-global-memory-item-type,
+.ai-global-memory-item-meta-small,
+.ai-global-memory-footer-meta,
+.ai-global-memory-footer-meta-label,
+.ai-global-memory-footer-text {
+  color: var(--z-color-fg-muted);
+}
+
+.providers-header,
+.ai-global-memory-tab:not(.active):hover,
+.ai-global-memory-tab.active,
+.ai-chat-role-badge,
+.ai-chat-input-badge:hover {
+  color: var(--z-color-fg-default);
+}
+
+.providers-header,
+.badge-select-option.active,
+.provider-default-model,
+.ai-chat-message-user,
+.ai-chat-history-ordinal,
+.ai-global-memory-tag,
+.ai-global-memory-badge,
+.ai-global-memory-switch input[type='checkbox'] {
+  background: var(--haomd-soft-accent-bg);
+}
+
+.provider-default-model,
+.ai-chat-message-user,
+.badge-select-option.active,
+.ai-chat-history-ordinal,
+.ai-global-memory-tag,
+.ai-global-memory-badge,
+.ai-global-memory-switch input[type='checkbox']:checked,
+.provider-actions .ghost.primary,
+.ai-global-memory-footer-button-primary {
+  border-color: var(--z-color-accent-primary-soft);
+}
+
+.provider-actions .ghost.primary,
+.ai-chat-input-footer .ai-chat-send-button:not(:disabled):hover,
+.ai-global-memory-footer-button-primary,
+.ai-settings-submodal .submodal-actions .ghost.primary:hover {
+  background: var(--z-color-accent-primary-soft);
+}
+
+.provider-actions .ghost.primary,
+.ai-global-memory-footer-button-primary,
+.ai-global-memory-switch input[type='checkbox']:checked {
+  background: var(--z-color-accent-primary);
+}
+
+.provider-actions .ghost:not(:disabled):hover,
+button.ghost.ghost-subtle:hover,
+.provider-model-row:hover,
+.ai-chat-icon-button:hover,
+.ai-history-page-button:not(:disabled):hover,
+.ai-chat-history-prev:hover:not(:disabled),
+.ai-chat-history-next:hover:not(:disabled),
+.ai-global-memory-item-action-button:hover,
+.ai-global-memory-footer-button:not(.ai-global-memory-footer-button-primary):not(:disabled):hover,
+.ai-global-memory-item-action-danger:hover,
+.ai-global-memory-danger-button:not(:disabled):hover {
+  background: var(--haomd-card-bg-active);
+  border-color: var(--z-color-accent-primary-soft);
+}
+
+.field-input:focus,
+.field-textarea:focus,
+.ai-chat-input-container:focus-within {
+  border-color: var(--z-color-accent-primary-soft);
+  box-shadow: 0 0 0 1px var(--haomd-focus-ring);
+}
+
+.providers-list,
+.provider-models,
+.ai-chat-history-body,
+.ai-history-body {
+  scrollbar-color: var(--haomd-input-border-strong) transparent;
+}
+
+.providers-list::-webkit-scrollbar-thumb,
+.provider-models::-webkit-scrollbar-thumb,
+.ai-chat-history-body::-webkit-scrollbar-thumb,
+.ai-history-body::-webkit-scrollbar-thumb {
+  background-color: var(--haomd-input-border-strong);
+}
+
+.providers-list::-webkit-scrollbar-thumb:hover,
+.provider-models::-webkit-scrollbar-thumb:hover,
+.ai-chat-history-body::-webkit-scrollbar-thumb:hover,
+.ai-history-body::-webkit-scrollbar-thumb:hover {
+  background-color: var(--z-color-border-strong);
+}
+
+.provider-actions .ghost.danger,
+.ai-history-status.ai-history-status-error,
+.ai-global-memory-item-action-danger,
+.ai-global-memory-danger-button,
+.form-error {
+  color: var(--haomd-soft-danger-fg);
+}
+
+.provider-actions .ghost.danger,
+.ai-global-memory-danger-button,
+.form-error {
+  background: var(--haomd-soft-danger-bg);
+  border-color: var(--z-color-danger);
+}

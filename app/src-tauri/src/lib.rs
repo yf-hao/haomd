@@ -587,6 +587,13 @@ struct AiChatUiCfg {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+struct ThemeSettingsCfg {
+    #[serde(default)]
+    mode: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 struct WordExportStyleSettingsCfg {
     #[serde(default)]
     body_font_family: Option<String>,
@@ -620,6 +627,8 @@ struct EditorSettingsCfg {
     #[serde(default)]
     ai_chat: Option<AiChatUiCfg>,
     #[serde(default)]
+    theme: Option<ThemeSettingsCfg>,
+    #[serde(default)]
     word_export: Option<WordExportStyleSettingsCfg>,
     /// 预留扩展位：保存未来新增的配置项，避免在写回文件时丢失
     #[serde(flatten)]
@@ -644,8 +653,15 @@ fn default_editor_settings() -> EditorSettingsCfg {
             max_visible_messages_dialog: Some(10),
             max_visible_messages_pane: Some(10),
         }),
+        theme: Some(default_theme_settings_cfg()),
         word_export: Some(default_word_export_style_settings_cfg()),
         extra: std::collections::HashMap::new(),
+    }
+}
+
+fn default_theme_settings_cfg() -> ThemeSettingsCfg {
+    ThemeSettingsCfg {
+        mode: Some("system".to_string()),
     }
 }
 

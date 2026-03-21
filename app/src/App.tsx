@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import './App.css'
 import WorkspaceShell, { type LeftPanelId, type InitialWorkspaceAction } from './components/WorkspaceShell'
 import { AiSettingsDialog } from './components/AiSettingsDialog'
@@ -6,6 +6,18 @@ import { PromptSettingsDialog } from './components/PromptSettingsDialog'
 import { SettingsDialog } from './components/SettingsDialog'
 import { onMenuAction } from './modules/platform/menuEvents'
 import { isTauriEnv } from './modules/platform/runtime'
+import {
+  getDefaultThemeSettings,
+  getThemeSettings,
+  type ThemeSettings,
+} from './modules/settings/editorSettings'
+import {
+  applyResolvedTheme,
+  getSystemPrefersDark,
+  resolveThemeMode,
+  subscribeSystemThemePreference,
+} from './modules/theme/themeRuntime'
+import { ThemeModeProvider } from './modules/theme/ThemeContext'
 
 const appStartTime = performance.now()
 
@@ -20,6 +32,8 @@ function App() {
   const [isStatusBarVisible, setStatusBarVisible] = useState(true)
   const [docCharCount, setDocCharCount] = useState<number | null>(null)
   const [statusMessage, setStatusMessage] = useState('')
+  const [themeSettings, setThemeSettings] = useState<ThemeSettings>(getDefaultThemeSettings())
+  const [systemPrefersDark, setSystemPrefersDark] = useState(() => getSystemPrefersDark())
 
   const handleLeftPanelToggle = useCallback(
     (id: LeftPanelId) => {
@@ -68,81 +82,114 @@ function App() {
     }
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+
+    ;(async () => {
+      const settings = await getThemeSettings()
+      if (cancelled) return
+      setThemeSettings(settings)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    return subscribeSystemThemePreference(setSystemPrefersDark)
+  }, [])
+
+  const resolvedThemeMode = useMemo(
+    () => resolveThemeMode(themeSettings.mode, systemPrefersDark),
+    [themeSettings.mode, systemPrefersDark],
+  )
+
+  useEffect(() => {
+    applyResolvedTheme(resolvedThemeMode)
+  }, [resolvedThemeMode])
+
   return (
-    <div className="app-shell">
-      <div className="layout-row">
-        <div className="activity-bar">
-          <button
-            type="button"
-            className={`activity-item ${activeLeftPanel === 'files' ? 'active' : ''}`}
-            onClick={() => handleLeftPanelToggle('files')}
-            aria-pressed={activeLeftPanel === 'files'}
-            title="Files"
-          >
-            <span className="activity-icon-file" aria-hidden="true" />
-          </button>
+    <ThemeModeProvider value={resolvedThemeMode}>
+      <div className="app-shell">
+        <div className="layout-row">
+          <div className="activity-bar">
+            <button
+              type="button"
+              className={`activity-item ${activeLeftPanel === 'files' ? 'active' : ''}`}
+              onClick={() => handleLeftPanelToggle('files')}
+              aria-pressed={activeLeftPanel === 'files'}
+              title="Files"
+            >
+              <span className="activity-icon-file" aria-hidden="true" />
+            </button>
 
-          <button
-            type="button"
-            className={`activity-item ${activeLeftPanel === 'outline' ? 'active' : ''}`}
-            onClick={() => handleLeftPanelToggle('outline')}
-            aria-pressed={activeLeftPanel === 'outline'}
-            title="Outline"
-          >
-            <span className="activity-icon-outline" aria-hidden="true" />
-          </button>
+            <button
+              type="button"
+              className={`activity-item ${activeLeftPanel === 'outline' ? 'active' : ''}`}
+              onClick={() => handleLeftPanelToggle('outline')}
+              aria-pressed={activeLeftPanel === 'outline'}
+              title="Outline"
+            >
+              <span className="activity-icon-outline" aria-hidden="true" />
+            </button>
 
-          <button
-            type="button"
-            className={`activity-item ${activeLeftPanel === 'pdf' ? 'active' : ''}`}
-            onClick={() => handleLeftPanelToggle('pdf')}
-            aria-pressed={activeLeftPanel === 'pdf'}
-            title="PDF"
-          >
-            <span className="activity-icon-pdf" aria-hidden="true" />
-          </button>
+            <button
+              type="button"
+              className={`activity-item ${activeLeftPanel === 'pdf' ? 'active' : ''}`}
+              onClick={() => handleLeftPanelToggle('pdf')}
+              aria-pressed={activeLeftPanel === 'pdf'}
+              title="PDF"
+            >
+              <span className="activity-icon-pdf" aria-hidden="true" />
+            </button>
 
-          <button
-            type="button"
-            className={`activity-item ${activeLeftPanel === 'sessions' ? 'active' : ''}`}
-            onClick={() => handleLeftPanelToggle('sessions')}
-            aria-pressed={activeLeftPanel === 'sessions'}
-            title="会话管理"
-          >
-            <span className="activity-icon-sessions" aria-hidden="true" />
-          </button>
+            <button
+              type="button"
+              className={`activity-item ${activeLeftPanel === 'sessions' ? 'active' : ''}`}
+              onClick={() => handleLeftPanelToggle('sessions')}
+              aria-pressed={activeLeftPanel === 'sessions'}
+              title="会话管理"
+            >
+              <span className="activity-icon-sessions" aria-hidden="true" />
+            </button>
+          </div>
+
+          <WorkspaceShell
+            activeLeftPanel={activeLeftPanel}
+            isTauriEnv={isTauriEnv}
+            initialAction={initialWorkspaceAction}
+            initialOpenRecentPath={initialOpenRecentPath}
+            initialOpenRecentIsFolder={initialOpenRecentIsFolder}
+            onInitialActionHandled={handleInitialActionHandled}
+            onDocumentStatsChange={(stats) => setDocCharCount(stats.charCount)}
+            onStatusMessageChange={setStatusMessage}
+          />
         </div>
 
-        <WorkspaceShell
-          activeLeftPanel={activeLeftPanel}
-          isTauriEnv={isTauriEnv}
-          initialAction={initialWorkspaceAction}
-          initialOpenRecentPath={initialOpenRecentPath}
-          initialOpenRecentIsFolder={initialOpenRecentIsFolder}
-          onInitialActionHandled={handleInitialActionHandled}
-          onDocumentStatsChange={(stats) => setDocCharCount(stats.charCount)}
-          onStatusMessageChange={setStatusMessage}
+        {isStatusBarVisible && (
+          <div className="status-bar">
+            <div className="status-bar-left">HaoMD · AI Markdown</div>
+            <div className="status-bar-right">
+              {docCharCount != null && (
+                <span style={{ marginRight: statusMessage ? 12 : 0 }}>
+                  {docCharCount.toLocaleString()} 字
+                </span>
+              )}
+              <span>{statusMessage || '\u00A0'}</span>
+            </div>
+          </div>
+        )}
+
+        <AiSettingsDialog open={isAiSettingsOpen} onClose={() => setAiSettingsOpen(false)} />
+        <PromptSettingsDialog open={isPromptSettingsOpen} onClose={() => setPromptSettingsOpen(false)} />
+        <SettingsDialog
+          open={isSettingsOpen}
+          onClose={() => setSettingsOpen(false)}
+          onThemeSettingsChange={setThemeSettings}
         />
       </div>
-
-      {isStatusBarVisible && (
-        <div className="status-bar">
-          <div className="status-bar-left">HaoMD · AI Markdown</div>
-          <div className="status-bar-right">
-            {docCharCount != null && (
-              <span style={{ marginRight: statusMessage ? 12 : 0 }}>
-                {docCharCount.toLocaleString()} 字
-              </span>
-            )}
-            <span>{statusMessage || '\u00A0'}</span>
-          </div>
-        </div>
-      )}
-
-      <AiSettingsDialog open={isAiSettingsOpen} onClose={() => setAiSettingsOpen(false)} />
-      <PromptSettingsDialog open={isPromptSettingsOpen} onClose={() => setPromptSettingsOpen(false)} />
-      <SettingsDialog open={isSettingsOpen} onClose={() => setSettingsOpen(false)} />
-    </div>
+    </ThemeModeProvider>
   )
 }
 

@@ -20,6 +20,12 @@ export type AiChatUiSettings = {
   maxVisibleMessagesPane: number
 }
 
+export type ThemeMode = 'system' | 'light' | 'dark'
+
+export type ThemeSettings = {
+  mode: ThemeMode
+}
+
 export type WordExportStyleSettings = {
   bodyFontFamily: string
   bodyFontSizePt: number
@@ -37,6 +43,7 @@ export type EditorSettings = {
   aiCompression?: Partial<AiCompressionSettings>
   hugeDoc?: HugeDocSettings
   aiChat?: Partial<AiChatUiSettings>
+  theme?: Partial<ThemeSettings>
   wordExport?: Partial<WordExportStyleSettings>
 }
 
@@ -57,6 +64,10 @@ const defaultHugeDoc: Required<HugeDocSettings> = {
 const defaultAiChatUi: AiChatUiSettings = {
   maxVisibleMessagesDialog: 50,
   maxVisibleMessagesPane: 50,
+}
+
+const defaultTheme: ThemeSettings = {
+  mode: 'system',
 }
 
 const defaultWordExport: WordExportStyleSettings = {
@@ -124,6 +135,14 @@ export async function getAiChatUiSettings(): Promise<AiChatUiSettings> {
   }
 }
 
+export async function getThemeSettings(): Promise<ThemeSettings> {
+  const settings = await loadEditorSettings()
+  const cfg = settings.theme ?? {}
+  return {
+    mode: cfg.mode ?? defaultTheme.mode,
+  }
+}
+
 export async function getWordExportStyleSettings(): Promise<WordExportStyleSettings> {
   const settings = await loadEditorSettings()
   const cfg = settings.wordExport ?? {}
@@ -151,6 +170,10 @@ export async function saveEditorSettings(settings: EditorSettings): Promise<void
 
 export function getDefaultWordExportStyleSettings(): WordExportStyleSettings {
   return { ...defaultWordExport }
+}
+
+export function getDefaultThemeSettings(): ThemeSettings {
+  return { ...defaultTheme }
 }
 
 /** 仅供测试使用：清除单例缓存 */

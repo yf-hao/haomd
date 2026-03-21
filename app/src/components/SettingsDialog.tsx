@@ -3,20 +3,25 @@ import './SettingsDialog.css'
 import { Button } from './Button'
 import { FontSelectField } from './settings/FontSelectField'
 import {
+  getDefaultThemeSettings,
   getDefaultWordExportStyleSettings,
+  getThemeSettings,
   getWordExportStyleSettings,
   loadEditorSettings,
   saveEditorSettings,
   type EditorSettings,
+  type ThemeMode,
+  type ThemeSettings,
   type WordExportStyleSettings,
 } from '../modules/settings/editorSettings'
 
 export type SettingsDialogProps = {
   open: boolean
   onClose: () => void
+  onThemeSettingsChange?: (settings: ThemeSettings) => void
 }
 
-type SettingsSectionId = 'word-export'
+type SettingsSectionId = 'theme' | 'word-export'
 
 const fieldGridStyle: React.CSSProperties = {
   display: 'grid',
@@ -25,10 +30,15 @@ const fieldGridStyle: React.CSSProperties = {
   alignItems: 'center',
 }
 
-export const SettingsDialog: FC<SettingsDialogProps> = ({ open, onClose }) => {
+export const SettingsDialog: FC<SettingsDialogProps> = ({
+  open,
+  onClose,
+  onThemeSettingsChange,
+}) => {
   const [settings, setSettings] = useState<EditorSettings>({})
+  const [theme, setTheme] = useState<ThemeSettings>(getDefaultThemeSettings())
   const [wordExport, setWordExport] = useState<WordExportStyleSettings>(getDefaultWordExportStyleSettings())
-  const [activeSection, setActiveSection] = useState<SettingsSectionId>('word-export')
+  const [activeSection, setActiveSection] = useState<SettingsSectionId>('theme')
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -37,12 +47,14 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({ open, onClose }) => {
     let cancelled = false
     ;(async () => {
       try {
-        const [loadedSettings, loadedWordExport] = await Promise.all([
+        const [loadedSettings, loadedTheme, loadedWordExport] = await Promise.all([
           loadEditorSettings(),
+          getThemeSettings(),
           getWordExportStyleSettings(),
         ])
         if (cancelled) return
         setSettings(loadedSettings)
+        setTheme(loadedTheme)
         setWordExport(loadedWordExport)
         setError(null)
       } catch (err) {
@@ -74,7 +86,15 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({ open, onClose }) => {
     }))
   }
 
+  const updateThemeMode = (mode: ThemeMode) => {
+    setTheme({ mode })
+  }
+
   const handleReset = () => {
+    if (activeSection === 'theme') {
+      setTheme(getDefaultThemeSettings())
+      return
+    }
     setWordExport(getDefaultWordExportStyleSettings())
   }
 
@@ -84,10 +104,12 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({ open, onClose }) => {
     try {
       const nextSettings: EditorSettings = {
         ...settings,
+        theme,
         wordExport,
       }
       await saveEditorSettings(nextSettings)
       setSettings(nextSettings)
+      onThemeSettingsChange?.(theme)
       onClose()
     } catch (err) {
       setError((err as Error).message || 'Failed to save settings')
@@ -108,6 +130,13 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({ open, onClose }) => {
               </div>
               <button
                 type="button"
+                onClick={() => setActiveSection('theme')}
+                className={`settings-sidebar-item ${activeSection === 'theme' ? 'active' : ''}`}
+              >
+                Theme
+              </button>
+              <button
+                type="button"
                 onClick={() => setActiveSection('word-export')}
                 className={`settings-sidebar-item ${activeSection === 'word-export' ? 'active' : ''}`}
               >
@@ -116,6 +145,48 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({ open, onClose }) => {
             </div>
 
             <div className="settings-panel">
+              {activeSection === 'theme' && (
+                <>
+                  <div className="settings-panel-header">
+                    <div className="settings-panel-title">Theme</div>
+                    <div className="settings-panel-description">
+                      Choose how HaoMD should appear. `System` follows the OS appearance.
+                    </div>
+                  </div>
+
+                  <div className="theme-option-group">
+                    {([
+                      {
+                        mode: 'system',
+                        title: 'System',
+                        description: 'Use the current macOS, Windows, or Linux appearance.',
+                      },
+                      {
+                        mode: 'dark',
+                        title: 'Dark',
+                        description: 'Use the dark HaoMD theme.',
+                      },
+                      {
+                        mode: 'light',
+                        title: 'Light',
+                        description: 'Use the light HaoMD theme.',
+                      },
+                    ] as const).map((option) => (
+                      <button
+                        key={option.mode}
+                        type="button"
+                        className={`theme-option-card ${theme.mode === option.mode ? 'active' : ''}`}
+                        onClick={() => updateThemeMode(option.mode)}
+                        aria-pressed={theme.mode === option.mode}
+                      >
+                        <span className="theme-option-card-title">{option.title}</span>
+                        <span className="theme-option-card-description">{option.description}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
               {activeSection === 'word-export' && (
                 <>
                   <div className="settings-panel-header">

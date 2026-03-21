@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   getAiCompressionSettings,
   getHugeDocSettings,
+  getThemeSettings,
   getWordExportStyleSettings,
   resetSettingsCache,
   saveEditorSettings,
@@ -68,6 +69,13 @@ describe('editorSettings', () => {
         expect(settings.lineSpacing).toBe(1.5)
         expect(settings.bodyFontSizePt).toBe(12)
         expect(settings.pageMarginCm).toBe(2.54)
+    })
+
+    it('should return default theme settings if backend is empty', async () => {
+        vi.mocked(mockInvoke).mockResolvedValue({ Ok: { data: {} } })
+
+        const settings = await getThemeSettings()
+        expect(settings.mode).toBe('system')
     })
 
     it('should save editor settings through backend command', async () => {

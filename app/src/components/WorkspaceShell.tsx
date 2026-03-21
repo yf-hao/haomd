@@ -1906,13 +1906,13 @@ export function WorkspaceShell({
                 </div>
               )}
               {pdfRecentLoading && (
-                <p style={{ color: '#9ca3af', padding: '12px', fontSize: '13px' }}>正在加载最近的 PDF...</p>
+                <p style={{ color: 'var(--z-color-fg-muted)', padding: '12px', fontSize: '13px' }}>正在加载最近的 PDF...</p>
               )}
               {!pdfRecentLoading && pdfRecentError && (
-                <p style={{ color: '#f97373', padding: '12px', fontSize: '13px' }}>{pdfRecentError}</p>
+                <p style={{ color: 'var(--z-color-danger)', padding: '12px', fontSize: '13px' }}>{pdfRecentError}</p>
               )}
               {!pdfRecentLoading && !pdfRecentError && pdfRecent.length === 0 && (
-                <p style={{ color: '#9ca3af', padding: '12px', fontSize: '13px' }}>
+                <p style={{ color: 'var(--z-color-fg-muted)', padding: '12px', fontSize: '13px' }}>
                   No recent PDFs. Use File → Open to open a PDF file.
                 </p>
               )}
@@ -2007,7 +2007,7 @@ export function WorkspaceShell({
                         </div>
                         {isCollapsed ? null : (
                           items.length === 0 ? (
-                            <div className="pdf-folder-empty" style={{ padding: '4px 12px', fontSize: '12px', color: '#9ca3af' }}>
+                            <div className="pdf-folder-empty" style={{ padding: '4px 12px', fontSize: '12px', color: 'var(--z-color-fg-muted)' }}>
                               No PDFs yet. Move recent files into this virtual folder to show them here.
                             </div>
                           ) : (

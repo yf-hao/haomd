@@ -74,24 +74,25 @@
 .welcome-button.primary {
   background: linear-gradient(135deg, var(--z-color-accent-primary), var(--z-color-accent-primary-soft));
   color: #ffffff;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  box-shadow: 0 4px 12px var(--haomd-focus-ring);
 }
 
 .welcome-button.primary:hover {
-  background: linear-gradient(135deg, #1d4ed8, #2563eb);
-  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+  background: linear-gradient(135deg, var(--z-color-accent-primary), var(--z-color-accent-primary-alt));
+  box-shadow: 0 6px 16px var(--haomd-focus-ring);
   transform: translateY(-2px);
 }
 
 .welcome-button.secondary {
-  background: rgba(148, 163, 184, 0.24);
-  color: #e5e7eb;
-  border: 1px solid var(--z-color-border-strong);
+  background: var(--haomd-input-bg);
+  color: var(--z-color-fg-default);
+  border: 1px solid var(--haomd-input-border-strong);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
 }
 
 .welcome-button.secondary:hover {
-  background: rgba(148, 163, 184, 0.36);
-  border-color: rgba(148, 163, 184, 0.4);
+  background: var(--haomd-card-bg-active);
+  border-color: var(--z-color-accent-primary-soft);
   transform: translateY(-2px);
 }
 

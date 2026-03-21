@@ -6,8 +6,8 @@
   border: none;
   outline: none;
   resize: none;
-  color: #e8ecf5;
-  background: #10121d;
+  color: var(--z-color-fg-default);
+  background: var(--haomd-editor-bg);
   font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
   font-size: 14px;
   line-height: 1.6;
@@ -29,7 +29,7 @@
 .code-editor .cm-editor {
   height: 100%;
   width: 100%;
-  background: #10121d;
+  background: var(--haomd-editor-bg);
   border: none;
   border-radius: 0;
   box-shadow: none;

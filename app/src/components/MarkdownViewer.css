@@ -5,7 +5,23 @@
 /* 应用内预览使用暗色背景，不影响导出 HTML（导出不带 gh-markdown 类） */
 .markdown-body.gh-markdown {
   background: var(--markdown-preview-bg);
-  color: #e8ecf5;
+  color: var(--z-color-fg-default);
+}
+
+.markdown-body.gh-markdown p,
+.markdown-body.gh-markdown li,
+.markdown-body.gh-markdown blockquote,
+.markdown-body.gh-markdown td,
+.markdown-body.gh-markdown th,
+.markdown-body.gh-markdown label,
+.markdown-body.gh-markdown dd,
+.markdown-body.gh-markdown dl,
+.markdown-body.gh-markdown summary,
+.markdown-body.gh-markdown details,
+.markdown-body.gh-markdown span,
+.markdown-body.gh-markdown strong,
+.markdown-body.gh-markdown em {
+  color: inherit;
 }
 
 /* 预览虚拟化：浏览器自动跳过离屏块的渲染，大幅提升长文档滚动性能 */

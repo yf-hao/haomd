@@ -18,14 +18,14 @@
 
 .sidebar-resizer:hover,
 .sidebar-resizer.active {
-  background: rgba(59, 130, 246, 0.35);
+  background: var(--haomd-sidebar-active);
 }
 
 .outline-panel {
   width: 220px;
   min-width: 180px;
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(5, 7, 12, 0.96);
+  border-right: 1px solid var(--z-color-border-subtle);
+  background: var(--haomd-panel-bg);
   backdrop-filter: blur(8px);
   padding: 8px 8px 8px 8px;
   display: flex;
@@ -36,7 +36,7 @@
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #8fa1c7;
+  color: var(--z-color-fg-subtle);
   margin-bottom: 4px;
   padding: 4px 4px 8px;
 }
@@ -59,7 +59,7 @@
   justify-content: center;
   text-align: center;
   padding: 12px;
-  color: #9ca3af;
+  color: var(--z-color-fg-muted);
 }
 
 .outline-empty-title {
@@ -82,16 +82,16 @@
   border-radius: 6px;
   cursor: pointer;
   font-size: 13px;
-  color: #c4ccee;
+  color: var(--z-color-fg-muted);
 }
 
 .outline-item:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--z-color-bg-surface);
 }
 
 .outline-item.active {
-  background: rgba(59, 130, 246, 0.18);
-  color: #e8ecf5;
+  background: var(--haomd-sidebar-active);
+  color: var(--z-color-fg-default);
 }
 
 .outline-item.active::before {
@@ -102,7 +102,7 @@
   bottom: 2px;
   width: 2px;
   border-radius: 999px;
-  background: #5ad8a6;
+  background: var(--z-color-accent-success);
 }
 
 .outline-item.level-1 {
@@ -134,13 +134,13 @@
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: rgba(148, 163, 184, 0.9);
+  background: var(--z-color-fg-subtle);
 }
 
 .outline-item.level-1 .outline-bullet {
   width: 6px;
   height: 6px;
-  background: #5ad8a6;
+  background: var(--z-color-accent-success);
 }
 
 .outline-text {
@@ -151,15 +151,15 @@
 }
 
 .outline-item.level-1 .outline-text {
-  color: #e5e7eb;
+  color: var(--z-color-fg-default);
 }
 
 .outline-item.level-2 .outline-text {
-  color: #d1ddff;
+  color: var(--z-color-fg-accent);
 }
 
 .outline-item.level-3 .outline-text {
-  color: #9ca3af;
+  color: var(--z-color-fg-muted);
   font-size: 12px;
 }
 
@@ -192,14 +192,14 @@
   background: transparent;
   cursor: pointer;
   margin-right: 4px;
-  color: #9ca3af;
+  color: var(--z-color-fg-muted);
   transition: transform 0.15s ease, color 0.15s ease;
   flex-shrink: 0;
 }
 
 .outline-toggle:hover {
-  color: #e5e7eb;
-  background: rgba(148, 163, 184, 0.1);
+  color: var(--z-color-fg-default);
+  background: var(--z-color-bg-surface);
   border-radius: 4px;
 }
 
@@ -223,14 +223,14 @@
   border-left-width: 7px;
   border-top-width: 5px;
   border-bottom-width: 5px;
-  border-left-color: #5ad8a6;
+  border-left-color: var(--z-color-accent-success);
 }
 
 .outline-item.level-2 .outline-toggle-icon {
   border-left-width: 6px;
   border-top-width: 4px;
   border-bottom-width: 4px;
-  border-left-color: #60a5fa;
+  border-left-color: var(--z-color-accent-primary-soft);
 }
 
 .outline-item.level-3 .outline-toggle-icon {
@@ -252,7 +252,7 @@
   border-left-width: 3px;
   border-top-width: 2px;
   border-bottom-width: 2px;
-  border-left-color: #94a3b8;
+  border-left-color: var(--z-color-fg-subtle);
 }
 
 /* 叶节点（无子节点）样式 - 显示小圆点 */
@@ -326,7 +326,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 4px 0 8px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+  border-bottom: 1px solid var(--z-color-border-strong);
 }
 
 /* File Browser 顶部标题样式，略小一号 */
@@ -335,7 +335,7 @@
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #8fa1c7;
+  color: var(--z-color-fg-default);
 }
 
 .sidebar-header-toolbar {
@@ -353,15 +353,15 @@
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: #8fa1c7;
+  color: var(--z-color-fg-subtle);
   cursor: pointer;
   padding: 0;
   font-size: 11px;
 }
 
 .sidebar-header-toolbar .toolbar-btn:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: #c4ccee;
+  background: var(--z-color-bg-surface);
+  color: var(--z-color-fg-default);
 }
 
 .sidebar-body {
@@ -388,7 +388,7 @@
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #8fa1c7;
+  color: var(--z-color-fg-subtle);
 }
 
 .folder-section-actions {
@@ -405,7 +405,7 @@
   padding: 0;
   border-radius: 4px;
   background: transparent;
-  color: #9ca3af;
+  color: var(--z-color-fg-muted);
   cursor: pointer;
   transition: background 0.12s ease-out, color 0.12s ease-out, box-shadow 0.12s ease-out, transform 0.12s ease-out;
 }
@@ -414,9 +414,9 @@
 }
 
 .folder-action-btn:hover {
-  background: rgba(59, 130, 246, 0.16);
-  color: #e5ecff;
-  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.4);
+  background: var(--haomd-soft-accent-bg);
+  color: var(--z-color-fg-default);
+  box-shadow: 0 0 0 1px var(--haomd-focus-ring);
 }
 
 /* New File 图标：文档 + 右下角加号 */
@@ -532,17 +532,17 @@
   border-radius: 6px;
   cursor: pointer;
   font-size: 12px;
-  color: #c4ccee;
+  color: var(--z-color-fg-default);
 }
 
 .sidebar-folder-row:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--z-color-bg-surface);
 }
 
 .sidebar-folder-row.active {
-  background: rgba(90, 216, 166, 0.22);
-  color: #e8ecf5;
-  box-shadow: inset 2px 0 0 rgba(90, 216, 166, 0.9);
+  background: color-mix(in srgb, var(--z-color-accent-success) 16%, transparent);
+  color: var(--z-color-fg-default);
+  box-shadow: inset 2px 0 0 var(--z-color-accent-success);
 }
 
 .tree-row {
@@ -553,12 +553,12 @@
   border-radius: 6px;
   cursor: pointer;
   font-size: 12px;
-  color: #c4ccee;
+  color: var(--z-color-fg-default);
   user-select: none;
 }
 
 .tree-row:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--z-color-bg-surface);
 }
 
 .tree-row.dir .tree-icon,
@@ -593,7 +593,7 @@
   /* 加粗一点：高约 10px、宽约 7px，更醒目 */
   border-width: 5px 0 5px 7px;
   /* 使用固定的高亮颜色，而不是跟随文字颜色，增强对比度 */
-  border-color: transparent transparent transparent #e5e7eb; /* 向右的三角 */
+  border-color: transparent transparent transparent currentColor; /* 向右的三角 */
   transform-origin: 50% 50%;
   transition: transform 0.12s ease-out;
 }
@@ -604,18 +604,18 @@
 }
 
 .tree-row.file.active {
-  background: rgba(90, 216, 166, 0.22);
-  color: #e8ecf5;
-  box-shadow: inset 2px 0 0 rgba(90, 216, 166, 0.9);
+  background: color-mix(in srgb, var(--z-color-accent-success) 16%, transparent);
+  color: var(--z-color-fg-default);
+  box-shadow: inset 2px 0 0 var(--z-color-accent-success);
 }
 
 .tree-row.new-file-editing {
-  background: rgba(59, 130, 246, 0.18);
-  color: #e5ecff;
+  background: var(--haomd-soft-accent-bg);
+  color: var(--z-color-fg-default);
 }
 
 .tree-row.new-file-editing:hover {
-  background: rgba(59, 130, 246, 0.18);
+  background: var(--haomd-soft-accent-bg);
 }
 
 .tree-name-input {
@@ -624,32 +624,32 @@
   border: none;
   outline: none;
   background: transparent;
-  color: #e5ecff;
+  color: var(--z-color-fg-default);
   font-size: 13px;
   padding: 0;
   cursor: text;
 }
 
 .tree-name-input::placeholder {
-  color: #6b7280;
+  color: var(--z-color-fg-muted);
 }
 
 .tree-row.file.highlighted {
   background: rgba(235, 37, 37, 0.604);
-  color: #bfdbfe;
+  color: var(--z-color-fg-default);
   box-shadow: none;
 }
 
 .tree-row.file.active.highlighted {
-  background: rgba(90, 216, 166, 0.22);
-  color: #e8ecf5;
-  box-shadow: inset 2px 0 0 rgba(90, 216, 166, 0.9);
+  background: color-mix(in srgb, var(--z-color-accent-success) 16%, transparent);
+  color: var(--z-color-fg-default);
+  box-shadow: inset 2px 0 0 var(--z-color-accent-success);
 }
 
 .tree-row.dir.active {
-  background: rgba(90, 216, 166, 0.22);
-  color: #e8ecf5;
-  box-shadow: inset 2px 0 0 rgba(90, 216, 166, 0.9);
+  background: color-mix(in srgb, var(--z-color-accent-success) 16%, transparent);
+  color: var(--z-color-fg-default);
+  box-shadow: inset 2px 0 0 var(--z-color-accent-success);
 }
 
 .tree-name {
@@ -708,7 +708,7 @@
   padding: 0;
   border-radius: 4px;
   background: transparent;
-  color: #9ca3af;
+  color: var(--z-color-fg-muted);
   cursor: pointer;
   font-size: 13px;
   line-height: 1;
@@ -719,9 +719,9 @@
 }
 
 .files-virtual-folder-add-btn:hover {
-  background: rgba(59, 130, 246, 0.16);
-  color: #e5ecff;
-  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.4);
+  background: var(--haomd-soft-accent-bg);
+  color: var(--z-color-fg-default);
+  box-shadow: 0 0 0 1px var(--haomd-focus-ring);
 }
 
 .sidebar-virtual-folder-inline-create {
@@ -732,15 +732,15 @@
   width: 100%;
   box-sizing: border-box;
   border-radius: 4px;
-  border: 1px solid rgba(148, 163, 184, 0.5);
-  background: rgba(15, 23, 42, 0.9);
-  color: #e5ecff;
+  border: 1px solid var(--haomd-input-border);
+  background: var(--haomd-input-bg);
+  color: var(--z-color-fg-default);
   font-size: 12px;
   padding: 4px 6px;
 }
 
 .sidebar-virtual-folder-inline-input::placeholder {
-  color: #6b7280;
+  color: var(--z-color-fg-muted);
 }
 
 .sidebar-virtual-folders {
@@ -750,8 +750,8 @@
 .sidebar-virtual-folder-section {
   border-radius: 6px;
   padding: 2px 0 4px;
-  background: rgba(15, 23, 42, 0.85);
-  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: var(--z-color-bg-surface);
+  border: 1px solid var(--z-color-border-subtle);
 }
 
 .sidebar-virtual-folder-section + .sidebar-virtual-folder-section {
@@ -766,18 +766,18 @@
   border-radius: 6px;
   cursor: pointer;
   font-size: 12px;
-  color: #c4ccee;
+  color: var(--z-color-fg-default);
 }
 
 .sidebar-virtual-folder-header:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--haomd-card-bg);
 }
 
 .sidebar-virtual-folder-toggle-icon {
   width: 14px;
   text-align: center;
   font-size: 10px;
-  color: #9ca3af;
+  color: var(--z-color-fg-muted);
 }
 
 .sidebar-virtual-folder-name {
@@ -794,7 +794,7 @@
   padding: 0;
   border-radius: 4px;
   background: transparent;
-  color: #6b7280;
+  color: var(--z-color-fg-muted);
   cursor: pointer;
   font-size: 11px;
   line-height: 1;
@@ -804,13 +804,12 @@
 }
 
 .sidebar-virtual-folder-delete-btn:hover {
-  background: rgba(248, 113, 113, 0.18);
-  color: #fecaca;
+  background: var(--haomd-soft-danger-bg);
+  color: var(--haomd-soft-danger-fg);
 }
 
 .sidebar-virtual-folder-empty {
   padding: 2px 8px 4px 18px;
   font-size: 11px;
-  color: #9ca3af;
+  color: var(--z-color-fg-muted);
 }
-

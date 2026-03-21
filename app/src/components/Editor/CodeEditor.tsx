@@ -3,6 +3,7 @@ import CodeMirror from '@uiw/react-codemirror'
 import type { Extension } from '@codemirror/state'
 import type { EditorView } from '@codemirror/view'
 import { createExtensions, type EditorOptions } from './extensions'
+import { useResolvedThemeMode } from '../../modules/theme/ThemeContext'
 
 export type CodeEditorProps = {
   value: string
@@ -22,6 +23,7 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
   ref,
 ) {
   const { value, onChange, onCursorChange, readOnly, extensions, className, placeholder, onViewReady, onFoldRegionsChange, editorZoom } = props
+  const themeMode = useResolvedThemeMode()
 
   const mergedExtensions = useMemo(() => {
     if (extensions && extensions.length) return extensions
@@ -32,8 +34,9 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
       onFoldRegionsChange,
       showLineNumbers: true,
       showActiveLine: true,
+      themeMode,
     } as EditorOptions)
-  }, [extensions, onCursorChange, readOnly, onFoldRegionsChange])
+  }, [extensions, onCursorChange, readOnly, onFoldRegionsChange, themeMode])
 
   const zoom = editorZoom ?? 1.0
   const BASE_FONT = 14
@@ -54,7 +57,7 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
         value={value}
         height="100%"
         basicSetup={false}
-        theme="dark"
+        theme={themeMode}
         className="cm-root"
         readOnly={readOnly}
         placeholder={placeholder}

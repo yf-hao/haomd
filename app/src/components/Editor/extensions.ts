@@ -16,79 +16,75 @@ import { markdown } from '@codemirror/lang-markdown'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { search } from '@codemirror/search'
 import { customSearchHighlight } from './searchHighlight'
+import type { ResolvedThemeMode } from '../../modules/theme/themeRuntime'
 
 export type EditorOptions = {
   readOnly?: boolean
   showLineNumbers?: boolean
   showActiveLine?: boolean
   enableAutocomplete?: boolean
+  themeMode?: ResolvedThemeMode
   onCursorChange?: (line: number) => void
   onFoldRegionsChange?: (regions: { fromLine: number; toLine: number }[]) => void
 }
 
-const baseTheme = EditorView.theme(
-  {
-    '&': {
-      backgroundColor: 'transparent',
-      color: '#e8ecf5',
-      fontFamily:
-        "'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-      fontSize: 'var(--haomd-editor-font-size, 14px)',
+function createBaseTheme(themeMode: ResolvedThemeMode) {
+  return EditorView.theme(
+    {
+      '&': {
+        backgroundColor: 'transparent',
+        color: 'var(--z-color-fg-default)',
+        fontFamily:
+          "'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+        fontSize: 'var(--haomd-editor-font-size, 14px)',
+      },
+      '.cm-activeLine': {
+        backgroundColor: 'transparent',
+      },
+      '.cm-content': {
+        caretColor: 'var(--haomd-editor-caret)',
+        padding: '12px 14px 12px 14px',
+        flex: '1 1 0',
+        minHeight: '100%',
+        paddingBottom: '25vh',
+      },
+      '.cm-gutters': {
+        backgroundColor: 'var(--haomd-editor-gutter-bg)',
+        color: 'var(--haomd-editor-gutter-fg)',
+        borderRight: 'none',
+        fontSize: 'var(--haomd-editor-gutter-font-size, 12px)',
+        margin: 0,
+      },
+      '.cm-gutter .cm-activeLineGutter': {
+        backgroundColor: 'var(--haomd-editor-active-gutter-bg)',
+        position: 'relative',
+      },
+      '.cm-gutter .cm-activeLineGutter::after': {
+        content: '""',
+        position: 'absolute',
+        top: 0,
+        bottom: 0,
+        right: '0px',
+        width: '2px',
+        backgroundColor: 'var(--haomd-editor-active-line-marker)',
+        boxShadow: '0 0 8px var(--haomd-editor-active-line-marker)',
+        pointerEvents: 'none',
+      },
+      '.cm-line': {
+        paddingLeft: '6px',
+      },
+      '.cm-scroller': {
+        backgroundColor: 'transparent',
+        lineHeight: '1.6',
+        padding: 0,
+      },
+      '&.cm-editor.cm-focused': {
+        outline: 'none',
+      },
     },
-    // 当前行（编辑区正文）：不再使用底色高亮，只依靠左侧 gutter 的绿色竖条
-    '.cm-activeLine': {
-      backgroundColor: 'transparent',
-    },
-    '.cm-content': {
-      caretColor: '#7ad7ff',
-      padding: '12px 14px 12px 14px',
-      flex: '1 1 0',
-      minHeight: '100%',
-      // 在文档末尾预留一段"虚拟空白"，避免最后一行贴着底部
-      paddingBottom: '25vh',
-    },
-    '.cm-gutters': {
-      backgroundColor: '#10121d',
-      color: '#8fa1c7',
-      borderRight: 'none',
-      fontSize: 'var(--haomd-editor-gutter-font-size, 12px)',
-      // padding: '0px 5px 0px 5px',
-      margin: 0,
-    },
-    // 光标所在行：所有 gutter 的 active 单元格统一高亮背景（更明显）
-    '.cm-gutter .cm-activeLineGutter': {
-      
-      // 提高对比度：更深的蓝色 + 更高不透明度，让当前行更突出
-      backgroundColor: 'rgba(37, 99, 235, 0.55)', // #2563eb @ 55%
-      position: 'relative',
-    },
-    // 竖绿条整体向右移动 5px（从 gutter 右边界外移）
-    '.cm-gutter .cm-activeLineGutter::after': {
-      content: '""',
-      position: 'absolute',
-      top: 0,
-      bottom: 0,
-      right: '0px',
-      width: '2px',
-      // 更亮一点的绿色，并带一点发光效果
-      backgroundColor: '#4ade80', // 比 #22c55e 更鲜亮
-      boxShadow: '0 0 8px rgba(74, 222, 128, 0.9)',
-      pointerEvents: 'none',
-    },
-    '.cm-line': {
-      paddingLeft: '6px',
-    },
-    '.cm-scroller': {
-      backgroundColor: 'transparent',
-      lineHeight: '1.6',
-      padding: 0,
-    },
-    '&.cm-editor.cm-focused': {
-      outline: 'none',
-    },
-  },
-  { dark: true },
-)
+    { dark: themeMode === 'dark' },
+  )
+}
 
 function cursorSyncPlugin(onCursorChange?: (line: number) => void): Extension[] {
   if (!onCursorChange) return []
@@ -211,6 +207,7 @@ export function createExtensions(options: EditorOptions = {}): Extension[] {
     showLineNumbers = true,
     showActiveLine = true,
     enableAutocomplete = true,
+    themeMode = 'dark',
     onCursorChange,
     onFoldRegionsChange,
   } = options
@@ -227,8 +224,7 @@ export function createExtensions(options: EditorOptions = {}): Extension[] {
   ]
 
   const extensions: Extension[] = [
-    oneDark,
-    baseTheme,
+    createBaseTheme(themeMode),
     EditorState.tabSize.of(2),
     drawSelection(),
     indentOnInput(),
@@ -246,6 +242,10 @@ export function createExtensions(options: EditorOptions = {}): Extension[] {
     language,
     EditorView.editable.of(!readOnly),
   ]
+
+  if (themeMode === 'dark') {
+    extensions.unshift(oneDark)
+  }
 
   if (showLineNumbers) extensions.unshift(lineNumbers(), foldGutter())
   if (showActiveLine) extensions.push(highlightActiveLine(), highlightActiveLineGutter())
