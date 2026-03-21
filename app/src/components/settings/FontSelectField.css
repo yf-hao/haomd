@@ -6,7 +6,7 @@
 
 .font-select-helper {
   font-size: 12px;
-  color: var(--z-color-fg-subtle);
+  color: var(--theme-text-subtle);
 }
 
 .font-select-toggle {
@@ -16,9 +16,9 @@
   justify-content: space-between;
   gap: 16px;
   border-radius: 10px;
-  border: 1px solid var(--haomd-input-border);
-  background: var(--haomd-input-bg);
-  color: var(--z-color-fg-default);
+  border: 1px solid var(--theme-border-input);
+  background: var(--theme-surface-input);
+  color: var(--theme-text-default);
   padding: 10px 12px;
   cursor: pointer;
   text-align: left;
@@ -27,19 +27,19 @@
 
 .font-select-toggle:hover,
 .font-select-toggle.expanded {
-  border-color: var(--z-color-accent-primary-soft);
-  background: var(--haomd-input-bg-soft-hover);
+  border-color: var(--theme-accent-primary-soft);
+  background: var(--theme-surface-input-soft-hover);
 }
 
 .font-select-toggle-label {
   font-size: 12px;
   font-weight: 600;
-  color: var(--z-color-fg-muted);
+  color: var(--theme-text-muted);
 }
 
 .font-select-toggle-value {
   font-size: 13px;
-  color: var(--z-color-fg-default);
+  color: var(--theme-text-default);
 }
 
 .font-select-search {
@@ -55,9 +55,9 @@
   max-height: 85vh;
   overflow: auto;
   border-radius: 10px;
-  border: 1px solid var(--haomd-card-border);
-  background: var(--haomd-modal-bg);
-  box-shadow: var(--haomd-card-shadow);
+  border: 1px solid var(--theme-border-subtle);
+  background: var(--theme-surface-modal);
+  box-shadow: var(--theme-shadow-card);
   padding: 10px;
   display: grid;
   gap: 12px;
@@ -72,7 +72,7 @@
   font-size: 11px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--z-color-fg-subtle);
+  color: var(--theme-text-subtle);
 }
 
 .font-select-group-list {
@@ -86,10 +86,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border: 1px solid var(--haomd-input-border);
+  border: 1px solid var(--theme-border-input);
   border-radius: 8px;
-  background: var(--haomd-input-bg-soft);
-  color: var(--z-color-fg-default);
+  background: var(--theme-surface-input-soft);
+  color: var(--theme-text-default);
   padding: 8px 10px;
   cursor: pointer;
   text-align: left;
@@ -97,36 +97,36 @@
 }
 
 .font-select-option:hover {
-  border-color: var(--z-color-accent-primary-soft);
-  background: var(--haomd-input-bg-soft-hover);
+  border-color: var(--theme-accent-primary-soft);
+  background: var(--theme-surface-input-soft-hover);
 }
 
 .font-select-option.active {
-  border-color: var(--z-color-accent-primary-soft);
-  background: var(--haomd-card-bg-active);
+  border-color: var(--theme-accent-primary-soft);
+  background: var(--theme-surface-card-active);
 }
 
 .font-select-option.highlighted {
   outline: none;
-  box-shadow: 0 0 0 1px var(--haomd-selection-ring);
+  box-shadow: 0 0 0 1px var(--theme-component-selection-ring);
 }
 
 .font-select-option-name {
   font-size: 13px;
-  color: var(--z-color-fg-default);
+  color: var(--theme-text-default);
 }
 
 .font-select-option-source {
   font-size: 11px;
-  color: var(--z-color-fg-subtle);
+  color: var(--theme-text-subtle);
   text-transform: uppercase;
 }
 
 .font-select-state {
   font-size: 12px;
-  color: var(--z-color-fg-muted);
+  color: var(--theme-text-muted);
 }
 
 .font-select-state-error {
-  color: #fecaca;
+  color: var(--theme-accent-soft-danger-fg);
 }

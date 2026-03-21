@@ -10,10 +10,10 @@ import {
   loadEditorSettings,
   saveEditorSettings,
   type EditorSettings,
-  type ThemeMode,
   type ThemeSettings,
   type WordExportStyleSettings,
 } from '../modules/settings/editorSettings'
+import type { ThemeMode } from '../modules/theme/schema'
 
 export type SettingsDialogProps = {
   open: boolean

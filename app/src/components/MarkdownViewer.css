@@ -5,7 +5,7 @@
 /* 应用内预览使用暗色背景，不影响导出 HTML（导出不带 gh-markdown 类） */
 .markdown-body.gh-markdown {
   background: var(--markdown-preview-bg);
-  color: var(--z-color-fg-default);
+  color: var(--theme-text-default);
 }
 
 .markdown-body.gh-markdown p,
@@ -84,9 +84,9 @@
 } */
 /* var(--bgColor-muted) */
 .markdown-body code:not(:is(pre code)) {
-  background-color: var(--haomd-card-bg-active);
-  color: var(--z-color-fg-default);
-  border: 1px solid var(--haomd-card-border);
+  background-color: var(--theme-surface-card-active);
+  color: var(--theme-text-default);
+  border: 1px solid var(--theme-border-subtle);
   padding: 2px 5px;
   border-radius: 4px;
   display: inline;
@@ -128,8 +128,8 @@
 
 :root[data-theme='light'] .markdown-body .code-copy-button {
   background-color: rgba(15, 23, 42, 0.08);
-  color: var(--z-color-fg-default);
-  border: 1px solid var(--haomd-input-border);
+  color: var(--theme-text-default);
+  border: 1px solid var(--theme-border-input);
 }
 
 .markdown-body .code-block-wrapper:hover .code-copy-button,
@@ -173,7 +173,7 @@
   margin: 8px 0 12px;
   padding: 8px 12px;
   border-radius: 4px;
-  background-color: rgba(15, 23, 42, 0.6);
+  background-color: var(--theme-surface-card-active);
 }
 
 .markdown-body.gh-markdown .md-toc-summary {

@@ -27,13 +27,13 @@ export function PdfSidebarPanel(props: PdfSidebarPanelProps) {
             </div>
             <div className="pdf-panel-content">
                 {pdfRecentLoading && (
-                    <p style={{ color: 'var(--z-color-fg-muted)', padding: '12px', fontSize: '13px' }}>正在加载最近的 PDF...</p>
+                    <p style={{ color: 'var(--theme-text-muted)', padding: '12px', fontSize: '13px' }}>正在加载最近的 PDF...</p>
                 )}
                 {!pdfRecentLoading && pdfRecentError && (
-                    <p style={{ color: 'var(--z-color-danger)', padding: '12px', fontSize: '13px' }}>{pdfRecentError}</p>
+                    <p style={{ color: 'var(--theme-accent-danger)', padding: '12px', fontSize: '13px' }}>{pdfRecentError}</p>
                 )}
                 {!pdfRecentLoading && !pdfRecentError && pdfRecent.length === 0 && (
-                    <p style={{ color: 'var(--z-color-fg-muted)', padding: '12px', fontSize: '13px' }}>
+                    <p style={{ color: 'var(--theme-text-muted)', padding: '12px', fontSize: '13px' }}>
                         No recent PDFs. Use File → Open to open a PDF file.
                     </p>
                 )}

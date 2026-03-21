@@ -39,13 +39,13 @@
 .logo-title {
   font-size: 36px;
   font-weight: 700;
-  color: var(--z-color-fg-default);
+  color: var(--theme-text-default);
   letter-spacing: -0.5px;
 }
 
 .welcome-subtitle {
   font-size: 16px;
-  color: var(--z-color-fg-muted);
+  color: var(--theme-text-muted);
   text-align: center;
   margin: 0 0 56px 0;
 }
@@ -72,27 +72,27 @@
 }
 
 .welcome-button.primary {
-  background: linear-gradient(135deg, var(--z-color-accent-primary), var(--z-color-accent-primary-soft));
+  background: linear-gradient(135deg, var(--theme-accent-primary), var(--theme-accent-primary-soft));
   color: #ffffff;
-  box-shadow: 0 4px 12px var(--haomd-focus-ring);
+  box-shadow: 0 4px 12px var(--theme-component-focus-ring);
 }
 
 .welcome-button.primary:hover {
-  background: linear-gradient(135deg, var(--z-color-accent-primary), var(--z-color-accent-primary-alt));
-  box-shadow: 0 6px 16px var(--haomd-focus-ring);
+  background: linear-gradient(135deg, var(--theme-accent-primary), var(--theme-accent-primary-alt));
+  box-shadow: 0 6px 16px var(--theme-component-focus-ring);
   transform: translateY(-2px);
 }
 
 .welcome-button.secondary {
-  background: var(--haomd-input-bg);
-  color: var(--z-color-fg-default);
-  border: 1px solid var(--haomd-input-border-strong);
+  background: var(--theme-surface-input);
+  color: var(--theme-text-default);
+  border: 1px solid var(--theme-border-input-strong);
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
 }
 
 .welcome-button.secondary:hover {
-  background: var(--haomd-card-bg-active);
-  border-color: var(--z-color-accent-primary-soft);
+  background: var(--theme-surface-card-active);
+  border-color: var(--theme-accent-primary-soft);
   transform: translateY(-2px);
 }
 

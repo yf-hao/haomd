@@ -1906,13 +1906,13 @@ export function WorkspaceShell({
                 </div>
               )}
               {pdfRecentLoading && (
-                <p style={{ color: 'var(--z-color-fg-muted)', padding: '12px', fontSize: '13px' }}>正在加载最近的 PDF...</p>
+                <p style={{ color: 'var(--theme-text-muted)', padding: '12px', fontSize: '13px' }}>正在加载最近的 PDF...</p>
               )}
               {!pdfRecentLoading && pdfRecentError && (
-                <p style={{ color: 'var(--z-color-danger)', padding: '12px', fontSize: '13px' }}>{pdfRecentError}</p>
+                <p style={{ color: 'var(--theme-accent-danger)', padding: '12px', fontSize: '13px' }}>{pdfRecentError}</p>
               )}
               {!pdfRecentLoading && !pdfRecentError && pdfRecent.length === 0 && (
-                <p style={{ color: 'var(--z-color-fg-muted)', padding: '12px', fontSize: '13px' }}>
+                <p style={{ color: 'var(--theme-text-muted)', padding: '12px', fontSize: '13px' }}>
                   No recent PDFs. Use File → Open to open a PDF file.
                 </p>
               )}
@@ -2007,7 +2007,7 @@ export function WorkspaceShell({
                         </div>
                         {isCollapsed ? null : (
                           items.length === 0 ? (
-                            <div className="pdf-folder-empty" style={{ padding: '4px 12px', fontSize: '12px', color: 'var(--z-color-fg-muted)' }}>
+                            <div className="pdf-folder-empty" style={{ padding: '4px 12px', fontSize: '12px', color: 'var(--theme-text-muted)' }}>
                               No PDFs yet. Move recent files into this virtual folder to show them here.
                             </div>
                           ) : (
@@ -2147,7 +2147,15 @@ export function WorkspaceShell({
             />
           ) : (
             <>
-              <TabBar tabs={tabs} activeId={activeId} onTabClick={setActiveTab} onTabClose={closeTabWithAiSession} onRequestSaveAndClose={handleTabSaveAndClose} />
+              {effectiveLayout === 'preview-only' && (
+                <TabBar
+                  tabs={tabs}
+                  activeId={activeId}
+                  onTabClick={setActiveTab}
+                  onTabClose={closeTabWithAiSession}
+                  onRequestSaveAndClose={handleTabSaveAndClose}
+                />
+              )}
               <main className={`workspace ${dragging ? 'dragging' : ''}`} style={{ gridTemplateColumns: outerGridTemplateColumns }}>
                 {aiChatMode === 'docked' && aiChatOpen && aiChatState && (
                   <>
@@ -2182,6 +2190,15 @@ export function WorkspaceShell({
                     }
                   >
                     <Suspense fallback={<div className="code-editor" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13 }}>加载编辑器…</div>}>
+                      {effectiveLayout !== 'preview-only' && (
+                        <TabBar
+                          tabs={tabs}
+                          activeId={activeId}
+                          onTabClick={setActiveTab}
+                          onTabClose={closeTabWithAiSession}
+                          onRequestSaveAndClose={handleTabSaveAndClose}
+                        />
+                      )}
                       {isSearchOpen && (
                         <SearchBar
                           view={editorViewRef.current}
@@ -2248,7 +2265,7 @@ export function WorkspaceShell({
                   </PreviewErrorBoundary>
 
                   {(effectiveLayout === 'preview-left' || effectiveLayout === 'preview-right') && (
-                    <div className={`divider-hotzone ${dragging ? 'active' : ''}`} style={{ left: effectiveLayout === 'preview-left' ? `${previewWidthForRender}%` : `${100 - previewWidthForRender}%` }} onMouseDown={startDragging}>
+                    <div className={`divider-hotzone editor-preview-divider ${dragging ? 'active' : ''}`} style={{ left: effectiveLayout === 'preview-left' ? `${previewWidthForRender}%` : `${100 - previewWidthForRender}%` }} onMouseDown={startDragging}>
                       <div className="divider-rail"><span className="divider-handle" /></div>
                     </div>
                   )}

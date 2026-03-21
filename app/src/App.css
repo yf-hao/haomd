@@ -1,5 +1,5 @@
 :root {
-  --markdown-preview-bg: var(--haomd-preview-bg);
+  --markdown-preview-bg: var(--theme-surface-preview);
 
   /* z-index 分层规范 */
   --z-content: 1;          /* 内容层：复制按钮、拖拽手柄等 */
@@ -21,8 +21,8 @@ button:disabled {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: var(--haomd-shell-bg);
-  color: var(--z-color-fg-default);
+  background: var(--theme-surface-shell);
+  color: var(--theme-text-default);
   overflow: hidden;
 }
 
@@ -37,8 +37,8 @@ button:disabled {
   width: 44px;
   min-width: 44px;
   max-width: 44px;
-  border-right: 1px solid var(--z-color-border-subtle);
-  background: var(--haomd-sidebar-bg);
+  border-right: 1px solid var(--theme-border-subtle);
+  background: var(--theme-surface-sidebar);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -52,7 +52,7 @@ button:disabled {
   border-radius: 8px;
   border: none;
   background: transparent;
-  color: var(--z-color-fg-muted);
+  color: var(--theme-text-muted);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -61,13 +61,13 @@ button:disabled {
 }
 
 .activity-item:hover {
-  background: var(--haomd-sidebar-hover);
-  color: var(--z-color-fg-default);
+  background: var(--theme-component-sidebar-hover);
+  color: var(--theme-text-default);
 }
 
 .activity-item.active {
-  background: var(--haomd-sidebar-active);
-  color: var(--z-color-fg-default);
+  background: var(--theme-component-sidebar-active);
+  color: var(--theme-text-default);
 }
 
 .activity-icon-file {
@@ -86,7 +86,7 @@ button:disabled {
   width: 8px;
   height: 8px;
   border-radius: 2px;
-  background: var(--haomd-sidebar-bg);
+  background: var(--theme-surface-sidebar);
   border-left: 1.5px solid currentColor;
   border-bottom: 1.5px solid currentColor;
   transform: translate(-1px, 1px) rotate(0deg);
@@ -137,7 +137,7 @@ button:disabled {
   width: 8px;
   height: 8px;
   border-radius: 2px;
-  background: var(--haomd-sidebar-bg);
+  background: var(--theme-surface-sidebar);
   border-left: 1.5px solid currentColor;
   border-bottom: 1.5px solid currentColor;
   transform: translate(-1px, 1px) rotate(0deg);
@@ -189,8 +189,8 @@ button:disabled {
 
 /* 会话 Panel */
 .conversation-panel {
-  background: var(--haomd-panel-bg);
-  border-right: 1px solid var(--z-color-border-subtle);
+  background: var(--theme-surface-panel);
+  border-right: 1px solid var(--theme-border-subtle);
   backdrop-filter: blur(8px);
   display: flex;
   flex-direction: column;
@@ -200,10 +200,10 @@ button:disabled {
 
 .conversation-panel-header {
   padding: 12px 16px;
-  border-bottom: 1px solid var(--z-color-border-subtle);
+  border-bottom: 1px solid var(--theme-border-subtle);
   font-size: 12px;
   font-weight: 600;
-  color: var(--z-color-fg-subtle);
+  color: var(--theme-text-subtle);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -213,7 +213,7 @@ button:disabled {
   min-height: 0;
   padding: 8px 12px;
   font-size: 13px;
-  color: var(--z-color-fg-muted);
+  color: var(--theme-text-muted);
 }
 
 .conversation-panel-empty {
@@ -224,8 +224,8 @@ button:disabled {
 /* PDF Panel */
 .pdf-panel {
   /* 与文件浏览器 Sidebar 保持一致的深色毛玻璃风格 */
-  background: var(--haomd-panel-bg);
-  border-right: 1px solid var(--z-color-border-subtle);
+  background: var(--theme-surface-panel);
+  border-right: 1px solid var(--theme-border-subtle);
   backdrop-filter: blur(8px);
   display: flex;
   flex-direction: column;
@@ -235,10 +235,10 @@ button:disabled {
 
 .pdf-panel-header {
   padding: 12px 16px;
-  border-bottom: 1px solid var(--z-color-border-subtle);
+  border-bottom: 1px solid var(--theme-border-subtle);
   font-size: 12px;
   font-weight: 600;
-  color: var(--z-color-fg-subtle);
+  color: var(--theme-text-subtle);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   display: flex;
@@ -249,9 +249,9 @@ button:disabled {
 
 .pdf-folder-add-btn {
   background: transparent;
-  border: 1px solid var(--haomd-input-border-strong);
+  border: 1px solid var(--theme-border-input-strong);
   border-radius: 4px;
-  color: var(--z-color-fg-accent);
+  color: var(--theme-text-accent);
   font-size: 12px;
   width: 20px;
   height: 20px;
@@ -261,7 +261,7 @@ button:disabled {
 }
 
 .pdf-folder-add-btn:hover {
-  background: var(--haomd-sidebar-hover);
+  background: var(--theme-component-sidebar-hover);
 }
 
 .pdf-folder-section {
@@ -272,8 +272,8 @@ button:disabled {
   padding: 4px 12px 2px 16px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--z-color-fg-default);
-  background: var(--haomd-card-bg);
+  color: var(--theme-text-default);
+  background: var(--theme-surface-card);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -281,7 +281,7 @@ button:disabled {
 }
 
 .pdf-folder-header:hover {
-  background: var(--haomd-card-bg-active);
+  background: var(--theme-surface-card-active);
 }
 
 .pdf-folder-toggle-icon {
@@ -297,10 +297,10 @@ button:disabled {
 
 .pdf-folder-rename-input {
   width: 100%;
-  background: var(--haomd-input-bg);
+  background: var(--theme-surface-input);
   border-radius: 4px;
-  border: 1px solid var(--haomd-input-border-strong);
-  color: var(--z-color-fg-default);
+  border: 1px solid var(--theme-border-input-strong);
+  color: var(--theme-text-default);
   font-size: 12px;
   padding: 2px 6px;
   outline: none;
@@ -312,7 +312,7 @@ button:disabled {
   border-radius: 999px;
   border: none;
   background: transparent;
-  color: var(--z-color-fg-muted);
+  color: var(--theme-text-muted);
   font-size: 11px;
   padding-bottom: 6px;
   display: flex;
@@ -323,13 +323,13 @@ button:disabled {
 }
 
 .pdf-folder-delete-btn:hover {
-  background: var(--haomd-soft-danger-bg);
-  color: var(--haomd-soft-danger-fg);
+  background: var(--theme-accent-soft-danger-bg);
+  color: var(--theme-accent-soft-danger-fg);
 }
 
 .pdf-folder-rename-input:focus {
-  border-color: var(--z-color-accent-primary-soft);
-  box-shadow: 0 0 0 1px var(--haomd-focus-ring);
+  border-color: var(--theme-accent-primary-soft);
+  box-shadow: 0 0 0 1px var(--theme-component-focus-ring);
 }
 
 .pdf-panel-content {
@@ -348,19 +348,19 @@ button:disabled {
   border-radius: 6px;
   cursor: pointer;
   font-size: 13px;
-  color: var(--z-color-fg-accent);
+  color: var(--theme-text-accent);
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
 .pdf-recent-item:hover {
-  background: var(--z-color-bg-surface);
+  background: var(--theme-surface-card);
 }
 
 .pdf-recent-item.active {
-  background: var(--haomd-soft-accent-bg);
-  color: var(--z-color-fg-default);
+  background: var(--theme-accent-soft-accent-bg);
+  color: var(--theme-text-default);
 }
 
 .pdf-recent-title {
@@ -371,7 +371,7 @@ button:disabled {
 
 .pdf-recent-meta {
   font-size: 11px;
-  color: var(--z-color-fg-muted);
+  color: var(--theme-text-muted);
 }
 
 .workspace-column {
@@ -423,7 +423,15 @@ button:disabled {
 /* 针对编辑器区域，允许其内部滚动，并统一背景为编辑区色 */
 .pane.editor-pane {
   overflow: visible;
-  background: var(--haomd-editor-bg);
+  background: var(--theme-surface-editor);
+}
+
+.pane.editor-pane > .tab-bar {
+  flex: 0 0 auto;
+  width: 100%;
+  background: var(--theme-surface-editor);
+  border-bottom-color: var(--theme-border-input);
+  backdrop-filter: none;
 }
 
 .pane.editor-pane > .code-editor {
@@ -575,14 +583,14 @@ button:disabled {
 }
 
 .pdf-text-layer ::selection {
-  background: var(--haomd-soft-accent-bg);
+  background: var(--theme-accent-soft-accent-bg);
 }
 
 .pdf-viewer-sidebar {
   width: 50px;
   max-width: 70px;
-  border-left: 1px solid var(--z-color-border-subtle);
-  background: var(--haomd-toolbar-bg);
+  border-left: 1px solid var(--theme-border-subtle);
+  background: var(--theme-surface-toolbar);
   padding: 16px 5px;
   box-sizing: border-box;
   display: flex;
@@ -609,7 +617,7 @@ button:disabled {
 .pdf-toolbar-separator {
   width: 60%;
   height: 1px;
-  background: var(--haomd-input-border);
+  background: var(--theme-border-input);
 }
 
 /* 页码显示：当前页大号胶囊 + 总页数文本 */
@@ -622,21 +630,21 @@ button:disabled {
   width: 40px;
   height: 40px;
   border-radius: 6px;
-  border: 1px solid var(--haomd-toolbar-btn-border);
-  background: var(--haomd-toolbar-btn-bg);
-  color: var(--haomd-toolbar-btn-fg);
+  border: 1px solid var(--theme-border-toolbar);
+  background: var(--theme-surface-toolbar-button);
+  color: var(--theme-text-toolbar);
   font-size: 14px;
   text-align: center;
   outline: none;
 }
 
 .pdf-page-input-pill::placeholder {
-  color: var(--haomd-toolbar-btn-muted);
+  color: var(--theme-text-toolbar-muted);
 }
 
 .pdf-page-total-text {
   font-size: 11px;
-  color: var(--haomd-toolbar-btn-muted);
+  color: var(--theme-text-toolbar-muted);
 }
 
 /* 通用圆角图标按钮 */
@@ -644,9 +652,9 @@ button:disabled {
   width: 36px;
   height: 36px;
   border-radius: 6px;
-  border: 1px solid var(--haomd-toolbar-btn-border);
-  background: var(--haomd-toolbar-btn-bg);
-  color: var(--haomd-toolbar-btn-fg);
+  border: 1px solid var(--theme-border-toolbar);
+  background: var(--theme-surface-toolbar-button);
+  color: var(--theme-text-toolbar);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -670,8 +678,8 @@ button:disabled {
 }
 
 .pdf-icon-btn:hover:not(:disabled) {
-  background: var(--haomd-toolbar-btn-bg-hover);
-  border-color: var(--haomd-toolbar-btn-border-hover);
+  background: var(--theme-surface-toolbar-button-hover);
+  border-color: var(--theme-border-toolbar-hover);
   transform: translateY(-0.5px);
 }
 
@@ -682,7 +690,7 @@ button:disabled {
 
 .pdf-zoom-percent {
   font-size: 12px;
-  color: var(--haomd-toolbar-btn-fg);
+  color: var(--theme-text-toolbar);
 }
 
 .pdf-zoom-icon-row {
@@ -697,15 +705,15 @@ button:disabled {
   flex-direction: column;
   gap: 10px;
   font-size: 12px;
-  color: var(--haomd-toolbar-btn-muted);
+  color: var(--theme-text-toolbar-muted);
 }
 
 .pdf-page-btn {
   height: 30px;
   border-radius: 6px;
-  border: 1px solid var(--haomd-toolbar-btn-border);
-  background: var(--haomd-toolbar-btn-bg);
-  color: var(--haomd-toolbar-btn-fg);
+  border: 1px solid var(--theme-border-toolbar);
+  background: var(--theme-surface-toolbar-button);
+  color: var(--theme-text-toolbar);
   font-size: 12px;
   cursor: pointer;
   padding: 0 10px;
@@ -714,8 +722,8 @@ button:disabled {
 }
 
 .pdf-page-btn:hover:not(:disabled) {
-  background: var(--haomd-toolbar-btn-bg-hover);
-  border-color: var(--haomd-toolbar-btn-border-hover);
+  background: var(--theme-surface-toolbar-button-hover);
+  border-color: var(--theme-border-toolbar-hover);
   transform: translateY(-0.5px);
 }
 
@@ -735,7 +743,7 @@ button:disabled {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--z-color-fg-subtle);
+  color: var(--theme-text-subtle);
 }
 
 .pdf-page-input-group {
@@ -762,9 +770,9 @@ button:disabled {
   width: 28px;
   height: 28px;
   border-radius: 6px;
-  border: 1px solid var(--haomd-toolbar-btn-border);
-  background: var(--haomd-toolbar-btn-bg-strong);
-  color: var(--haomd-toolbar-btn-fg);
+  border: 1px solid var(--theme-border-toolbar);
+  background: var(--theme-surface-toolbar-button-strong);
+  color: var(--theme-text-toolbar);
   font-size: 14px;
   cursor: pointer;
   display: flex;
@@ -774,7 +782,7 @@ button:disabled {
 }
 
 .pdf-zoom-btn:hover:not(:disabled) {
-  border-color: var(--haomd-toolbar-btn-border-hover);
+  border-color: var(--theme-border-toolbar-hover);
 }
 
 .pdf-zoom-btn:disabled {
@@ -786,7 +794,7 @@ button:disabled {
   min-width: 56px;
   text-align: center;
   font-size: 12px;
-  color: var(--haomd-toolbar-btn-fg);
+  color: var(--theme-text-toolbar);
 }
 
 .pdf-zoom-fit,
@@ -795,7 +803,7 @@ button:disabled {
   margin-top: 2px;
   border: none;
   background: transparent;
-  color: var(--haomd-toolbar-btn-muted);
+  color: var(--theme-text-toolbar-muted);
   font-size: 11px;
   cursor: pointer;
   padding: 0;
@@ -803,7 +811,7 @@ button:disabled {
 
 .pdf-zoom-fit:hover:not(:disabled),
 .pdf-zoom-reset:hover:not(:disabled) {
-  color: var(--haomd-toolbar-btn-fg);
+  color: var(--theme-text-toolbar);
   text-decoration: underline;
 }
 
@@ -817,22 +825,22 @@ button:disabled {
   width: 64px;
   height: 28px;
   border-radius: 6px;
-  border: 1px solid var(--haomd-input-border-strong);
-  background: var(--haomd-input-bg);
-  color: var(--z-color-fg-default);
+  border: 1px solid var(--theme-border-input-strong);
+  background: var(--theme-surface-input);
+  color: var(--theme-text-default);
   padding: 0 8px;
   font-size: 12px;
   outline: none;
 }
 
 .pdf-page-input:focus {
-  border-color: var(--z-color-accent-primary-soft);
-  box-shadow: 0 0 0 1px var(--haomd-focus-ring);
+  border-color: var(--theme-accent-primary-soft);
+  box-shadow: 0 0 0 1px var(--theme-component-focus-ring);
 }
 
 .pdf-page-total {
   font-size: 12px;
-  color: var(--z-color-fg-muted);
+  color: var(--theme-text-muted);
 }
 
 
@@ -847,9 +855,11 @@ button:disabled {
   align-items: center;
   gap: 8px;
   justify-content: space-between;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--z-color-border-strong);
-  background: var(--haomd-panel-bg);
+  padding: 0 12px;
+  min-height: var(--theme-component-tabbar-height);
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--theme-border-strong);
+  background: var(--theme-surface-panel);
 }
 
 .ai-chat-pane-title {
@@ -862,7 +872,7 @@ button:disabled {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: var(--haomd-panel-bg);
+  background: var(--theme-surface-panel);
 }
 
 /* Dock 模式下的 AI Chat 布局：上方消息滚动，下方输入固定 */
@@ -912,9 +922,9 @@ button:disabled {
   top: 12px;
   right: 12px;
   z-index: var(--z-content);
-  border: 1px solid var(--z-color-border-subtle);
-  background: var(--z-color-bg-surface);
-  color: var(--z-color-fg-default);
+  border: 1px solid var(--theme-border-subtle);
+  background: var(--theme-surface-card);
+  color: var(--theme-text-default);
   padding: 8px 12px;
   border-radius: 10px;
   font-size: 12px;
@@ -924,11 +934,11 @@ button:disabled {
 
 .floating-toggle:hover,
 .floating-toggle:focus-visible {
-  border-color: var(--haomd-toolbar-btn-border-hover);
-  background: var(--haomd-card-bg-active);
-  color: var(--z-color-fg-default);
+  border-color: var(--theme-border-toolbar-hover);
+  background: var(--theme-surface-card-active);
+  color: var(--theme-text-default);
   outline: none;
-  box-shadow: 0 0 12px var(--haomd-focus-ring);
+  box-shadow: 0 0 12px var(--theme-component-focus-ring);
 }
 
 .editor {
@@ -968,12 +978,12 @@ button:disabled {
 .sidebar-context-menu {
   min-width: 180px;
   padding: 4px 0;
-  background: var(--haomd-modal-bg);
+  background: var(--theme-surface-modal);
   border-radius: 6px;
   box-shadow:
     0 8px 24px rgba(0, 0, 0, 0.3),
-    0 0 0 1px var(--z-color-border-strong);
-  border: 1px solid var(--z-color-border-subtle);
+    0 0 0 1px var(--theme-border-strong);
+  border: 1px solid var(--theme-border-subtle);
   backdrop-filter: blur(12px);
 }
 
@@ -986,13 +996,13 @@ button:disabled {
   text-align: left;
   font-size: 13px;
   line-height: 22px;
-  color: var(--z-color-fg-default);
+  color: var(--theme-text-default);
   cursor: default;
 }
 
 .sidebar-context-menu button:hover,
 .sidebar-context-menu button.active {
-  background: var(--z-color-accent-primary);
+  background: var(--theme-accent-primary);
   color: #ffffff;
 }
 
@@ -1021,26 +1031,26 @@ button:disabled {
 
 .modal-btn:focus-visible,
 .modal-btn:focus {
-  outline: 2px solid var(--z-color-accent-primary-soft);
+  outline: 2px solid var(--theme-accent-primary-soft);
   outline-offset: 2px;
-  box-shadow: 0 0 0 1px var(--haomd-focus-ring);
+  box-shadow: 0 0 0 1px var(--theme-component-focus-ring);
 }
 
 .modal-btn.primary {
-  border: 1px solid var(--z-color-accent-primary-alt);
-  background: linear-gradient(135deg, var(--z-color-accent-primary-alt), var(--z-color-accent-primary-alt-soft));
+  border: 1px solid var(--theme-accent-primary-alt);
+  background: linear-gradient(135deg, var(--theme-accent-primary-alt), var(--theme-accent-primary-alt-soft));
   color: #0a0c12;
 }
 
 .modal-btn.secondary {
-  background: var(--z-color-bg-surface);
-  color: var(--z-color-fg-default);
+  background: var(--theme-surface-card);
+  color: var(--theme-text-default);
 }
 
 .modal-btn.tertiary {
   background: transparent;
-  color: var(--z-color-fg-default);
-  border: 1px solid var(--z-color-border-subtle);
+  color: var(--theme-text-default);
+  border: 1px solid var(--theme-border-subtle);
 }
 
 .modal-btn:hover {
@@ -1079,7 +1089,7 @@ button:disabled {
   left: 0;
   right: 0;
   bottom: 0;
-  background: var(--haomd-overlay-bg);
+  background: var(--theme-surface-overlay);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -1099,10 +1109,10 @@ button:disabled {
 }
 
 .modal {
-  background: var(--haomd-modal-bg);
-  border: 1px solid var(--z-color-border-strong);
+  background: var(--theme-surface-modal);
+  border: 1px solid var(--theme-border-strong);
   border-radius: 12px;
-  box-shadow: var(--haomd-modal-shadow);
+  box-shadow: var(--theme-shadow-modal);
   backdrop-filter: blur(12px);
   min-width: 360px;
   max-width: 480px;
@@ -1155,20 +1165,20 @@ button:disabled {
   height: 32px;
   padding: 6px 10px;
   border-radius: 8px;
-  border: 1px solid var(--haomd-input-border);
-  background: var(--haomd-input-bg);
-  color: var(--z-color-fg-default);
+  border: 1px solid var(--theme-border-input);
+  background: var(--theme-surface-input);
+  color: var(--theme-text-default);
   font-size: 13px;
   outline: none;
 }
 
 .recent-dialog-search-input::placeholder {
-  color: var(--z-color-fg-muted);
+  color: var(--theme-text-muted);
 }
 
 .recent-dialog-search-input:focus {
-  border-color: var(--z-color-accent-primary-soft);
-  box-shadow: 0 0 0 1px var(--haomd-focus-ring);
+  border-color: var(--theme-accent-primary-soft);
+  box-shadow: 0 0 0 1px var(--theme-component-focus-ring);
 }
 
 /* 最近文件列表项样式与高亮态 */
@@ -1177,19 +1187,19 @@ button:disabled {
   border-radius: 8px;
   cursor: pointer;
   font-size: 13px;
-  color: var(--z-color-fg-default);
+  color: var(--theme-text-default);
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
 .recent-dialog-item:hover {
-  background: var(--z-color-bg-surface);
+  background: var(--theme-surface-card);
 }
 
 .recent-dialog-item.active {
-  background: var(--haomd-soft-accent-bg);
-  color: var(--z-color-fg-default);
+  background: var(--theme-accent-soft-accent-bg);
+  color: var(--theme-text-default);
 }
 
 .recent-dialog-item-name {
@@ -1200,14 +1210,14 @@ button:disabled {
 
 .recent-dialog-item-path {
   font-size: 11px;
-  color: var(--z-color-fg-muted);
+  color: var(--theme-text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .recent-dialog-item.active .recent-dialog-item-path {
-  color: var(--z-color-fg-default);
+  color: var(--theme-text-default);
 }
 
 .recent-dialog-pagination {
@@ -1218,7 +1228,7 @@ button:disabled {
 
 .recent-dialog-page-label {
   font-size: 13px;
-  color: var(--z-color-fg-muted);
+  color: var(--theme-text-muted);
 }
 
 .modal-confirm {
@@ -1255,7 +1265,7 @@ button:disabled {
 .modal-title {
   font-size: 18px;
   font-weight: 600;
-  color: var(--z-color-fg-default);
+  color: var(--theme-text-default);
   margin-bottom: 6px;
 }
 
@@ -1266,7 +1276,7 @@ button:disabled {
 .modal-message {
   font-size: 14px;
   line-height: 1.6;
-  color: var(--z-color-fg-muted);
+  color: var(--theme-text-muted);
 }
 
 .modal-actions {
@@ -1290,7 +1300,7 @@ button:disabled {
 
 .insert-table-label {
   font-size: 13px;
-  color: var(--z-color-fg-default);
+  color: var(--theme-text-default);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1307,9 +1317,9 @@ button:disabled {
   max-width: 100%;
   padding: 4px 8px;
   border-radius: 6px;
-  border: 1px solid var(--haomd-input-border-strong);
-  background: var(--haomd-input-bg);
-  color: var(--z-color-fg-default);
+  border: 1px solid var(--theme-border-input-strong);
+  background: var(--theme-surface-input);
+  color: var(--theme-text-default);
   font-size: 13px;
   outline: none;
 }
@@ -1326,8 +1336,8 @@ button:disabled {
 }
 
 .insert-table-input:focus {
-  border-color: var(--z-color-accent-primary-soft);
-  box-shadow: 0 0 0 1px var(--haomd-focus-ring);
+  border-color: var(--theme-accent-primary-soft);
+  box-shadow: 0 0 0 1px var(--theme-component-focus-ring);
 }
 
 .insert-table-stepper {
@@ -1352,37 +1362,37 @@ button:disabled {
 .insert-table-error {
   margin-top: 4px;
   font-size: 12px;
-  color: var(--haomd-soft-danger-fg);
+  color: var(--theme-accent-soft-danger-fg);
 }
 
 /* 全局 Ghost 按钮样式：所有模态框统一视觉风格 */
 .modal .modal-actions .ghost {
   border-radius: 999px;
-  border: 1px solid var(--haomd-input-border-strong);
-  background: var(--haomd-input-bg);
-  color: var(--z-color-fg-default);
+  border: 1px solid var(--theme-border-input-strong);
+  background: var(--theme-surface-input);
+  color: var(--theme-text-default);
   font-size: 12px;
   padding: 4px 12px;
 }
 
 .modal .modal-actions .ghost.primary {
-  border-color: var(--z-color-accent-primary-soft);
-  background: var(--z-color-accent-primary);
+  border-color: var(--theme-accent-primary-soft);
+  background: var(--theme-accent-primary);
 }
 
 .modal .modal-actions .ghost.danger {
-  border-color: var(--z-color-danger);
-  color: var(--haomd-soft-danger-fg);
-  background: var(--haomd-soft-danger-bg);
+  border-color: var(--theme-accent-danger);
+  color: var(--theme-accent-soft-danger-fg);
+  background: var(--theme-accent-soft-danger-bg);
 }
 
 .modal .modal-actions .ghost:not(:disabled):hover {
-  background: var(--haomd-soft-accent-bg);
-  border-color: var(--z-color-accent-primary-soft);
+  background: var(--theme-accent-soft-accent-bg);
+  border-color: var(--theme-accent-primary-soft);
 }
 
 .modal .modal-actions .ghost.primary:not(:disabled):hover {
-  background: var(--z-color-accent-primary-soft);
+  background: var(--theme-accent-primary-soft);
 }
 
 .modal-actions-stacked {
@@ -1400,18 +1410,18 @@ button:disabled {
 }
 
 .modal-actions-stacked .modal-btn.primary {
-  background: linear-gradient(135deg, var(--z-color-accent-primary), var(--z-color-accent-primary-soft));
+  background: linear-gradient(135deg, var(--theme-accent-primary), var(--theme-accent-primary-soft));
   color: #ffffff;
 }
 
 .modal-actions-stacked .modal-btn.secondary {
-  background: var(--z-color-bg-surface);
-  color: var(--z-color-fg-default);
+  background: var(--theme-surface-card);
+  color: var(--theme-text-default);
 }
 
 .modal-actions-stacked .modal-btn.tertiary {
   background: transparent;
-  color: var(--z-color-fg-default);
+  color: var(--theme-text-default);
 }
 
 
@@ -1451,8 +1461,8 @@ button:disabled {
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  border: 1px solid var(--z-color-accent-primary-alt);
-  background: linear-gradient(135deg, var(--z-color-accent-primary-alt), var(--z-color-accent-primary-alt-soft));
+  border: 1px solid var(--theme-accent-primary-alt);
+  background: linear-gradient(135deg, var(--theme-accent-primary-alt), var(--theme-accent-primary-alt-soft));
   color: #0a0c12;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -1461,20 +1471,20 @@ button:disabled {
 
 .ai-chat-send-button:hover {
   transform: scale(1.05);
-  box-shadow: 0 0 12px var(--haomd-focus-ring);
+  box-shadow: 0 0 12px var(--theme-component-focus-ring);
 }
 
 .ai-chat-send-button.loading {
-  background: var(--z-color-bg-surface);
-  border-color: var(--haomd-input-border);
-  color: var(--z-color-fg-default);
-  box-shadow: 0 0 8px var(--z-color-bg-surface);
+  background: var(--theme-surface-card);
+  border-color: var(--theme-border-input);
+  color: var(--theme-text-default);
+  box-shadow: 0 0 8px var(--theme-surface-card);
 }
 
 .ai-chat-send-button.loading:hover {
-  background: var(--haomd-card-bg-active);
-  border-color: var(--haomd-input-border-strong);
-  box-shadow: 0 0 12px var(--haomd-focus-ring);
+  background: var(--theme-surface-card-active);
+  border-color: var(--theme-border-input-strong);
+  box-shadow: 0 0 12px var(--theme-component-focus-ring);
 }
 
 /* 纸飞机图标 (CSS Drawing) */
@@ -1504,10 +1514,10 @@ button:disabled {
   align-items: center;
   gap: 10px;
   padding: 8px 12px;
-  background: var(--z-color-bg-surface);
+  background: var(--theme-surface-card);
   border-radius: 8px;
   margin: 4px 12px 0px 12px;
-  border: 1px solid var(--z-color-border-subtle);
+  border: 1px solid var(--theme-border-subtle);
 }
 
 .ai-chat-pending-image-thumb {
@@ -1515,7 +1525,7 @@ button:disabled {
   height: 48px;
   border-radius: 6px;
   object-fit: cover;
-  border: 1px solid var(--haomd-input-border);
+  border: 1px solid var(--theme-border-input);
 }
 
 .ai-chat-pending-image-info {
@@ -1528,7 +1538,7 @@ button:disabled {
 .ai-chat-pending-image-name {
   font-size: 12px;
   font-weight: 500;
-  color: var(--z-color-fg-default);
+  color: var(--theme-text-default);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1537,7 +1547,7 @@ button:disabled {
 
 .ai-chat-pending-image-hint {
   font-size: 11px;
-  color: var(--z-color-fg-subtle);
+  color: var(--theme-text-subtle);
 }
 
 .ai-chat-pending-image-clear {
@@ -1548,15 +1558,15 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--z-color-bg-surface);
-  color: var(--z-color-fg-subtle);
+  background: var(--theme-surface-card);
+  color: var(--theme-text-subtle);
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .ai-chat-pending-image-clear:hover {
-  background: var(--haomd-soft-danger-bg);
-  color: var(--z-color-danger);
+  background: var(--theme-accent-soft-danger-bg);
+  color: var(--theme-accent-danger);
 }
 
 /* AI Chat New Attachment Preview Bar */
@@ -1565,8 +1575,8 @@ button:disabled {
   flex-wrap: wrap;
   gap: 8px;
   padding: 8px 12px;
-  background: var(--z-color-bg-surface);
-  border-bottom: 1px solid var(--z-color-border-subtle);
+  background: var(--theme-surface-card);
+  border-bottom: 1px solid var(--theme-border-subtle);
 }
 
 .ai-chat-attachment-item {
@@ -1575,8 +1585,8 @@ button:disabled {
   height: 64px;
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid var(--z-color-border-subtle);
-  background: var(--z-color-bg-surface);
+  border: 1px solid var(--theme-border-subtle);
+  background: var(--theme-surface-card);
 }
 
 .ai-chat-attachment-thumb {
@@ -1592,7 +1602,7 @@ button:disabled {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: var(--haomd-overlay-bg);
+  background: var(--theme-surface-overlay);
   color: #fff;
   border: none;
   cursor: pointer;
@@ -1744,6 +1754,27 @@ button:disabled {
       rgba(98, 195, 255, 0.35));
 }
 
+.divider-hotzone.editor-preview-divider {
+  opacity: 1;
+}
+
+.divider-hotzone.editor-preview-divider .divider-rail {
+  width: var(--theme-component-divider-width);
+  height: calc(100% - var(--theme-component-tabbar-height));
+  margin-top: var(--theme-component-tabbar-height);
+  border-radius: 0;
+  background: var(--theme-border-input-strong);
+}
+
+.divider-hotzone.editor-preview-divider .divider-handle {
+  display: none;
+}
+
+.divider-hotzone.editor-preview-divider:hover .divider-rail,
+.divider-hotzone.editor-preview-divider.active .divider-rail {
+  background: var(--theme-accent-primary-soft);
+}
+
 /* 状态栏：缩小为一行文字高度的紧凑条 */
 .status-bar {
   display: flex;
@@ -1753,9 +1784,9 @@ button:disabled {
   /* 几乎只保留文字本身的高度 */
   font-size: 12px;
   line-height: 1.2;
-  border-top: 1px solid var(--z-color-border-strong);
-  background: var(--haomd-status-bg);
-  color: var(--z-color-fg-muted);
+  border-top: 1px solid var(--theme-border-strong);
+  background: var(--theme-surface-status);
+  color: var(--theme-text-muted);
 }
 
 .status-bar-left,

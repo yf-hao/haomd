@@ -8,7 +8,6 @@ import { onMenuAction } from './modules/platform/menuEvents'
 import { isTauriEnv } from './modules/platform/runtime'
 import {
   getDefaultThemeSettings,
-  getThemeSettings,
   type ThemeSettings,
 } from './modules/settings/editorSettings'
 import {
@@ -18,6 +17,8 @@ import {
   subscribeSystemThemePreference,
 } from './modules/theme/themeRuntime'
 import { ThemeModeProvider } from './modules/theme/ThemeContext'
+import { resolveActiveTheme } from './modules/theme/themeResolver'
+import { loadThemePreference } from './modules/theme/themePreferenceStore'
 
 const appStartTime = performance.now()
 
@@ -86,7 +87,7 @@ function App() {
     let cancelled = false
 
     ;(async () => {
-      const settings = await getThemeSettings()
+      const settings = await loadThemePreference()
       if (cancelled) return
       setThemeSettings(settings)
     })()
@@ -104,13 +105,23 @@ function App() {
     () => resolveThemeMode(themeSettings.mode, systemPrefersDark),
     [themeSettings.mode, systemPrefersDark],
   )
+  const activeTheme = useMemo(
+    () => resolveActiveTheme(themeSettings.mode, systemPrefersDark),
+    [themeSettings.mode, systemPrefersDark],
+  )
 
   useEffect(() => {
-    applyResolvedTheme(resolvedThemeMode)
-  }, [resolvedThemeMode])
+    applyResolvedTheme(activeTheme, resolvedThemeMode)
+  }, [activeTheme, resolvedThemeMode])
 
   return (
-    <ThemeModeProvider value={resolvedThemeMode}>
+    <ThemeModeProvider
+      value={{
+        selectedMode: themeSettings.mode,
+        resolvedMode: resolvedThemeMode,
+        activeTheme,
+      }}
+    >
       <div className="app-shell">
         <div className="layout-row">
           <div className="activity-bar">

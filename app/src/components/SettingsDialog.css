@@ -23,7 +23,7 @@
 }
 
 .settings-sidebar {
-  border-right: 1px solid var(--haomd-card-border);
+  border-right: 1px solid var(--theme-border-subtle);
   padding-right: 16px;
   display: flex;
   flex-direction: column;
@@ -33,7 +33,7 @@
 .settings-sidebar-title {
   font-size: 12px;
   font-weight: 700;
-  color: var(--z-color-fg-subtle);
+  color: var(--theme-text-subtle);
   text-transform: uppercase;
   letter-spacing: 0.6px;
 }
@@ -44,7 +44,7 @@
   border-radius: 10px;
   border: none;
   background: transparent;
-  color: var(--z-color-fg-muted);
+  color: var(--theme-text-muted);
   cursor: pointer;
   font-size: 13px;
   font-weight: 500;
@@ -53,13 +53,13 @@
 }
 
 .settings-sidebar-item:hover {
-  background: var(--haomd-card-bg);
-  color: var(--z-color-fg-default);
+  background: var(--theme-surface-card);
+  color: var(--theme-text-default);
 }
 
 .settings-sidebar-item.active {
-  background: var(--haomd-card-bg-active);
-  color: var(--z-color-fg-default);
+  background: var(--theme-surface-card-active);
+  color: var(--theme-text-default);
   font-weight: 600;
 }
 
@@ -71,7 +71,7 @@
   bottom: 8px;
   width: 3px;
   border-radius: 999px;
-  background: var(--z-color-accent-primary-soft);
+  background: var(--theme-accent-primary-soft);
 }
 
 .settings-panel {
@@ -86,18 +86,18 @@
   font-size: 15px;
   font-weight: 600;
   margin-bottom: 6px;
-  color: var(--z-color-fg-default);
+  color: var(--theme-text-default);
 }
 
 .settings-panel-description {
   font-size: 12px;
-  color: var(--z-color-fg-subtle);
+  color: var(--theme-text-subtle);
 }
 
 .settings-field-label {
   font-size: 12px;
   font-weight: 500;
-  color: var(--z-color-fg-muted);
+  color: var(--theme-text-muted);
 }
 
 .settings-number-input::-webkit-outer-spin-button,
@@ -115,9 +115,9 @@
 .field-select {
   width: 100%;
   border-radius: 8px;
-  border: 1px solid var(--haomd-input-border-strong);
-  background: var(--haomd-input-bg);
-  color: var(--z-color-fg-default);
+  border: 1px solid var(--theme-border-input-strong);
+  background: var(--theme-surface-input);
+  color: var(--theme-text-default);
   padding: 7px 10px;
   font-size: 13px;
 }
@@ -139,21 +139,21 @@
 .field-input:focus,
 .field-textarea:focus {
   outline: none;
-  border-color: var(--z-color-accent-primary-soft);
-  box-shadow: 0 0 0 1px var(--haomd-focus-ring);
+  border-color: var(--theme-accent-primary-soft);
+  box-shadow: 0 0 0 1px var(--theme-component-focus-ring);
 }
 
 .field-select:focus {
   outline: none;
-  border-color: var(--haomd-input-border-strong);
+  border-color: var(--theme-border-input-strong);
   box-shadow: none;
 }
 
 .form-error {
   padding: 6px 8px;
   border-radius: 8px;
-  background: rgba(248, 113, 113, 0.16);
-  color: #fecaca;
+  background: var(--theme-accent-soft-danger-bg);
+  color: var(--theme-accent-soft-danger-fg);
   font-size: 12px;
   white-space: pre-wrap;
 }
@@ -170,21 +170,21 @@
   text-align: left;
   padding: 14px 16px;
   border-radius: 12px;
-  border: 1px solid var(--haomd-card-border);
-  background: var(--haomd-card-bg);
-  color: var(--z-color-fg-default);
+  border: 1px solid var(--theme-border-subtle);
+  background: var(--theme-surface-card);
+  color: var(--theme-text-default);
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
 }
 
 .theme-option-card:hover {
-  background: var(--haomd-card-bg-active);
+  background: var(--theme-surface-card-active);
 }
 
 .theme-option-card.active {
-  border-color: var(--z-color-accent-primary-soft);
-  background: var(--haomd-card-bg-active);
-  box-shadow: 0 0 0 1px var(--haomd-focus-ring);
+  border-color: var(--theme-accent-primary-soft);
+  background: var(--theme-surface-card-active);
+  box-shadow: 0 0 0 1px var(--theme-component-focus-ring);
 }
 
 .theme-option-card-title {
@@ -194,7 +194,7 @@
 
 .theme-option-card-description {
   font-size: 12px;
-  color: var(--z-color-fg-muted);
+  color: var(--theme-text-muted);
 }
 
 @media (max-width: 900px) {
@@ -210,7 +210,7 @@
 
   .settings-sidebar {
     border-right: none;
-    border-bottom: 1px solid var(--haomd-card-border);
+    border-bottom: 1px solid var(--theme-border-subtle);
     padding-right: 0;
     padding-bottom: 12px;
   }

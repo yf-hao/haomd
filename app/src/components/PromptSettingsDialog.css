@@ -20,7 +20,7 @@
 }
 
 .prompt-settings-column-left {
-  border-right: 1px solid var(--z-color-border-strong);
+  border-right: 1px solid var(--theme-border-strong);
   padding-right: 16px;
 }
 
@@ -113,8 +113,9 @@
   margin-top: 4px;
   padding: 8px;
   border-radius: var(--z-radius-sm);
-  background: rgba(15, 23, 42, 0.9);
-  color: var(--z-color-fg-default);
+  background: var(--theme-surface-card);
+  border: 1px solid var(--theme-border-subtle);
+  color: var(--theme-text-default);
   font-size: 13px;
   white-space: pre-wrap;
 }
@@ -132,7 +133,7 @@
 
   .prompt-settings-column-left {
     border-right: none;
-    border-bottom: 1px solid var(--z-color-border-strong);
+    border-bottom: 1px solid var(--theme-border-strong);
     padding-right: 0;
     padding-bottom: 12px;
     margin-bottom: 8px;
@@ -142,4 +143,3 @@
     padding-left: 0;
   }
 }
-

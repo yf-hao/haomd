@@ -62,6 +62,7 @@ export function PreviewPane({ value, activeLine, previewWidth, effectiveLayout, 
 
   return (
     <section className="pane preview" style={style}>
+      {effectiveLayout !== 'preview-only' && <div className="preview-top-offset" aria-hidden />}
       <div className={renderHtml ? 'preview-body preview-body-html' : 'preview-body'}>
         {renderHtml ? (
           <HtmlPreview html={value} />

@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import type { BackendResult } from '../platform/backendTypes'
+import type { ThemeMode } from '../theme/schema'
 
 export type AiCompressionSettings = {
   minMessagesToCompress: number
@@ -20,10 +21,9 @@ export type AiChatUiSettings = {
   maxVisibleMessagesPane: number
 }
 
-export type ThemeMode = 'system' | 'light' | 'dark'
-
 export type ThemeSettings = {
   mode: ThemeMode
+  customThemeId?: string | null
 }
 
 export type WordExportStyleSettings = {

@@ -34,12 +34,12 @@ class PreviewErrorBoundary extends Component<Props, State> {
       return (
         <section className="pane preview">
           <div className="preview-body" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--z-color-danger)' }}>预览渲染出错</div>
-            <div style={{ fontSize: 12, opacity: 0.7, maxWidth: 400, wordBreak: 'break-word', textAlign: 'center', color: 'var(--z-color-fg-muted)' }}>{error.message}</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--theme-accent-danger)' }}>预览渲染出错</div>
+            <div style={{ fontSize: 12, opacity: 0.7, maxWidth: 400, wordBreak: 'break-word', textAlign: 'center', color: 'var(--theme-text-muted)' }}>{error.message}</div>
             <button
               type="button"
               onClick={this.handleReset}
-              style={{ marginTop: 4, padding: '4px 12px', fontSize: 12, borderRadius: 4, border: '1px solid var(--z-color-border-subtle)', background: 'var(--z-color-bg-surface)', color: 'var(--z-color-fg-default)', cursor: 'pointer' }}
+              style={{ marginTop: 4, padding: '4px 12px', fontSize: 12, borderRadius: 4, border: '1px solid var(--theme-border-subtle)', background: 'var(--theme-surface-card)', color: 'var(--theme-text-default)', cursor: 'pointer' }}
             >
               重试
             </button>

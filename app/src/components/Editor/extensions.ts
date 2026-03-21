@@ -33,30 +33,30 @@ function createBaseTheme(themeMode: ResolvedThemeMode) {
     {
       '&': {
         backgroundColor: 'transparent',
-        color: 'var(--z-color-fg-default)',
+        color: 'var(--theme-text-default)',
         fontFamily:
           "'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-        fontSize: 'var(--haomd-editor-font-size, 14px)',
+        fontSize: 'var(--editor-font-size, 14px)',
       },
       '.cm-activeLine': {
         backgroundColor: 'transparent',
       },
       '.cm-content': {
-        caretColor: 'var(--haomd-editor-caret)',
+        caretColor: 'var(--theme-editor-caret)',
         padding: '12px 14px 12px 14px',
         flex: '1 1 0',
         minHeight: '100%',
         paddingBottom: '25vh',
       },
       '.cm-gutters': {
-        backgroundColor: 'var(--haomd-editor-gutter-bg)',
-        color: 'var(--haomd-editor-gutter-fg)',
+        backgroundColor: 'var(--theme-surface-editor-gutter)',
+        color: 'var(--theme-editor-gutter-fg)',
         borderRight: 'none',
-        fontSize: 'var(--haomd-editor-gutter-font-size, 12px)',
+        fontSize: 'var(--editor-gutter-font-size, 12px)',
         margin: 0,
       },
       '.cm-gutter .cm-activeLineGutter': {
-        backgroundColor: 'var(--haomd-editor-active-gutter-bg)',
+        backgroundColor: 'var(--theme-editor-active-gutter-bg)',
         position: 'relative',
       },
       '.cm-gutter .cm-activeLineGutter::after': {
@@ -66,8 +66,8 @@ function createBaseTheme(themeMode: ResolvedThemeMode) {
         bottom: 0,
         right: '0px',
         width: '2px',
-        backgroundColor: 'var(--haomd-editor-active-line-marker)',
-        boxShadow: '0 0 8px var(--haomd-editor-active-line-marker)',
+        backgroundColor: 'var(--theme-editor-active-line-marker)',
+        boxShadow: '0 0 8px var(--theme-editor-active-line-marker)',
         pointerEvents: 'none',
       },
       '.cm-line': {

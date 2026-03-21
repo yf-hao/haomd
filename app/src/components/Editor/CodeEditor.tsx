@@ -49,8 +49,8 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
       ref={ref}
       className={className}
       style={{
-        '--haomd-editor-font-size': `${fontSizePx}px`,
-        '--haomd-editor-gutter-font-size': `${gutterFontSizePx}px`,
+        '--editor-font-size': `${fontSizePx}px`,
+        '--editor-gutter-font-size': `${gutterFontSizePx}px`,
       } as React.CSSProperties}
     >
       <CodeMirror

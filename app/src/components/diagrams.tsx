@@ -364,7 +364,7 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
   }, [data, error, renderKey, codeHash, themeMode])
 
   return (
-    <>
+    <div className="diagram-block">
       {error && (
         <div className="diagram-placeholder">
           <p>渲染失败：{error}</p>
@@ -384,12 +384,12 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
             pointerEvents: 'none',
             cursor: 'default',
             ['--bgcolor' as string]: 'transparent',
-            ['--map-padding' as string]: themeMode === 'light' ? '6px 8px' : '8px 10px',
+            ['--map-padding' as string]: '0',
           }}
           aria-hidden
         />
       )}
-    </>
+    </div>
   )
 }
 

@@ -5,6 +5,12 @@
   min-height: 0;
 }
 
+.preview-top-offset {
+  flex: 0 0 var(--theme-component-tabbar-height);
+  border-bottom: 1px solid var(--theme-border-input);
+  background: var(--theme-surface-editor);
+}
+
 .preview-body {
   flex: 1;
   min-height: 0;
@@ -35,5 +41,5 @@
   width: 100%;
   height: 100%;
   border: none;
-  background: white;
+  background: var(--theme-surface-preview);
 }

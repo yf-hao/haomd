@@ -16,35 +16,35 @@ function buildMermaidThemeVariables(themeMode: ResolvedThemeMode) {
   if (themeMode === 'dark') {
     return {
       background: 'transparent',
-      primaryColor: getCssThemeColor('--haomd-card-bg', '#1e293b'),
-      primaryTextColor: getCssThemeColor('--z-color-fg-default', '#e8ecf5'),
-      primaryBorderColor: getCssThemeColor('--z-color-accent-primary-alt-soft', '#62c3ff'),
-      lineColor: getCssThemeColor('--z-color-border-strong', '#94a3b8'),
-      textColor: getCssThemeColor('--z-color-fg-default', '#e8ecf5'),
-      secondaryColor: getCssThemeColor('--haomd-card-bg-active', '#334155'),
-      tertiaryColor: getCssThemeColor('--z-color-bg-surface', 'rgba(255, 255, 255, 0.02)'),
-      clusterBkg: getCssThemeColor('--haomd-panel-bg', '#05070c'),
-      clusterBorder: getCssThemeColor('--z-color-border-subtle', 'rgba(255, 255, 255, 0.06)'),
-      nodeBorder: getCssThemeColor('--z-color-accent-primary-alt-soft', '#62c3ff'),
-      edgeLabelBackground: getCssThemeColor('--haomd-preview-bg', '#0c0d16'),
-      mainBkg: getCssThemeColor('--haomd-card-bg', '#1e293b'),
+      primaryColor: getCssThemeColor('--theme-surface-card', '#1e293b'),
+      primaryTextColor: getCssThemeColor('--theme-text-default', '#e8ecf5'),
+      primaryBorderColor: getCssThemeColor('--theme-accent-primary-alt-soft', '#62c3ff'),
+      lineColor: getCssThemeColor('--theme-border-strong', '#94a3b8'),
+      textColor: getCssThemeColor('--theme-text-default', '#e8ecf5'),
+      secondaryColor: getCssThemeColor('--theme-surface-card-active', '#334155'),
+      tertiaryColor: getCssThemeColor('--theme-surface-card', 'rgba(255, 255, 255, 0.02)'),
+      clusterBkg: getCssThemeColor('--theme-surface-panel', '#05070c'),
+      clusterBorder: getCssThemeColor('--theme-border-subtle', 'rgba(255, 255, 255, 0.06)'),
+      nodeBorder: getCssThemeColor('--theme-accent-primary-alt-soft', '#62c3ff'),
+      edgeLabelBackground: getCssThemeColor('--theme-surface-preview', '#0c0d16'),
+      mainBkg: getCssThemeColor('--theme-surface-card', '#1e293b'),
     }
   }
 
   return {
     background: 'transparent',
-    primaryColor: getCssThemeColor('--haomd-card-bg', '#f8fafc'),
-    primaryTextColor: getCssThemeColor('--z-color-fg-default', '#0f172a'),
-    primaryBorderColor: getCssThemeColor('--z-color-fg-default', '#0f172a'),
-    lineColor: getCssThemeColor('--z-color-fg-default', '#0f172a'),
-    textColor: getCssThemeColor('--z-color-fg-default', '#0f172a'),
-    secondaryColor: getCssThemeColor('--haomd-card-bg-active', '#dbeafe'),
-    tertiaryColor: getCssThemeColor('--z-color-bg-surface', 'rgba(15, 23, 42, 0.03)'),
-    clusterBkg: getCssThemeColor('--haomd-panel-bg', '#ffffff'),
-    clusterBorder: getCssThemeColor('--z-color-border-subtle', 'rgba(15, 23, 42, 0.08)'),
-    nodeBorder: getCssThemeColor('--z-color-fg-default', '#0f172a'),
-    edgeLabelBackground: getCssThemeColor('--haomd-preview-bg', '#ffffff'),
-    mainBkg: getCssThemeColor('--haomd-card-bg', '#f8fafc'),
+    primaryColor: getCssThemeColor('--theme-surface-card', '#f8fafc'),
+    primaryTextColor: getCssThemeColor('--theme-text-default', '#0f172a'),
+    primaryBorderColor: getCssThemeColor('--theme-text-default', '#0f172a'),
+    lineColor: getCssThemeColor('--theme-text-default', '#0f172a'),
+    textColor: getCssThemeColor('--theme-text-default', '#0f172a'),
+    secondaryColor: getCssThemeColor('--theme-surface-card-active', '#dbeafe'),
+    tertiaryColor: getCssThemeColor('--theme-surface-card', 'rgba(15, 23, 42, 0.03)'),
+    clusterBkg: getCssThemeColor('--theme-surface-panel', '#ffffff'),
+    clusterBorder: getCssThemeColor('--theme-border-subtle', 'rgba(15, 23, 42, 0.08)'),
+    nodeBorder: getCssThemeColor('--theme-text-default', '#0f172a'),
+    edgeLabelBackground: getCssThemeColor('--theme-surface-preview', '#ffffff'),
+    mainBkg: getCssThemeColor('--theme-surface-card', '#f8fafc'),
   }
 }
 
@@ -204,8 +204,6 @@ function isLikelyMermaidBackdrop(rect: Element, rootWidth: number | null, rootHe
   const height = readSvgDimension(rect.getAttribute('height'))
   const x = readSvgDimension(rect.getAttribute('x')) ?? 0
   const y = readSvgDimension(rect.getAttribute('y')) ?? 0
-  const rx = readSvgDimension(rect.getAttribute('rx')) ?? 0
-  const ry = readSvgDimension(rect.getAttribute('ry')) ?? 0
 
   if (width == null || height == null || rootWidth == null || rootHeight == null) return false
   if (x > 1 || y > 1) return false

@@ -1,18 +1,37 @@
 import { createContext, useContext, type ReactNode } from 'react'
-import type { ResolvedThemeMode } from './themeRuntime'
+import type { ThemeMode, ThemeDefinition } from './schema'
+import type { ResolvedThemeMode } from './themeResolver'
 
-const ThemeModeContext = createContext<ResolvedThemeMode>('dark')
+export type ThemeContextValue = {
+  selectedMode: ThemeMode
+  resolvedMode: ResolvedThemeMode
+  activeTheme: ThemeDefinition
+}
+
+const ThemeContext = createContext<ThemeContextValue | null>(null)
 
 export function ThemeModeProvider({
   value,
   children,
 }: Readonly<{
-  value: ResolvedThemeMode
+  value: ThemeContextValue
   children: ReactNode
 }>) {
-  return <ThemeModeContext.Provider value={value}>{children}</ThemeModeContext.Provider>
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
+}
+
+export function useThemeContext(): ThemeContextValue {
+  const value = useContext(ThemeContext)
+  if (!value) {
+    throw new Error('Theme context is not available')
+  }
+  return value
 }
 
 export function useResolvedThemeMode(): ResolvedThemeMode {
-  return useContext(ThemeModeContext)
+  return useThemeContext().resolvedMode
+}
+
+export function useActiveTheme(): ThemeDefinition {
+  return useThemeContext().activeTheme
 }
