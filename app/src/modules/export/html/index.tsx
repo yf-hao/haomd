@@ -199,9 +199,12 @@ async function renderMindBlockToSvg(code: string, MindElixir: any, SIDE: any): P
       toolBar: false,
       keypress: false,
       allowUndo: false,
+      theme: MindElixir.THEME,
     })
     mind.init(data)
     mind.initSide()
+    container.style.setProperty('--bgcolor', 'transparent')
+    container.style.setProperty('--map-padding', '6px 8px')
 
     // 4. 等待布局稳定（并行处理时略缩短为 300ms）
     await new Promise(resolve => setTimeout(resolve, 300))

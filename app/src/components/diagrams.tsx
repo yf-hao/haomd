@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { renderMermaidToSvg } from '../modules/visualization/mermaidRenderer'
+import { useResolvedThemeMode } from '../modules/theme/ThemeContext'
 
 // --- mind-elixir 动态加载 ---
 let MindElixirCtor: typeof import('mind-elixir').default | null = null
@@ -23,6 +24,7 @@ const mermaidCache = new Map<string, string>()
 const mindCache = new Map<string, MindElixirData>()
 
 export const MermaidBlock = memo(function MermaidBlock({ code }: Readonly<{ code: string }>) {
+  const themeMode = useResolvedThemeMode()
   const [svg, setSvg] = useState<string>('加载中…')
   const [error, setError] = useState<string | null>(null)
   const [mermaidId] = useState(() => `mermaid-${Math.random().toString(36).slice(2)}`)
@@ -35,8 +37,8 @@ export const MermaidBlock = memo(function MermaidBlock({ code }: Readonly<{ code
 
   const cacheKey = useMemo(() => {
     const width = containerWidth ?? 0
-    return `${code}__w:${Math.round(width)}`
-  }, [code, containerWidth])
+    return `${code}__w:${Math.round(width)}__theme:${themeMode}`
+  }, [code, containerWidth, themeMode])
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -81,7 +83,7 @@ export const MermaidBlock = memo(function MermaidBlock({ code }: Readonly<{ code
     setSvg('加载中…')
 
     const timer = window.setTimeout(() => {
-      renderMermaidToSvg(code, idRef.current)
+      renderMermaidToSvg(code, idRef.current, { themeMode })
         .then((svg) => {
           if (cancelled || currentRun !== runIdRef.current) return
           mermaidCache.set(cacheKey, svg)
@@ -97,7 +99,7 @@ export const MermaidBlock = memo(function MermaidBlock({ code }: Readonly<{ code
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [cacheKey, code, containerWidth])
+  }, [cacheKey, code, containerWidth, themeMode])
 
   return (
     <div className="diagram-block" ref={containerRef}>
@@ -191,15 +193,17 @@ function parseOutline(text: string): MindNode | null {
 }
 
 export function XMindBlock({ code }: Readonly<{ code: string }>) {
+  const themeMode = useResolvedThemeMode()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mindRef = useRef<any>(null)
-  const lastHashRef = useRef<string | null>(null)
+  const lastRenderKeyRef = useRef<string | null>(null)
   const resizeRafRef = useRef<number | null>(null)
   const isHandlingResizeRef = useRef(false)
   const lastResizeWidthRef = useRef<number>(-1)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const codeHash = useMemo(() => hashString(code), [code])
+  const renderKey = useMemo(() => `${codeHash}__theme:${themeMode}`, [codeHash, themeMode])
 
   const data = useMemo(() => {
     if (mindCache.has(codeHash)) return mindCache.get(codeHash)!
@@ -227,14 +231,14 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
 
   useEffect(() => {
     if (!containerRef.current || !data || error) return
-    if (lastHashRef.current === codeHash) return
+    if (lastRenderKeyRef.current === renderKey) return
 
     const el = containerRef.current
     el.innerHTML = ''
 
     const init = () => {
       if (!containerRef.current || !data || error) return
-      if (lastHashRef.current === codeHash && mindRef.current) return
+      if (lastRenderKeyRef.current === renderKey && mindRef.current) return
 
       const el = containerRef.current
       const width = el.clientWidth
@@ -256,6 +260,7 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
         // 重新清空容器，确保 init 时是干净的
         el.innerHTML = ''
 
+        const baseTheme = themeMode === 'light' ? MindElixirCtor!.THEME : MindElixirCtor!.DARK_THEME
         const mind = new MindElixirCtor!({
           el,
           direction: data.direction ?? (SIDE_VALUE as any),
@@ -265,11 +270,12 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
           keypress: false,
           allowUndo: false,
           locale: 'zh_CN',
+          theme: baseTheme,
         })
         mind.init(data)
         mind.initSide()
         mindRef.current = mind
-        lastHashRef.current = codeHash
+        lastRenderKeyRef.current = renderKey
 
         try {
           mind.scaleFit()
@@ -305,13 +311,13 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
       const shouldSkip =
         Math.abs(width - lastResizeWidthRef.current) < 2 &&
         !!mindRef.current &&
-        lastHashRef.current === codeHash
+        lastRenderKeyRef.current === renderKey
       if (shouldSkip) return
 
       isHandlingResizeRef.current = true
       lastResizeWidthRef.current = width
       try {
-        if (!mindRef.current || lastHashRef.current !== codeHash) {
+        if (!mindRef.current || lastRenderKeyRef.current !== renderKey) {
           init()
           return
         }
@@ -352,9 +358,10 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
           console.warn('Mind-elixir destroy on cleanup failed', e)
         }
         mindRef.current = null
+        lastRenderKeyRef.current = null
       }
     }
-  }, [data, error, codeHash])
+  }, [data, error, renderKey, codeHash, themeMode])
 
   return (
     <>
@@ -371,7 +378,14 @@ export function XMindBlock({ code }: Readonly<{ code: string }>) {
         <div
           ref={containerRef}
           className="diagram-canvas mind-center"
-          style={{ height: '100%', width: '100%', pointerEvents: 'none', cursor: 'default' }}
+          style={{
+            height: '100%',
+            width: '100%',
+            pointerEvents: 'none',
+            cursor: 'default',
+            ['--bgcolor' as string]: 'transparent',
+            ['--map-padding' as string]: themeMode === 'light' ? '6px 8px' : '8px 10px',
+          }}
           aria-hidden
         />
       )}

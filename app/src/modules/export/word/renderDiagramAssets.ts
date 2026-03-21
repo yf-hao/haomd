@@ -413,9 +413,12 @@ async function renderMindBlockToSvg(code: string): Promise<string | null> {
       toolBar: false,
       keypress: false,
       allowUndo: false,
+      theme: MindElixir.THEME,
     })
     mind.init(data)
     mind.initSide()
+    container.style.setProperty('--bgcolor', 'transparent')
+    container.style.setProperty('--map-padding', '6px 8px')
     await new Promise((resolve) => setTimeout(resolve, 300))
     try {
       mind.scaleFit()

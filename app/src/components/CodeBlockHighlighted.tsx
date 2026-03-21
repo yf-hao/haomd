@@ -1,6 +1,7 @@
 import React, { memo } from 'react'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { useResolvedThemeMode } from '../modules/theme/ThemeContext'
 
 type CodeBlockProps = {
   lang?: string
@@ -55,6 +56,7 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
 const CodeBlock = memo(
   ({ lang, content, ...rest }: CodeBlockProps) => {
     const [copied, setCopied] = React.useState(false)
+    const themeMode = useResolvedThemeMode()
 
     const handleCopy = async (event: React.MouseEvent<HTMLButtonElement>) => {
       event.stopPropagation()
@@ -78,7 +80,7 @@ const CodeBlock = memo(
         </button>
         <SyntaxHighlighter
           language={lang}
-          style={oneDark}
+          style={themeMode === 'light' ? oneLight : oneDark}
           showLineNumbers
           wrapLines
           {...rest}

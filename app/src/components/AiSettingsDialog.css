@@ -954,10 +954,22 @@ button.ghost.ghost-subtle:hover {
 }
 
 .ai-chat-role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 6px;
+  border: 1px solid var(--haomd-input-border-strong);
+  background: var(--haomd-input-bg);
+  color: var(--z-color-fg-default);
   padding: 0 4px 0 8px;
-  /* Reduce right padding for select arrow */
   position: relative;
   cursor: pointer;
+  box-shadow: 0 1px 0 var(--z-color-border-subtle);
+}
+
+.ai-chat-role-badge:hover {
+  background: var(--haomd-card-bg-active);
+  border-color: var(--z-color-accent-primary-soft);
 }
 
 .badge-select-label {
@@ -974,10 +986,10 @@ button.ghost.ghost-subtle:hover {
   min-width: 160px;
   max-height: 240px;
   overflow-y: auto;
-  background: var(--haomd-modal-bg);
-  border: 1px solid var(--z-color-border-subtle);
+  background: var(--haomd-modal-bg) !important;
+  border: 1px solid var(--haomd-input-border-strong);
   border-radius: 8px;
-  box-shadow: var(--z-shadow-elevated);
+  box-shadow: var(--haomd-modal-shadow);
   z-index: 100;
   padding: 4px 0;
 }
@@ -1016,8 +1028,8 @@ button.ghost.ghost-subtle:hover {
 }
 
 .ai-chat-role-select-inline option {
-  background-color: #1e293b;
-  color: #e5e7eb;
+  background-color: var(--haomd-modal-bg);
+  color: var(--z-color-fg-default);
 }
 
 /* Override global send button for this specific location */
@@ -1186,29 +1198,30 @@ button.ghost.ghost-subtle:hover {
 .ai-chat-icon-button {
   padding: 4px;
   border-radius: 6px;
-  border: 1px solid rgba(148, 163, 184, 0.4);
-  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid var(--haomd-input-border);
+  background: var(--haomd-input-bg);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
+  color: var(--z-color-fg-default);
 }
 
 .ai-chat-icon-button:hover {
-  background: rgba(30, 64, 175, 0.5);
-  border-color: rgba(129, 140, 248, 0.9);
+  background: var(--haomd-soft-accent-bg);
+  border-color: var(--z-color-accent-primary-soft);
   transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--z-shadow-elevated);
 }
 
 .ai-chat-icon-button.ai-chat-icon-button-active {
-  background: rgba(30, 64, 175, 0.7);
-  border-color: rgba(129, 140, 248, 1);
+  background: var(--haomd-card-bg-active);
+  border-color: var(--z-color-accent-primary-soft);
 }
 
 .ai-chat-icon-button:active {
   transform: translateY(0);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  box-shadow: none;
 }
 
 .ai-chat-icon {
@@ -1221,7 +1234,7 @@ button.ghost.ghost-subtle:hover {
   width: 16px;
   height: 16px;
   position: relative;
-  color: white;
+  color: currentColor;
 }
 
 .ai-chat-icon-source::before,
@@ -1265,8 +1278,8 @@ button.ghost.ghost-subtle:hover {
   top: 2px;
   width: 10px;
   height: 12px;
-  background: rgba(148, 163, 184, 0.4);
-  border: 1.5px solid rgba(226, 232, 240, 0.9);
+  background: var(--z-color-bg-surface);
+  border: 1.5px solid currentColor;
   border-radius: 2px;
 }
 
@@ -1278,16 +1291,16 @@ button.ghost.ghost-subtle:hover {
   top: 4px;
   width: 10px;
   height: 12px;
-  background: rgba(15, 23, 42, 0.95);
-  border: 1.5px solid rgba(226, 232, 240, 0.9);
+  background: var(--haomd-input-bg);
+  border: 1.5px solid currentColor;
   border-radius: 2px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 4px var(--haomd-focus-ring);
 }
 
 /* 文档内部的内容行 */
 .ai-chat-icon-button:active .ai-chat-icon-copy::after {
   transform: scale(0.95);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  box-shadow: none;
 }
 
 /* 插入到编辑器：改进的插入图标，体现插入的感觉 */
@@ -1308,8 +1321,8 @@ button.ghost.ghost-subtle:hover {
   height: 0;
   border-left: 4px solid transparent;
   border-right: 4px solid transparent;
-  border-top: 5px solid rgba(226, 232, 240, 0.95);
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.2));
+  border-top: 5px solid currentColor;
+  filter: drop-shadow(0 1px 1px var(--haomd-focus-ring));
 }
 
 /* 箭头下方的横线（插入位置） */
@@ -1321,15 +1334,15 @@ button.ghost.ghost-subtle:hover {
   transform: translateX(-50%);
   width: 10px;
   height: 2px;
-  background: rgba(226, 232, 240, 0.95);
+  background: currentColor;
   border-radius: 2px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 1px 2px var(--haomd-focus-ring);
 }
 
 /* 点击时的动画效果 */
 .ai-chat-icon-button:active .ai-chat-icon-insert::before {
   transform: translateX(-50%) translateY(1px);
-  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.3));
+  filter: none;
 }
 
 .ai-chat-icon-button:active .ai-chat-icon-insert::after {
@@ -1354,10 +1367,10 @@ button.ghost.ghost-subtle:hover {
   width: 12px;
   height: 12px;
   border: 2px solid transparent;
-  border-top-color: rgba(226, 232, 240, 0.95);
-  border-right-color: rgba(226, 232, 240, 0.95);
+  border-top-color: currentColor;
+  border-right-color: currentColor;
   border-radius: 50%;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 4px var(--haomd-focus-ring);
 }
 
 /* 内圈箭头（反向旋转）- 中灰色 */
@@ -1370,16 +1383,16 @@ button.ghost.ghost-subtle:hover {
   width: 7px;
   height: 7px;
   border: 2px solid transparent;
-  border-bottom-color: rgba(148, 163, 184, 0.7);
-  border-left-color: rgba(148, 163, 184, 0.7);
+  border-bottom-color: var(--z-color-fg-muted);
+  border-left-color: var(--z-color-fg-muted);
   border-radius: 50%;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.15));
+  filter: none;
 }
 
 /* 点击时的动画效果 - 外圈旋转 */
 .ai-chat-icon-button:active .ai-chat-icon-replace::before {
   transform: translate(-50%, -50%) rotate(90deg);
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4);
+  box-shadow: none;
   transition: transform 0.15s ease-out;
 }
 
@@ -1404,10 +1417,10 @@ button.ghost.ghost-subtle:hover {
   top: 1px;
   width: 10px;
   height: 12px;
-  background: rgba(15, 23, 42, 0.95);
-  border: 1.5px solid rgba(226, 232, 240, 0.9);
+  background: var(--haomd-input-bg);
+  border: 1.5px solid currentColor;
   border-radius: 2px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 4px var(--haomd-focus-ring);
 }
 
 /* 保存符号（对勾） */
@@ -1418,17 +1431,17 @@ button.ghost.ghost-subtle:hover {
   top: 4px;
   width: 6px;
   height: 3px;
-  border-left: 2px solid rgba(226, 232, 240, 0.95);
-  border-bottom: 2px solid rgba(226, 232, 240, 0.95);
+  border-left: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
   transform: rotate(-45deg);
   border-radius: 1px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 1px 2px var(--haomd-focus-ring);
 }
 
 /* 点击时的动画效果 */
 .ai-chat-icon-button:active .ai-chat-icon-save::before {
   transform: scale(0.95);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  box-shadow: none;
 }
 
 .ai-chat-icon-button:active .ai-chat-icon-save::after {

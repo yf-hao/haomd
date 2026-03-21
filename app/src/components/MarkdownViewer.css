@@ -30,10 +30,32 @@
   contain-intrinsic-size: auto 50px;
 }
 
-/* 提高语义权重覆盖原始 */
-.markdown-body pre:not(.no-style) {
+/* 提高语义权重覆盖原始，仅作用于普通 pre */
+.markdown-body pre:not(.no-style):not(:has(> .code-block-wrapper)):not(:has(> .diagram-block)) {
   padding: 6px 6px;
   margin: 0.5em;
+}
+
+/* 代码块的外层 pre 只负责包裹和块间距，不承担视觉盒子 */
+.markdown-body pre:has(> .code-block-wrapper) {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0.75em 0 !important;
+  overflow: visible;
+}
+
+/* 图表块不需要代码块的暗色背景 */
+.markdown-body pre:has(> .diagram-block) {
+  background-color: transparent;
+  padding: 0;
+  overflow: visible;
+}
+
+.markdown-body .diagram-canvas svg {
+  display: block;
+  margin: 0 auto;
 }
 
 #footnote-label {
@@ -62,20 +84,13 @@
 } */
 /* var(--bgColor-muted) */
 .markdown-body code:not(:is(pre code)) {
-  background-color: rgb(5,6,10);
+  background-color: var(--haomd-card-bg-active);
+  color: var(--z-color-fg-default);
+  border: 1px solid var(--haomd-card-border);
   padding: 2px 5px;
   border-radius: 4px;
   display: inline;
   margin: 0 2px;
-}
-
-.markdown-body pre.code-block > pre{
-  background-color: transparent !important;
-  padding: 0 !important;
-}
-
-.markdown-body pre.code-block > pre>code{
-  background-color: transparent !important;
 }
 
 /* 让斜体在中文场景下也有明显的视觉效果 */
@@ -92,7 +107,7 @@
 }
 
 .markdown-body .code-block-wrapper > pre {
-  margin-top: 0;
+  margin: 0 !important;
 }
 
 .markdown-body .code-copy-button {
@@ -109,6 +124,12 @@
   opacity: 0;
   transition: opacity 0.2s ease, background-color 0.2s ease;
   z-index: var(--z-content);
+}
+
+:root[data-theme='light'] .markdown-body .code-copy-button {
+  background-color: rgba(15, 23, 42, 0.08);
+  color: var(--z-color-fg-default);
+  border: 1px solid var(--haomd-input-border);
 }
 
 .markdown-body .code-block-wrapper:hover .code-copy-button,
