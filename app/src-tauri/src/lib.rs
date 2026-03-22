@@ -654,6 +654,8 @@ struct EditorSettingsCfg {
     #[serde(default)]
     ai_chat: Option<AiChatUiCfg>,
     #[serde(default)]
+    language: Option<String>,
+    #[serde(default)]
     theme: Option<ThemeSettingsCfg>,
     #[serde(default)]
     word_export: Option<WordExportStyleSettingsCfg>,
@@ -680,6 +682,7 @@ fn default_editor_settings() -> EditorSettingsCfg {
             max_visible_messages_dialog: Some(10),
             max_visible_messages_pane: Some(10),
         }),
+        language: Some("system".to_string()),
         theme: Some(default_theme_settings_cfg()),
         word_export: Some(default_word_export_style_settings_cfg()),
         extra: std::collections::HashMap::new(),
@@ -909,16 +912,18 @@ fn import_editor_background_image_sync(
     backgrounds_dir: &Path,
     source_path: &Path,
 ) -> Result<PathBuf, String> {
-    let bytes = std::fs::read(source_path)
-        .map_err(|err| format!("读取图片失败: {err}"))?;
-    let original =
-        image::load_from_memory(&bytes).map_err(|err| format!("解析图片失败: {err}"))?;
+    let bytes = std::fs::read(source_path).map_err(|err| format!("读取图片失败: {err}"))?;
+    let original = image::load_from_memory(&bytes).map_err(|err| format!("解析图片失败: {err}"))?;
     let (width, height) = (original.width(), original.height());
     let (target_width, target_height) = clamp_image_to_long_edge(width, height, 1080);
     let processed = if target_width == width && target_height == height {
         original
     } else {
-        original.resize(target_width, target_height, image::imageops::FilterType::Lanczos3)
+        original.resize(
+            target_width,
+            target_height,
+            image::imageops::FilterType::Lanczos3,
+        )
     };
 
     let stem = source_path
@@ -1572,8 +1577,10 @@ async fn pick_editor_background_image(
         .set_title("Choose Editor Background Image")
         .add_filter("Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])
         .pick_file(move |file_path| {
-            let selected = file_path
-                .and_then(|path| path.as_path().map(|value| value.to_string_lossy().to_string()));
+            let selected = file_path.and_then(|path| {
+                path.as_path()
+                    .map(|value| value.to_string_lossy().to_string())
+            });
             if let Ok(mut guard) = tx.lock() {
                 if let Some(sender) = guard.take() {
                     let _ = sender.send(selected);
@@ -1599,11 +1606,8 @@ async fn pick_editor_background_image(
     let imported = tokio::task::spawn_blocking(move || {
         let imported = import_editor_background_image_sync(&backgrounds_dir, &source_path)?;
         if let Some(previous_path) = previous_path {
-            if should_cleanup_managed_editor_background(
-                &backgrounds_dir,
-                &previous_path,
-                &imported,
-            ) {
+            if should_cleanup_managed_editor_background(&backgrounds_dir, &previous_path, &imported)
+            {
                 let _ = std::fs::remove_file(&previous_path);
             }
         }
@@ -4734,7 +4738,286 @@ fn format_recent_menu_label(item: &RecentFile) -> String {
     format!("{}{}", icon, abbreviate_path_for_menu(&item.path))
 }
 
-async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MenuLocale {
+    ZhCn,
+    EnUs,
+}
+
+#[derive(Clone, Copy)]
+struct MenuTexts {
+    about_haomd: &'static str,
+    settings: &'static str,
+    quit: &'static str,
+    open_recent: &'static str,
+    clear_recent: &'static str,
+    more: &'static str,
+    export: &'static str,
+    file: &'static str,
+    new_file: &'static str,
+    open: &'static str,
+    open_folder: &'static str,
+    save: &'static str,
+    save_as: &'static str,
+    close_file: &'static str,
+    edit: &'static str,
+    paste: &'static str,
+    find: &'static str,
+    replace: &'static str,
+    toggle_comment: &'static str,
+    format_document: &'static str,
+    heading: &'static str,
+    paragraph: &'static str,
+    heading_1: &'static str,
+    heading_2: &'static str,
+    heading_3: &'static str,
+    heading_4: &'static str,
+    heading_5: &'static str,
+    heading_6: &'static str,
+    format: &'static str,
+    emphasis: &'static str,
+    strikethrough: &'static str,
+    table: &'static str,
+    code_block: &'static str,
+    layout: &'static str,
+    preview_left: &'static str,
+    preview_right: &'static str,
+    editor_only: &'static str,
+    preview_only: &'static str,
+    dock_ai_chat: &'static str,
+    floating: &'static str,
+    dock_left: &'static str,
+    dock_right: &'static str,
+    view: &'static str,
+    toggle_editor: &'static str,
+    toggle_preview_only: &'static str,
+    toggle_sidebar: &'static str,
+    toggle_status_bar: &'static str,
+    zoom_in: &'static str,
+    zoom_out: &'static str,
+    reset_zoom: &'static str,
+    go_to_line: &'static str,
+    next_tab: &'static str,
+    previous_tab: &'static str,
+    global_memory: &'static str,
+    user_persona: &'static str,
+    manage_global_memory: &'static str,
+    session: &'static str,
+    history: &'static str,
+    compress: &'static str,
+    clear: &'static str,
+    ai: &'static str,
+    provider_settings: &'static str,
+    prompt_settings: &'static str,
+    open_ai_chat: &'static str,
+    ask_ai_about_file: &'static str,
+    ask_ai_about_selection: &'static str,
+    help: &'static str,
+    markdown_handbook: &'static str,
+    release_notes: &'static str,
+    report_issue: &'static str,
+    about: &'static str,
+    html: &'static str,
+    pdf_text_only: &'static str,
+    word_docx: &'static str,
+}
+
+fn menu_texts(locale: MenuLocale) -> MenuTexts {
+    match locale {
+        MenuLocale::ZhCn => MenuTexts {
+            about_haomd: "关于 HaoMD",
+            settings: "设置...",
+            quit: "退出",
+            open_recent: "打开最近文件",
+            clear_recent: "清空最近记录",
+            more: "更多...",
+            export: "导出",
+            file: "文件",
+            new_file: "新建",
+            open: "打开",
+            open_folder: "打开文件夹",
+            save: "保存",
+            save_as: "另存为",
+            close_file: "关闭文件",
+            edit: "编辑",
+            paste: "粘贴",
+            find: "查找",
+            replace: "替换",
+            toggle_comment: "切换注释",
+            format_document: "格式化文档",
+            heading: "标题",
+            paragraph: "段落",
+            heading_1: "一级标题",
+            heading_2: "二级标题",
+            heading_3: "三级标题",
+            heading_4: "四级标题",
+            heading_5: "五级标题",
+            heading_6: "六级标题",
+            format: "格式",
+            emphasis: "强调",
+            strikethrough: "删除线",
+            table: "表格",
+            code_block: "代码块",
+            layout: "布局",
+            preview_left: "预览在左",
+            preview_right: "预览在右",
+            editor_only: "仅编辑器",
+            preview_only: "仅预览",
+            dock_ai_chat: "停靠 AI 对话",
+            floating: "浮动",
+            dock_left: "停靠左侧",
+            dock_right: "停靠右侧",
+            view: "视图",
+            toggle_editor: "切换编辑器 (⌘P)",
+            toggle_preview_only: "切换仅预览 (⇧⌘P)",
+            toggle_sidebar: "切换侧边栏",
+            toggle_status_bar: "切换状态栏",
+            zoom_in: "放大",
+            zoom_out: "缩小",
+            reset_zoom: "重置缩放",
+            go_to_line: "跳转到行",
+            next_tab: "下一个标签",
+            previous_tab: "上一个标签",
+            global_memory: "全局记忆",
+            user_persona: "用户画像",
+            manage_global_memory: "管理全局记忆",
+            session: "会话",
+            history: "历史记录",
+            compress: "压缩",
+            clear: "清空",
+            ai: "AI",
+            provider_settings: "模型服务设置",
+            prompt_settings: "提示词设置",
+            open_ai_chat: "打开 AI 对话",
+            ask_ai_about_file: "向 AI 询问文件",
+            ask_ai_about_selection: "向 AI 询问选中内容",
+            help: "帮助",
+            markdown_handbook: "Markdown 手册",
+            release_notes: "版本说明",
+            report_issue: "报告问题",
+            about: "关于",
+            html: "HTML",
+            pdf_text_only: "PDF（仅文本）",
+            word_docx: "Word (.docx)",
+        },
+        MenuLocale::EnUs => MenuTexts {
+            about_haomd: "About HaoMD",
+            settings: "Settings...",
+            quit: "Quit",
+            open_recent: "Open Recent",
+            clear_recent: "Clear Recent",
+            more: "More...",
+            export: "Export",
+            file: "File",
+            new_file: "New",
+            open: "Open",
+            open_folder: "Open Folder",
+            save: "Save",
+            save_as: "Save As",
+            close_file: "Close File",
+            edit: "Edit",
+            paste: "Paste",
+            find: "Find",
+            replace: "Replace",
+            toggle_comment: "Toggle Comment",
+            format_document: "Format Document",
+            heading: "Heading",
+            paragraph: "Paragraph",
+            heading_1: "Heading 1",
+            heading_2: "Heading 2",
+            heading_3: "Heading 3",
+            heading_4: "Heading 4",
+            heading_5: "Heading 5",
+            heading_6: "Heading 6",
+            format: "Format",
+            emphasis: "Emphasis",
+            strikethrough: "Strikethrough",
+            table: "Table",
+            code_block: "Code Block",
+            layout: "Layout",
+            preview_left: "Preview Left",
+            preview_right: "Preview Right",
+            editor_only: "Editor Only",
+            preview_only: "Preview Only",
+            dock_ai_chat: "Dock AI Chat",
+            floating: "Floating",
+            dock_left: "Dock Left",
+            dock_right: "Dock Right",
+            view: "View",
+            toggle_editor: "Toggle Editor (⌘P)",
+            toggle_preview_only: "Toggle Preview Only (⇧⌘P)",
+            toggle_sidebar: "Toggle Sidebar",
+            toggle_status_bar: "Toggle Status Bar",
+            zoom_in: "Zoom In",
+            zoom_out: "Zoom Out",
+            reset_zoom: "Reset Zoom",
+            go_to_line: "Go to Line",
+            next_tab: "Next Tab",
+            previous_tab: "Previous Tab",
+            global_memory: "Global Memory",
+            user_persona: "User Persona",
+            manage_global_memory: "Manage Global Memory",
+            session: "Session",
+            history: "History",
+            compress: "Compress",
+            clear: "Clear",
+            ai: "AI",
+            provider_settings: "Provider Settings",
+            prompt_settings: "Prompt Settings",
+            open_ai_chat: "Open AI Chat",
+            ask_ai_about_file: "Ask AI About File",
+            ask_ai_about_selection: "Ask AI About Selection",
+            help: "Help",
+            markdown_handbook: "Markdown Handbook",
+            release_notes: "Release Notes",
+            report_issue: "Report Issue",
+            about: "About",
+            html: "HTML",
+            pdf_text_only: "PDF (Text only)",
+            word_docx: "Word (.docx)",
+        },
+    }
+}
+
+fn detect_system_menu_locale() -> MenuLocale {
+    let locale_value = ["LC_ALL", "LC_MESSAGES", "LANG"]
+        .into_iter()
+        .find_map(|key| std::env::var(key).ok())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+
+    if locale_value.starts_with("zh") {
+        MenuLocale::ZhCn
+    } else {
+        MenuLocale::EnUs
+    }
+}
+
+async fn resolve_menu_locale(app: &AppHandle) -> MenuLocale {
+    let path = match editor_settings_path(app) {
+        Ok(path) => path,
+        Err(_) => return detect_system_menu_locale(),
+    };
+
+    let bytes = match tokio::fs::read(path).await {
+        Ok(bytes) => bytes,
+        Err(_) => return detect_system_menu_locale(),
+    };
+
+    let cfg: EditorSettingsCfg = match serde_json::from_slice(&bytes) {
+        Ok(cfg) => cfg,
+        Err(_) => return detect_system_menu_locale(),
+    };
+
+    match cfg.language.as_deref() {
+        Some("zh-CN") => MenuLocale::ZhCn,
+        Some("en-US") => MenuLocale::EnUs,
+        _ => detect_system_menu_locale(),
+    }
+}
+
+pub(crate) async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+    let texts = menu_texts(resolve_menu_locale(app).await);
     // 读取最近文件列表，用于构建 Open Recent 子菜单
     let mut recent = read_recent_store(app).await.unwrap_or_default();
     // 按时间降序，防御性处理
@@ -4768,20 +5051,20 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     // HaoMD 菜单
     let haomd_menu = SubmenuBuilder::new(app, "HaoMD")
         .item(
-            &MenuItemBuilder::new("About HaoMD")
+            &MenuItemBuilder::new(texts.about_haomd)
                 .id("haomd_about")
                 .build(app)?,
         )
         .separator()
         .item(
-            &MenuItemBuilder::new("Settings...")
+            &MenuItemBuilder::new(texts.settings)
                 .id("haomd_settings")
                 .accelerator("CmdOrCtrl+,")
                 .build(app)?,
         )
         .separator()
         .item(
-            &MenuItemBuilder::new("Quit")
+            &MenuItemBuilder::new(texts.quit)
                 .id("quit")
                 .accelerator("CmdOrCtrl+Q")
                 .build(app)?,
@@ -4789,7 +5072,7 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .build()?;
 
     // Open Recent 原生子菜单：展示前若干最近文件 + Clear Recent + More...
-    let mut open_recent_builder = SubmenuBuilder::new(app, "Open Recent");
+    let mut open_recent_builder = SubmenuBuilder::new(app, texts.open_recent);
     {
         let mut map = RECENT_MENU_MAP.lock().unwrap();
         map.clear();
@@ -4816,51 +5099,55 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 
     // 清空最近：仍然保留在菜单层
     open_recent_builder = open_recent_builder.item(
-        &MenuItemBuilder::new("Clear Recent")
+        &MenuItemBuilder::new(texts.clear_recent)
             .id("clear_recent")
             .build(app)?,
     );
 
     // More...：打开前端最近文件模态窗（open_recent_dialog 命令）
     open_recent_builder = open_recent_builder.item(
-        &MenuItemBuilder::new("More...")
+        &MenuItemBuilder::new(texts.more)
             .id("open_recent_dialog")
             .build(app)?,
     );
 
     let open_recent_menu = open_recent_builder.build()?;
 
-    let export_menu = SubmenuBuilder::new(app, "Export")
-        .item(&MenuItemBuilder::new("HTML").id("export_html").build(app)?)
+    let export_menu = SubmenuBuilder::new(app, texts.export)
         .item(
-            &MenuItemBuilder::new("PDF (Text only)")
+            &MenuItemBuilder::new(texts.html)
+                .id("export_html")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.pdf_text_only)
                 .id("export_pdf")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Word (.docx)")
+            &MenuItemBuilder::new(texts.word_docx)
                 .id("export_word")
                 .build(app)?,
         )
         .build()?;
 
     // File 菜单
-    let file_menu = SubmenuBuilder::new(app, "File")
+    let file_menu = SubmenuBuilder::new(app, texts.file)
         .item(
-            &MenuItemBuilder::new("New")
+            &MenuItemBuilder::new(texts.new_file)
                 .id("new_file")
                 .accelerator("CmdOrCtrl+n")
                 .build(app)?,
         )
         .separator()
         .item(
-            &MenuItemBuilder::new("Open")
+            &MenuItemBuilder::new(texts.open)
                 .id("open_file")
                 .accelerator("CmdOrCtrl+o")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Open Folder")
+            &MenuItemBuilder::new(texts.open_folder)
                 .id("open_folder")
                 .accelerator("CmdOrCtrl+Shift+o")
                 .build(app)?,
@@ -4868,13 +5155,13 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .item(&open_recent_menu)
         .separator()
         .item(
-            &MenuItemBuilder::new("Save")
+            &MenuItemBuilder::new(texts.save)
                 .id("save")
                 .accelerator("CmdOrCtrl+s")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Save As")
+            &MenuItemBuilder::new(texts.save_as)
                 .id("save_as")
                 .accelerator("CmdOrCtrl+Shift+s")
                 .build(app)?,
@@ -4883,7 +5170,7 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .item(&export_menu)
         .separator()
         .item(
-            &MenuItemBuilder::new("Close File")
+            &MenuItemBuilder::new(texts.close_file)
                 .id("close_file")
                 .accelerator("CmdOrCtrl+w")
                 .build(app)?,
@@ -4891,79 +5178,83 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .build()?;
 
     // Edit 菜单
-    let edit_menu = SubmenuBuilder::new(app, "Edit")
+    let edit_menu = SubmenuBuilder::new(app, texts.edit)
         .item(&PredefinedMenuItem::undo(app, None)?)
         .item(&PredefinedMenuItem::redo(app, None)?)
         .separator()
         .item(&PredefinedMenuItem::cut(app, None)?)
         .item(&PredefinedMenuItem::copy(app, None)?)
         .item(
-            &MenuItemBuilder::new("Paste")
+            &MenuItemBuilder::new(texts.paste)
                 .id("paste")
                 .accelerator("CmdOrCtrl+v")
                 .build(app)?,
         )
         .separator()
         .item(
-            &MenuItemBuilder::new("Find")
+            &MenuItemBuilder::new(texts.find)
                 .id("find")
                 .accelerator("CmdOrCtrl+f")
                 .build(app)?,
         )
-        .item(&MenuItemBuilder::new("Replace").id("replace").build(app)?)
+        .item(
+            &MenuItemBuilder::new(texts.replace)
+                .id("replace")
+                .build(app)?,
+        )
         .item(&PredefinedMenuItem::select_all(app, None)?)
         .item(
-            &MenuItemBuilder::new("Toggle Comment")
+            &MenuItemBuilder::new(texts.toggle_comment)
                 .id("toggle_comment")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Format Document")
+            &MenuItemBuilder::new(texts.format_document)
                 .id("format_document")
                 .build(app)?,
         )
         .build()?;
 
     // Heading 子菜单
-    let heading_menu = SubmenuBuilder::new(app, "Heading")
+    let heading_menu = SubmenuBuilder::new(app, texts.heading)
         .item(
-            &MenuItemBuilder::new("Paragraph")
+            &MenuItemBuilder::new(texts.paragraph)
                 .id("format_heading_paragraph")
                 .accelerator("CmdOrCtrl+0")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Heading 1")
+            &MenuItemBuilder::new(texts.heading_1)
                 .id("format_heading_1")
                 .accelerator("CmdOrCtrl+1")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Heading 2")
+            &MenuItemBuilder::new(texts.heading_2)
                 .id("format_heading_2")
                 .accelerator("CmdOrCtrl+2")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Heading 3")
+            &MenuItemBuilder::new(texts.heading_3)
                 .id("format_heading_3")
                 .accelerator("CmdOrCtrl+3")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Heading 4")
+            &MenuItemBuilder::new(texts.heading_4)
                 .id("format_heading_4")
                 .accelerator("CmdOrCtrl+4")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Heading 5")
+            &MenuItemBuilder::new(texts.heading_5)
                 .id("format_heading_5")
                 .accelerator("CmdOrCtrl+5")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Heading 6")
+            &MenuItemBuilder::new(texts.heading_6)
                 .id("format_heading_6")
                 .accelerator("CmdOrCtrl+6")
                 .build(app)?,
@@ -4971,133 +5262,133 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .build()?;
 
     // Format 菜单
-    let format_menu = SubmenuBuilder::new(app, "Format")
+    let format_menu = SubmenuBuilder::new(app, texts.format)
         .item(&heading_menu)
         .item(
-            &MenuItemBuilder::new("Emphasis")
+            &MenuItemBuilder::new(texts.emphasis)
                 .id("format_emphasize_selection")
                 .accelerator("CmdOrCtrl+B")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Strikethrough")
+            &MenuItemBuilder::new(texts.strikethrough)
                 .id("format_strikethrough")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Table")
+            &MenuItemBuilder::new(texts.table)
                 .id("format_insert_table")
                 .accelerator("CmdOrCtrl+T")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Code Block")
+            &MenuItemBuilder::new(texts.code_block)
                 .id("format_insert_code_block")
                 .accelerator("CmdOrCtrl+Alt+C")
                 .build(app)?,
         )
         .build()?;
 
-    let layout_menu = SubmenuBuilder::new(app, "Layout")
+    let layout_menu = SubmenuBuilder::new(app, texts.layout)
         .item(
-            &MenuItemBuilder::new("Preview Left")
+            &MenuItemBuilder::new(texts.preview_left)
                 .id("layout_preview_left")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Preview Right")
+            &MenuItemBuilder::new(texts.preview_right)
                 .id("layout_preview_right")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Editor Only")
+            &MenuItemBuilder::new(texts.editor_only)
                 .id("layout_editor_only")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Preview Only")
+            &MenuItemBuilder::new(texts.preview_only)
                 .id("layout_preview_only")
                 .build(app)?,
         )
         .build()?;
 
-    let dock_ai_chat_menu = SubmenuBuilder::new(app, "Dock AI Chat")
+    let dock_ai_chat_menu = SubmenuBuilder::new(app, texts.dock_ai_chat)
         .item(
-            &MenuItemBuilder::new("Floating")
+            &MenuItemBuilder::new(texts.floating)
                 .id("view_ai_chat_floating")
                 .accelerator("CmdOrCtrl+Shift+F")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Dock Left")
+            &MenuItemBuilder::new(texts.dock_left)
                 .id("view_ai_chat_dock_left")
                 .accelerator("CmdOrCtrl+Shift+L")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Dock Right")
+            &MenuItemBuilder::new(texts.dock_right)
                 .id("view_ai_chat_dock_right")
                 .accelerator("CmdOrCtrl+Shift+R")
                 .build(app)?,
         )
         .build()?;
 
-    let view_menu = SubmenuBuilder::new(app, "View")
+    let view_menu = SubmenuBuilder::new(app, texts.view)
         .item(
-            &MenuItemBuilder::new("Toggle Editor (⌘P)")
+            &MenuItemBuilder::new(texts.toggle_editor)
                 .id("toggle_preview")
                 .accelerator("CmdOrCtrl+P")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Toggle Preview Only (⇧⌘P)")
+            &MenuItemBuilder::new(texts.toggle_preview_only)
                 .id("toggle_preview_only")
                 .accelerator("CmdOrCtrl+Shift+P")
                 .build(app)?,
         )
         // .item(&MenuItemBuilder::new("Split View").id("split_view").build(app)?)
         .item(
-            &MenuItemBuilder::new("Toggle Sidebar")
+            &MenuItemBuilder::new(texts.toggle_sidebar)
                 .id("toggle_sidebar")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Toggle Status Bar")
+            &MenuItemBuilder::new(texts.toggle_status_bar)
                 .id("toggle_status_bar")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Zoom In")
+            &MenuItemBuilder::new(texts.zoom_in)
                 .id("zoom_in")
                 .accelerator("CmdOrCtrl+=")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Zoom Out")
+            &MenuItemBuilder::new(texts.zoom_out)
                 .id("zoom_out")
                 .accelerator("CmdOrCtrl+-")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Reset Zoom")
+            &MenuItemBuilder::new(texts.reset_zoom)
                 .id("zoom_reset")
                 .accelerator("CmdOrCtrl+Shift+0")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Go to Line")
+            &MenuItemBuilder::new(texts.go_to_line)
                 .id("go_line")
                 .accelerator("CmdOrCtrl+L")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Next Tab")
+            &MenuItemBuilder::new(texts.next_tab)
                 .id("next_tab")
                 .accelerator("Ctrl+Tab")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Previous Tab")
+            &MenuItemBuilder::new(texts.previous_tab)
                 .id("prev_tab")
                 .accelerator("Ctrl+Shift+Tab")
                 .build(app)?,
@@ -5108,63 +5399,63 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .item(&layout_menu)
         .build()?;
 
-    let global_memory_menu = SubmenuBuilder::new(app, "Global Memory")
+    let global_memory_menu = SubmenuBuilder::new(app, texts.global_memory)
         .item(
-            &MenuItemBuilder::new("User Persona")
+            &MenuItemBuilder::new(texts.user_persona)
                 .id("ai_session_globalMemory_userPersona")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Manage Global Memory")
+            &MenuItemBuilder::new(texts.manage_global_memory)
                 .id("ai_session_globalMemory_manage")
                 .build(app)?,
         )
         .build()?;
 
-    let ai_conversation_menu = SubmenuBuilder::new(app, "Session")
+    let ai_conversation_menu = SubmenuBuilder::new(app, texts.session)
         .item(
-            &MenuItemBuilder::new("History")
+            &MenuItemBuilder::new(texts.history)
                 .id("ai_conversation_history")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Compress")
+            &MenuItemBuilder::new(texts.compress)
                 .id("ai_conversation_compress")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Clear")
+            &MenuItemBuilder::new(texts.clear)
                 .id("ai_conversation_clear")
                 .build(app)?,
         )
         .item(&global_memory_menu)
         .build()?;
 
-    let ai_menu = SubmenuBuilder::new(app, "AI")
+    let ai_menu = SubmenuBuilder::new(app, texts.ai)
         .item(
-            &MenuItemBuilder::new("Provider Settings")
+            &MenuItemBuilder::new(texts.provider_settings)
                 .id("ai_settings")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Prompt Settings")
+            &MenuItemBuilder::new(texts.prompt_settings)
                 .id("ai_prompt_settings")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Open AI Chat")
+            &MenuItemBuilder::new(texts.open_ai_chat)
                 .id("ai_chat")
                 .accelerator("CmdOrCtrl+K")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Ask AI About File")
+            &MenuItemBuilder::new(texts.ask_ai_about_file)
                 .id("ai_ask_file")
                 .accelerator("CmdOrCtrl+D")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Ask AI About Selection")
+            &MenuItemBuilder::new(texts.ask_ai_about_selection)
                 .id("ai_ask_selection")
                 .accelerator("CmdOrCtrl+L")
                 .build(app)?,
@@ -5172,23 +5463,27 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .item(&ai_conversation_menu)
         .build()?;
 
-    let help_menu = SubmenuBuilder::new(app, "Help")
+    let help_menu = SubmenuBuilder::new(app, texts.help)
         .item(
-            &MenuItemBuilder::new("Markdown Handbook")
+            &MenuItemBuilder::new(texts.markdown_handbook)
                 .id("help_docs")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Release Notes")
+            &MenuItemBuilder::new(texts.release_notes)
                 .id("help_release")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new("Report Issue")
+            &MenuItemBuilder::new(texts.report_issue)
                 .id("help_issue")
                 .build(app)?,
         )
-        .item(&MenuItemBuilder::new("About").id("help_about").build(app)?)
+        .item(
+            &MenuItemBuilder::new(texts.about)
+                .id("help_about")
+                .build(app)?,
+        )
         .build()?;
 
     let menu = MenuBuilder::new(app)
@@ -5204,7 +5499,7 @@ async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     Ok(menu)
 }
 
-async fn refresh_app_menu(app: &AppHandle) {
+pub(crate) async fn refresh_app_menu(app: &AppHandle) {
     if let Ok(menu) = build_app_menu(app).await {
         let _ = app.set_menu(menu);
     }

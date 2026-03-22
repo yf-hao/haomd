@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { Button } from './Button'
+import { useI18n } from '../modules/i18n/I18nContext'
 
 export type ConfirmDialogProps = {
   title: string
@@ -16,14 +17,17 @@ export type ConfirmDialogProps = {
 export function ConfirmDialog({
   title,
   message,
-  confirmText = '确认',
-  cancelText = '取消',
+  confirmText,
+  cancelText,
   extraText,
   variant = 'default',
   onConfirm,
   onCancel,
   onExtra,
 }: ConfirmDialogProps) {
+  const { t } = useI18n()
+  const resolvedConfirmText = confirmText ?? t('common.confirm')
+  const resolvedCancelText = cancelText ?? t('common.cancel')
   const isStacked = variant === 'stacked' || Boolean(extraText)
 
   const modalRef = useRef<HTMLDivElement | null>(null)
@@ -141,7 +145,7 @@ export function ConfirmDialog({
                 variant="primary"
                 onClick={onConfirm}
               >
-                {confirmText}
+                {resolvedConfirmText}
               </Button>
               {onExtra && (
                 <Button
@@ -157,7 +161,7 @@ export function ConfirmDialog({
                 variant="tertiary"
                 onClick={onCancel}
               >
-                {cancelText}
+                {resolvedCancelText}
               </Button>
             </>
           ) : (
@@ -167,14 +171,14 @@ export function ConfirmDialog({
                 variant="tertiary"
                 onClick={onCancel}
               >
-                {cancelText}
+                {resolvedCancelText}
               </Button>
               <Button
                 ref={confirmRef}
                 variant="primary"
                 onClick={onConfirm}
               >
-                {confirmText}
+                {resolvedConfirmText}
               </Button>
             </>
           )}

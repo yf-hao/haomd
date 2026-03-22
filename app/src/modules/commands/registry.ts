@@ -11,6 +11,7 @@ export type { AppCommand, CommandRegistry } from './types'
 
 type StatusContext = {
   setStatusMessage: (msg: string) => void
+  t?: (key: string, params?: Record<string, string | number>) => string
 }
 
 /**
@@ -146,27 +147,34 @@ const EDITOR_ZOOM_MIN = 0.75
 const EDITOR_ZOOM_MAX = 1.5
 const EDITOR_ZOOM_STEP = 0.1
 
+const tr = (
+  ctx: StatusContext,
+  key: string,
+  fallback: string,
+  params?: Record<string, string | number>,
+) => ctx.t?.(key, params) ?? fallback
+
 function createLayoutCommands(ctx: LayoutCommandContext): CommandRegistry {
   return {
     layout_preview_left: () => {
       ctx.setLayout('preview-left')
       ctx.setShowPreview(true)
-      ctx.setStatusMessage('布局：预览在左')
+      ctx.setStatusMessage(tr(ctx, 'commands.layoutPreviewLeft', '布局：预览在左'))
     },
     layout_preview_right: () => {
       ctx.setLayout('preview-right')
       ctx.setShowPreview(true)
-      ctx.setStatusMessage('布局：预览在右')
+      ctx.setStatusMessage(tr(ctx, 'commands.layoutPreviewRight', '布局：预览在右'))
     },
     layout_editor_only: () => {
       ctx.setLayout('editor-only')
       ctx.setShowPreview(false)
-      ctx.setStatusMessage('布局：仅编辑器')
+      ctx.setStatusMessage(tr(ctx, 'commands.layoutEditorOnly', '布局：仅编辑器'))
     },
     layout_preview_only: () => {
       ctx.setLayout('preview-only')
       ctx.setShowPreview(true)
-      ctx.setStatusMessage('布局：仅预览')
+      ctx.setStatusMessage(tr(ctx, 'commands.layoutPreviewOnly', '布局：仅预览'))
     },
     find: () => {
       ctx.openSearch?.()
@@ -176,34 +184,34 @@ function createLayoutCommands(ctx: LayoutCommandContext): CommandRegistry {
         const target = lastLayoutForPreviewOnly ?? 'preview-right'
         ctx.setLayout(target)
         ctx.setShowPreview(true)
-        ctx.setStatusMessage('布局：退出预览专注模式')
+        ctx.setStatusMessage(tr(ctx, 'commands.layoutExitPreviewFocus', '布局：退出预览专注模式'))
         return
       }
 
       lastLayoutForPreviewOnly = ctx.layout
       ctx.setLayout('preview-only')
       ctx.setShowPreview(true)
-      ctx.setStatusMessage('布局：预览专注模式')
+      ctx.setStatusMessage(tr(ctx, 'commands.layoutPreviewFocus', '布局：预览专注模式'))
     },
     view_ai_chat_floating: () => {
       ctx.setAiChatMode('floating')
-      ctx.setStatusMessage('AI Chat：浮动模式')
+      ctx.setStatusMessage(tr(ctx, 'commands.aiChatFloating', 'AI Chat：浮动模式'))
     },
     view_ai_chat_dock_left: () => {
       ctx.setAiChatMode('docked')
       ctx.setAiChatDockSide('left')
-      ctx.setStatusMessage('AI Chat：Dock 在左侧')
+      ctx.setStatusMessage(tr(ctx, 'commands.aiChatDockLeft', 'AI Chat：Dock 在左侧'))
     },
     view_ai_chat_dock_right: () => {
       ctx.setAiChatMode('docked')
       ctx.setAiChatDockSide('right')
-      ctx.setStatusMessage('AI Chat：Dock 在右侧')
+      ctx.setStatusMessage(tr(ctx, 'commands.aiChatDockRight', 'AI Chat：Dock 在右侧'))
     },
     zoom_in: () => {
       ctx.setEditorZoom((prev) => {
         const next = Math.min(EDITOR_ZOOM_MAX, prev + EDITOR_ZOOM_STEP)
         const percent = Math.round(next * 100)
-        ctx.setStatusMessage(`Editor Zoom：${percent}%`)
+        ctx.setStatusMessage(tr(ctx, 'commands.editorZoomPercent', `Editor Zoom：${percent}%`, { percent }))
         return next
       })
     },
@@ -211,14 +219,14 @@ function createLayoutCommands(ctx: LayoutCommandContext): CommandRegistry {
       ctx.setEditorZoom((prev) => {
         const next = Math.max(EDITOR_ZOOM_MIN, prev - EDITOR_ZOOM_STEP)
         const percent = Math.round(next * 100)
-        ctx.setStatusMessage(`Editor Zoom：${percent}%`)
+        ctx.setStatusMessage(tr(ctx, 'commands.editorZoomPercent', `Editor Zoom：${percent}%`, { percent }))
         return next
       })
     },
     zoom_reset: () => {
       const next = 1.0
       ctx.setEditorZoom(next)
-      ctx.setStatusMessage('Editor Zoom：100%')
+      ctx.setStatusMessage(tr(ctx, 'commands.editorZoomPercent', 'Editor Zoom：100%', { percent: 100 }))
     },
     toggle_preview: () => {
       ctx.setShowPreview((v) => {
@@ -304,14 +312,14 @@ function createFileCommands(ctx: FileCommandContext): CommandRegistry {
     open_folder: async () => {
       // 打开文件夹不会直接丢失当前文档内容，这里不再拦截未保存变更
       if (!ctx.openFolderInSidebar) {
-        ctx.setStatusMessage('当前版本暂不支持 Sidebar 打开文件夹')
+        ctx.setStatusMessage(tr(ctx, 'commands.openFolderSidebarUnsupported', '当前版本暂不支持 Sidebar 打开文件夹'))
         return
       }
       await ctx.openFolderInSidebar()
     },
     open_recent: async () => {
       if (!ctx.handleShowRecent) {
-        ctx.setStatusMessage('最近文件面板已移除，请使用菜单 File → Open Recent')
+        ctx.setStatusMessage(tr(ctx, 'commands.recentPanelRemoved', '最近文件面板已移除，请使用菜单 File → Open Recent'))
         return
       }
       await ctx.handleShowRecent()
@@ -320,34 +328,34 @@ function createFileCommands(ctx: FileCommandContext): CommandRegistry {
       if (ctx.openRecentDialog) {
         ctx.openRecentDialog()
       } else {
-        ctx.setStatusMessage('当前版本未挂载最近文件模态窗')
+        ctx.setStatusMessage(tr(ctx, 'commands.recentDialogUnavailable', '当前版本未挂载最近文件模态窗'))
       }
     },
     clear_recent: async () => {
       const resp = await ctx.clearRecentAll()
       if (resp && resp.ok) {
-        ctx.setStatusMessage('已清空最近文件')
+        ctx.setStatusMessage(tr(ctx, 'commands.recentCleared', '已清空最近文件'))
       }
     },
     export_html: async () => {
       if (ctx.exportHtml) {
         await ctx.exportHtml()
       } else {
-        ctx.setStatusMessage('当前版本 HTML 导出功能未挂载')
+        ctx.setStatusMessage(tr(ctx, 'commands.exportHtmlUnavailable', '当前版本 HTML 导出功能未挂载'))
       }
     },
     export_pdf: async () => {
       if (ctx.exportPdf) {
         await ctx.exportPdf()
       } else {
-        ctx.setStatusMessage('当前版本 PDF 导出功能未挂载')
+        ctx.setStatusMessage(tr(ctx, 'commands.exportPdfUnavailable', '当前版本 PDF 导出功能未挂载'))
       }
     },
     export_word: async () => {
       if (ctx.exportWord) {
         await ctx.exportWord()
       } else {
-        ctx.setStatusMessage('当前版本 Word 导出功能未挂载')
+        ctx.setStatusMessage(tr(ctx, 'commands.exportWordUnavailable', '当前版本 Word 导出功能未挂载'))
       }
     },
   }
@@ -370,7 +378,7 @@ function createLifecycleCommands(ctx: AppLifecycleCommandContext): CommandRegist
       } else {
         // 回退实现：如果有未保存变更，使用浏览器确认对话框
         if (!ctx.confirmLoseChanges()) return
-        ctx.setStatusMessage('占位：Quit 未实现')
+        ctx.setStatusMessage(tr(ctx, 'commands.quitPlaceholder', '占位：Quit 未实现'))
       }
     },
   }
@@ -391,20 +399,20 @@ function createClipboardCommands(ctx: StatusContext): CommandRegistry {
     },
     copy: () => {
       if (typeof document === 'undefined') {
-        ctx.setStatusMessage('复制未生效')
+        ctx.setStatusMessage(tr(ctx, 'commands.copyFailed', '复制未生效'))
         return
       }
       try {
         const ok = document.execCommand('copy')
-        if (!ok) ctx.setStatusMessage('复制未生效')
+        if (!ok) ctx.setStatusMessage(tr(ctx, 'commands.copyFailed', '复制未生效'))
       } catch (err) {
         console.warn('execCommand copy failed', err)
-        ctx.setStatusMessage('复制未生效')
+        ctx.setStatusMessage(tr(ctx, 'commands.copyFailed', '复制未生效'))
       }
     },
     cut: () => {
       if (typeof document === 'undefined') {
-        ctx.setStatusMessage('剪切未生效')
+        ctx.setStatusMessage(tr(ctx, 'commands.cutFailed', '剪切未生效'))
         return
       }
 
@@ -414,10 +422,10 @@ function createClipboardCommands(ctx: StatusContext): CommandRegistry {
       if (!isEditableElement(active)) {
         try {
           const okCopy = document.execCommand('copy')
-          if (!okCopy) ctx.setStatusMessage('剪切未生效')
+          if (!okCopy) ctx.setStatusMessage(tr(ctx, 'commands.cutFailed', '剪切未生效'))
         } catch (err) {
           console.warn('fallback copy for cut failed', err)
-          ctx.setStatusMessage('剪切未生效')
+          ctx.setStatusMessage(tr(ctx, 'commands.cutFailed', '剪切未生效'))
         }
         return
       }
@@ -426,16 +434,16 @@ function createClipboardCommands(ctx: StatusContext): CommandRegistry {
         const ok = document.execCommand('cut')
         if (!ok) {
           const okCopy = document.execCommand('copy')
-          if (!okCopy) ctx.setStatusMessage('剪切未生效')
+          if (!okCopy) ctx.setStatusMessage(tr(ctx, 'commands.cutFailed', '剪切未生效'))
         }
       } catch (err) {
         console.warn('execCommand cut failed', err)
         try {
           const okCopy = document.execCommand('copy')
-          if (!okCopy) ctx.setStatusMessage('剪切未生效')
+          if (!okCopy) ctx.setStatusMessage(tr(ctx, 'commands.cutFailed', '剪切未生效'))
         } catch (err2) {
           console.warn('fallback copy after cut failed', err2)
-          ctx.setStatusMessage('剪切未生效')
+          ctx.setStatusMessage(tr(ctx, 'commands.cutFailed', '剪切未生效'))
         }
       }
     },
@@ -448,7 +456,7 @@ function createHelpCommands(ctx: HelpCommandContext): CommandRegistry {
       if (ctx.openAboutDialog) {
         ctx.openAboutDialog()
       } else {
-        ctx.setStatusMessage('HaoMD · 关于（占位）')
+        ctx.setStatusMessage(tr(ctx, 'commands.aboutPlaceholder', 'HaoMD · 关于（占位）'))
       }
     },
     help_docs: () => {
@@ -457,16 +465,16 @@ function createHelpCommands(ctx: HelpCommandContext): CommandRegistry {
       ctx.applyOpenedContent(usageDocs)
       // 将逻辑文件名设置为“使用说明.md”，用于窗口标题等展示
       ctx.setFilePath('使用说明.md')
-      ctx.setStatusMessage('已打开使用说明')
+      ctx.setStatusMessage(tr(ctx, 'commands.usageOpened', '已打开使用说明'))
     },
     help_release: () => {
-      ctx.setStatusMessage('HaoMD · 菜单占位/帮助')
+      ctx.setStatusMessage(tr(ctx, 'commands.helpPlaceholder', 'HaoMD · 菜单占位/帮助'))
     },
     help_issue: () => {
-      ctx.setStatusMessage('HaoMD · 菜单占位/帮助')
+      ctx.setStatusMessage(tr(ctx, 'commands.helpPlaceholder', 'HaoMD · 菜单占位/帮助'))
     },
     help_about: () => {
-      ctx.setStatusMessage('HaoMD · 菜单占位/帮助')
+      ctx.setStatusMessage(tr(ctx, 'commands.helpPlaceholder', 'HaoMD · 菜单占位/帮助'))
     },
   }
 }
@@ -477,13 +485,13 @@ function createAiCommands(ctx: AiCommandContext): CommandRegistry {
       // 如果当前 AI Chat 已经打开，并且提供了关闭回调，则作为 toggle 行为优先关闭
       if (ctx.aiChatOpen && ctx.closeAiChatDialog) {
         ctx.closeAiChatDialog()
-        ctx.setStatusMessage('AI Chat：已关闭')
+        ctx.setStatusMessage(tr(ctx, 'commands.aiChatClosed', 'AI Chat：已关闭'))
         return
       }
 
       try {
         if (!ctx.aiClient) {
-          ctx.setStatusMessage('AI Chat 未配置：AI 客户端未初始化')
+          ctx.setStatusMessage(tr(ctx, 'commands.aiChatUnconfigured', 'AI Chat 未配置：AI 客户端未初始化'))
           return
         }
         const resp = await ctx.aiClient.openChat()
@@ -493,25 +501,25 @@ function createAiCommands(ctx: AiCommandContext): CommandRegistry {
           return
         }
         if (!ctx.openAiChatDialog) {
-          ctx.setStatusMessage('AI Chat UI 未初始化')
+          ctx.setStatusMessage(tr(ctx, 'commands.aiChatUiUnavailable', 'AI Chat UI 未初始化'))
           return
         }
         ctx.openAiChatDialog({ entryMode: 'chat' })
       } catch (err) {
         console.error('[commands] ai_chat error', err)
-        ctx.setStatusMessage('AI Chat 调用出错，请检查控制台日志')
+        ctx.setStatusMessage(tr(ctx, 'commands.aiChatError', 'AI Chat 调用出错，请检查控制台日志'))
       }
     },
     ai_ask_file: async () => {
       if (!ctx.aiClient) {
-        ctx.setStatusMessage('Ask AI About File 未配置：AI 客户端未初始化')
+        ctx.setStatusMessage(tr(ctx, 'commands.askAiAboutFileUnconfigured', 'Ask AI About File 未配置：AI 客户端未初始化'))
         return
       }
       const resp = await ctx.aiClient.askAboutFile()
       ctx.setStatusMessage(resp.message)
       if (!resp.ok) return
       if (!ctx.openAiChatDialog || !ctx.getCurrentMarkdown) {
-        ctx.setStatusMessage('当前编辑器状态不可用，无法发起 Ask AI About File')
+        ctx.setStatusMessage(tr(ctx, 'commands.askAiAboutFileUnavailable', '当前编辑器状态不可用，无法发起 Ask AI About File'))
         return
       }
       const content = ctx.getCurrentMarkdown()
@@ -536,73 +544,73 @@ function createAiCommands(ctx: AiCommandContext): CommandRegistry {
     ai_conversation_history: async () => {
       try {
         if (!ctx.getCurrentFilePath) {
-          ctx.setStatusMessage('当前编辑器状态不可用，无法打开文档会话历史')
+          ctx.setStatusMessage(tr(ctx, 'commands.conversationHistoryUnavailable', '当前编辑器状态不可用，无法打开文档会话历史'))
           return
         }
         const filePath = ctx.getCurrentFilePath()
         if (!filePath) {
-          ctx.setStatusMessage('请先打开并保存一个文档，再使用 History 查看会话历史')
+          ctx.setStatusMessage(tr(ctx, 'commands.conversationHistoryNeedsSavedDoc', '请先打开并保存一个文档，再使用 History 查看会话历史'))
           return
         }
         if (!ctx.openDocConversationsHistory) {
-          ctx.setStatusMessage('当前版本未注册 History 浮窗，无法展示文档会话历史')
+          ctx.setStatusMessage(tr(ctx, 'commands.conversationHistoryDialogUnavailable', '当前版本未注册 History 浮窗，无法展示文档会话历史'))
           return
         }
         const docPath = getDirKeyFromDocPath(filePath) ?? filePath
         ctx.openDocConversationsHistory(docPath)
       } catch (err) {
         console.error('[commands] ai_conversation_history error', err)
-        ctx.setStatusMessage('打开文档会话历史失败，请检查控制台日志')
+        ctx.setStatusMessage(tr(ctx, 'commands.conversationHistoryOpenFailed', '打开文档会话历史失败，请检查控制台日志'))
       }
     },
     ai_conversation_clear: async () => {
       try {
         if (!ctx.getCurrentFilePath) {
-          ctx.setStatusMessage('当前编辑器状态不可用，无法清空文档会话历史')
+          ctx.setStatusMessage(tr(ctx, 'commands.conversationClearUnavailable', '当前编辑器状态不可用，无法清空文档会话历史'))
           return
         }
         const filePath = ctx.getCurrentFilePath()
         if (!filePath) {
-          ctx.setStatusMessage('请先打开一个已保存的文档，再使用 Clear 会话历史')
+          ctx.setStatusMessage(tr(ctx, 'commands.conversationClearNeedsSavedDoc', '请先打开一个已保存的文档，再使用 Clear 会话历史'))
           return
         }
         const docPath = getDirKeyFromDocPath(filePath) ?? filePath
         await docConversationService.clearByDocPath(docPath)
-        ctx.setStatusMessage('已清空当前目录的 AI 会话历史')
+        ctx.setStatusMessage(tr(ctx, 'commands.conversationCleared', '已清空当前目录的 AI 会话历史'))
       } catch (err) {
         console.error('[commands] ai_conversation_clear error', err)
-        ctx.setStatusMessage('清空文档会话历史失败，请检查控制台日志')
+        ctx.setStatusMessage(tr(ctx, 'commands.conversationClearFailed', '清空文档会话历史失败，请检查控制台日志'))
       }
     },
     ai_conversation_compress: async () => {
       try {
         if (!ctx.getCurrentFilePath) {
-          ctx.setStatusMessage('当前编辑器状态不可用，无法压缩文档会话历史')
+          ctx.setStatusMessage(tr(ctx, 'commands.conversationCompressUnavailable', '当前编辑器状态不可用，无法压缩文档会话历史'))
           return
         }
         const filePath = ctx.getCurrentFilePath()
         if (!filePath) {
-          ctx.setStatusMessage('请先打开一个已保存的文档，再使用 Compress')
+          ctx.setStatusMessage(tr(ctx, 'commands.conversationCompressNeedsSavedDoc', '请先打开一个已保存的文档，再使用 Compress'))
           return
         }
         const docPath = getDirKeyFromDocPath(filePath) ?? filePath
         await docConversationService.compressByDocPath(docPath)
-        ctx.setStatusMessage('已触发当前目录会话压缩，并加入全局记忆学习队列（若已开启）')
+        ctx.setStatusMessage(tr(ctx, 'commands.conversationCompressed', '已触发当前目录会话压缩，并加入全局记忆学习队列（若已开启）'))
       } catch (err) {
         console.error('[commands] ai_conversation_compress error', err)
-        ctx.setStatusMessage('压缩文档会话历史失败，请检查控制台日志')
+        ctx.setStatusMessage(tr(ctx, 'commands.conversationCompressFailed', '压缩文档会话历史失败，请检查控制台日志'))
       }
     },
     ai_session_globalMemory_userPersona: () => {
       if (!ctx.openGlobalMemoryDialog) {
-        ctx.setStatusMessage('当前版本未注册 Global Memory 对话框')
+        ctx.setStatusMessage(tr(ctx, 'commands.globalMemoryDialogUnavailable', '当前版本未注册 Global Memory 对话框'))
         return
       }
       ctx.openGlobalMemoryDialog({ initialTab: 'persona' })
     },
     ai_session_globalMemory_manage: () => {
       if (!ctx.openGlobalMemoryDialog) {
-        ctx.setStatusMessage('当前版本未注册 Global Memory 对话框')
+        ctx.setStatusMessage(tr(ctx, 'commands.globalMemoryDialogUnavailable', '当前版本未注册 Global Memory 对话框'))
         return
       }
       ctx.openGlobalMemoryDialog({ initialTab: 'manage' })

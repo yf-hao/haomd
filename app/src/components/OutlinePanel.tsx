@@ -1,5 +1,6 @@
 import type { OutlineItem } from '../modules/outline/parser'
 import { memo, useState } from 'react'
+import { useI18n } from '../modules/i18n/I18nContext'
 
 export type OutlinePanelProps = {
   items: OutlineItem[]
@@ -9,6 +10,7 @@ export type OutlinePanelProps = {
 }
 
 export const OutlinePanel = memo(function OutlinePanel({ items, activeId, onSelect, panelWidth }: OutlinePanelProps) {
+  const { t } = useI18n()
   const hasItems = items.length > 0
   const style = panelWidth ? { width: panelWidth } : undefined
   
@@ -50,7 +52,7 @@ export const OutlinePanel = memo(function OutlinePanel({ items, activeId, onSele
                 toggleCollapse(e, item.id)
               }
             }}
-            aria-label={hasChildren ? (collapsed ? '展开' : '折叠') : undefined}
+            aria-label={hasChildren ? (collapsed ? t('outline.expand') : t('outline.collapse')) : undefined}
             aria-expanded={hasChildren ? !collapsed : undefined}
             disabled={!hasChildren}
           >
@@ -70,7 +72,7 @@ export const OutlinePanel = memo(function OutlinePanel({ items, activeId, onSele
 
   return (
     <aside className="outline-panel" style={style}>
-      <div className="outline-header">Outline</div>
+      <div className="outline-header">{t('outline.title')}</div>
 
       {hasItems ? (
         <ul className="outline-list">
@@ -78,8 +80,8 @@ export const OutlinePanel = memo(function OutlinePanel({ items, activeId, onSele
         </ul>
       ) : (
         <div className="outline-empty">
-          <div className="outline-empty-title">No headings yet</div>
-          <div className="outline-empty-sub">Add Markdown headings like #, ## to see the outline.</div>
+          <div className="outline-empty-title">{t('outline.noHeadings')}</div>
+          <div className="outline-empty-sub">{t('outline.noHeadingsHint')}</div>
         </div>
       )}
     </aside>

@@ -3,9 +3,13 @@ import { invoke } from '@tauri-apps/api/core'
 import './SettingsDialog.css'
 import { Button } from './Button'
 import { FontSelectField } from './settings/FontSelectField'
+import { useI18n } from '../modules/i18n/I18nContext'
+import type { LanguageMode } from '../modules/i18n/schema'
 import {
+  getDefaultLanguageSetting,
   getDefaultThemeSettings,
   getDefaultWordExportStyleSettings,
+  getLanguageSetting,
   getThemeSettings,
   getWordExportStyleSettings,
   loadEditorSettings,
@@ -21,6 +25,7 @@ export type SettingsDialogProps = {
   open: boolean
   onClose: () => void
   onThemeSettingsChange?: (settings: ThemeSettings) => void
+  onLanguageModeChange?: (mode: LanguageMode) => void
 }
 
 type SettingsSectionId = 'theme' | 'word-export'
@@ -56,9 +61,12 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   open,
   onClose,
   onThemeSettingsChange,
+  onLanguageModeChange,
 }) => {
+  const { t } = useI18n()
   const [settings, setSettings] = useState<EditorSettings>({})
   const [theme, setTheme] = useState<ThemeSettings>(getDefaultThemeSettings())
+  const [languageMode, setLanguageMode] = useState<LanguageMode>(getDefaultLanguageSetting())
   const [wordExport, setWordExport] = useState<WordExportStyleSettings>(getDefaultWordExportStyleSettings())
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('theme')
   const [activeThemeTab, setActiveThemeTab] = useState<ThemePanelTabId>('theme-preset')
@@ -72,6 +80,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const previewDragRef = useRef(false)
   const modalRef = useRef<HTMLDivElement | null>(null)
   const originalThemeRef = useRef<ThemeSettings>(getDefaultThemeSettings())
+  const originalLanguageRef = useRef<LanguageMode>(getDefaultLanguageSetting())
   const themePreviewReadyRef = useRef(false)
   const dialogDragRef = useRef<{
     active: boolean
@@ -95,15 +104,18 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     let cancelled = false
     ;(async () => {
       try {
-        const [loadedSettings, loadedTheme, loadedWordExport] = await Promise.all([
+        const [loadedSettings, loadedTheme, loadedLanguage, loadedWordExport] = await Promise.all([
           loadEditorSettings(),
           getThemeSettings(),
+          getLanguageSetting(),
           getWordExportStyleSettings(),
         ])
         if (cancelled) return
         setSettings(loadedSettings)
         setTheme(loadedTheme)
         originalThemeRef.current = loadedTheme
+        setLanguageMode(loadedLanguage)
+        originalLanguageRef.current = loadedLanguage
         themePreviewReadyRef.current = true
         setWordExport(loadedWordExport)
         setEditorBackgroundOpacityInput(String(loadedTheme.editorBackground?.opacity ?? getDefaultThemeSettings().editorBackground?.opacity ?? 0.3))
@@ -126,6 +138,11 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     if (!open || !themePreviewReadyRef.current) return
     onThemeSettingsChange?.(theme)
   }, [open, theme, onThemeSettingsChange])
+
+  useEffect(() => {
+    if (!open || !themePreviewReadyRef.current) return
+    onLanguageModeChange?.(languageMode)
+  }, [open, languageMode, onLanguageModeChange])
 
   useEffect(() => {
     setEditorBackgroundOpacityInput(String(theme.editorBackground?.opacity ?? getDefaultThemeSettings().editorBackground?.opacity ?? 0.3))
@@ -314,12 +331,14 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     try {
       const nextSettings: EditorSettings = {
         ...settings,
+        language: languageMode,
         theme,
         wordExport,
       }
       await saveEditorSettings(nextSettings)
       setSettings(nextSettings)
       originalThemeRef.current = theme
+      originalLanguageRef.current = languageMode
       onClose()
     } catch (err) {
       setError((err as Error).message || 'Failed to save settings')
@@ -331,6 +350,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const handleCloseWithoutSave = () => {
     if (themePreviewReadyRef.current) {
       onThemeSettingsChange?.(originalThemeRef.current)
+      onLanguageModeChange?.(originalLanguageRef.current)
     }
     onClose()
   }
@@ -338,7 +358,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const editorBackground = theme.editorBackground ?? getDefaultThemeSettings().editorBackground!
   const selectedImageName = editorBackground.path
     ? editorBackground.path.split(/[\\/]/).pop()
-    : 'No image selected'
+    : t('theme.image')
   const editorBackgroundPreviewUrl = editorBackground.path
     ? encodeSettingsImagePreviewPath(editorBackground.path)
     : null
@@ -407,27 +427,27 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
           onPointerUp={handleDialogPointerEnd}
           onPointerCancel={handleDialogPointerEnd}
         >
-          Settings
+          {t('settings.title')}
         </div>
         <div className="modal-content" style={{ paddingTop: 8 }}>
           <div className="settings-layout">
             <div className="settings-sidebar">
               <div className="settings-sidebar-title">
-                Categories
+                {t('settings.categories')}
               </div>
               <button
                 type="button"
                 onClick={() => setActiveSection('theme')}
                 className={`settings-sidebar-item ${activeSection === 'theme' ? 'active' : ''}`}
               >
-                Theme
+                {t('settings.theme')}
               </button>
               <button
                 type="button"
                 onClick={() => setActiveSection('word-export')}
                 className={`settings-sidebar-item ${activeSection === 'word-export' ? 'active' : ''}`}
               >
-                Word Export
+                {t('settings.wordExport')}
               </button>
             </div>
 
@@ -436,7 +456,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                 <>
                   <div className="settings-panel-header">
                     <div className="settings-panel-header-top">
-                      <div className="settings-panel-tabs" role="tablist" aria-label="Theme settings sections">
+                      <div className="settings-panel-tabs" role="tablist" aria-label={t('settings.themeSections')}>
                         <button
                           type="button"
                           role="tab"
@@ -444,7 +464,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                           className={`settings-panel-tab ${activeThemeTab === 'theme-preset' ? 'active' : ''}`}
                           onClick={() => setActiveThemeTab('theme-preset')}
                         >
-                          Theme
+                          {t('settings.theme')}
                         </button>
                         <button
                           type="button"
@@ -453,74 +473,89 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                           className={`settings-panel-tab ${activeThemeTab === 'editor-background' ? 'active' : ''}`}
                           onClick={() => setActiveThemeTab('editor-background')}
                         >
-                          Editor Background
+                          {t('theme.editorBackground')}
                         </button>
                       </div>
                     </div>
                     {activeThemeTab === 'theme-preset' ? (
                       <div className="settings-panel-description">
-                        Choose how HaoMD should appear. `System` follows the OS appearance.
+                        {t('settings.appearanceDescription')}
                       </div>
                     ) : null}
                   </div>
 
                   {activeThemeTab === 'theme-preset' ? (
                     <div className="theme-option-group">
+                      <div style={{ ...fieldGridStyle, marginBottom: 2 }}>
+                        <label className="settings-field-label">{t('settings.language')}</label>
+                        <select
+                          className="field-select"
+                          value={languageMode}
+                          onChange={(event) => setLanguageMode(event.target.value as LanguageMode)}
+                        >
+                          <option value="system">{t('settings.system')}</option>
+                          <option value="zh-CN">{t('settings.simplifiedChinese')}</option>
+                          <option value="en-US">{t('settings.english')}</option>
+                        </select>
+                      </div>
+                      <div className="settings-panel-description" style={{ marginBottom: 8 }}>
+                        {t('settings.languageDescription')}
+                      </div>
                       {([
                         {
                           mode: 'system',
-                          title: 'System',
-                          description: 'Use the current macOS, Windows, or Linux appearance.',
+                          title: t('theme.presets.system.title'),
+                          description: t('theme.presets.system.description'),
                         },
                         {
                           mode: 'light',
-                          title: 'Light',
-                          description: 'Use the light HaoMD theme.',
+                          title: t('theme.presets.light.title'),
+                          description: t('theme.presets.light.description'),
                         },
                         {
                           mode: 'romantic',
-                          title: 'Romantic',
-                          description: 'Use a softer warm preset with rose accents and paper-like surfaces.',
+                          title: t('theme.presets.romantic.title'),
+                          description: t('theme.presets.romantic.description'),
                         },
                         {
                           mode: 'paper',
-                          title: 'Paper',
-                          description: 'Use a warm reading preset with softer paper-like surfaces for long-form writing.',
+                          title: t('theme.presets.paper.title'),
+                          description: t('theme.presets.paper.description'),
                         },
                         {
                           mode: 'high-contrast',
-                          title: 'High Contrast',
-                          description: 'Use a stronger readability preset with clearer borders and higher text contrast.',
+                          title: t('theme.presets.highContrast.title'),
+                          description: t('theme.presets.highContrast.description'),
                         },
                         {
                           mode: 'dark',
-                          title: 'Dark',
-                          description: 'Use the dark HaoMD theme.',
+                          title: t('theme.presets.dark.title'),
+                          description: t('theme.presets.dark.description'),
                         },
                         {
                           mode: 'electric-mint',
-                          title: 'Electric Mint',
-                          description: 'Use a vibrant mint-and-cyan preset with fresh dark surfaces and a crisp youthful accent palette.',
+                          title: t('theme.presets.electricMint.title'),
+                          description: t('theme.presets.electricMint.description'),
                         },
                         {
                           mode: 'neon-pop',
-                          title: 'Neon Pop',
-                          description: 'Use a high-energy neon preset with punchy pink, cyan, and violet highlights on dark surfaces.',
+                          title: t('theme.presets.neonPop.title'),
+                          description: t('theme.presets.neonPop.description'),
                         },
                         {
                           mode: 'velvet-rose',
-                          title: 'Velvet Rose',
-                          description: 'Use a dark romantic preset with velvet berry surfaces and plum accents.',
+                          title: t('theme.presets.velvetRose.title'),
+                          description: t('theme.presets.velvetRose.description'),
                         },
                         {
                           mode: 'focus',
-                          title: 'Focus',
-                          description: 'Use a quieter low-distraction dark preset for long working sessions.',
+                          title: t('theme.presets.focus.title'),
+                          description: t('theme.presets.focus.description'),
                         },
                         {
                           mode: 'ai-console',
-                          title: 'AI Console',
-                          description: 'Use a deep neutral workspace preset with restrained contrast and console-style surfaces.',
+                          title: t('theme.presets.aiConsole.title'),
+                          description: t('theme.presets.aiConsole.description'),
                         },
                       ] as const).map((option) => (
                         <button
@@ -544,28 +579,28 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                             checked={editorBackground.enabled}
                             onChange={(event) => updateEditorBackground({ enabled: event.target.checked })}
                           />
-                          <span>Enable editor background image</span>
+                          <span>{t('theme.enableEditorBackgroundImage')}</span>
                         </label>
                       </div>
 
                       <div style={{ display: 'grid', gap: 14 }}>
                         <div style={fieldGridStyle}>
-                          <label className="settings-field-label">Image</label>
+                          <label className="settings-field-label">{t('theme.image')}</label>
                           <div className="settings-inline-actions">
                             <div className="settings-inline-meta">{selectedImageName}</div>
                             <div className="settings-inline-buttons">
                               <Button variant="secondary" type="button" onClick={() => void handleSelectEditorBackground()}>
-                                Choose Image
+                                {t('common.chooseImage')}
                               </Button>
                               <Button variant="tertiary" type="button" onClick={clearEditorBackground} disabled={!editorBackground.path}>
-                                Clear
+                                {t('common.clear')}
                               </Button>
                             </div>
                           </div>
                         </div>
 
                         <div style={fieldGridStyle}>
-                          <label className="settings-field-label">Image Opacity</label>
+                          <label className="settings-field-label">{t('theme.imageOpacity')}</label>
                           <input
                             className="field-input settings-number-input"
                             type="number"
@@ -579,7 +614,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                         </div>
 
                         <div style={fieldGridStyle}>
-                          <label className="settings-field-label">Blur (px)</label>
+                          <label className="settings-field-label">{t('theme.blurPx')}</label>
                           <input
                             className="field-input settings-number-input"
                             type="number"
@@ -593,7 +628,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                         </div>
 
                         <div style={fieldGridStyle}>
-                          <label className="settings-field-label">Overlay Opacity</label>
+                          <label className="settings-field-label">{t('theme.overlayOpacity')}</label>
                           <input
                             className="field-input settings-number-input"
                             type="number"
@@ -607,7 +642,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                         </div>
 
                         <div style={fieldGridStyle}>
-                          <label className="settings-field-label">Brightness (%)</label>
+                          <label className="settings-field-label">{t('theme.brightnessPercent')}</label>
                           <input
                             className="field-input settings-number-input"
                             type="number"
@@ -621,22 +656,22 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                         </div>
 
                         <div style={fieldGridStyle}>
-                          <label className="settings-field-label">Image Fit</label>
+                          <label className="settings-field-label">{t('theme.imageFit')}</label>
                           <select
                             className="field-select"
                           value={editorBackground.size}
                           onChange={updateEditorBackgroundSize}
                         >
-                          <option value="cover">Cover</option>
-                          <option value="height-fill">Height Fill</option>
-                          <option value="width-fill">Width Fill</option>
-                          <option value="contain">Contain</option>
-                          <option value="auto">Original</option>
+                          <option value="cover">{t('theme.cover')}</option>
+                          <option value="height-fill">{t('theme.heightFill')}</option>
+                          <option value="width-fill">{t('theme.widthFill')}</option>
+                          <option value="contain">{t('theme.contain')}</option>
+                          <option value="auto">{t('theme.original')}</option>
                         </select>
                         </div>
 
                         <div style={fieldGridStyle}>
-                          <label className="settings-field-label">Image Position</label>
+                          <label className="settings-field-label">{t('theme.imagePosition')}</label>
                           <div style={{ display: 'grid', gap: 10 }}>
                             <div
                               className={`settings-image-position-picker ${editorBackground.path ? '' : 'disabled'}`}
@@ -675,7 +710,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                                   }}
                                 />
                               ) : (
-                                <div className="settings-image-position-empty">Choose an image to enable dragging.</div>
+                                <div className="settings-image-position-empty">{t('theme.chooseImageToDrag')}</div>
                               )}
                               <div
                                 className="settings-image-position-preview-overlay"
@@ -693,7 +728,10 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                               />
                             </div>
                             <div className="settings-inline-meta">
-                              X {Math.round(editorBackground.positionX)}% · Y {Math.round(editorBackground.positionY)}%
+                              {t('theme.positionLabel', {
+                                x: Math.round(editorBackground.positionX),
+                                y: Math.round(editorBackground.positionY),
+                              })}
                             </div>
                           </div>
                         </div>
@@ -706,51 +744,51 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
               {activeSection === 'word-export' && (
                 <>
                   <div className="settings-panel-header">
-                    <div className="settings-panel-title">Word Export</div>
+                    <div className="settings-panel-title">{t('wordExport.title')}</div>
                     <div className="settings-panel-description">
-                      Customize default fonts, spacing, and margins for `.docx` export.
+                      {t('wordExport.description')}
                     </div>
                   </div>
 
                   <div style={{ display: 'grid', gap: 14 }}>
                     <div style={fieldGridStyle}>
-                      <label className="settings-field-label">Body Font</label>
+                      <label className="settings-field-label">{t('wordExport.bodyFont')}</label>
                       <FontSelectField value={wordExport.bodyFontFamily} onChange={updateFontFamily('bodyFontFamily')} />
                     </div>
                     <div style={fieldGridStyle}>
-                      <label className="settings-field-label">Body Size (pt)</label>
+                      <label className="settings-field-label">{t('wordExport.bodySizePt')}</label>
                       <input className="field-input settings-number-input" type="number" min={8} max={48} step={0.5} value={wordExport.bodyFontSizePt} onChange={updateNumber('bodyFontSizePt')} />
                     </div>
                     <div style={fieldGridStyle}>
-                      <label className="settings-field-label">Heading Font</label>
+                      <label className="settings-field-label">{t('wordExport.headingFont')}</label>
                       <FontSelectField value={wordExport.headingFontFamily} onChange={updateFontFamily('headingFontFamily')} />
                     </div>
                     <div style={fieldGridStyle}>
-                      <label className="settings-field-label">Heading 1 Size (pt)</label>
+                      <label className="settings-field-label">{t('wordExport.heading1SizePt')}</label>
                       <input className="field-input settings-number-input" type="number" min={10} max={48} step={0.5} value={wordExport.heading1SizePt} onChange={updateNumber('heading1SizePt')} />
                     </div>
                     <div style={fieldGridStyle}>
-                      <label className="settings-field-label">Heading 2 Size (pt)</label>
+                      <label className="settings-field-label">{t('wordExport.heading2SizePt')}</label>
                       <input className="field-input settings-number-input" type="number" min={10} max={48} step={0.5} value={wordExport.heading2SizePt} onChange={updateNumber('heading2SizePt')} />
                     </div>
                     <div style={fieldGridStyle}>
-                      <label className="settings-field-label">Heading 3 Size (pt)</label>
+                      <label className="settings-field-label">{t('wordExport.heading3SizePt')}</label>
                       <input className="field-input settings-number-input" type="number" min={10} max={48} step={0.5} value={wordExport.heading3SizePt} onChange={updateNumber('heading3SizePt')} />
                     </div>
                     <div style={fieldGridStyle}>
-                      <label className="settings-field-label">Paragraph Spacing After (pt)</label>
+                      <label className="settings-field-label">{t('wordExport.paragraphSpacingAfterPt')}</label>
                       <input className="field-input settings-number-input" type="number" min={0} max={72} step={0.5} value={wordExport.paragraphSpacingAfterPt} onChange={updateNumber('paragraphSpacingAfterPt')} />
                     </div>
                     <div style={fieldGridStyle}>
-                      <label className="settings-field-label">Line Spacing</label>
+                      <label className="settings-field-label">{t('wordExport.lineSpacing')}</label>
                       <input className="field-input settings-number-input" type="number" min={1} max={3} step={0.05} value={wordExport.lineSpacing} onChange={updateNumber('lineSpacing')} />
                     </div>
                     <div style={fieldGridStyle}>
-                      <label className="settings-field-label">Code Size (pt)</label>
+                      <label className="settings-field-label">{t('wordExport.codeSizePt')}</label>
                       <input className="field-input settings-number-input" type="number" min={8} max={32} step={0.5} value={wordExport.codeFontSizePt} onChange={updateNumber('codeFontSizePt')} />
                     </div>
                     <div style={fieldGridStyle}>
-                      <label className="settings-field-label">Page Margin (cm)</label>
+                      <label className="settings-field-label">{t('wordExport.pageMarginCm')}</label>
                       <input className="field-input settings-number-input" type="number" min={1} max={5} step={0.1} value={wordExport.pageMarginCm} onChange={updateNumber('pageMarginCm')} />
                     </div>
                   </div>
@@ -768,14 +806,14 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
         <div className="modal-actions">
           {activeSection === 'word-export' || (activeSection === 'theme' && activeThemeTab === 'editor-background') ? (
             <Button variant="tertiary" type="button" onClick={handleReset} disabled={isSaving}>
-              Reset
+              {t('common.reset')}
             </Button>
           ) : null}
           <Button variant="secondary" type="button" onClick={handleCloseWithoutSave} disabled={isSaving}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button variant="primary" type="button" onClick={handleSave} disabled={isSaving} loading={isSaving}>
-            {isSaving ? 'Saving...' : 'Save'}
+            {isSaving ? t('common.saving') : t('common.save')}
           </Button>
         </div>
       </div>

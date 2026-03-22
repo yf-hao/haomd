@@ -28,6 +28,7 @@ export type CommandSystemParams = CommandContext & {
    * 可选的 AI 客户端实现，默认使用基于 AI Settings 的实现。
    */
   aiClient?: IAiClient
+  t?: (key: string, params?: Record<string, string | number>) => string
 }
 
 export function useCommandSystem(params: CommandSystemParams) {
@@ -79,6 +80,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     closeAiChatDialog,
     openInsertTableDialog,
     openRecentDialog,
+    t,
   } = params
 
   const aiClient = useMemo<IAiClient>(() => {
@@ -134,6 +136,7 @@ export function useCommandSystem(params: CommandSystemParams) {
         openInsertTableDialog,
         closeAiChatDialog,
         openRecentDialog,
+        t,
       }),
     [
       layout,
@@ -181,6 +184,7 @@ export function useCommandSystem(params: CommandSystemParams) {
       openSearch,
       openInsertTableDialog,
       closeAiChatDialog,
+      t,
     ],
   )
 
@@ -188,7 +192,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     async (action: string) => {
       const handler = commands[action]
       if (!handler) {
-        setStatusMessage('暂未实现的菜单')
+        setStatusMessage(t?.('commands.menuNotImplemented') ?? '暂未实现的菜单')
         return
       }
       await Promise.resolve(handler())

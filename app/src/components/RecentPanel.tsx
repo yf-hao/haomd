@@ -1,4 +1,5 @@
 import type { RecentFile } from '../modules/files/types'
+import { useI18n } from '../modules/i18n/I18nContext'
 
 export type RecentPanelProps = {
   open: boolean
@@ -25,18 +26,19 @@ export function RecentPanel({
   onOpenItem,
   onDeleteItem,
 }: RecentPanelProps) {
+  const { t } = useI18n()
   if (!open) return null
 
   return (
     <aside className="side-panel recent-panel">
       <div className="side-header">
-        <div className="pane-title">最近文件</div>
+        <div className="pane-title">{t('recent.title')}</div>
         <button className="ghost" onClick={onClose}>
-          关闭
+          {t('recent.close')}
         </button>
       </div>
       <div className="side-body">
-        {items.length === 0 && <div className="muted">暂无记录</div>}
+        {items.length === 0 && <div className="muted">{t('recent.noRecords')}</div>}
         {items.map((item) => (
           <div key={item.path} className="history-item-row">
             <div
@@ -68,7 +70,7 @@ export function RecentPanel({
                 await onDeleteItem(item.path)
               }}
             >
-              删除
+              {t('recent.delete')}
             </button>
           </div>
         ))}
@@ -81,7 +83,7 @@ export function RecentPanel({
                 await onLoadMore()
               }}
             >
-              {loading ? '加载中…' : '加载更多'}
+              {loading ? t('recent.loadingMore') : t('recent.loadMore')}
             </button>
           </div>
         )}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent }
 import { Button } from './Button'
 import { listRecentPage } from '../modules/files/service'
 import type { RecentFile } from '../modules/files/types'
+import { useI18n } from '../modules/i18n/I18nContext'
 
 export type RecentFilesDialogProps = {
   open: boolean
@@ -28,6 +29,7 @@ function filterItems(items: RecentFile[], query: string): RecentFile[] {
 }
 
 export function RecentFilesDialog({ open, onClose, onOpenFile }: RecentFilesDialogProps) {
+  const { t } = useI18n()
   const [items, setItems] = useState<RecentFile[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -205,14 +207,14 @@ export function RecentFilesDialog({ open, onClose, onOpenFile }: RecentFilesDial
         tabIndex={0}
         onKeyDown={handleKeyDown}
       >
-        <div className="modal-title">Recent files</div>
+        <div className="modal-title">{t('recent.title')}</div>
         <div className="modal-content recent-dialog-content">
           <div className="recent-dialog-toolbar">
             <input
               ref={searchInputRef}
               type="text"
               className="recent-dialog-search-input"
-              placeholder="Search by name or path…"
+              placeholder={t('recent.searchPlaceholder')}
               value={query}
               onChange={(e) => {
                 setQuery(e.target.value)
@@ -225,13 +227,13 @@ export function RecentFilesDialog({ open, onClose, onOpenFile }: RecentFilesDial
 
           <div className="recent-dialog-list">
             {loading && (
-              <div className="recent-dialog-status">Loading recent files…</div>
+              <div className="recent-dialog-status">{t('recent.loading')}</div>
             )}
             {!loading && error && (
               <div className="recent-dialog-status recent-dialog-error">{error}</div>
             )}
             {!loading && !error && pageItems.length === 0 && (
-              <div className="recent-dialog-status">No matching recent files</div>
+              <div className="recent-dialog-status">{t('recent.noMatch')}</div>
             )}
             {!loading && !error && pageItems.length > 0 && (
               <ul ref={listRef}>
@@ -268,7 +270,7 @@ export function RecentFilesDialog({ open, onClose, onOpenFile }: RecentFilesDial
               }}
               disabled={currentPage <= 1}
             >
-              Prev
+              {t('recent.prev')}
             </Button>
             <span className="recent-dialog-page-label">{pageLabel}</span>
             <Button
@@ -279,7 +281,7 @@ export function RecentFilesDialog({ open, onClose, onOpenFile }: RecentFilesDial
               }}
               disabled={currentPage >= totalPages}
             >
-              Next
+              {t('recent.next')}
             </Button>
           </div>
           <div className="recent-dialog-actions-right">

@@ -10,7 +10,10 @@ export async function exportToWord(ctx: {
   getCurrentMarkdown: () => string
   getCurrentFileName: () => string | null
   getFilePath?: () => string | null
+  t?: (key: string, params?: Record<string, string | number>) => string
 }) {
+  const tr = (key: string, fallback: string, params?: Record<string, string | number>) =>
+    ctx.t?.(key, params) ?? fallback
   try {
     const rawTitle = ctx.getCurrentFileName() || 'Document'
     const title = buildWordExportBaseName(rawTitle)
@@ -25,13 +28,13 @@ export async function exportToWord(ctx: {
     })
     if (!outputPath) return false
 
-    ctx.setStatusMessage('正在解析 Markdown 结构...')
+    ctx.setStatusMessage(tr('export.wordParsing', '正在解析 Markdown 结构...'))
     let payload = isPlainText
       ? plainTextToWordModel(markdown, title)
       : markdownToWordModel(markdown, title)
     payload.styleSettings = styleSettings
 
-    ctx.setStatusMessage('正在收集文档资源...')
+    ctx.setStatusMessage(tr('export.wordCollectingAssets', '正在收集文档资源...'))
     payload = await collectWordAssets({ payload, filePath })
 
     payload = await renderWordDiagramAssets({
@@ -39,17 +42,17 @@ export async function exportToWord(ctx: {
       setStatusMessage: ctx.setStatusMessage,
     })
 
-    ctx.setStatusMessage('正在生成 Word 文档...')
+    ctx.setStatusMessage(tr('export.wordGenerating', '正在生成 Word 文档...'))
     await invoke('export_word_docx', {
       payloadJson: JSON.stringify(payload),
       outputPath,
     })
 
-    ctx.setStatusMessage(`Word 导出成功: ${outputPath}`)
+    ctx.setStatusMessage(tr('export.wordSuccess', `Word 导出成功: ${outputPath}`, { path: outputPath }))
     return true
   } catch (error) {
     console.error('[Export Word] 导出失败:', error)
-    ctx.setStatusMessage('Word 导出失败: ' + (error as Error).message)
+    ctx.setStatusMessage(tr('export.wordFailed', 'Word 导出失败: ' + (error as Error).message, { message: (error as Error).message }))
     return false
   }
 }

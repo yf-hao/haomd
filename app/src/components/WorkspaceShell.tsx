@@ -38,6 +38,7 @@ import { openTerminalAt } from '../modules/platform/terminalService'
 import { openInFileManager } from '../modules/platform/fileExplorerService'
 import { loadDefaultImagePathStrategyConfig, resolveImageTarget } from '../modules/images/imagePasteStrategy'
 import { registerApplyHeadingLevel, registerResetHeadingToParagraph, registerEmphasizeSelection, registerInsertCodeBlock } from '../modules/editor/formatService'
+import { useI18n } from '../modules/i18n/I18nContext'
 // 改为从内部动态加载，优化编辑性能
 // import { exportToHtml } from '../modules/export/html'
 
@@ -107,6 +108,7 @@ export function WorkspaceShell({
   onDocumentStatsChange,
   onStatusMessageChange,
 }: WorkspaceShellProps) {
+  const { t } = useI18n()
   const [markdown, setMarkdown] = useState(seed)
   const [previewValue, setPreviewValue] = useState(seed)
   const [activeLine, setActiveLine] = useState(1)
@@ -760,11 +762,11 @@ export function WorkspaceShell({
     if (!tab) return
     if (tab.dirty) {
       setConfirmDialog({
-        title: `Do you want to save changes to ${tab.title}?`,
-        message: "Your changes will be lost if you don't save them.",
-        confirmText: 'Save',
-        cancelText: 'Cancel',
-        extraText: "Don't Save",
+        title: t('workspace.saveChangesToTitle', { title: tab.title }),
+        message: t('workspace.saveChangesMessage'),
+        confirmText: t('common.save'),
+        cancelText: t('common.cancel'),
+        extraText: t('workspace.dontSave'),
         variant: 'stacked',
         onConfirm: async () => {
           setConfirmDialog(null)
@@ -790,10 +792,10 @@ export function WorkspaceShell({
     // 无论是否存在未保存标签，都先弹出确认模态
     if (unsaved.length === 0) {
       setConfirmDialog({
-        title: 'Quit HaoMD?',
-        message: 'Are you sure you want to quit HaoMD?',
-        confirmText: 'Quit',
-        cancelText: 'Cancel',
+        title: t('workspace.quitTitle'),
+        message: t('workspace.quitMessage'),
+        confirmText: t('workspace.quit'),
+        cancelText: t('common.cancel'),
         onConfirm: () => {
           setConfirmDialog(null)
           if (isTauriEnv()) invoke('quit_app').catch(() => { })
@@ -877,19 +879,19 @@ export function WorkspaceShell({
 
   const saveWithPdfGuard = useCallback(async () => {
     if (isPdfActive) {
-      setStatusMessage('当前为 PDF 标签，保存命令仅适用于 Markdown 文档')
-      return { ok: false as const, error: { code: 'UNSUPPORTED', message: '当前标签为 PDF，不支持保存', traceId: undefined } }
+      setStatusMessage(t('workspace.saveUnsupportedPdf'))
+      return { ok: false as const, error: { code: 'UNSUPPORTED', message: t('workspace.saveUnsupportedPdfError'), traceId: undefined } }
     }
     return await save()
-  }, [isPdfActive, save, setStatusMessage])
+  }, [isPdfActive, save, setStatusMessage, t])
 
   const saveAsWithPdfGuard = useCallback(async () => {
     if (isPdfActive) {
-      setStatusMessage('当前为 PDF 标签，保存命令仅适用于 Markdown 文档')
-      return { ok: false as const, error: { code: 'UNSUPPORTED', message: '当前标签为 PDF，不支持另存为', traceId: undefined } }
+      setStatusMessage(t('workspace.saveUnsupportedPdf'))
+      return { ok: false as const, error: { code: 'UNSUPPORTED', message: t('workspace.saveAsUnsupportedPdfError'), traceId: undefined } }
     }
     return await saveAs()
-  }, [isPdfActive, saveAs, setStatusMessage])
+  }, [isPdfActive, saveAs, setStatusMessage, t])
 
   const markPendingRestoreRef = useRef<((tabId: string) => void) | null>(null)
 
@@ -960,7 +962,7 @@ export function WorkspaceShell({
     if (!trimmed) return null
 
     if (/[\\/]/.test(trimmed)) {
-      setStatusMessage('文件名中不能包含路径分隔符')
+      setStatusMessage(t('workspace.fileNameCannotContainSeparator'))
       return null
     }
 
@@ -1005,7 +1007,7 @@ export function WorkspaceShell({
 
     if (/[\\/]/.test(trimmed)) {
       console.log('[WorkspaceShell.generateUniqueFolderPath] invalid-name-has-separator', { trimmed })
-      setStatusMessage('文件夹名中不能包含路径分隔符')
+      setStatusMessage(t('workspace.folderNameCannotContainSeparator'))
       return null
     }
 
@@ -1066,7 +1068,7 @@ export function WorkspaceShell({
     if (sidebar.folderRoots.length > 0) {
       return sidebar.folderRoots[0]
     }
-    setStatusMessage('请先打开一个文件或文件夹')
+    setStatusMessage(t('workspace.openFileOrFolderFirst'))
     return null
   }
 
@@ -1083,7 +1085,7 @@ export function WorkspaceShell({
     if (sidebar.folderRoots.length > 0) {
       return sidebar.folderRoots[0]
     }
-    setStatusMessage('请先打开一个文件或文件夹')
+    setStatusMessage(t('workspace.openFileOrFolderFirst'))
     return null
   }
 
@@ -1093,7 +1095,7 @@ export function WorkspaceShell({
 
   const handleToolbarNewFileInCurrentFolder = useCallback(() => {
     if (isCreatingTab) {
-      setStatusMessage('正在创建新标签，请稍候…')
+      setStatusMessage(t('workspace.creatingTabPleaseWait'))
       return
     }
 
@@ -1152,7 +1154,7 @@ export function WorkspaceShell({
 
   const handleToolbarNewFolderInCurrentFolder = useCallback(() => {
     if (isCreatingTab) {
-      setStatusMessage('正在创建新标签，请稍候…')
+      setStatusMessage(t('workspace.creatingTabPleaseWait'))
       return
     }
 
@@ -1218,7 +1220,7 @@ export function WorkspaceShell({
 
     const targetPath = selectedFolderPath ?? activeTab?.path ?? null
     if (!targetPath) {
-      setStatusMessage('请先在左侧 File Browser 中选中文件或文件夹')
+      setStatusMessage(t('workspace.selectFileOrFolderInBrowserFirst'))
       return
     }
 
@@ -1228,7 +1230,7 @@ export function WorkspaceShell({
       return rootNorm === normalizedTarget
     })
     if (isRoot) {
-      setStatusMessage('暂不支持在 HaoMD 中重命名根目录，请在系统文件管理器中操作')
+      setStatusMessage(t('workspace.renameRootNotSupported'))
       return
     }
 
@@ -1245,13 +1247,13 @@ export function WorkspaceShell({
 
     const name = rawName.trim()
     if (!name) {
-      setStatusMessage('名称不能为空')
+      setStatusMessage(t('workspace.nameCannotBeEmpty'))
       setInlineRenamePath(null)
       return
     }
 
     if (/[\\/]/.test(name)) {
-      setStatusMessage('名称中不能包含路径分隔符')
+      setStatusMessage(t('workspace.nameCannotContainSeparator'))
       return
     }
 
@@ -1302,7 +1304,7 @@ export function WorkspaceShell({
         return tabNorm === normalizedDir || tabNorm.startsWith(normalizedDir + '/')
       })
       if (hasOpenedUnderDir) {
-        setStatusMessage('当前目录下存在已打开的文件，暂不支持重命名目录，请先关闭相关标签')
+        setStatusMessage(t('workspace.renameFolderWithOpenFilesNotSupported'))
         setInlineRenamePath(null)
         return
       }
@@ -1372,9 +1374,9 @@ export function WorkspaceShell({
       else sidebar.removeFolderRoot(path)
     } else if (action === 'delete') {
       setConfirmDialog({
-        title: 'Confirm Delete',
-        message: `Are you sure you want to delete ${path}?`,
-        confirmText: 'Delete',
+        title: t('workspace.confirmDeleteTitle'),
+        message: t('workspace.confirmDeleteMessage', { path }),
+        confirmText: t('workspace.delete'),
         onConfirm: async () => {
           setConfirmDialog(null)
           const resp = await deleteFsEntry(path)
@@ -1425,7 +1427,7 @@ export function WorkspaceShell({
     } else if (action === 'rename') {
       // 禁止重命名根目录，保持与键盘 Enter 行为一致
       if (kind === 'folder-root') {
-        setStatusMessage('暂不支持在 HaoMD 中重命名根目录，请在系统文件管理器中操作')
+        setStatusMessage(t('workspace.renameRootNotSupported'))
         return
       }
 
@@ -1505,7 +1507,7 @@ export function WorkspaceShell({
   const handleExportHtml = useCallback(async () => {
     // 防重入
     if (isExportingHtmlRef.current) {
-      setStatusMessage('正在准备导出，请稍候...')
+      setStatusMessage(t('workspace.preparingExportPleaseWait'))
       return
     }
 
@@ -1519,11 +1521,12 @@ export function WorkspaceShell({
         setStatusMessage,
         getCurrentMarkdown,
         getCurrentFileName,
-        getFilePath: () => activeTabPathRef.current
+        getFilePath: () => activeTabPathRef.current,
+        t,
       })
     } catch (e) {
       console.error('[Export] 动态加载失败:', e)
-      setStatusMessage('导出功能加载失败，请重试')
+      setStatusMessage(t('workspace.exportFeatureLoadFailed'))
     } finally {
       isExportingHtmlRef.current = false
     }
@@ -1533,7 +1536,7 @@ export function WorkspaceShell({
     console.log('[WorkspaceShell] 预备导出 PDF...')
     // 防重入
     if (isExportingPdfRef.current) {
-      setStatusMessage('正在准备导出，请稍候...')
+      setStatusMessage(t('workspace.preparingExportPleaseWait'))
       return
     }
 
@@ -1545,11 +1548,12 @@ export function WorkspaceShell({
         setStatusMessage,
         getCurrentMarkdown,
         getCurrentFileName,
-        getFilePath: () => activeTabPathRef.current
+        getFilePath: () => activeTabPathRef.current,
+        t,
       })
     } catch (e) {
       console.error('[Export PDF] 动态加载失败:', e)
-      setStatusMessage('PDF 导出加载失败，请重试')
+      setStatusMessage(t('workspace.pdfExportLoadFailed'))
     } finally {
       isExportingPdfRef.current = false
     }
@@ -1557,7 +1561,7 @@ export function WorkspaceShell({
 
   const handleExportWord = useCallback(async () => {
     if (isPdfActive) {
-      setStatusMessage('当前为 PDF 标签，暂不支持导出为 Word')
+      setStatusMessage(t('workspace.exportWordUnsupportedPdf'))
       return
     }
 
@@ -1568,20 +1572,21 @@ export function WorkspaceShell({
         getCurrentMarkdown,
         getCurrentFileName,
         getFilePath: () => activeTabPathRef.current,
+        t,
       })
     } catch (e) {
       console.error('[Export Word] 动态加载失败:', e)
-      setStatusMessage('Word 导出功能加载失败，请重试')
+      setStatusMessage(t('workspace.exportWordLoadFailed'))
     }
-  }, [isPdfActive, setStatusMessage, getCurrentMarkdown, getCurrentFileName])
+  }, [isPdfActive, setStatusMessage, getCurrentMarkdown, getCurrentFileName, t])
 
   const openInsertTableDialog = useCallback(() => {
     if (isPdfActive) {
-      setStatusMessage('当前为 PDF 标签，暂不支持插入 Markdown 表格')
+      setStatusMessage(t('workspace.insertTableUnsupportedPdf'))
       return
     }
     setIsInsertTableDialogOpen(true)
-  }, [isPdfActive, setStatusMessage])
+  }, [isPdfActive, setStatusMessage, t])
 
   const generateMarkdownTable = useCallback((rows: number, cols: number): string => {
     const safeRows = Math.max(1, rows)
@@ -1604,14 +1609,14 @@ export function WorkspaceShell({
       setIsInsertTableDialogOpen(false)
 
       if (isPdfActive) {
-        setStatusMessage('当前为 PDF 标签，暂不支持插入 Markdown 表格')
+        setStatusMessage(t('workspace.insertTableUnsupportedPdf'))
         return
       }
 
       const tableMarkdown = generateMarkdownTable(rows, cols)
       await insertMarkdownAtCursorBelow(tableMarkdown)
     },
-    [generateMarkdownTable, insertMarkdownAtCursorBelow, isPdfActive, setStatusMessage],
+    [generateMarkdownTable, insertMarkdownAtCursorBelow, isPdfActive, setStatusMessage, t],
   )
 
   const { dispatchAction } = useCommandSystem({
@@ -1637,6 +1642,7 @@ export function WorkspaceShell({
     exportPdf: handleExportPdf,
     exportWord: handleExportWord,
     openRecentDialog: () => setRecentDialogOpen(true),
+    t,
   } as any)
 
   const aiChatCommandBridge = useMemo(
@@ -1672,9 +1678,9 @@ export function WorkspaceShell({
       if (!filePath || filePath === 'untitled.md') {
         console.warn('[WorkspaceShell] onNativePasteImage: no filePath, cannot determine images dir')
         setConfirmDialogRef.current({
-          title: 'Cannot Insert Image',
-          message: 'Please save the file first (Ctrl/Cmd+S) before inserting images.',
-          confirmText: 'OK',
+          title: t('workspace.cannotInsertImageTitle'),
+          message: t('workspace.cannotInsertImageMessage'),
+          confirmText: t('workspace.ok'),
           onConfirm: () => setConfirmDialogRef.current(null),
         })
         return
@@ -1704,14 +1710,14 @@ export function WorkspaceShell({
         const okPart = result && 'Ok' in result ? result.Ok : null
         if (!okPart) {
           console.error('[WorkspaceShell] onNativePasteImage: backend returned Err', result?.Err)
-          setStatusMessage(result?.Err?.error?.message || '粘贴图片失败：后端错误')
+          setStatusMessage(result?.Err?.error?.message || t('workspace.pasteImageBackendError'))
           return
         }
 
         const fileName = okPart?.data?.file_name as string | undefined
         if (!fileName) {
           console.error('[WorkspaceShell] onNativePasteImage: missing file_name in Ok.data')
-          setStatusMessage('粘贴图片失败：后端未返回文件名')
+          setStatusMessage(t('workspace.pasteImageMissingFileName'))
           return
         }
 
@@ -1730,14 +1736,14 @@ export function WorkspaceShell({
         }))
       } catch (err) {
         console.error('[WorkspaceShell] onNativePasteImage: invoke failed', err)
-        setStatusMessage(`粘贴图片失败：${String(err)}`)
+        setStatusMessage(t('workspace.pasteImageFailed', { message: String(err) }))
       }
     })
 
     return () => {
       unlisten()
     }
-  }, [editorViewRef, filePath, setStatusMessage])
+  }, [editorViewRef, filePath, setStatusMessage, t])
 
   const saveCursorPositionRef = useRef<((globalLine: number) => void) | null>(null)
 
@@ -1790,15 +1796,15 @@ export function WorkspaceShell({
     const tab = tabs.find(t => t.id === id)
     if (!isActive) {
       setConfirmDialog({
-        title: 'Cannot save background tab',
-        message: `Close ${tab?.title} and discard changes?`,
-        confirmText: 'Discard and Close',
+        title: t('workspace.cannotSaveBackgroundTab'),
+        message: t('workspace.closeAndDiscardChanges', { title: tab?.title ?? '' }),
+        confirmText: t('workspace.discardAndClose'),
         onConfirm: () => { setConfirmDialog(null); closeTabWithAiSession(id); }
       })
     } else {
       handleCurrentTabClose()
     }
-  }, [activeId, tabs, closeTabWithAiSession, handleCurrentTabClose])
+  }, [activeId, tabs, closeTabWithAiSession, handleCurrentTabClose, t])
 
   const initialActionHandledRef = useRef(false)
   useEffect(() => {
@@ -1854,10 +1860,10 @@ export function WorkspaceShell({
             onInlineRenameCancel={handleInlineRenameCancel}
             onRequestConfirmDeleteFileVirtualFolder={({ folder, onConfirm }) => {
               setConfirmDialog({
-                title: '删除虚拟文件夹',
-                message: `确认删除虚拟文件夹 “${folder.name}”？其中的文件会移回根列表。`,
-                confirmText: '删除',
-                cancelText: '取消',
+                title: t('workspace.deleteVirtualFolderTitle'),
+                message: t('workspace.deleteVirtualFolderMessage', { name: folder.name }),
+                confirmText: t('workspace.delete'),
+                cancelText: t('common.cancel'),
                 onConfirm: () => {
                   setConfirmDialog(null)
                   onConfirm()
@@ -1873,11 +1879,11 @@ export function WorkspaceShell({
         {activeLeftPanel === 'pdf' && (
           <div className="pdf-panel" style={{ width: sidebarWidth }}>
             <div className="pdf-panel-header">
-              <span>PDF</span>
+              <span>{t('pdf.title')}</span>
               <button
                 type="button"
                 className="pdf-folder-add-btn"
-                title="新建虚拟文件夹"
+                title={t('workspace.newVirtualFolder')}
                 onClick={() => handleCreatePdfFolder()}
               >
                 +
@@ -1889,7 +1895,7 @@ export function WorkspaceShell({
                   <input
                     type="text"
                     className="pdf-folder-inline-input sidebar-virtual-folder-inline-input"
-                    placeholder="输入虚拟文件夹名称后按回车确认，Esc 取消"
+                    placeholder={t('workspace.virtualFolderPlaceholder')}
                     autoFocus
                     value={creatingPdfFolderName}
                     onChange={(e) => handlePdfFolderInlineNameChange(e.target.value)}
@@ -1906,14 +1912,14 @@ export function WorkspaceShell({
                 </div>
               )}
               {pdfRecentLoading && (
-                <p style={{ color: 'var(--theme-text-muted)', padding: '12px', fontSize: '13px' }}>正在加载最近的 PDF...</p>
+                <p style={{ color: 'var(--theme-text-muted)', padding: '12px', fontSize: '13px' }}>{t('pdf.loadingRecent')}</p>
               )}
               {!pdfRecentLoading && pdfRecentError && (
                 <p style={{ color: 'var(--theme-accent-danger)', padding: '12px', fontSize: '13px' }}>{pdfRecentError}</p>
               )}
               {!pdfRecentLoading && !pdfRecentError && pdfRecent.length === 0 && (
                 <p style={{ color: 'var(--theme-text-muted)', padding: '12px', fontSize: '13px' }}>
-                  No recent PDFs. Use File → Open to open a PDF file.
+                  {t('pdf.noRecent')}
                 </p>
               )}
               {!pdfRecentLoading && !pdfRecentError && pdfRecent.length > 0 && (
@@ -1994,7 +2000,7 @@ export function WorkspaceShell({
                               <button
                                 type="button"
                                 className="pdf-folder-delete-btn"
-                                title="删除虚拟文件夹"
+                                title={t('sidebar.deleteVirtualFolder')}
                                 onClick={(e) => {
                                   e.stopPropagation()
                                   handleDeletePdfFolder(folder)
@@ -2008,7 +2014,7 @@ export function WorkspaceShell({
                         {isCollapsed ? null : (
                           items.length === 0 ? (
                             <div className="pdf-folder-empty" style={{ padding: '4px 12px', fontSize: '12px', color: 'var(--theme-text-muted)' }}>
-                              No PDFs yet. Move recent files into this virtual folder to show them here.
+                              {t('workspace.pdfFolderEmpty')}
                             </div>
                           ) : (
                             <ul className="pdf-recent-list">
@@ -2051,7 +2057,7 @@ export function WorkspaceShell({
                   items={[
                     {
                       id: 'open',
-                      label: 'Open',
+                      label: t('workspace.open'),
                       onClick: () => {
                         void openRecentFileInNewTab(pdfMenuState.targetPath!)
                         closePdfMenu()
@@ -2059,7 +2065,7 @@ export function WorkspaceShell({
                     },
                     {
                       id: 'move-to-folder-menu',
-                      label: 'Move to Virtual Folder…',
+                      label: t('workspace.moveToVirtualFolder'),
                       onClick: () => {
                         const targetPath = pdfMenuState.targetPath!
                         const offsetX = 180
@@ -2074,7 +2080,7 @@ export function WorkspaceShell({
                     },
                     {
                       id: 'open-in-file-manager',
-                      label: 'Open in File Manager',
+                      label: t('workspace.openInFileManager'),
                       onClick: () => {
                         const dir = computeDirFromPath(pdfMenuState.targetPath!)
                         void (async () => {
@@ -2088,7 +2094,7 @@ export function WorkspaceShell({
                     },
                     {
                       id: 'remove-from-recent',
-                      label: 'Remove from Recent',
+                      label: t('workspace.removeFromRecent'),
                       onClick: () => {
                         handleRemovePdfFromRecent(pdfMenuState.targetPath!)
                         closePdfMenu()
@@ -2106,7 +2112,7 @@ export function WorkspaceShell({
                   items={[
                     {
                       id: 'move-to-root',
-                      label: 'Move to Root (No Folder)',
+                      label: t('workspace.moveToRootNoFolder'),
                       onClick: () => {
                         const targetPath = pdfFolderMenuState.targetPath!
                         movePdfToFolder(targetPath, null)
@@ -2160,7 +2166,7 @@ export function WorkspaceShell({
                 {aiChatMode === 'docked' && aiChatOpen && aiChatState && (
                   <>
                     {aiChatDockSide === 'left' && (
-                      <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13, height: '100%' }}>加载 AI 面板…</div>}>
+                      <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13, height: '100%' }}>{t('workspace.loadingAiPane')}</div>}>
                         <AiChatPaneLazy
                           sessionKey={aiChatSessionKey}
                           entryMode={aiChatState.entryMode}
@@ -2189,7 +2195,7 @@ export function WorkspaceShell({
                             : { gridColumn: '1/-1' }
                     }
                   >
-                    <Suspense fallback={<div className="code-editor" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13 }}>加载编辑器…</div>}>
+                    <Suspense fallback={<div className="code-editor" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13 }}>{t('workspace.loadingEditor')}</div>}>
                       {effectiveLayout !== 'preview-only' && (
                         <TabBar
                           tabs={tabs}
@@ -2224,7 +2230,7 @@ export function WorkspaceShell({
                   </section>
 
                   <PreviewErrorBoundary>
-                  <Suspense fallback={<section className="pane preview"><div className="preview-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13 }}>加载预览…</div></section>}>
+                  <Suspense fallback={<section className="pane preview"><div className="preview-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13 }}>{t('workspace.loadingPreview')}</div></section>}>
                     {isPdfActive ? (
                       <section
                         className="pane preview"
@@ -2271,7 +2277,7 @@ export function WorkspaceShell({
                   )}
                 </section>
                 {aiChatMode === 'docked' && aiChatOpen && aiChatState && aiChatDockSide === 'right' && (
-                  <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13, height: '100%' }}>加载 AI 面板…</div>}>
+                  <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13, height: '100%' }}>{t('workspace.loadingAiPane')}</div>}>
                     <AiChatPaneLazy
                       sessionKey={aiChatSessionKey}
                       entryMode={aiChatState.entryMode}
@@ -2297,7 +2303,7 @@ export function WorkspaceShell({
           />
         )}
         {confirmDialog && <ConfirmDialog title={confirmDialog.title} message={confirmDialog.message} confirmText={confirmDialog.confirmText} cancelText={confirmDialog.cancelText} extraText={confirmDialog.extraText} variant={confirmDialog.variant} onConfirm={confirmDialog.onConfirm} onExtra={confirmDialog.onExtra} onCancel={() => setConfirmDialog(null)} />}
-        {quitConfirmDialog && <ConfirmDialog title={quitConfirmDialog.unsavedCount === 1 ? 'Save changes?' : `Save ${quitConfirmDialog.unsavedCount} files?`} message="Your changes will be lost." confirmText="Save All" cancelText="Cancel" extraText="Don't Save" variant="stacked" onConfirm={quitConfirmDialog.onSaveAll} onExtra={quitConfirmDialog.onQuitWithoutSaving} onCancel={() => setQuitConfirmDialog(null)} />}
+        {quitConfirmDialog && <ConfirmDialog title={quitConfirmDialog.unsavedCount === 1 ? t('workspace.saveChangesTitle') : t('workspace.saveFilesTitle', { count: quitConfirmDialog.unsavedCount })} message={t('workspace.saveChangesMessage')} confirmText={t('workspace.saveAll')} cancelText={t('common.cancel')} extraText={t('workspace.dontSave')} variant="stacked" onConfirm={quitConfirmDialog.onSaveAll} onExtra={quitConfirmDialog.onQuitWithoutSaving} onCancel={() => setQuitConfirmDialog(null)} />}
 
         <InsertTableDialog
           open={isInsertTableDialogOpen}

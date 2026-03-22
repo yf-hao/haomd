@@ -9,22 +9,24 @@ import { prepareExportHtmlContents } from '../html'
  * 导出为 PDF
  */
 export async function exportToPdf(ctx: any) {
+    const tr = (key: string, fallback: string, params?: Record<string, string | number>) =>
+        ctx.t?.(key, params) ?? fallback
     try {
         console.log('[Export PDF] 开始准备 PDF 内容')
-        ctx.setStatusMessage('正在准备 PDF 数据...')
+        ctx.setStatusMessage(tr('export.pdfPreparing', '正在准备 PDF 数据...'))
 
         // 1. 复用公共 HTML 渲染逻辑
         const { fullHtml, title } = await prepareExportHtmlContents(ctx)
 
         // 2. 使用主窗口 Portal 方案唤起打印
-        ctx.setStatusMessage('正在唤起系统打印对话框...')
+        ctx.setStatusMessage(tr('export.pdfPrinting', '正在唤起系统打印对话框...'))
         await printViaMainPortal(fullHtml, title)
 
-        ctx.setStatusMessage('PDF 导出任务已完成')
+        ctx.setStatusMessage(tr('export.pdfCompleted', 'PDF 导出任务已完成'))
         return true
     } catch (error) {
         console.error('[Export PDF] 导出失败:', error)
-        ctx.setStatusMessage('PDF 导出失败: ' + (error as Error).message)
+        ctx.setStatusMessage(tr('export.pdfFailed', 'PDF 导出失败: ' + (error as Error).message, { message: (error as Error).message }))
         return false
     }
 }

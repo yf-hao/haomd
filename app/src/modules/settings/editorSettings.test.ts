@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   getAiCompressionSettings,
   getHugeDocSettings,
+  getLanguageSetting,
   getThemeSettings,
   getWordExportStyleSettings,
   resetSettingsCache,
@@ -77,6 +78,13 @@ describe('editorSettings', () => {
         const settings = await getThemeSettings()
         expect(settings.mode).toBe('system')
         expect(settings.customThemeId).toBeNull()
+    })
+
+    it('should return default language setting if backend is empty', async () => {
+        vi.mocked(mockInvoke).mockResolvedValue({ Ok: { data: {} } })
+
+        const language = await getLanguageSetting()
+        expect(language).toBe('system')
     })
 
     it('should preserve theme preset metadata from backend', async () => {

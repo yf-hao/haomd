@@ -39,6 +39,10 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::Editor
                 cfg.ai_chat = default_cfg.ai_chat.clone();
                 changed = true;
             }
+            if cfg.language.is_none() {
+                cfg.language = default_cfg.language.clone();
+                changed = true;
+            }
             if cfg.theme.is_none() {
                 cfg.theme = default_cfg.theme.clone();
                 changed = true;
@@ -104,7 +108,8 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::Editor
             if let Some(ref mut theme) = cfg.theme {
                 if let Some(ref default_theme) = default_cfg.theme {
                     if let Some(ref mut editor_background) = theme.editor_background {
-                        if let Some(ref default_editor_background) = default_theme.editor_background {
+                        if let Some(ref default_editor_background) = default_theme.editor_background
+                        {
                             if editor_background.enabled.is_none() {
                                 editor_background.enabled = default_editor_background.enabled;
                                 changed = true;
@@ -247,7 +252,10 @@ pub async fn save_editor_settings(
     };
 
     match fs::write(&path, bytes).await {
-        Ok(()) => ok((), trace),
+        Ok(()) => {
+            crate::refresh_app_menu(&app).await;
+            ok((), trace)
+        }
         Err(err) => err_payload(
             ErrorCode::IoError,
             format!("保存 editor_settings 失败: {err}"),

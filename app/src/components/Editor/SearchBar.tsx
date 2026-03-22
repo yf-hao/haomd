@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { setSearchQuery, findNext, findPrevious, SearchQuery, replaceNext, replaceAll } from '@codemirror/search'
 import { setCustomSearchQuery } from './searchHighlight'
+import { useI18n } from '../../modules/i18n/I18nContext'
 import './SearchBar.css'
 
 interface SearchBarProps {
@@ -9,6 +10,7 @@ interface SearchBarProps {
 }
 
 export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose }) => {
+    const { t } = useI18n()
     const [searchText, setSearchText] = useState('')
     const [caseSensitive, setCaseSensitive] = useState(false)
     const [wholeWord, setWholeWord] = useState(false)
@@ -200,7 +202,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose }) => {
             <button
                 className="search-bar-toggle"
                 onClick={() => setReplaceMode(!replaceMode)}
-                title="切换替换"
+                title={t('editor.searchToggleReplace')}
             >
                 <i className={replaceMode ? 'icon-chevron-down' : 'icon-chevron-right'} />
             </button>
@@ -212,28 +214,28 @@ export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose }) => {
                             ref={inputRef}
                             type="text"
                             className="search-input"
-                            placeholder="查找文本..."
+                            placeholder={t('editor.searchPlaceholder')}
                             value={searchText}
                             onChange={(e) => setSearchText(e.target.value)}
                         />
                         <div className="search-options">
                             <button
                                 className={`search-option-btn ${caseSensitive ? 'active' : ''}`}
-                                title="区分大小写"
+                                title={t('editor.searchCaseSensitive')}
                                 onClick={() => setCaseSensitive(!caseSensitive)}
                             >
                                 Aa
                             </button>
                             <button
                                 className={`search-option-btn ${wholeWord ? 'active' : ''}`}
-                                title="全词匹配"
+                                title={t('editor.searchWholeWord')}
                                 onClick={() => setWholeWord(!wholeWord)}
                             >
                                 ab
                             </button>
                             <button
                                 className={`search-option-btn ${regexp ? 'active' : ''}`}
-                                title="正则表达式"
+                                title={t('editor.searchRegexp')}
                                 onClick={() => setRegexp(!regexp)}
                             >
                                 .*
@@ -246,7 +248,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose }) => {
                             matchCount > 0 ? (
                                 `${currentMatchIndex} / ${matchCount}`
                             ) : (
-                                '无匹配结果'
+                                t('editor.searchNoResults')
                             )
                         ) : null}
                     </div>
@@ -255,7 +257,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose }) => {
                         <div className="search-nav">
                             <button
                                 className="search-nav-btn"
-                                title="上一个 (Shift+Enter)"
+                                title={t('editor.searchPrevious')}
                                 onClick={() => navigate('prev')}
                                 disabled={!searchText || matchCount === 0}
                             >
@@ -263,13 +265,13 @@ export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose }) => {
                             </button>
                             <button
                                 className="search-nav-btn"
-                                title="下一个 (Enter)"
+                                title={t('editor.searchNext')}
                                 onClick={() => navigate('next')}
                                 disabled={!searchText || matchCount === 0}
                             >
                                 <i className="icon-down" />
                             </button>
-                            <button className="search-nav-btn" title="更多选项">
+                            <button className="search-nav-btn" title={t('editor.searchMoreOptions')}>
                                 <i className="icon-menu">
                                     <span></span>
                                     <span></span>
@@ -277,7 +279,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose }) => {
                                 </i>
                             </button>
                         </div>
-                        <button className="search-close-btn" onClick={onClose} title="关闭 (Esc)">
+                        <button className="search-close-btn" onClick={onClose} title={t('editor.searchClose')}>
                             <i className="icon-close" />
                         </button>
                     </div>
@@ -289,7 +291,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose }) => {
                             <input
                                 type="text"
                                 className="replace-input"
-                                placeholder="替换为..."
+                                placeholder={t('editor.replacePlaceholder')}
                                 value={replaceText}
                                 onChange={(e) => setReplaceText(e.target.value)}
                                 onKeyDown={(e) => {
@@ -310,7 +312,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose }) => {
                             <div className="replace-actions">
                                 <button
                                     className="replace-action-btn"
-                                    title="替换当前 (Enter)"
+                                    title={t('editor.replaceCurrent')}
                                     disabled={!searchText || matchCount === 0}
                                     onClick={handleReplace}
                                 >
@@ -318,7 +320,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose }) => {
                                 </button>
                                 <button
                                     className="replace-action-btn"
-                                    title="全部替换 (Cmd/Ctrl+Enter)"
+                                    title={t('editor.replaceAll')}
                                     disabled={!searchText || matchCount === 0}
                                     onClick={handleReplaceAll}
                                 >

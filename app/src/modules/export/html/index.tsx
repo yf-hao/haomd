@@ -24,6 +24,8 @@ export interface ExportHtmlOptions {
  * 包含：思维导图渲染、React 静态渲染、图片转 Base64、模板生成
  */
 export async function prepareExportHtmlContents(ctx: any) {
+  const tr = (key: string, fallback: string, params?: Record<string, string | number>) =>
+    ctx.t?.(key, params) ?? fallback
   const rawTitle = ctx.getCurrentFileName() || 'Document'
   const title = rawTitle.replace(/\.md$/i, '')
   const filePath = ctx.getFilePath ? ctx.getFilePath() : null
@@ -31,17 +33,17 @@ export async function prepareExportHtmlContents(ctx: any) {
   const baseDir = filePath ? await dirname(filePath) : null
 
   // 1. 并行渲染思维导图
-  ctx.setStatusMessage('正在渲染思维导图...')
+  ctx.setStatusMessage(tr('export.htmlRenderingMind', '正在渲染思维导图...'))
   const processedMarkdown = await preTreatMindBlocks(markdown)
 
   // 2. 渲染 React 组件为静态字符串
-  ctx.setStatusMessage('正在构建页面结构...')
+  ctx.setStatusMessage(tr('export.htmlBuildingPage', '正在构建页面结构...'))
   const renderedHtml = renderToString(
     <ExportWrapper markdown={processedMarkdown} />
   )
 
   // 3. 图片转 Base64（离线化）
-  ctx.setStatusMessage('正在处理图片资源...')
+  ctx.setStatusMessage(tr('export.htmlProcessingImages', '正在处理图片资源...'))
   const finalHtml = await convertImagesToBase64(renderedHtml, baseDir)
 
   // 4. 生成最终完整的 HTML 模板
@@ -66,6 +68,8 @@ export async function prepareExportHtmlContents(ctx: any) {
  * 导出为 HTML
  */
 export async function exportToHtml(ctx: any) {
+  const tr = (key: string, fallback: string, params?: Record<string, string | number>) =>
+    ctx.t?.(key, params) ?? fallback
   try {
     console.log('[Export] 开始导出 HTML')
 
@@ -87,18 +91,18 @@ export async function exportToHtml(ctx: any) {
     const { fullHtml } = await prepareExportHtmlContents(ctx)
 
     // 3. 写入文件
-    ctx.setStatusMessage('正在保存到磁盘...')
+    ctx.setStatusMessage(tr('export.htmlSaving', '正在保存到磁盘...'))
     const writeResult = await writeFileNoRecent({ path: savePath, content: fullHtml })
     if (!writeResult.ok) {
       throw new Error(writeResult.error?.message || '文件写入失败')
     }
 
     console.log('[Export] 导出完成:', savePath)
-    ctx.setStatusMessage(`导出成功: ${savePath}`)
+    ctx.setStatusMessage(tr('export.htmlSuccess', `导出成功: ${savePath}`, { path: savePath }))
     return true
   } catch (error) {
     console.error('[Export] 导出失败:', error)
-    ctx.setStatusMessage('导出失败: ' + (error as Error).message)
+    ctx.setStatusMessage(tr('export.htmlFailed', '导出失败: ' + (error as Error).message, { message: (error as Error).message }))
     return false
   }
 }

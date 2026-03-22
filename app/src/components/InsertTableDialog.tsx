@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { Button } from './Button'
+import { useI18n } from '../modules/i18n/I18nContext'
 
 export type InsertTableDialogProps = {
   open: boolean
@@ -19,6 +20,7 @@ export function InsertTableDialog({
   onConfirm,
   onCancel,
 }: InsertTableDialogProps) {
+  const { t } = useI18n()
   const [rows, setRows] = useState<string>(String(defaultRows))
   const [cols, setCols] = useState<string>(String(defaultCols))
   const [error, setError] = useState<string | null>(null)
@@ -72,11 +74,11 @@ export function InsertTableDialog({
     const r = parsePositiveInt(rows)
     const c = parsePositiveInt(cols)
     if (r == null || c == null) {
-      setError('行数和列数必须是大于 0 的整数')
+      setError(t('workspace.tableRowsAndColumnsMustBePositiveIntegers'))
       return
     }
     if (r > 50 || c > 20) {
-      setError('行数或列数过大，请控制在 50 行、20 列以内')
+      setError(t('workspace.tableRowsAndColumnsTooLarge'))
       return
     }
     setError(null)
@@ -132,7 +134,7 @@ export function InsertTableDialog({
         onKeyDown={handleKeyDown}
       >
         <div id="insert-table-title" className="modal-title">
-          Insert Table
+          {t('workspace.insertTableTitle')}
         </div>
         <form
           className="modal-content insert-table-dialog"
@@ -140,7 +142,7 @@ export function InsertTableDialog({
         >
           <div className="insert-table-row">
             <label className="insert-table-label">
-              Rows
+              {t('common.rows')}
               <div className="insert-table-input-group">
                 <input
                   ref={rowsInputRef}
@@ -176,7 +178,7 @@ export function InsertTableDialog({
           </div>
           <div className="insert-table-row">
             <label className="insert-table-label">
-              Columns
+              {t('common.columns')}
               <div className="insert-table-input-group">
                 <input
                   type="number"
@@ -213,10 +215,10 @@ export function InsertTableDialog({
 
           <div className="modal-actions">
             <Button variant="primary" type="submit">
-              OK
+              {t('workspace.ok')}
             </Button>
             <Button variant="tertiary" type="button" onClick={onCancel}>
-              Cancel
+              {t('common.cancel')}
             </Button>
           </div>
         </form>

@@ -1,13 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
 import './App.css'
 import WorkspaceShell, { type LeftPanelId, type InitialWorkspaceAction } from './components/WorkspaceShell'
 import { AiSettingsDialog } from './components/AiSettingsDialog'
 import { PromptSettingsDialog } from './components/PromptSettingsDialog'
 import { SettingsDialog } from './components/SettingsDialog'
+import { I18nProvider, useI18n } from './modules/i18n/I18nContext'
+import { resolveLanguageMode } from './modules/i18n/languageResolver'
+import type { LanguageMode } from './modules/i18n/schema'
 import { onMenuAction } from './modules/platform/menuEvents'
 import { isTauriEnv } from './modules/platform/runtime'
 import {
+  getDefaultLanguageSetting,
   getDefaultThemeSettings,
+  getLanguageSetting,
   type ThemeSettings,
 } from './modules/settings/editorSettings'
 import {
@@ -34,6 +39,7 @@ function App() {
   const [docCharCount, setDocCharCount] = useState<number | null>(null)
   const [statusMessage, setStatusMessage] = useState('')
   const [themeSettings, setThemeSettings] = useState<ThemeSettings>(getDefaultThemeSettings())
+  const [languageMode, setLanguageMode] = useState<LanguageMode>(getDefaultLanguageSetting())
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => getSystemPrefersDark())
 
   const handleLeftPanelToggle = useCallback(
@@ -49,7 +55,6 @@ function App() {
     setInitialOpenRecentIsFolder(null)
   }, [])
 
-  // 监听 Tauri 菜单：在任意阶段响应 AI 设置相关菜单，其余命令交给 WorkspaceShell 内部处理
   useEffect(() => {
     if (!isTauriEnv()) return
 
@@ -68,7 +73,6 @@ function App() {
       }
       if (actionId === 'toggle_status_bar') {
         setStatusBarVisible((prev) => !prev)
-        return
       }
     })
 
@@ -87,9 +91,10 @@ function App() {
     let cancelled = false
 
     ;(async () => {
-      const settings = await loadThemePreference()
+      const [settings, language] = await Promise.all([loadThemePreference(), getLanguageSetting()])
       if (cancelled) return
       setThemeSettings(settings)
+      setLanguageMode(language)
     })()
 
     return () => {
@@ -109,99 +114,180 @@ function App() {
     () => resolveActiveTheme(themeSettings.mode, systemPrefersDark),
     [themeSettings.mode, systemPrefersDark],
   )
+  const resolvedLanguage = useMemo(() => resolveLanguageMode(languageMode), [languageMode])
 
   useEffect(() => {
     applyResolvedTheme(activeTheme, resolvedThemeMode)
   }, [activeTheme, resolvedThemeMode])
 
   return (
-    <ThemeModeProvider
+    <I18nProvider
       value={{
-        selectedMode: themeSettings.mode,
-        themeSettings,
-        resolvedMode: resolvedThemeMode,
-        activeTheme,
+        languageMode,
+        resolvedLanguage,
       }}
     >
-      <div className="app-shell">
-        <div className="layout-row">
-          <div className="activity-bar">
-            <button
-              type="button"
-              className={`activity-item ${activeLeftPanel === 'files' ? 'active' : ''}`}
-              onClick={() => handleLeftPanelToggle('files')}
-              aria-pressed={activeLeftPanel === 'files'}
-              title="Files"
-            >
-              <span className="activity-icon-file" aria-hidden="true" />
-            </button>
+      <ThemeModeProvider
+        value={{
+          selectedMode: themeSettings.mode,
+          themeSettings,
+          resolvedMode: resolvedThemeMode,
+          activeTheme,
+        }}
+      >
+        <AppShellContent
+          activeLeftPanel={activeLeftPanel}
+          initialWorkspaceAction={initialWorkspaceAction}
+          initialOpenRecentPath={initialOpenRecentPath}
+          initialOpenRecentIsFolder={initialOpenRecentIsFolder}
+          isAiSettingsOpen={isAiSettingsOpen}
+          isPromptSettingsOpen={isPromptSettingsOpen}
+          isSettingsOpen={isSettingsOpen}
+          isStatusBarVisible={isStatusBarVisible}
+          docCharCount={docCharCount}
+          statusMessage={statusMessage}
+          handleLeftPanelToggle={handleLeftPanelToggle}
+          handleInitialActionHandled={handleInitialActionHandled}
+          onThemeSettingsChange={setThemeSettings}
+          onLanguageModeChange={setLanguageMode}
+          setAiSettingsOpen={setAiSettingsOpen}
+          setPromptSettingsOpen={setPromptSettingsOpen}
+          setSettingsOpen={setSettingsOpen}
+          setStatusBarVisible={setStatusBarVisible}
+          setDocCharCount={setDocCharCount}
+          setStatusMessage={setStatusMessage}
+        />
+      </ThemeModeProvider>
+    </I18nProvider>
+  )
+}
 
-            <button
-              type="button"
-              className={`activity-item ${activeLeftPanel === 'outline' ? 'active' : ''}`}
-              onClick={() => handleLeftPanelToggle('outline')}
-              aria-pressed={activeLeftPanel === 'outline'}
-              title="Outline"
-            >
-              <span className="activity-icon-outline" aria-hidden="true" />
-            </button>
+type AppShellContentProps = {
+  activeLeftPanel: LeftPanelId
+  initialWorkspaceAction: InitialWorkspaceAction
+  initialOpenRecentPath: string | null
+  initialOpenRecentIsFolder: boolean | null
+  isAiSettingsOpen: boolean
+  isPromptSettingsOpen: boolean
+  isSettingsOpen: boolean
+  isStatusBarVisible: boolean
+  docCharCount: number | null
+  statusMessage: string
+  handleLeftPanelToggle: (id: LeftPanelId) => void
+  handleInitialActionHandled: () => void
+  onThemeSettingsChange: (settings: ThemeSettings) => void
+  onLanguageModeChange: (mode: LanguageMode) => void
+  setAiSettingsOpen: (open: boolean) => void
+  setPromptSettingsOpen: (open: boolean) => void
+  setSettingsOpen: (open: boolean) => void
+  setStatusBarVisible: Dispatch<SetStateAction<boolean>>
+  setDocCharCount: (count: number | null) => void
+  setStatusMessage: (message: string) => void
+}
 
-            <button
-              type="button"
-              className={`activity-item ${activeLeftPanel === 'pdf' ? 'active' : ''}`}
-              onClick={() => handleLeftPanelToggle('pdf')}
-              aria-pressed={activeLeftPanel === 'pdf'}
-              title="PDF"
-            >
-              <span className="activity-icon-pdf" aria-hidden="true" />
-            </button>
+function AppShellContent({
+  activeLeftPanel,
+  initialWorkspaceAction,
+  initialOpenRecentPath,
+  initialOpenRecentIsFolder,
+  isAiSettingsOpen,
+  isPromptSettingsOpen,
+  isSettingsOpen,
+  isStatusBarVisible,
+  docCharCount,
+  statusMessage,
+  handleLeftPanelToggle,
+  handleInitialActionHandled,
+  onThemeSettingsChange,
+  onLanguageModeChange,
+  setAiSettingsOpen,
+  setPromptSettingsOpen,
+  setSettingsOpen,
+  setDocCharCount,
+  setStatusMessage,
+}: AppShellContentProps) {
+  const { t } = useI18n()
 
-            <button
-              type="button"
-              className={`activity-item ${activeLeftPanel === 'sessions' ? 'active' : ''}`}
-              onClick={() => handleLeftPanelToggle('sessions')}
-              aria-pressed={activeLeftPanel === 'sessions'}
-              title="会话管理"
-            >
-              <span className="activity-icon-sessions" aria-hidden="true" />
-            </button>
-          </div>
+  return (
+    <div className="app-shell">
+      <div className="layout-row">
+        <div className="activity-bar">
+          <button
+            type="button"
+            className={`activity-item ${activeLeftPanel === 'files' ? 'active' : ''}`}
+            onClick={() => handleLeftPanelToggle('files')}
+            aria-pressed={activeLeftPanel === 'files'}
+            title={t('app.files')}
+          >
+            <span className="activity-icon-file" aria-hidden="true" />
+          </button>
 
-          <WorkspaceShell
-            activeLeftPanel={activeLeftPanel}
-            isTauriEnv={isTauriEnv}
-            initialAction={initialWorkspaceAction}
-            initialOpenRecentPath={initialOpenRecentPath}
-            initialOpenRecentIsFolder={initialOpenRecentIsFolder}
-            onInitialActionHandled={handleInitialActionHandled}
-            onDocumentStatsChange={(stats) => setDocCharCount(stats.charCount)}
-            onStatusMessageChange={setStatusMessage}
-          />
+          <button
+            type="button"
+            className={`activity-item ${activeLeftPanel === 'outline' ? 'active' : ''}`}
+            onClick={() => handleLeftPanelToggle('outline')}
+            aria-pressed={activeLeftPanel === 'outline'}
+            title={t('app.outline')}
+          >
+            <span className="activity-icon-outline" aria-hidden="true" />
+          </button>
+
+          <button
+            type="button"
+            className={`activity-item ${activeLeftPanel === 'pdf' ? 'active' : ''}`}
+            onClick={() => handleLeftPanelToggle('pdf')}
+            aria-pressed={activeLeftPanel === 'pdf'}
+            title={t('app.pdf')}
+          >
+            <span className="activity-icon-pdf" aria-hidden="true" />
+          </button>
+
+          <button
+            type="button"
+            className={`activity-item ${activeLeftPanel === 'sessions' ? 'active' : ''}`}
+            onClick={() => handleLeftPanelToggle('sessions')}
+            aria-pressed={activeLeftPanel === 'sessions'}
+            title={t('app.sessions')}
+          >
+            <span className="activity-icon-sessions" aria-hidden="true" />
+          </button>
         </div>
 
-        {isStatusBarVisible && (
-          <div className="status-bar">
-            <div className="status-bar-left">HaoMD · AI Markdown</div>
-            <div className="status-bar-right">
-              {docCharCount != null && (
-                <span style={{ marginRight: statusMessage ? 12 : 0 }}>
-                  {docCharCount.toLocaleString()} 字
-                </span>
-              )}
-              <span>{statusMessage || '\u00A0'}</span>
-            </div>
-          </div>
-        )}
-
-        <AiSettingsDialog open={isAiSettingsOpen} onClose={() => setAiSettingsOpen(false)} />
-        <PromptSettingsDialog open={isPromptSettingsOpen} onClose={() => setPromptSettingsOpen(false)} />
-        <SettingsDialog
-          open={isSettingsOpen}
-          onClose={() => setSettingsOpen(false)}
-          onThemeSettingsChange={setThemeSettings}
+        <WorkspaceShell
+          activeLeftPanel={activeLeftPanel}
+          isTauriEnv={isTauriEnv}
+          initialAction={initialWorkspaceAction}
+          initialOpenRecentPath={initialOpenRecentPath}
+          initialOpenRecentIsFolder={initialOpenRecentIsFolder}
+          onInitialActionHandled={handleInitialActionHandled}
+          onDocumentStatsChange={(stats) => setDocCharCount(stats.charCount)}
+          onStatusMessageChange={setStatusMessage}
         />
       </div>
-    </ThemeModeProvider>
+
+      {isStatusBarVisible && (
+        <div className="status-bar">
+          <div className="status-bar-left">{t('app.statusBarTitle')}</div>
+          <div className="status-bar-right">
+            {docCharCount != null && (
+              <span style={{ marginRight: statusMessage ? 12 : 0 }}>
+                {t('app.characters', { count: docCharCount.toLocaleString() })}
+              </span>
+            )}
+            <span>{statusMessage || '\u00A0'}</span>
+          </div>
+        </div>
+      )}
+
+      <AiSettingsDialog open={isAiSettingsOpen} onClose={() => setAiSettingsOpen(false)} />
+      <PromptSettingsDialog open={isPromptSettingsOpen} onClose={() => setPromptSettingsOpen(false)} />
+      <SettingsDialog
+        open={isSettingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onThemeSettingsChange={onThemeSettingsChange}
+        onLanguageModeChange={onLanguageModeChange}
+      />
+    </div>
   )
 }
 

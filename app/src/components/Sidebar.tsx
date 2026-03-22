@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import type { FileTreeNode } from '../domain/sidebarTree'
 import { FileContextMenu } from './FileContextMenu'
+import { useI18n } from '../modules/i18n/I18nContext'
 import type { FileVirtualFolder, FileVirtualAssignment } from '../modules/files/types'
 import { loadFileVirtualFolders, listFileVirtualAssignments, saveFileVirtualFolders, updateFileVirtualFolderForPath } from '../modules/files/service'
 import './Sidebar.css'
@@ -343,6 +344,7 @@ function InlineRenameRow({ level, isFolder, initialName, onConfirm, onCancel }: 
 
 
 export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, onToggle, onFileClick, onDirClick, onContextAction, onToolbarNewFileInCurrentFolder, onToolbarNewFolderInCurrentFolder, onToolbarRefreshCurrentFolder, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel, inlineNewFolderDir, onInlineNewFolderConfirm, onInlineNewFolderCancel, inlineRenamePath, onInlineRenameConfirm, onInlineRenameCancel, activePath, panelWidth, highlightedPaths, onFileVisited, onRequestConfirmDeleteFileVirtualFolder, onNotify }: SidebarProps) {
+  const { t } = useI18n()
   const hasStandalone = standaloneFiles.length > 0
   const hasTree = folderRoots.some((rootPath) => (treesByRoot[rootPath]?.length ?? 0) > 0)
 
@@ -681,9 +683,9 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
         }}
       >
         <div className="sidebar-header">
-          <div className="pane-title">File Browser</div>
+          <div className="pane-title">{t('sidebar.fileBrowser')}</div>
         </div>
-        <div className="sidebar-body muted small">暂无文件</div>
+        <div className="sidebar-body muted small">{t('sidebar.noFiles')}</div>
       </aside>
     )
   }
@@ -700,18 +702,18 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
       }}
     >
       <div className="sidebar-header">
-        <div className="pane-title">File Browser</div>
+        <div className="pane-title">{t('sidebar.fileBrowser')}</div>
       </div>
       <div className="sidebar-body">
         {hasStandalone && (
           <section className="sidebar-section">
             <div className="sidebar-section-header">
-              <div className="sidebar-section-title">Files</div>
+              <div className="sidebar-section-title">{t('sidebar.files')}</div>
               <div className="files-section-actions">
                 <button
                   type="button"
                   className="files-virtual-folder-add-btn"
-                  title="新建虚拟文件夹"
+                  title={t('sidebar.newVirtualFolder')}
                   onClick={(e) => {
                     e.stopPropagation()
                     e.preventDefault()
@@ -728,7 +730,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                 <input
                   type="text"
                   className="sidebar-virtual-folder-inline-input"
-                  placeholder="输入虚拟文件夹名称后按回车确认，Esc 取消"
+                  placeholder={t('sidebar.virtualFolderPlaceholder')}
                   autoFocus
                   value={creatingFileFolderName}
                   onChange={(e) => handleFileFolderInlineNameChange(e.target.value)}
@@ -837,7 +839,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                         <button
                           type="button"
                           className="sidebar-virtual-folder-delete-btn"
-                          title="删除虚拟文件夹"
+                          title={t('sidebar.deleteVirtualFolder')}
                           onClick={(e) => {
                             e.stopPropagation()
                             e.preventDefault()
@@ -850,7 +852,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                       {isCollapsed ? null : (
                         files.length === 0 ? (
                           <div className="sidebar-virtual-folder-empty">
-                            No files yet. Move files into this virtual folder to show them here.
+                            {t('sidebar.noFilesInVirtualFolder')}
                           </div>
                         ) : (
                           <ul className="sidebar-file-list">
@@ -889,12 +891,12 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
         {hasTree && (
           <section className="sidebar-section">
             <div className="sidebar-section-header">
-              <div className="sidebar-section-title">Folders</div>
+              <div className="sidebar-section-title">{t('sidebar.folders')}</div>
               <div className="folder-section-actions">
                 <button
                   type="button"
                   className="folder-action-btn icon-new-file"
-                  title="在当前文件夹中新建文件"
+                  title={t('sidebar.newFileInCurrentFolder')}
                   onClick={(e) => {
                     e.stopPropagation()
                     e.preventDefault()
@@ -904,7 +906,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                 <button
                   type="button"
                   className="folder-action-btn icon-new-folder"
-                  title="在当前文件夹中新建子文件夹"
+                  title={t('sidebar.newFolderInCurrentFolder')}
                   onClick={(e) => {
                     e.stopPropagation()
                     e.preventDefault()
@@ -914,7 +916,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                 <button
                   type="button"
                   className="folder-action-btn icon-refresh"
-                  title="刷新当前文件夹"
+                  title={t('sidebar.refreshCurrentFolder')}
                   onClick={(e) => {
                     e.stopPropagation()
                     e.preventDefault()

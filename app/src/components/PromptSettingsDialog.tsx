@@ -7,6 +7,7 @@ import { usePromptSettingsState, type PromptRoleDraft } from '../hooks/usePrompt
 import { onNativePaste } from '../modules/platform/clipboardEvents'
 import { FieldGroup } from './FieldGroup'
 import { Button } from './Button'
+import { useI18n } from '../modules/i18n/I18nContext'
 
 export type PromptSettingsDialogProps = {
   open: boolean
@@ -14,6 +15,7 @@ export type PromptSettingsDialogProps = {
 }
 
 export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onClose }) => {
+  const { t } = useI18n()
   const { load, save } = usePromptSettingsPersistence()
   const {
     settings,
@@ -246,9 +248,9 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
   const handleSave = async () => {
     const stateToSave = settings
 
-    const ok = await save(stateToSave)
+      const ok = await save(stateToSave)
     if (!ok) {
-      setError('Failed to save prompt settings. Please try again.')
+      setError(t('prompt.saveFailed'))
       return
     }
 
@@ -260,15 +262,15 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
   }
 
   const ROLE_FORM_FIELDS: { key: keyof PromptRoleDraft; label: string; type: 'text' | 'textarea'; placeholder: string; ref: any }[] = [
-    { key: 'name', label: 'Role Name', type: 'text', placeholder: 'e.g. Expert Markdown Editor', ref: nameInputRef },
-    { key: 'description', label: 'Paramters (optional)', type: 'text', placeholder: 'Short description shown in the list', ref: descInputRef },
-    { key: 'prompt', label: 'Prompt', type: 'textarea', placeholder: 'You are an expert Markdown editor...', ref: promptTextareaRef },
+    { key: 'name', label: t('prompt.roleName'), type: 'text', placeholder: t('prompt.roleNamePlaceholder'), ref: nameInputRef },
+    { key: 'description', label: t('prompt.parametersOptional'), type: 'text', placeholder: t('prompt.parametersPlaceholder'), ref: descInputRef },
+    { key: 'prompt', label: t('prompt.prompt'), type: 'textarea', placeholder: t('prompt.promptPlaceholder'), ref: promptTextareaRef },
   ]
 
   return (
     <div className="modal-backdrop">
       <div className="modal modal-prompt-settings">
-        <div className="modal-title">Prompt Settings</div>
+        <div className="modal-title">{t('prompt.title')}</div>
         <div className="modal-content prompt-settings-body">
           <div className="prompt-settings-column-left">
             <form onSubmit={handleAddRole} className="prompt-settings-form">
@@ -300,19 +302,19 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
 
               <div className="prompt-settings-form-actions">
                 <Button type="button" variant="tertiary" onClick={handleResetDraft}>
-                  Reset Draft
+                  {t('prompt.resetDraft')}
                 </Button>
                 <Button type="submit" variant="primary">
-                  Add
+                  {t('prompt.add')}
                 </Button>
               </div>
             </form>
           </div>
 
           <div className="prompt-settings-column-right">
-            <div className="providers-header">Saved Roles</div>
+            <div className="providers-header">{t('prompt.savedRoles')}</div>
             {settings.roles.length === 0 ? (
-              <div className="providers-empty">No roles configured yet.</div>
+              <div className="providers-empty">{t('prompt.noRoles')}</div>
             ) : (
               <div
                 className="providers-list prompt-roles-list"
@@ -345,7 +347,7 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
                             className="provider-drag-handle"
                             onMouseDown={handleRoleMouseDown(r.id)}
                             onClick={(e) => e.stopPropagation()}
-                            aria-label="Drag to reorder"
+                            aria-label={t('prompt.dragToReorder')}
                             role="button"
                           >
                             ⋮⋮
@@ -371,7 +373,7 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
                         <button
                           type="button"
                           className="provider-toggle"
-                          aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                          aria-label={isExpanded ? t('prompt.collapse') : t('prompt.expand')}
                         >
                           {isExpanded ? '▼' : '▶'}
                         </button>
@@ -380,7 +382,7 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
                       {isExpanded && !isBuiltin && (
                         <div className="provider-details">
 
-                          <div className="provider-detail-row">Prompt Preview:</div>
+                          <div className="provider-detail-row">{t('prompt.promptPreview')}</div>
                           <div className="prompt-preview">
                             {(() => {
                               const lines = r.prompt.split(/\r?\n/)
@@ -404,14 +406,14 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
                             {!isBuiltin && (
                               <>
                                 <Button type="button" variant="tertiary" onClick={() => handleEditRole(r)}>
-                                  Edit Role
+                                  {t('prompt.editRole')}
                                 </Button>
                                 <Button
                                   type="button"
                                   variant="secondary"
                                   onClick={() => handleDeleteRole(r.id)}
                                 >
-                                  Delete Role
+                                  {t('prompt.deleteRole')}
                                 </Button>
                               </>
                             )}
@@ -426,7 +428,7 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
 
             {defaultRole && (
               <div className="default-summary">
-                Default prompt role: {defaultRole.name}
+                {t('prompt.defaultPromptRole', { name: defaultRole.name })}
               </div>
             )}
           </div>
@@ -434,10 +436,10 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
 
         <div className="modal-actions">
           <Button variant="tertiary" type="button" onClick={handleCancel}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button variant="primary" type="button" onClick={handleSave}>
-            Save
+            {t('common.save')}
           </Button>
         </div>
       </div>

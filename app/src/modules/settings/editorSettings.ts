@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import type { BackendResult } from '../platform/backendTypes'
+import type { LanguageMode } from '../i18n/schema'
 import type { ThemeMode } from '../theme/schema'
 
 export type AiCompressionSettings = {
@@ -58,6 +59,7 @@ export type EditorSettings = {
   aiCompression?: Partial<AiCompressionSettings>
   hugeDoc?: HugeDocSettings
   aiChat?: Partial<AiChatUiSettings>
+  language?: LanguageMode
   theme?: Partial<ThemeSettings>
   wordExport?: Partial<WordExportStyleSettings>
 }
@@ -80,6 +82,8 @@ const defaultAiChatUi: AiChatUiSettings = {
   maxVisibleMessagesDialog: 50,
   maxVisibleMessagesPane: 50,
 }
+
+const defaultLanguage: LanguageMode = 'system'
 
 const defaultTheme: ThemeSettings = {
   mode: 'system',
@@ -182,6 +186,11 @@ export async function getThemeSettings(): Promise<ThemeSettings> {
   }
 }
 
+export async function getLanguageSetting(): Promise<LanguageMode> {
+  const settings = await loadEditorSettings()
+  return settings.language ?? defaultLanguage
+}
+
 export async function getWordExportStyleSettings(): Promise<WordExportStyleSettings> {
   const settings = await loadEditorSettings()
   const cfg = settings.wordExport ?? {}
@@ -213,6 +222,10 @@ export function getDefaultWordExportStyleSettings(): WordExportStyleSettings {
 
 export function getDefaultThemeSettings(): ThemeSettings {
   return { ...defaultTheme }
+}
+
+export function getDefaultLanguageSetting(): LanguageMode {
+  return defaultLanguage
 }
 
 /** 仅供测试使用：清除单例缓存 */

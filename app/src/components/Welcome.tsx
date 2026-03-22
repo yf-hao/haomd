@@ -1,5 +1,6 @@
 import logo from '../assets/logo.png'
 import './Welcome.css'
+import { useI18n } from '../modules/i18n/I18nContext'
 export interface WelcomeProps {
   onNewFile: () => void
   onOpenFile: () => void
@@ -7,6 +8,8 @@ export interface WelcomeProps {
 }
 
 export function Welcome({ onNewFile, onOpenFile, onOpenAiChat }: WelcomeProps) {
+  const { t } = useI18n()
+
   return (
     <div className="welcome">
       <div className="welcome-content">
@@ -17,15 +20,15 @@ export function Welcome({ onNewFile, onOpenFile, onOpenAiChat }: WelcomeProps) {
           <div className="logo-title">HaoMD</div>
         </div>
 
-        <p className="welcome-subtitle">Powered by AI, this Markdown editor intelligently optimizes your text, offers smart writing suggestions, and helps you quickly produce well-structured, perfectly formatted documents.</p>
+        <p className="welcome-subtitle">{t('welcome.subtitle')}</p>
 
         <div className="welcome-actions">
-          <button className="welcome-button primary" onClick={onNewFile}>
-            New File
+          <button className="welcome-button secondary" onClick={onNewFile}>
+            {t('welcome.newFile')}
           </button>
 
           <button className="welcome-button secondary" onClick={onOpenFile}>
-            Open File
+            {t('welcome.openFile')}
           </button>
 
           {onOpenAiChat && (
@@ -33,7 +36,7 @@ export function Welcome({ onNewFile, onOpenFile, onOpenAiChat }: WelcomeProps) {
               className="welcome-button secondary"
               onClick={onOpenAiChat}
             >
-              Open AI Chat
+              {t('welcome.openAiChat')}
             </button>
           )}
         </div>

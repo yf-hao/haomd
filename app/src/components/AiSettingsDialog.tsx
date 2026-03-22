@@ -6,6 +6,7 @@ import { emptySettings, type UiProvider, type ProviderType } from '../modules/ai
 import { useAiSettingsPersistence } from '../hooks/useAiSettingsPersistence'
 import { useAiSettingsState, type ProviderDraft, parseModelsInput } from '../hooks/useAiSettingsState'
 import { testProviderConnection } from '../modules/ai/testConnection'
+import { useI18n } from '../modules/i18n/I18nContext'
 import { FieldGroup } from './FieldGroup'
 import { Button } from './Button'
 
@@ -15,6 +16,7 @@ export type AiSettingsDialogProps = {
 }
 
 export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) => {
+  const { t } = useI18n()
   const [activeField, setActiveField] = useState<keyof ProviderDraft | null>(null)
   const [testResult, setTestResult] = useState<string | null>(null)
   const [showKeyOnlyModal, setShowKeyOnlyModal] = useState(false)
@@ -48,11 +50,11 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
   } = useAiSettingsState(emptySettings)
 
   const AI_FORM_FIELDS: { key: keyof ProviderDraft; label: string; type: 'text' | 'password' | 'textarea'; placeholder?: string }[] = [
-    { key: 'name', label: 'Provider Name', type: 'text' },
-    { key: 'baseUrl', label: 'Base URL', type: 'text' },
-    { key: 'apiKey', label: 'API Key', type: 'password' },
-    { key: 'modelsInput', label: 'Models', type: 'text', placeholder: 'gpt-4.1, gpt-4o-mini' },
-    { key: 'description', label: 'Paramters', type: 'textarea' },
+    { key: 'name', label: t('provider.providerName'), type: 'text' },
+    { key: 'baseUrl', label: t('provider.baseUrl'), type: 'text' },
+    { key: 'apiKey', label: t('provider.apiKey'), type: 'password' },
+    { key: 'modelsInput', label: t('provider.models'), type: 'text', placeholder: t('provider.modelsPlaceholder') },
+    { key: 'description', label: t('provider.parameters'), type: 'textarea' },
   ]
 
   // 打开对话框时重置展开状态，确保所有提供商默认不展开
@@ -141,19 +143,19 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
   const handleTestConnection = async () => {
     const models = parseModelsInput(draft.modelsInput)
     if (!draft.baseUrl.trim() || !draft.apiKey.trim()) {
-      setError('请填写 Base URL / API Key')
+      setError(t('provider.fillBaseUrlApiKey'))
       setTestResult(null)
       return
     }
     if (models.length === 0) {
-      setError('请至少填写一个 ModelID')
+      setError(t('provider.fillAtLeastOneModel'))
       setTestResult(null)
       return
     }
 
     // 清理之前的状态，展示测试中提示
     setError(null)
-    setTestResult('正在测试连接...')
+    setTestResult(t('provider.testingConnection'))
 
     try {
       const baseUrl = draft.baseUrl.trim()
@@ -180,18 +182,20 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
 
       if (failedCount === 0) {
         // 全部通过
-        setTestResult(`连接成功：${total} 个模型通过测试`)
+        setTestResult(t('provider.testSuccess', { count: total }))
       } else {
         // 部分或全部失败：提示成功数量 + 失败详情
         setTestResult(null)
-        setError(
-          `共 ${total} 个模型，成功 ${successCount} 个。\n以下模型测试失败：\n${failed.join('\n')}`,
-        )
+        setError(t('provider.testSummary', {
+          total,
+          success: successCount,
+          details: failed.join('\n'),
+        }))
       }
     } catch (e) {
       const err = e as Error
       setTestResult(null)
-      setError(`连接测试异常：${err.message || '未知错误'}`)
+      setError(t('provider.testException', { message: err.message || 'Unknown error' }))
     }
   }
 
@@ -270,11 +274,11 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
     if (!settings.providers.length && hasDraft) {
       const models = parseModelsInput(draft.modelsInput)
       if (!draft.name.trim() || !draft.baseUrl.trim() || !draft.apiKey.trim()) {
-        setError('请填写 Provider Name / Base URL / API Key，或先点击 “Test & Add Provider”')
+        setError(t('provider.fillRequiredBeforeSave'))
         return
       }
       if (models.length === 0) {
-        setError('请至少填写一个 ModelID，或先点击 “Test & Add Provider”')
+        setError(t('provider.fillModelBeforeSave'))
         return
       }
 
@@ -328,7 +332,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
 
     const ok = await save(stateToSave)
     if (!ok) {
-      setError('保存失败：请稍后重试')
+      setError(t('provider.saveFailed'))
       return
     }
 
@@ -342,7 +346,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
   return (
     <div className="modal-backdrop">
       <div className="modal modal-ai-settings">
-        <div className="modal-title">Provider Settings</div>
+        <div className="modal-title">{t('provider.title')}</div>
         <div className="modal-content ai-settings-body">
           <div className="ai-settings-column-left">
             <form onSubmit={handleTestAndAdd} className="ai-settings-form">
@@ -369,27 +373,27 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                 </FieldGroup>
               ))}
 
-              <FieldGroup label="Type">
+              <FieldGroup label={t('provider.type')}>
                 <select
                   className="field-select"
                   value={draft.providerType || 'openai'}
                   onChange={(e) => updateDraftField('providerType', e.target.value)}
                   onFocus={() => setActiveField('providerType')}
                 >
-                  <option value="dify">Dify</option>
-                  <option value="openai">OpenAI Compatible</option>
+                  <option value="dify">{t('provider.dify')}</option>
+                  <option value="openai">{t('provider.openaiCompatible')}</option>
                 </select>
               </FieldGroup>
 
-              <FieldGroup label="Vision Mode">
+              <FieldGroup label={t('provider.visionMode')}>
                 <select
                   className="field-select"
                   value={draft.visionMode || 'disabled'}
                   onChange={(e) => updateDraftField('visionMode', e.target.value)}
                   onFocus={() => setActiveField('visionMode')}
                 >
-                  <option value="disabled">disabled</option>
-                  <option value="enabled">enabled</option>
+                  <option value="disabled">{t('provider.disabled')}</option>
+                  <option value="enabled">{t('provider.enabled')}</option>
                 </select>
               </FieldGroup>
 
@@ -398,22 +402,22 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
 
               <div className="ai-settings-form-actions">
                 <Button type="button" variant="tertiary" onClick={handleResetDraft}>
-                  Reset Form
+                  {t('provider.resetForm')}
                 </Button>
                 <Button type="button" variant="secondary" onClick={handleTestConnection}>
-                  Test
+                  {t('provider.test')}
                 </Button>
                 <Button type="submit" variant="primary">
-                  Add
+                  {t('provider.add')}
                 </Button>
               </div>
             </form>
           </div>
 
           <div className="ai-settings-column-right">
-            <div className="providers-header">Configured Providers</div>
+            <div className="providers-header">{t('provider.configuredProviders')}</div>
             {settings.providers.length === 0 ? (
-              <div className="providers-empty">No Provider</div>
+              <div className="providers-empty">{t('provider.noProvider')}</div>
             ) : (
               <div className="providers-list">
                 {settings.providers.map((p) => {
@@ -437,17 +441,17 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                           <div className="provider-name-row">
                             <div className="provider-name">{p.name}</div>
                             <div className="provider-default-model">
-                              {p.defaultModelId ? `Default: ${p.defaultModelId}` : ''}
+                              {p.defaultModelId ? t('provider.defaultLabel', { model: p.defaultModelId }) : ''}
                             </div>
                           </div>
                           <div className="provider-sub">
-                            Base URL: {p.baseUrl}
+                            {t('provider.baseUrlLabel', { url: p.baseUrl })}
                           </div>
                         </div>
                         <button
                           type="button"
                           className="provider-toggle"
-                          aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                          aria-label={isExpanded ? t('provider.collapse') : t('provider.expand')}
                         >
                           {isExpanded ? '▼' : '▶'}
                         </button>
@@ -455,7 +459,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
 
                       {isExpanded && (
                         <div className="provider-details">
-                          <div className="provider-detail-row">Models:</div>
+                          <div className="provider-detail-row">{t('provider.modelsTitle')}</div>
                           <ul className="provider-models">
                             {p.models.map((m) => (
                               <li key={m.id} className="provider-model-row">
@@ -464,7 +468,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                                   className="field-input provider-model-max-tokens-input"
                                   type="number"
                                   min={1}
-                                  placeholder="max tokens"
+                                  placeholder={t('provider.maxTokensPlaceholder')}
                                   value={m.maxTokens ?? ''}
                                   onChange={(e) =>
                                     handleChangeModelMaxTokens(p.id, m.id, e.target.value)
@@ -481,15 +485,15 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                                     )
                                   }
                                 >
-                                  <option value="disabled">Vision: disabled</option>
-                                  <option value="enabled">Vision: enabled</option>
+                                  <option value="disabled">{t('provider.visionDisabled')}</option>
+                                  <option value="enabled">{t('provider.visionEnabled')}</option>
                                 </select>
                                 <button
                                   type="button"
                                   className="ghost tiny ghost-subtle"
                                   onClick={() => handleRemoveModel(p.id, m.id)}
                                 >
-                                  Remove
+                                  {t('provider.remove')}
                                 </button>
                               </li>
                             ))}
@@ -503,7 +507,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                             >
                               {p.models.map((m) => (
                                 <option key={m.id} value={m.id}>
-                                  Default Model: {m.id}
+                                  {t('provider.defaultModel', { model: m.id })}
                                 </option>
                               ))}
                             </select>
@@ -515,14 +519,14 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                               className="ghost primary"
                               onClick={() => handleEditProvider(p)}
                             >
-                              Edit Provider
+                              {t('provider.editProvider')}
                             </button>
                             <button
                               type="button"
                               className="ghost danger"
                               onClick={() => handleDeleteProvider(p.id)}
                             >
-                              Delete Provider
+                              {t('provider.deleteProvider')}
                             </button>
                           </div>
                         </div>
@@ -535,8 +539,10 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
 
             {defaultProvider && (
               <div className="default-summary">
-                Default chat model: {defaultProvider.name}
-                {defaultProvider.defaultModelId ? ` / ${defaultProvider.defaultModelId}` : ''}
+                {t('provider.defaultChatModel', {
+                  provider: defaultProvider.name,
+                  modelSuffix: defaultProvider.defaultModelId ? ` / ${defaultProvider.defaultModelId}` : '',
+                })}
               </div>
             )}
           </div>
@@ -544,21 +550,21 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
 
         <div className="modal-actions">
           <Button variant="tertiary" type="button" onClick={handleCancel}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button variant="primary" type="button" onClick={handleSave}>
-            Save
+            {t('common.save')}
           </Button>
         </div>
 
         {showKeyOnlyModal && (
           <div className="ai-settings-submodal-backdrop">
             <div className="ai-settings-submodal">
-              <div className="submodal-title">提示</div>
+              <div className="submodal-title">{t('provider.keyOnlyTitle')}</div>
               <div className="submodal-body">
-                检测到当前 Provider 没有新增模型，只修改了 API Key。
+                {t('provider.keyOnlyBodyLine1')}
                 <br />
-                如需更新 API Key，请直接点击右下角的 Save 按钮保存配置。
+                {t('provider.keyOnlyBodyLine2')}
               </div>
               <div className="submodal-actions">
                 <Button
@@ -566,7 +572,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                   variant="primary"
                   onClick={() => setShowKeyOnlyModal(false)}
                 >
-                  知道了
+                  {t('provider.gotIt')}
                 </Button>
               </div>
             </div>

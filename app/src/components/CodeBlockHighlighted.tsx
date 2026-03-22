@@ -2,6 +2,7 @@ import React, { memo } from 'react'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { useResolvedThemeMode } from '../modules/theme/ThemeContext'
+import { useI18n } from '../modules/i18n/I18nContext'
 
 type CodeBlockProps = {
   lang?: string
@@ -55,6 +56,7 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
 
 const CodeBlock = memo(
   ({ lang, content, ...rest }: CodeBlockProps) => {
+    const { t } = useI18n()
     const [copied, setCopied] = React.useState(false)
     const themeMode = useResolvedThemeMode()
 
@@ -74,9 +76,9 @@ const CodeBlock = memo(
           type="button"
           className={`code-copy-button${copied ? ' copied' : ''}`}
           onClick={handleCopy}
-          aria-label={copied ? '已复制代码' : '复制代码'}
+          aria-label={copied ? t('editor.copiedCode') : t('editor.copyCode')}
         >
-          {copied ? '已复制' : '复制'}
+          {copied ? t('editor.copied') : t('editor.copy')}
         </button>
         <SyntaxHighlighter
           language={lang}

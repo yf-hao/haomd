@@ -1,5 +1,6 @@
 import type { RecentFile } from '../modules/files/types'
 import type { EditorTab } from '../types/tabs'
+import { useI18n } from '../modules/i18n/I18nContext'
 
 export type PdfSidebarPanelProps = {
     sidebarWidth: number
@@ -11,6 +12,7 @@ export type PdfSidebarPanelProps = {
 }
 
 export function PdfSidebarPanel(props: PdfSidebarPanelProps) {
+    const { t } = useI18n()
     const {
         sidebarWidth,
         pdfRecentLoading,
@@ -23,18 +25,18 @@ export function PdfSidebarPanel(props: PdfSidebarPanelProps) {
     return (
         <div className="pdf-panel" style={{ width: sidebarWidth }}>
             <div className="pdf-panel-header">
-                <span>PDF</span>
+                <span>{t('pdf.title')}</span>
             </div>
             <div className="pdf-panel-content">
                 {pdfRecentLoading && (
-                    <p style={{ color: 'var(--theme-text-muted)', padding: '12px', fontSize: '13px' }}>正在加载最近的 PDF...</p>
+                    <p style={{ color: 'var(--theme-text-muted)', padding: '12px', fontSize: '13px' }}>{t('pdf.loadingRecent')}</p>
                 )}
                 {!pdfRecentLoading && pdfRecentError && (
                     <p style={{ color: 'var(--theme-accent-danger)', padding: '12px', fontSize: '13px' }}>{pdfRecentError}</p>
                 )}
                 {!pdfRecentLoading && !pdfRecentError && pdfRecent.length === 0 && (
                     <p style={{ color: 'var(--theme-text-muted)', padding: '12px', fontSize: '13px' }}>
-                        No recent PDFs. Use File → Open to open a PDF file.
+                        {t('pdf.noRecent')}
                     </p>
                 )}
                 {!pdfRecentLoading && !pdfRecentError && pdfRecent.length > 0 && (

@@ -2,6 +2,7 @@ import { useEffect, useMemo, type CSSProperties, type RefObject } from 'react'
 import { EditorView } from '@codemirror/view'
 import { CodeEditor } from './Editor/CodeEditor'
 import { useThemeContext } from '../modules/theme/ThemeContext'
+import { useI18n } from '../modules/i18n/I18nContext'
 import './EditorPane.css'
 
 export type EditorFocusRequest = {
@@ -59,6 +60,7 @@ export function EditorPane(props: EditorPaneProps) {
     onEditorReady,
   } = props
   const { themeSettings } = useThemeContext()
+  const { t } = useI18n()
   const currentEditorBackground = themeSettings.editorBackground
 
   const editorBackgroundUrl = useMemo(() => {
@@ -147,7 +149,7 @@ export function EditorPane(props: EditorPaneProps) {
         value={markdown}
         onChange={onChange}
         onCursorChange={onCursorChange}
-        placeholder="在此输入 Markdown..."
+        placeholder={t('editor.placeholder')}
         className="code-editor"
         editorZoom={editorZoom}
         onViewReady={(view) => {

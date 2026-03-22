@@ -10,6 +10,7 @@ import {
 import { loadGlobalMemorySettings, saveGlobalMemorySettings } from '../globalMemory/settingsRepo'
 import { runGlobalMemoryUpdateNow } from '../globalMemory/autoUpdate'
 import type { UserProfile, GlobalMemoryItem, GlobalMemorySettings } from '../globalMemory/types'
+import { useI18n } from '../../i18n/I18nContext'
 
 export type GlobalMemoryDialogInitialTab = 'persona' | 'manage'
 
@@ -20,18 +21,19 @@ export type GlobalMemoryDialogProps = {
 }
 
 function formatLastUpdated(profile: UserProfile | null): string {
-  if (!profile || !profile.updatedAt) return 'User persona not generated yet'
+  if (!profile || !profile.updatedAt) return ''
   const d = new Date(profile.updatedAt)
   return d.toLocaleString()
 }
 
 function formatGlobalUpdateTime(timestamp: number | null): string {
-  if (!timestamp) return 'Global memory has not been updated yet'
+  if (!timestamp) return ''
   const d = new Date(timestamp)
   return d.toLocaleString()
 }
 
 export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialTab = 'persona', onClose }) => {
+  const { t } = useI18n()
   const [activeTab, setActiveTab] = useState<GlobalMemoryDialogInitialTab>(initialTab)
   const [profile, setProfile] = useState<UserProfile | null>(() => loadUserProfile())
   const [items, setItems] = useState<GlobalMemoryItem[]>(() => loadGlobalMemoryItems())
@@ -65,7 +67,7 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
 
   const personaSummary =
     profile?.summary?.trim() ||
-    'Your user persona has not been generated yet. Keep using AI Chat and document conversations, and the system will gradually learn your long-term preferences.'
+    t('globalMemory.userPersonaNotGenerated')
 
   const handleToggleEnabled = () => {
     const next: GlobalMemorySettings = {
@@ -126,7 +128,7 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
   const handleEditTags = (item: GlobalMemoryItem) => {
     if (typeof window === 'undefined') return
     const current = (item.tags ?? []).join(', ')
-    const next = window.prompt('Edit tags (comma separated)', current)
+    const next = window.prompt(t('globalMemory.editTagsPrompt'), current)
     if (next == null) return
     const tags = Array.from(new Set(next.split(',').map((t) => t.trim()).filter((t) => t.length > 0)))
     const now = Date.now()
@@ -145,7 +147,7 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
 
   const handleDeleteItem = (id: string) => {
     if (typeof window !== 'undefined') {
-      const ok = window.confirm('Are you sure you want to delete this memory? This will not affect any documents or conversation history.')
+      const ok = window.confirm(t('globalMemory.confirmDeleteMemory'))
       if (!ok) return
     }
     updateItemsAndSave((prev) => prev.filter((item) => item.id !== id))
@@ -154,9 +156,7 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
   const handleClearAll = () => {
     if (isClearing) return
     if (typeof window !== 'undefined') {
-      const ok = window.confirm(
-        'Are you sure you want to clear all global memories? This will not delete any documents or conversation history.',
-      )
+      const ok = window.confirm(t('globalMemory.confirmClearAll'))
       if (!ok) return
     }
 
@@ -197,7 +197,7 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
           <button
             type="button"
             className="ai-chat-close-button"
-            aria-label="Close Global Memory"
+            aria-label={t('globalMemory.close')}
             onClick={onClose}
           >
             <span className="ai-chat-close-icon" aria-hidden="true" />
@@ -208,14 +208,14 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
               className={activeTab === 'persona' ? 'ai-global-memory-tab active' : 'ai-global-memory-tab'}
               onClick={() => setActiveTab('persona')}
             >
-              User Persona
+              {t('globalMemory.userPersona')}
             </button>
             <button
               type="button"
               className={activeTab === 'manage' ? 'ai-global-memory-tab active' : 'ai-global-memory-tab'}
               onClick={() => setActiveTab('manage')}
             >
-              Manage Memory
+              {t('globalMemory.manageMemory')}
             </button>
           </div>
         </div>
@@ -223,30 +223,30 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
         {activeTab === 'persona' && (
           <div className="ai-global-memory-body ai-global-memory-body-persona">
             <section className="ai-global-memory-section">
-              <h2 className="ai-global-memory-section-title">Overview</h2>
+              <h2 className="ai-global-memory-section-title">{t('globalMemory.overview')}</h2>
               <p className="ai-global-memory-persona-summary">{personaSummary}</p>
             </section>
 
             <section className="ai-global-memory-section">
-              <h2 className="ai-global-memory-section-title">Preferences</h2>
+              <h2 className="ai-global-memory-section-title">{t('globalMemory.preferences')}</h2>
               <div className="ai-global-memory-preferences-grid">
                 <div className="ai-global-memory-preference-block">
-                  <div className="ai-global-memory-preference-label">Language</div>
+                  <div className="ai-global-memory-preference-label">{t('globalMemory.language')}</div>
                   <div className="ai-global-memory-preference-value">
-                    {profile?.languages?.length ? profile.languages.join(', ') : 'Not specified yet'}
+                    {profile?.languages?.length ? profile.languages.join(', ') : t('globalMemory.notSpecifiedYet')}
                   </div>
                 </div>
                 <div className="ai-global-memory-preference-block">
-                  <div className="ai-global-memory-preference-label">Style</div>
+                  <div className="ai-global-memory-preference-label">{t('globalMemory.style')}</div>
                   <div className="ai-global-memory-preference-value">
-                    {profile?.writingStyle || 'Not specified yet'}
+                    {profile?.writingStyle || t('globalMemory.notSpecifiedYet')}
                   </div>
                 </div>
               </div>
             </section>
 
             <section className="ai-global-memory-section">
-              <h2 className="ai-global-memory-section-title">Interests</h2>
+              <h2 className="ai-global-memory-section-title">{t('globalMemory.interests')}</h2>
               <div className="ai-global-memory-tags">
                 {profile?.interests?.length ? (
                   profile.interests.map((tag) => (
@@ -255,24 +255,24 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
                     </span>
                   ))
                 ) : (
-                  <span className="ai-global-memory-empty-text">No interest tags yet</span>
+                  <span className="ai-global-memory-empty-text">{t('globalMemory.noInterestTags')}</span>
                 )}
               </div>
             </section>
 
             <section className="ai-global-memory-section">
-              <h2 className="ai-global-memory-section-title">Meta</h2>
+              <h2 className="ai-global-memory-section-title">{t('globalMemory.meta')}</h2>
               <div className="ai-global-memory-meta">
                 <div className="ai-global-memory-meta-row">
-                  <span className="ai-global-memory-meta-label">Last updated</span>
-                  <span className="ai-global-memory-meta-value">{formatLastUpdated(profile)}</span>
+                  <span className="ai-global-memory-meta-label">{t('globalMemory.lastUpdated')}</span>
+                  <span className="ai-global-memory-meta-value">{formatLastUpdated(profile) || t('globalMemory.userPersonaNotGeneratedShort')}</span>
                 </div>
                 <div className="ai-global-memory-meta-row">
-                  <span className="ai-global-memory-meta-label">Active memories</span>
+                  <span className="ai-global-memory-meta-label">{t('globalMemory.activeMemories')}</span>
                   <span className="ai-global-memory-meta-value">{enabledItems.length}</span>
                 </div>
                 <div className="ai-global-memory-meta-row">
-                  <span className="ai-global-memory-meta-label">Pinned</span>
+                  <span className="ai-global-memory-meta-label">{t('globalMemory.pinned')}</span>
                   <span className="ai-global-memory-meta-value">{pinnedCount}</span>
                 </div>
               </div>
@@ -286,11 +286,11 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
               <input
                 type="text"
                 className="ai-global-memory-search-input"
-                placeholder="Search memories (browse-only in this version)"
+                placeholder={t('globalMemory.searchPlaceholder')}
                 disabled
               />
               <div className="ai-global-memory-filter-summary">
-                Total {items.length} · Enabled {enabledItems.length} · Pinned {pinnedCount}
+                {t('globalMemory.filterSummary', { total: items.length, enabled: enabledItems.length, pinned: pinnedCount })}
               </div>
             </div>
 
@@ -301,7 +301,7 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
                   checked={settings.enabled}
                   onChange={handleToggleEnabled}
                 />
-                <span>Enable Global Memory</span>
+                <span>{t('globalMemory.enableGlobalMemory')}</span>
               </label>
               <label className="ai-global-memory-switch">
                 <input
@@ -310,7 +310,7 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
                   onChange={handleToggleAutoUpdate}
                   disabled={!settings.enabled}
                 />
-                <span>Allow auto update</span>
+                <span>{t('globalMemory.allowAutoUpdate')}</span>
               </label>
               <button
                 type="button"
@@ -318,14 +318,14 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
                 onClick={handleClearAll}
                 disabled={isClearing}
               >
-                {isClearing ? 'Clearing...' : 'Clear all global memories...'}
+                {isClearing ? t('globalMemory.clearing') : t('globalMemory.clearAllGlobalMemories')}
               </button>
             </div>
 
             <div className="ai-global-memory-list">
               {items.length === 0 && (
                 <div className="ai-global-memory-empty-text">
-                  There are no global memory items yet. Keep using AI Chat and document conversations; the system will learn your long-term preferences over time.
+                  {t('globalMemory.noMemoryItems')}
                 </div>
               )}
 
@@ -335,9 +335,9 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
                     <div className="ai-global-memory-item-title">{item.title}</div>
                     <div className="ai-global-memory-item-meta">
                       <span className="ai-global-memory-item-type">{item.type}</span>
-                      {item.pinned && <span className="ai-global-memory-badge">Pinned</span>}
+                      {item.pinned && <span className="ai-global-memory-badge">{t('globalMemory.pinned')}</span>}
                       {item.disabled && (
-                        <span className="ai-global-memory-badge badge-muted">Disabled</span>
+                        <span className="ai-global-memory-badge badge-muted">{t('globalMemory.disable')}</span>
                       )}
                     </div>
                   </div>
@@ -360,28 +360,28 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
                         className="ai-global-memory-item-action-button"
                         onClick={() => handleEditTags(item)}
                       >
-                        Edit tags
+                        {t('globalMemory.editTags')}
                       </button>
                       <button
                         type="button"
                         className="ai-global-memory-item-action-button"
                         onClick={() => handleTogglePinned(item.id)}
                       >
-                        {item.pinned ? 'Unpin' : 'Pin'}
+                        {item.pinned ? t('globalMemory.unpin') : t('globalMemory.pin')}
                       </button>
                       <button
                         type="button"
                         className="ai-global-memory-item-action-button"
                         onClick={() => handleToggleDisabled(item.id)}
                       >
-                        {item.disabled ? 'Enable' : 'Disable'}
+                        {item.disabled ? t('globalMemory.enable') : t('globalMemory.disable')}
                       </button>
                       <button
                         type="button"
                         className="ai-global-memory-item-action-button ai-global-memory-item-action-danger"
                         onClick={() => handleDeleteItem(item.id)}
                       >
-                        Delete
+                        {t('globalMemory.delete')}
                       </button>
                     </span>
                   </div>
@@ -394,17 +394,17 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
         <div className="ai-global-memory-footer">
           <div className="ai-global-memory-footer-left">
             <div className="ai-global-memory-footer-meta">
-              <span className="ai-global-memory-footer-meta-label">Last global update:</span>
+              <span className="ai-global-memory-footer-meta-label">{t('globalMemory.lastGlobalUpdate')}</span>
               <span className="ai-global-memory-footer-meta-value">
-                {formatGlobalUpdateTime(lastGlobalUpdate)}
+                {formatGlobalUpdateTime(lastGlobalUpdate) || t('globalMemory.globalMemoryNotUpdated')}
               </span>
               <span className="ai-global-memory-footer-meta-separator">·</span>
               <span className="ai-global-memory-footer-meta-value">
-                Pending digests: {pendingCount}
+                {t('globalMemory.pendingDigests', { count: pendingCount })}
               </span>
             </div>
             <div className="ai-global-memory-footer-text">
-              Your data is stored locally only. Global memory is used as preference context, and your explicit instructions always take precedence. Clearing global memory will not delete any documents or conversation history.
+              {t('globalMemory.footerText')}
             </div>
           </div>
           <div className="ai-global-memory-footer-right">
@@ -414,10 +414,10 @@ export const GlobalMemoryDialog: FC<GlobalMemoryDialogProps> = ({ open, initialT
               onClick={handleUpdateNow}
               disabled={isUpdating}
             >
-              {isUpdating ? 'Updating...' : 'Update Now'}
+              {isUpdating ? t('globalMemory.updating') : t('globalMemory.updateNow')}
             </button>
             <button type="button" className="ai-global-memory-footer-button" onClick={onClose}>
-              Close
+              {t('common.close')}
             </button>
           </div>
         </div>

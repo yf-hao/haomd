@@ -5,6 +5,7 @@ import type { DocConversationMessage, DocConversationRecord } from '../domain/do
 import { docConversationService } from '../application/docConversationService'
 import { aiSessionExportService } from '../export/AiSessionExportService'
 import { aiSessionImportService } from '../import/AiSessionImportService'
+import { useI18n } from '../../i18n/I18nContext'
 
 export type DocConversationHistoryDialogProps = {
   open: boolean
@@ -129,6 +130,7 @@ function buildMarkdownFromDocRecord(record: DocConversationRecord, groups: Conve
 }
 
 export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps> = ({ open, docPath, onClose }) => {
+  const { t } = useI18n()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [record, setRecord] = useState<DocConversationRecord | null>(null)
@@ -318,9 +320,9 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
   }, [docPath, pageSize])
 
   const summaryLine = (() => {
-    if (!record || !record.messages.length) return '当前目录暂无 AI 会话历史'
+    if (!record || !record.messages.length) return t('aiHistory.emptySummary')
     const lastTs = new Date(record.lastActiveAt).toLocaleString()
-    return `最近活跃时间：${lastTs} · 总消息数：${record.messages.length} · 总对话轮次：${groups.length}`
+    return t('aiHistory.summaryLine', { time: lastTs, messages: record.messages.length, groups: groups.length })
   })()
 
   return (
@@ -333,41 +335,41 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
           <button
             type="button"
             className="ai-chat-close-button"
-            aria-label="关闭会话历史"
+            aria-label={t('aiHistory.close')}
             onClick={onClose}
           >
             <span className="ai-chat-close-icon" aria-hidden="true" />
           </button>
-          <div className="modal-title-text">AI Session History</div>
+          <div className="modal-title-text">{t('aiHistory.title')}</div>
           <div className="ai-history-actions">
             <button
               type="button"
               className="ai-history-export-button"
               onClick={handleExportMarkdown}
             >
-              导出 Markdown
+              {t('aiHistory.exportMarkdown')}
             </button>
             <button
               type="button"
               className="ai-history-export-button"
               onClick={handleExportJson}
             >
-              Export JSON
+              {t('aiHistory.exportJson')}
             </button>
             <button
               type="button"
               className="ai-history-export-button"
               onClick={handleImportJson}
             >
-              Import JSON
+              {t('aiHistory.importJson')}
             </button>
           </div>
         </div>
 
         <div className="ai-history-summary">
-          {loading && <div className="ai-history-status">正在加载文档会话历史…</div>}
+          {loading && <div className="ai-history-status">{t('aiHistory.loading')}</div>}
           {!loading && error && (
-            <div className="ai-history-status ai-history-status-error">加载失败：{error.message}</div>
+            <div className="ai-history-status ai-history-status-error">{t('aiHistory.loadFailed', { message: error.message })}</div>
           )}
           {!loading && !error && (
             <div className="ai-history-status">{summaryLine}</div>
@@ -377,9 +379,9 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
         <div className="ai-history-body">
           {!loading && !error && !hasData && (
             <div className="ai-history-empty">
-              当前目录暂无 AI 会话历史。
-              <br />
-              你可以通过 AI Chat 或 Ask File / Ask Selection 发起对话，历史会自动记录在这里。
+              {t('aiHistory.emptyBody').split('\n').map((line, index) => (
+                <div key={index}>{line}</div>
+              ))}
             </div>
           )}
 
@@ -390,7 +392,7 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
                 return (
                   <div className="ai-history-group" key={group.id}>
                     <div className="ai-history-group-header">
-                      <span className="ai-history-group-title">对话 {groupIndex}</span>
+                      <span className="ai-history-group-title">{t('aiHistory.conversation', { index: groupIndex })}</span>
                     </div>
 
                     {group.systemMessages.map((m) => (
@@ -398,7 +400,7 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
                         <div className="ai-history-message-meta">
                           {(() => {
                             const level = m.meta?.summaryLevel ?? 0
-                            return level >= 1 ? `摘要 (Level ${level})` : 'System'
+                            return level >= 1 ? t('aiHistory.summaryLevel', { level }) : t('aiHistory.system')
                           })()}
                         </div>
                         <div className="ai-history-message-content">{m.content}</div>
@@ -408,7 +410,7 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
                     {group.userMessages.length > 0 && (
                       <div className="ai-history-message ai-history-message-user">
                         <div className="ai-history-message-meta">
-                          <span className="ai-history-role">User</span>
+                          <span className="ai-history-role">{t('aiHistory.user')}</span>
                           <span className="ai-history-time">
                             {new Date(group.userMessages[0].timestamp).toLocaleString()}
                           </span>
@@ -424,7 +426,7 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
                     {group.assistantMessages.length > 0 && (
                       <div className="ai-history-message ai-history-message-assistant">
                         <div className="ai-history-message-meta">
-                          <span className="ai-history-role">Assistant</span>
+                          <span className="ai-history-role">{t('aiHistory.assistant')}</span>
                           <span className="ai-history-model">
                             {(() => {
                               const meta = group.assistantMessages[0].meta
@@ -458,10 +460,10 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
               onClick={handlePrevPage}
               disabled={displayPageIndex <= 0}
             >
-              上一页
+              {t('common.previousPage')}
             </button>
             <span className="ai-history-page-info">
-              第 {displayPageIndex + 1} / {totalPages} 页
+              {t('aiHistory.pageInfo', { current: displayPageIndex + 1, total: totalPages })}
             </span>
             <button
               type="button"
@@ -469,18 +471,18 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
               onClick={handleNextPage}
               disabled={displayPageIndex >= totalPages - 1}
             >
-              下一页
+              {t('common.nextPage')}
             </button>
           </div>
 
           <div className="ai-history-page-size">
-            每页
+            {t('aiHistory.perPage')}
             <select value={pageSize} onChange={handlePageSizeChange}>
-              <option value={5}>5 组</option>
-              <option value={10}>10 组</option>
-              <option value={20}>20 组</option>
+              <option value={5}>5 {t('aiHistory.groups')}</option>
+              <option value={10}>10 {t('aiHistory.groups')}</option>
+              <option value={20}>20 {t('aiHistory.groups')}</option>
             </select>
-            对话
+            {t('aiHistory.conversations')}
           </div>
         </div>
 

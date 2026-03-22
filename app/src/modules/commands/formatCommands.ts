@@ -4,47 +4,55 @@ import { applyHeadingLevel, resetHeadingToParagraph, emphasizeSelection, insertC
 export type FormatCommandContext = {
   setStatusMessage: (msg: string) => void
   openInsertTableDialog?: () => void
+  t?: (key: string, params?: Record<string, string | number>) => string
 }
+
+const tr = (
+  ctx: FormatCommandContext,
+  key: string,
+  fallback: string,
+  params?: Record<string, string | number>,
+) => ctx.t?.(key, params) ?? fallback
 
 export function createFormatCommands(ctx: FormatCommandContext): CommandRegistry {
   return {
     format_heading_paragraph: async () => {
       await resetHeadingToParagraph()
-      ctx.setStatusMessage('已转换为段落')
+      ctx.setStatusMessage(tr(ctx, 'commands.formatParagraph', '已转换为段落'))
     },
     format_heading_1: async () => {
       await applyHeadingLevel(1)
-      ctx.setStatusMessage('已设置为 Heading 1')
+      ctx.setStatusMessage(tr(ctx, 'commands.formatHeading', '已设置为 Heading 1', { level: 1 }))
     },
     format_heading_2: async () => {
       await applyHeadingLevel(2)
-      ctx.setStatusMessage('已设置为 Heading 2')
+      ctx.setStatusMessage(tr(ctx, 'commands.formatHeading', '已设置为 Heading 2', { level: 2 }))
     },
     format_heading_3: async () => {
       await applyHeadingLevel(3)
-      ctx.setStatusMessage('已设置为 Heading 3')
+      ctx.setStatusMessage(tr(ctx, 'commands.formatHeading', '已设置为 Heading 3', { level: 3 }))
     },
     format_heading_4: async () => {
       await applyHeadingLevel(4)
-      ctx.setStatusMessage('已设置为 Heading 4')
+      ctx.setStatusMessage(tr(ctx, 'commands.formatHeading', '已设置为 Heading 4', { level: 4 }))
     },
     format_heading_5: async () => {
       await applyHeadingLevel(5)
-      ctx.setStatusMessage('已设置为 Heading 5')
+      ctx.setStatusMessage(tr(ctx, 'commands.formatHeading', '已设置为 Heading 5', { level: 5 }))
     },
     format_heading_6: async () => {
       await applyHeadingLevel(6)
-      ctx.setStatusMessage('已设置为 Heading 6')
+      ctx.setStatusMessage(tr(ctx, 'commands.formatHeading', '已设置为 Heading 6', { level: 6 }))
     },
     format_emphasize_selection: async () => {
       await emphasizeSelection()
-      ctx.setStatusMessage('已加粗选中内容')
+      ctx.setStatusMessage(tr(ctx, 'commands.formatBold', '已加粗选中内容'))
     },
     format_insert_table: () => {
       if (ctx.openInsertTableDialog) {
         ctx.openInsertTableDialog()
       } else {
-        ctx.setStatusMessage('Insert Table 尚未实现')
+        ctx.setStatusMessage(tr(ctx, 'commands.insertTableUnavailable', 'Insert Table 尚未实现'))
       }
     },
     format_insert_code_block: async () => {
