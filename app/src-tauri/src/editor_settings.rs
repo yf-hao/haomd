@@ -47,6 +47,10 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::Editor
                 cfg.theme = default_cfg.theme.clone();
                 changed = true;
             }
+            if cfg.ui_typography.is_none() {
+                cfg.ui_typography = default_cfg.ui_typography.clone();
+                changed = true;
+            }
             if cfg.word_export.is_none() {
                 cfg.word_export = default_cfg.word_export.clone();
                 changed = true;
@@ -88,6 +92,49 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::Editor
                 }
             }
 
+            if let Some(ref mut typography) = cfg.ui_typography {
+                if let Some(ref default_typography) = default_cfg.ui_typography {
+                    if typography.app_font_size.is_none() {
+                        typography.app_font_size = default_typography.app_font_size;
+                        changed = true;
+                    }
+                    if typography.settings_font_size.is_none() {
+                        typography.settings_font_size = default_typography.settings_font_size;
+                        changed = true;
+                    }
+                    if typography.sidebar_font_size.is_none() {
+                        typography.sidebar_font_size = default_typography.sidebar_font_size;
+                        changed = true;
+                    }
+                    if typography.tab_bar_font_size.is_none() {
+                        typography.tab_bar_font_size = default_typography.tab_bar_font_size;
+                        changed = true;
+                    }
+                    if typography.status_bar_font_size.is_none() {
+                        typography.status_bar_font_size = default_typography.status_bar_font_size;
+                        changed = true;
+                    }
+                    if typography.editor_font_size.is_none() {
+                        typography.editor_font_size = default_typography.editor_font_size;
+                        changed = true;
+                    }
+                    if typography.preview_font_size.is_none() {
+                        typography.preview_font_size = default_typography.preview_font_size;
+                        changed = true;
+                    }
+                    if typography.ai_chat_message_font_size.is_none() {
+                        typography.ai_chat_message_font_size =
+                            default_typography.ai_chat_message_font_size;
+                        changed = true;
+                    }
+                    if typography.ai_chat_input_font_size.is_none() {
+                        typography.ai_chat_input_font_size =
+                            default_typography.ai_chat_input_font_size;
+                        changed = true;
+                    }
+                }
+            }
+
             if let Some(ref mut theme) = cfg.theme {
                 if let Some(ref default_theme) = default_cfg.theme {
                     if theme.mode.is_none() {
@@ -100,6 +147,10 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::Editor
                     }
                     if theme.editor_background.is_none() {
                         theme.editor_background = default_theme.editor_background.clone();
+                        changed = true;
+                    }
+                    if theme.preview_background.is_none() {
+                        theme.preview_background = default_theme.preview_background.clone();
                         changed = true;
                     }
                     if theme.ai_chat_background.is_none() {
@@ -153,8 +204,55 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::Editor
                             }
                         }
                     }
+                    if let Some(ref mut preview_background) = theme.preview_background {
+                        if let Some(ref default_preview_background) =
+                            default_theme.preview_background
+                        {
+                            if preview_background.enabled.is_none() {
+                                preview_background.enabled = default_preview_background.enabled;
+                                changed = true;
+                            }
+                            if preview_background.path.is_none() {
+                                preview_background.path = default_preview_background.path.clone();
+                                changed = true;
+                            }
+                            if preview_background.opacity.is_none() {
+                                preview_background.opacity = default_preview_background.opacity;
+                                changed = true;
+                            }
+                            if preview_background.overlay_opacity.is_none() {
+                                preview_background.overlay_opacity =
+                                    default_preview_background.overlay_opacity;
+                                changed = true;
+                            }
+                            if preview_background.blur_px.is_none() {
+                                preview_background.blur_px = default_preview_background.blur_px;
+                                changed = true;
+                            }
+                            if preview_background.brightness.is_none() {
+                                preview_background.brightness =
+                                    default_preview_background.brightness;
+                                changed = true;
+                            }
+                            if preview_background.size.is_none() {
+                                preview_background.size = default_preview_background.size.clone();
+                                changed = true;
+                            }
+                            if preview_background.position_x.is_none() {
+                                preview_background.position_x =
+                                    default_preview_background.position_x;
+                                changed = true;
+                            }
+                            if preview_background.position_y.is_none() {
+                                preview_background.position_y =
+                                    default_preview_background.position_y;
+                                changed = true;
+                            }
+                        }
+                    }
                     if let Some(ref mut ai_chat_background) = theme.ai_chat_background {
-                        if let Some(ref default_ai_chat_background) = default_theme.ai_chat_background
+                        if let Some(ref default_ai_chat_background) =
+                            default_theme.ai_chat_background
                         {
                             if ai_chat_background.enabled.is_none() {
                                 ai_chat_background.enabled = default_ai_chat_background.enabled;
@@ -178,7 +276,8 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::Editor
                                 changed = true;
                             }
                             if ai_chat_background.brightness.is_none() {
-                                ai_chat_background.brightness = default_ai_chat_background.brightness;
+                                ai_chat_background.brightness =
+                                    default_ai_chat_background.brightness;
                                 changed = true;
                             }
                             if ai_chat_background.size.is_none() {
@@ -186,11 +285,13 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::Editor
                                 changed = true;
                             }
                             if ai_chat_background.position_x.is_none() {
-                                ai_chat_background.position_x = default_ai_chat_background.position_x;
+                                ai_chat_background.position_x =
+                                    default_ai_chat_background.position_x;
                                 changed = true;
                             }
                             if ai_chat_background.position_y.is_none() {
-                                ai_chat_background.position_y = default_ai_chat_background.position_y;
+                                ai_chat_background.position_y =
+                                    default_ai_chat_background.position_y;
                                 changed = true;
                             }
                         }

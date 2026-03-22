@@ -5,6 +5,18 @@
   width: 900px;
   min-width: 760px;
   padding: 20px 24px 18px;
+  font-size: var(--ui-font-settings);
+}
+
+.modal.modal-prompt-settings .field-label,
+.modal.modal-prompt-settings .field-helper {
+  font-size: calc(var(--ui-font-settings) - 1px);
+}
+
+.modal.modal-prompt-settings .field-input,
+.modal.modal-prompt-settings .field-textarea,
+.modal.modal-prompt-settings .field-select {
+  font-size: var(--ui-font-settings);
 }
 
 .prompt-settings-body {
@@ -66,7 +78,7 @@
 
 .prompt-role-item-builtin .provider-name::after {
   content: ' (builtin)';
-  font-size: 11px;
+  font-size: calc(var(--ui-font-settings) - 2px);
   color: #9ca3af;
 }
 
@@ -116,7 +128,7 @@
   background: var(--theme-surface-card);
   border: 1px solid var(--theme-border-subtle);
   color: var(--theme-text-default);
-  font-size: 13px;
+  font-size: var(--ui-font-settings);
   white-space: pre-wrap;
 }
 

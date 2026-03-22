@@ -4,6 +4,7 @@ import {
   getHugeDocSettings,
   getLanguageSetting,
   getThemeSettings,
+  getUiTypographySettings,
   getWordExportStyleSettings,
   resetSettingsCache,
   saveEditorSettings,
@@ -78,6 +79,8 @@ describe('editorSettings', () => {
         const settings = await getThemeSettings()
         expect(settings.mode).toBe('system')
         expect(settings.customThemeId).toBeNull()
+        expect(settings.previewBackground?.enabled).toBe(false)
+        expect(settings.previewBackground?.size).toBe('height-fill')
         expect(settings.aiChatBackground?.enabled).toBe(false)
         expect(settings.aiChatBackground?.size).toBe('height-fill')
     })
@@ -87,6 +90,15 @@ describe('editorSettings', () => {
 
         const language = await getLanguageSetting()
         expect(language).toBe('system')
+    })
+
+    it('should return default typography settings if backend is empty', async () => {
+        vi.mocked(mockInvoke).mockResolvedValue({ Ok: { data: {} } })
+
+        const typography = await getUiTypographySettings()
+        expect(typography.appFontSize).toBe(13)
+        expect(typography.previewFontSize).toBe(15)
+        expect(typography.aiChatInputFontSize).toBe(13)
     })
 
     it('should preserve theme preset metadata from backend', async () => {
@@ -100,6 +112,11 @@ describe('editorSettings', () => {
                             enabled: true,
                             path: '/tmp/romantic-bg.png',
                             opacity: 0.16,
+                        },
+                        previewBackground: {
+                            enabled: true,
+                            path: '/tmp/romantic-preview-bg.png',
+                            opacity: 0.2,
                         },
                         aiChatBackground: {
                             enabled: true,
@@ -120,6 +137,10 @@ describe('editorSettings', () => {
         expect(settings.editorBackground?.overlayOpacity).toBe(0)
         expect(settings.editorBackground?.blurPx).toBe(1)
         expect(settings.editorBackground?.size).toBe('height-fill')
+        expect(settings.previewBackground?.enabled).toBe(true)
+        expect(settings.previewBackground?.path).toBe('/tmp/romantic-preview-bg.png')
+        expect(settings.previewBackground?.opacity).toBe(0.2)
+        expect(settings.previewBackground?.overlayOpacity).toBe(0.12)
         expect(settings.aiChatBackground?.enabled).toBe(true)
         expect(settings.aiChatBackground?.path).toBe('/tmp/romantic-chat-bg.png')
         expect(settings.aiChatBackground?.opacity).toBe(0.24)
@@ -130,6 +151,9 @@ describe('editorSettings', () => {
         vi.mocked(mockInvoke).mockResolvedValue({ Ok: { data: null } })
 
         await saveEditorSettings({
+            uiTypography: {
+                previewFontSize: 16,
+            },
             wordExport: {
                 bodyFontFamily: 'Calibri',
                 bodyFontSizePt: 11,
@@ -138,6 +162,9 @@ describe('editorSettings', () => {
 
         expect(mockInvoke).toHaveBeenCalledWith('save_editor_settings', {
             cfg: {
+                uiTypography: {
+                    previewFontSize: 16,
+                },
                 wordExport: {
                     bodyFontFamily: 'Calibri',
                     bodyFontSizePt: 11,

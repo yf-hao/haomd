@@ -7,6 +7,7 @@
   padding: 0 8px 8px 12px;
   display: flex;
   flex-direction: column;
+  font-size: var(--ui-font-sidebar);
 }
 
 .sidebar-resizer {
@@ -31,12 +32,13 @@
   padding: 0 8px 8px 8px;
   display: flex;
   flex-direction: column;
+  font-size: var(--ui-font-sidebar);
 }
 
 .outline-header {
   min-height: var(--theme-component-tabbar-height);
   box-sizing: border-box;
-  font-size: 12px;
+  font-size: calc(var(--ui-font-sidebar) - 1px);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -70,13 +72,13 @@
 }
 
 .outline-empty-title {
-  font-size: 13px;
+  font-size: var(--ui-font-sidebar);
   font-weight: 500;
   margin-bottom: 4px;
 }
 
 .outline-empty-sub {
-  font-size: 12px;
+  font-size: calc(var(--ui-font-sidebar) - 1px);
   opacity: 0.8;
 }
 
@@ -88,7 +90,7 @@
   padding: 4px 8px;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: calc(var(--ui-font-sidebar) - 1px);
   color: var(--theme-text-muted);
   transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -163,7 +165,7 @@
 
 .outline-item.level-3 .outline-text {
   color: var(--theme-text-muted);
-  font-size: 12px;
+  font-size: calc(var(--ui-font-sidebar) - 1px);
 }
 
 .outline-item.level-2 .outline-bullet {
@@ -336,7 +338,7 @@
 
 /* File Browser 顶部标题样式，略小一号 */
 .sidebar-header .pane-title {
-  font-size: 12px;
+  font-size: calc(var(--ui-font-sidebar) - 1px);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -361,7 +363,7 @@
   color: var(--theme-text-subtle);
   cursor: pointer;
   padding: 0;
-  font-size: 11px;
+  font-size: calc(var(--ui-font-sidebar) - 2px);
 }
 
 .sidebar-header-toolbar .toolbar-btn:hover {
@@ -391,7 +393,7 @@
 }
 
 .sidebar-section-title {
-  font-size: 12px;
+  font-size: calc(var(--ui-font-sidebar) - 1px);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--theme-text-subtle);
@@ -508,7 +510,7 @@
 
 .sidebar-file-row {
   /* standalone 文件分组的条目，字号与 Folders 分组保持一致 */
-  font-size: 12px;
+  font-size: calc(var(--ui-font-sidebar) - 1px);
 }
 
 .sidebar-folder-list {
@@ -537,7 +539,7 @@
   padding: 4px 8px;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: calc(var(--ui-font-sidebar) - 1px);
   color: var(--theme-text-muted);
   transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -560,7 +562,7 @@
   padding: 4px 8px;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: calc(var(--ui-font-sidebar) - 1px);
   color: var(--theme-text-muted);
   user-select: none;
   transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
@@ -635,7 +637,7 @@
   outline: none;
   background: transparent;
   color: var(--theme-text-default);
-  font-size: 13px;
+  font-size: var(--ui-font-sidebar);
   padding: 0;
   cursor: text;
 }
@@ -688,7 +690,7 @@
   border: none;
   background: transparent;
   text-align: left;
-  font-size: 13px;
+  font-size: var(--ui-font-sidebar);
   line-height: 22px;
   color: #e5e7eb;
   cursor: default;
@@ -720,7 +722,7 @@
   background: transparent;
   color: var(--theme-text-muted);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--ui-font-sidebar);
   line-height: 1;
   display: inline-flex;
   align-items: center;
@@ -745,7 +747,7 @@
   border: 1px solid var(--theme-border-input);
   background: var(--theme-surface-input);
   color: var(--theme-text-default);
-  font-size: 12px;
+  font-size: calc(var(--ui-font-sidebar) - 1px);
   padding: 4px 6px;
 }
 
@@ -775,7 +777,7 @@
   padding: 0 4px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: calc(var(--ui-font-sidebar) - 1px);
   color: var(--theme-text-default);
 }
 
@@ -806,7 +808,7 @@
   background: transparent;
   color: var(--theme-text-muted);
   cursor: pointer;
-  font-size: 11px;
+  font-size: calc(var(--ui-font-sidebar) - 2px);
   line-height: 1;
   display: inline-flex;
   align-items: center;
@@ -820,6 +822,6 @@
 
 .sidebar-virtual-folder-empty {
   padding: 2px 8px 4px 18px;
-  font-size: 11px;
+  font-size: calc(var(--ui-font-sidebar) - 2px);
   color: var(--theme-text-muted);
 }

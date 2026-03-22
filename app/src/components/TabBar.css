@@ -16,7 +16,7 @@
   gap: 6px;
   padding: 4px 10px;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--ui-font-tabbar);
   cursor: pointer;
   color: var(--theme-text-muted);
   background: transparent;
@@ -67,7 +67,7 @@
   color: inherit;
   cursor: pointer;
   padding: 0 2px;
-  font-size: 12px;
+  font-size: calc(var(--ui-font-tabbar) - 1px);
 }
 
 .tab-close:hover {

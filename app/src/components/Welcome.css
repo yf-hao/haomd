@@ -11,6 +11,7 @@
 .welcome-content {
   max-width: 600px;
   width: 100%;
+  font-size: var(--ui-font-app);
 }
 
 .welcome-logo {
@@ -37,14 +38,14 @@
 }
 
 .logo-title {
-  font-size: 36px;
+  font-size: calc(var(--ui-font-app) + 23px);
   font-weight: 700;
   color: var(--theme-text-default);
   letter-spacing: -0.5px;
 }
 
 .welcome-subtitle {
-  font-size: 16px;
+  font-size: calc(var(--ui-font-app) + 3px);
   color: var(--theme-text-muted);
   text-align: center;
   margin: 0 0 56px 0;
@@ -60,7 +61,7 @@
 
 .welcome-button {
   padding: 16px 32px;
-  font-size: 16px;
+  font-size: calc(var(--ui-font-app) + 3px);
   font-weight: 600;
   border-radius: 10px;
   cursor: pointer;
@@ -101,7 +102,7 @@
 }
 
 .shortcut {
-  font-size: 12px;
+  font-size: calc(var(--ui-font-app) - 1px);
   color: rgba(255, 255, 255, 0.7);
   background: rgba(0, 0, 0, 0.3);
   padding: 2px 8px;

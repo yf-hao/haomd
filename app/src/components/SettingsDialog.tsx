@@ -8,9 +8,11 @@ import type { LanguageMode } from '../modules/i18n/schema'
 import {
   getDefaultLanguageSetting,
   getDefaultThemeSettings,
+  getDefaultUiTypographySettings,
   getDefaultWordExportStyleSettings,
   getLanguageSetting,
   getThemeSettings,
+  getUiTypographySettings,
   getWordExportStyleSettings,
   loadEditorSettings,
   saveEditorSettings,
@@ -18,6 +20,7 @@ import {
   type ThemeBackgroundSettings,
   type ThemeBackgroundSize,
   type ThemeSettings,
+  type UiTypographySettings,
   type WordExportStyleSettings,
 } from '../modules/settings/editorSettings'
 import { resolveManagedBackgroundImageUrl } from '../modules/theme/backgroundImageRuntime'
@@ -28,11 +31,12 @@ export type SettingsDialogProps = {
   onClose: () => void
   onThemeSettingsChange?: (settings: ThemeSettings) => void
   onLanguageModeChange?: (mode: LanguageMode) => void
+  onUiTypographyChange?: (settings: UiTypographySettings) => void
 }
 
-type SettingsSectionId = 'theme' | 'word-export'
-type ThemePanelTabId = 'theme-preset' | 'editor-background' | 'ai-chat-background'
-type BackgroundTarget = 'editorBackground' | 'aiChatBackground'
+type SettingsSectionId = 'theme' | 'typography' | 'word-export'
+type ThemePanelTabId = 'theme-preset' | 'editor-background' | 'preview-background' | 'ai-chat-background'
+type BackgroundTarget = 'editorBackground' | 'previewBackground' | 'aiChatBackground'
 
 const fieldGridStyle: React.CSSProperties = {
   display: 'grid',
@@ -46,12 +50,14 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   onClose,
   onThemeSettingsChange,
   onLanguageModeChange,
+  onUiTypographyChange,
 }) => {
   const { t } = useI18n()
   const [settings, setSettings] = useState<EditorSettings>({})
   const [theme, setTheme] = useState<ThemeSettings>(getDefaultThemeSettings())
   const [languageMode, setLanguageMode] = useState<LanguageMode>(getDefaultLanguageSetting())
   const [wordExport, setWordExport] = useState<WordExportStyleSettings>(getDefaultWordExportStyleSettings())
+  const [uiTypography, setUiTypography] = useState<UiTypographySettings>(getDefaultUiTypographySettings())
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('theme')
   const [activeThemeTab, setActiveThemeTab] = useState<ThemePanelTabId>('theme-preset')
   const [isSaving, setIsSaving] = useState(false)
@@ -60,6 +66,10 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const [editorBackgroundOverlayOpacityInput, setEditorBackgroundOverlayOpacityInput] = useState('')
   const [editorBackgroundBlurInput, setEditorBackgroundBlurInput] = useState('')
   const [editorBackgroundBrightnessInput, setEditorBackgroundBrightnessInput] = useState('')
+  const [previewBackgroundOpacityInput, setPreviewBackgroundOpacityInput] = useState('')
+  const [previewBackgroundOverlayOpacityInput, setPreviewBackgroundOverlayOpacityInput] = useState('')
+  const [previewBackgroundBlurInput, setPreviewBackgroundBlurInput] = useState('')
+  const [previewBackgroundBrightnessInput, setPreviewBackgroundBrightnessInput] = useState('')
   const [aiChatBackgroundOpacityInput, setAiChatBackgroundOpacityInput] = useState('')
   const [aiChatBackgroundOverlayOpacityInput, setAiChatBackgroundOverlayOpacityInput] = useState('')
   const [aiChatBackgroundBlurInput, setAiChatBackgroundBlurInput] = useState('')
@@ -69,6 +79,8 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const modalRef = useRef<HTMLDivElement | null>(null)
   const originalThemeRef = useRef<ThemeSettings>(getDefaultThemeSettings())
   const originalLanguageRef = useRef<LanguageMode>(getDefaultLanguageSetting())
+  const originalTypographyRef = useRef<UiTypographySettings>(getDefaultUiTypographySettings())
+  const hasLocalPreviewEditsRef = useRef(false)
   const themePreviewReadyRef = useRef(false)
   const dialogDragRef = useRef<{
     active: boolean
@@ -89,27 +101,36 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   useEffect(() => {
     if (!open) return
     setDragOffset({ x: 0, y: 0 })
+    hasLocalPreviewEditsRef.current = false
     let cancelled = false
     ;(async () => {
       try {
-        const [loadedSettings, loadedTheme, loadedLanguage, loadedWordExport] = await Promise.all([
+        const [loadedSettings, loadedTheme, loadedLanguage, loadedTypography, loadedWordExport] = await Promise.all([
           loadEditorSettings(),
           getThemeSettings(),
           getLanguageSetting(),
+          getUiTypographySettings(),
           getWordExportStyleSettings(),
         ])
         if (cancelled) return
+        if (hasLocalPreviewEditsRef.current) return
         setSettings(loadedSettings)
         setTheme(loadedTheme)
         originalThemeRef.current = loadedTheme
         setLanguageMode(loadedLanguage)
         originalLanguageRef.current = loadedLanguage
+        setUiTypography(loadedTypography)
+        originalTypographyRef.current = loadedTypography
         themePreviewReadyRef.current = true
         setWordExport(loadedWordExport)
         setEditorBackgroundOpacityInput(String(loadedTheme.editorBackground?.opacity ?? getDefaultThemeSettings().editorBackground?.opacity ?? 0.3))
         setEditorBackgroundOverlayOpacityInput(String(loadedTheme.editorBackground?.overlayOpacity ?? getDefaultThemeSettings().editorBackground?.overlayOpacity ?? 0))
         setEditorBackgroundBlurInput(String(loadedTheme.editorBackground?.blurPx ?? getDefaultThemeSettings().editorBackground?.blurPx ?? 1))
         setEditorBackgroundBrightnessInput(String(loadedTheme.editorBackground?.brightness ?? getDefaultThemeSettings().editorBackground?.brightness ?? 100))
+        setPreviewBackgroundOpacityInput(String(loadedTheme.previewBackground?.opacity ?? getDefaultThemeSettings().previewBackground?.opacity ?? 0.22))
+        setPreviewBackgroundOverlayOpacityInput(String(loadedTheme.previewBackground?.overlayOpacity ?? getDefaultThemeSettings().previewBackground?.overlayOpacity ?? 0.12))
+        setPreviewBackgroundBlurInput(String(loadedTheme.previewBackground?.blurPx ?? getDefaultThemeSettings().previewBackground?.blurPx ?? 2))
+        setPreviewBackgroundBrightnessInput(String(loadedTheme.previewBackground?.brightness ?? getDefaultThemeSettings().previewBackground?.brightness ?? 100))
         setAiChatBackgroundOpacityInput(String(loadedTheme.aiChatBackground?.opacity ?? getDefaultThemeSettings().aiChatBackground?.opacity ?? 0.3))
         setAiChatBackgroundOverlayOpacityInput(String(loadedTheme.aiChatBackground?.overlayOpacity ?? getDefaultThemeSettings().aiChatBackground?.overlayOpacity ?? 0))
         setAiChatBackgroundBlurInput(String(loadedTheme.aiChatBackground?.blurPx ?? getDefaultThemeSettings().aiChatBackground?.blurPx ?? 1))
@@ -128,19 +149,33 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
 
   useEffect(() => {
     if (!open || !themePreviewReadyRef.current) return
-    onThemeSettingsChange?.(theme)
-  }, [open, theme, onThemeSettingsChange])
+    onLanguageModeChange?.(languageMode)
+  }, [open, languageMode, onLanguageModeChange])
 
   useEffect(() => {
     if (!open || !themePreviewReadyRef.current) return
-    onLanguageModeChange?.(languageMode)
-  }, [open, languageMode, onLanguageModeChange])
+    onUiTypographyChange?.(uiTypography)
+  }, [open, uiTypography, onUiTypographyChange])
+
+  useEffect(() => {
+    if (!open || !themePreviewReadyRef.current || !hasLocalPreviewEditsRef.current) return
+    onThemeSettingsChange?.({
+      ...theme,
+      editorBackground: theme.editorBackground ? { ...theme.editorBackground } : undefined,
+      previewBackground: theme.previewBackground ? { ...theme.previewBackground } : undefined,
+      aiChatBackground: theme.aiChatBackground ? { ...theme.aiChatBackground } : undefined,
+    })
+  }, [open, theme, onThemeSettingsChange])
 
   useEffect(() => {
     setEditorBackgroundOpacityInput(String(theme.editorBackground?.opacity ?? getDefaultThemeSettings().editorBackground?.opacity ?? 0.3))
     setEditorBackgroundOverlayOpacityInput(String(theme.editorBackground?.overlayOpacity ?? getDefaultThemeSettings().editorBackground?.overlayOpacity ?? 0))
     setEditorBackgroundBlurInput(String(theme.editorBackground?.blurPx ?? getDefaultThemeSettings().editorBackground?.blurPx ?? 1))
     setEditorBackgroundBrightnessInput(String(theme.editorBackground?.brightness ?? getDefaultThemeSettings().editorBackground?.brightness ?? 100))
+    setPreviewBackgroundOpacityInput(String(theme.previewBackground?.opacity ?? getDefaultThemeSettings().previewBackground?.opacity ?? 0.22))
+    setPreviewBackgroundOverlayOpacityInput(String(theme.previewBackground?.overlayOpacity ?? getDefaultThemeSettings().previewBackground?.overlayOpacity ?? 0.12))
+    setPreviewBackgroundBlurInput(String(theme.previewBackground?.blurPx ?? getDefaultThemeSettings().previewBackground?.blurPx ?? 2))
+    setPreviewBackgroundBrightnessInput(String(theme.previewBackground?.brightness ?? getDefaultThemeSettings().previewBackground?.brightness ?? 100))
     setAiChatBackgroundOpacityInput(String(theme.aiChatBackground?.opacity ?? getDefaultThemeSettings().aiChatBackground?.opacity ?? 0.3))
     setAiChatBackgroundOverlayOpacityInput(String(theme.aiChatBackground?.overlayOpacity ?? getDefaultThemeSettings().aiChatBackground?.overlayOpacity ?? 0))
     setAiChatBackgroundBlurInput(String(theme.aiChatBackground?.blurPx ?? getDefaultThemeSettings().aiChatBackground?.blurPx ?? 1))
@@ -150,6 +185,10 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     theme.editorBackground?.overlayOpacity,
     theme.editorBackground?.blurPx,
     theme.editorBackground?.brightness,
+    theme.previewBackground?.opacity,
+    theme.previewBackground?.overlayOpacity,
+    theme.previewBackground?.blurPx,
+    theme.previewBackground?.brightness,
     theme.aiChatBackground?.opacity,
     theme.aiChatBackground?.overlayOpacity,
     theme.aiChatBackground?.blurPx,
@@ -176,20 +215,39 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   }
 
   const updateThemeMode = (mode: ThemeMode) => {
+    hasLocalPreviewEditsRef.current = true
     setTheme((prev) => ({ ...prev, mode }))
   }
+
+  const updateTypographyNumber =
+    (key: keyof UiTypographySettings) =>
+      (event: ChangeEvent<HTMLInputElement>) => {
+        const value = Number(event.target.value)
+        if (!Number.isFinite(value)) return
+        setUiTypography((prev) => ({
+          ...prev,
+          [key]: Math.min(Math.max(value, 10), 24),
+        }))
+      }
 
   const getDefaultBackgroundSettings = (target: BackgroundTarget): ThemeBackgroundSettings => {
     const defaults = getDefaultThemeSettings()
     return {
       ...(target === 'editorBackground'
         ? defaults.editorBackground
+        : target === 'previewBackground'
+          ? defaults.previewBackground
         : defaults.aiChatBackground)!,
     }
   }
 
   const getBackgroundSettings = (target: BackgroundTarget): ThemeBackgroundSettings => {
-    const current = target === 'editorBackground' ? theme.editorBackground : theme.aiChatBackground
+    const current =
+      target === 'editorBackground'
+        ? theme.editorBackground
+        : target === 'previewBackground'
+          ? theme.previewBackground
+          : theme.aiChatBackground
     return {
       ...getDefaultBackgroundSettings(target),
       ...current,
@@ -208,6 +266,13 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
       else setEditorBackgroundBrightnessInput(value)
       return
     }
+    if (target === 'previewBackground') {
+      if (key === 'opacity') setPreviewBackgroundOpacityInput(value)
+      else if (key === 'overlayOpacity') setPreviewBackgroundOverlayOpacityInput(value)
+      else if (key === 'blurPx') setPreviewBackgroundBlurInput(value)
+      else setPreviewBackgroundBrightnessInput(value)
+      return
+    }
 
     if (key === 'opacity') setAiChatBackgroundOpacityInput(value)
     else if (key === 'overlayOpacity') setAiChatBackgroundOverlayOpacityInput(value)
@@ -219,11 +284,17 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     target: BackgroundTarget,
     patch: Partial<ThemeBackgroundSettings>,
   ) => {
+    hasLocalPreviewEditsRef.current = true
+    console.warn('[SettingsDialog] updateThemeBackground', { target, patch })
     setTheme((prev) => ({
       ...prev,
       [target]: {
         ...getDefaultBackgroundSettings(target),
-        ...(target === 'editorBackground' ? prev.editorBackground : prev.aiChatBackground),
+        ...(target === 'editorBackground'
+          ? prev.editorBackground
+          : target === 'previewBackground'
+            ? prev.previewBackground
+            : prev.aiChatBackground),
         ...patch,
       },
     }))
@@ -234,6 +305,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
       const selected = await invoke<string | null>('pick_editor_background_image', {
         currentPath: getBackgroundSettings(target).path,
       })
+      console.warn('[SettingsDialog] selectBackgroundImage result', { target, selected })
       if (!selected) return
       updateThemeBackground(target, {
         enabled: true,
@@ -303,13 +375,25 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
 
   const handleReset = () => {
     if (activeSection === 'theme') {
-      if (activeThemeTab === 'editor-background' || activeThemeTab === 'ai-chat-background') {
-        const target = activeThemeTab === 'editor-background' ? 'editorBackground' : 'aiChatBackground'
-        setTheme((prev) => ({
-          ...prev,
-          [target]: getDefaultBackgroundSettings(target),
-        }))
+      if (activeThemeTab === 'editor-background' || activeThemeTab === 'preview-background' || activeThemeTab === 'ai-chat-background') {
+        hasLocalPreviewEditsRef.current = true
+        const target =
+          activeThemeTab === 'editor-background'
+            ? 'editorBackground'
+            : activeThemeTab === 'preview-background'
+              ? 'previewBackground'
+              : 'aiChatBackground'
+        setTheme((prev) => {
+          return {
+            ...prev,
+            [target]: getDefaultBackgroundSettings(target),
+          }
+        })
       }
+      return
+    }
+    if (activeSection === 'typography') {
+      setUiTypography(getDefaultUiTypographySettings())
       return
     }
     setWordExport(getDefaultWordExportStyleSettings())
@@ -323,12 +407,14 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
         ...settings,
         language: languageMode,
         theme,
+        uiTypography,
         wordExport,
       }
       await saveEditorSettings(nextSettings)
       setSettings(nextSettings)
       originalThemeRef.current = theme
       originalLanguageRef.current = languageMode
+      originalTypographyRef.current = uiTypography
       onClose()
     } catch (err) {
       setError((err as Error).message || 'Failed to save settings')
@@ -341,25 +427,52 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     if (themePreviewReadyRef.current) {
       onThemeSettingsChange?.(originalThemeRef.current)
       onLanguageModeChange?.(originalLanguageRef.current)
+      onUiTypographyChange?.(originalTypographyRef.current)
     }
     onClose()
   }
 
   const currentBackgroundTarget: BackgroundTarget =
-    activeThemeTab === 'ai-chat-background' ? 'aiChatBackground' : 'editorBackground'
+    activeThemeTab === 'ai-chat-background'
+      ? 'aiChatBackground'
+      : activeThemeTab === 'preview-background'
+        ? 'previewBackground'
+        : 'editorBackground'
   const currentBackground = getBackgroundSettings(currentBackgroundTarget)
   const currentBackgroundOpacityInput =
-    currentBackgroundTarget === 'editorBackground' ? editorBackgroundOpacityInput : aiChatBackgroundOpacityInput
+    currentBackgroundTarget === 'editorBackground'
+      ? editorBackgroundOpacityInput
+      : currentBackgroundTarget === 'previewBackground'
+        ? previewBackgroundOpacityInput
+        : aiChatBackgroundOpacityInput
   const currentBackgroundOverlayOpacityInput =
-    currentBackgroundTarget === 'editorBackground' ? editorBackgroundOverlayOpacityInput : aiChatBackgroundOverlayOpacityInput
+    currentBackgroundTarget === 'editorBackground'
+      ? editorBackgroundOverlayOpacityInput
+      : currentBackgroundTarget === 'previewBackground'
+        ? previewBackgroundOverlayOpacityInput
+        : aiChatBackgroundOverlayOpacityInput
   const currentBackgroundBlurInput =
-    currentBackgroundTarget === 'editorBackground' ? editorBackgroundBlurInput : aiChatBackgroundBlurInput
+    currentBackgroundTarget === 'editorBackground'
+      ? editorBackgroundBlurInput
+      : currentBackgroundTarget === 'previewBackground'
+        ? previewBackgroundBlurInput
+        : aiChatBackgroundBlurInput
   const currentBackgroundBrightnessInput =
-    currentBackgroundTarget === 'editorBackground' ? editorBackgroundBrightnessInput : aiChatBackgroundBrightnessInput
+    currentBackgroundTarget === 'editorBackground'
+      ? editorBackgroundBrightnessInput
+      : currentBackgroundTarget === 'previewBackground'
+        ? previewBackgroundBrightnessInput
+        : aiChatBackgroundBrightnessInput
   const selectedImageName = currentBackground.path
     ? currentBackground.path.split(/[\\/]/).pop()
     : t('theme.image')
   const currentBackgroundPreviewUrl = resolveManagedBackgroundImageUrl(currentBackground.path)
+  const currentBackgroundTitle =
+    currentBackgroundTarget === 'editorBackground'
+      ? t('theme.editorBackground')
+      : currentBackgroundTarget === 'previewBackground'
+        ? t('theme.previewBackground')
+        : t('theme.aiChatBackground')
 
   const clampDialogOffset = (nextX: number, nextY: number) => {
     const modal = modalRef.current
@@ -442,6 +555,13 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
               </button>
               <button
                 type="button"
+                onClick={() => setActiveSection('typography')}
+                className={`settings-sidebar-item ${activeSection === 'typography' ? 'active' : ''}`}
+              >
+                {t('settings.typography')}
+              </button>
+              <button
+                type="button"
                 onClick={() => setActiveSection('word-export')}
                 className={`settings-sidebar-item ${activeSection === 'word-export' ? 'active' : ''}`}
               >
@@ -472,6 +592,15 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                           onClick={() => setActiveThemeTab('editor-background')}
                         >
                           {t('theme.editorBackground')}
+                        </button>
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={activeThemeTab === 'preview-background'}
+                          className={`settings-panel-tab ${activeThemeTab === 'preview-background' ? 'active' : ''}`}
+                          onClick={() => setActiveThemeTab('preview-background')}
+                        >
+                          {t('theme.previewBackground')}
                         </button>
                         <button
                           type="button"
@@ -579,6 +708,9 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                     </div>
                   ) : (
                     <div className="settings-subsection settings-subsection-standalone">
+                      <div className="settings-subsection-heading">
+                        {currentBackgroundTitle}
+                      </div>
                       <div className="settings-checkbox-row">
                         <label className="settings-checkbox-label">
                           <input
@@ -589,6 +721,8 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                           <span>
                             {activeThemeTab === 'ai-chat-background'
                               ? t('theme.enableAiChatBackgroundImage')
+                              : activeThemeTab === 'preview-background'
+                                ? t('theme.enablePreviewBackgroundImage')
                               : t('theme.enableEditorBackgroundImage')}
                           </span>
                         </label>
@@ -752,6 +886,73 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                 </>
               )}
 
+              {activeSection === 'typography' && (
+                <>
+                  <div className="settings-panel-header">
+                    <div className="settings-panel-title">{t('typography.title')}</div>
+                    <div className="settings-panel-description">
+                      {t('typography.description')}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gap: 18 }}>
+                    <div className="settings-subgroup">
+                      <div className="settings-subgroup-title">{t('typography.groups.global')}</div>
+                      <div style={{ display: 'grid', gap: 14 }}>
+                        <div style={fieldGridStyle}>
+                          <label className="settings-field-label">{t('typography.appFontSize')}</label>
+                          <input className="field-input settings-number-input" type="number" min={10} max={24} step={1} value={uiTypography.appFontSize} onChange={updateTypographyNumber('appFontSize')} />
+                        </div>
+                        <div style={fieldGridStyle}>
+                          <label className="settings-field-label">{t('typography.settingsFontSize')}</label>
+                          <input className="field-input settings-number-input" type="number" min={10} max={24} step={1} value={uiTypography.settingsFontSize} onChange={updateTypographyNumber('settingsFontSize')} />
+                        </div>
+                        <div style={fieldGridStyle}>
+                          <label className="settings-field-label">{t('typography.tabBarFontSize')}</label>
+                          <input className="field-input settings-number-input" type="number" min={10} max={24} step={1} value={uiTypography.tabBarFontSize} onChange={updateTypographyNumber('tabBarFontSize')} />
+                        </div>
+                        <div style={fieldGridStyle}>
+                          <label className="settings-field-label">{t('typography.statusBarFontSize')}</label>
+                          <input className="field-input settings-number-input" type="number" min={10} max={24} step={1} value={uiTypography.statusBarFontSize} onChange={updateTypographyNumber('statusBarFontSize')} />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="settings-subgroup">
+                      <div className="settings-subgroup-title">{t('typography.groups.workspace')}</div>
+                      <div style={{ display: 'grid', gap: 14 }}>
+                        <div style={fieldGridStyle}>
+                          <label className="settings-field-label">{t('typography.sidebarFontSize')}</label>
+                          <input className="field-input settings-number-input" type="number" min={10} max={24} step={1} value={uiTypography.sidebarFontSize} onChange={updateTypographyNumber('sidebarFontSize')} />
+                        </div>
+                        <div style={fieldGridStyle}>
+                          <label className="settings-field-label">{t('typography.editorFontSize')}</label>
+                          <input className="field-input settings-number-input" type="number" min={10} max={24} step={1} value={uiTypography.editorFontSize} onChange={updateTypographyNumber('editorFontSize')} />
+                        </div>
+                        <div style={fieldGridStyle}>
+                          <label className="settings-field-label">{t('typography.previewFontSize')}</label>
+                          <input className="field-input settings-number-input" type="number" min={10} max={24} step={1} value={uiTypography.previewFontSize} onChange={updateTypographyNumber('previewFontSize')} />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="settings-subgroup">
+                      <div className="settings-subgroup-title">{t('typography.groups.ai')}</div>
+                      <div style={{ display: 'grid', gap: 14 }}>
+                        <div style={fieldGridStyle}>
+                          <label className="settings-field-label">{t('typography.aiChatMessageFontSize')}</label>
+                          <input className="field-input settings-number-input" type="number" min={10} max={24} step={1} value={uiTypography.aiChatMessageFontSize} onChange={updateTypographyNumber('aiChatMessageFontSize')} />
+                        </div>
+                        <div style={fieldGridStyle}>
+                          <label className="settings-field-label">{t('typography.aiChatInputFontSize')}</label>
+                          <input className="field-input settings-number-input" type="number" min={10} max={24} step={1} value={uiTypography.aiChatInputFontSize} onChange={updateTypographyNumber('aiChatInputFontSize')} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
               {activeSection === 'word-export' && (
                 <>
                   <div className="settings-panel-header">
@@ -815,7 +1016,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
           </div>
         </div>
         <div className="modal-actions">
-          {activeSection === 'word-export' || (activeSection === 'theme' && activeThemeTab === 'editor-background') ? (
+          {activeSection === 'word-export' || activeSection === 'typography' || (activeSection === 'theme' && activeThemeTab !== 'theme-preset') ? (
             <Button variant="tertiary" type="button" onClick={handleReset} disabled={isSaving}>
               {t('common.reset')}
             </Button>

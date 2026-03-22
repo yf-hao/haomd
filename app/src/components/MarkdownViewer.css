@@ -6,6 +6,12 @@
 .markdown-body.gh-markdown {
   background: var(--markdown-preview-bg);
   color: var(--theme-text-default);
+  font-size: var(--ui-font-preview);
+  --markdown-code-font-size: var(--ui-font-preview);
+}
+
+.preview.has-preview-background .markdown-body.gh-markdown {
+  background: color-mix(in srgb, var(--theme-surface-preview) 28%, transparent);
 }
 
 .markdown-body.gh-markdown p,
@@ -115,7 +121,7 @@
   top: 6px;
   right: 8px;
   padding: 2px 6px;
-  font-size: 12px;
+  font-size: calc(var(--ui-font-preview) - 3px);
   border-radius: 4px;
   border: none;
   background-color: rgba(0, 0, 0, 0.4);

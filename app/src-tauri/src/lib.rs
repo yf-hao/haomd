@@ -618,7 +618,32 @@ struct ThemeSettingsCfg {
     #[serde(default)]
     editor_background: Option<ThemeEditorBackgroundCfg>,
     #[serde(default)]
+    preview_background: Option<ThemeEditorBackgroundCfg>,
+    #[serde(default)]
     ai_chat_background: Option<ThemeEditorBackgroundCfg>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct UiTypographySettingsCfg {
+    #[serde(default)]
+    app_font_size: Option<f32>,
+    #[serde(default)]
+    settings_font_size: Option<f32>,
+    #[serde(default)]
+    sidebar_font_size: Option<f32>,
+    #[serde(default)]
+    tab_bar_font_size: Option<f32>,
+    #[serde(default)]
+    status_bar_font_size: Option<f32>,
+    #[serde(default)]
+    editor_font_size: Option<f32>,
+    #[serde(default)]
+    preview_font_size: Option<f32>,
+    #[serde(default)]
+    ai_chat_message_font_size: Option<f32>,
+    #[serde(default)]
+    ai_chat_input_font_size: Option<f32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -660,6 +685,8 @@ struct EditorSettingsCfg {
     #[serde(default)]
     theme: Option<ThemeSettingsCfg>,
     #[serde(default)]
+    ui_typography: Option<UiTypographySettingsCfg>,
+    #[serde(default)]
     word_export: Option<WordExportStyleSettingsCfg>,
     /// 预留扩展位：保存未来新增的配置项，避免在写回文件时丢失
     #[serde(flatten)]
@@ -686,6 +713,7 @@ fn default_editor_settings() -> EditorSettingsCfg {
         }),
         language: Some("system".to_string()),
         theme: Some(default_theme_settings_cfg()),
+        ui_typography: Some(default_ui_typography_settings_cfg()),
         word_export: Some(default_word_export_style_settings_cfg()),
         extra: std::collections::HashMap::new(),
     }
@@ -701,6 +729,17 @@ fn default_theme_settings_cfg() -> ThemeSettingsCfg {
             opacity: Some(0.3),
             overlay_opacity: Some(0.0),
             blur_px: Some(1.0),
+            brightness: Some(100.0),
+            size: Some("height-fill".to_string()),
+            position_x: Some(50.0),
+            position_y: Some(50.0),
+        }),
+        preview_background: Some(ThemeEditorBackgroundCfg {
+            enabled: Some(false),
+            path: None,
+            opacity: Some(0.22),
+            overlay_opacity: Some(0.12),
+            blur_px: Some(2.0),
             brightness: Some(100.0),
             size: Some("height-fill".to_string()),
             position_x: Some(50.0),
@@ -732,6 +771,20 @@ fn default_word_export_style_settings_cfg() -> WordExportStyleSettingsCfg {
         line_spacing: Some(1.25),
         code_font_size_pt: Some(10.5),
         page_margin_cm: Some(2.54),
+    }
+}
+
+fn default_ui_typography_settings_cfg() -> UiTypographySettingsCfg {
+    UiTypographySettingsCfg {
+        app_font_size: Some(13.0),
+        settings_font_size: Some(13.0),
+        sidebar_font_size: Some(13.0),
+        tab_bar_font_size: Some(13.0),
+        status_bar_font_size: Some(12.0),
+        editor_font_size: Some(14.0),
+        preview_font_size: Some(15.0),
+        ai_chat_message_font_size: Some(13.0),
+        ai_chat_input_font_size: Some(13.0),
     }
 }
 

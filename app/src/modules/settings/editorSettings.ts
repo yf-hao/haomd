@@ -26,7 +26,20 @@ export type ThemeSettings = {
   mode: ThemeMode
   customThemeId?: string | null
   editorBackground?: ThemeBackgroundSettings
+  previewBackground?: ThemeBackgroundSettings
   aiChatBackground?: ThemeBackgroundSettings
+}
+
+export type UiTypographySettings = {
+  appFontSize: number
+  settingsFontSize: number
+  sidebarFontSize: number
+  tabBarFontSize: number
+  statusBarFontSize: number
+  editorFontSize: number
+  previewFontSize: number
+  aiChatMessageFontSize: number
+  aiChatInputFontSize: number
 }
 
 export type ThemeBackgroundSize = 'cover' | 'contain' | 'auto' | 'height-fill' | 'width-fill'
@@ -65,6 +78,7 @@ export type EditorSettings = {
   aiChat?: Partial<AiChatUiSettings>
   language?: LanguageMode
   theme?: Partial<ThemeSettings>
+  uiTypography?: Partial<UiTypographySettings>
   wordExport?: Partial<WordExportStyleSettings>
 }
 
@@ -103,6 +117,17 @@ const defaultTheme: ThemeSettings = {
     positionX: 50,
     positionY: 50,
   },
+  previewBackground: {
+    enabled: false,
+    path: null,
+    opacity: 0.22,
+    overlayOpacity: 0.12,
+    blurPx: 2,
+    brightness: 100,
+    size: 'height-fill',
+    positionX: 50,
+    positionY: 50,
+  },
   aiChatBackground: {
     enabled: false,
     path: null,
@@ -114,6 +139,18 @@ const defaultTheme: ThemeSettings = {
     positionX: 50,
     positionY: 50,
   },
+}
+
+const defaultUiTypography: UiTypographySettings = {
+  appFontSize: 13,
+  settingsFontSize: 13,
+  sidebarFontSize: 13,
+  tabBarFontSize: 13,
+  statusBarFontSize: 12,
+  editorFontSize: 14,
+  previewFontSize: 15,
+  aiChatMessageFontSize: 13,
+  aiChatInputFontSize: 13,
 }
 
 const defaultWordExport: WordExportStyleSettings = {
@@ -198,6 +235,18 @@ export async function getThemeSettings(): Promise<ThemeSettings> {
       positionX: cfg.editorBackground?.positionX ?? defaultTheme.editorBackground?.positionX ?? 50,
       positionY: cfg.editorBackground?.positionY ?? defaultTheme.editorBackground?.positionY ?? 50,
     },
+    previewBackground: {
+      enabled: cfg.previewBackground?.enabled ?? defaultTheme.previewBackground?.enabled ?? false,
+      path: cfg.previewBackground?.path ?? defaultTheme.previewBackground?.path ?? null,
+      opacity: cfg.previewBackground?.opacity ?? defaultTheme.previewBackground?.opacity ?? 0.22,
+      overlayOpacity:
+        cfg.previewBackground?.overlayOpacity ?? defaultTheme.previewBackground?.overlayOpacity ?? 0.12,
+      blurPx: cfg.previewBackground?.blurPx ?? defaultTheme.previewBackground?.blurPx ?? 2,
+      brightness: cfg.previewBackground?.brightness ?? defaultTheme.previewBackground?.brightness ?? 100,
+      size: cfg.previewBackground?.size ?? defaultTheme.previewBackground?.size ?? 'height-fill',
+      positionX: cfg.previewBackground?.positionX ?? defaultTheme.previewBackground?.positionX ?? 50,
+      positionY: cfg.previewBackground?.positionY ?? defaultTheme.previewBackground?.positionY ?? 50,
+    },
     aiChatBackground: {
       enabled: cfg.aiChatBackground?.enabled ?? defaultTheme.aiChatBackground?.enabled ?? false,
       path: cfg.aiChatBackground?.path ?? defaultTheme.aiChatBackground?.path ?? null,
@@ -215,6 +264,23 @@ export async function getThemeSettings(): Promise<ThemeSettings> {
 export async function getLanguageSetting(): Promise<LanguageMode> {
   const settings = await loadEditorSettings()
   return settings.language ?? defaultLanguage
+}
+
+export async function getUiTypographySettings(): Promise<UiTypographySettings> {
+  const settings = await loadEditorSettings()
+  const cfg = settings.uiTypography ?? {}
+  return {
+    appFontSize: cfg.appFontSize ?? defaultUiTypography.appFontSize,
+    settingsFontSize: cfg.settingsFontSize ?? defaultUiTypography.settingsFontSize,
+    sidebarFontSize: cfg.sidebarFontSize ?? defaultUiTypography.sidebarFontSize,
+    tabBarFontSize: cfg.tabBarFontSize ?? defaultUiTypography.tabBarFontSize,
+    statusBarFontSize: cfg.statusBarFontSize ?? defaultUiTypography.statusBarFontSize,
+    editorFontSize: cfg.editorFontSize ?? defaultUiTypography.editorFontSize,
+    previewFontSize: cfg.previewFontSize ?? defaultUiTypography.previewFontSize,
+    aiChatMessageFontSize:
+      cfg.aiChatMessageFontSize ?? defaultUiTypography.aiChatMessageFontSize,
+    aiChatInputFontSize: cfg.aiChatInputFontSize ?? defaultUiTypography.aiChatInputFontSize,
+  }
 }
 
 export async function getWordExportStyleSettings(): Promise<WordExportStyleSettings> {
@@ -250,12 +316,17 @@ export function getDefaultThemeSettings(): ThemeSettings {
   return {
     ...defaultTheme,
     editorBackground: defaultTheme.editorBackground ? { ...defaultTheme.editorBackground } : undefined,
+    previewBackground: defaultTheme.previewBackground ? { ...defaultTheme.previewBackground } : undefined,
     aiChatBackground: defaultTheme.aiChatBackground ? { ...defaultTheme.aiChatBackground } : undefined,
   }
 }
 
 export function getDefaultLanguageSetting(): LanguageMode {
   return defaultLanguage
+}
+
+export function getDefaultUiTypographySettings(): UiTypographySettings {
+  return { ...defaultUiTypography }
 }
 
 /** 仅供测试使用：清除单例缓存 */

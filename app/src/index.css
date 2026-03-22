@@ -69,6 +69,15 @@
   --theme-component-selection-ring: rgba(125, 211, 252, 0.9);
   --theme-component-tabbar-height: 38px;
   --theme-component-divider-width: 2px;
+  --ui-font-app: 13px;
+  --ui-font-settings: 13px;
+  --ui-font-sidebar: 13px;
+  --ui-font-tabbar: 13px;
+  --ui-font-statusbar: 12px;
+  --ui-font-editor: 14px;
+  --ui-font-preview: 15px;
+  --ui-font-ai-chat-message: 13px;
+  --ui-font-ai-chat-input: 13px;
 
   --z-radius-xs: var(--theme-radius-xs);
   --z-radius-sm: var(--theme-radius-sm);
@@ -101,5 +110,11 @@ a {
 }
 
 button {
+  font-family: inherit;
+}
+
+input,
+select,
+textarea {
   font-family: inherit;
 }

@@ -17,11 +17,29 @@
   flex-direction: column;
   max-height: 72vh;
   overflow: hidden;
+  font-size: var(--ui-font-settings);
+}
+
+.modal.modal-ai-settings .field-label,
+.modal.modal-ai-settings .field-label-inline,
+.modal.modal-ai-settings .field-helper,
+.modal.modal-ai-settings .provider-meta,
+.modal.modal-ai-settings .provider-subtle,
+.modal.modal-ai-settings .provider-description {
+  font-size: calc(var(--ui-font-settings) - 1px);
+}
+
+.modal.modal-ai-settings .field-input,
+.modal.modal-ai-settings .field-textarea,
+.modal.modal-ai-settings .field-select,
+.modal.modal-ai-settings .provider-model-select,
+.modal.modal-ai-settings .provider-model-vision-select {
+  font-size: var(--ui-font-settings);
 }
 
 /* AI Chat dialog layout */
 .modal.modal-ai-chat {
-  --ai-chat-message-font-size: 13px;
+  --ai-chat-message-font-size: var(--ui-font-ai-chat-message);
   position: relative;
   max-width: 840px;
   width: 820px;
@@ -48,7 +66,7 @@
 }
 
 .ai-chat-pane {
-  --ai-chat-message-font-size: 13px;
+  --ai-chat-message-font-size: var(--ui-font-ai-chat-message);
 }
 
 .ai-chat-body {
@@ -121,7 +139,7 @@
 
 .ai-chat-title .modal-title-text {
   font-weight: 600;
-  font-size: 14px;
+  font-size: calc(var(--ui-font-settings) + 1px);
   color: var(--theme-text-default);
 }
 
@@ -297,6 +315,7 @@
   padding-top: 6px;
   padding-bottom: 20px;
   position: relative;
+  font-size: var(--ui-font-ai-chat-input);
 }
 
 .ai-chat-input::before {
@@ -327,6 +346,7 @@
   background: var(--theme-surface-input);
   /* 允许 slash-panel 浮动在输入框上方，不被裁剪 */
   overflow: visible;
+  font-size: var(--ui-font-ai-chat-input);
 }
 
 .ai-chat-input-container:focus-within {
@@ -343,7 +363,7 @@
   background: transparent;
   color: var(--theme-text-default);
   padding: 8px 10px;
-  font-size: 13px;
+  font-size: var(--ui-font-ai-chat-input);
   line-height: 1.5;
   outline: none;
 }
@@ -365,6 +385,8 @@
   background: transparent;
   resize: none !important;
   min-height: 24px !important;
+  font-size: var(--ui-font-ai-chat-input) !important;
+  line-height: 1.5;
 }
 
 #ai-chat-input:focus {
@@ -1315,6 +1337,7 @@ button.ghost.ghost-subtle:hover {
 .modal.modal-ai-chat .ai-chat-message-user .markdown-body.gh-markdown,
 .modal.modal-ai-chat .ai-chat-message-content .markdown-body.gh-markdown {
   font-size: var(--ai-chat-message-font-size);
+  --markdown-code-font-size: var(--ai-chat-message-font-size);
   line-height: 1.6;
   --bgColor-default: transparent;
   background: color-mix(in srgb, var(--theme-surface-preview) 26%, transparent);
@@ -1325,6 +1348,7 @@ button.ghost.ghost-subtle:hover {
 .ai-chat-pane .ai-chat-message-user .markdown-body.gh-markdown,
 .ai-chat-pane .ai-chat-message-content .markdown-body.gh-markdown {
   font-size: var(--ai-chat-message-font-size);
+  --markdown-code-font-size: var(--ai-chat-message-font-size);
   line-height: 1.6;
   --bgColor-default: transparent;
   background: color-mix(in srgb, var(--theme-surface-preview) 26%, transparent);

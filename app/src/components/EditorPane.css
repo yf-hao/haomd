@@ -84,7 +84,7 @@
   color: var(--theme-text-default);
   background: var(--theme-surface-editor);
   font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-  font-size: 14px;
+  font-size: var(--ui-font-editor);
   line-height: 1.6;
 }
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import './App.css'
 import WorkspaceShell, { type LeftPanelId, type InitialWorkspaceAction } from './components/WorkspaceShell'
 import { AiSettingsDialog } from './components/AiSettingsDialog'
@@ -12,9 +12,13 @@ import { isTauriEnv } from './modules/platform/runtime'
 import {
   getDefaultLanguageSetting,
   getDefaultThemeSettings,
+  getDefaultUiTypographySettings,
   getLanguageSetting,
+  getUiTypographySettings,
   type ThemeSettings,
+  type UiTypographySettings,
 } from './modules/settings/editorSettings'
+import { applyUiTypography } from './modules/settings/uiTypographyRuntime'
 import {
   applyResolvedTheme,
   getSystemPrefersDark,
@@ -40,7 +44,27 @@ function App() {
   const [statusMessage, setStatusMessage] = useState('')
   const [themeSettings, setThemeSettings] = useState<ThemeSettings>(getDefaultThemeSettings())
   const [languageMode, setLanguageMode] = useState<LanguageMode>(getDefaultLanguageSetting())
+  const [uiTypography, setUiTypography] = useState<UiTypographySettings>(getDefaultUiTypographySettings())
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => getSystemPrefersDark())
+  const hasPreviewThemeOverrideRef = useRef(false)
+  const hasPreviewLanguageOverrideRef = useRef(false)
+  const hasPreviewTypographyOverrideRef = useRef(false)
+
+  const handleThemeSettingsPreview = useCallback((settings: ThemeSettings) => {
+    hasPreviewThemeOverrideRef.current = true
+    console.warn('[App] apply theme settings preview', {
+      mode: settings.mode,
+      editorBackground: settings.editorBackground,
+      previewBackground: settings.previewBackground,
+      aiChatBackground: settings.aiChatBackground,
+    })
+    setThemeSettings({
+      ...settings,
+      editorBackground: settings.editorBackground ? { ...settings.editorBackground } : undefined,
+      previewBackground: settings.previewBackground ? { ...settings.previewBackground } : undefined,
+      aiChatBackground: settings.aiChatBackground ? { ...settings.aiChatBackground } : undefined,
+    })
+  }, [])
 
   const handleLeftPanelToggle = useCallback(
     (id: LeftPanelId) => {
@@ -91,10 +115,21 @@ function App() {
     let cancelled = false
 
     ;(async () => {
-      const [settings, language] = await Promise.all([loadThemePreference(), getLanguageSetting()])
+      const [settings, language, typography] = await Promise.all([
+        loadThemePreference(),
+        getLanguageSetting(),
+        getUiTypographySettings(),
+      ])
       if (cancelled) return
-      setThemeSettings(settings)
-      setLanguageMode(language)
+      if (!hasPreviewThemeOverrideRef.current) {
+        setThemeSettings(settings)
+      }
+      if (!hasPreviewLanguageOverrideRef.current) {
+        setLanguageMode(language)
+      }
+      if (!hasPreviewTypographyOverrideRef.current) {
+        setUiTypography(typography)
+      }
     })()
 
     return () => {
@@ -119,6 +154,10 @@ function App() {
   useEffect(() => {
     applyResolvedTheme(activeTheme, resolvedThemeMode)
   }, [activeTheme, resolvedThemeMode])
+
+  useEffect(() => {
+    applyUiTypography(uiTypography)
+  }, [uiTypography])
 
   return (
     <I18nProvider
@@ -148,8 +187,15 @@ function App() {
           statusMessage={statusMessage}
           handleLeftPanelToggle={handleLeftPanelToggle}
           handleInitialActionHandled={handleInitialActionHandled}
-          onThemeSettingsChange={setThemeSettings}
-          onLanguageModeChange={setLanguageMode}
+          onThemeSettingsChange={handleThemeSettingsPreview}
+          onLanguageModeChange={(mode) => {
+            hasPreviewLanguageOverrideRef.current = true
+            setLanguageMode(mode)
+          }}
+          onUiTypographyChange={(settings) => {
+            hasPreviewTypographyOverrideRef.current = true
+            setUiTypography(settings)
+          }}
           setAiSettingsOpen={setAiSettingsOpen}
           setPromptSettingsOpen={setPromptSettingsOpen}
           setSettingsOpen={setSettingsOpen}
@@ -177,6 +223,7 @@ type AppShellContentProps = {
   handleInitialActionHandled: () => void
   onThemeSettingsChange: (settings: ThemeSettings) => void
   onLanguageModeChange: (mode: LanguageMode) => void
+  onUiTypographyChange: (settings: UiTypographySettings) => void
   setAiSettingsOpen: (open: boolean) => void
   setPromptSettingsOpen: (open: boolean) => void
   setSettingsOpen: (open: boolean) => void
@@ -200,6 +247,7 @@ function AppShellContent({
   handleInitialActionHandled,
   onThemeSettingsChange,
   onLanguageModeChange,
+  onUiTypographyChange,
   setAiSettingsOpen,
   setPromptSettingsOpen,
   setSettingsOpen,
@@ -286,6 +334,7 @@ function AppShellContent({
         onClose={() => setSettingsOpen(false)}
         onThemeSettingsChange={onThemeSettingsChange}
         onLanguageModeChange={onLanguageModeChange}
+        onUiTypographyChange={onUiTypographyChange}
       />
     </div>
   )

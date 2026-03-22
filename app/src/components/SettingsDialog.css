@@ -15,6 +15,7 @@
   overflow: hidden;
   background: var(--theme-surface-preview);
   border: 1px solid var(--theme-border-subtle);
+  font-size: var(--ui-font-settings);
 }
 
 .settings-dialog-drag-handle {
@@ -45,7 +46,7 @@
 }
 
 .settings-sidebar-title {
-  font-size: 12px;
+  font-size: calc(var(--ui-font-settings) - 1px);
   font-weight: 700;
   color: var(--theme-text-subtle);
   text-transform: uppercase;
@@ -60,7 +61,7 @@
   background: transparent;
   color: var(--theme-text-muted);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--ui-font-settings);
   font-weight: 500;
   position: relative;
   transition: background 0.15s ease, color 0.15s ease;
@@ -105,13 +106,13 @@
 }
 
 .settings-panel-title {
-  font-size: 15px;
+  font-size: calc(var(--ui-font-settings) + 2px);
   font-weight: 600;
   color: var(--theme-text-default);
 }
 
 .settings-panel-description {
-  font-size: 12px;
+  font-size: calc(var(--ui-font-settings) - 1px);
   color: var(--theme-text-subtle);
 }
 
@@ -131,7 +132,7 @@
   color: var(--theme-text-muted);
   padding: 8px 12px;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--ui-font-settings);
   font-weight: 500;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
@@ -148,7 +149,7 @@
 }
 
 .settings-field-label {
-  font-size: 12px;
+  font-size: calc(var(--ui-font-settings) - 1px);
   font-weight: 500;
   color: var(--theme-text-muted);
 }
@@ -172,7 +173,7 @@
   background: var(--theme-surface-editor);
   color: var(--theme-text-default);
   padding: 7px 10px;
-  font-size: 13px;
+  font-size: var(--ui-font-settings);
   transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -208,7 +209,7 @@
   border-radius: 8px;
   background: var(--theme-accent-soft-danger-bg);
   color: var(--theme-accent-soft-danger-fg);
-  font-size: 12px;
+  font-size: calc(var(--ui-font-settings) - 1px);
   white-space: pre-wrap;
 }
 
@@ -242,13 +243,26 @@
 }
 
 .theme-option-card-title {
-  font-size: 14px;
+  font-size: calc(var(--ui-font-settings) + 1px);
   font-weight: 600;
 }
 
 .theme-option-card-description {
-  font-size: 12px;
+  font-size: calc(var(--ui-font-settings) - 1px);
   color: var(--theme-text-muted);
+}
+
+.settings-subgroup {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-subgroup-title {
+  font-size: calc(var(--ui-font-settings) - 1px);
+  font-weight: 700;
+  color: var(--theme-text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .settings-subsection {

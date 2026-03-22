@@ -85,6 +85,14 @@ const CodeBlock = memo(
           style={themeMode === 'light' ? oneLight : oneDark}
           showLineNumbers
           wrapLines
+          customStyle={{
+            fontSize: 'var(--markdown-code-font-size, inherit)',
+          }}
+          codeTagProps={{
+            style: {
+              fontSize: 'var(--markdown-code-font-size, inherit)',
+            },
+          }}
           {...rest}
         >
           {content}
