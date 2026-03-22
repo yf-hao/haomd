@@ -1,6 +1,7 @@
 import type { OutlineItem } from '../modules/outline/parser'
 import { memo, useState } from 'react'
 import { useI18n } from '../modules/i18n/I18nContext'
+import { SidebarBackgroundShell } from './SidebarBackgroundShell'
 
 export type OutlinePanelProps = {
   items: OutlineItem[]
@@ -71,7 +72,7 @@ export const OutlinePanel = memo(function OutlinePanel({ items, activeId, onSele
   }
 
   return (
-    <aside className="outline-panel" style={style}>
+    <SidebarBackgroundShell as="aside" className="outline-panel" style={style}>
       <div className="outline-header">{t('outline.title')}</div>
 
       {hasItems ? (
@@ -84,6 +85,6 @@ export const OutlinePanel = memo(function OutlinePanel({ items, activeId, onSele
           <div className="outline-empty-sub">{t('outline.noHeadingsHint')}</div>
         </div>
       )}
-    </aside>
+    </SidebarBackgroundShell>
   )
 })

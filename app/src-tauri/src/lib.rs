@@ -621,6 +621,8 @@ struct ThemeSettingsCfg {
     preview_background: Option<ThemeEditorBackgroundCfg>,
     #[serde(default)]
     ai_chat_background: Option<ThemeEditorBackgroundCfg>,
+    #[serde(default)]
+    sidebar_background: Option<ThemeEditorBackgroundCfg>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -751,6 +753,17 @@ fn default_theme_settings_cfg() -> ThemeSettingsCfg {
             opacity: Some(0.3),
             overlay_opacity: Some(0.0),
             blur_px: Some(1.0),
+            brightness: Some(100.0),
+            size: Some("height-fill".to_string()),
+            position_x: Some(50.0),
+            position_y: Some(50.0),
+        }),
+        sidebar_background: Some(ThemeEditorBackgroundCfg {
+            enabled: Some(false),
+            path: None,
+            opacity: Some(0.2),
+            overlay_opacity: Some(0.16),
+            blur_px: Some(2.0),
             brightness: Some(100.0),
             size: Some("height-fill".to_string()),
             position_x: Some(50.0),

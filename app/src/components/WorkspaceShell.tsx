@@ -11,6 +11,7 @@ import { TabBar } from './TabBar'
 import { FileContextMenu } from './FileContextMenu'
 import { Sidebar, type SidebarContextActionPayload } from './Sidebar'
 import { OutlinePanel } from './OutlinePanel'
+import { SidebarBackgroundShell } from './SidebarBackgroundShell'
 import { Welcome } from './Welcome'
 import { SearchBar } from './Editor/SearchBar'
 import { useOutline } from '../hooks/useOutline'
@@ -1877,7 +1878,7 @@ export function WorkspaceShell({
           <OutlinePanel items={outlineItems} activeId={activeOutlineId} onSelect={handleOutlineSelect} panelWidth={sidebarWidth} />
         )}
         {activeLeftPanel === 'pdf' && (
-          <div className="pdf-panel" style={{ width: sidebarWidth }}>
+          <SidebarBackgroundShell as="div" className="pdf-panel" style={{ width: sidebarWidth }}>
             <div className="pdf-panel-header">
               <span>{t('pdf.title')}</span>
               <button
@@ -2132,7 +2133,7 @@ export function WorkspaceShell({
                 />
               )}
             </div>
-          </div>
+          </SidebarBackgroundShell>
         )}
         {(activeLeftPanel === 'files' || activeLeftPanel === 'outline' || activeLeftPanel === 'pdf' || activeLeftPanel === 'sessions') && (
           <div className={`sidebar-resizer ${isSidebarResizing ? 'active' : ''}`} onMouseDown={handleSidebarResizeStart} />

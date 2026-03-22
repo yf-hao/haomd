@@ -28,6 +28,7 @@ export type ThemeSettings = {
   editorBackground?: ThemeBackgroundSettings
   previewBackground?: ThemeBackgroundSettings
   aiChatBackground?: ThemeBackgroundSettings
+  sidebarBackground?: ThemeBackgroundSettings
 }
 
 export type UiTypographySettings = {
@@ -134,6 +135,17 @@ const defaultTheme: ThemeSettings = {
     opacity: 0.3,
     overlayOpacity: 0,
     blurPx: 1,
+    brightness: 100,
+    size: 'height-fill',
+    positionX: 50,
+    positionY: 50,
+  },
+  sidebarBackground: {
+    enabled: false,
+    path: null,
+    opacity: 0.2,
+    overlayOpacity: 0.16,
+    blurPx: 2,
     brightness: 100,
     size: 'height-fill',
     positionX: 50,
@@ -258,6 +270,18 @@ export async function getThemeSettings(): Promise<ThemeSettings> {
       positionX: cfg.aiChatBackground?.positionX ?? defaultTheme.aiChatBackground?.positionX ?? 50,
       positionY: cfg.aiChatBackground?.positionY ?? defaultTheme.aiChatBackground?.positionY ?? 50,
     },
+    sidebarBackground: {
+      enabled: cfg.sidebarBackground?.enabled ?? defaultTheme.sidebarBackground?.enabled ?? false,
+      path: cfg.sidebarBackground?.path ?? defaultTheme.sidebarBackground?.path ?? null,
+      opacity: cfg.sidebarBackground?.opacity ?? defaultTheme.sidebarBackground?.opacity ?? 0.2,
+      overlayOpacity:
+        cfg.sidebarBackground?.overlayOpacity ?? defaultTheme.sidebarBackground?.overlayOpacity ?? 0.16,
+      blurPx: cfg.sidebarBackground?.blurPx ?? defaultTheme.sidebarBackground?.blurPx ?? 2,
+      brightness: cfg.sidebarBackground?.brightness ?? defaultTheme.sidebarBackground?.brightness ?? 100,
+      size: cfg.sidebarBackground?.size ?? defaultTheme.sidebarBackground?.size ?? 'height-fill',
+      positionX: cfg.sidebarBackground?.positionX ?? defaultTheme.sidebarBackground?.positionX ?? 50,
+      positionY: cfg.sidebarBackground?.positionY ?? defaultTheme.sidebarBackground?.positionY ?? 50,
+    },
   }
 }
 
@@ -318,6 +342,7 @@ export function getDefaultThemeSettings(): ThemeSettings {
     editorBackground: defaultTheme.editorBackground ? { ...defaultTheme.editorBackground } : undefined,
     previewBackground: defaultTheme.previewBackground ? { ...defaultTheme.previewBackground } : undefined,
     aiChatBackground: defaultTheme.aiChatBackground ? { ...defaultTheme.aiChatBackground } : undefined,
+    sidebarBackground: defaultTheme.sidebarBackground ? { ...defaultTheme.sidebarBackground } : undefined,
   }
 }
 

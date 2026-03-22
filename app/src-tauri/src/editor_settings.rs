@@ -157,6 +157,10 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::Editor
                         theme.ai_chat_background = default_theme.ai_chat_background.clone();
                         changed = true;
                     }
+                    if theme.sidebar_background.is_none() {
+                        theme.sidebar_background = default_theme.sidebar_background.clone();
+                        changed = true;
+                    }
                 }
             }
 
@@ -292,6 +296,50 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::Editor
                             if ai_chat_background.position_y.is_none() {
                                 ai_chat_background.position_y =
                                     default_ai_chat_background.position_y;
+                                changed = true;
+                            }
+                        }
+                    }
+                    if let Some(ref mut sidebar_background) = theme.sidebar_background {
+                        if let Some(ref default_sidebar_background) = default_theme.sidebar_background
+                        {
+                            if sidebar_background.enabled.is_none() {
+                                sidebar_background.enabled = default_sidebar_background.enabled;
+                                changed = true;
+                            }
+                            if sidebar_background.path.is_none() {
+                                sidebar_background.path = default_sidebar_background.path.clone();
+                                changed = true;
+                            }
+                            if sidebar_background.opacity.is_none() {
+                                sidebar_background.opacity = default_sidebar_background.opacity;
+                                changed = true;
+                            }
+                            if sidebar_background.overlay_opacity.is_none() {
+                                sidebar_background.overlay_opacity =
+                                    default_sidebar_background.overlay_opacity;
+                                changed = true;
+                            }
+                            if sidebar_background.blur_px.is_none() {
+                                sidebar_background.blur_px = default_sidebar_background.blur_px;
+                                changed = true;
+                            }
+                            if sidebar_background.brightness.is_none() {
+                                sidebar_background.brightness = default_sidebar_background.brightness;
+                                changed = true;
+                            }
+                            if sidebar_background.size.is_none() {
+                                sidebar_background.size = default_sidebar_background.size.clone();
+                                changed = true;
+                            }
+                            if sidebar_background.position_x.is_none() {
+                                sidebar_background.position_x =
+                                    default_sidebar_background.position_x;
+                                changed = true;
+                            }
+                            if sidebar_background.position_y.is_none() {
+                                sidebar_background.position_y =
+                                    default_sidebar_background.position_y;
                                 changed = true;
                             }
                         }

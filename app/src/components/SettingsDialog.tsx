@@ -35,8 +35,8 @@ export type SettingsDialogProps = {
 }
 
 type SettingsSectionId = 'theme' | 'typography' | 'word-export'
-type ThemePanelTabId = 'theme-preset' | 'editor-background' | 'preview-background' | 'ai-chat-background'
-type BackgroundTarget = 'editorBackground' | 'previewBackground' | 'aiChatBackground'
+type ThemePanelTabId = 'theme-preset' | 'editor-background' | 'preview-background' | 'ai-chat-background' | 'sidebar-background'
+type BackgroundTarget = 'editorBackground' | 'previewBackground' | 'aiChatBackground' | 'sidebarBackground'
 
 const fieldGridStyle: React.CSSProperties = {
   display: 'grid',
@@ -74,6 +74,10 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const [aiChatBackgroundOverlayOpacityInput, setAiChatBackgroundOverlayOpacityInput] = useState('')
   const [aiChatBackgroundBlurInput, setAiChatBackgroundBlurInput] = useState('')
   const [aiChatBackgroundBrightnessInput, setAiChatBackgroundBrightnessInput] = useState('')
+  const [sidebarBackgroundOpacityInput, setSidebarBackgroundOpacityInput] = useState('')
+  const [sidebarBackgroundOverlayOpacityInput, setSidebarBackgroundOverlayOpacityInput] = useState('')
+  const [sidebarBackgroundBlurInput, setSidebarBackgroundBlurInput] = useState('')
+  const [sidebarBackgroundBrightnessInput, setSidebarBackgroundBrightnessInput] = useState('')
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const previewDragRef = useRef(false)
   const modalRef = useRef<HTMLDivElement | null>(null)
@@ -135,6 +139,10 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
         setAiChatBackgroundOverlayOpacityInput(String(loadedTheme.aiChatBackground?.overlayOpacity ?? getDefaultThemeSettings().aiChatBackground?.overlayOpacity ?? 0))
         setAiChatBackgroundBlurInput(String(loadedTheme.aiChatBackground?.blurPx ?? getDefaultThemeSettings().aiChatBackground?.blurPx ?? 1))
         setAiChatBackgroundBrightnessInput(String(loadedTheme.aiChatBackground?.brightness ?? getDefaultThemeSettings().aiChatBackground?.brightness ?? 100))
+        setSidebarBackgroundOpacityInput(String(loadedTheme.sidebarBackground?.opacity ?? getDefaultThemeSettings().sidebarBackground?.opacity ?? 0.2))
+        setSidebarBackgroundOverlayOpacityInput(String(loadedTheme.sidebarBackground?.overlayOpacity ?? getDefaultThemeSettings().sidebarBackground?.overlayOpacity ?? 0.16))
+        setSidebarBackgroundBlurInput(String(loadedTheme.sidebarBackground?.blurPx ?? getDefaultThemeSettings().sidebarBackground?.blurPx ?? 2))
+        setSidebarBackgroundBrightnessInput(String(loadedTheme.sidebarBackground?.brightness ?? getDefaultThemeSettings().sidebarBackground?.brightness ?? 100))
         setError(null)
       } catch (err) {
         if (cancelled) return
@@ -164,6 +172,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
       editorBackground: theme.editorBackground ? { ...theme.editorBackground } : undefined,
       previewBackground: theme.previewBackground ? { ...theme.previewBackground } : undefined,
       aiChatBackground: theme.aiChatBackground ? { ...theme.aiChatBackground } : undefined,
+      sidebarBackground: theme.sidebarBackground ? { ...theme.sidebarBackground } : undefined,
     })
   }, [open, theme, onThemeSettingsChange])
 
@@ -180,6 +189,10 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     setAiChatBackgroundOverlayOpacityInput(String(theme.aiChatBackground?.overlayOpacity ?? getDefaultThemeSettings().aiChatBackground?.overlayOpacity ?? 0))
     setAiChatBackgroundBlurInput(String(theme.aiChatBackground?.blurPx ?? getDefaultThemeSettings().aiChatBackground?.blurPx ?? 1))
     setAiChatBackgroundBrightnessInput(String(theme.aiChatBackground?.brightness ?? getDefaultThemeSettings().aiChatBackground?.brightness ?? 100))
+    setSidebarBackgroundOpacityInput(String(theme.sidebarBackground?.opacity ?? getDefaultThemeSettings().sidebarBackground?.opacity ?? 0.2))
+    setSidebarBackgroundOverlayOpacityInput(String(theme.sidebarBackground?.overlayOpacity ?? getDefaultThemeSettings().sidebarBackground?.overlayOpacity ?? 0.16))
+    setSidebarBackgroundBlurInput(String(theme.sidebarBackground?.blurPx ?? getDefaultThemeSettings().sidebarBackground?.blurPx ?? 2))
+    setSidebarBackgroundBrightnessInput(String(theme.sidebarBackground?.brightness ?? getDefaultThemeSettings().sidebarBackground?.brightness ?? 100))
   }, [
     theme.editorBackground?.opacity,
     theme.editorBackground?.overlayOpacity,
@@ -193,6 +206,10 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     theme.aiChatBackground?.overlayOpacity,
     theme.aiChatBackground?.blurPx,
     theme.aiChatBackground?.brightness,
+    theme.sidebarBackground?.opacity,
+    theme.sidebarBackground?.overlayOpacity,
+    theme.sidebarBackground?.blurPx,
+    theme.sidebarBackground?.brightness,
   ])
 
   if (!open) return null
@@ -237,7 +254,9 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
         ? defaults.editorBackground
         : target === 'previewBackground'
           ? defaults.previewBackground
-        : defaults.aiChatBackground)!,
+          : target === 'aiChatBackground'
+            ? defaults.aiChatBackground
+            : defaults.sidebarBackground)!,
     }
   }
 
@@ -247,7 +266,9 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
         ? theme.editorBackground
         : target === 'previewBackground'
           ? theme.previewBackground
-          : theme.aiChatBackground
+          : target === 'aiChatBackground'
+            ? theme.aiChatBackground
+            : theme.sidebarBackground
     return {
       ...getDefaultBackgroundSettings(target),
       ...current,
@@ -273,6 +294,13 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
       else setPreviewBackgroundBrightnessInput(value)
       return
     }
+    if (target === 'sidebarBackground') {
+      if (key === 'opacity') setSidebarBackgroundOpacityInput(value)
+      else if (key === 'overlayOpacity') setSidebarBackgroundOverlayOpacityInput(value)
+      else if (key === 'blurPx') setSidebarBackgroundBlurInput(value)
+      else setSidebarBackgroundBrightnessInput(value)
+      return
+    }
 
     if (key === 'opacity') setAiChatBackgroundOpacityInput(value)
     else if (key === 'overlayOpacity') setAiChatBackgroundOverlayOpacityInput(value)
@@ -294,7 +322,9 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
           ? prev.editorBackground
           : target === 'previewBackground'
             ? prev.previewBackground
-            : prev.aiChatBackground),
+            : target === 'aiChatBackground'
+              ? prev.aiChatBackground
+              : prev.sidebarBackground),
         ...patch,
       },
     }))
@@ -382,7 +412,9 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
             ? 'editorBackground'
             : activeThemeTab === 'preview-background'
               ? 'previewBackground'
-              : 'aiChatBackground'
+              : activeThemeTab === 'ai-chat-background'
+                ? 'aiChatBackground'
+                : 'sidebarBackground'
         setTheme((prev) => {
           return {
             ...prev,
@@ -435,6 +467,8 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const currentBackgroundTarget: BackgroundTarget =
     activeThemeTab === 'ai-chat-background'
       ? 'aiChatBackground'
+      : activeThemeTab === 'sidebar-background'
+        ? 'sidebarBackground'
       : activeThemeTab === 'preview-background'
         ? 'previewBackground'
         : 'editorBackground'
@@ -444,25 +478,33 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
       ? editorBackgroundOpacityInput
       : currentBackgroundTarget === 'previewBackground'
         ? previewBackgroundOpacityInput
-        : aiChatBackgroundOpacityInput
+        : currentBackgroundTarget === 'aiChatBackground'
+          ? aiChatBackgroundOpacityInput
+          : sidebarBackgroundOpacityInput
   const currentBackgroundOverlayOpacityInput =
     currentBackgroundTarget === 'editorBackground'
       ? editorBackgroundOverlayOpacityInput
       : currentBackgroundTarget === 'previewBackground'
         ? previewBackgroundOverlayOpacityInput
-        : aiChatBackgroundOverlayOpacityInput
+        : currentBackgroundTarget === 'aiChatBackground'
+          ? aiChatBackgroundOverlayOpacityInput
+          : sidebarBackgroundOverlayOpacityInput
   const currentBackgroundBlurInput =
     currentBackgroundTarget === 'editorBackground'
       ? editorBackgroundBlurInput
       : currentBackgroundTarget === 'previewBackground'
         ? previewBackgroundBlurInput
-        : aiChatBackgroundBlurInput
+        : currentBackgroundTarget === 'aiChatBackground'
+          ? aiChatBackgroundBlurInput
+          : sidebarBackgroundBlurInput
   const currentBackgroundBrightnessInput =
     currentBackgroundTarget === 'editorBackground'
       ? editorBackgroundBrightnessInput
       : currentBackgroundTarget === 'previewBackground'
         ? previewBackgroundBrightnessInput
-        : aiChatBackgroundBrightnessInput
+        : currentBackgroundTarget === 'aiChatBackground'
+          ? aiChatBackgroundBrightnessInput
+          : sidebarBackgroundBrightnessInput
   const selectedImageName = currentBackground.path
     ? currentBackground.path.split(/[\\/]/).pop()
     : t('theme.image')
@@ -472,7 +514,9 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
       ? t('theme.editorBackground')
       : currentBackgroundTarget === 'previewBackground'
         ? t('theme.previewBackground')
-        : t('theme.aiChatBackground')
+        : currentBackgroundTarget === 'aiChatBackground'
+          ? t('theme.aiChatBackground')
+          : t('theme.sidebarBackground')
 
   const clampDialogOffset = (nextX: number, nextY: number) => {
     const modal = modalRef.current
@@ -611,6 +655,15 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                         >
                           {t('theme.aiChatBackground')}
                         </button>
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={activeThemeTab === 'sidebar-background'}
+                          className={`settings-panel-tab ${activeThemeTab === 'sidebar-background' ? 'active' : ''}`}
+                          onClick={() => setActiveThemeTab('sidebar-background')}
+                        >
+                          {t('theme.sidebarBackground')}
+                        </button>
                       </div>
                     </div>
                     {activeThemeTab === 'theme-preset' ? (
@@ -721,6 +774,8 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                           <span>
                             {activeThemeTab === 'ai-chat-background'
                               ? t('theme.enableAiChatBackgroundImage')
+                              : activeThemeTab === 'sidebar-background'
+                                ? t('theme.enableSidebarBackgroundImage')
                               : activeThemeTab === 'preview-background'
                                 ? t('theme.enablePreviewBackgroundImage')
                               : t('theme.enableEditorBackgroundImage')}

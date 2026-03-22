@@ -57,12 +57,14 @@ function App() {
       editorBackground: settings.editorBackground,
       previewBackground: settings.previewBackground,
       aiChatBackground: settings.aiChatBackground,
+      sidebarBackground: settings.sidebarBackground,
     })
     setThemeSettings({
       ...settings,
       editorBackground: settings.editorBackground ? { ...settings.editorBackground } : undefined,
       previewBackground: settings.previewBackground ? { ...settings.previewBackground } : undefined,
       aiChatBackground: settings.aiChatBackground ? { ...settings.aiChatBackground } : undefined,
+      sidebarBackground: settings.sidebarBackground ? { ...settings.sidebarBackground } : undefined,
     })
   }, [])
 

@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import type { FileTreeNode } from '../domain/sidebarTree'
 import { FileContextMenu } from './FileContextMenu'
+import { SidebarBackgroundShell } from './SidebarBackgroundShell'
 import { useI18n } from '../modules/i18n/I18nContext'
 import type { FileVirtualFolder, FileVirtualAssignment } from '../modules/files/types'
 import { loadFileVirtualFolders, listFileVirtualAssignments, saveFileVirtualFolders, updateFileVirtualFolderForPath } from '../modules/files/service'
@@ -673,7 +674,8 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
 
   if (!hasTree && !hasStandalone) {
     return (
-      <aside
+      <SidebarBackgroundShell
+        as="aside"
         className="sidebar"
         style={asideStyle}
         onClick={closeMenu}
@@ -686,12 +688,13 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
           <div className="pane-title">{t('sidebar.fileBrowser')}</div>
         </div>
         <div className="sidebar-body muted small">{t('sidebar.noFiles')}</div>
-      </aside>
+      </SidebarBackgroundShell>
     )
   }
 
   return (
-    <aside
+    <SidebarBackgroundShell
+      as="aside"
       className="sidebar"
       style={asideStyle}
       tabIndex={-1}
@@ -1126,6 +1129,6 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
           ]}
         />
       )}
-    </aside>
+    </SidebarBackgroundShell>
   )
 }
