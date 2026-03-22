@@ -438,7 +438,10 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
 
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [dragging, setDragging] = useState(false)
+  const [isResizing, setIsResizing] = useState(false)
   const dragStateRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null)
+  const dragModeRef = useRef<'move' | 'resize'>('move')
+  const resizeRestoreTimerRef = useRef<number | null>(null)
 
   const isDifyProvider = providerType === 'dify'
 
@@ -618,6 +621,15 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
       const interactive = target.closest('select, button, input, textarea')
       if (interactive) return
     }
+    if (resizeRestoreTimerRef.current != null) {
+      window.clearTimeout(resizeRestoreTimerRef.current)
+      resizeRestoreTimerRef.current = null
+    }
+    const isResizeHandle = (e.currentTarget as HTMLElement).classList.contains('ai-chat-drag-handle')
+    dragModeRef.current = isResizeHandle ? 'resize' : 'move'
+    if (isResizeHandle) {
+      setIsResizing(true)
+    }
     const { clientX, clientY } = e
     dragStateRef.current = {
       startX: clientX,
@@ -641,6 +653,13 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     const handleUp = () => {
       setDragging(false)
       dragStateRef.current = null
+      if (dragModeRef.current === 'resize') {
+        resizeRestoreTimerRef.current = window.setTimeout(() => {
+          setIsResizing(false)
+          resizeRestoreTimerRef.current = null
+        }, 120)
+      }
+      dragModeRef.current = 'move'
     }
     window.addEventListener('mousemove', handleMove)
     window.addEventListener('mouseup', handleUp)
@@ -649,6 +668,14 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
       window.removeEventListener('mouseup', handleUp)
     }
   }, [dragging])
+
+  useEffect(() => {
+    return () => {
+      if (resizeRestoreTimerRef.current != null) {
+        window.clearTimeout(resizeRestoreTimerRef.current)
+      }
+    }
+  }, [])
 
   const isStreamingUI = isDifyProvider && !!activeTypewriterId && messages.some(
     (msg) => msg.id === activeTypewriterId && msg.role === 'assistant' && (
@@ -790,6 +817,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
             return canUpload ? uploadFiles : undefined;
           })()}
           inputPlaceholder={inputPlaceholder}
+          isResizing={isResizing}
         />
 
 

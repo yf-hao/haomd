@@ -25,22 +25,26 @@ export type AiChatUiSettings = {
 export type ThemeSettings = {
   mode: ThemeMode
   customThemeId?: string | null
-  editorBackground?: ThemeEditorBackgroundSettings
+  editorBackground?: ThemeBackgroundSettings
+  aiChatBackground?: ThemeBackgroundSettings
 }
 
-export type ThemeEditorBackgroundSize = 'cover' | 'contain' | 'auto' | 'height-fill' | 'width-fill'
+export type ThemeBackgroundSize = 'cover' | 'contain' | 'auto' | 'height-fill' | 'width-fill'
 
-export type ThemeEditorBackgroundSettings = {
+export type ThemeBackgroundSettings = {
   enabled: boolean
   path: string | null
   opacity: number
   overlayOpacity: number
   blurPx: number
   brightness: number
-  size: ThemeEditorBackgroundSize
+  size: ThemeBackgroundSize
   positionX: number
   positionY: number
 }
+
+export type ThemeEditorBackgroundSize = ThemeBackgroundSize
+export type ThemeEditorBackgroundSettings = ThemeBackgroundSettings
 
 export type WordExportStyleSettings = {
   bodyFontFamily: string
@@ -89,6 +93,17 @@ const defaultTheme: ThemeSettings = {
   mode: 'system',
   customThemeId: null,
   editorBackground: {
+    enabled: false,
+    path: null,
+    opacity: 0.3,
+    overlayOpacity: 0,
+    blurPx: 1,
+    brightness: 100,
+    size: 'height-fill',
+    positionX: 50,
+    positionY: 50,
+  },
+  aiChatBackground: {
     enabled: false,
     path: null,
     opacity: 0.3,
@@ -183,6 +198,17 @@ export async function getThemeSettings(): Promise<ThemeSettings> {
       positionX: cfg.editorBackground?.positionX ?? defaultTheme.editorBackground?.positionX ?? 50,
       positionY: cfg.editorBackground?.positionY ?? defaultTheme.editorBackground?.positionY ?? 50,
     },
+    aiChatBackground: {
+      enabled: cfg.aiChatBackground?.enabled ?? defaultTheme.aiChatBackground?.enabled ?? false,
+      path: cfg.aiChatBackground?.path ?? defaultTheme.aiChatBackground?.path ?? null,
+      opacity: cfg.aiChatBackground?.opacity ?? defaultTheme.aiChatBackground?.opacity ?? 0.3,
+      overlayOpacity: cfg.aiChatBackground?.overlayOpacity ?? defaultTheme.aiChatBackground?.overlayOpacity ?? 0,
+      blurPx: cfg.aiChatBackground?.blurPx ?? defaultTheme.aiChatBackground?.blurPx ?? 1,
+      brightness: cfg.aiChatBackground?.brightness ?? defaultTheme.aiChatBackground?.brightness ?? 100,
+      size: cfg.aiChatBackground?.size ?? defaultTheme.aiChatBackground?.size ?? 'height-fill',
+      positionX: cfg.aiChatBackground?.positionX ?? defaultTheme.aiChatBackground?.positionX ?? 50,
+      positionY: cfg.aiChatBackground?.positionY ?? defaultTheme.aiChatBackground?.positionY ?? 50,
+    },
   }
 }
 
@@ -221,7 +247,11 @@ export function getDefaultWordExportStyleSettings(): WordExportStyleSettings {
 }
 
 export function getDefaultThemeSettings(): ThemeSettings {
-  return { ...defaultTheme }
+  return {
+    ...defaultTheme,
+    editorBackground: defaultTheme.editorBackground ? { ...defaultTheme.editorBackground } : undefined,
+    aiChatBackground: defaultTheme.aiChatBackground ? { ...defaultTheme.aiChatBackground } : undefined,
+  }
 }
 
 export function getDefaultLanguageSetting(): LanguageMode {

@@ -15,10 +15,12 @@ import {
   loadEditorSettings,
   saveEditorSettings,
   type EditorSettings,
+  type ThemeBackgroundSettings,
+  type ThemeBackgroundSize,
   type ThemeSettings,
-  type ThemeEditorBackgroundSize,
   type WordExportStyleSettings,
 } from '../modules/settings/editorSettings'
+import { resolveManagedBackgroundImageUrl } from '../modules/theme/backgroundImageRuntime'
 import type { ThemeMode } from '../modules/theme/schema'
 
 export type SettingsDialogProps = {
@@ -29,32 +31,14 @@ export type SettingsDialogProps = {
 }
 
 type SettingsSectionId = 'theme' | 'word-export'
-type ThemePanelTabId = 'theme-preset' | 'editor-background'
+type ThemePanelTabId = 'theme-preset' | 'editor-background' | 'ai-chat-background'
+type BackgroundTarget = 'editorBackground' | 'aiChatBackground'
 
 const fieldGridStyle: React.CSSProperties = {
   display: 'grid',
   gridTemplateColumns: '180px minmax(0, 1fr)',
   gap: 12,
   alignItems: 'center',
-}
-
-const settingsImagePreviewUrlCache = new Map<string, string>()
-
-function encodeSettingsImagePreviewPath(absPath: string): string {
-  const isWindows = absPath.includes('\\') || navigator.userAgent.includes('Windows')
-  const cacheKey = `${isWindows ? 'win' : 'unix'}|${absPath}`
-  const cached = settingsImagePreviewUrlCache.get(cacheKey)
-  if (cached) return cached
-
-  const pathParts = absPath.split(/([/\\])/)
-  const encodedParts = pathParts.map((part) => {
-    if (part === '/' || part === '\\') return part
-    return encodeURIComponent(part)
-  })
-  const encoded = encodedParts.join('')
-  const finalUrl = isWindows ? `https://haomd.localhost${encoded}` : `haomd://localhost${encoded}`
-  settingsImagePreviewUrlCache.set(cacheKey, finalUrl)
-  return finalUrl
 }
 
 export const SettingsDialog: FC<SettingsDialogProps> = ({
@@ -76,6 +60,10 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const [editorBackgroundOverlayOpacityInput, setEditorBackgroundOverlayOpacityInput] = useState('')
   const [editorBackgroundBlurInput, setEditorBackgroundBlurInput] = useState('')
   const [editorBackgroundBrightnessInput, setEditorBackgroundBrightnessInput] = useState('')
+  const [aiChatBackgroundOpacityInput, setAiChatBackgroundOpacityInput] = useState('')
+  const [aiChatBackgroundOverlayOpacityInput, setAiChatBackgroundOverlayOpacityInput] = useState('')
+  const [aiChatBackgroundBlurInput, setAiChatBackgroundBlurInput] = useState('')
+  const [aiChatBackgroundBrightnessInput, setAiChatBackgroundBrightnessInput] = useState('')
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const previewDragRef = useRef(false)
   const modalRef = useRef<HTMLDivElement | null>(null)
@@ -122,6 +110,10 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
         setEditorBackgroundOverlayOpacityInput(String(loadedTheme.editorBackground?.overlayOpacity ?? getDefaultThemeSettings().editorBackground?.overlayOpacity ?? 0))
         setEditorBackgroundBlurInput(String(loadedTheme.editorBackground?.blurPx ?? getDefaultThemeSettings().editorBackground?.blurPx ?? 1))
         setEditorBackgroundBrightnessInput(String(loadedTheme.editorBackground?.brightness ?? getDefaultThemeSettings().editorBackground?.brightness ?? 100))
+        setAiChatBackgroundOpacityInput(String(loadedTheme.aiChatBackground?.opacity ?? getDefaultThemeSettings().aiChatBackground?.opacity ?? 0.3))
+        setAiChatBackgroundOverlayOpacityInput(String(loadedTheme.aiChatBackground?.overlayOpacity ?? getDefaultThemeSettings().aiChatBackground?.overlayOpacity ?? 0))
+        setAiChatBackgroundBlurInput(String(loadedTheme.aiChatBackground?.blurPx ?? getDefaultThemeSettings().aiChatBackground?.blurPx ?? 1))
+        setAiChatBackgroundBrightnessInput(String(loadedTheme.aiChatBackground?.brightness ?? getDefaultThemeSettings().aiChatBackground?.brightness ?? 100))
         setError(null)
       } catch (err) {
         if (cancelled) return
@@ -149,7 +141,20 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     setEditorBackgroundOverlayOpacityInput(String(theme.editorBackground?.overlayOpacity ?? getDefaultThemeSettings().editorBackground?.overlayOpacity ?? 0))
     setEditorBackgroundBlurInput(String(theme.editorBackground?.blurPx ?? getDefaultThemeSettings().editorBackground?.blurPx ?? 1))
     setEditorBackgroundBrightnessInput(String(theme.editorBackground?.brightness ?? getDefaultThemeSettings().editorBackground?.brightness ?? 100))
-  }, [theme.editorBackground?.opacity, theme.editorBackground?.overlayOpacity, theme.editorBackground?.blurPx, theme.editorBackground?.brightness])
+    setAiChatBackgroundOpacityInput(String(theme.aiChatBackground?.opacity ?? getDefaultThemeSettings().aiChatBackground?.opacity ?? 0.3))
+    setAiChatBackgroundOverlayOpacityInput(String(theme.aiChatBackground?.overlayOpacity ?? getDefaultThemeSettings().aiChatBackground?.overlayOpacity ?? 0))
+    setAiChatBackgroundBlurInput(String(theme.aiChatBackground?.blurPx ?? getDefaultThemeSettings().aiChatBackground?.blurPx ?? 1))
+    setAiChatBackgroundBrightnessInput(String(theme.aiChatBackground?.brightness ?? getDefaultThemeSettings().aiChatBackground?.brightness ?? 100))
+  }, [
+    theme.editorBackground?.opacity,
+    theme.editorBackground?.overlayOpacity,
+    theme.editorBackground?.blurPx,
+    theme.editorBackground?.brightness,
+    theme.aiChatBackground?.opacity,
+    theme.aiChatBackground?.overlayOpacity,
+    theme.aiChatBackground?.blurPx,
+    theme.aiChatBackground?.brightness,
+  ])
 
   if (!open) return null
 
@@ -174,68 +179,63 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     setTheme((prev) => ({ ...prev, mode }))
   }
 
-  const updateEditorBackground = (
-    patch: Partial<NonNullable<ThemeSettings['editorBackground']>>,
+  const getDefaultBackgroundSettings = (target: BackgroundTarget): ThemeBackgroundSettings => {
+    const defaults = getDefaultThemeSettings()
+    return {
+      ...(target === 'editorBackground'
+        ? defaults.editorBackground
+        : defaults.aiChatBackground)!,
+    }
+  }
+
+  const getBackgroundSettings = (target: BackgroundTarget): ThemeBackgroundSettings => {
+    const current = target === 'editorBackground' ? theme.editorBackground : theme.aiChatBackground
+    return {
+      ...getDefaultBackgroundSettings(target),
+      ...current,
+    }
+  }
+
+  const setBackgroundNumberInput = (
+    target: BackgroundTarget,
+    key: 'opacity' | 'overlayOpacity' | 'blurPx' | 'brightness',
+    value: string,
+  ) => {
+    if (target === 'editorBackground') {
+      if (key === 'opacity') setEditorBackgroundOpacityInput(value)
+      else if (key === 'overlayOpacity') setEditorBackgroundOverlayOpacityInput(value)
+      else if (key === 'blurPx') setEditorBackgroundBlurInput(value)
+      else setEditorBackgroundBrightnessInput(value)
+      return
+    }
+
+    if (key === 'opacity') setAiChatBackgroundOpacityInput(value)
+    else if (key === 'overlayOpacity') setAiChatBackgroundOverlayOpacityInput(value)
+    else if (key === 'blurPx') setAiChatBackgroundBlurInput(value)
+    else setAiChatBackgroundBrightnessInput(value)
+  }
+
+  const updateThemeBackground = (
+    target: BackgroundTarget,
+    patch: Partial<ThemeBackgroundSettings>,
   ) => {
     setTheme((prev) => ({
       ...prev,
-      editorBackground: {
-        enabled:
-          patch.enabled
-          ?? prev.editorBackground?.enabled
-          ?? getDefaultThemeSettings().editorBackground?.enabled
-          ?? false,
-        path:
-          patch.path
-          ?? prev.editorBackground?.path
-          ?? getDefaultThemeSettings().editorBackground?.path
-          ?? null,
-        opacity:
-          patch.opacity
-          ?? prev.editorBackground?.opacity
-          ?? getDefaultThemeSettings().editorBackground?.opacity
-          ?? 0.1,
-        overlayOpacity:
-          patch.overlayOpacity
-          ?? prev.editorBackground?.overlayOpacity
-          ?? getDefaultThemeSettings().editorBackground?.overlayOpacity
-          ?? 0,
-        blurPx:
-          patch.blurPx
-          ?? prev.editorBackground?.blurPx
-          ?? getDefaultThemeSettings().editorBackground?.blurPx
-          ?? 1,
-        brightness:
-          patch.brightness
-          ?? prev.editorBackground?.brightness
-          ?? getDefaultThemeSettings().editorBackground?.brightness
-          ?? 100,
-        size:
-          patch.size
-          ?? prev.editorBackground?.size
-          ?? getDefaultThemeSettings().editorBackground?.size
-          ?? 'cover',
-        positionX:
-          patch.positionX
-          ?? prev.editorBackground?.positionX
-          ?? getDefaultThemeSettings().editorBackground?.positionX
-          ?? 50,
-        positionY:
-          patch.positionY
-          ?? prev.editorBackground?.positionY
-          ?? getDefaultThemeSettings().editorBackground?.positionY
-          ?? 50,
+      [target]: {
+        ...getDefaultBackgroundSettings(target),
+        ...(target === 'editorBackground' ? prev.editorBackground : prev.aiChatBackground),
+        ...patch,
       },
     }))
   }
 
-  const handleSelectEditorBackground = async () => {
+  const handleSelectBackgroundImage = async (target: BackgroundTarget) => {
     try {
       const selected = await invoke<string | null>('pick_editor_background_image', {
-        currentPath: editorBackground.path,
+        currentPath: getBackgroundSettings(target).path,
       })
       if (!selected) return
-      updateEditorBackground({
+      updateThemeBackground(target, {
         enabled: true,
         path: selected,
       })
@@ -250,26 +250,22 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     }
   }
 
-  const clearEditorBackground = () => {
-    updateEditorBackground({
+  const clearBackgroundImage = (target: BackgroundTarget) => {
+    updateThemeBackground(target, {
       enabled: false,
       path: null,
     })
   }
 
-  const commitEditorBackgroundNumber = (key: 'opacity' | 'overlayOpacity' | 'blurPx' | 'brightness', rawValue: string) => {
+  const commitBackgroundNumber = (
+    target: BackgroundTarget,
+    key: 'opacity' | 'overlayOpacity' | 'blurPx' | 'brightness',
+    rawValue: string,
+  ) => {
     const trimmed = rawValue.trim()
     if (!trimmed) {
-      updateEditorBackground({ [key]: 0 } as Pick<NonNullable<ThemeSettings['editorBackground']>, typeof key>)
-      if (key === 'opacity') {
-        setEditorBackgroundOpacityInput('')
-      } else if (key === 'overlayOpacity') {
-        setEditorBackgroundOverlayOpacityInput('')
-      } else if (key === 'brightness') {
-        setEditorBackgroundBrightnessInput('')
-      } else {
-        setEditorBackgroundBlurInput('')
-      }
+      updateThemeBackground(target, { [key]: 0 } as Pick<ThemeBackgroundSettings, typeof key>)
+      setBackgroundNumberInput(target, key, '')
       return
     }
 
@@ -283,30 +279,23 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
         ? Math.min(Math.max(value, 0), 200)
         : value
 
-    updateEditorBackground({ [key]: normalizedValue } as Pick<NonNullable<ThemeSettings['editorBackground']>, typeof key>)
-    if (key === 'opacity') {
-      setEditorBackgroundOpacityInput(String(normalizedValue))
-    } else if (key === 'overlayOpacity') {
-      setEditorBackgroundOverlayOpacityInput(String(normalizedValue))
-    } else if (key === 'brightness') {
-      setEditorBackgroundBrightnessInput(String(normalizedValue))
-    } else {
-      setEditorBackgroundBlurInput(String(normalizedValue))
-    }
+    updateThemeBackground(target, { [key]: normalizedValue } as Pick<ThemeBackgroundSettings, typeof key>)
+    setBackgroundNumberInput(target, key, String(normalizedValue))
   }
 
-  const updateEditorBackgroundSize = (event: ChangeEvent<HTMLSelectElement>) => {
-    updateEditorBackground({ size: event.target.value as ThemeEditorBackgroundSize })
+  const updateBackgroundSize = (target: BackgroundTarget) => (event: ChangeEvent<HTMLSelectElement>) => {
+    updateThemeBackground(target, { size: event.target.value as ThemeBackgroundSize })
   }
 
   const updateEditorBackgroundPositionFromPointer = (
+    target: BackgroundTarget,
     event: ReactPointerEvent<HTMLDivElement>,
   ) => {
     const rect = event.currentTarget.getBoundingClientRect()
     if (!rect.width || !rect.height) return
     const x = ((event.clientX - rect.left) / rect.width) * 100
     const y = ((event.clientY - rect.top) / rect.height) * 100
-    updateEditorBackground({
+    updateThemeBackground(target, {
       positionX: Math.min(Math.max(Number(x.toFixed(2)), 0), 100),
       positionY: Math.min(Math.max(Number(y.toFixed(2)), 0), 100),
     })
@@ -314,10 +303,11 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
 
   const handleReset = () => {
     if (activeSection === 'theme') {
-      if (activeThemeTab === 'editor-background') {
+      if (activeThemeTab === 'editor-background' || activeThemeTab === 'ai-chat-background') {
+        const target = activeThemeTab === 'editor-background' ? 'editorBackground' : 'aiChatBackground'
         setTheme((prev) => ({
           ...prev,
-          editorBackground: getDefaultThemeSettings().editorBackground,
+          [target]: getDefaultBackgroundSettings(target),
         }))
       }
       return
@@ -355,13 +345,21 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     onClose()
   }
 
-  const editorBackground = theme.editorBackground ?? getDefaultThemeSettings().editorBackground!
-  const selectedImageName = editorBackground.path
-    ? editorBackground.path.split(/[\\/]/).pop()
+  const currentBackgroundTarget: BackgroundTarget =
+    activeThemeTab === 'ai-chat-background' ? 'aiChatBackground' : 'editorBackground'
+  const currentBackground = getBackgroundSettings(currentBackgroundTarget)
+  const currentBackgroundOpacityInput =
+    currentBackgroundTarget === 'editorBackground' ? editorBackgroundOpacityInput : aiChatBackgroundOpacityInput
+  const currentBackgroundOverlayOpacityInput =
+    currentBackgroundTarget === 'editorBackground' ? editorBackgroundOverlayOpacityInput : aiChatBackgroundOverlayOpacityInput
+  const currentBackgroundBlurInput =
+    currentBackgroundTarget === 'editorBackground' ? editorBackgroundBlurInput : aiChatBackgroundBlurInput
+  const currentBackgroundBrightnessInput =
+    currentBackgroundTarget === 'editorBackground' ? editorBackgroundBrightnessInput : aiChatBackgroundBrightnessInput
+  const selectedImageName = currentBackground.path
+    ? currentBackground.path.split(/[\\/]/).pop()
     : t('theme.image')
-  const editorBackgroundPreviewUrl = editorBackground.path
-    ? encodeSettingsImagePreviewPath(editorBackground.path)
-    : null
+  const currentBackgroundPreviewUrl = resolveManagedBackgroundImageUrl(currentBackground.path)
 
   const clampDialogOffset = (nextX: number, nextY: number) => {
     const modal = modalRef.current
@@ -475,6 +473,15 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                         >
                           {t('theme.editorBackground')}
                         </button>
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={activeThemeTab === 'ai-chat-background'}
+                          className={`settings-panel-tab ${activeThemeTab === 'ai-chat-background' ? 'active' : ''}`}
+                          onClick={() => setActiveThemeTab('ai-chat-background')}
+                        >
+                          {t('theme.aiChatBackground')}
+                        </button>
                       </div>
                     </div>
                     {activeThemeTab === 'theme-preset' ? (
@@ -576,10 +583,14 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                         <label className="settings-checkbox-label">
                           <input
                             type="checkbox"
-                            checked={editorBackground.enabled}
-                            onChange={(event) => updateEditorBackground({ enabled: event.target.checked })}
+                            checked={currentBackground.enabled}
+                            onChange={(event) => updateThemeBackground(currentBackgroundTarget, { enabled: event.target.checked })}
                           />
-                          <span>{t('theme.enableEditorBackgroundImage')}</span>
+                          <span>
+                            {activeThemeTab === 'ai-chat-background'
+                              ? t('theme.enableAiChatBackgroundImage')
+                              : t('theme.enableEditorBackgroundImage')}
+                          </span>
                         </label>
                       </div>
 
@@ -589,10 +600,10 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                           <div className="settings-inline-actions">
                             <div className="settings-inline-meta">{selectedImageName}</div>
                             <div className="settings-inline-buttons">
-                              <Button variant="secondary" type="button" onClick={() => void handleSelectEditorBackground()}>
+                              <Button variant="secondary" type="button" onClick={() => void handleSelectBackgroundImage(currentBackgroundTarget)}>
                                 {t('common.chooseImage')}
                               </Button>
-                              <Button variant="tertiary" type="button" onClick={clearEditorBackground} disabled={!editorBackground.path}>
+                              <Button variant="tertiary" type="button" onClick={() => clearBackgroundImage(currentBackgroundTarget)} disabled={!currentBackground.path}>
                                 {t('common.clear')}
                               </Button>
                             </div>
@@ -607,9 +618,9 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                             min={0.02}
                             max={0.4}
                             step={0.01}
-                            value={editorBackgroundOpacityInput}
-                            onChange={(event) => setEditorBackgroundOpacityInput(event.target.value)}
-                            onBlur={(event) => commitEditorBackgroundNumber('opacity', event.target.value)}
+                            value={currentBackgroundOpacityInput}
+                            onChange={(event) => setBackgroundNumberInput(currentBackgroundTarget, 'opacity', event.target.value)}
+                            onBlur={(event) => commitBackgroundNumber(currentBackgroundTarget, 'opacity', event.target.value)}
                           />
                         </div>
 
@@ -621,9 +632,9 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                             min={0}
                             max={24}
                             step={1}
-                            value={editorBackgroundBlurInput}
-                            onChange={(event) => setEditorBackgroundBlurInput(event.target.value)}
-                            onBlur={(event) => commitEditorBackgroundNumber('blurPx', event.target.value)}
+                            value={currentBackgroundBlurInput}
+                            onChange={(event) => setBackgroundNumberInput(currentBackgroundTarget, 'blurPx', event.target.value)}
+                            onBlur={(event) => commitBackgroundNumber(currentBackgroundTarget, 'blurPx', event.target.value)}
                           />
                         </div>
 
@@ -635,9 +646,9 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                             min={0}
                             max={1}
                             step={0.01}
-                            value={editorBackgroundOverlayOpacityInput}
-                            onChange={(event) => setEditorBackgroundOverlayOpacityInput(event.target.value)}
-                            onBlur={(event) => commitEditorBackgroundNumber('overlayOpacity', event.target.value)}
+                            value={currentBackgroundOverlayOpacityInput}
+                            onChange={(event) => setBackgroundNumberInput(currentBackgroundTarget, 'overlayOpacity', event.target.value)}
+                            onBlur={(event) => commitBackgroundNumber(currentBackgroundTarget, 'overlayOpacity', event.target.value)}
                           />
                         </div>
 
@@ -649,9 +660,9 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                             min={0}
                             max={200}
                             step={1}
-                            value={editorBackgroundBrightnessInput}
-                            onChange={(event) => setEditorBackgroundBrightnessInput(event.target.value)}
-                            onBlur={(event) => commitEditorBackgroundNumber('brightness', event.target.value)}
+                            value={currentBackgroundBrightnessInput}
+                            onChange={(event) => setBackgroundNumberInput(currentBackgroundTarget, 'brightness', event.target.value)}
+                            onBlur={(event) => commitBackgroundNumber(currentBackgroundTarget, 'brightness', event.target.value)}
                           />
                         </div>
 
@@ -659,8 +670,8 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                           <label className="settings-field-label">{t('theme.imageFit')}</label>
                           <select
                             className="field-select"
-                          value={editorBackground.size}
-                          onChange={updateEditorBackgroundSize}
+                          value={currentBackground.size}
+                          onChange={updateBackgroundSize(currentBackgroundTarget)}
                         >
                           <option value="cover">{t('theme.cover')}</option>
                           <option value="height-fill">{t('theme.heightFill')}</option>
@@ -674,16 +685,16 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                           <label className="settings-field-label">{t('theme.imagePosition')}</label>
                           <div style={{ display: 'grid', gap: 10 }}>
                             <div
-                              className={`settings-image-position-picker ${editorBackground.path ? '' : 'disabled'}`}
+                              className={`settings-image-position-picker ${currentBackground.path ? '' : 'disabled'}`}
                               onPointerDown={(event) => {
-                                if (!editorBackground.path) return
+                                if (!currentBackground.path) return
                                 previewDragRef.current = true
                                 event.currentTarget.setPointerCapture(event.pointerId)
-                                updateEditorBackgroundPositionFromPointer(event)
+                                updateEditorBackgroundPositionFromPointer(currentBackgroundTarget, event)
                               }}
                               onPointerMove={(event) => {
-                                if (!previewDragRef.current || !editorBackground.path) return
-                                updateEditorBackgroundPositionFromPointer(event)
+                                if (!previewDragRef.current || !currentBackground.path) return
+                                updateEditorBackgroundPositionFromPointer(currentBackgroundTarget, event)
                               }}
                               onPointerUp={(event) => {
                                 previewDragRef.current = false
@@ -695,18 +706,18 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                                 previewDragRef.current = false
                               }}
                             >
-                              {editorBackground.path ? (
+                              {currentBackground.path ? (
                                 <img
-                                  className={`settings-image-position-preview fit-${editorBackground.size}`}
-                                  src={editorBackgroundPreviewUrl ?? ''}
+                                  className={`settings-image-position-preview fit-${currentBackground.size}`}
+                                  src={currentBackgroundPreviewUrl ?? ''}
                                   alt=""
                                   aria-hidden="true"
                                   style={{
-                                    objectPosition: `${editorBackground.positionX}% ${editorBackground.positionY}%`,
-                                    opacity: Math.min(Math.max(editorBackground.opacity, 0), 0.4),
-                                    filter: `blur(${Math.min(Math.max(editorBackground.blurPx, 0), 24)}px) brightness(${Math.min(Math.max(editorBackground.brightness, 0), 200)}%)`,
-                                    ['--settings-image-position-x' as string]: `${editorBackground.positionX}%`,
-                                    ['--settings-image-position-y' as string]: `${editorBackground.positionY}%`,
+                                    objectPosition: `${currentBackground.positionX}% ${currentBackground.positionY}%`,
+                                    opacity: Math.min(Math.max(currentBackground.opacity, 0), 0.4),
+                                    filter: `blur(${Math.min(Math.max(currentBackground.blurPx, 0), 24)}px) brightness(${Math.min(Math.max(currentBackground.brightness, 0), 200)}%)`,
+                                    ['--settings-image-position-x' as string]: `${currentBackground.positionX}%`,
+                                    ['--settings-image-position-y' as string]: `${currentBackground.positionY}%`,
                                   }}
                                 />
                               ) : (
@@ -716,21 +727,21 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                                 className="settings-image-position-preview-overlay"
                                 aria-hidden="true"
                                 style={{
-                                  opacity: Math.min(Math.max(editorBackground.overlayOpacity ?? 0, 0), 1),
+                                  opacity: Math.min(Math.max(currentBackground.overlayOpacity ?? 0, 0), 1),
                                 }}
                               />
                               <div
                                 className="settings-image-position-crosshair"
                                 style={{
-                                  left: `${editorBackground.positionX}%`,
-                                  top: `${editorBackground.positionY}%`,
+                                  left: `${currentBackground.positionX}%`,
+                                  top: `${currentBackground.positionY}%`,
                                 }}
                               />
                             </div>
                             <div className="settings-inline-meta">
                               {t('theme.positionLabel', {
-                                x: Math.round(editorBackground.positionX),
-                                y: Math.round(editorBackground.positionY),
+                                x: Math.round(currentBackground.positionX),
+                                y: Math.round(currentBackground.positionY),
                               })}
                             </div>
                           </div>

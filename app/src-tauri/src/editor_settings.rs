@@ -102,6 +102,10 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::Editor
                         theme.editor_background = default_theme.editor_background.clone();
                         changed = true;
                     }
+                    if theme.ai_chat_background.is_none() {
+                        theme.ai_chat_background = default_theme.ai_chat_background.clone();
+                        changed = true;
+                    }
                 }
             }
 
@@ -145,6 +149,48 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::Editor
                             }
                             if editor_background.position_y.is_none() {
                                 editor_background.position_y = default_editor_background.position_y;
+                                changed = true;
+                            }
+                        }
+                    }
+                    if let Some(ref mut ai_chat_background) = theme.ai_chat_background {
+                        if let Some(ref default_ai_chat_background) = default_theme.ai_chat_background
+                        {
+                            if ai_chat_background.enabled.is_none() {
+                                ai_chat_background.enabled = default_ai_chat_background.enabled;
+                                changed = true;
+                            }
+                            if ai_chat_background.path.is_none() {
+                                ai_chat_background.path = default_ai_chat_background.path.clone();
+                                changed = true;
+                            }
+                            if ai_chat_background.opacity.is_none() {
+                                ai_chat_background.opacity = default_ai_chat_background.opacity;
+                                changed = true;
+                            }
+                            if ai_chat_background.overlay_opacity.is_none() {
+                                ai_chat_background.overlay_opacity =
+                                    default_ai_chat_background.overlay_opacity;
+                                changed = true;
+                            }
+                            if ai_chat_background.blur_px.is_none() {
+                                ai_chat_background.blur_px = default_ai_chat_background.blur_px;
+                                changed = true;
+                            }
+                            if ai_chat_background.brightness.is_none() {
+                                ai_chat_background.brightness = default_ai_chat_background.brightness;
+                                changed = true;
+                            }
+                            if ai_chat_background.size.is_none() {
+                                ai_chat_background.size = default_ai_chat_background.size.clone();
+                                changed = true;
+                            }
+                            if ai_chat_background.position_x.is_none() {
+                                ai_chat_background.position_x = default_ai_chat_background.position_x;
+                                changed = true;
+                            }
+                            if ai_chat_background.position_y.is_none() {
+                                ai_chat_background.position_y = default_ai_chat_background.position_y;
                                 changed = true;
                             }
                         }

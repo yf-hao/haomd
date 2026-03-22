@@ -741,6 +741,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
             return canUpload ? uploadFiles : undefined;
           })()}
           inputPlaceholder={inputPlaceholder}
+          isResizing={false}
         />
       </div>
     </section>

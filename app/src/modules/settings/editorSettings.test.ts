@@ -78,6 +78,8 @@ describe('editorSettings', () => {
         const settings = await getThemeSettings()
         expect(settings.mode).toBe('system')
         expect(settings.customThemeId).toBeNull()
+        expect(settings.aiChatBackground?.enabled).toBe(false)
+        expect(settings.aiChatBackground?.size).toBe('height-fill')
     })
 
     it('should return default language setting if backend is empty', async () => {
@@ -98,7 +100,12 @@ describe('editorSettings', () => {
                             enabled: true,
                             path: '/tmp/romantic-bg.png',
                             opacity: 0.16,
-                        }
+                        },
+                        aiChatBackground: {
+                            enabled: true,
+                            path: '/tmp/romantic-chat-bg.png',
+                            opacity: 0.24,
+                        },
                     }
                 }
             }
@@ -113,6 +120,10 @@ describe('editorSettings', () => {
         expect(settings.editorBackground?.overlayOpacity).toBe(0)
         expect(settings.editorBackground?.blurPx).toBe(1)
         expect(settings.editorBackground?.size).toBe('height-fill')
+        expect(settings.aiChatBackground?.enabled).toBe(true)
+        expect(settings.aiChatBackground?.path).toBe('/tmp/romantic-chat-bg.png')
+        expect(settings.aiChatBackground?.opacity).toBe(0.24)
+        expect(settings.aiChatBackground?.overlayOpacity).toBe(0)
     })
 
     it('should save editor settings through backend command', async () => {

@@ -21,6 +21,7 @@
 
 /* AI Chat dialog layout */
 .modal.modal-ai-chat {
+  --ai-chat-message-font-size: 13px;
   position: relative;
   max-width: 840px;
   width: 820px;
@@ -44,6 +45,10 @@
   flex: 1 1 auto;
   min-height: 0;
   max-height: none;
+}
+
+.ai-chat-pane {
+  --ai-chat-message-font-size: 13px;
 }
 
 .ai-chat-body {
@@ -136,6 +141,7 @@
 }
 
 .ai-chat-messages {
+  position: relative;
   width: 100%;
   /* border-radius: 10px; */
   background: var(--theme-surface-panel);
@@ -143,16 +149,114 @@
   min-height: 300px;
   /* 起始固定高度，避免只有一条空提示时塌缩 */
   max-height: 720px;
-  overflow-y: auto;
-  padding-bottom: 30px;
+  overflow: hidden;
   display: flex;
-  flex-direction: column;
   /* 不显示滚动条，但保留滚动能力 */
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 
-.ai-chat-messages::-webkit-scrollbar {
+.ai-chat-messages-background,
+.ai-chat-messages-background-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ai-chat-messages-background {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: var(--ai-chat-bg-position-x, 50%) var(--ai-chat-bg-position-y, 50%);
+  opacity: var(--ai-chat-bg-opacity, 0);
+  filter: blur(var(--ai-chat-bg-blur, 0px)) brightness(var(--ai-chat-bg-brightness, 100%));
+  transform: scale(1.03);
+}
+
+.ai-chat-messages.ai-chat-bg-fit-contain .ai-chat-messages-background {
+  object-fit: contain;
+}
+
+.ai-chat-messages.ai-chat-bg-fit-height-fill .ai-chat-messages-background {
+  width: auto;
+  min-width: 100%;
+  height: 100%;
+  max-width: none;
+  left: var(--ai-chat-bg-position-x, 50%);
+  top: var(--ai-chat-bg-position-y, 50%);
+  transform: translate(
+      calc(-1 * var(--ai-chat-bg-position-x, 50%)),
+      calc(-1 * var(--ai-chat-bg-position-y, 50%))
+    )
+    scale(1.03);
+  object-fit: fill;
+}
+
+.ai-chat-messages.ai-chat-bg-fit-width-fill .ai-chat-messages-background {
+  width: 100%;
+  min-height: 100%;
+  height: auto;
+  max-height: none;
+  left: var(--ai-chat-bg-position-x, 50%);
+  top: var(--ai-chat-bg-position-y, 50%);
+  transform: translate(
+      calc(-1 * var(--ai-chat-bg-position-x, 50%)),
+      calc(-1 * var(--ai-chat-bg-position-y, 50%))
+    )
+    scale(1.03);
+  object-fit: fill;
+}
+
+.ai-chat-messages.ai-chat-bg-fit-auto .ai-chat-messages-background {
+  object-fit: none;
+}
+
+.ai-chat-messages-background-overlay {
+  background: #000;
+  opacity: var(--ai-chat-bg-overlay-opacity, 0);
+}
+
+.ai-chat-messages.is-ai-chat-resizing .ai-chat-messages-background {
+  filter: brightness(var(--ai-chat-bg-brightness, 100%));
+}
+
+.ai-chat-messages.is-ai-chat-resizing.ai-chat-bg-fit-height-fill .ai-chat-messages-background,
+.ai-chat-messages.is-ai-chat-resizing.ai-chat-bg-fit-width-fill .ai-chat-messages-background {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  left: 0;
+  top: 0;
+  object-fit: cover;
+  transform: scale(1.03);
+}
+
+.ai-chat-messages-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  padding-bottom: 30px;
+}
+
+.ai-chat-messages-scroll {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.ai-chat-messages-scroll::-webkit-scrollbar {
   width: 0;
   height: 0;
   display: none;
@@ -1172,6 +1276,28 @@ button.ghost.ghost-subtle:hover {
   color: var(--theme-text-default);
 }
 
+.ai-chat-messages.has-ai-chat-background .ai-chat-message-user {
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(96, 165, 250, 0.16);
+  backdrop-filter: blur(3px);
+}
+
+.ai-chat-messages.has-ai-chat-background .ai-chat-message-assistant {
+  background: rgba(15, 23, 42, 0.2);
+  border-color: rgba(148, 163, 184, 0.12);
+  backdrop-filter: blur(4px);
+}
+
+.ai-chat-messages.is-ai-chat-resizing.has-ai-chat-background .ai-chat-message-user,
+.ai-chat-messages.is-ai-chat-resizing.has-ai-chat-background .ai-chat-message-assistant {
+  backdrop-filter: none;
+}
+
+:root[data-theme='light'] .ai-chat-messages.has-ai-chat-background .ai-chat-message-assistant {
+  background: rgba(255, 255, 255, 0.26);
+  border-color: rgba(15, 23, 42, 0.08);
+}
+
 :root[data-theme='light'] .ai-chat-message-assistant {
   background: rgba(15, 23, 42, 0.04);
   border-color: rgba(15, 23, 42, 0.1);
@@ -1181,18 +1307,27 @@ button.ghost.ghost-subtle:hover {
   word-wrap: break-word;
   overflow-wrap: break-word;
   padding: 0px 12px;
+  font-size: var(--ai-chat-message-font-size);
 }
 
 /* AI Chat 窗口中的 gh-markdown 字体调小一些 */
+.modal.modal-ai-chat .ai-chat-message-assistant .markdown-body.gh-markdown,
+.modal.modal-ai-chat .ai-chat-message-user .markdown-body.gh-markdown,
 .modal.modal-ai-chat .ai-chat-message-content .markdown-body.gh-markdown {
-  font-size: 10px;
+  font-size: var(--ai-chat-message-font-size);
   line-height: 1.6;
+  --bgColor-default: transparent;
+  background: color-mix(in srgb, var(--theme-surface-preview) 26%, transparent);
 }
 
 /* Dock 模式下 AI Chat 面板中的 gh-markdown 字体也调小 */
+.ai-chat-pane .ai-chat-message-assistant .markdown-body.gh-markdown,
+.ai-chat-pane .ai-chat-message-user .markdown-body.gh-markdown,
 .ai-chat-pane .ai-chat-message-content .markdown-body.gh-markdown {
-  font-size: 10px;
+  font-size: var(--ai-chat-message-font-size);
   line-height: 1.6;
+  --bgColor-default: transparent;
+  background: color-mix(in srgb, var(--theme-surface-preview) 26%, transparent);
 }
 
 .ai-chat-message+.ai-chat-message {

@@ -617,6 +617,8 @@ struct ThemeSettingsCfg {
     custom_theme_id: Option<String>,
     #[serde(default)]
     editor_background: Option<ThemeEditorBackgroundCfg>,
+    #[serde(default)]
+    ai_chat_background: Option<ThemeEditorBackgroundCfg>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -694,6 +696,17 @@ fn default_theme_settings_cfg() -> ThemeSettingsCfg {
         mode: Some("system".to_string()),
         custom_theme_id: None,
         editor_background: Some(ThemeEditorBackgroundCfg {
+            enabled: Some(false),
+            path: None,
+            opacity: Some(0.3),
+            overlay_opacity: Some(0.0),
+            blur_px: Some(1.0),
+            brightness: Some(100.0),
+            size: Some("height-fill".to_string()),
+            position_x: Some(50.0),
+            position_y: Some(50.0),
+        }),
+        ai_chat_background: Some(ThemeEditorBackgroundCfg {
             enabled: Some(false),
             path: None,
             opacity: Some(0.3),
@@ -1574,7 +1587,7 @@ async fn pick_editor_background_image(
 
     app.dialog()
         .file()
-        .set_title("Choose Editor Background Image")
+        .set_title("Choose Background Image")
         .add_filter("Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])
         .pick_file(move |file_path| {
             let selected = file_path.and_then(|path| {

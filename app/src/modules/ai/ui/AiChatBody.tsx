@@ -5,14 +5,18 @@ import type {
   RefObject,
   ChangeEvent,
   ClipboardEvent,
+  CSSProperties,
 } from 'react'
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { MarkdownViewer } from '../../../components/MarkdownViewer'
 import type { ChatMessageView } from '../domain/chatSession'
 import type { VisionMode, UploadedFileRef } from '../domain/types'
 import { useAiSlashCommandHints } from './hooks/useAiSlashCommandHints'
 import { AiSlashCommandHintPanel } from './AiSlashCommandHintPanel'
 import { BadgeSelect } from './BadgeSelect'
+import { useThemeContext } from '../../theme/ThemeContext'
+import { resolveManagedBackgroundImageUrl } from '../../theme/backgroundImageRuntime'
+import { useI18n } from '../../i18n/I18nContext'
 
 type MessageViewMode = 'rendered' | 'source'
 
@@ -57,6 +61,7 @@ export interface AiChatBodyProps {
   onUploadFiles?: (files: File[]) => void
   /** Optional placeholder text for the input textarea */
   inputPlaceholder?: string
+  isResizing?: boolean
 }
 
 export const AiChatBody: FC<AiChatBodyProps> = ({
@@ -92,10 +97,31 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
   isUploading,
   onUploadFiles,
   inputPlaceholder,
+  isResizing = false,
 }) => {
+  const { themeSettings } = useThemeContext()
+  const { t } = useI18n()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [messageViewModes, setMessageViewModes] = useState<Record<string, MessageViewMode>>({})
   const [cursorIndex, setCursorIndex] = useState(input.length)
+  const aiChatBackground = themeSettings.aiChatBackground
+
+  const aiChatBackgroundUrl = useMemo(() => {
+    if (!aiChatBackground?.enabled || !aiChatBackground.path) return null
+    return resolveManagedBackgroundImageUrl(aiChatBackground.path)
+  }, [aiChatBackground])
+
+  const aiChatBackgroundStyle = useMemo(() => {
+    if (!aiChatBackground?.enabled || !aiChatBackground.path) return undefined
+    return {
+      '--ai-chat-bg-opacity': `${Math.min(Math.max(aiChatBackground.opacity, 0), 0.4)}`,
+      '--ai-chat-bg-overlay-opacity': `${Math.min(Math.max(aiChatBackground.overlayOpacity ?? 0, 0), 1)}`,
+      '--ai-chat-bg-blur': `${Math.min(Math.max(aiChatBackground.blurPx, 0), 24)}px`,
+      '--ai-chat-bg-brightness': `${Math.min(Math.max(aiChatBackground.brightness, 0), 200)}%`,
+      '--ai-chat-bg-position-x': `${Math.min(Math.max(aiChatBackground.positionX, 0), 100)}%`,
+      '--ai-chat-bg-position-y': `${Math.min(Math.max(aiChatBackground.positionY, 0), 100)}%`,
+    } as CSSProperties
+  }, [aiChatBackground])
 
   const updateCursorIndex = (el: HTMLTextAreaElement) => {
     setCursorIndex(el.selectionStart ?? el.value.length)
@@ -262,96 +288,111 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
   return (
     <div className="modal-content ai-chat-body">
       <div
-        className="ai-chat-messages"
-        ref={messagesContainerRef}
+        className={`ai-chat-messages ${aiChatBackgroundUrl ? 'has-ai-chat-background' : ''} ${isResizing ? 'is-ai-chat-resizing' : ''} ai-chat-bg-fit-${aiChatBackground?.size ?? 'cover'}`}
+        style={aiChatBackgroundStyle}
       >
-        {messages.length === 0 && !loading && (
-          <div className="ai-chat-empty muted small"></div>
-        )}
-        {messages.map((msg) => {
-          const viewMode: MessageViewMode = messageViewModes[msg.id] ?? 'rendered'
-          const displayContent =
-            msg.role === 'assistant'
-              ? (viewMode === 'source'
-                ? msg.content
-                : getDisplayContent(msg.id, msg.content, msg.streaming)
-              )
-              : getUserDisplayContent(msg.content)
+        {aiChatBackgroundUrl ? (
+          <>
+            <img
+              className="ai-chat-messages-background"
+              src={aiChatBackgroundUrl}
+              alt=""
+              aria-hidden="true"
+            />
+            <div className="ai-chat-messages-background-overlay" aria-hidden="true" />
+          </>
+        ) : null}
+        <div className="ai-chat-messages-scroll" ref={messagesContainerRef}>
+          <div className="ai-chat-messages-content">
+            {messages.length === 0 && !loading && (
+              <div className="ai-chat-empty muted small"></div>
+            )}
+            {messages.map((msg) => {
+              const viewMode: MessageViewMode = messageViewModes[msg.id] ?? 'rendered'
+              const displayContent =
+                msg.role === 'assistant'
+                  ? (viewMode === 'source'
+                    ? msg.content
+                    : getDisplayContent(msg.id, msg.content, msg.streaming)
+                  )
+                  : getUserDisplayContent(msg.content)
 
-          return (
-            <div key={msg.id} className={`ai-chat-message ai-chat-message-${msg.role}`}>
-              {msg.role === 'assistant' ? (
-                <MarkdownViewer value={displayContent} mode={viewMode} />
-              ) : (
-                <div className="ai-chat-message-content">{displayContent}</div>
-              )}
-              {msg.role === 'assistant' && !msg.streaming && msg.content.trim() && (
-                <div className="ai-chat-message-actions">
-                  <button
-                    type="button"
-                    className="icon-button ai-chat-icon-button"
-                    title="复制为 Markdown"
-                    aria-label="复制为 Markdown"
-                    onClick={() => void onCopy(msg.content)}
-                  >
-                    <span className="ai-chat-icon ai-chat-icon-copy" aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-button ai-chat-icon-button"
-                    title="插入到编辑器"
-                    aria-label="插入到编辑器"
-                    onClick={() => void onInsert(msg.content)}
-                  >
-                    <span className="ai-chat-icon ai-chat-icon-insert" aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-button ai-chat-icon-button"
-                    title="替换选区"
-                    aria-label="替换选区"
-                    onClick={() => void onReplace(msg.content)}
-                  >
-                    <span className="ai-chat-icon ai-chat-icon-replace" aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-button ai-chat-icon-button"
-                    title="保存为新文档"
-                    aria-label="保存为新文档"
-                    onClick={() => void onSave(msg.content)}
-                  >
-                    <span className="ai-chat-icon ai-chat-icon-save" aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    className={`icon-button ai-chat-icon-button ${viewMode === 'source' ? 'ai-chat-icon-button-active' : ''}`}
-                    title={viewMode === 'source' ? '显示渲染后的 Markdown' : '查看 Markdown 源代码'}
-                    aria-label={viewMode === 'source' ? '显示渲染后的 Markdown' : '查看 Markdown 源代码'}
-                    aria-pressed={viewMode === 'source'}
-                    onClick={() => {
-                      setMessageViewModes((prev) => {
-                        const current = prev[msg.id] ?? 'rendered'
-                        const next: MessageViewMode = current === 'rendered' ? 'source' : 'rendered'
-                        return { ...prev, [msg.id]: next }
-                      })
-                    }}
-                  >
-                    <span className="ai-chat-icon ai-chat-icon-source" aria-hidden="true" />
-                  </button>
+              return (
+                <div key={msg.id} className={`ai-chat-message ai-chat-message-${msg.role}`}>
+                  {msg.role === 'assistant' ? (
+                    <MarkdownViewer value={displayContent} mode={viewMode} />
+                  ) : (
+                    <div className="ai-chat-message-content">{displayContent}</div>
+                  )}
+                  {msg.role === 'assistant' && !msg.streaming && msg.content.trim() && (
+                    <div className="ai-chat-message-actions">
+                      <button
+                        type="button"
+                        className="icon-button ai-chat-icon-button"
+                        title={t('ai.copyMarkdown')}
+                        aria-label={t('ai.copyMarkdown')}
+                        onClick={() => void onCopy(msg.content)}
+                      >
+                        <span className="ai-chat-icon ai-chat-icon-copy" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-button ai-chat-icon-button"
+                        title={t('ai.insertIntoEditor')}
+                        aria-label={t('ai.insertIntoEditor')}
+                        onClick={() => void onInsert(msg.content)}
+                      >
+                        <span className="ai-chat-icon ai-chat-icon-insert" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-button ai-chat-icon-button"
+                        title={t('ai.replaceSelection')}
+                        aria-label={t('ai.replaceSelection')}
+                        onClick={() => void onReplace(msg.content)}
+                      >
+                        <span className="ai-chat-icon ai-chat-icon-replace" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-button ai-chat-icon-button"
+                        title={t('ai.saveAsNewDocument')}
+                        aria-label={t('ai.saveAsNewDocument')}
+                        onClick={() => void onSave(msg.content)}
+                      >
+                        <span className="ai-chat-icon ai-chat-icon-save" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className={`icon-button ai-chat-icon-button ${viewMode === 'source' ? 'ai-chat-icon-button-active' : ''}`}
+                        title={viewMode === 'source' ? t('ai.showRenderedMarkdown') : t('ai.viewMarkdownSource')}
+                        aria-label={viewMode === 'source' ? t('ai.showRenderedMarkdown') : t('ai.viewMarkdownSource')}
+                        aria-pressed={viewMode === 'source'}
+                        onClick={() => {
+                          setMessageViewModes((prev) => {
+                            const current = prev[msg.id] ?? 'rendered'
+                            const next: MessageViewMode = current === 'rendered' ? 'source' : 'rendered'
+                            return { ...prev, [msg.id]: next }
+                          })
+                        }}
+                      >
+                        <span className="ai-chat-icon ai-chat-icon-source" aria-hidden="true" />
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          )
-        })}
-        {/* 加载指示器：loading 且当前正在流式传输的助手消息还没有内容时显示 */}
-        {loading && messages.some((m) => m.role === 'assistant' && m.streaming && m.content.length === 0) && (
-          <div className="ai-chat-loading-indicator">
-            <span className="ai-typing-dot" />
-            <span className="ai-typing-dot" />
-            <span className="ai-typing-dot" />
+              )
+            })}
+            {/* 加载指示器：loading 且当前正在流式传输的助手消息还没有内容时显示 */}
+            {loading && messages.some((m) => m.role === 'assistant' && m.streaming && m.content.length === 0) && (
+              <div className="ai-chat-loading-indicator">
+                <span className="ai-typing-dot" />
+                <span className="ai-typing-dot" />
+                <span className="ai-typing-dot" />
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
       <form className="ai-chat-input" onSubmit={loading ? (e) => e.preventDefault() : onSubmit}>
@@ -387,7 +428,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
                     type="button"
                     className="ai-chat-attachment-remove"
                     onClick={() => onRemoveAttachment?.(att.id)}
-                    title="移除图片"
+                    title={t('ai.removeImage')}
                   >
                     ×
                   </button>
@@ -400,7 +441,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
                     type="button"
                     className="ai-chat-attachment-remove"
                     onClick={() => onClearImage?.()}
-                    title="移除图片"
+                    title={t('ai.removeImage')}
                   >
                     ×
                   </button>
@@ -433,7 +474,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
             onCompositionStart={onCompositionStart}
             onCompositionEnd={onCompositionEnd}
             onPaste={handlePaste}
-            placeholder={inputPlaceholder ?? 'Ask anything to AI'}
+            placeholder={inputPlaceholder ?? t('ai.askAnything')}
           />
           <div className="ai-chat-input-footer">
             <div className="ai-chat-input-tools-left">
@@ -447,7 +488,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
               <button
                 type="button"
                 className="ai-chat-tool-btn"
-                title="上传图片"
+                title={t('ai.uploadImage')}
                 onClick={handleToolClick}
               >
                 <span className="ai-chat-icon-plus" aria-hidden="true" />
@@ -479,7 +520,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
                     onStop()
                   }
                 }}
-                title={loading ? '停止生成' : '发送'}
+                title={loading ? t('ai.stopGenerating') : t('ai.send')}
                 disabled={!loading && !input.trim() && !attachedImageDataUrl && (pendingAttachments?.length ?? 0) === 0}
               >
                 {loading ? (
