@@ -35,7 +35,7 @@ export type SettingsDialogProps = {
 }
 
 type SettingsSectionId = 'theme' | 'typography' | 'word-export'
-type ThemePanelTabId = 'theme-preset' | 'editor-background' | 'preview-background' | 'ai-chat-background' | 'sidebar-background'
+type ThemePanelTabId = 'theme-preset' | 'backgrounds'
 type BackgroundTarget = 'editorBackground' | 'previewBackground' | 'aiChatBackground' | 'sidebarBackground'
 
 const fieldGridStyle: React.CSSProperties = {
@@ -60,6 +60,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const [uiTypography, setUiTypography] = useState<UiTypographySettings>(getDefaultUiTypographySettings())
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('theme')
   const [activeThemeTab, setActiveThemeTab] = useState<ThemePanelTabId>('theme-preset')
+  const [currentBackgroundTarget, setCurrentBackgroundTarget] = useState<BackgroundTarget>('editorBackground')
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [editorBackgroundOpacityInput, setEditorBackgroundOpacityInput] = useState('')
@@ -405,20 +406,12 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
 
   const handleReset = () => {
     if (activeSection === 'theme') {
-      if (activeThemeTab === 'editor-background' || activeThemeTab === 'preview-background' || activeThemeTab === 'ai-chat-background') {
+      if (activeThemeTab === 'backgrounds') {
         hasLocalPreviewEditsRef.current = true
-        const target =
-          activeThemeTab === 'editor-background'
-            ? 'editorBackground'
-            : activeThemeTab === 'preview-background'
-              ? 'previewBackground'
-              : activeThemeTab === 'ai-chat-background'
-                ? 'aiChatBackground'
-                : 'sidebarBackground'
         setTheme((prev) => {
           return {
             ...prev,
-            [target]: getDefaultBackgroundSettings(target),
+            [currentBackgroundTarget]: getDefaultBackgroundSettings(currentBackgroundTarget),
           }
         })
       }
@@ -464,14 +457,6 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     onClose()
   }
 
-  const currentBackgroundTarget: BackgroundTarget =
-    activeThemeTab === 'ai-chat-background'
-      ? 'aiChatBackground'
-      : activeThemeTab === 'sidebar-background'
-        ? 'sidebarBackground'
-      : activeThemeTab === 'preview-background'
-        ? 'previewBackground'
-        : 'editorBackground'
   const currentBackground = getBackgroundSettings(currentBackgroundTarget)
   const currentBackgroundOpacityInput =
     currentBackgroundTarget === 'editorBackground'
@@ -631,38 +616,11 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                         <button
                           type="button"
                           role="tab"
-                          aria-selected={activeThemeTab === 'editor-background'}
-                          className={`settings-panel-tab ${activeThemeTab === 'editor-background' ? 'active' : ''}`}
-                          onClick={() => setActiveThemeTab('editor-background')}
+                          aria-selected={activeThemeTab === 'backgrounds'}
+                          className={`settings-panel-tab ${activeThemeTab === 'backgrounds' ? 'active' : ''}`}
+                          onClick={() => setActiveThemeTab('backgrounds')}
                         >
-                          {t('theme.editorBackground')}
-                        </button>
-                        <button
-                          type="button"
-                          role="tab"
-                          aria-selected={activeThemeTab === 'preview-background'}
-                          className={`settings-panel-tab ${activeThemeTab === 'preview-background' ? 'active' : ''}`}
-                          onClick={() => setActiveThemeTab('preview-background')}
-                        >
-                          {t('theme.previewBackground')}
-                        </button>
-                        <button
-                          type="button"
-                          role="tab"
-                          aria-selected={activeThemeTab === 'ai-chat-background'}
-                          className={`settings-panel-tab ${activeThemeTab === 'ai-chat-background' ? 'active' : ''}`}
-                          onClick={() => setActiveThemeTab('ai-chat-background')}
-                        >
-                          {t('theme.aiChatBackground')}
-                        </button>
-                        <button
-                          type="button"
-                          role="tab"
-                          aria-selected={activeThemeTab === 'sidebar-background'}
-                          className={`settings-panel-tab ${activeThemeTab === 'sidebar-background' ? 'active' : ''}`}
-                          onClick={() => setActiveThemeTab('sidebar-background')}
-                        >
-                          {t('theme.sidebarBackground')}
+                          {t('theme.backgrounds')}
                         </button>
                       </div>
                     </div>
@@ -761,6 +719,47 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                     </div>
                   ) : (
                     <div className="settings-subsection settings-subsection-standalone">
+                      <div style={{ ...fieldGridStyle, marginBottom: 14 }}>
+                        <label className="settings-field-label">{t('theme.backgroundTarget')}</label>
+                        <div className="settings-panel-tabs" role="tablist" aria-label={t('theme.backgroundTargets')}>
+                          <button
+                            type="button"
+                            role="tab"
+                            aria-selected={currentBackgroundTarget === 'editorBackground'}
+                            className={`settings-panel-tab ${currentBackgroundTarget === 'editorBackground' ? 'active' : ''}`}
+                            onClick={() => setCurrentBackgroundTarget('editorBackground')}
+                          >
+                            {t('theme.editorBackgroundShort')}
+                          </button>
+                          <button
+                            type="button"
+                            role="tab"
+                            aria-selected={currentBackgroundTarget === 'previewBackground'}
+                            className={`settings-panel-tab ${currentBackgroundTarget === 'previewBackground' ? 'active' : ''}`}
+                            onClick={() => setCurrentBackgroundTarget('previewBackground')}
+                          >
+                            {t('theme.previewBackgroundShort')}
+                          </button>
+                          <button
+                            type="button"
+                            role="tab"
+                            aria-selected={currentBackgroundTarget === 'aiChatBackground'}
+                            className={`settings-panel-tab ${currentBackgroundTarget === 'aiChatBackground' ? 'active' : ''}`}
+                            onClick={() => setCurrentBackgroundTarget('aiChatBackground')}
+                          >
+                            {t('theme.aiChatBackgroundShort')}
+                          </button>
+                          <button
+                            type="button"
+                            role="tab"
+                            aria-selected={currentBackgroundTarget === 'sidebarBackground'}
+                            className={`settings-panel-tab ${currentBackgroundTarget === 'sidebarBackground' ? 'active' : ''}`}
+                            onClick={() => setCurrentBackgroundTarget('sidebarBackground')}
+                          >
+                            {t('theme.sidebarBackgroundShort')}
+                          </button>
+                        </div>
+                      </div>
                       <div className="settings-subsection-heading">
                         {currentBackgroundTitle}
                       </div>
@@ -772,11 +771,11 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                             onChange={(event) => updateThemeBackground(currentBackgroundTarget, { enabled: event.target.checked })}
                           />
                           <span>
-                            {activeThemeTab === 'ai-chat-background'
+                            {currentBackgroundTarget === 'aiChatBackground'
                               ? t('theme.enableAiChatBackgroundImage')
-                              : activeThemeTab === 'sidebar-background'
+                              : currentBackgroundTarget === 'sidebarBackground'
                                 ? t('theme.enableSidebarBackgroundImage')
-                              : activeThemeTab === 'preview-background'
+                              : currentBackgroundTarget === 'previewBackground'
                                 ? t('theme.enablePreviewBackgroundImage')
                               : t('theme.enableEditorBackgroundImage')}
                           </span>
