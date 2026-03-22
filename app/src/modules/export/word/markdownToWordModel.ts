@@ -3,6 +3,7 @@ import remarkParse from 'remark-parse'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import katex from 'katex'
+import { normalizeLatexDelimiters } from '../../markdown/normalizeLatexDelimiters'
 import type { Root, Content, Image, List, ListItem, PhrasingContent, TableCell, TableRow } from 'mdast'
 import { toString } from 'mdast-util-to-string'
 import type { InlineRun, WordAsset, WordBlock, WordDocPayload } from './types'
@@ -19,11 +20,12 @@ type ParseContext = {
 }
 
 export function markdownToWordModel(markdown: string, title: string): WordDocPayload {
+  const normalizedMarkdown = normalizeLatexDelimiters(markdown)
   const tree = unified()
     .use(remarkParse)
     .use(remarkGfm)
     .use(remarkMath)
-    .parse(markdown) as Root
+    .parse(normalizedMarkdown) as Root
 
   const ctx: ParseContext = {
     definitions: collectDefinitions(tree),

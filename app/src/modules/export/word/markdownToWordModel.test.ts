@@ -153,6 +153,31 @@ describe('export/word - markdownToWordModel', () => {
     )
   })
 
+  it('should support standard latex delimiters for inline and block math', () => {
+    const payload = markdownToWordModel([
+      'Inline \\(E = mc^2\\) example.',
+      '',
+      '\\[',
+      '\\sum_{i=1}^n x^i',
+      '\\]',
+    ].join('\n'), 'latex-delimiters.md')
+
+    expect(payload.blocks[0]).toEqual({
+      type: 'paragraph',
+      text: [
+        { type: 'text', value: 'Inline ' },
+        expect.objectContaining({ type: 'math', value: 'E = mc^2', mathMl: expect.stringContaining('<math') }),
+        { type: 'text', value: ' example.' },
+      ],
+    })
+
+    expect(payload.blocks[1]).toEqual(expect.objectContaining({
+      type: 'math',
+      content: '\\sum_{i=1}^n x^i',
+      mathMl: expect.stringContaining('<munderover>'),
+    }))
+  })
+
   it('should map raw html blocks into word structures', () => {
     const markdown = [
       '<h2>HTML Title</h2>',

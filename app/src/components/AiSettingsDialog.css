@@ -218,7 +218,7 @@
 /* Input container as unified box with textarea and footer inside */
 .ai-chat-input-container {
   position: relative;
-  border-radius: 10px;
+  border-radius: 0px;
   border: 1px solid var(--theme-border-input-strong);
   background: var(--theme-surface-input);
   /* 允许 slash-panel 浮动在输入框上方，不被裁剪 */

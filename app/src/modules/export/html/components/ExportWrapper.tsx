@@ -4,6 +4,7 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import rehypeRaw from 'rehype-raw'
 import rehypeHighlight from 'rehype-highlight'
+import { normalizeLatexDelimiters } from '../../../markdown/normalizeLatexDelimiters'
 import { remarkToc } from '../../../markdown/remarkToc'
 
 // 自定义 pre 包装器：如果子内容是 mermaid，直接透传，避免双重 <pre>
@@ -53,6 +54,7 @@ function ExportImage(props: any) {
 }
 
 export function ExportWrapper({ markdown }: { markdown: string }) {
+    const normalizedMarkdown = normalizeLatexDelimiters(markdown)
     return (
         <div className="markdown-body">
             <ReactMarkdown
@@ -71,9 +73,8 @@ export function ExportWrapper({ markdown }: { markdown: string }) {
                     img: ExportImage,
                 }}
             >
-                {markdown}
+                {normalizedMarkdown}
             </ReactMarkdown>
         </div>
     )
 }
-

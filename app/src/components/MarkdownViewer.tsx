@@ -6,6 +6,7 @@ import rehypeRaw from 'rehype-raw'
 import 'github-markdown-css/github-markdown.css'
 import './MarkdownViewer.css'
 import { getRenderer } from '../modules/markdown/plugins'
+import { normalizeLatexDelimiters } from '../modules/markdown/normalizeLatexDelimiters'
 import { remarkToc } from '../modules/markdown/remarkToc'
 import { DownloadOnClickUseCase, TauriWebviewOpener } from '../modules/download/handleMarkdownLinkClick'
 import { ExamAttachmentLinkClassifier } from '../modules/download/linkClassifier'
@@ -366,9 +367,10 @@ function MarkdownViewerComponent(
   const containerRef = useRef<HTMLDivElement | null>(null)
 
   const { value, activeLine, previewWidth, filePath, foldRegions, mode = 'rendered', onLineClick, onSelectionChange } = props
+  const renderedValue = useMemo(() => normalizeLatexDelimiters(value), [value])
 
   // KaTeX 按需加载：检测文档是否包含数学公式
-  const hasMath = useMemo(() => /\$/.test(value), [value])
+  const hasMath = useMemo(() => /\$/.test(renderedValue), [renderedValue])
   const [katexLib, setKatexLib] = useState<KatexModule | null>(null)
   useEffect(() => {
     if (hasMath && !katexLib) {
@@ -468,7 +470,7 @@ function MarkdownViewerComponent(
     } else {
       scrollParent.scrollTop = savedScrollTop
     }
-  }, [value])
+  }, [renderedValue])
 
   // 高亮当前行逻辑
   useEffect(() => {
@@ -612,7 +614,7 @@ function MarkdownViewerComponent(
               rehypePlugins={[rehypeRaw]}
               components={components}
             >
-              {value}
+              {renderedValue}
             </ReactMarkdown>
           ) : (
             <pre className="markdown-source">
