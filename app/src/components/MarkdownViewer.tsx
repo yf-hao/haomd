@@ -32,6 +32,11 @@ export interface MarkdownViewerProps {
   onSelectionChange?: (text: string | null) => void
 }
 
+function isPlainTextFile(path: string | null | undefined): boolean {
+  if (!path) return false
+  return path.toLowerCase().endsWith('.txt')
+}
+
 type LineRange = {
   start?: number
   end?: number
@@ -90,7 +95,41 @@ function remarkMathLineAnchors() {
   }
 }
 
-const remarkPlugins = [remarkGfm, remarkMath, remarkMathLineAnchors, remarkToc]
+function remarkPreserveSingleLineBreaks() {
+  return (tree: any) => {
+    const walk = (node: any) => {
+      if (!node || typeof node !== 'object' || !Array.isArray(node.children)) return
+
+      const nextChildren: any[] = []
+      for (const child of node.children) {
+        if (child?.type === 'text' && typeof child.value === 'string' && child.value.includes('\n')) {
+          const parts = child.value.split(/\r?\n/)
+          parts.forEach((part: string, index: number) => {
+            if (part.length > 0) {
+              nextChildren.push({
+                ...child,
+                value: part,
+              })
+            }
+            if (index < parts.length - 1) {
+              nextChildren.push({
+                type: 'break',
+              })
+            }
+          })
+          continue
+        }
+
+        walk(child)
+        nextChildren.push(child)
+      }
+
+      node.children = nextChildren
+    }
+
+    walk(tree)
+  }
+}
 
 // Markdown 链接点击用例：点击特定链接时触发下载并保存，其余链接走内置浏览器
 const markdownLinkClickHandler = new DownloadOnClickUseCase(
@@ -367,6 +406,7 @@ function MarkdownViewerComponent(
   const containerRef = useRef<HTMLDivElement | null>(null)
 
   const { value, activeLine, previewWidth, filePath, foldRegions, mode = 'rendered', onLineClick, onSelectionChange } = props
+  const plainTextMode = isPlainTextFile(filePath)
   const renderedValue = useMemo(() => normalizeLatexDelimiters(value), [value])
 
   // KaTeX 按需加载：检测文档是否包含数学公式
@@ -453,6 +493,13 @@ function MarkdownViewerComponent(
       code: StableCode,
     }
   }, []) // 稳定引用
+
+  const activeRemarkPlugins = useMemo(
+    () => plainTextMode
+      ? [remarkGfm, remarkMath, remarkMathLineAnchors, remarkToc, remarkPreserveSingleLineBreaks]
+      : [remarkGfm, remarkMath, remarkMathLineAnchors, remarkToc],
+    [plainTextMode],
+  )
 
   // 保存和恢复滚动位置
   useLayoutEffect(() => {
@@ -609,7 +656,7 @@ function MarkdownViewerComponent(
         <div className="markdown-body gh-markdown" ref={containerRef} data-preview-width={previewWidth}>
           {mode === 'rendered' ? (
             <ReactMarkdown
-              remarkPlugins={remarkPlugins}
+              remarkPlugins={activeRemarkPlugins}
               remarkRehypeOptions={remarkRehypeOptions}
               rehypePlugins={[rehypeRaw]}
               components={components}

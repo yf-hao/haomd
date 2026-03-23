@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       is_new_version: ${{ steps.check.outputs.is_new_version }}
+      changelog: ${{ steps.extract_changelog.outputs.body }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,6 +30,23 @@ jobs:
             echo "New version $TAG detected! Triggering release."
             echo "is_new_version=true" >> $GITHUB_OUTPUT
           fi
+
+      - name: Extract Latest Changelog
+        if: steps.check.outputs.is_new_version == 'true'
+        id: extract_changelog
+        run: |
+          BODY=$(node -e "
+            const fs = require('fs');
+            const content = fs.readFileSync('CHANGELOG.md', 'utf8');
+            // Match the first version block (## [vX.X.X] until the next ## [vX.X.X] or end of file)
+            const regex = /## \[v\d+\.\d+\.\d+\][\s\S]*?(?=\n## \[v\d+\.\d+\.\d+\]|$)/;
+            const match = content.match(regex);
+            // Output only the matched body
+            process.stdout.write(match ? match[0].trim() : '');
+          ")
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "$BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
   publish:
     permissions:
@@ -85,7 +103,10 @@ jobs:
           tagName: v__VERSION__
           releaseName: 'HaoMD v__VERSION__'
           releaseBody: |
-            ## Download
+            ${{ needs.check-version.outputs.changelog }}
+
+            ---
+            ### 📥 Download
 
             | Platform | File |
             |---|---|

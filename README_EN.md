@@ -7,6 +7,18 @@ A high-performance, cross-platform Markdown editor built with Tauri 2 + React + 
 
 ## Features
 
+### UI/UX
+
+> **Customizable Global Background**
+
+HaoMD lets you set a **custom background** (including local images) for both the editor and the AI chat panel, creating an immersive writing environment:
+
+![Custom background preview](docs/images/custom-background.png)
+
+- 🎨 **Themes & Dark Mode**: Multiple theme styles with an eye-friendly dark mode
+- 📱 **Responsive Design**: Adapts to different window sizes
+- ⌨️ **Keyboard Shortcuts**: Full keyboard shortcut support
+
 ### Core Editor
 - 🚀 **High-Performance**: Smooth editing for large files (>10MB) with CodeMirror 6
 - 📑 **Multi-Tab**: Edit multiple documents simultaneously
@@ -41,11 +53,6 @@ A high-performance, cross-platform Markdown editor built with Tauri 2 + React + 
 - 🎵 **Audio**: Play MP3, WAV, M4A, OGG, FLAC files directly in Markdown
 - 🎬 **Video**: Play MP4, WebM, MOV, OGG files with poster image support
 - 📷 **Images**: Support for various image formats with custom sizing
-
-### UI/UX
-- 🎨 **Dark Theme**: Eye-friendly dark mode
-- 📱 **Responsive Design**: Adapts to different window sizes
-- ⌨️ **Keyboard Shortcuts**: Full keyboard shortcut support
 
 ---
 
