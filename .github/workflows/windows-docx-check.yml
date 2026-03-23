@@ -1,0 +1,41 @@
+name: Windows DOCX Check
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+on:
+  workflow_dispatch:
+
+jobs:
+  rust-windows-docx:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri -> target
+
+      - name: Rust Format Check
+        run: cargo fmt -- --check
+        working-directory: app/src-tauri
+
+      - name: Rust Clippy
+        run: cargo clippy -- -D warnings
+        working-directory: app/src-tauri
+
+      - name: Windows DOCX Packaging Test
+        run: cargo test should_build_minimal_docx_package -- --nocapture
+        working-directory: app/src-tauri
+
+      - name: Windows DOCX Packaging Test With Chinese Text And Image
+        run: cargo test should_build_docx_package_with_chinese_text_and_embedded_image -- --nocapture
+        working-directory: app/src-tauri
