@@ -1,5 +1,5 @@
 import type { FC, FormEvent, KeyboardEvent, MouseEventHandler, MouseEvent as ReactMouseEvent } from 'react'
-import { useContext, useEffect, useRef, useState } from 'react'
+import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { getAiChatUiSettings } from '../../settings/editorSettings'
 import type { ChatEntryMode, ChatMessageView, EntryContext } from '../domain/chatSession'
 import { getDirKeyFromDocPath } from '../domain/docPathUtils'
@@ -220,6 +220,11 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     autoResizeInput()
   }, [open, providerType, entryMode, initialContext])
 
+  useLayoutEffect(() => {
+    if (!open) return
+    autoResizeInput()
+  }, [input, open])
+
   const doSend = async () => {
     const contentToSend = input
     const directoryKey = dirKey ?? '/'
@@ -253,7 +258,6 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
 
     // 非本地历史命令：正常进入 slash 命令和模型发送流程
     setInput('')
-    autoResizeInput()
 
     const handled = await tryHandleSlashCommand(contentToSend, {
       // slash 命令与文档会话保持一致：按目录共享会话

@@ -1,5 +1,5 @@
 import type { FC, FormEvent, KeyboardEvent } from 'react'
-import { useContext, useEffect, useRef, useState } from 'react'
+import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { getAiChatUiSettings } from '../../settings/editorSettings'
 import type { ChatEntryMode, EntryContext } from '../domain/chatSession'
 import { getDirKeyFromDocPath } from '../domain/docPathUtils'
@@ -96,6 +96,10 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
     el.setSelectionRange(el.value.length, el.value.length)
     autoResizeInput()
   }, [entryMode, initialContext])
+
+  useLayoutEffect(() => {
+    autoResizeInput()
+  }, [input])
 
   useEffect(() => {
     if (!entryMode || !initialContext) {
@@ -253,7 +257,6 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
 
     // 非本地历史命令：正常进入 slash 命令和模型发送流程
     setInput('')
-    autoResizeInput()
 
     const handled = await tryHandleSlashCommand(contentToSend, {
       // slash 命令与文档会话保持一致：按目录共享会话
