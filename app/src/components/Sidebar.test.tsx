@@ -26,7 +26,7 @@ function renderWithI18n(node: ReactNode) {
                     selectedMode: 'system',
                     resolvedMode: 'light',
                     themeSettings: getDefaultThemeSettings(),
-                    activeTheme: resolveActiveTheme('light', getDefaultThemeSettings()),
+                    activeTheme: resolveActiveTheme('light', false),
                 }}
             >
                 {node}
