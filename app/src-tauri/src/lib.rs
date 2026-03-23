@@ -27,6 +27,9 @@ use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 use tokio::fs;
 use tokio::sync::Mutex;
+use zip::write::SimpleFileOptions;
+use zip::CompressionMethod;
+use zip::ZipWriter;
 
 #[cfg(target_os = "macos")]
 use tauri::RunEvent;
@@ -1887,41 +1890,58 @@ fn package_docx_workspace(work_dir: &Path, output_path: &Path) -> Result<(), Str
         std::fs::remove_file(output_path).map_err(|e| format!("删除旧输出文件失败: {e}"))?;
     }
 
-    #[cfg(target_os = "windows")]
-    {
-        let command = format!(
-            "Compress-Archive -Path '[Content_Types].xml','_rels','docProps','word' -DestinationPath '{}' -Force",
-            output_path.display()
-        );
-        let status = Command::new("powershell")
-            .args(["-NoProfile", "-Command", &command])
-            .current_dir(work_dir)
-            .status()
-            .map_err(|e| format!("执行 Compress-Archive 失败: {e}"))?;
-        if !status.success() {
-            return Err(format!("打包 docx 失败，退出码: {:?}", status.code()));
-        }
-    }
+    package_directory_as_zip(work_dir, output_path)
+}
 
-    #[cfg(not(target_os = "windows"))]
-    {
-        let status = Command::new("zip")
-            .args([
-                "-qr",
-                output_path
-                    .to_str()
-                    .ok_or_else(|| "输出路径包含无效 UTF-8".to_string())?,
-                "[Content_Types].xml",
-                "_rels",
-                "docProps",
-                "word",
-            ])
-            .current_dir(work_dir)
-            .status()
-            .map_err(|e| format!("执行 zip 失败: {e}"))?;
-        if !status.success() {
-            return Err(format!("打包 docx 失败，退出码: {:?}", status.code()));
+fn package_directory_as_zip(source_dir: &Path, output_path: &Path) -> Result<(), String> {
+    let file =
+        std::fs::File::create(output_path).map_err(|e| format!("创建 docx 输出文件失败: {e}"))?;
+    let mut zip = ZipWriter::new(file);
+    let options = SimpleFileOptions::default()
+        .compression_method(CompressionMethod::Deflated)
+        .unix_permissions(0o644);
+
+    add_directory_to_zip(&mut zip, source_dir, source_dir, options)?;
+    zip.finish()
+        .map_err(|e| format!("完成 docx 打包失败: {e}"))?;
+    Ok(())
+}
+
+fn add_directory_to_zip(
+    zip: &mut ZipWriter<std::fs::File>,
+    base_dir: &Path,
+    current_dir: &Path,
+    options: SimpleFileOptions,
+) -> Result<(), String> {
+    let entries =
+        std::fs::read_dir(current_dir).map_err(|e| format!("读取导出工作目录失败: {e}"))?;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("读取导出条目失败: {e}"))?;
+        let path = entry.path();
+        let relative = path
+            .strip_prefix(base_dir)
+            .map_err(|e| format!("计算导出相对路径失败: {e}"))?;
+        let zip_path = relative.to_string_lossy().replace('\\', "/");
+
+        if path.is_dir() {
+            let dir_name = if zip_path.ends_with('/') {
+                zip_path
+            } else {
+                format!("{zip_path}/")
+            };
+            zip.add_directory(&dir_name, options)
+                .map_err(|e| format!("写入 docx 目录失败 ({dir_name}): {e}"))?;
+            add_directory_to_zip(zip, base_dir, &path, options)?;
+            continue;
         }
+
+        zip.start_file(&zip_path, options)
+            .map_err(|e| format!("写入 docx 文件头失败 ({zip_path}): {e}"))?;
+        let mut input = std::fs::File::open(&path)
+            .map_err(|e| format!("读取导出文件失败 ({zip_path}): {e}"))?;
+        std::io::copy(&mut input, zip)
+            .map_err(|e| format!("写入 docx 文件失败 ({zip_path}): {e}"))?;
     }
 
     Ok(())

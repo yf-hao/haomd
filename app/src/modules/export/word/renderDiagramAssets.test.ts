@@ -103,6 +103,22 @@ describe('export/word - renderWordDiagramAssets', () => {
         mimeType: 'image/png',
       }),
     ])
+
+    const { default: mermaid } = await import('mermaid')
+    expect(vi.mocked(mermaid.initialize)).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        theme: 'base',
+        themeVariables: expect.objectContaining({
+          primaryColor: '#ffffff',
+          primaryBorderColor: '#000000',
+          lineColor: '#000000',
+          textColor: '#000000',
+          clusterBkg: '#ffffff',
+          clusterBorder: '#000000',
+          edgeLabelBackground: '#ffffff',
+        }),
+      }),
+    )
   })
 
   it('should convert mind code blocks into embedded png assets', async () => {
