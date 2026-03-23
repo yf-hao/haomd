@@ -822,6 +822,12 @@
   padding: 12px 0;
 }
 
+.ai-chat-loading-indicator-inline {
+  justify-content: flex-start;
+  min-height: 20px;
+  padding: 4px 12px;
+}
+
 .ai-typing-dot {
   display: inline-block;
   width: 7px;

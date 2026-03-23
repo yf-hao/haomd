@@ -316,11 +316,21 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
                     : getDisplayContent(msg.id, msg.content, msg.streaming)
                   )
                   : getUserDisplayContent(msg.content)
+              const showStreamingIndicator =
+                msg.role === 'assistant' && msg.streaming && displayContent.trim().length === 0
 
               return (
                 <div key={msg.id} className={`ai-chat-message ai-chat-message-${msg.role}`}>
                   {msg.role === 'assistant' ? (
-                    <MarkdownViewer value={displayContent} mode={viewMode} />
+                    showStreamingIndicator ? (
+                      <div className="ai-chat-loading-indicator ai-chat-loading-indicator-inline" aria-label={t('ai.stopGenerating')}>
+                        <span className="ai-typing-dot" />
+                        <span className="ai-typing-dot" />
+                        <span className="ai-typing-dot" />
+                      </div>
+                    ) : (
+                      <MarkdownViewer value={displayContent} mode={viewMode} />
+                    )
                   ) : (
                     <div className="ai-chat-message-content">{displayContent}</div>
                   )}
@@ -383,14 +393,6 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
                 </div>
               )
             })}
-            {/* 加载指示器：loading 且当前正在流式传输的助手消息还没有内容时显示 */}
-            {loading && messages.some((m) => m.role === 'assistant' && m.streaming && m.content.length === 0) && (
-              <div className="ai-chat-loading-indicator">
-                <span className="ai-typing-dot" />
-                <span className="ai-typing-dot" />
-                <span className="ai-typing-dot" />
-              </div>
-            )}
           </div>
         </div>
       </div>
