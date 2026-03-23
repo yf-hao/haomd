@@ -33,7 +33,8 @@ describe('SettingsDialog', () => {
       </I18nProvider>,
     )
 
-    fireEvent.click(await screen.findByRole('tab', { name: 'Preview Background' }))
+    fireEvent.click(await screen.findByRole('tab', { name: 'Backgrounds' }))
+    fireEvent.click(await screen.findByRole('tab', { name: 'Preview' }))
     fireEvent.click(screen.getByRole('button', { name: 'Choose Image' }))
 
     await waitFor(() => {

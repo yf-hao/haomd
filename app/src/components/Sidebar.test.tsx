@@ -1,6 +1,11 @@
+import type { ReactNode } from 'react'
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { Sidebar } from './Sidebar'
+import { I18nProvider } from '../modules/i18n/I18nContext'
+import { ThemeModeProvider } from '../modules/theme/ThemeContext'
+import { getDefaultThemeSettings } from '../modules/settings/editorSettings'
+import { resolveActiveTheme } from '../modules/theme/themeResolver'
 
 // Mock context menu to avoid its complex logic
 vi.mock('./FileContextMenu', () => ({
@@ -13,6 +18,23 @@ vi.mock('./FileContextMenu', () => ({
     )
 }))
 
+function renderWithI18n(node: ReactNode) {
+    return render(
+        <I18nProvider value={{ languageMode: 'zh-CN', resolvedLanguage: 'zh-CN' }}>
+            <ThemeModeProvider
+                value={{
+                    selectedMode: 'system',
+                    resolvedMode: 'light',
+                    themeSettings: getDefaultThemeSettings(),
+                    activeTheme: resolveActiveTheme('light', getDefaultThemeSettings()),
+                }}
+            >
+                {node}
+            </ThemeModeProvider>
+        </I18nProvider>,
+    )
+}
+
 describe('Sidebar', () => {
     const mockProps = {
         standaloneFiles: [],
@@ -24,7 +46,7 @@ describe('Sidebar', () => {
     }
 
     it('should render empty state when no files or folders', () => {
-        render(<Sidebar {...mockProps} />)
+        renderWithI18n(<Sidebar {...mockProps} />)
         expect(screen.getByText('暂无文件')).toBeDefined()
     })
 
@@ -33,7 +55,7 @@ describe('Sidebar', () => {
             ...mockProps,
             standaloneFiles: [{ path: '/test.md', name: 'test.md' }]
         }
-        render(<Sidebar {...props} />)
+        renderWithI18n(<Sidebar {...props} />)
         expect(screen.getByText('test.md')).toBeDefined()
     })
 
@@ -44,7 +66,7 @@ describe('Sidebar', () => {
             standaloneFiles: [{ path: '/test.md', name: 'test.md' }],
             onFileClick
         }
-        render(<Sidebar {...props} />)
+        renderWithI18n(<Sidebar {...props} />)
         fireEvent.click(screen.getByText('test.md'))
         expect(onFileClick).toHaveBeenCalledWith('/test.md')
     })
@@ -57,7 +79,7 @@ describe('Sidebar', () => {
             treesByRoot: { '/my-project': [{ id: '1', name: 'f1', path: '/my-project/f1', kind: 'file' as const }] },
             onToggle
         }
-        render(<Sidebar {...props} />)
+        renderWithI18n(<Sidebar {...props} />)
         const rootRow = screen.getByText('my-project')
         expect(rootRow).toBeDefined()
 
@@ -77,7 +99,7 @@ describe('Sidebar', () => {
                 ]
             }
         }
-        render(<Sidebar {...props} />)
+        renderWithI18n(<Sidebar {...props} />)
         expect(screen.getByText('file1.md')).toBeDefined()
         expect(screen.getByText('dir1')).toBeDefined()
     })
@@ -90,7 +112,7 @@ describe('Sidebar', () => {
             treesByRoot: { '/root': [{ id: '1', name: 'f1', path: '/root/f1', kind: 'file' as const }] },
             onToolbarNewFileInCurrentFolder
         }
-        render(<Sidebar {...props} />)
+        renderWithI18n(<Sidebar {...props} />)
         const btn = screen.getByTitle('在当前文件夹中新建文件')
         fireEvent.click(btn)
         expect(onToolbarNewFileInCurrentFolder).toHaveBeenCalled()
@@ -110,7 +132,7 @@ describe('Sidebar', () => {
             onContextAction,
         }
 
-        render(<Sidebar {...props} />)
+        renderWithI18n(<Sidebar {...props} />)
 
         const dirNode = screen.getByText('dir1')
         fireEvent.contextMenu(dirNode)

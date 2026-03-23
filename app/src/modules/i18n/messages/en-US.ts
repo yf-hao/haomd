@@ -66,7 +66,7 @@ export const enUSMessages: MessageDictionary = {
     enablePreviewBackgroundImage: 'Enable preview background image',
     enableAiChatBackgroundImage: 'Enable AI chat message background image',
     enableSidebarBackgroundImage: 'Enable shared sidebar background image',
-    excludeSidebar: 'Exclude Sidebar',
+    includeSidebar: 'Include Sidebar',
     image: 'Image',
     imageOpacity: 'Image Opacity',
     overlayOpacity: 'Overlay Opacity',

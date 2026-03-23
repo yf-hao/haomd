@@ -66,7 +66,7 @@ export const zhCNMessages: MessageDictionary = {
     enablePreviewBackgroundImage: '启用预览区背景图片',
     enableAiChatBackgroundImage: '启用 AI Chat 消息区背景图片',
     enableSidebarBackgroundImage: '启用共享侧边栏背景图片',
-    excludeSidebar: '排除侧边栏',
+    includeSidebar: '包含侧边栏',
     image: '图片',
     imageOpacity: '图片透明度',
     overlayOpacity: '遮罩透明度',

@@ -555,6 +555,10 @@ button:disabled {
   position: relative;
 }
 
+.workspace-column.workspace-column-with-background {
+  overflow: hidden;
+}
+
 .workspace-column-content {
   position: relative;
   z-index: 1;
@@ -643,9 +647,9 @@ button:disabled {
   flex-direction: column;
 }
 
-.workspace-region.has-workspace-background.workspace-background-includes-sidebar .sidebar-panel-shell:not(.has-sidebar-background) .sidebar,
-.workspace-region.has-workspace-background.workspace-background-includes-sidebar .sidebar-panel-shell:not(.has-sidebar-background) .outline-panel,
-.workspace-region.has-workspace-background.workspace-background-includes-sidebar .sidebar-panel-shell:not(.has-sidebar-background) .pdf-panel {
+.workspace-region.has-workspace-background.workspace-background-includes-sidebar .sidebar-panel-shell.sidebar:not(.has-sidebar-background),
+.workspace-region.has-workspace-background.workspace-background-includes-sidebar .sidebar-panel-shell.outline-panel:not(.has-sidebar-background),
+.workspace-region.has-workspace-background.workspace-background-includes-sidebar .sidebar-panel-shell.pdf-panel:not(.has-sidebar-background) {
   background: transparent;
 }
 

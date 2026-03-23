@@ -301,7 +301,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [ ] Plugin System
 - [x] Word Export
 - [ ] More Diagram Types (PlantUML, Graphviz)
-- [ ] Custom Themes
+- [x] Multi-language Support (i18n)
+- [x] Custom Themes & Light Mode
+- [ ] Plugin System
+- [ ] Cloud Sync
 - [ ] Mobile Support
 
 ---

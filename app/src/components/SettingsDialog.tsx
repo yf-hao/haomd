@@ -542,17 +542,6 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     ? currentBackground.path.split(/[\\/]/).pop()
     : t('theme.image')
   const currentBackgroundPreviewUrl = resolveManagedBackgroundImageUrl(currentBackground.path)
-  const currentBackgroundTitle =
-    currentBackgroundTarget === 'workspaceBackground'
-      ? t('theme.workspaceBackground')
-      : currentBackgroundTarget === 'editorBackground'
-      ? t('theme.editorBackground')
-      : currentBackgroundTarget === 'previewBackground'
-        ? t('theme.previewBackground')
-        : currentBackgroundTarget === 'aiChatBackground'
-          ? t('theme.aiChatBackground')
-          : t('theme.sidebarBackground')
-
   const clampDialogOffset = (nextX: number, nextY: number) => {
     const modal = modalRef.current
     if (!modal || typeof window === 'undefined') return { x: nextX, y: nextY }
@@ -684,7 +673,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                   {activeThemeTab === 'theme-preset' ? (
                     <div className="theme-option-group">
                       <div style={{ ...fieldGridStyle, marginBottom: 2 }}>
-                        <label className="settings-field-label">{t('settings.language')}</label>
+                        <div className="settings-field-label">{t('settings.language')}</div>
                         <select
                           className="field-select"
                           value={languageMode}
@@ -769,9 +758,8 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                     </div>
                   ) : (
                     <div className="settings-subsection settings-subsection-standalone">
-                      <div style={{ ...fieldGridStyle, marginBottom: 14 }}>
-                        <label className="settings-field-label">{t('theme.backgroundTarget')}</label>
-                        <div className="settings-panel-tabs" role="tablist" aria-label={t('theme.backgroundTargets')}>
+                      <div style={{ marginBottom: 14 }}>
+                        <div className="settings-panel-tabs settings-panel-tabs-full" role="tablist" aria-label={t('theme.backgroundTargets')}>
                           <button
                             type="button"
                             role="tab"
@@ -819,9 +807,6 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                           </button>
                         </div>
                       </div>
-                      <div className="settings-subsection-heading">
-                        {currentBackgroundTitle}
-                      </div>
                       <div className="settings-checkbox-row">
                         <label className="settings-checkbox-label">
                           <input
@@ -847,23 +832,23 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                           <label className="settings-checkbox-label">
                             <input
                               type="checkbox"
-                              checked={!(theme.workspaceBackgroundIncludeSidebar ?? false)}
+                              checked={theme.workspaceBackgroundIncludeSidebar ?? false}
                               onChange={(event) => {
                                 hasLocalPreviewEditsRef.current = true
                                 setTheme((prev) => ({
                                   ...prev,
-                                  workspaceBackgroundIncludeSidebar: !event.target.checked,
+                                  workspaceBackgroundIncludeSidebar: event.target.checked,
                                 }))
                               }}
                             />
-                            <span>{t('theme.excludeSidebar')}</span>
+                            <span>{t('theme.includeSidebar')}</span>
                           </label>
                         </div>
                       ) : null}
 
                       <div style={{ display: 'grid', gap: 14 }}>
                         <div style={fieldGridStyle}>
-                          <label className="settings-field-label">{t('theme.image')}</label>
+                          <div className="settings-field-label">{t('theme.image')}</div>
                           <div className="settings-inline-actions">
                             <div className="settings-inline-meta">{selectedImageName}</div>
                             <div className="settings-inline-buttons">
@@ -878,7 +863,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                         </div>
 
                         <div style={fieldGridStyle}>
-                          <label className="settings-field-label">{t('theme.imageOpacity')}</label>
+                          <div className="settings-field-label">{t('theme.imageOpacity')}</div>
                           <input
                             className="field-input settings-number-input"
                             type="number"
@@ -892,7 +877,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                         </div>
 
                         <div style={fieldGridStyle}>
-                          <label className="settings-field-label">{t('theme.blurPx')}</label>
+                          <div className="settings-field-label">{t('theme.blurPx')}</div>
                           <input
                             className="field-input settings-number-input"
                             type="number"
@@ -906,7 +891,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                         </div>
 
                         <div style={fieldGridStyle}>
-                          <label className="settings-field-label">{t('theme.overlayOpacity')}</label>
+                          <div className="settings-field-label">{t('theme.overlayOpacity')}</div>
                           <input
                             className="field-input settings-number-input"
                             type="number"
@@ -920,7 +905,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                         </div>
 
                         <div style={fieldGridStyle}>
-                          <label className="settings-field-label">{t('theme.brightnessPercent')}</label>
+                          <div className="settings-field-label">{t('theme.brightnessPercent')}</div>
                           <input
                             className="field-input settings-number-input"
                             type="number"
@@ -934,7 +919,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                         </div>
 
                         <div style={fieldGridStyle}>
-                          <label className="settings-field-label">{t('theme.imageFit')}</label>
+                          <div className="settings-field-label">{t('theme.imageFit')}</div>
                           <select
                             className="field-select"
                           value={currentBackground.size}
@@ -949,7 +934,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                         </div>
 
                         <div style={fieldGridStyle}>
-                          <label className="settings-field-label">{t('theme.imagePosition')}</label>
+                          <div className="settings-field-label">{t('theme.imagePosition')}</div>
                           <div style={{ display: 'grid', gap: 10 }}>
                             <div
                               className={`settings-image-position-picker ${currentBackground.path ? '' : 'disabled'}`}
@@ -1033,19 +1018,19 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                       <div className="settings-subgroup-title">{t('typography.groups.global')}</div>
                       <div style={{ display: 'grid', gap: 14 }}>
                         <div style={fieldGridStyle}>
-                          <label className="settings-field-label">{t('typography.appFontSize')}</label>
+                          <div className="settings-field-label">{t('typography.appFontSize')}</div>
                           <input className="field-input settings-number-input" type="number" min={10} max={24} step={1} value={uiTypography.appFontSize} onChange={updateTypographyNumber('appFontSize')} />
                         </div>
                         <div style={fieldGridStyle}>
-                          <label className="settings-field-label">{t('typography.settingsFontSize')}</label>
+                          <div className="settings-field-label">{t('typography.settingsFontSize')}</div>
                           <input className="field-input settings-number-input" type="number" min={10} max={24} step={1} value={uiTypography.settingsFontSize} onChange={updateTypographyNumber('settingsFontSize')} />
                         </div>
                         <div style={fieldGridStyle}>
-                          <label className="settings-field-label">{t('typography.tabBarFontSize')}</label>
+                          <div className="settings-field-label">{t('typography.tabBarFontSize')}</div>
                           <input className="field-input settings-number-input" type="number" min={10} max={24} step={1} value={uiTypography.tabBarFontSize} onChange={updateTypographyNumber('tabBarFontSize')} />
                         </div>
                         <div style={fieldGridStyle}>
-                          <label className="settings-field-label">{t('typography.statusBarFontSize')}</label>
+                          <div className="settings-field-label">{t('typography.statusBarFontSize')}</div>
                           <input className="field-input settings-number-input" type="number" min={10} max={24} step={1} value={uiTypography.statusBarFontSize} onChange={updateTypographyNumber('statusBarFontSize')} />
                         </div>
                       </div>
@@ -1055,15 +1040,15 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                       <div className="settings-subgroup-title">{t('typography.groups.workspace')}</div>
                       <div style={{ display: 'grid', gap: 14 }}>
                         <div style={fieldGridStyle}>
-                          <label className="settings-field-label">{t('typography.sidebarFontSize')}</label>
+                          <div className="settings-field-label">{t('typography.sidebarFontSize')}</div>
                           <input className="field-input settings-number-input" type="number" min={10} max={24} step={1} value={uiTypography.sidebarFontSize} onChange={updateTypographyNumber('sidebarFontSize')} />
                         </div>
                         <div style={fieldGridStyle}>
-                          <label className="settings-field-label">{t('typography.editorFontSize')}</label>
+                          <div className="settings-field-label">{t('typography.editorFontSize')}</div>
                           <input className="field-input settings-number-input" type="number" min={10} max={24} step={1} value={uiTypography.editorFontSize} onChange={updateTypographyNumber('editorFontSize')} />
                         </div>
                         <div style={fieldGridStyle}>
-                          <label className="settings-field-label">{t('typography.previewFontSize')}</label>
+                          <div className="settings-field-label">{t('typography.previewFontSize')}</div>
                           <input className="field-input settings-number-input" type="number" min={10} max={24} step={1} value={uiTypography.previewFontSize} onChange={updateTypographyNumber('previewFontSize')} />
                         </div>
                       </div>
@@ -1073,11 +1058,11 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                       <div className="settings-subgroup-title">{t('typography.groups.ai')}</div>
                       <div style={{ display: 'grid', gap: 14 }}>
                         <div style={fieldGridStyle}>
-                          <label className="settings-field-label">{t('typography.aiChatMessageFontSize')}</label>
+                          <div className="settings-field-label">{t('typography.aiChatMessageFontSize')}</div>
                           <input className="field-input settings-number-input" type="number" min={10} max={24} step={1} value={uiTypography.aiChatMessageFontSize} onChange={updateTypographyNumber('aiChatMessageFontSize')} />
                         </div>
                         <div style={fieldGridStyle}>
-                          <label className="settings-field-label">{t('typography.aiChatInputFontSize')}</label>
+                          <div className="settings-field-label">{t('typography.aiChatInputFontSize')}</div>
                           <input className="field-input settings-number-input" type="number" min={10} max={24} step={1} value={uiTypography.aiChatInputFontSize} onChange={updateTypographyNumber('aiChatInputFontSize')} />
                         </div>
                       </div>
@@ -1097,43 +1082,43 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
 
                   <div style={{ display: 'grid', gap: 14 }}>
                     <div style={fieldGridStyle}>
-                      <label className="settings-field-label">{t('wordExport.bodyFont')}</label>
+                      <div className="settings-field-label">{t('wordExport.bodyFont')}</div>
                       <FontSelectField value={wordExport.bodyFontFamily} onChange={updateFontFamily('bodyFontFamily')} />
                     </div>
                     <div style={fieldGridStyle}>
-                      <label className="settings-field-label">{t('wordExport.bodySizePt')}</label>
+                      <div className="settings-field-label">{t('wordExport.bodySizePt')}</div>
                       <input className="field-input settings-number-input" type="number" min={8} max={48} step={0.5} value={wordExport.bodyFontSizePt} onChange={updateNumber('bodyFontSizePt')} />
                     </div>
                     <div style={fieldGridStyle}>
-                      <label className="settings-field-label">{t('wordExport.headingFont')}</label>
+                      <div className="settings-field-label">{t('wordExport.headingFont')}</div>
                       <FontSelectField value={wordExport.headingFontFamily} onChange={updateFontFamily('headingFontFamily')} />
                     </div>
                     <div style={fieldGridStyle}>
-                      <label className="settings-field-label">{t('wordExport.heading1SizePt')}</label>
+                      <div className="settings-field-label">{t('wordExport.heading1SizePt')}</div>
                       <input className="field-input settings-number-input" type="number" min={10} max={48} step={0.5} value={wordExport.heading1SizePt} onChange={updateNumber('heading1SizePt')} />
                     </div>
                     <div style={fieldGridStyle}>
-                      <label className="settings-field-label">{t('wordExport.heading2SizePt')}</label>
+                      <div className="settings-field-label">{t('wordExport.heading2SizePt')}</div>
                       <input className="field-input settings-number-input" type="number" min={10} max={48} step={0.5} value={wordExport.heading2SizePt} onChange={updateNumber('heading2SizePt')} />
                     </div>
                     <div style={fieldGridStyle}>
-                      <label className="settings-field-label">{t('wordExport.heading3SizePt')}</label>
+                      <div className="settings-field-label">{t('wordExport.heading3SizePt')}</div>
                       <input className="field-input settings-number-input" type="number" min={10} max={48} step={0.5} value={wordExport.heading3SizePt} onChange={updateNumber('heading3SizePt')} />
                     </div>
                     <div style={fieldGridStyle}>
-                      <label className="settings-field-label">{t('wordExport.paragraphSpacingAfterPt')}</label>
+                      <div className="settings-field-label">{t('wordExport.paragraphSpacingAfterPt')}</div>
                       <input className="field-input settings-number-input" type="number" min={0} max={72} step={0.5} value={wordExport.paragraphSpacingAfterPt} onChange={updateNumber('paragraphSpacingAfterPt')} />
                     </div>
                     <div style={fieldGridStyle}>
-                      <label className="settings-field-label">{t('wordExport.lineSpacing')}</label>
+                      <div className="settings-field-label">{t('wordExport.lineSpacing')}</div>
                       <input className="field-input settings-number-input" type="number" min={1} max={3} step={0.05} value={wordExport.lineSpacing} onChange={updateNumber('lineSpacing')} />
                     </div>
                     <div style={fieldGridStyle}>
-                      <label className="settings-field-label">{t('wordExport.codeSizePt')}</label>
+                      <div className="settings-field-label">{t('wordExport.codeSizePt')}</div>
                       <input className="field-input settings-number-input" type="number" min={8} max={32} step={0.5} value={wordExport.codeFontSizePt} onChange={updateNumber('codeFontSizePt')} />
                     </div>
                     <div style={fieldGridStyle}>
-                      <label className="settings-field-label">{t('wordExport.pageMarginCm')}</label>
+                      <div className="settings-field-label">{t('wordExport.pageMarginCm')}</div>
                       <input className="field-input settings-number-input" type="number" min={1} max={5} step={0.1} value={wordExport.pageMarginCm} onChange={updateNumber('pageMarginCm')} />
                     </div>
                   </div>

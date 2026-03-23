@@ -1,10 +1,20 @@
+import type { ReactNode } from 'react'
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { ConfirmDialog } from './ConfirmDialog'
+import { I18nProvider } from '../modules/i18n/I18nContext'
+
+function renderWithI18n(node: ReactNode) {
+    return render(
+        <I18nProvider value={{ languageMode: 'zh-CN', resolvedLanguage: 'zh-CN' }}>
+            {node}
+        </I18nProvider>,
+    )
+}
 
 describe('ConfirmDialog', () => {
     it('should render title and message', () => {
-        render(
+        renderWithI18n(
             <ConfirmDialog
                 title="Test Title"
                 message="Test Message"
@@ -19,7 +29,7 @@ describe('ConfirmDialog', () => {
 
     it('should call onConfirm when confirm button is clicked', () => {
         const onConfirm = vi.fn()
-        render(
+        renderWithI18n(
             <ConfirmDialog
                 title="Title"
                 message="Msg"
@@ -35,7 +45,7 @@ describe('ConfirmDialog', () => {
 
     it('should call onCancel when cancel button is clicked', () => {
         const onCancel = vi.fn()
-        render(
+        renderWithI18n(
             <ConfirmDialog
                 title="Title"
                 message="Msg"
@@ -51,7 +61,7 @@ describe('ConfirmDialog', () => {
 
     it('should call onCancel when backdrop is clicked', () => {
         const onCancel = vi.fn()
-        const { container } = render(
+        const { container } = renderWithI18n(
             <ConfirmDialog
                 title="Title"
                 message="Msg"
@@ -68,7 +78,7 @@ describe('ConfirmDialog', () => {
 
     it('should handle Escape key to cancel', () => {
         const onCancel = vi.fn()
-        render(
+        renderWithI18n(
             <ConfirmDialog
                 title="Title"
                 message="Msg"
@@ -86,7 +96,7 @@ describe('ConfirmDialog', () => {
 
     it('should handle Enter key to confirm by default', () => {
         const onConfirm = vi.fn()
-        render(
+        renderWithI18n(
             <ConfirmDialog
                 title="Title"
                 message="Msg"

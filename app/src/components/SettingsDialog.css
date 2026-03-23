@@ -126,6 +126,15 @@
   flex-shrink: 0;
 }
 
+.settings-panel-tabs-full {
+  display: flex;
+  width: 100%;
+}
+
+.settings-panel-tabs-full .settings-panel-tab {
+  flex: 1 1 0;
+}
+
 .settings-panel-tab {
   border: none;
   background: transparent;
