@@ -29,6 +29,10 @@
   background: transparent;
 }
 
+.workspace-region.has-workspace-background .preview:not(.has-preview-background) .preview-body {
+  background: transparent;
+}
+
 /* 编辑器光标定位到预览区时的闪烁高亮 */
 @keyframes highlight-flash {
   0%, 100% { background-color: transparent; }
@@ -53,6 +57,10 @@
 }
 
 .preview.has-preview-background .html-preview-frame {
+  background: transparent;
+}
+
+.workspace-region.has-workspace-background .preview:not(.has-preview-background) .html-preview-frame {
   background: transparent;
 }
 

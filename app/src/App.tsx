@@ -54,6 +54,8 @@ function App() {
     hasPreviewThemeOverrideRef.current = true
     console.warn('[App] apply theme settings preview', {
       mode: settings.mode,
+      workspaceBackground: settings.workspaceBackground,
+      workspaceBackgroundIncludeSidebar: settings.workspaceBackgroundIncludeSidebar,
       editorBackground: settings.editorBackground,
       previewBackground: settings.previewBackground,
       aiChatBackground: settings.aiChatBackground,
@@ -61,6 +63,8 @@ function App() {
     })
     setThemeSettings({
       ...settings,
+      workspaceBackground: settings.workspaceBackground ? { ...settings.workspaceBackground } : undefined,
+      workspaceBackgroundIncludeSidebar: settings.workspaceBackgroundIncludeSidebar,
       editorBackground: settings.editorBackground ? { ...settings.editorBackground } : undefined,
       previewBackground: settings.previewBackground ? { ...settings.previewBackground } : undefined,
       aiChatBackground: settings.aiChatBackground ? { ...settings.aiChatBackground } : undefined,

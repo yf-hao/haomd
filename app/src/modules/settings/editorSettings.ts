@@ -25,6 +25,8 @@ export type AiChatUiSettings = {
 export type ThemeSettings = {
   mode: ThemeMode
   customThemeId?: string | null
+  workspaceBackground?: ThemeBackgroundSettings
+  workspaceBackgroundIncludeSidebar?: boolean
   editorBackground?: ThemeBackgroundSettings
   previewBackground?: ThemeBackgroundSettings
   aiChatBackground?: ThemeBackgroundSettings
@@ -107,6 +109,18 @@ const defaultLanguage: LanguageMode = 'system'
 const defaultTheme: ThemeSettings = {
   mode: 'system',
   customThemeId: null,
+  workspaceBackground: {
+    enabled: false,
+    path: null,
+    opacity: 0.22,
+    overlayOpacity: 0.12,
+    blurPx: 2,
+    brightness: 100,
+    size: 'height-fill',
+    positionX: 50,
+    positionY: 50,
+  },
+  workspaceBackgroundIncludeSidebar: false,
   editorBackground: {
     enabled: false,
     path: null,
@@ -236,6 +250,20 @@ export async function getThemeSettings(): Promise<ThemeSettings> {
   return {
     mode: cfg.mode ?? defaultTheme.mode,
     customThemeId: cfg.customThemeId ?? null,
+    workspaceBackground: {
+      enabled: cfg.workspaceBackground?.enabled ?? defaultTheme.workspaceBackground?.enabled ?? false,
+      path: cfg.workspaceBackground?.path ?? defaultTheme.workspaceBackground?.path ?? null,
+      opacity: cfg.workspaceBackground?.opacity ?? defaultTheme.workspaceBackground?.opacity ?? 0.22,
+      overlayOpacity:
+        cfg.workspaceBackground?.overlayOpacity ?? defaultTheme.workspaceBackground?.overlayOpacity ?? 0.12,
+      blurPx: cfg.workspaceBackground?.blurPx ?? defaultTheme.workspaceBackground?.blurPx ?? 2,
+      brightness: cfg.workspaceBackground?.brightness ?? defaultTheme.workspaceBackground?.brightness ?? 100,
+      size: cfg.workspaceBackground?.size ?? defaultTheme.workspaceBackground?.size ?? 'height-fill',
+      positionX: cfg.workspaceBackground?.positionX ?? defaultTheme.workspaceBackground?.positionX ?? 50,
+      positionY: cfg.workspaceBackground?.positionY ?? defaultTheme.workspaceBackground?.positionY ?? 50,
+    },
+    workspaceBackgroundIncludeSidebar:
+      cfg.workspaceBackgroundIncludeSidebar ?? defaultTheme.workspaceBackgroundIncludeSidebar ?? false,
     editorBackground: {
       enabled: cfg.editorBackground?.enabled ?? defaultTheme.editorBackground?.enabled ?? false,
       path: cfg.editorBackground?.path ?? defaultTheme.editorBackground?.path ?? null,
@@ -339,6 +367,7 @@ export function getDefaultWordExportStyleSettings(): WordExportStyleSettings {
 export function getDefaultThemeSettings(): ThemeSettings {
   return {
     ...defaultTheme,
+    workspaceBackground: defaultTheme.workspaceBackground ? { ...defaultTheme.workspaceBackground } : undefined,
     editorBackground: defaultTheme.editorBackground ? { ...defaultTheme.editorBackground } : undefined,
     previewBackground: defaultTheme.previewBackground ? { ...defaultTheme.previewBackground } : undefined,
     aiChatBackground: defaultTheme.aiChatBackground ? { ...defaultTheme.aiChatBackground } : undefined,

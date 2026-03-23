@@ -14,6 +14,10 @@
   background: color-mix(in srgb, var(--theme-surface-preview) 28%, transparent);
 }
 
+.workspace-region.has-workspace-background .preview:not(.has-preview-background) .markdown-body.gh-markdown {
+  background: color-mix(in srgb, var(--theme-surface-preview) 28%, transparent);
+}
+
 .markdown-body.gh-markdown p,
 .markdown-body.gh-markdown li,
 .markdown-body.gh-markdown blockquote,

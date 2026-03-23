@@ -11,6 +11,10 @@
   background: transparent;
 }
 
+.workspace-region.has-workspace-background .editor-pane-frame:not(.has-editor-background) {
+  background: transparent;
+}
+
 .editor-pane-background-overlay {
   position: absolute;
   inset: 0;
@@ -137,5 +141,10 @@
 
 .editor-pane-frame.has-editor-background .code-editor .cm-gutters,
 .editor-pane-frame.has-editor-background .code-editor .cm-scroller {
+  background: transparent;
+}
+
+.workspace-region.has-workspace-background .editor-pane-frame:not(.has-editor-background) .code-editor .cm-gutters,
+.workspace-region.has-workspace-background .editor-pane-frame:not(.has-editor-background) .code-editor .cm-scroller {
   background: transparent;
 }

@@ -36,7 +36,12 @@ export type SettingsDialogProps = {
 
 type SettingsSectionId = 'theme' | 'typography' | 'word-export'
 type ThemePanelTabId = 'theme-preset' | 'backgrounds'
-type BackgroundTarget = 'editorBackground' | 'previewBackground' | 'aiChatBackground' | 'sidebarBackground'
+type BackgroundTarget =
+  | 'workspaceBackground'
+  | 'editorBackground'
+  | 'previewBackground'
+  | 'aiChatBackground'
+  | 'sidebarBackground'
 
 const fieldGridStyle: React.CSSProperties = {
   display: 'grid',
@@ -60,9 +65,13 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const [uiTypography, setUiTypography] = useState<UiTypographySettings>(getDefaultUiTypographySettings())
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('theme')
   const [activeThemeTab, setActiveThemeTab] = useState<ThemePanelTabId>('theme-preset')
-  const [currentBackgroundTarget, setCurrentBackgroundTarget] = useState<BackgroundTarget>('editorBackground')
+  const [currentBackgroundTarget, setCurrentBackgroundTarget] = useState<BackgroundTarget>('workspaceBackground')
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [workspaceBackgroundOpacityInput, setWorkspaceBackgroundOpacityInput] = useState('')
+  const [workspaceBackgroundOverlayOpacityInput, setWorkspaceBackgroundOverlayOpacityInput] = useState('')
+  const [workspaceBackgroundBlurInput, setWorkspaceBackgroundBlurInput] = useState('')
+  const [workspaceBackgroundBrightnessInput, setWorkspaceBackgroundBrightnessInput] = useState('')
   const [editorBackgroundOpacityInput, setEditorBackgroundOpacityInput] = useState('')
   const [editorBackgroundOverlayOpacityInput, setEditorBackgroundOverlayOpacityInput] = useState('')
   const [editorBackgroundBlurInput, setEditorBackgroundBlurInput] = useState('')
@@ -128,6 +137,10 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
         originalTypographyRef.current = loadedTypography
         themePreviewReadyRef.current = true
         setWordExport(loadedWordExport)
+        setWorkspaceBackgroundOpacityInput(String(loadedTheme.workspaceBackground?.opacity ?? getDefaultThemeSettings().workspaceBackground?.opacity ?? 0.22))
+        setWorkspaceBackgroundOverlayOpacityInput(String(loadedTheme.workspaceBackground?.overlayOpacity ?? getDefaultThemeSettings().workspaceBackground?.overlayOpacity ?? 0.12))
+        setWorkspaceBackgroundBlurInput(String(loadedTheme.workspaceBackground?.blurPx ?? getDefaultThemeSettings().workspaceBackground?.blurPx ?? 2))
+        setWorkspaceBackgroundBrightnessInput(String(loadedTheme.workspaceBackground?.brightness ?? getDefaultThemeSettings().workspaceBackground?.brightness ?? 100))
         setEditorBackgroundOpacityInput(String(loadedTheme.editorBackground?.opacity ?? getDefaultThemeSettings().editorBackground?.opacity ?? 0.3))
         setEditorBackgroundOverlayOpacityInput(String(loadedTheme.editorBackground?.overlayOpacity ?? getDefaultThemeSettings().editorBackground?.overlayOpacity ?? 0))
         setEditorBackgroundBlurInput(String(loadedTheme.editorBackground?.blurPx ?? getDefaultThemeSettings().editorBackground?.blurPx ?? 1))
@@ -170,6 +183,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     if (!open || !themePreviewReadyRef.current || !hasLocalPreviewEditsRef.current) return
     onThemeSettingsChange?.({
       ...theme,
+      workspaceBackground: theme.workspaceBackground ? { ...theme.workspaceBackground } : undefined,
       editorBackground: theme.editorBackground ? { ...theme.editorBackground } : undefined,
       previewBackground: theme.previewBackground ? { ...theme.previewBackground } : undefined,
       aiChatBackground: theme.aiChatBackground ? { ...theme.aiChatBackground } : undefined,
@@ -178,6 +192,10 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   }, [open, theme, onThemeSettingsChange])
 
   useEffect(() => {
+    setWorkspaceBackgroundOpacityInput(String(theme.workspaceBackground?.opacity ?? getDefaultThemeSettings().workspaceBackground?.opacity ?? 0.22))
+    setWorkspaceBackgroundOverlayOpacityInput(String(theme.workspaceBackground?.overlayOpacity ?? getDefaultThemeSettings().workspaceBackground?.overlayOpacity ?? 0.12))
+    setWorkspaceBackgroundBlurInput(String(theme.workspaceBackground?.blurPx ?? getDefaultThemeSettings().workspaceBackground?.blurPx ?? 2))
+    setWorkspaceBackgroundBrightnessInput(String(theme.workspaceBackground?.brightness ?? getDefaultThemeSettings().workspaceBackground?.brightness ?? 100))
     setEditorBackgroundOpacityInput(String(theme.editorBackground?.opacity ?? getDefaultThemeSettings().editorBackground?.opacity ?? 0.3))
     setEditorBackgroundOverlayOpacityInput(String(theme.editorBackground?.overlayOpacity ?? getDefaultThemeSettings().editorBackground?.overlayOpacity ?? 0))
     setEditorBackgroundBlurInput(String(theme.editorBackground?.blurPx ?? getDefaultThemeSettings().editorBackground?.blurPx ?? 1))
@@ -195,6 +213,10 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     setSidebarBackgroundBlurInput(String(theme.sidebarBackground?.blurPx ?? getDefaultThemeSettings().sidebarBackground?.blurPx ?? 2))
     setSidebarBackgroundBrightnessInput(String(theme.sidebarBackground?.brightness ?? getDefaultThemeSettings().sidebarBackground?.brightness ?? 100))
   }, [
+    theme.workspaceBackground?.opacity,
+    theme.workspaceBackground?.overlayOpacity,
+    theme.workspaceBackground?.blurPx,
+    theme.workspaceBackground?.brightness,
     theme.editorBackground?.opacity,
     theme.editorBackground?.overlayOpacity,
     theme.editorBackground?.blurPx,
@@ -251,7 +273,9 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const getDefaultBackgroundSettings = (target: BackgroundTarget): ThemeBackgroundSettings => {
     const defaults = getDefaultThemeSettings()
     return {
-      ...(target === 'editorBackground'
+      ...(target === 'workspaceBackground'
+        ? defaults.workspaceBackground
+        : target === 'editorBackground'
         ? defaults.editorBackground
         : target === 'previewBackground'
           ? defaults.previewBackground
@@ -263,7 +287,9 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
 
   const getBackgroundSettings = (target: BackgroundTarget): ThemeBackgroundSettings => {
     const current =
-      target === 'editorBackground'
+      target === 'workspaceBackground'
+        ? theme.workspaceBackground
+        : target === 'editorBackground'
         ? theme.editorBackground
         : target === 'previewBackground'
           ? theme.previewBackground
@@ -281,6 +307,13 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     key: 'opacity' | 'overlayOpacity' | 'blurPx' | 'brightness',
     value: string,
   ) => {
+    if (target === 'workspaceBackground') {
+      if (key === 'opacity') setWorkspaceBackgroundOpacityInput(value)
+      else if (key === 'overlayOpacity') setWorkspaceBackgroundOverlayOpacityInput(value)
+      else if (key === 'blurPx') setWorkspaceBackgroundBlurInput(value)
+      else setWorkspaceBackgroundBrightnessInput(value)
+      return
+    }
     if (target === 'editorBackground') {
       if (key === 'opacity') setEditorBackgroundOpacityInput(value)
       else if (key === 'overlayOpacity') setEditorBackgroundOverlayOpacityInput(value)
@@ -319,7 +352,9 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
       ...prev,
       [target]: {
         ...getDefaultBackgroundSettings(target),
-        ...(target === 'editorBackground'
+        ...(target === 'workspaceBackground'
+          ? prev.workspaceBackground
+          : target === 'editorBackground'
           ? prev.editorBackground
           : target === 'previewBackground'
             ? prev.previewBackground
@@ -409,10 +444,15 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
       if (activeThemeTab === 'backgrounds') {
         hasLocalPreviewEditsRef.current = true
         setTheme((prev) => {
-          return {
+          const nextTheme = {
             ...prev,
             [currentBackgroundTarget]: getDefaultBackgroundSettings(currentBackgroundTarget),
           }
+          if (currentBackgroundTarget === 'workspaceBackground') {
+            nextTheme.workspaceBackgroundIncludeSidebar =
+              getDefaultThemeSettings().workspaceBackgroundIncludeSidebar ?? false
+          }
+          return nextTheme
         })
       }
       return
@@ -459,7 +499,9 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
 
   const currentBackground = getBackgroundSettings(currentBackgroundTarget)
   const currentBackgroundOpacityInput =
-    currentBackgroundTarget === 'editorBackground'
+    currentBackgroundTarget === 'workspaceBackground'
+      ? workspaceBackgroundOpacityInput
+      : currentBackgroundTarget === 'editorBackground'
       ? editorBackgroundOpacityInput
       : currentBackgroundTarget === 'previewBackground'
         ? previewBackgroundOpacityInput
@@ -467,7 +509,9 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
           ? aiChatBackgroundOpacityInput
           : sidebarBackgroundOpacityInput
   const currentBackgroundOverlayOpacityInput =
-    currentBackgroundTarget === 'editorBackground'
+    currentBackgroundTarget === 'workspaceBackground'
+      ? workspaceBackgroundOverlayOpacityInput
+      : currentBackgroundTarget === 'editorBackground'
       ? editorBackgroundOverlayOpacityInput
       : currentBackgroundTarget === 'previewBackground'
         ? previewBackgroundOverlayOpacityInput
@@ -475,7 +519,9 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
           ? aiChatBackgroundOverlayOpacityInput
           : sidebarBackgroundOverlayOpacityInput
   const currentBackgroundBlurInput =
-    currentBackgroundTarget === 'editorBackground'
+    currentBackgroundTarget === 'workspaceBackground'
+      ? workspaceBackgroundBlurInput
+      : currentBackgroundTarget === 'editorBackground'
       ? editorBackgroundBlurInput
       : currentBackgroundTarget === 'previewBackground'
         ? previewBackgroundBlurInput
@@ -483,7 +529,9 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
           ? aiChatBackgroundBlurInput
           : sidebarBackgroundBlurInput
   const currentBackgroundBrightnessInput =
-    currentBackgroundTarget === 'editorBackground'
+    currentBackgroundTarget === 'workspaceBackground'
+      ? workspaceBackgroundBrightnessInput
+      : currentBackgroundTarget === 'editorBackground'
       ? editorBackgroundBrightnessInput
       : currentBackgroundTarget === 'previewBackground'
         ? previewBackgroundBrightnessInput
@@ -495,7 +543,9 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     : t('theme.image')
   const currentBackgroundPreviewUrl = resolveManagedBackgroundImageUrl(currentBackground.path)
   const currentBackgroundTitle =
-    currentBackgroundTarget === 'editorBackground'
+    currentBackgroundTarget === 'workspaceBackground'
+      ? t('theme.workspaceBackground')
+      : currentBackgroundTarget === 'editorBackground'
       ? t('theme.editorBackground')
       : currentBackgroundTarget === 'previewBackground'
         ? t('theme.previewBackground')
@@ -725,6 +775,15 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                           <button
                             type="button"
                             role="tab"
+                            aria-selected={currentBackgroundTarget === 'workspaceBackground'}
+                            className={`settings-panel-tab ${currentBackgroundTarget === 'workspaceBackground' ? 'active' : ''}`}
+                            onClick={() => setCurrentBackgroundTarget('workspaceBackground')}
+                          >
+                            {t('theme.workspaceBackgroundShort')}
+                          </button>
+                          <button
+                            type="button"
+                            role="tab"
                             aria-selected={currentBackgroundTarget === 'editorBackground'}
                             className={`settings-panel-tab ${currentBackgroundTarget === 'editorBackground' ? 'active' : ''}`}
                             onClick={() => setCurrentBackgroundTarget('editorBackground')}
@@ -771,7 +830,9 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                             onChange={(event) => updateThemeBackground(currentBackgroundTarget, { enabled: event.target.checked })}
                           />
                           <span>
-                            {currentBackgroundTarget === 'aiChatBackground'
+                            {currentBackgroundTarget === 'workspaceBackground'
+                              ? t('theme.enableWorkspaceBackgroundImage')
+                              : currentBackgroundTarget === 'aiChatBackground'
                               ? t('theme.enableAiChatBackgroundImage')
                               : currentBackgroundTarget === 'sidebarBackground'
                                 ? t('theme.enableSidebarBackgroundImage')
@@ -781,6 +842,24 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                           </span>
                         </label>
                       </div>
+                      {currentBackgroundTarget === 'workspaceBackground' ? (
+                        <div className="settings-checkbox-row">
+                          <label className="settings-checkbox-label">
+                            <input
+                              type="checkbox"
+                              checked={!(theme.workspaceBackgroundIncludeSidebar ?? false)}
+                              onChange={(event) => {
+                                hasLocalPreviewEditsRef.current = true
+                                setTheme((prev) => ({
+                                  ...prev,
+                                  workspaceBackgroundIncludeSidebar: !event.target.checked,
+                                }))
+                              }}
+                            />
+                            <span>{t('theme.excludeSidebar')}</span>
+                          </label>
+                        </div>
+                      ) : null}
 
                       <div style={{ display: 'grid', gap: 14 }}>
                         <div style={fieldGridStyle}>

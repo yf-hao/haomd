@@ -145,6 +145,15 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::Editor
                         theme.custom_theme_id = default_theme.custom_theme_id.clone();
                         changed = true;
                     }
+                    if theme.workspace_background.is_none() {
+                        theme.workspace_background = default_theme.workspace_background.clone();
+                        changed = true;
+                    }
+                    if theme.workspace_background_include_sidebar.is_none() {
+                        theme.workspace_background_include_sidebar =
+                            default_theme.workspace_background_include_sidebar;
+                        changed = true;
+                    }
                     if theme.editor_background.is_none() {
                         theme.editor_background = default_theme.editor_background.clone();
                         changed = true;
@@ -166,6 +175,54 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::Editor
 
             if let Some(ref mut theme) = cfg.theme {
                 if let Some(ref default_theme) = default_cfg.theme {
+                    if let Some(ref mut workspace_background) = theme.workspace_background {
+                        if let Some(ref default_workspace_background) =
+                            default_theme.workspace_background
+                        {
+                            if workspace_background.enabled.is_none() {
+                                workspace_background.enabled = default_workspace_background.enabled;
+                                changed = true;
+                            }
+                            if workspace_background.path.is_none() {
+                                workspace_background.path =
+                                    default_workspace_background.path.clone();
+                                changed = true;
+                            }
+                            if workspace_background.opacity.is_none() {
+                                workspace_background.opacity = default_workspace_background.opacity;
+                                changed = true;
+                            }
+                            if workspace_background.overlay_opacity.is_none() {
+                                workspace_background.overlay_opacity =
+                                    default_workspace_background.overlay_opacity;
+                                changed = true;
+                            }
+                            if workspace_background.blur_px.is_none() {
+                                workspace_background.blur_px = default_workspace_background.blur_px;
+                                changed = true;
+                            }
+                            if workspace_background.brightness.is_none() {
+                                workspace_background.brightness =
+                                    default_workspace_background.brightness;
+                                changed = true;
+                            }
+                            if workspace_background.size.is_none() {
+                                workspace_background.size =
+                                    default_workspace_background.size.clone();
+                                changed = true;
+                            }
+                            if workspace_background.position_x.is_none() {
+                                workspace_background.position_x =
+                                    default_workspace_background.position_x;
+                                changed = true;
+                            }
+                            if workspace_background.position_y.is_none() {
+                                workspace_background.position_y =
+                                    default_workspace_background.position_y;
+                                changed = true;
+                            }
+                        }
+                    }
                     if let Some(ref mut editor_background) = theme.editor_background {
                         if let Some(ref default_editor_background) = default_theme.editor_background
                         {
@@ -301,7 +358,8 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::Editor
                         }
                     }
                     if let Some(ref mut sidebar_background) = theme.sidebar_background {
-                        if let Some(ref default_sidebar_background) = default_theme.sidebar_background
+                        if let Some(ref default_sidebar_background) =
+                            default_theme.sidebar_background
                         {
                             if sidebar_background.enabled.is_none() {
                                 sidebar_background.enabled = default_sidebar_background.enabled;
@@ -325,7 +383,8 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::Editor
                                 changed = true;
                             }
                             if sidebar_background.brightness.is_none() {
-                                sidebar_background.brightness = default_sidebar_background.brightness;
+                                sidebar_background.brightness =
+                                    default_sidebar_background.brightness;
                                 changed = true;
                             }
                             if sidebar_background.size.is_none() {

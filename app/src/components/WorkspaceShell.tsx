@@ -40,6 +40,8 @@ import { openInFileManager } from '../modules/platform/fileExplorerService'
 import { loadDefaultImagePathStrategyConfig, resolveImageTarget } from '../modules/images/imagePasteStrategy'
 import { registerApplyHeadingLevel, registerResetHeadingToParagraph, registerEmphasizeSelection, registerInsertCodeBlock } from '../modules/editor/formatService'
 import { useI18n } from '../modules/i18n/I18nContext'
+import { useThemeContext } from '../modules/theme/ThemeContext'
+import { buildBackgroundImageVars, resolveManagedBackgroundImageUrl } from '../modules/theme/backgroundImageRuntime'
 // 改为从内部动态加载，优化编辑性能
 // import { exportToHtml } from '../modules/export/html'
 
@@ -110,6 +112,7 @@ export function WorkspaceShell({
   onStatusMessageChange,
 }: WorkspaceShellProps) {
   const { t } = useI18n()
+  const { themeSettings } = useThemeContext()
   const [markdown, setMarkdown] = useState(seed)
   const [previewValue, setPreviewValue] = useState(seed)
   const [activeLine, setActiveLine] = useState(1)
@@ -350,6 +353,31 @@ export function WorkspaceShell({
   const [quitConfirmDialog, setQuitConfirmDialog] = useState<any>(null)
   const [isInsertTableDialogOpen, setIsInsertTableDialogOpen] = useState(false)
   const [recentDialogOpen, setRecentDialogOpen] = useState(false)
+
+  const workspaceBackground = themeSettings.workspaceBackground
+  const workspaceBackgroundUrl = useMemo(
+    () => resolveManagedBackgroundImageUrl(workspaceBackground?.path),
+    [workspaceBackground?.path],
+  )
+  const workspaceBackgroundStyle = useMemo(
+    () => buildBackgroundImageVars(workspaceBackground, { maxOpacity: 0.4 }),
+    [workspaceBackground],
+  )
+  const hasWorkspaceBackground = Boolean(workspaceBackground?.enabled && workspaceBackgroundUrl)
+  const workspaceBackgroundIncludesSidebar = Boolean(
+    hasWorkspaceBackground && themeSettings.workspaceBackgroundIncludeSidebar,
+  )
+  const workspaceBackgroundFitClass = workspaceBackground?.enabled
+    ? workspaceBackground.size === 'contain'
+      ? 'workspace-bg-fit-contain'
+      : workspaceBackground.size === 'height-fill'
+        ? 'workspace-bg-fit-height-fill'
+        : workspaceBackground.size === 'width-fill'
+          ? 'workspace-bg-fit-width-fill'
+          : workspaceBackground.size === 'auto'
+            ? 'workspace-bg-fit-auto'
+            : ''
+    : ''
 
   // 用于在 useEffect 中访问最新的 setConfirmDialog
   const setConfirmDialogRef = useRef(setConfirmDialog)
@@ -1837,6 +1865,17 @@ export function WorkspaceShell({
   return (
     <AiChatCommandBridgeContext.Provider value={aiChatCommandBridge}>
       <>
+        <div
+          className={`workspace-region ${hasWorkspaceBackground ? 'has-workspace-background' : ''} ${workspaceBackgroundIncludesSidebar ? 'workspace-background-includes-sidebar' : ''} ${workspaceBackgroundFitClass}`.trim()}
+          style={workspaceBackgroundIncludesSidebar ? workspaceBackgroundStyle : undefined}
+        >
+          {hasWorkspaceBackground && workspaceBackgroundIncludesSidebar ? (
+            <>
+              <img className="workspace-background" src={workspaceBackgroundUrl ?? ''} alt="" aria-hidden="true" />
+              <div className="workspace-background-overlay" aria-hidden="true" />
+            </>
+          ) : null}
+          <div className="workspace-region-content">
         {activeLeftPanel === 'files' && (
           <Sidebar
             standaloneFiles={sidebar.standaloneFiles} folderRoots={sidebar.folderRoots}
@@ -2139,7 +2178,17 @@ export function WorkspaceShell({
           <div className={`sidebar-resizer ${isSidebarResizing ? 'active' : ''}`} onMouseDown={handleSidebarResizeStart} />
         )}
 
-        <div className="workspace-column">
+        <div
+          className={`workspace-column ${hasWorkspaceBackground && !workspaceBackgroundIncludesSidebar ? 'workspace-column-with-background' : ''} ${workspaceBackgroundFitClass}`.trim()}
+          style={hasWorkspaceBackground && !workspaceBackgroundIncludesSidebar ? workspaceBackgroundStyle : undefined}
+        >
+          {hasWorkspaceBackground && !workspaceBackgroundIncludesSidebar ? (
+            <>
+              <img className="workspace-background" src={workspaceBackgroundUrl ?? ''} alt="" aria-hidden="true" />
+              <div className="workspace-background-overlay" aria-hidden="true" />
+            </>
+          ) : null}
+          <div className="workspace-column-content">
           {tabs.length === 0 ? (
             <Welcome
               onNewFile={() => createTab()}
@@ -2292,6 +2341,9 @@ export function WorkspaceShell({
               </main>
             </>
           )}
+          </div>
+        </div>
+          </div>
         </div>
 
         {conflictError && (

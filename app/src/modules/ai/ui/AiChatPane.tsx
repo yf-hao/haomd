@@ -16,6 +16,7 @@ import { tryHandleSlashCommand, parseHistoryRecallCommand } from './aiSlashComma
 import { AiChatCommandBridgeContext } from './AiChatCommandBridgeContext'
 import { ConfirmDialog } from '../../../components/ConfirmDialog'
 import { AiChatHistoryDialog } from './AiChatHistoryDialog'
+import { useThemeContext } from '../../theme/ThemeContext'
 
 const EMPTY_MESSAGES = [] as const
 
@@ -30,6 +31,7 @@ export interface AiChatPaneProps {
 }
 
 export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initialContext, onClose, currentFilePath, sourceTabId }) => {
+  const { themeSettings } = useThemeContext()
   const [input, setInput] = useState('')
   const [contextPrefix, setContextPrefix] = useState<string | null>(null)
   const [contextPrefixUsed, setContextPrefixUsed] = useState(false)
@@ -644,6 +646,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
       : lastMessage?.content.length ?? 0
 
   const lastMessageKey = lastMessage ? `${lastMessage.id}:${lastMessageDisplayLength}` : ''
+  const hasLocalBackground = Boolean(themeSettings.aiChatBackground?.enabled && themeSettings.aiChatBackground?.path)
 
   useEffect(() => {
     const el = messagesContainerRef.current
@@ -674,7 +677,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
 
   return (
     <>
-    <section className="pane ai-chat-pane" ref={paneRootRef}>
+    <section className={`pane ai-chat-pane ${hasLocalBackground ? 'has-ai-chat-local-background' : ''}`.trim()} ref={paneRootRef}>
       <div className="ai-chat-pane-header">
         <div className="ai-chat-pane-title">
           {(() => {

@@ -34,6 +34,88 @@ button:disabled {
   overflow: hidden;
 }
 
+.workspace-region {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspace-region-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.workspace-background,
+.workspace-background-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.workspace-background {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: var(--background-image-position-x, 50%) var(--background-image-position-y, 50%);
+  opacity: var(--background-image-opacity, 0);
+  filter: blur(var(--background-image-blur, 0px)) brightness(var(--background-image-brightness, 100%));
+  transform: scale(1.03);
+}
+
+.workspace-region.workspace-bg-fit-contain .workspace-background,
+.workspace-column.workspace-bg-fit-contain .workspace-background {
+  object-fit: contain;
+}
+
+.workspace-region.workspace-bg-fit-height-fill .workspace-background,
+.workspace-column.workspace-bg-fit-height-fill .workspace-background {
+  width: auto;
+  min-width: 100%;
+  height: 100%;
+  max-width: none;
+  left: var(--background-image-position-x, 50%);
+  top: var(--background-image-position-y, 50%);
+  transform: translate(
+      calc(-1 * var(--background-image-position-x, 50%)),
+      calc(-1 * var(--background-image-position-y, 50%))
+    )
+    scale(1.03);
+  object-fit: fill;
+}
+
+.workspace-region.workspace-bg-fit-width-fill .workspace-background,
+.workspace-column.workspace-bg-fit-width-fill .workspace-background {
+  width: 100%;
+  min-height: 100%;
+  height: auto;
+  max-height: none;
+  left: var(--background-image-position-x, 50%);
+  top: var(--background-image-position-y, 50%);
+  transform: translate(
+      calc(-1 * var(--background-image-position-x, 50%)),
+      calc(-1 * var(--background-image-position-y, 50%))
+    )
+    scale(1.03);
+  object-fit: fill;
+}
+
+.workspace-region.workspace-bg-fit-auto .workspace-background,
+.workspace-column.workspace-bg-fit-auto .workspace-background {
+  object-fit: none;
+}
+
+.workspace-background-overlay {
+  background: #000;
+  opacity: var(--background-image-overlay-opacity, 0);
+}
+
 .sidebar-panel-shell {
   position: relative;
   overflow: hidden;
@@ -469,6 +551,18 @@ button:disabled {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
+  position: relative;
+}
+
+.workspace-column-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
 }
 
 /* 主工作区：TabBar 下方区域，填满剩余高度 */
@@ -516,6 +610,10 @@ button:disabled {
   background: var(--theme-surface-editor);
 }
 
+.workspace-region.has-workspace-background .pane.editor-pane:not(:has(.editor-pane-frame.has-editor-background)) {
+  background: transparent;
+}
+
 .pane.editor-pane > .tab-bar {
   flex: 0 0 auto;
   width: 100%;
@@ -526,6 +624,10 @@ button:disabled {
 
 .pane.editor-pane > .code-editor {
   overflow: visible;
+}
+
+.workspace-region.has-workspace-background .pane.editor-pane:not(:has(.editor-pane-frame.has-editor-background)) > .tab-bar {
+  background: color-mix(in srgb, var(--theme-surface-editor) 72%, transparent);
 }
 
 .sidebar {
@@ -539,6 +641,12 @@ button:disabled {
   padding: 8px 8px 8px 12px;
   display: flex;
   flex-direction: column;
+}
+
+.workspace-region.has-workspace-background.workspace-background-includes-sidebar .sidebar-panel-shell:not(.has-sidebar-background) .sidebar,
+.workspace-region.has-workspace-background.workspace-background-includes-sidebar .sidebar-panel-shell:not(.has-sidebar-background) .outline-panel,
+.workspace-region.has-workspace-background.workspace-background-includes-sidebar .sidebar-panel-shell:not(.has-sidebar-background) .pdf-panel {
+  background: transparent;
 }
 
 .outline-panel {
@@ -963,6 +1071,14 @@ button:disabled {
   display: flex;
   flex-direction: column;
   background: var(--theme-surface-panel);
+}
+
+.workspace-region.has-workspace-background .ai-chat-pane:not(.has-ai-chat-local-background) .ai-chat-pane-header {
+  background: color-mix(in srgb, var(--theme-surface-panel) 70%, transparent);
+}
+
+.workspace-region.has-workspace-background .ai-chat-pane:not(.has-ai-chat-local-background) .ai-chat-pane-body {
+  background: transparent;
 }
 
 /* Dock 模式下的 AI Chat 布局：上方消息滚动，下方输入固定 */

@@ -616,6 +616,10 @@ struct ThemeSettingsCfg {
     #[serde(default)]
     custom_theme_id: Option<String>,
     #[serde(default)]
+    workspace_background: Option<ThemeEditorBackgroundCfg>,
+    #[serde(default)]
+    workspace_background_include_sidebar: Option<bool>,
+    #[serde(default)]
     editor_background: Option<ThemeEditorBackgroundCfg>,
     #[serde(default)]
     preview_background: Option<ThemeEditorBackgroundCfg>,
@@ -725,6 +729,18 @@ fn default_theme_settings_cfg() -> ThemeSettingsCfg {
     ThemeSettingsCfg {
         mode: Some("system".to_string()),
         custom_theme_id: None,
+        workspace_background: Some(ThemeEditorBackgroundCfg {
+            enabled: Some(false),
+            path: None,
+            opacity: Some(0.22),
+            overlay_opacity: Some(0.12),
+            blur_px: Some(2.0),
+            brightness: Some(100.0),
+            size: Some("height-fill".to_string()),
+            position_x: Some(50.0),
+            position_y: Some(50.0),
+        }),
+        workspace_background_include_sidebar: Some(false),
         editor_background: Some(ThemeEditorBackgroundCfg {
             enabled: Some(false),
             path: None,
