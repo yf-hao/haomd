@@ -3582,6 +3582,7 @@ fn escape_xml_attr(input: &str) -> String {
 mod tests {
     use super::*;
     use std::fs;
+    use std::io::Read;
 
     fn unique_test_path(prefix: &str, ext: Option<&str>) -> std::path::PathBuf {
         let mut path =
@@ -3659,6 +3660,96 @@ mod tests {
             bytes.starts_with(&[0x50, 0x4b]),
             "docx should be a zip package"
         );
+
+        let _ = std::fs::remove_dir_all(&work_dir);
+        let _ = std::fs::remove_file(&output_path);
+    }
+
+    #[test]
+    fn should_build_docx_package_with_chinese_text_and_embedded_image() {
+        let work_dir = unique_test_path("haomd-word-zh-image", None);
+        let output_path = unique_test_path("haomd-word-zh-image", Some("docx"));
+
+        let payload = WordDocPayloadCfg {
+            title: "论文导出示例".to_string(),
+            blocks: vec![
+                WordBlockCfg::Heading {
+                    level: 1,
+                    text: vec![WordInlineRunCfg::Text {
+                        value: "第一章 绪论".to_string(),
+                        bold: Some(true),
+                        italic: None,
+                        code: None,
+                        strike: None,
+                        underline: None,
+                        color: None,
+                        background_color: None,
+                        font_size_pt: None,
+                        font_family: None,
+                    }],
+                    style: None,
+                },
+                WordBlockCfg::Paragraph {
+                    text: vec![WordInlineRunCfg::Text {
+                        value: "这是一个用于 Windows CI 验证的中文段落。".to_string(),
+                        bold: None,
+                        italic: None,
+                        code: None,
+                        strike: None,
+                        underline: None,
+                        color: None,
+                        background_color: None,
+                        font_size_pt: None,
+                        font_family: None,
+                    }],
+                    style: None,
+                },
+                WordBlockCfg::Image {
+                    asset_id: "asset_cn_0".to_string(),
+                    alt: Some("示意图".to_string()),
+                    width_px: Some(1),
+                    height_px: Some(1),
+                    width_percent: None,
+                    max_width_percent: None,
+                },
+            ],
+            assets: vec![WordAssetCfg::EmbeddedImage {
+                id: "asset_cn_0".to_string(),
+                file_name: "figure.png".to_string(),
+                mime_type: "image/png".to_string(),
+                base64_data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9l9WQAAAAASUVORK5CYII=".to_string(),
+                width_px: Some(1),
+                height_px: Some(1),
+            }],
+            style_settings: None,
+        };
+
+        build_word_export_workspace(&work_dir, &payload).expect("workspace should build");
+        package_docx_workspace(&work_dir, &output_path).expect("docx package should build");
+
+        let bytes = std::fs::read(&output_path).expect("docx should exist");
+        assert!(
+            bytes.starts_with(&[0x50, 0x4b]),
+            "docx should be a zip package"
+        );
+
+        let cursor = std::io::Cursor::new(bytes);
+        let mut archive =
+            zip::ZipArchive::new(cursor).expect("docx package should be readable as zip");
+
+        let mut document_xml = String::new();
+        archive
+            .by_name("word/document.xml")
+            .expect("document.xml should exist")
+            .read_to_string(&mut document_xml)
+            .expect("document.xml should be readable");
+        assert!(document_xml.contains("第一章 绪论"));
+        assert!(document_xml.contains("这是一个用于 Windows CI 验证的中文段落。"));
+
+        let image_entry = archive
+            .by_name("word/media/figure.png")
+            .expect("embedded image should exist");
+        assert!(image_entry.size() > 0, "embedded image should not be empty");
 
         let _ = std::fs::remove_dir_all(&work_dir);
         let _ = std::fs::remove_file(&output_path);
