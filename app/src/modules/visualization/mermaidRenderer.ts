@@ -15,6 +15,7 @@ function getCssThemeColor(name: string, fallback: string) {
 function buildExportMermaidThemeVariables() {
   return {
     background: 'transparent',
+    fontSize: '15px',
     primaryColor: '#ffffff',
     primaryTextColor: '#000000',
     primaryBorderColor: '#000000',
@@ -140,7 +141,9 @@ function buildMermaidConfig(profile: MermaidRenderProfile, themeMode: ResolvedTh
     themeVariables: profile === 'export'
       ? buildExportMermaidThemeVariables()
       : buildMermaidThemeVariables(resolvedThemeMode),
-    fontFamily: mermaidConfig.fontFamily,
+    fontFamily: profile === 'export'
+      ? 'SimSun, "Times New Roman", serif'
+      : mermaidConfig.fontFamily,
     ...(profile === 'export'
       ? {
           flowchart: {
@@ -197,10 +200,10 @@ export async function renderMermaidToSvg(
   lib.initialize(buildMermaidConfig(profile, themeMode))
   const renderId = id ?? `mermaid-${Math.random().toString(36).slice(2)}`
   const rendered = await lib.render(renderId, code)
-  return normalizeMermaidSvg(rendered.svg)
+  return normalizeMermaidSvg(rendered.svg, profile)
 }
 
-function normalizeMermaidSvg(svgMarkup: string): string {
+function normalizeMermaidSvg(svgMarkup: string, profile: MermaidRenderProfile = 'preview'): string {
   if (typeof DOMParser !== 'undefined' && typeof XMLSerializer !== 'undefined') {
     try {
       const parser = new DOMParser()
@@ -231,6 +234,14 @@ function normalizeMermaidSvg(svgMarkup: string): string {
           .replace(/background:\s*[^;}\n]+;?/gi, '')
       }
 
+      if (profile === 'export') {
+        const textNodes = Array.from(svg.querySelectorAll('text, tspan'))
+        for (const node of textNodes) {
+          node.setAttribute('font-size', '15px')
+          node.setAttribute('font-weight', '700')
+        }
+      }
+
       return new XMLSerializer().serializeToString(doc)
     } catch {
       // fall through to string-based normalization
@@ -252,6 +263,23 @@ function normalizeMermaidSvg(svgMarkup: string): string {
 
   normalized = normalized.replace(/background-color:\s*[^;}\n]+;?/gi, '')
   normalized = normalized.replace(/background:\s*[^;}\n]+;?/gi, '')
+
+  if (profile === 'export') {
+    normalized = normalized.replace(/<(text|tspan)\b([^>]*)>/gi, (_match, tag: string, attrs: string) => {
+      let nextAttrs = attrs
+      if (/\bfont-size="/i.test(nextAttrs)) {
+        nextAttrs = nextAttrs.replace(/\bfont-size="[^"]*"/i, 'font-size="15px"')
+      } else {
+        nextAttrs += ' font-size="15px"'
+      }
+      if (/\bfont-weight="/i.test(nextAttrs)) {
+        nextAttrs = nextAttrs.replace(/\bfont-weight="[^"]*"/i, 'font-weight="700"')
+      } else {
+        nextAttrs += ' font-weight="700"'
+      }
+      return `<${tag}${nextAttrs}>`
+    })
+  }
 
   if (!/\bstyle="/i.test(normalized.match(/<svg\b[^>]*>/i)?.[0] ?? '')) {
     normalized = normalized.replace(/<svg\b/i, '<svg style="background: transparent;"')

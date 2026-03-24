@@ -207,7 +207,7 @@ async function svgToPng(svgMarkup: string): Promise<{ base64Data: string; widthP
 
   const width = Math.round(parseSvgWidth(normalized) ?? 1200)
   const height = Math.round(parseSvgHeight(normalized) ?? 800)
-  const scale = 4
+  const scale = 6
 
   const canvas = document.createElement('canvas')
   canvas.width = Math.round(width * scale)
@@ -254,7 +254,7 @@ export function replaceForeignObjectWithText(svgMarkup: string): string {
       const w = parseFloat(attrs.match(/\bwidth="([^"]*)"/)?.[1] || '100')
       const h = parseFloat(attrs.match(/\bheight="([^"]*)"/)?.[1] || '20')
 
-      const fontSize = 10.5
+      const fontSize = 15
       const lines = wrapForeignObjectLines(extractForeignObjectLines(innerHtml), w, fontSize)
       if (!lines.length) return ''
 
@@ -264,7 +264,7 @@ export function replaceForeignObjectWithText(svgMarkup: string): string {
       const cy = y + h / 2 + (fontSize * 0.35)
 
       if (lines.length === 1) {
-        return `<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-size="${fontSize}pt" fill="#000000" font-family="SimSun, &quot;Times New Roman&quot;, serif">${escapeXml(lines[0])}</text>`
+        return `<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-size="${fontSize}px" font-weight="700" fill="#000000" font-family="SimSun, &quot;Times New Roman&quot;, serif">${escapeXml(lines[0])}</text>`
       }
 
       const startY = cy - ((lines.length - 1) * lineHeight) / 2
@@ -275,7 +275,7 @@ export function replaceForeignObjectWithText(svgMarkup: string): string {
         })
         .join('')
 
-      return `<text x="${cx}" y="${startY}" text-anchor="middle" font-size="${fontSize}pt" fill="#000000" font-family="SimSun, &quot;Times New Roman&quot;, serif">${tspans}</text>`
+      return `<text x="${cx}" y="${startY}" text-anchor="middle" font-size="${fontSize}px" font-weight="700" fill="#000000" font-family="SimSun, &quot;Times New Roman&quot;, serif">${tspans}</text>`
     },
   )
 }

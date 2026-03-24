@@ -129,7 +129,7 @@ describe('export/word - renderWordDiagramAssets', () => {
     expect(svgMarkup).toContain('<tspan')
     expect(svgMarkup).toContain('资源层')
     expect(svgMarkup).toContain('config.yaml /')
-    expect(svgMarkup).toContain('FingerDir.yaml /')
+    expect(svgMarkup).toContain('FingerDir.yaml')
     expect(svgMarkup).toContain('DirDict')
   })
 
@@ -141,7 +141,7 @@ describe('export/word - renderWordDiagramAssets', () => {
     expect(tspanCount).toBeGreaterThan(1)
     expect(svgMarkup).toContain('资源层')
     expect(svgMarkup).toContain('config.yaml /')
-    expect(svgMarkup).toContain('FingerDir.yaml /')
+    expect(svgMarkup).toContain('FingerDir.yaml')
     expect(svgMarkup).toContain('DirDict')
   })
 
