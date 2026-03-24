@@ -124,7 +124,7 @@ describe('TabBar', () => {
             { id: '3', title: 'Tab 3', dirty: false },
         ] as any
 
-        const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+        const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
             const el = this as HTMLElement
             if (el.classList.contains('tab-bar')) {
                 return { width: 220, height: 28, top: 0, left: 0, right: 220, bottom: 28, x: 0, y: 0, toJSON() {} } as DOMRect

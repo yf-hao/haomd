@@ -251,8 +251,8 @@ export function useCommandSystem(params: CommandSystemParams) {
           void dispatchAction('toggle_preview')
         }
       } else if (key === 'c') {
-        // Mac + Tauri：完全交给系统 / WebView 处理
-        if (isMac && isTauri) return
+        // Tauri 下的复制交给系统 / WebView 处理，避免与原生快捷键或菜单重复触发。
+        if (isTauri) return
         const active = (typeof document !== 'undefined'
           ? (document.activeElement as Element | null)
           : null)
@@ -260,8 +260,8 @@ export function useCommandSystem(params: CommandSystemParams) {
           void dispatchAction('copy')
         }
       } else if (key === 'x') {
-        // Mac + Tauri：完全交给系统 / WebView 处理
-        if (isMac && isTauri) return
+        // Tauri 下的剪切交给系统 / WebView 处理，避免与原生快捷键或菜单重复触发。
+        if (isTauri) return
         const active = (typeof document !== 'undefined'
           ? (document.activeElement as Element | null)
           : null)

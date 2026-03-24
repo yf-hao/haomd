@@ -62,6 +62,20 @@ fn new_trace_id() -> String {
     format!("trace_{}", nanos)
 }
 
+fn left_aligned_math_paragraph_style() -> WordParagraphStyleCfg {
+    WordParagraphStyleCfg {
+        align: Some("left".to_string()),
+        line_height: None,
+        spacing_after_pt: None,
+        background_color: None,
+        border_color: None,
+        border_top_color: None,
+        border_right_color: None,
+        border_bottom_color: None,
+        border_left_color: None,
+    }
+}
+
 fn service_error(
     code: ErrorCode,
     message: impl Into<String>,
@@ -2033,15 +2047,18 @@ fn render_word_block(
             false,
             false,
         )),
-        WordBlockCfg::Math { content, math_ml } => Ok(render_paragraph_xml(
-            render_math_run_xml(content, math_ml.as_deref(), true),
-            None,
-            None,
-            quote_depth,
-            list_info,
-            false,
-            true,
-        )),
+        WordBlockCfg::Math { content, math_ml } => {
+            let paragraph_style = left_aligned_math_paragraph_style();
+            Ok(render_paragraph_xml(
+                render_math_run_xml(content, math_ml.as_deref(), true),
+                None,
+                Some(&paragraph_style),
+                quote_depth,
+                list_info,
+                false,
+                true,
+            ))
+        }
         WordBlockCfg::Code {
             language: _,
             content,
@@ -2841,6 +2858,7 @@ fn font_size_pt_to_half_points(size_pt: Option<f32>) -> Option<u32> {
 struct MathMlNode {
     name: String,
     text: String,
+    attrs: HashMap<String, String>,
     children: Vec<MathMlNode>,
 }
 
@@ -2881,14 +2899,34 @@ fn parse_mathml(math_ml: &str) -> Result<MathMlNode, String> {
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(event)) => {
+                let mut attrs = HashMap::new();
+                for attr in event.attributes().flatten() {
+                    let key = String::from_utf8_lossy(attr.key.local_name().as_ref()).to_string();
+                    let value = attr
+                        .decode_and_unescape_value(reader.decoder())
+                        .map_err(|e| format!("解析 MathML 属性失败: {e}"))?
+                        .into_owned();
+                    attrs.insert(key, value);
+                }
                 stack.push(MathMlNode {
                     name: String::from_utf8_lossy(event.local_name().as_ref()).to_string(),
+                    attrs,
                     ..Default::default()
                 });
             }
             Ok(Event::Empty(event)) => {
+                let mut attrs = HashMap::new();
+                for attr in event.attributes().flatten() {
+                    let key = String::from_utf8_lossy(attr.key.local_name().as_ref()).to_string();
+                    let value = attr
+                        .decode_and_unescape_value(reader.decoder())
+                        .map_err(|e| format!("解析 MathML 属性失败: {e}"))?
+                        .into_owned();
+                    attrs.insert(key, value);
+                }
                 let node = MathMlNode {
                     name: String::from_utf8_lossy(event.local_name().as_ref()).to_string(),
+                    attrs,
                     ..Default::default()
                 };
                 if let Some(parent) = stack.last_mut() {
@@ -2967,6 +3005,9 @@ fn convert_mathml_node(node: &MathMlNode) -> String {
             .map(convert_mathml_node)
             .collect::<Vec<_>>()
             .join(""),
+        "mtable" => convert_mathml_table(node),
+        "mtr" | "mlabeledtr" => convert_mathml_table_row(node, &[]),
+        "mtd" => convert_mathml_table_cell(node),
         "mrow" => convert_mathml_row(node),
         "annotation" => String::new(),
         "mi" | "mn" | "mo" | "mtext" => render_omml_text_run(&collect_mathml_text(node)),
@@ -3079,6 +3120,176 @@ fn convert_mathml_node(node: &MathMlNode) -> String {
             }
         }
     }
+}
+
+fn convert_mathml_table(node: &MathMlNode) -> String {
+    let raw_rows = node
+        .children
+        .iter()
+        .filter(|child| matches!(child.name.as_str(), "mtr" | "mlabeledtr"))
+        .collect::<Vec<_>>();
+
+    let keep_columns = meaningful_table_columns(&raw_rows);
+    let rows = raw_rows
+        .iter()
+        .map(|row| convert_mathml_table_row(row, &keep_columns))
+        .filter(|row| !row.is_empty())
+        .collect::<Vec<_>>();
+
+    if rows.is_empty() {
+        return node
+            .children
+            .iter()
+            .map(convert_mathml_node)
+            .collect::<Vec<_>>()
+            .join("");
+    }
+
+    if rows.len() == 1 {
+        return rows.into_iter().next().unwrap_or_default();
+    }
+
+    let alignments = column_alignments(node, &keep_columns);
+    let columns_xml = alignments
+        .iter()
+        .map(|align| {
+            format!(
+                r#"<m:mc><m:mcPr><m:count m:val="1"/><m:mcJc m:val="{}"/></m:mcPr></m:mc>"#,
+                escape_xml_attr(align)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("");
+
+    let rows_xml = rows
+        .into_iter()
+        .map(|row| format!("<m:mr>{}</m:mr>", row))
+        .collect::<Vec<_>>()
+        .join("");
+
+    format!(
+        concat!(
+            r#"<m:m><m:mPr><m:mcs>{}</m:mcs>"#,
+            r#"<m:cGp m:val="60"/><m:cGpRule m:val="3"/><m:plcHide m:val="1"/>"#,
+            r#"</m:mPr>{}</m:m>"#
+        ),
+        columns_xml, rows_xml
+    )
+}
+
+fn convert_mathml_table_row(node: &MathMlNode, keep_columns: &[usize]) -> String {
+    let source_cells = node
+        .children
+        .iter()
+        .filter(|child| child.name == "mtd")
+        .collect::<Vec<_>>();
+
+    if source_cells.is_empty() {
+        return node
+            .children
+            .iter()
+            .map(convert_mathml_node)
+            .filter(|segment| !segment.is_empty())
+            .collect::<Vec<_>>()
+            .join("");
+    }
+
+    let indices = if keep_columns.is_empty() {
+        (0..source_cells.len()).collect::<Vec<_>>()
+    } else {
+        keep_columns.to_vec()
+    };
+
+    indices
+        .into_iter()
+        .map(|index| {
+            let content = source_cells
+                .get(index)
+                .map(|cell| convert_mathml_table_cell(cell))
+                .unwrap_or_default();
+            format!("<m:e>{}</m:e>", content)
+        })
+        .collect::<Vec<_>>()
+        .join("")
+}
+
+fn convert_mathml_table_cell(node: &MathMlNode) -> String {
+    node.children
+        .iter()
+        .map(convert_mathml_node)
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>()
+        .join("")
+}
+
+fn meaningful_table_columns(rows: &[&MathMlNode]) -> Vec<usize> {
+    let max_cols = rows
+        .iter()
+        .map(|row| row.children.iter().filter(|child| child.name == "mtd").count())
+        .max()
+        .unwrap_or(0);
+
+    (0..max_cols)
+        .filter(|index| {
+            rows.iter().any(|row| {
+                row.children
+                    .iter()
+                    .filter(|child| child.name == "mtd")
+                    .nth(*index)
+                    .map(|cell| !is_mathml_cell_empty(cell))
+                    .unwrap_or(false)
+            })
+        })
+        .collect()
+}
+
+fn is_mathml_cell_empty(node: &MathMlNode) -> bool {
+    if !node.text.trim().is_empty() {
+        return false;
+    }
+
+    if node.name == "mtd" {
+        return node.children.iter().all(is_mathml_cell_empty);
+    }
+
+    if matches!(node.name.as_str(), "mrow" | "mstyle" | "mpadded" | "mphantom" | "semantics") {
+        return node.children.iter().all(is_mathml_cell_empty);
+    }
+
+    node.children.is_empty()
+}
+
+fn column_alignments(node: &MathMlNode, keep_columns: &[usize]) -> Vec<&'static str> {
+    let source = node
+        .attrs
+        .get("columnalign")
+        .map(|value| {
+            value
+                .split_whitespace()
+                .map(|part| match part {
+                    "left" => "left",
+                    "right" => "right",
+                    "center" => "center",
+                    _ => "left",
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    if !source.is_empty() && source.len() == keep_columns.len() {
+        return source;
+    }
+
+    let indices = if keep_columns.is_empty() {
+        (0..source.len().max(1)).collect::<Vec<_>>()
+    } else {
+        keep_columns.to_vec()
+    };
+
+    indices
+        .into_iter()
+        .map(|index| source.get(index).copied().unwrap_or("left"))
+        .collect()
 }
 
 fn convert_mathml_row(node: &MathMlNode) -> String {
@@ -4172,9 +4383,26 @@ mod tests {
         assert!(document_xml.contains("E"));
         assert!(document_xml.contains("∑"));
         assert!(document_xml.contains(r#"<m:e><m:sSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sup><m:r><m:t>i</m:t></m:r></m:sup></m:sSup>"#));
-        assert!(document_xml.contains(r#"<w:jc w:val="center"/>"#));
+        assert!(document_xml.contains(r#"<w:jc w:val="left"/>"#));
 
         let _ = std::fs::remove_dir_all(&work_dir);
+    }
+
+    #[test]
+    fn should_convert_mathml_alignment_table_to_word_matrix() {
+        let math_ml = "<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\"><semantics><mtable rowspacing=\"0.25em\" columnalign=\"right left\" columnspacing=\"0em\"><mtr><mtd></mtd><mtd><mstyle scriptlevel=\"0\" displaystyle=\"true\"><mi>a</mi></mstyle></mtd><mtd><mstyle scriptlevel=\"0\" displaystyle=\"true\"><mrow><mrow></mrow><mo>=</mo><mi>b</mi><mo>+</mo><mi>c</mi></mrow></mstyle></mtd><mtd></mtd><mtd></mtd></mtr><mtr><mtd></mtd><mtd><mstyle scriptlevel=\"0\" displaystyle=\"true\"><mrow><mi>d</mi><mo>+</mo><mi>e</mi></mrow></mstyle></mtd><mtd><mstyle scriptlevel=\"0\" displaystyle=\"true\"><mrow><mrow></mrow><mo>=</mo><mi>f</mi></mrow></mstyle></mtd><mtd></mtd><mtd></mtd></mtr></mtable></semantics></math>";
+
+        let omml = mathml_to_omml(math_ml).expect("mtable mathml should convert");
+
+        assert!(omml.contains("<m:m>"));
+        assert!(omml.contains(r#"<m:mcJc m:val="right"/>"#));
+        assert!(omml.contains(r#"<m:mcJc m:val="left"/>"#));
+        assert_eq!(omml.matches("<m:mr>").count(), 2);
+        assert_eq!(omml.matches("<m:e>").count(), 4);
+        assert!(omml.contains("<m:t>a</m:t>"));
+        assert!(omml.contains("<m:t>=</m:t>"));
+        assert!(omml.contains("<m:t>d</m:t>"));
+        assert!(omml.contains("<m:t>f</m:t>"));
     }
 
     #[test]
@@ -5074,8 +5302,8 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             dock_left: "停靠左侧",
             dock_right: "停靠右侧",
             view: "视图",
-            toggle_editor: "切换编辑器 (⌘P)",
-            toggle_preview_only: "切换仅预览 (⇧⌘P)",
+            toggle_editor: "切换编辑器 ",
+            toggle_preview_only: "切换仅预览",
             toggle_sidebar: "切换侧边栏",
             toggle_status_bar: "切换状态栏",
             zoom_in: "放大",
@@ -5150,8 +5378,8 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             dock_left: "Dock Left",
             dock_right: "Dock Right",
             view: "View",
-            toggle_editor: "Toggle Editor (⌘P)",
-            toggle_preview_only: "Toggle Preview Only (⇧⌘P)",
+            toggle_editor: "Toggle Editor",
+            toggle_preview_only: "Toggle Preview Only",
             toggle_sidebar: "Toggle Sidebar",
             toggle_status_bar: "Toggle Status Bar",
             zoom_in: "Zoom In",

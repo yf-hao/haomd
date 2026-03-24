@@ -127,7 +127,7 @@ export const TabBar = memo(function TabBar({ tabs, activeId, onTabClick, onTabCl
     }
 
     const visible = tabs.slice(startIndex, endIndex + 1)
-    const hidden = tabs.filter((tab, index) => index < startIndex || index > endIndex)
+    const hidden = tabs.filter((_, index) => index < startIndex || index > endIndex)
     return { visibleTabs: visible, hiddenTabs: hidden }
   }, [activeId, containerWidth, tabWidths, tabs])
 
