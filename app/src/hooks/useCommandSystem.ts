@@ -270,6 +270,13 @@ export function useCommandSystem(params: CommandSystemParams) {
         }
       } else if (key === 'k') {
         e.preventDefault()
+        e.stopPropagation()
+        if (typeof document !== 'undefined') {
+          const active = document.activeElement
+          if (isEditableElement(active)) {
+            ;(active as HTMLElement).blur()
+          }
+        }
         void dispatchAction('ai_chat')
       } else if (key === 'd') {
         e.preventDefault()

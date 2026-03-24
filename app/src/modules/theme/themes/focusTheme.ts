@@ -77,7 +77,7 @@ export const focusTheme: ThemeDefinition = {
       sidebarActive: 'rgba(255, 255, 255, 0.09)',
       focusRing: 'rgba(147, 183, 255, 0.28)',
       selectionRing: 'rgba(147, 183, 255, 0.46)',
-      tabBarHeight: '38px',
+      tabBarHeight: '28px',
       dividerWidth: '2px',
     },
   },

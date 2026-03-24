@@ -77,7 +77,7 @@ export const velvetRoseTheme: ThemeDefinition = {
       sidebarActive: 'rgba(196, 90, 142, 0.16)',
       focusRing: 'rgba(215, 122, 166, 0.28)',
       selectionRing: 'rgba(215, 122, 166, 0.46)',
-      tabBarHeight: '38px',
+      tabBarHeight: '28px',
       dividerWidth: '2px',
     },
   },

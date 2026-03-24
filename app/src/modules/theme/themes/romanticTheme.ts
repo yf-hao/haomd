@@ -77,7 +77,7 @@ export const romanticTheme: ThemeDefinition = {
       sidebarActive: 'rgba(223, 115, 160, 0.26)',
       focusRing: 'rgba(223, 115, 160, 0.40)',
       selectionRing: 'rgba(223, 115, 160, 0.56)',
-      tabBarHeight: '38px',
+      tabBarHeight: '28px',
       dividerWidth: '2px',
     },
   },

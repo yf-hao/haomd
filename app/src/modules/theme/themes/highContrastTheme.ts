@@ -77,7 +77,7 @@ export const highContrastTheme: ThemeDefinition = {
       sidebarActive: 'rgba(37, 99, 235, 0.16)',
       focusRing: 'rgba(37, 99, 235, 0.42)',
       selectionRing: 'rgba(37, 99, 235, 0.56)',
-      tabBarHeight: '38px',
+      tabBarHeight: '28px',
       dividerWidth: '2px',
     },
   },

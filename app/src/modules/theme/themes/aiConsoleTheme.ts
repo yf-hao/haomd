@@ -77,7 +77,7 @@ export const aiConsoleTheme: ThemeDefinition = {
       sidebarActive: 'rgba(255, 255, 255, 0.10)',
       focusRing: 'rgba(168, 199, 250, 0.34)',
       selectionRing: 'rgba(168, 199, 250, 0.56)',
-      tabBarHeight: '38px',
+      tabBarHeight: '28px',
       dividerWidth: '2px',
     },
   },

@@ -77,7 +77,7 @@ export const neonPopTheme: ThemeDefinition = {
       sidebarActive: 'rgba(255, 93, 177, 0.18)',
       focusRing: 'rgba(255, 93, 177, 0.36)',
       selectionRing: 'rgba(105, 207, 255, 0.50)',
-      tabBarHeight: '38px',
+      tabBarHeight: '28px',
       dividerWidth: '2px',
     },
   },

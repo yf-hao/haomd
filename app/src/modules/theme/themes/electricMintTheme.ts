@@ -77,7 +77,7 @@ export const electricMintTheme: ThemeDefinition = {
       sidebarActive: 'rgba(86, 240, 203, 0.16)',
       focusRing: 'rgba(86, 240, 203, 0.34)',
       selectionRing: 'rgba(68, 213, 255, 0.48)',
-      tabBarHeight: '38px',
+      tabBarHeight: '28px',
       dividerWidth: '2px',
     },
   },

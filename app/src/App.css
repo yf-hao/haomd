@@ -1058,6 +1058,7 @@ button:disabled {
   gap: 8px;
   justify-content: space-between;
   padding: 0 12px;
+  height: var(--theme-component-tabbar-height);
   min-height: var(--theme-component-tabbar-height);
   box-sizing: border-box;
   border-bottom: 1px solid var(--theme-border-strong);
@@ -1065,8 +1066,13 @@ button:disabled {
 }
 
 .ai-chat-pane-title {
+  display: flex;
+  align-items: center;
   font-size: 13px;
   font-weight: 600;
+  line-height: 28px;
+  min-height: 28px;
+  align-self: center;
 }
 
 .ai-chat-pane-body {
@@ -1125,6 +1131,15 @@ button:disabled {
   /* 去掉浮动窗口里的垂直位移 */
   margin-left: auto;
   /* 在 Dock 头部里靠右排列 */
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  flex: 0 0 28px;
+  align-self: center;
+}
+
+.ai-chat-pane-header .ai-chat-close-icon {
+  display: block;
 }
 
 .floating-toggle {

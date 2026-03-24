@@ -8,6 +8,16 @@
   border-bottom: 1px solid var(--theme-border-subtle);
   background: var(--theme-surface-input-soft);
   backdrop-filter: blur(6px);
+  position: relative;
+  overflow: hidden;
+}
+
+.tab-bar-list {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
 }
 
 .tab-item {
@@ -21,6 +31,8 @@
   color: var(--theme-text-muted);
   background: transparent;
   transition: background 0.15s ease, color 0.15s ease;
+  min-width: 0;
+  flex: 0 0 auto;
 }
 
 .tab-item:hover {
@@ -72,4 +84,88 @@
 
 .tab-close:hover {
   background: var(--theme-surface-card);
+}
+
+.tab-overflow {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.tab-overflow-button,
+.tab-overflow-item {
+  border: none;
+  background: transparent;
+  color: var(--theme-text-muted);
+  cursor: pointer;
+}
+
+.tab-overflow-button {
+  min-width: 32px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 8px;
+  font-size: calc(var(--ui-font-tabbar) - 1px);
+}
+
+.tab-overflow-button:hover,
+.tab-overflow-button[aria-expanded='true'] {
+  background: var(--theme-surface-card);
+  color: var(--theme-text-default);
+}
+
+.tab-overflow-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 220px;
+  max-width: min(320px, 70vw);
+  max-height: 280px;
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid var(--theme-border-subtle);
+  border-radius: 10px;
+  background: var(--theme-surface-panel);
+  box-shadow: var(--theme-shadow-card);
+  z-index: var(--z-popover);
+}
+
+.tab-overflow-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: var(--ui-font-tabbar);
+  text-align: left;
+}
+
+.tab-overflow-item:hover,
+.tab-overflow-item.active {
+  background: var(--theme-surface-card);
+  color: var(--theme-text-default);
+}
+
+.tab-overflow-title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tab-bar-measure {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+  inset: 0 auto auto 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.tab-item-measure {
+  flex: 0 0 auto;
 }

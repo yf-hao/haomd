@@ -77,7 +77,7 @@ export const paperTheme: ThemeDefinition = {
       sidebarActive: 'rgba(169, 122, 80, 0.14)',
       focusRing: 'rgba(169, 122, 80, 0.24)',
       selectionRing: 'rgba(169, 122, 80, 0.42)',
-      tabBarHeight: '38px',
+      tabBarHeight: '28px',
       dividerWidth: '2px',
     },
   },

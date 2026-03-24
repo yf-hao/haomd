@@ -77,7 +77,7 @@ export const lightTheme: ThemeDefinition = {
       sidebarActive: 'rgba(59, 130, 246, 0.16)',
       focusRing: 'rgba(59, 130, 246, 0.32)',
       selectionRing: 'rgba(59, 130, 246, 0.56)',
-      tabBarHeight: '38px',
+      tabBarHeight: '28px',
       dividerWidth: '2px',
     },
   },

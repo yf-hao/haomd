@@ -77,7 +77,7 @@ export const darkTheme: ThemeDefinition = {
       sidebarActive: 'rgba(59, 130, 246, 0.35)',
       focusRing: 'rgba(96, 165, 250, 0.6)',
       selectionRing: 'rgba(125, 211, 252, 0.9)',
-      tabBarHeight: '38px',
+      tabBarHeight: '28px',
       dividerWidth: '2px',
     },
   },
