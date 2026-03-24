@@ -115,7 +115,7 @@ jobs:
             | 🪟 Windows | `*_x64-setup.exe` |
             | 🐧 Linux (Debian/Ubuntu) | `*.deb` |
             | 🐧 Linux (AppImage) | `*.AppImage` |
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           projectPath: app
           args: ${{ matrix.args }}

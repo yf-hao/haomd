@@ -3225,7 +3225,12 @@ fn convert_mathml_table_cell(node: &MathMlNode) -> String {
 fn meaningful_table_columns(rows: &[&MathMlNode]) -> Vec<usize> {
     let max_cols = rows
         .iter()
-        .map(|row| row.children.iter().filter(|child| child.name == "mtd").count())
+        .map(|row| {
+            row.children
+                .iter()
+                .filter(|child| child.name == "mtd")
+                .count()
+        })
         .max()
         .unwrap_or(0);
 
@@ -3252,7 +3257,10 @@ fn is_mathml_cell_empty(node: &MathMlNode) -> bool {
         return node.children.iter().all(is_mathml_cell_empty);
     }
 
-    if matches!(node.name.as_str(), "mrow" | "mstyle" | "mpadded" | "mphantom" | "semantics") {
+    if matches!(
+        node.name.as_str(),
+        "mrow" | "mstyle" | "mpadded" | "mphantom" | "semantics"
+    ) {
         return node.children.iter().all(is_mathml_cell_empty);
     }
 
