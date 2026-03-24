@@ -111,7 +111,7 @@ function domNodeToBlocks(node: ChildNode, ctx: HtmlWordModelContext): WordBlock[
       return block ? [block] : []
     }
     case 'hr':
-      return [{ type: 'paragraph', text: [{ type: 'text', value: '----------------' }] }]
+      return []
     default: {
       const inlineRuns = domChildrenToInlineRuns(element, ctx)
       return inlineRuns.length ? [{ type: 'paragraph', text: inlineRuns }] : []

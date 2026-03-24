@@ -111,10 +111,7 @@ function transformBlock(node: Content, ctx: ParseContext): WordBlock[] {
         rows: node.children.map((row) => tableRowToModel(row, ctx)),
       }]
     case 'thematicBreak':
-      return [{
-        type: 'paragraph',
-        text: [{ type: 'text', value: '----------------' }],
-      }]
+      return []
     case 'html':
       return htmlFragmentToBlocks(node.value, htmlContextFromParseContext(ctx))
     case 'definition':

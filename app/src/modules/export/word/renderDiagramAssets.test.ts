@@ -4,7 +4,7 @@ vi.mock('mermaid', () => ({
   default: {
     initialize: vi.fn(),
     render: vi.fn(async () => ({
-      svg: '<svg width="240" height="120" viewBox="0 0 240 120"><rect width="240" height="120"/></svg>',
+      svg: '<svg width="240" height="120" viewBox="0 0 240 120"><foreignObject x="20" y="20" width="120" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="line-height: 1.5"><p>资源层 config.yaml /</p><p>FingerDir.yaml / DirDict</p></div></foreignObject><rect width="240" height="120"/></svg>',
     })),
   },
 }))
@@ -33,7 +33,7 @@ vi.mock('mind-elixir', () => {
   }
 })
 
-import { renderWordDiagramAssets } from './renderDiagramAssets'
+import { renderWordDiagramAssets, replaceForeignObjectWithText } from './renderDiagramAssets'
 import type { WordDocPayload } from './types'
 
 class MockImage {
@@ -103,6 +103,7 @@ describe('export/word - renderWordDiagramAssets', () => {
         mimeType: 'image/png',
       }),
     ])
+    expect(HTMLCanvasElement.prototype.toDataURL).toHaveBeenCalled()
 
     const { default: mermaid } = await import('mermaid')
     expect(vi.mocked(mermaid.initialize)).toHaveBeenLastCalledWith(
@@ -119,6 +120,29 @@ describe('export/word - renderWordDiagramAssets', () => {
         }),
       }),
     )
+  })
+
+  it('should preserve multiline foreignObject labels when rasterizing mermaid svg', async () => {
+    const svgMarkup = replaceForeignObjectWithText(
+      '<svg width="240" height="120" viewBox="0 0 240 120"><foreignObject x="20" y="20" width="120" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="line-height: 1.5"><p>资源层 config.yaml /</p><p>FingerDir.yaml / DirDict</p></div></foreignObject></svg>',
+    )
+    expect(svgMarkup).toContain('<tspan')
+    expect(svgMarkup).toContain('资源层')
+    expect(svgMarkup).toContain('config.yaml /')
+    expect(svgMarkup).toContain('FingerDir.yaml /')
+    expect(svgMarkup).toContain('DirDict')
+  })
+
+  it('should wrap long single-line foreignObject labels by width before rasterizing', async () => {
+    const svgMarkup = replaceForeignObjectWithText(
+      '<svg width="240" height="120" viewBox="0 0 240 120"><foreignObject x="20" y="20" width="120" height="48"><div xmlns="http://www.w3.org/1999/xhtml">资源层 config.yaml / FingerDir.yaml / DirDict</div></foreignObject></svg>',
+    )
+    const tspanCount = (svgMarkup.match(/<tspan/g) || []).length
+    expect(tspanCount).toBeGreaterThan(1)
+    expect(svgMarkup).toContain('资源层')
+    expect(svgMarkup).toContain('config.yaml /')
+    expect(svgMarkup).toContain('FingerDir.yaml /')
+    expect(svgMarkup).toContain('DirDict')
   })
 
   it('should convert mind code blocks into embedded png assets', async () => {

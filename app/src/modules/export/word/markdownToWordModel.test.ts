@@ -125,6 +125,24 @@ describe('export/word - markdownToWordModel', () => {
     ])
   })
 
+  it('should ignore thematic breaks when exporting to word', () => {
+    const payload = markdownToWordModel(['before', '', '---', '', 'after'].join('\n'), 'Rule')
+
+    expect(payload.blocks).toEqual([
+      { type: 'paragraph', text: [{ type: 'text', value: 'before' }] },
+      { type: 'paragraph', text: [{ type: 'text', value: 'after' }] },
+    ])
+  })
+
+  it('should ignore html hr when exporting to word', () => {
+    const payload = markdownToWordModel(['before', '', '<hr>', '', 'after'].join('\n'), 'Rule')
+
+    expect(payload.blocks).toEqual([
+      { type: 'paragraph', text: [{ type: 'text', value: 'before' }] },
+      { type: 'paragraph', text: [{ type: 'text', value: 'after' }] },
+    ])
+  })
+
   it('should parse block math and inline math nodes', () => {
     const markdown = [
       'Inline math $E = mc^2$ in a sentence.',

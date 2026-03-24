@@ -207,7 +207,7 @@ async function svgToPng(svgMarkup: string): Promise<{ base64Data: string; widthP
 
   const width = Math.round(parseSvgWidth(normalized) ?? 1200)
   const height = Math.round(parseSvgHeight(normalized) ?? 800)
-  const scale = 2
+  const scale = 4
 
   const canvas = document.createElement('canvas')
   canvas.width = Math.round(width * scale)
@@ -245,7 +245,7 @@ async function svgToPng(svgMarkup: string): Promise<{ base64Data: string; widthP
  * Replace <foreignObject> blocks with SVG <text> using regex.
  * DOMParser can't reliably handle mixed HTML-in-SVG, so we use regex instead.
  */
-function replaceForeignObjectWithText(svgMarkup: string): string {
+export function replaceForeignObjectWithText(svgMarkup: string): string {
   return svgMarkup.replace(
     /<foreignObject([^>]*)>([\s\S]*?)<\/foreignObject>/gi,
     (_match, attrs: string, innerHtml: string) => {
@@ -254,20 +254,98 @@ function replaceForeignObjectWithText(svgMarkup: string): string {
       const w = parseFloat(attrs.match(/\bwidth="([^"]*)"/)?.[1] || '100')
       const h = parseFloat(attrs.match(/\bheight="([^"]*)"/)?.[1] || '20')
 
-      // Extract visible text, strip HTML tags
-      const text = innerHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
-      if (!text) return ''
+      const fontSize = 10.5
+      const lines = wrapForeignObjectLines(extractForeignObjectLines(innerHtml), w, fontSize)
+      if (!lines.length) return ''
 
-      // Detect font-size from inline styles
-      const sizeMatch = innerHtml.match(/font-size:\s*([\d.]+)/)
-      const fontSize = sizeMatch ? sizeMatch[1] : '14'
+      const lineHeight = fontSize * 1.2
 
       const cx = x + w / 2
-      const cy = y + h / 2
+      const cy = y + h / 2 + (fontSize * 0.35)
 
-      return `<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-size="${fontSize}" fill="#333" font-family="Inter, system-ui, sans-serif">${escapeXml(text)}</text>`
+      if (lines.length === 1) {
+        return `<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-size="${fontSize}pt" fill="#000000" font-family="SimSun, &quot;Times New Roman&quot;, serif">${escapeXml(lines[0])}</text>`
+      }
+
+      const startY = cy - ((lines.length - 1) * lineHeight) / 2
+      const tspans = lines
+        .map((line, index) => {
+          const dy = index === 0 ? '0' : `${lineHeight}`
+          return `<tspan x="${cx}" dy="${dy}">${escapeXml(line)}</tspan>`
+        })
+        .join('')
+
+      return `<text x="${cx}" y="${startY}" text-anchor="middle" font-size="${fontSize}pt" fill="#000000" font-family="SimSun, &quot;Times New Roman&quot;, serif">${tspans}</text>`
     },
   )
+}
+
+function extractForeignObjectLines(innerHtml: string): string[] {
+  const normalized = innerHtml
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>\s*<p[^>]*>/gi, '\n')
+    .replace(/<\/div>\s*<div[^>]*>/gi, '\n')
+    .replace(/<\/span>\s*<span[^>]*>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+
+  return normalized
+    .split('\n')
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+}
+
+function wrapForeignObjectLines(lines: string[], width: number, fontSize: number): string[] {
+  const maxTextWidth = Math.max(20, width - 12)
+  const wrapped: string[] = []
+  for (const line of lines) {
+    wrapped.push(...wrapLineByWidth(line, maxTextWidth, fontSize))
+  }
+  return wrapped
+}
+
+function wrapLineByWidth(line: string, maxTextWidth: number, fontSize: number): string[] {
+  if (!line) return []
+  const tokens = line.split(/(\s+|\/)/).filter(Boolean)
+  const lines: string[] = []
+  let current = ''
+
+  const pushCurrent = () => {
+    const normalized = current.trim()
+    if (normalized) lines.push(normalized)
+    current = ''
+  }
+
+  for (const token of tokens) {
+    const candidate = current ? `${current}${token}` : token
+    if (current && estimateTextWidth(candidate, fontSize) > maxTextWidth) {
+      pushCurrent()
+      current = token.trimStart()
+      continue
+    }
+    current = candidate
+  }
+  pushCurrent()
+
+  if (lines.length === 0) return [line]
+  return lines
+}
+
+function estimateTextWidth(text: string, fontSize: number): number {
+  let width = 0
+  for (const char of text) {
+    if (/\s/.test(char)) {
+      width += fontSize * 0.3
+    } else if (/[\u4e00-\u9fff]/.test(char)) {
+      width += fontSize * 1
+    } else if (/[A-Z]/.test(char)) {
+      width += fontSize * 0.68
+    } else if (/[a-z0-9]/.test(char)) {
+      width += fontSize * 0.56
+    } else {
+      width += fontSize * 0.45
+    }
+  }
+  return width
 }
 
 function escapeXml(str: string): string {
