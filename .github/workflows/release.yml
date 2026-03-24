@@ -34,19 +34,7 @@ jobs:
       - name: Extract Latest Changelog
         if: steps.check.outputs.is_new_version == 'true'
         id: extract_changelog
-        run: |
-          BODY=$(node -e "
-            const fs = require('fs');
-            const content = fs.readFileSync('CHANGELOG.md', 'utf8');
-            // Match the first version block (## [vX.X.X] until the next ## [vX.X.X] or end of file)
-            const regex = /## \[v\d+\.\d+\.\d+\][\s\S]*?(?=\n## \[v\d+\.\d+\.\d+\]|$)/;
-            const match = content.match(regex);
-            // Output only the matched body
-            process.stdout.write(match ? match[0].trim() : '');
-          ")
-          echo "body<<EOF" >> $GITHUB_OUTPUT
-          echo "$BODY" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+        run: node scripts/extract-changelog.mjs
 
   publish:
     permissions:
