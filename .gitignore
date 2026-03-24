@@ -2,6 +2,10 @@
 /*.md
 !/README.md
 !/README_EN.md
+!/CHANGELOG.md
+!/GUIDE.md
+!/INSTALL.md
+!/CLAUDE.md
 
 # Environment variables
 .env
