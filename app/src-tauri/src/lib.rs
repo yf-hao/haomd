@@ -5609,6 +5609,13 @@ fn detect_system_menu_locale() -> MenuLocale {
     }
 }
 
+fn menu_locale_language_tag(locale: MenuLocale) -> &'static str {
+    match locale {
+        MenuLocale::ZhCn => "zh-CN",
+        MenuLocale::EnUs => "en-US",
+    }
+}
+
 async fn resolve_menu_locale(app: &AppHandle) -> MenuLocale {
     let path = match editor_settings_path(app) {
         Ok(path) => path,
@@ -5630,6 +5637,11 @@ async fn resolve_menu_locale(app: &AppHandle) -> MenuLocale {
         Some("en-US") => MenuLocale::EnUs,
         _ => detect_system_menu_locale(),
     }
+}
+
+#[tauri::command]
+async fn get_system_language(app: AppHandle) -> Result<String, String> {
+    Ok(menu_locale_language_tag(resolve_menu_locale(&app).await).to_string())
 }
 
 pub(crate) async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
@@ -7046,6 +7058,7 @@ pub fn run() {
       open_webview_browser,
       pick_editor_background_image,
       export_word_docx,
+      get_system_language,
       is_inkscape_available,
       convert_svg_to_emf,
       convert_svg_to_plain_svg,

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { invoke } from '@tauri-apps/api/core'
 import './App.css'
 import WorkspaceShell, { type LeftPanelId, type InitialWorkspaceAction } from './components/WorkspaceShell'
 import { AiSettingsDialog } from './components/AiSettingsDialog'
 import { PromptSettingsDialog } from './components/PromptSettingsDialog'
 import { SettingsDialog } from './components/SettingsDialog'
 import { I18nProvider, useI18n } from './modules/i18n/I18nContext'
-import { resolveLanguageMode } from './modules/i18n/languageResolver'
-import type { LanguageMode } from './modules/i18n/schema'
+import { getSystemResolvedLanguage, normalizeLanguageTag, resolveLanguageMode } from './modules/i18n/languageResolver'
+import type { LanguageMode, ResolvedLanguage } from './modules/i18n/schema'
 import { onMenuAction } from './modules/platform/menuEvents'
 import { isTauriEnv } from './modules/platform/runtime'
 import {
@@ -44,6 +45,7 @@ function App() {
   const [statusMessage, setStatusMessage] = useState('')
   const [themeSettings, setThemeSettings] = useState<ThemeSettings>(getDefaultThemeSettings())
   const [languageMode, setLanguageMode] = useState<LanguageMode>(getDefaultLanguageSetting())
+  const [systemResolvedLanguage, setSystemResolvedLanguage] = useState<ResolvedLanguage>(() => getSystemResolvedLanguage())
   const [uiTypography, setUiTypography] = useState<UiTypographySettings>(getDefaultUiTypographySettings())
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => getSystemPrefersDark())
   const hasPreviewThemeOverrideRef = useRef(false)
@@ -112,6 +114,31 @@ function App() {
   }, [])
 
   useEffect(() => {
+    if (!isTauriEnv()) {
+      setSystemResolvedLanguage(getSystemResolvedLanguage())
+      return
+    }
+
+    let cancelled = false
+
+    void invoke<string>('get_system_language')
+      .then((language) => {
+        if (!cancelled) {
+          setSystemResolvedLanguage(normalizeLanguageTag(language))
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSystemResolvedLanguage(getSystemResolvedLanguage())
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
     if (import.meta.env.DEV) {
       console.log('[Perf] App first render cost:', performance.now() - appStartTime, 'ms')
     }
@@ -155,7 +182,10 @@ function App() {
     () => resolveActiveTheme(themeSettings.mode, systemPrefersDark),
     [themeSettings.mode, systemPrefersDark],
   )
-  const resolvedLanguage = useMemo(() => resolveLanguageMode(languageMode), [languageMode])
+  const resolvedLanguage = useMemo(
+    () => resolveLanguageMode(languageMode, systemResolvedLanguage),
+    [languageMode, systemResolvedLanguage],
+  )
 
   useEffect(() => {
     applyResolvedTheme(activeTheme, resolvedThemeMode)

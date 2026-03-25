@@ -18,7 +18,10 @@ export function getSystemResolvedLanguage(): ResolvedLanguage {
   return 'en-US'
 }
 
-export function resolveLanguageMode(mode: LanguageMode): ResolvedLanguage {
-  if (mode === 'system') return getSystemResolvedLanguage()
+export function resolveLanguageMode(
+  mode: LanguageMode,
+  systemLanguage: ResolvedLanguage = getSystemResolvedLanguage(),
+): ResolvedLanguage {
+  if (mode === 'system') return systemLanguage
   return mode
 }
