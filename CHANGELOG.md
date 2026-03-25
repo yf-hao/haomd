@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.4.3] - 2026-03-25
+
+### 中文
+
+本次更新重点在于 **Word 导出渲染引擎的再升级**，并增强了 **搜索系统的易用性**，同时修复了发布流程中的关键故障。
+
+#### ✨ 新特性
+
+*   **Inkscape 支持集成**：导出 Word 时，现能调用系统级 Inkscape 工具优化 Mermaid 图表的渲染路径，确保生成的 SVG/图片更专业清晰。
+*   **搜索预填功能**：编辑器内唤起搜索框（`Cmd + F`）时，会自动获取当前选中的文字作为初始搜索内容，减少重复输入。
+*   **系统语言探测**：底层新增对用户系统默认语言的自动获取支持，为后续国际化的深度适配打下基础。
+
+#### 🔧 系统改进 与修复
+
+*   **CI 工作流故障修复**：针对发布脚本中 `CHANGELOG.md` 路径解析异常导致的工作流中断进行了针对性修复，打通了自动化发布链路。
+*   **Word 导出 Mermaid 细节打磨**：进一步优化了图表在不同主题背景下的视觉兼容性。
+
+---
+
+### English
+
+This release focuses on **upgrading the Word export rendering engine**, enhancing **search usability**, and resolving critical issues in the CI pipeline.
+
+#### ✨ New Features
+
+*   **Inkscape Integration for Word Export**: The app can now leverage system-installed Inkscape to optimize Mermaid diagram rendering, ensuring professional-grade visual clarity in exported documents.
+*   **Smart Search Pre-fill**: When opening the Find & Replace bar (`Cmd + F`), any text currently selected in the editor will now be automatically pre-filled as the search term.
+*   **System Language Detection**: Added a new core capability to automatically detect the user's system language, laying the groundwork for deeper i18n support.
+
+#### 🔧 System Refinements & Fixes
+
+*   **CI Workflow Reliability**: Fixed an `ENOENT` error in the release script where `CHANGELOG.md` couldn't be correctly located, ensuring stable automated deployments.
+*   **Mermaid Export Polish**: Systematically refined the visual styles of Mermaid diagrams during Word export for better theme consistency.
+
+---
+
 ## [v0.4.2] - 2026-03-25
 
 ### 中文
