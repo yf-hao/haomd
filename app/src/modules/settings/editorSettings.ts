@@ -195,7 +195,7 @@ const defaultWordExport: WordExportStyleSettings = {
   pageMarginCm: 2.54,
   enableInkscapeForWordExport: false,
   mermaidExportFormat: 'png',
-  inkscapeFallback: 'ask',
+  inkscapeFallback: 'png',
 }
 
 let cachedSettings: EditorSettings | null = null
@@ -344,6 +344,7 @@ export async function getUiTypographySettings(): Promise<UiTypographySettings> {
 export async function getWordExportStyleSettings(): Promise<WordExportStyleSettings> {
   const settings = await loadEditorSettings()
   const cfg = settings.wordExport ?? {}
+  const mermaidExportFormat = cfg.mermaidExportFormat ?? defaultWordExport.mermaidExportFormat
   return {
     bodyFontFamily: cfg.bodyFontFamily ?? defaultWordExport.bodyFontFamily,
     bodyFontSizePt: cfg.bodyFontSizePt ?? defaultWordExport.bodyFontSizePt,
@@ -357,8 +358,8 @@ export async function getWordExportStyleSettings(): Promise<WordExportStyleSetti
     pageMarginCm: cfg.pageMarginCm ?? defaultWordExport.pageMarginCm,
     enableInkscapeForWordExport:
       cfg.enableInkscapeForWordExport ?? defaultWordExport.enableInkscapeForWordExport,
-    mermaidExportFormat: cfg.mermaidExportFormat ?? defaultWordExport.mermaidExportFormat,
-    inkscapeFallback: cfg.inkscapeFallback ?? defaultWordExport.inkscapeFallback,
+    mermaidExportFormat,
+    inkscapeFallback: mermaidExportFormat === 'png' ? 'png' : 'ask',
   }
 }
 

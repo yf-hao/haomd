@@ -58,6 +58,9 @@ class MockImage {
 }
 
 describe('export/word - renderWordDiagramAssets', () => {
+  const a4BodyWidthPx = 602
+  const a4BodyHeightPx = 301
+
   beforeEach(() => {
     vi.clearAllMocks()
     invokeMock.mockReset()
@@ -100,8 +103,8 @@ describe('export/word - renderWordDiagramAssets', () => {
         type: 'image',
         assetId: 'asset_0',
         alt: 'Mermaid Diagram',
-        widthPx: 240,
-        heightPx: 120,
+        widthPx: a4BodyWidthPx,
+        heightPx: a4BodyHeightPx,
       },
     ])
     expect(result.assets).toEqual([
@@ -118,7 +121,9 @@ describe('export/word - renderWordDiagramAssets', () => {
     expect(vi.mocked(mermaid.initialize)).toHaveBeenLastCalledWith(
       expect.objectContaining({
         theme: 'base',
+        fontFamily: 'SimSun, "Times New Roman", serif',
         themeVariables: expect.objectContaining({
+          fontSize: '15px',
           primaryColor: '#ffffff',
           primaryBorderColor: '#000000',
           lineColor: '#000000',
@@ -126,6 +131,44 @@ describe('export/word - renderWordDiagramAssets', () => {
           clusterBkg: '#ffffff',
           clusterBorder: '#000000',
           edgeLabelBackground: '#ffffff',
+        }),
+      }),
+    )
+  })
+
+  it('should increase export font size for dense mermaid diagrams', async () => {
+    const payload: WordDocPayload = {
+      title: 'Dense Mermaid',
+      assets: [],
+      blocks: [
+        {
+          type: 'code',
+          language: 'mermaid',
+          content: `flowchart TD
+A[资源层 config.yaml / FingerDir.yaml / DirDict]
+B[扫描编排 scanner.py]
+C[表示层 GUI 界面]
+D[能力层 指纹识别]
+E[代理层 proxy_pool.py]
+F[UA层 ua_pool.py]
+G[用户]
+G --> C
+C --> B
+B --> A
+B --> D
+B --> E
+B --> F`,
+        },
+      ],
+    }
+
+    await renderWordDiagramAssets({ payload })
+
+    const { default: mermaid } = await import('mermaid')
+    expect(vi.mocked(mermaid.initialize)).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        themeVariables: expect.objectContaining({
+          fontSize: '18px',
         }),
       }),
     )
@@ -160,6 +203,8 @@ describe('export/word - renderWordDiagramAssets', () => {
         fileName: 'asset_0.emf',
         mimeType: 'image/x-emf',
         base64Data: 'ZW1m',
+        widthPx: a4BodyWidthPx,
+        heightPx: a4BodyHeightPx,
       }),
     ])
     expect(HTMLCanvasElement.prototype.toDataURL).not.toHaveBeenCalled()
@@ -194,6 +239,8 @@ describe('export/word - renderWordDiagramAssets', () => {
         fileName: 'asset_0.svg',
         mimeType: 'image/svg+xml',
         base64Data: 'c3Zn',
+        widthPx: a4BodyWidthPx,
+        heightPx: a4BodyHeightPx,
       }),
     ])
     expect(HTMLCanvasElement.prototype.toDataURL).not.toHaveBeenCalled()
@@ -285,6 +332,8 @@ describe('export/word - renderWordDiagramAssets', () => {
         fileName: 'asset_0.svg',
         mimeType: 'image/svg+xml',
         base64Data: 'c3Zn',
+        widthPx: a4BodyWidthPx,
+        heightPx: a4BodyHeightPx,
       }),
     ])
     expect(HTMLCanvasElement.prototype.toDataURL).not.toHaveBeenCalled()

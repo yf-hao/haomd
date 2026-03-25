@@ -501,8 +501,8 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
 
   const currentBackground = getBackgroundSettings(currentBackgroundTarget)
   const isInkscapeEnhancedExportEnabled = wordExport.enableInkscapeForWordExport
-  const shouldEnableInkscapeFallbackControl =
-    isInkscapeEnhancedExportEnabled && wordExport.mermaidExportFormat !== 'png'
+  const effectiveInkscapeFallback =
+    wordExport.mermaidExportFormat === 'png' ? 'png' : 'ask'
   const currentBackgroundOpacityInput =
     currentBackgroundTarget === 'workspaceBackground'
       ? workspaceBackgroundOpacityInput
@@ -1198,10 +1198,14 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                             value={wordExport.mermaidExportFormat}
                             disabled={!isInkscapeEnhancedExportEnabled}
                             onChange={(event) =>
-                              setWordExport((prev) => ({
-                                ...prev,
-                                mermaidExportFormat: event.target.value as WordExportStyleSettings['mermaidExportFormat'],
-                              }))}
+                              setWordExport((prev) => {
+                                const mermaidExportFormat = event.target.value as WordExportStyleSettings['mermaidExportFormat']
+                                return {
+                                  ...prev,
+                                  mermaidExportFormat,
+                                  inkscapeFallback: mermaidExportFormat === 'png' ? 'png' : 'ask',
+                                }
+                              })}
                           >
                             <option value="png">{t('wordExport.exportFormats.png')}</option>
                             <option value="svg">{t('wordExport.exportFormats.svg')}</option>
@@ -1212,13 +1216,9 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                           <div className="settings-field-label">{t('wordExport.inkscapeFallback')}</div>
                           <select
                             className="field-select"
-                            value={wordExport.inkscapeFallback}
-                            disabled={!shouldEnableInkscapeFallbackControl}
-                            onChange={(event) =>
-                              setWordExport((prev) => ({
-                                ...prev,
-                                inkscapeFallback: event.target.value as WordExportStyleSettings['inkscapeFallback'],
-                              }))}
+                            value={effectiveInkscapeFallback}
+                            disabled
+                            onChange={undefined}
                           >
                             <option value="ask">{t('wordExport.fallbackModes.ask')}</option>
                             <option value="png">{t('wordExport.fallbackModes.png')}</option>

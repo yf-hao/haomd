@@ -12,10 +12,10 @@ function getCssThemeColor(name: string, fallback: string) {
   return value || fallback
 }
 
-function buildExportMermaidThemeVariables() {
+function buildExportMermaidThemeVariables(fontSizePx: number) {
   return {
     background: 'transparent',
-    fontSize: '15px',
+    fontSize: `${fontSizePx}px`,
     primaryColor: '#ffffff',
     primaryTextColor: '#000000',
     primaryBorderColor: '#000000',
@@ -131,7 +131,11 @@ function buildMermaidThemeVariables(themeMode: ResolvedThemeMode) {
   }
 }
 
-function buildMermaidConfig(profile: MermaidRenderProfile, themeMode: ResolvedThemeMode = 'dark') {
+function buildMermaidConfig(
+  profile: MermaidRenderProfile,
+  themeMode: ResolvedThemeMode = 'dark',
+  exportFontSizePx = 15,
+) {
   const resolvedThemeMode = profile === 'export' ? 'light' : themeMode
 
   return {
@@ -139,7 +143,7 @@ function buildMermaidConfig(profile: MermaidRenderProfile, themeMode: ResolvedTh
     securityLevel: mermaidConfig.securityLevel,
     theme: 'base' as const,
     themeVariables: profile === 'export'
-      ? buildExportMermaidThemeVariables()
+      ? buildExportMermaidThemeVariables(exportFontSizePx)
       : buildMermaidThemeVariables(resolvedThemeMode),
     fontFamily: profile === 'export'
       ? 'SimSun, "Times New Roman", serif'
@@ -192,18 +196,23 @@ export function loadMermaid() {
 export async function renderMermaidToSvg(
   code: string,
   id?: string,
-  options?: { profile?: MermaidRenderProfile; themeMode?: ResolvedThemeMode },
+  options?: { profile?: MermaidRenderProfile; themeMode?: ResolvedThemeMode; exportFontSizePx?: number },
 ): Promise<string> {
   const lib = await loadMermaid()
   const profile = options?.profile ?? 'preview'
   const themeMode = options?.themeMode ?? 'dark'
-  lib.initialize(buildMermaidConfig(profile, themeMode))
+  const exportFontSizePx = options?.exportFontSizePx ?? 15
+  lib.initialize(buildMermaidConfig(profile, themeMode, exportFontSizePx))
   const renderId = id ?? `mermaid-${Math.random().toString(36).slice(2)}`
   const rendered = await lib.render(renderId, code)
-  return normalizeMermaidSvg(rendered.svg, profile)
+  return normalizeMermaidSvg(rendered.svg, profile, exportFontSizePx)
 }
 
-function normalizeMermaidSvg(svgMarkup: string, profile: MermaidRenderProfile = 'preview'): string {
+function normalizeMermaidSvg(
+  svgMarkup: string,
+  profile: MermaidRenderProfile = 'preview',
+  exportFontSizePx = 15,
+): string {
   if (typeof DOMParser !== 'undefined' && typeof XMLSerializer !== 'undefined') {
     try {
       const parser = new DOMParser()
@@ -237,8 +246,7 @@ function normalizeMermaidSvg(svgMarkup: string, profile: MermaidRenderProfile = 
       if (profile === 'export') {
         const textNodes = Array.from(svg.querySelectorAll('text, tspan'))
         for (const node of textNodes) {
-          node.setAttribute('font-size', '15px')
-          node.setAttribute('font-weight', '800')
+          node.setAttribute('font-size', `${exportFontSizePx}px`)
         }
       }
 
@@ -268,14 +276,9 @@ function normalizeMermaidSvg(svgMarkup: string, profile: MermaidRenderProfile = 
     normalized = normalized.replace(/<(text|tspan)\b([^>]*)>/gi, (_match, tag: string, attrs: string) => {
       let nextAttrs = attrs
       if (/\bfont-size="/i.test(nextAttrs)) {
-        nextAttrs = nextAttrs.replace(/\bfont-size="[^"]*"/i, 'font-size="15px"')
+        nextAttrs = nextAttrs.replace(/\bfont-size="[^"]*"/i, `font-size="${exportFontSizePx}px"`)
       } else {
-        nextAttrs += ' font-size="15px"'
-      }
-      if (/\bfont-weight="/i.test(nextAttrs)) {
-        nextAttrs = nextAttrs.replace(/\bfont-weight="[^"]*"/i, 'font-weight="800"')
-      } else {
-        nextAttrs += ' font-weight="800"'
+        nextAttrs += ` font-size="${exportFontSizePx}px"`
       }
       return `<${tag}${nextAttrs}>`
     })

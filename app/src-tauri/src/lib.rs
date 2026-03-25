@@ -4641,6 +4641,9 @@ mod tests {
                 line_spacing: Some(1.5),
                 code_font_size_pt: Some(9.0),
                 page_margin_cm: Some(3.0),
+                enable_inkscape_for_word_export: Some(false),
+                mermaid_export_format: Some("png".to_string()),
+                inkscape_fallback: Some("png".to_string()),
             }),
         };
 

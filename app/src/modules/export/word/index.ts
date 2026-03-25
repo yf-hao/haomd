@@ -29,6 +29,7 @@ export async function exportToWord(ctx: {
     const styleSettings = await getWordExportStyleSettings()
     let preferInkscapeForMermaid = false
     let mermaidExportFormat = styleSettings.mermaidExportFormat
+    const inkscapeFallback = mermaidExportFormat === 'png' ? 'png' : 'ask'
 
     if (containsMermaidBlock(markdown)) {
       const needsInkscape =
@@ -38,8 +39,7 @@ export async function exportToWord(ctx: {
         const hasInkscape = await checkInkscapeAvailability()
         preferInkscapeForMermaid = hasInkscape
         if (!hasInkscape) {
-          if (styleSettings.inkscapeFallback === 'cancel') return false
-          if (styleSettings.inkscapeFallback === 'ask') {
+          if (inkscapeFallback === 'ask') {
             const shouldContinue = await (ctx.confirmContinue
               ? ctx.confirmContinue({
                   title: tr('export.wordMermaidFallbackTitle', '未检测到 Inkscape'),

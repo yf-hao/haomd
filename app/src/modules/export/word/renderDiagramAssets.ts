@@ -1,7 +1,12 @@
 import { invoke } from '@tauri-apps/api/core'
 import MindElixir, { SIDE } from 'mind-elixir'
-import type { WordBlock, WordDocPayload } from './types'
+import type { WordBlock, WordDocPayload, WordExportStyleSettings } from './types'
 import { renderMermaidToSvg } from '../../visualization/mermaidRenderer'
+
+const WORD_A4_WIDTH_CM = 21
+const CM_PER_INCH = 2.54
+const CSS_PX_PER_INCH = 96
+const DEFAULT_PAGE_MARGIN_CM = 2.54
 
 type MindNode = { title: string; children?: MindNode[] }
 type MindElixirData = {
@@ -36,6 +41,7 @@ export async function renderWordDiagramAssets(options: {
             normalizedContent,
             preferInkscapeForMermaid,
             mermaidExportFormat,
+            payload.styleSettings,
           )
           if (!rendered) throw new Error(`Mermaid 图表渲染失败: ${summarizeDiagramBlock(normalizedContent)}`)
 
@@ -140,6 +146,7 @@ async function renderMermaidBlockForWord(
   code: string,
   preferInkscape: boolean,
   exportFormat: 'png' | 'svg' | 'emf',
+  styleSettings?: WordExportStyleSettings,
 ): Promise<{
   base64Data: string
   widthPx: number
@@ -148,12 +155,16 @@ async function renderMermaidBlockForWord(
   fileExtension: 'png' | 'emf' | 'svg'
 } | null> {
   try {
-    const svg = await renderMermaidBlockToSvg(code)
+    const exportFontSizePx = resolveMermaidExportFontSizePx(code)
+    const svg = await renderMermaidBlockToSvg(code, exportFontSizePx)
     if (!svg) return null
 
-    const widthPx = Math.round(parseSvgWidth(svg) ?? 1200)
-    const heightPx = Math.round(parseSvgHeight(svg) ?? 800)
-    const normalizedSvg = normalizeSvgForRasterization(replaceForeignObjectWithText(svg))
+    const sourceWidthPx = Math.round(parseSvgWidth(svg) ?? 1200)
+    const sourceHeightPx = Math.round(parseSvgHeight(svg) ?? 800)
+    const targetWidthPx = getA4BodyWidthPx(styleSettings)
+    const widthPx = targetWidthPx
+    const heightPx = Math.max(1, Math.round((sourceHeightPx / Math.max(sourceWidthPx, 1)) * widthPx))
+    const normalizedSvg = normalizeSvgForRasterization(replaceForeignObjectWithText(svg, exportFontSizePx))
     const isSequence = isSequenceDiagram(code)
 
     if (preferInkscape && exportFormat !== 'png') {
@@ -188,7 +199,10 @@ async function renderMermaidBlockForWord(
       }
     }
 
-    const png = await svgToPng(normalizedSvg)
+    const png = await svgToPng(normalizedSvg, {
+      widthPx,
+      heightPx,
+    })
     return {
       ...png,
       mimeType: 'image/png',
@@ -209,11 +223,11 @@ function isSequenceDiagram(code: string): boolean {
   return /^sequenceDiagram\b/i.test(firstMeaningfulLine ?? '')
 }
 
-async function renderMermaidBlockToSvg(code: string): Promise<string | null> {
+async function renderMermaidBlockToSvg(code: string, exportFontSizePx: number): Promise<string | null> {
   return await renderMermaidToSvg(
     code,
     `mermaid-export-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    { profile: 'export' },
+    { profile: 'export', exportFontSizePx },
   )
 }
 
@@ -274,9 +288,12 @@ function firstNonEmptyString(...values: unknown[]): string | null {
   return null
 }
 
-async function svgToPng(svgMarkup: string): Promise<{ base64Data: string; widthPx: number; heightPx: number }> {
-  const width = Math.round(parseSvgWidth(svgMarkup) ?? 1200)
-  const height = Math.round(parseSvgHeight(svgMarkup) ?? 800)
+async function svgToPng(
+  svgMarkup: string,
+  targetSize?: { widthPx: number; heightPx: number },
+): Promise<{ base64Data: string; widthPx: number; heightPx: number }> {
+  const width = Math.round(targetSize?.widthPx ?? parseSvgWidth(svgMarkup) ?? 1200)
+  const height = Math.round(targetSize?.heightPx ?? parseSvgHeight(svgMarkup) ?? 800)
   const scale = 6
 
   const canvas = document.createElement('canvas')
@@ -311,11 +328,17 @@ async function svgToPng(svgMarkup: string): Promise<{ base64Data: string; widthP
   }
 }
 
+function getA4BodyWidthPx(styleSettings?: WordExportStyleSettings): number {
+  const pageMarginCm = styleSettings?.pageMarginCm ?? DEFAULT_PAGE_MARGIN_CM
+  const bodyWidthCm = Math.max(1, WORD_A4_WIDTH_CM - pageMarginCm * 2)
+  return Math.round((bodyWidthCm / CM_PER_INCH) * CSS_PX_PER_INCH)
+}
+
 /**
  * Replace <foreignObject> blocks with SVG <text> using regex.
  * DOMParser can't reliably handle mixed HTML-in-SVG, so we use regex instead.
  */
-export function replaceForeignObjectWithText(svgMarkup: string): string {
+export function replaceForeignObjectWithText(svgMarkup: string, fontSize = 15): string {
   return svgMarkup.replace(
     /<foreignObject([^>]*)>([\s\S]*?)<\/foreignObject>/gi,
     (_match, attrs: string, innerHtml: string) => {
@@ -324,7 +347,6 @@ export function replaceForeignObjectWithText(svgMarkup: string): string {
       const w = parseFloat(attrs.match(/\bwidth="([^"]*)"/)?.[1] || '100')
       const h = parseFloat(attrs.match(/\bheight="([^"]*)"/)?.[1] || '20')
 
-      const fontSize = 15
       const lines = wrapForeignObjectLines(extractForeignObjectLines(innerHtml), w, fontSize)
       if (!lines.length) return ''
 
@@ -334,7 +356,7 @@ export function replaceForeignObjectWithText(svgMarkup: string): string {
       const cy = y + h / 2 + (fontSize * 0.35)
 
       if (lines.length === 1) {
-        return `<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-size="${fontSize}px" font-weight="800" fill="#000000" font-family="SimSun, &quot;Times New Roman&quot;, serif">${escapeXml(lines[0])}</text>`
+        return `<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-size="${fontSize}px" fill="#000000" font-family="SimSun, &quot;Times New Roman&quot;, serif">${escapeXml(lines[0])}</text>`
       }
 
       const startY = cy - ((lines.length - 1) * lineHeight) / 2
@@ -345,9 +367,22 @@ export function replaceForeignObjectWithText(svgMarkup: string): string {
         })
         .join('')
 
-      return `<text x="${cx}" y="${startY}" text-anchor="middle" font-size="${fontSize}px" font-weight="800" fill="#000000" font-family="SimSun, &quot;Times New Roman&quot;, serif">${tspans}</text>`
+      return `<text x="${cx}" y="${startY}" text-anchor="middle" font-size="${fontSize}px" fill="#000000" font-family="SimSun, &quot;Times New Roman&quot;, serif">${tspans}</text>`
     },
   )
+}
+
+function resolveMermaidExportFontSizePx(code: string): number {
+  const meaningfulLines = code
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith('%%'))
+  const lineCount = meaningfulLines.length
+  const textLength = meaningfulLines.join('\n').length
+
+  if (textLength >= 420 || lineCount >= 20) return 21
+  if (textLength >= 220 || lineCount >= 12) return 18
+  return 15
 }
 
 function extractForeignObjectLines(innerHtml: string): string[] {
