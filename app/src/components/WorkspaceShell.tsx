@@ -350,6 +350,8 @@ export function WorkspaceShell({
   const outlineItems = useOutline(markdown)
 
   const [confirmDialog, setConfirmDialog] = useState<any>(null)
+  const [searchPrefillText, setSearchPrefillText] = useState('')
+  const [searchPrefillVersion, setSearchPrefillVersion] = useState(0)
   const [quitConfirmDialog, setQuitConfirmDialog] = useState<any>(null)
   const [isInsertTableDialogOpen, setIsInsertTableDialogOpen] = useState(false)
   const [recentDialogOpen, setRecentDialogOpen] = useState(false)
@@ -1626,6 +1628,19 @@ export function WorkspaceShell({
     }
   }, [isPdfActive, setStatusMessage, getCurrentMarkdown, getCurrentFileName, t])
 
+  const openSearchWithSelection = useCallback(() => {
+    const view = editorViewRef.current
+    const selection = view?.state?.selection?.main
+    const nextSearchText =
+      view && selection && !selection.empty
+        ? view.state.sliceDoc(selection.from, selection.to)
+        : ''
+
+    setSearchPrefillText(nextSearchText)
+    setSearchPrefillVersion((prev) => prev + 1)
+    setIsSearchOpen(true)
+  }, [])
+
   const openInsertTableDialog = useCallback(() => {
     if (isPdfActive) {
       setStatusMessage(t('workspace.insertTableUnsupportedPdf'))
@@ -1672,7 +1687,7 @@ export function WorkspaceShell({
     confirmLoseChanges, hasUnsavedChanges, newDocument, setFilePath, applyOpenedContent,
     openFile, save: saveWithPdfGuard, saveAs: saveAsWithPdfGuard, handleShowRecent: undefined, clearRecentAll,
     createTab, updateActiveMeta, openFolderInSidebar, closeCurrentTab,
-    openSearch: () => setIsSearchOpen(true),
+    openSearch: openSearchWithSelection,
     openInsertTableDialog,
     openAiChatDialog: (options: any) => openAiChatDialog(options as any),
     closeAiChatDialog,
@@ -2275,6 +2290,8 @@ export function WorkspaceShell({
                       {isSearchOpen && (
                         <SearchBar
                           view={editorViewRef.current}
+                          prefillText={searchPrefillText}
+                          prefillVersion={searchPrefillVersion}
                           onClose={() => setIsSearchOpen(false)}
                         />
                       )}

@@ -7,6 +7,8 @@ import './SearchBar.css'
 interface SearchBarProps {
     view: any
     onClose: () => void
+    prefillText?: string
+    prefillVersion?: number
 }
 
 function getInitialSearchText(view: any): string {
@@ -16,9 +18,9 @@ function getInitialSearchText(view: any): string {
     return view.state.sliceDoc(selection.from, selection.to)
 }
 
-export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose }) => {
+export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose, prefillText, prefillVersion }) => {
     const { t } = useI18n()
-    const [searchText, setSearchText] = useState(() => getInitialSearchText(view))
+    const [searchText, setSearchText] = useState(() => prefillText ?? getInitialSearchText(view))
     const [caseSensitive, setCaseSensitive] = useState(false)
     const [wholeWord, setWholeWord] = useState(false)
     const [regexp, setRegexp] = useState(false)
@@ -47,6 +49,15 @@ export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose }) => {
             }
         }
     }, [view])
+
+    useEffect(() => {
+        if (prefillVersion == null) return
+        setSearchText(prefillText ?? '')
+        queueMicrotask(() => {
+            inputRef.current?.focus()
+            inputRef.current?.select()
+        })
+    }, [prefillText, prefillVersion])
 
     const updateIndex = useCallback(() => {
         if (!view || !searchText) return;
