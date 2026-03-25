@@ -36,6 +36,7 @@ export type SettingsDialogProps = {
 
 type SettingsSectionId = 'theme' | 'typography' | 'word-export'
 type ThemePanelTabId = 'theme-preset' | 'backgrounds'
+type WordExportTabId = 'document' | 'layout' | 'diagrams'
 type BackgroundTarget =
   | 'workspaceBackground'
   | 'editorBackground'
@@ -65,6 +66,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const [uiTypography, setUiTypography] = useState<UiTypographySettings>(getDefaultUiTypographySettings())
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('theme')
   const [activeThemeTab, setActiveThemeTab] = useState<ThemePanelTabId>('theme-preset')
+  const [activeWordExportTab, setActiveWordExportTab] = useState<WordExportTabId>('document')
   const [currentBackgroundTarget, setCurrentBackgroundTarget] = useState<BackgroundTarget>('workspaceBackground')
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -498,6 +500,9 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   }
 
   const currentBackground = getBackgroundSettings(currentBackgroundTarget)
+  const isInkscapeEnhancedExportEnabled = wordExport.enableInkscapeForWordExport
+  const shouldEnableInkscapeFallbackControl =
+    isInkscapeEnhancedExportEnabled && wordExport.mermaidExportFormat !== 'png'
   const currentBackgroundOpacityInput =
     currentBackgroundTarget === 'workspaceBackground'
       ? workspaceBackgroundOpacityInput
@@ -1074,54 +1079,155 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
               {activeSection === 'word-export' && (
                 <>
                   <div className="settings-panel-header">
-                    <div className="settings-panel-title">{t('wordExport.title')}</div>
+                    <div className="settings-panel-header-top">
+                      <div className="settings-panel-title">{t('wordExport.title')}</div>
+                      <div className="settings-panel-tabs" role="tablist" aria-label={t('wordExport.sections')}>
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={activeWordExportTab === 'document'}
+                          className={`settings-panel-tab ${activeWordExportTab === 'document' ? 'active' : ''}`}
+                          onClick={() => setActiveWordExportTab('document')}
+                        >
+                          {t('wordExport.tabs.document')}
+                        </button>
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={activeWordExportTab === 'layout'}
+                          className={`settings-panel-tab ${activeWordExportTab === 'layout' ? 'active' : ''}`}
+                          onClick={() => setActiveWordExportTab('layout')}
+                        >
+                          {t('wordExport.tabs.layout')}
+                        </button>
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={activeWordExportTab === 'diagrams'}
+                          className={`settings-panel-tab ${activeWordExportTab === 'diagrams' ? 'active' : ''}`}
+                          onClick={() => setActiveWordExportTab('diagrams')}
+                        >
+                          {t('wordExport.tabs.diagrams')}
+                        </button>
+                      </div>
+                    </div>
                     <div className="settings-panel-description">
-                      {t('wordExport.description')}
+                      {activeWordExportTab === 'document'
+                        ? t('wordExport.documentDescription')
+                        : activeWordExportTab === 'layout'
+                          ? t('wordExport.layoutDescription')
+                          : t('wordExport.diagramsDescription')}
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gap: 14 }}>
-                    <div style={fieldGridStyle}>
-                      <div className="settings-field-label">{t('wordExport.bodyFont')}</div>
-                      <FontSelectField value={wordExport.bodyFontFamily} onChange={updateFontFamily('bodyFontFamily')} />
+                  {activeWordExportTab === 'document' ? (
+                    <div className="settings-subgroup">
+                      <div className="settings-subgroup-title">{t('wordExport.groups.document')}</div>
+                      <div style={{ display: 'grid', gap: 14 }}>
+                        <div style={fieldGridStyle}>
+                          <div className="settings-field-label">{t('wordExport.bodyFont')}</div>
+                          <FontSelectField value={wordExport.bodyFontFamily} onChange={updateFontFamily('bodyFontFamily')} />
+                        </div>
+                        <div style={fieldGridStyle}>
+                          <div className="settings-field-label">{t('wordExport.bodySizePt')}</div>
+                          <input className="field-input settings-number-input" type="number" min={8} max={48} step={0.5} value={wordExport.bodyFontSizePt} onChange={updateNumber('bodyFontSizePt')} />
+                        </div>
+                        <div style={fieldGridStyle}>
+                          <div className="settings-field-label">{t('wordExport.headingFont')}</div>
+                          <FontSelectField value={wordExport.headingFontFamily} onChange={updateFontFamily('headingFontFamily')} />
+                        </div>
+                        <div style={fieldGridStyle}>
+                          <div className="settings-field-label">{t('wordExport.heading1SizePt')}</div>
+                          <input className="field-input settings-number-input" type="number" min={10} max={48} step={0.5} value={wordExport.heading1SizePt} onChange={updateNumber('heading1SizePt')} />
+                        </div>
+                        <div style={fieldGridStyle}>
+                          <div className="settings-field-label">{t('wordExport.heading2SizePt')}</div>
+                          <input className="field-input settings-number-input" type="number" min={10} max={48} step={0.5} value={wordExport.heading2SizePt} onChange={updateNumber('heading2SizePt')} />
+                        </div>
+                        <div style={fieldGridStyle}>
+                          <div className="settings-field-label">{t('wordExport.heading3SizePt')}</div>
+                          <input className="field-input settings-number-input" type="number" min={10} max={48} step={0.5} value={wordExport.heading3SizePt} onChange={updateNumber('heading3SizePt')} />
+                        </div>
+                        <div style={fieldGridStyle}>
+                          <div className="settings-field-label">{t('wordExport.codeSizePt')}</div>
+                          <input className="field-input settings-number-input" type="number" min={8} max={32} step={0.5} value={wordExport.codeFontSizePt} onChange={updateNumber('codeFontSizePt')} />
+                        </div>
+                      </div>
                     </div>
-                    <div style={fieldGridStyle}>
-                      <div className="settings-field-label">{t('wordExport.bodySizePt')}</div>
-                      <input className="field-input settings-number-input" type="number" min={8} max={48} step={0.5} value={wordExport.bodyFontSizePt} onChange={updateNumber('bodyFontSizePt')} />
+                  ) : activeWordExportTab === 'layout' ? (
+                    <div className="settings-subgroup">
+                      <div className="settings-subgroup-title">{t('wordExport.groups.layout')}</div>
+                      <div style={{ display: 'grid', gap: 14 }}>
+                        <div style={fieldGridStyle}>
+                          <div className="settings-field-label">{t('wordExport.paragraphSpacingAfterPt')}</div>
+                          <input className="field-input settings-number-input" type="number" min={0} max={72} step={0.5} value={wordExport.paragraphSpacingAfterPt} onChange={updateNumber('paragraphSpacingAfterPt')} />
+                        </div>
+                        <div style={fieldGridStyle}>
+                          <div className="settings-field-label">{t('wordExport.lineSpacing')}</div>
+                          <input className="field-input settings-number-input" type="number" min={1} max={3} step={0.05} value={wordExport.lineSpacing} onChange={updateNumber('lineSpacing')} />
+                        </div>
+                        <div style={fieldGridStyle}>
+                          <div className="settings-field-label">{t('wordExport.pageMarginCm')}</div>
+                          <input className="field-input settings-number-input" type="number" min={1} max={5} step={0.1} value={wordExport.pageMarginCm} onChange={updateNumber('pageMarginCm')} />
+                        </div>
+                      </div>
                     </div>
-                    <div style={fieldGridStyle}>
-                      <div className="settings-field-label">{t('wordExport.headingFont')}</div>
-                      <FontSelectField value={wordExport.headingFontFamily} onChange={updateFontFamily('headingFontFamily')} />
+                  ) : (
+                    <div className="settings-subgroup">
+                      <div className="settings-subgroup-title">{t('wordExport.groups.diagrams')}</div>
+                      <div style={{ display: 'grid', gap: 14 }}>
+                        <div style={fieldGridStyle}>
+                          <div className="settings-field-label">{t('wordExport.enableInkscapeForWordExport')}</div>
+                          <label className="settings-checkbox-label">
+                            <input
+                              type="checkbox"
+                              checked={wordExport.enableInkscapeForWordExport}
+                              onChange={(event) =>
+                                setWordExport((prev) => ({
+                                  ...prev,
+                                  enableInkscapeForWordExport: event.target.checked,
+                                }))}
+                            />
+                            <span>{t('wordExport.enableInkscapeForWordExportHint')}</span>
+                          </label>
+                        </div>
+                        <div style={fieldGridStyle}>
+                          <div className="settings-field-label">{t('wordExport.mermaidExportFormat')}</div>
+                          <select
+                            className="field-select"
+                            value={wordExport.mermaidExportFormat}
+                            disabled={!isInkscapeEnhancedExportEnabled}
+                            onChange={(event) =>
+                              setWordExport((prev) => ({
+                                ...prev,
+                                mermaidExportFormat: event.target.value as WordExportStyleSettings['mermaidExportFormat'],
+                              }))}
+                          >
+                            <option value="png">{t('wordExport.exportFormats.png')}</option>
+                            <option value="svg">{t('wordExport.exportFormats.svg')}</option>
+                            <option value="emf">{t('wordExport.exportFormats.emf')}</option>
+                          </select>
+                        </div>
+                        <div style={fieldGridStyle}>
+                          <div className="settings-field-label">{t('wordExport.inkscapeFallback')}</div>
+                          <select
+                            className="field-select"
+                            value={wordExport.inkscapeFallback}
+                            disabled={!shouldEnableInkscapeFallbackControl}
+                            onChange={(event) =>
+                              setWordExport((prev) => ({
+                                ...prev,
+                                inkscapeFallback: event.target.value as WordExportStyleSettings['inkscapeFallback'],
+                              }))}
+                          >
+                            <option value="ask">{t('wordExport.fallbackModes.ask')}</option>
+                            <option value="png">{t('wordExport.fallbackModes.png')}</option>
+                            <option value="cancel">{t('wordExport.fallbackModes.cancel')}</option>
+                          </select>
+                        </div>
+                      </div>
                     </div>
-                    <div style={fieldGridStyle}>
-                      <div className="settings-field-label">{t('wordExport.heading1SizePt')}</div>
-                      <input className="field-input settings-number-input" type="number" min={10} max={48} step={0.5} value={wordExport.heading1SizePt} onChange={updateNumber('heading1SizePt')} />
-                    </div>
-                    <div style={fieldGridStyle}>
-                      <div className="settings-field-label">{t('wordExport.heading2SizePt')}</div>
-                      <input className="field-input settings-number-input" type="number" min={10} max={48} step={0.5} value={wordExport.heading2SizePt} onChange={updateNumber('heading2SizePt')} />
-                    </div>
-                    <div style={fieldGridStyle}>
-                      <div className="settings-field-label">{t('wordExport.heading3SizePt')}</div>
-                      <input className="field-input settings-number-input" type="number" min={10} max={48} step={0.5} value={wordExport.heading3SizePt} onChange={updateNumber('heading3SizePt')} />
-                    </div>
-                    <div style={fieldGridStyle}>
-                      <div className="settings-field-label">{t('wordExport.paragraphSpacingAfterPt')}</div>
-                      <input className="field-input settings-number-input" type="number" min={0} max={72} step={0.5} value={wordExport.paragraphSpacingAfterPt} onChange={updateNumber('paragraphSpacingAfterPt')} />
-                    </div>
-                    <div style={fieldGridStyle}>
-                      <div className="settings-field-label">{t('wordExport.lineSpacing')}</div>
-                      <input className="field-input settings-number-input" type="number" min={1} max={3} step={0.05} value={wordExport.lineSpacing} onChange={updateNumber('lineSpacing')} />
-                    </div>
-                    <div style={fieldGridStyle}>
-                      <div className="settings-field-label">{t('wordExport.codeSizePt')}</div>
-                      <input className="field-input settings-number-input" type="number" min={8} max={32} step={0.5} value={wordExport.codeFontSizePt} onChange={updateNumber('codeFontSizePt')} />
-                    </div>
-                    <div style={fieldGridStyle}>
-                      <div className="settings-field-label">{t('wordExport.pageMarginCm')}</div>
-                      <input className="field-input settings-number-input" type="number" min={1} max={5} step={0.1} value={wordExport.pageMarginCm} onChange={updateNumber('pageMarginCm')} />
-                    </div>
-                  </div>
+                  )}
                 </>
               )}
 

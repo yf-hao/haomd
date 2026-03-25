@@ -692,6 +692,12 @@ struct WordExportStyleSettingsCfg {
     code_font_size_pt: Option<f32>,
     #[serde(default)]
     page_margin_cm: Option<f32>,
+    #[serde(default)]
+    enable_inkscape_for_word_export: Option<bool>,
+    #[serde(default)]
+    mermaid_export_format: Option<String>,
+    #[serde(default)]
+    inkscape_fallback: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -817,6 +823,9 @@ fn default_word_export_style_settings_cfg() -> WordExportStyleSettingsCfg {
         line_spacing: Some(1.25),
         code_font_size_pt: Some(10.5),
         page_margin_cm: Some(2.54),
+        enable_inkscape_for_word_export: Some(false),
+        mermaid_export_format: Some("png".to_string()),
+        inkscape_fallback: Some("ask".to_string()),
     }
 }
 
@@ -1756,6 +1765,169 @@ async fn export_word_docx(payload_json: String, output_path: String) -> Result<(
 
     let _ = std::fs::remove_dir_all(&work_dir);
     result
+}
+
+#[tauri::command]
+async fn is_inkscape_available() -> Result<bool, String> {
+    Ok(find_inkscape_binary().is_some())
+}
+
+#[tauri::command]
+async fn convert_svg_to_emf(svg_markup: String) -> Result<String, String> {
+    let inkscape = find_inkscape_binary().ok_or_else(|| "未检测到 Inkscape".to_string())?;
+    let work_dir = std::env::temp_dir().join(format!(
+        "haomd-inkscape-{}",
+        new_trace_id().replace("trace_", "")
+    ));
+    std::fs::create_dir_all(&work_dir).map_err(|e| format!("创建 Inkscape 临时目录失败: {e}"))?;
+
+    let input_path = work_dir.join("diagram.svg");
+    let output_path = work_dir.join("diagram.emf");
+
+    let result = (|| -> Result<String, String> {
+        std::fs::write(&input_path, svg_markup.as_bytes())
+            .map_err(|e| format!("写入 SVG 临时文件失败: {e}"))?;
+
+        let output = Command::new(&inkscape)
+            .arg(&input_path)
+            .arg("--export-type=emf")
+            .arg(format!(
+                "--export-filename={}",
+                output_path.to_string_lossy()
+            ))
+            .output()
+            .map_err(|e| format!("调用 Inkscape 失败: {e}"))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let detail = if !stderr.is_empty() {
+                stderr
+            } else if !stdout.is_empty() {
+                stdout
+            } else {
+                format!("退出码: {:?}", output.status.code())
+            };
+            return Err(format!("Inkscape 转换 EMF 失败: {detail}"));
+        }
+
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        if !stderr.is_empty() {
+            log::warn!("[inkscape][emf] {}", stderr);
+        }
+
+        let emf_bytes =
+            std::fs::read(&output_path).map_err(|e| format!("读取 EMF 输出失败: {e}"))?;
+        Ok(base64::encode(emf_bytes))
+    })();
+
+    let _ = std::fs::remove_dir_all(&work_dir);
+    result
+}
+
+#[tauri::command]
+async fn convert_svg_to_plain_svg(svg_markup: String) -> Result<String, String> {
+    let inkscape = find_inkscape_binary().ok_or_else(|| "未检测到 Inkscape".to_string())?;
+    let work_dir = std::env::temp_dir().join(format!(
+        "haomd-inkscape-{}",
+        new_trace_id().replace("trace_", "")
+    ));
+    std::fs::create_dir_all(&work_dir).map_err(|e| format!("创建 Inkscape 临时目录失败: {e}"))?;
+
+    let input_path = work_dir.join("diagram.svg");
+    let output_path = work_dir.join("diagram-plain.svg");
+
+    let result = (|| -> Result<String, String> {
+        std::fs::write(&input_path, svg_markup.as_bytes())
+            .map_err(|e| format!("写入 SVG 临时文件失败: {e}"))?;
+
+        let output = Command::new(&inkscape)
+            .arg(&input_path)
+            .arg("--export-plain-svg")
+            .arg(format!(
+                "--export-filename={}",
+                output_path.to_string_lossy()
+            ))
+            .output()
+            .map_err(|e| format!("调用 Inkscape 失败: {e}"))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let detail = if !stderr.is_empty() {
+                stderr
+            } else if !stdout.is_empty() {
+                stdout
+            } else {
+                format!("退出码: {:?}", output.status.code())
+            };
+            return Err(format!("Inkscape 导出 Plain SVG 失败: {detail}"));
+        }
+
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        if !stderr.is_empty() {
+            log::warn!("[inkscape][plain-svg] {}", stderr);
+        }
+
+        let svg_bytes =
+            std::fs::read(&output_path).map_err(|e| format!("读取 Plain SVG 输出失败: {e}"))?;
+        Ok(base64::encode(svg_bytes))
+    })();
+
+    let _ = std::fs::remove_dir_all(&work_dir);
+    result
+}
+
+fn find_inkscape_binary() -> Option<PathBuf> {
+    let path_var = std::env::var_os("PATH")?;
+    let mut candidates = Vec::<PathBuf>::new();
+
+    for dir in std::env::split_paths(&path_var) {
+        #[cfg(target_os = "windows")]
+        {
+            candidates.push(dir.join("inkscape.exe"));
+            candidates.push(dir.join("inkscape.com"));
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            candidates.push(dir.join("inkscape"));
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        candidates.push(PathBuf::from(
+            "/Applications/Inkscape.app/Contents/MacOS/inkscape",
+        ));
+        candidates.push(PathBuf::from("/opt/homebrew/bin/inkscape"));
+        candidates.push(PathBuf::from("/usr/local/bin/inkscape"));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        candidates.push(PathBuf::from(r"C:\Program Files\Inkscape\bin\inkscape.exe"));
+        candidates.push(PathBuf::from(r"C:\Program Files\Inkscape\inkscape.exe"));
+        candidates.push(PathBuf::from(
+            r"C:\Program Files (x86)\Inkscape\bin\inkscape.exe",
+        ));
+        candidates.push(PathBuf::from(
+            r"C:\Program Files (x86)\Inkscape\inkscape.exe",
+        ));
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        candidates.push(PathBuf::from("/usr/bin/inkscape"));
+        candidates.push(PathBuf::from("/usr/local/bin/inkscape"));
+        candidates.push(PathBuf::from("/snap/bin/inkscape"));
+    }
+
+    candidates.into_iter().find_map(|candidate| {
+        if !candidate.is_file() {
+            return None;
+        }
+        std::fs::canonicalize(&candidate).ok().or(Some(candidate))
+    })
 }
 
 fn build_word_export_workspace(dir: &Path, payload: &WordDocPayloadCfg) -> Result<(), String> {
@@ -3767,6 +3939,7 @@ fn detect_asset_extension(
         "image/gif" => "gif",
         "image/webp" => "webp",
         "image/svg+xml" => "svg",
+        "image/x-emf" | "image/emf" => "emf",
         _ => "bin",
     }
     .to_string()
@@ -3779,6 +3952,7 @@ fn mime_for_extension(ext: &str) -> &'static str {
         "gif" => "image/gif",
         "webp" => "image/webp",
         "svg" => "image/svg+xml",
+        "emf" => "image/x-emf",
         _ => "application/octet-stream",
     }
 }
@@ -6872,6 +7046,9 @@ pub fn run() {
       open_webview_browser,
       pick_editor_background_image,
       export_word_docx,
+      is_inkscape_available,
+      convert_svg_to_emf,
+      convert_svg_to_plain_svg,
       save_clipboard_image_to_dir,
       read_clipboard_image_as_base64,
       load_doc_conversations,

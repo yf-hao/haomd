@@ -1601,6 +1601,23 @@ export function WorkspaceShell({
         getCurrentMarkdown,
         getCurrentFileName,
         getFilePath: () => activeTabPathRef.current,
+        confirmContinue: ({ title, message, confirmText, cancelText }) =>
+          new Promise<boolean>((resolve) => {
+            setConfirmDialog({
+              title,
+              message,
+              confirmText,
+              cancelText,
+              onConfirm: () => {
+                setConfirmDialog(null)
+                resolve(true)
+              },
+              onCancel: () => {
+                setConfirmDialog(null)
+                resolve(false)
+              },
+            })
+          }),
         t,
       })
     } catch (e) {
@@ -2355,7 +2372,7 @@ export function WorkspaceShell({
             onCancel={() => setConflictError(null)}
           />
         )}
-        {confirmDialog && <ConfirmDialog title={confirmDialog.title} message={confirmDialog.message} confirmText={confirmDialog.confirmText} cancelText={confirmDialog.cancelText} extraText={confirmDialog.extraText} variant={confirmDialog.variant} onConfirm={confirmDialog.onConfirm} onExtra={confirmDialog.onExtra} onCancel={() => setConfirmDialog(null)} />}
+        {confirmDialog && <ConfirmDialog title={confirmDialog.title} message={confirmDialog.message} confirmText={confirmDialog.confirmText} cancelText={confirmDialog.cancelText} extraText={confirmDialog.extraText} variant={confirmDialog.variant} onConfirm={confirmDialog.onConfirm} onExtra={confirmDialog.onExtra} onCancel={confirmDialog.onCancel ?? (() => setConfirmDialog(null))} />}
         {quitConfirmDialog && <ConfirmDialog title={quitConfirmDialog.unsavedCount === 1 ? t('workspace.saveChangesTitle') : t('workspace.saveFilesTitle', { count: quitConfirmDialog.unsavedCount })} message={t('workspace.saveChangesMessage')} confirmText={t('workspace.saveAll')} cancelText={t('common.cancel')} extraText={t('workspace.dontSave')} variant="stacked" onConfirm={quitConfirmDialog.onSaveAll} onExtra={quitConfirmDialog.onQuitWithoutSaving} onCancel={() => setQuitConfirmDialog(null)} />}
 
         <InsertTableDialog

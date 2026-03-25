@@ -10,6 +10,12 @@ export async function exportToWord(ctx: {
   getCurrentMarkdown: () => string
   getCurrentFileName: () => string | null
   getFilePath?: () => string | null
+  confirmContinue?: (options: {
+    title: string
+    message: string
+    confirmText?: string
+    cancelText?: string
+  }) => Promise<boolean>
   t?: (key: string, params?: Record<string, string | number>) => string
 }) {
   const tr = (key: string, fallback: string, params?: Record<string, string | number>) =>
@@ -21,6 +27,42 @@ export async function exportToWord(ctx: {
     const markdown = ctx.getCurrentMarkdown()
     const isPlainText = /\.txt$/i.test(rawTitle) || /\.txt$/i.test(filePath || '')
     const styleSettings = await getWordExportStyleSettings()
+    let preferInkscapeForMermaid = false
+    let mermaidExportFormat = styleSettings.mermaidExportFormat
+
+    if (containsMermaidBlock(markdown)) {
+      const needsInkscape =
+        styleSettings.enableInkscapeForWordExport && styleSettings.mermaidExportFormat !== 'png'
+
+      if (needsInkscape) {
+        const hasInkscape = await checkInkscapeAvailability()
+        preferInkscapeForMermaid = hasInkscape
+        if (!hasInkscape) {
+          if (styleSettings.inkscapeFallback === 'cancel') return false
+          if (styleSettings.inkscapeFallback === 'ask') {
+            const shouldContinue = await (ctx.confirmContinue
+              ? ctx.confirmContinue({
+                  title: tr('export.wordMermaidFallbackTitle', '未检测到 Inkscape'),
+                  message: tr(
+                    'export.wordMermaidFallbackMessage',
+                    '当前系统未安装 Inkscape。Mermaid 图表将回退为现有导出方式，清晰度可能受影响。是否继续导出 Word？',
+                  ),
+                  confirmText: tr('export.wordMermaidFallbackContinue', '继续导出'),
+                  cancelText: tr('common.cancel', '取消'),
+                })
+              : Promise.resolve(window.confirm(
+                  tr(
+                    'export.wordMermaidFallbackConfirm',
+                    '当前系统未安装 Inkscape。Mermaid 图表将回退为现有导出方式，清晰度可能受影响。是否继续导出 Word？',
+                  ),
+                )))
+            if (!shouldContinue) return false
+          }
+          mermaidExportFormat = 'png'
+          preferInkscapeForMermaid = false
+        }
+      }
+    }
 
     const outputPath = await save({
       defaultPath: `${title}.docx`,
@@ -40,6 +82,8 @@ export async function exportToWord(ctx: {
     payload = await renderWordDiagramAssets({
       payload,
       setStatusMessage: ctx.setStatusMessage,
+      preferInkscapeForMermaid,
+      mermaidExportFormat,
     })
 
     ctx.setStatusMessage(tr('export.wordGenerating', '正在生成 Word 文档...'))
@@ -61,4 +105,16 @@ export function buildWordExportBaseName(fileName: string | null): string {
   const raw = (fileName || 'Document').trim()
   if (!raw) return 'Document'
   return raw.replace(/\.[^./\\]+$/i, '')
+}
+
+function containsMermaidBlock(markdown: string): boolean {
+  return /```[\t ]*mermaid(?:[\t ]|\r?\n)/i.test(markdown)
+}
+
+async function checkInkscapeAvailability(): Promise<boolean> {
+  try {
+    return await invoke<boolean>('is_inkscape_available')
+  } catch {
+    return false
+  }
 }

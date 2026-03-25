@@ -131,6 +131,34 @@ export const zhCNMessages: MessageDictionary = {
   wordExport: {
     title: 'Word 导出',
     description: '自定义 `.docx` 导出的默认字体、间距和页边距。',
+    sections: 'Word 导出设置分组',
+    documentDescription: '调整导出文档的字体、字号和标题层级样式。',
+    layoutDescription: '调整段落间距、行距和页面留白等版式参数。',
+    diagramsDescription: '配置 Mermaid 图表在 Word 中的导出格式，以及是否启用 Inkscape 增强导出。',
+    tabs: {
+      document: '文档样式',
+      layout: '版式布局',
+      diagrams: '图表导出',
+    },
+    groups: {
+      document: '文档样式',
+      layout: '版式布局',
+      diagrams: '图表导出',
+    },
+    enableInkscapeForWordExport: '启用 Inkscape 增强导出',
+    enableInkscapeForWordExportHint: '导出 Mermaid 图表时优先尝试 Inkscape 转换',
+    mermaidExportFormat: 'Mermaid 导出格式',
+    inkscapeFallback: 'Inkscape 不可用时',
+    exportFormats: {
+      png: 'PNG（最稳）',
+      svg: 'SVG（实验性）',
+      emf: 'EMF（适合 Word）',
+    },
+    fallbackModes: {
+      ask: '询问我',
+      png: '自动回退为 PNG',
+      cancel: '取消导出',
+    },
     bodyFont: '正文字体',
     bodySizePt: '正文字号（pt）',
     headingFont: '标题字体',
@@ -469,6 +497,12 @@ export const zhCNMessages: MessageDictionary = {
     wordGenerating: '正在生成 Word 文档...',
     wordSuccess: 'Word 导出成功: {path}',
     wordFailed: 'Word 导出失败: {message}',
+    wordMermaidFallbackTitle: '未检测到 Inkscape',
+    wordMermaidFallbackMessage:
+      '当前系统未安装 Inkscape。Mermaid 图表将回退为现有导出方式，清晰度可能受影响。是否继续导出 Word？',
+    wordMermaidFallbackContinue: '继续导出',
+    wordMermaidFallbackConfirm:
+      '当前系统未安装 Inkscape。Mermaid 图表将回退为现有导出方式，清晰度可能受影响。是否继续导出 Word？',
     htmlRenderingMind: '正在渲染思维导图...',
     htmlBuildingPage: '正在构建页面结构...',
     htmlProcessingImages: '正在处理图片资源...',

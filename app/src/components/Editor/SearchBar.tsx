@@ -9,9 +9,16 @@ interface SearchBarProps {
     onClose: () => void
 }
 
+function getInitialSearchText(view: any): string {
+    if (!view?.state?.selection?.main || !view?.state?.sliceDoc) return ''
+    const selection = view.state.selection.main
+    if (selection.empty) return ''
+    return view.state.sliceDoc(selection.from, selection.to)
+}
+
 export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose }) => {
     const { t } = useI18n()
-    const [searchText, setSearchText] = useState('')
+    const [searchText, setSearchText] = useState(() => getInitialSearchText(view))
     const [caseSensitive, setCaseSensitive] = useState(false)
     const [wholeWord, setWholeWord] = useState(false)
     const [regexp, setRegexp] = useState(false)

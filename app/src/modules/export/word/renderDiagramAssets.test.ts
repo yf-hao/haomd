@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+const { invokeMock } = vi.hoisted(() => ({
+  invokeMock: vi.fn(),
+}))
+
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: invokeMock,
+}))
+
 vi.mock('mermaid', () => ({
   default: {
     initialize: vi.fn(),
@@ -52,6 +60,7 @@ class MockImage {
 describe('export/word - renderWordDiagramAssets', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    invokeMock.mockReset()
     vi.stubGlobal('Image', MockImage)
     vi.stubGlobal('URL', {
       createObjectURL: vi.fn(() => 'blob:word-diagram'),
@@ -120,6 +129,165 @@ describe('export/word - renderWordDiagramAssets', () => {
         }),
       }),
     )
+  })
+
+  it('should convert mermaid code blocks into embedded emf assets when inkscape is preferred', async () => {
+    invokeMock.mockResolvedValue('ZW1m')
+
+    const payload: WordDocPayload = {
+      title: 'Mermaid',
+      assets: [],
+      blocks: [
+        {
+          type: 'code',
+          language: 'mermaid',
+          content: 'flowchart LR\nA-->B',
+        },
+      ],
+    }
+
+    const result = await renderWordDiagramAssets({
+      payload,
+      preferInkscapeForMermaid: true,
+      mermaidExportFormat: 'emf',
+    })
+
+    expect(invokeMock).toHaveBeenCalledWith('convert_svg_to_emf', expect.any(Object))
+    expect(result.assets).toEqual([
+      expect.objectContaining({
+        id: 'asset_0',
+        kind: 'embedded-image',
+        fileName: 'asset_0.emf',
+        mimeType: 'image/x-emf',
+        base64Data: 'ZW1m',
+      }),
+    ])
+    expect(HTMLCanvasElement.prototype.toDataURL).not.toHaveBeenCalled()
+  })
+
+  it('should convert mermaid code blocks into embedded svg assets when svg export is preferred', async () => {
+    invokeMock.mockResolvedValue('c3Zn')
+
+    const payload: WordDocPayload = {
+      title: 'Mermaid',
+      assets: [],
+      blocks: [
+        {
+          type: 'code',
+          language: 'mermaid',
+          content: 'flowchart LR\nA-->B',
+        },
+      ],
+    }
+
+    const result = await renderWordDiagramAssets({
+      payload,
+      preferInkscapeForMermaid: true,
+      mermaidExportFormat: 'svg',
+    })
+
+    expect(invokeMock).toHaveBeenCalledWith('convert_svg_to_plain_svg', expect.any(Object))
+    expect(result.assets).toEqual([
+      expect.objectContaining({
+        id: 'asset_0',
+        kind: 'embedded-image',
+        fileName: 'asset_0.svg',
+        mimeType: 'image/svg+xml',
+        base64Data: 'c3Zn',
+      }),
+    ])
+    expect(HTMLCanvasElement.prototype.toDataURL).not.toHaveBeenCalled()
+  })
+
+  it('should fall back to png when inkscape conversion fails', async () => {
+    invokeMock.mockRejectedValueOnce(new Error('inkscape failed'))
+
+    const payload: WordDocPayload = {
+      title: 'Mermaid',
+      assets: [],
+      blocks: [
+        {
+          type: 'code',
+          language: 'mermaid',
+          content: 'flowchart LR\nA-->B',
+        },
+      ],
+    }
+
+    const result = await renderWordDiagramAssets({ payload, preferInkscapeForMermaid: true })
+
+    expect(result.assets).toEqual([
+      expect.objectContaining({
+        id: 'asset_0',
+        kind: 'embedded-image',
+        fileName: 'asset_0.png',
+        mimeType: 'image/png',
+      }),
+    ])
+    expect(HTMLCanvasElement.prototype.toDataURL).toHaveBeenCalled()
+  })
+
+  it('should keep sequence diagrams on png even when inkscape is preferred', async () => {
+    invokeMock.mockResolvedValue('ZW1m')
+
+    const payload: WordDocPayload = {
+      title: 'Sequence',
+      assets: [],
+      blocks: [
+        {
+          type: 'code',
+          language: 'mermaid',
+          content: 'sequenceDiagram\nAlice->>Bob: Hello',
+        },
+      ],
+    }
+
+    const result = await renderWordDiagramAssets({ payload, preferInkscapeForMermaid: true })
+
+    expect(invokeMock).not.toHaveBeenCalled()
+    expect(result.assets).toEqual([
+      expect.objectContaining({
+        id: 'asset_0',
+        kind: 'embedded-image',
+        fileName: 'asset_0.png',
+        mimeType: 'image/png',
+      }),
+    ])
+    expect(HTMLCanvasElement.prototype.toDataURL).toHaveBeenCalled()
+  })
+
+  it('should export sequence diagrams as plain svg when svg export is preferred', async () => {
+    invokeMock.mockResolvedValue('c3Zn')
+
+    const payload: WordDocPayload = {
+      title: 'Sequence SVG',
+      assets: [],
+      blocks: [
+        {
+          type: 'code',
+          language: 'mermaid',
+          content: 'sequenceDiagram\nAlice->>Bob: Hello',
+        },
+      ],
+    }
+
+    const result = await renderWordDiagramAssets({
+      payload,
+      preferInkscapeForMermaid: true,
+      mermaidExportFormat: 'svg',
+    })
+
+    expect(invokeMock).toHaveBeenCalledWith('convert_svg_to_plain_svg', expect.any(Object))
+    expect(result.assets).toEqual([
+      expect.objectContaining({
+        id: 'asset_0',
+        kind: 'embedded-image',
+        fileName: 'asset_0.svg',
+        mimeType: 'image/svg+xml',
+        base64Data: 'c3Zn',
+      }),
+    ])
+    expect(HTMLCanvasElement.prototype.toDataURL).not.toHaveBeenCalled()
   })
 
   it('should preserve multiline foreignObject labels when rasterizing mermaid svg', async () => {

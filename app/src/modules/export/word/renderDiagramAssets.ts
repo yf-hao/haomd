@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core'
 import MindElixir, { SIDE } from 'mind-elixir'
 import type { WordBlock, WordDocPayload } from './types'
 import { renderMermaidToSvg } from '../../visualization/mermaidRenderer'
@@ -11,8 +12,15 @@ type MindElixirData = {
 export async function renderWordDiagramAssets(options: {
   payload: WordDocPayload
   setStatusMessage?: (msg: string) => void
+  preferInkscapeForMermaid?: boolean
+  mermaidExportFormat?: 'png' | 'svg' | 'emf'
 }): Promise<WordDocPayload> {
-  const { payload, setStatusMessage } = options
+  const {
+    payload,
+    setStatusMessage,
+    preferInkscapeForMermaid = false,
+    mermaidExportFormat = 'png',
+  } = options
   let assetCounter = payload.assets.length
   const nextAssets = [...payload.assets]
 
@@ -24,15 +32,19 @@ export async function renderWordDiagramAssets(options: {
         const normalizedContent = block.content.trim()
         if (lang === 'mermaid') {
           setStatusMessage?.('正在渲染 Mermaid 图表...')
-          const rendered = await renderMermaidBlockToPng(normalizedContent)
+          const rendered = await renderMermaidBlockForWord(
+            normalizedContent,
+            preferInkscapeForMermaid,
+            mermaidExportFormat,
+          )
           if (!rendered) throw new Error(`Mermaid 图表渲染失败: ${summarizeDiagramBlock(normalizedContent)}`)
 
           const assetId = `asset_${assetCounter++}`
           nextAssets.push({
             id: assetId,
             kind: 'embedded-image',
-            fileName: `${assetId}.png`,
-            mimeType: 'image/png',
+            fileName: `${assetId}.${rendered.fileExtension}`,
+            mimeType: rendered.mimeType,
             base64Data: rendered.base64Data,
             widthPx: rendered.widthPx,
             heightPx: rendered.heightPx,
@@ -124,15 +136,77 @@ function summarizeDiagramBlock(content: string): string {
   return firstLine ? firstLine.slice(0, 80) : '空图表'
 }
 
-async function renderMermaidBlockToPng(code: string): Promise<{ base64Data: string; widthPx: number; heightPx: number } | null> {
+async function renderMermaidBlockForWord(
+  code: string,
+  preferInkscape: boolean,
+  exportFormat: 'png' | 'svg' | 'emf',
+): Promise<{
+  base64Data: string
+  widthPx: number
+  heightPx: number
+  mimeType: 'image/png' | 'image/x-emf' | 'image/svg+xml'
+  fileExtension: 'png' | 'emf' | 'svg'
+} | null> {
   try {
     const svg = await renderMermaidBlockToSvg(code)
     if (!svg) return null
-    return await svgToPng(svg)
+
+    const widthPx = Math.round(parseSvgWidth(svg) ?? 1200)
+    const heightPx = Math.round(parseSvgHeight(svg) ?? 800)
+    const normalizedSvg = normalizeSvgForRasterization(replaceForeignObjectWithText(svg))
+    const isSequence = isSequenceDiagram(code)
+
+    if (preferInkscape && exportFormat !== 'png') {
+      if (exportFormat === 'emf' && !isSequence) {
+        try {
+          const base64Data = await invoke<string>('convert_svg_to_emf', { svgMarkup: normalizedSvg })
+          return {
+            base64Data,
+            widthPx,
+            heightPx,
+            mimeType: 'image/x-emf',
+            fileExtension: 'emf',
+          }
+        } catch (error) {
+          console.warn('[WordExport] Inkscape EMF conversion failed, fallback to PNG', error)
+        }
+      }
+
+      if (exportFormat === 'svg') {
+        try {
+          const base64Data = await invoke<string>('convert_svg_to_plain_svg', { svgMarkup: normalizedSvg })
+          return {
+            base64Data,
+            widthPx,
+            heightPx,
+            mimeType: 'image/svg+xml',
+            fileExtension: 'svg',
+          }
+        } catch (error) {
+          console.warn('[WordExport] Inkscape plain SVG conversion failed, fallback to PNG', error)
+        }
+      }
+    }
+
+    const png = await svgToPng(normalizedSvg)
+    return {
+      ...png,
+      mimeType: 'image/png',
+      fileExtension: 'png',
+    }
   } catch (error) {
     console.warn('[WordExport] Mermaid render failed', error)
     throw new Error(`Mermaid 图表渲染失败: ${extractErrorMessage(error)}`)
   }
+}
+
+function isSequenceDiagram(code: string): boolean {
+  const firstMeaningfulLine = code
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.length > 0 && !line.startsWith('%%'))
+
+  return /^sequenceDiagram\b/i.test(firstMeaningfulLine ?? '')
 }
 
 async function renderMermaidBlockToSvg(code: string): Promise<string | null> {
@@ -201,12 +275,8 @@ function firstNonEmptyString(...values: unknown[]): string | null {
 }
 
 async function svgToPng(svgMarkup: string): Promise<{ base64Data: string; widthPx: number; heightPx: number }> {
-  // Strip foreignObject (which taints canvas) and replace with SVG <text>
-  const cleanSvg = replaceForeignObjectWithText(svgMarkup)
-  const normalized = normalizeSvgForRasterization(cleanSvg)
-
-  const width = Math.round(parseSvgWidth(normalized) ?? 1200)
-  const height = Math.round(parseSvgHeight(normalized) ?? 800)
+  const width = Math.round(parseSvgWidth(svgMarkup) ?? 1200)
+  const height = Math.round(parseSvgHeight(svgMarkup) ?? 800)
   const scale = 6
 
   const canvas = document.createElement('canvas')
@@ -218,7 +288,7 @@ async function svgToPng(svgMarkup: string): Promise<{ base64Data: string; widthP
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, width, height)
 
-  const blob = new Blob([normalized], { type: 'image/svg+xml;charset=utf-8' })
+  const blob = new Blob([svgMarkup], { type: 'image/svg+xml;charset=utf-8' })
   const url = URL.createObjectURL(blob)
 
   try {
@@ -264,7 +334,7 @@ export function replaceForeignObjectWithText(svgMarkup: string): string {
       const cy = y + h / 2 + (fontSize * 0.35)
 
       if (lines.length === 1) {
-        return `<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-size="${fontSize}px" font-weight="700" fill="#000000" font-family="SimSun, &quot;Times New Roman&quot;, serif">${escapeXml(lines[0])}</text>`
+        return `<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-size="${fontSize}px" font-weight="800" fill="#000000" font-family="SimSun, &quot;Times New Roman&quot;, serif">${escapeXml(lines[0])}</text>`
       }
 
       const startY = cy - ((lines.length - 1) * lineHeight) / 2
@@ -275,7 +345,7 @@ export function replaceForeignObjectWithText(svgMarkup: string): string {
         })
         .join('')
 
-      return `<text x="${cx}" y="${startY}" text-anchor="middle" font-size="${fontSize}px" font-weight="700" fill="#000000" font-family="SimSun, &quot;Times New Roman&quot;, serif">${tspans}</text>`
+      return `<text x="${cx}" y="${startY}" text-anchor="middle" font-size="${fontSize}px" font-weight="800" fill="#000000" font-family="SimSun, &quot;Times New Roman&quot;, serif">${tspans}</text>`
     },
   )
 }

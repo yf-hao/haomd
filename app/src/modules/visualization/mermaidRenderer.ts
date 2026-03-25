@@ -238,7 +238,7 @@ function normalizeMermaidSvg(svgMarkup: string, profile: MermaidRenderProfile = 
         const textNodes = Array.from(svg.querySelectorAll('text, tspan'))
         for (const node of textNodes) {
           node.setAttribute('font-size', '15px')
-          node.setAttribute('font-weight', '700')
+          node.setAttribute('font-weight', '800')
         }
       }
 
@@ -273,9 +273,9 @@ function normalizeMermaidSvg(svgMarkup: string, profile: MermaidRenderProfile = 
         nextAttrs += ' font-size="15px"'
       }
       if (/\bfont-weight="/i.test(nextAttrs)) {
-        nextAttrs = nextAttrs.replace(/\bfont-weight="[^"]*"/i, 'font-weight="700"')
+        nextAttrs = nextAttrs.replace(/\bfont-weight="[^"]*"/i, 'font-weight="800"')
       } else {
-        nextAttrs += ' font-weight="700"'
+        nextAttrs += ' font-weight="800"'
       }
       return `<${tag}${nextAttrs}>`
     })

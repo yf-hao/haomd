@@ -63,7 +63,7 @@ export function WorkspaceDialogs(props: WorkspaceDialogsProps) {
                     variant={confirmDialog.variant}
                     onConfirm={confirmDialog.onConfirm}
                     onExtra={confirmDialog.onExtra}
-                    onCancel={() => setConfirmDialog(null)}
+                    onCancel={confirmDialog.onCancel ?? (() => setConfirmDialog(null))}
                 />
             )}
 

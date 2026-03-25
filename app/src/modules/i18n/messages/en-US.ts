@@ -131,6 +131,34 @@ export const enUSMessages: MessageDictionary = {
   wordExport: {
     title: 'Word Export',
     description: 'Customize default fonts, spacing, and margins for `.docx` export.',
+    sections: 'Word export setting groups',
+    documentDescription: 'Adjust document fonts, font sizes, and heading styles for exported files.',
+    layoutDescription: 'Adjust paragraph spacing, line spacing, and page margins for the exported layout.',
+    diagramsDescription: 'Configure Mermaid export format for Word and whether Inkscape-enhanced export is enabled.',
+    tabs: {
+      document: 'Document',
+      layout: 'Layout',
+      diagrams: 'Diagrams',
+    },
+    groups: {
+      document: 'Document',
+      layout: 'Layout',
+      diagrams: 'Diagrams',
+    },
+    enableInkscapeForWordExport: 'Enable Inkscape-enhanced export',
+    enableInkscapeForWordExportHint: 'Prefer Inkscape conversion when exporting Mermaid diagrams',
+    mermaidExportFormat: 'Mermaid Export Format',
+    inkscapeFallback: 'When Inkscape Is Unavailable',
+    exportFormats: {
+      png: 'PNG (Most Stable)',
+      svg: 'SVG (Experimental)',
+      emf: 'EMF (Best for Word)',
+    },
+    fallbackModes: {
+      ask: 'Ask Me',
+      png: 'Fallback to PNG',
+      cancel: 'Cancel Export',
+    },
     bodyFont: 'Body Font',
     bodySizePt: 'Body Size (pt)',
     headingFont: 'Heading Font',
@@ -475,6 +503,12 @@ export const enUSMessages: MessageDictionary = {
     wordGenerating: 'Generating Word document...',
     wordSuccess: 'Word export succeeded: {path}',
     wordFailed: 'Word export failed: {message}',
+    wordMermaidFallbackTitle: 'Inkscape Not Detected',
+    wordMermaidFallbackMessage:
+      'Inkscape is not installed on this system. Mermaid diagrams will fall back to the current export path, and image clarity may be affected. Continue exporting the Word document?',
+    wordMermaidFallbackContinue: 'Continue Export',
+    wordMermaidFallbackConfirm:
+      'Inkscape is not installed on this system. Mermaid diagrams will fall back to the current export path, and image clarity may be affected. Continue exporting the Word document?',
     htmlRenderingMind: 'Rendering mind diagrams...',
     htmlBuildingPage: 'Building page structure...',
     htmlProcessingImages: 'Processing image assets...',

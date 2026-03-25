@@ -73,6 +73,9 @@ export type WordExportStyleSettings = {
   lineSpacing: number
   codeFontSizePt: number
   pageMarginCm: number
+  enableInkscapeForWordExport: boolean
+  mermaidExportFormat: 'png' | 'svg' | 'emf'
+  inkscapeFallback: 'ask' | 'png' | 'cancel'
 }
 
 export type EditorSettings = {
@@ -190,6 +193,9 @@ const defaultWordExport: WordExportStyleSettings = {
   lineSpacing: 1.25,
   codeFontSizePt: 10.5,
   pageMarginCm: 2.54,
+  enableInkscapeForWordExport: false,
+  mermaidExportFormat: 'png',
+  inkscapeFallback: 'ask',
 }
 
 let cachedSettings: EditorSettings | null = null
@@ -349,6 +355,10 @@ export async function getWordExportStyleSettings(): Promise<WordExportStyleSetti
     lineSpacing: cfg.lineSpacing ?? defaultWordExport.lineSpacing,
     codeFontSizePt: cfg.codeFontSizePt ?? defaultWordExport.codeFontSizePt,
     pageMarginCm: cfg.pageMarginCm ?? defaultWordExport.pageMarginCm,
+    enableInkscapeForWordExport:
+      cfg.enableInkscapeForWordExport ?? defaultWordExport.enableInkscapeForWordExport,
+    mermaidExportFormat: cfg.mermaidExportFormat ?? defaultWordExport.mermaidExportFormat,
+    inkscapeFallback: cfg.inkscapeFallback ?? defaultWordExport.inkscapeFallback,
   }
 }
 
