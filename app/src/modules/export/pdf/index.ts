@@ -73,6 +73,15 @@ async function printViaMainPortal(html: string, title: string): Promise<void> {
     const style = document.createElement('style')
     style.id = 'haomd-print-override'
     style.innerHTML = `
+        /*
+         * 防止模板 body 样式（padding/color/font-family）泄漏到主应用。
+         * 模板的 <style> 包含 body { padding: 20px } 等全局规则，
+         * 注入到主文档后会给 body 加上 padding，在深色主题下形成黑边。
+         */
+        html, body {
+            padding: 0 !important;
+        }
+
         /* 离屏渲染：保持可见以正确计算 SVG 尺寸 */
         #haomd-print-portal { 
             position: fixed !important;
@@ -85,10 +94,13 @@ async function printViaMainPortal(html: string, title: string): Promise<void> {
         }
 
         @media print {
-            body { 
-                visibility: hidden !important; 
+            html, body { 
                 background: white !important; 
-                margin: 0 !important; 
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            body > *:not(#haomd-print-portal) {
+                display: none !important;
             }
             #haomd-print-portal {
                 visibility: visible !important; 
@@ -102,7 +114,6 @@ async function printViaMainPortal(html: string, title: string): Promise<void> {
                 z-index: 2147483647 !important;
                 color: #1a1a1a !important;
             }
-            #root, #app, .workspace-shell { display: none !important; }
             .markdown-body { 
                 max-width: none !important; 
                 background: white !important; 
