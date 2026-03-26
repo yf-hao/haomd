@@ -510,6 +510,7 @@ export const enUSMessages: MessageDictionary = {
     wordMermaidFallbackConfirm:
       'Inkscape is not installed on this system. Mermaid diagrams will fall back to the current export path, and image clarity may be affected. Continue exporting the Word document?',
     htmlRenderingMind: 'Rendering mind diagrams...',
+    renderingMermaid: 'Pre-rendering Mermaid diagrams...',
     htmlBuildingPage: 'Building page structure...',
     htmlProcessingImages: 'Processing image assets...',
     htmlSaving: 'Saving to disk...',

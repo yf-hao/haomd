@@ -3,13 +3,25 @@ export interface TemplateOptions {
   body: string
   hasMind: boolean
   hasMermaid: boolean
+  /** 是否内联 CSS（PDF 模式，避免 CDN 依赖） */
+  inlineCss?: boolean
 }
 
 const KATEX_CDN = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css'
+const KATEX_CDN_BASE = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/'
 // 使用 UMD 格式，兼容性最好，避免 ES Module 跨域问题
 const MERMAID_CDN = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js'
 // highlight.js CSS 主题（github 风格，与应用浅色主题一致）
 const HLJS_CSS_CDN = 'https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github.min.css'
+
+// Vite raw imports for inline CSS (PDF offline mode)
+import katexCssRaw from 'katex/dist/katex.min.css?raw'
+import hljsCssRaw from 'highlight.js/styles/github.css?raw'
+
+/** 将 KaTeX CSS 中的相对字体路径替换为 CDN 绝对路径 */
+function resolveKatexFontUrls(css: string): string {
+  return css.replace(/url\(fonts\//g, `url(${KATEX_CDN_BASE}fonts/`)
+}
 
 const EXPORT_ASSETS = {
   katexCss: {
@@ -30,12 +42,23 @@ const EXPORT_ASSETS = {
 } as const
 
 export function generateHTMLTemplate(options: TemplateOptions): string {
+  const useInlineCss = options.inlineCss === true
+
+  // CSS 部分：内联模式下直接嵌入 CSS，否则使用 CDN + 本地 fallback
+  const cssBlock = useInlineCss
+    ? `<style>${resolveKatexFontUrls(katexCssRaw)}</style>
+  <style>${hljsCssRaw}</style>`
+    : `<link rel="stylesheet" href="${EXPORT_ASSETS.katexCss.cdn}">
+  <link rel="stylesheet" href="${EXPORT_ASSETS.katexCss.local}">
+  <link rel="stylesheet" href="${EXPORT_ASSETS.hljsCss.cdn}">
+  <link rel="stylesheet" href="${EXPORT_ASSETS.hljsCss.local}">`
+
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <title>${options.title}</title>
-  <script>
+  ${!useInlineCss ? `<script>
     function loadScriptLocalFirst(localSrc, cdnSrc) {
       var s = document.createElement('script');
       s.src = localSrc;
@@ -48,11 +71,8 @@ export function generateHTMLTemplate(options: TemplateOptions): string {
       };
       document.head.appendChild(s);
     }
-  </script>
-  <link rel="stylesheet" href="${EXPORT_ASSETS.katexCss.cdn}">
-  <link rel="stylesheet" href="${EXPORT_ASSETS.katexCss.local}">
-  <link rel="stylesheet" href="${EXPORT_ASSETS.hljsCss.cdn}">
-  <link rel="stylesheet" href="${EXPORT_ASSETS.hljsCss.local}">
+  </script>` : ''}
+  ${cssBlock}
   ${options.hasMermaid ? `<script>
     loadScriptLocalFirst('${EXPORT_ASSETS.mermaid.local}', '${EXPORT_ASSETS.mermaid.cdn}');
   </script>

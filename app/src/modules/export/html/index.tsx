@@ -12,6 +12,7 @@ import { writeFileNoRecent } from '../../files/service'
 import { ExportWrapper } from './components/ExportWrapper'
 import { generateHTMLTemplate } from './template'
 import { convertImagesToBase64 } from './imageHandler'
+import { renderMermaidToSvg } from '../../visualization/mermaidRenderer'
 
 export interface ExportHtmlOptions {
   title: string
@@ -19,11 +20,19 @@ export interface ExportHtmlOptions {
   baseDir?: string
 }
 
+export interface PrepareExportOptions {
+  /** 是否预渲染 Mermaid 为内联 SVG（PDF 导出使用） */
+  preRenderMermaid?: boolean
+  /** 是否内联 CSS（PDF 导出使用，避免 CDN 依赖） */
+  inlineCss?: boolean
+}
+
 /**
  * 准备导出的 HTML 内容（供 HTML 和 PDF 导出复用）
  * 包含：思维导图渲染、React 静态渲染、图片转 Base64、模板生成
  */
-export async function prepareExportHtmlContents(ctx: any) {
+export async function prepareExportHtmlContents(ctx: any, options?: PrepareExportOptions) {
+  const { preRenderMermaid = false, inlineCss = false } = options ?? {}
   const tr = (key: string, fallback: string, params?: Record<string, string | number>) =>
     ctx.t?.(key, params) ?? fallback
   const rawTitle = ctx.getCurrentFileName() || 'Document'
@@ -34,27 +43,35 @@ export async function prepareExportHtmlContents(ctx: any) {
 
   // 1. 并行渲染思维导图
   ctx.setStatusMessage(tr('export.htmlRenderingMind', '正在渲染思维导图...'))
-  const processedMarkdown = await preTreatMindBlocks(markdown)
+  let processedMarkdown = await preTreatMindBlocks(markdown)
 
-  // 2. 渲染 React 组件为静态字符串
+  // 2. 预渲染 Mermaid 为内联 SVG（PDF 模式）
+  if (preRenderMermaid) {
+    ctx.setStatusMessage(tr('export.renderingMermaid', '正在预渲染 Mermaid 图表...'))
+    processedMarkdown = await preTreatMermaidBlocks(processedMarkdown)
+  }
+
+  // 3. 渲染 React 组件为静态字符串
   ctx.setStatusMessage(tr('export.htmlBuildingPage', '正在构建页面结构...'))
   const renderedHtml = renderToString(
     <ExportWrapper markdown={processedMarkdown} />
   )
 
-  // 3. 图片转 Base64（离线化）
+  // 4. 图片转 Base64（离线化）
   ctx.setStatusMessage(tr('export.htmlProcessingImages', '正在处理图片资源...'))
   const finalHtml = await convertImagesToBase64(renderedHtml, baseDir)
 
-  // 4. 生成最终完整的 HTML 模板
+  // 5. 生成最终完整的 HTML 模板
   const hasMind = processedMarkdown.includes('mind-diagram-export')
-  const hasMermaid = finalHtml.includes('class="mermaid"')
+  // 预渲染模式下 Mermaid 已是内联 SVG，无需 CDN 脚本
+  const hasMermaid = preRenderMermaid ? false : finalHtml.includes('class="mermaid"')
 
   const fullHtml = generateHTMLTemplate({
     title,
     body: finalHtml,
     hasMind,
-    hasMermaid
+    hasMermaid,
+    inlineCss,
   })
 
   return {
@@ -268,6 +285,85 @@ async function renderMindBlockToSvg(code: string, MindElixir: any, SIDE: any): P
   } finally {
     try { document.body.removeChild(container) } catch { /* ... */ }
   }
+}
+
+/**
+ * 预处理：将 ```mermaid...``` 代码块并行替换为内嵌 SVG
+ * 复用 mermaidRenderer 的 export profile，生成黑白高清 SVG
+ */
+async function preTreatMermaidBlocks(markdown: string): Promise<string> {
+  const regex = /```\s*mermaid\s*([\s\S]*?)```/g
+  const matches = [...markdown.matchAll(regex)]
+  if (matches.length === 0) return markdown
+
+  console.log('[Export Mermaid] 开始并行处理', matches.length, '个图表')
+
+  const renderTasks = matches.map(async (match) => {
+    const code = match[1].trim()
+    try {
+      const svgText = await renderMermaidToSvg(
+        code,
+        `mermaid-pdf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        { profile: 'export' },
+      )
+      // 规范化 SVG 尺寸：保留 viewBox，设 width=100% 使其适配打印页面宽度
+      const normalizedSvg = normalizeMermaidSvgForExport(svgText)
+      return {
+        original: match[0],
+        replacement: `\n<div class="mermaid-rendered" style="text-align:center;margin:16px 0;">\n${normalizedSvg}\n</div>\n`
+      }
+    } catch (e) {
+      console.error('[Export Mermaid] 图表渲染失败:', e)
+      return {
+        original: match[0],
+        replacement: `${match[0]}\n\n> ⚠️ Mermaid 图表渲染失败\n`
+      }
+    }
+  })
+
+  const results = await Promise.all(renderTasks)
+
+  let result = markdown
+  for (const item of results) {
+    result = result.replace(item.original, item.replacement)
+  }
+
+  return result
+}
+
+/**
+ * 规范化 Mermaid SVG 用于导出：设 width=100%，保留 viewBox 以自适应页面宽度
+ */
+function normalizeMermaidSvgForExport(svgMarkup: string): string {
+  try {
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(svgMarkup, 'image/svg+xml')
+    const svgEl = doc.documentElement
+
+    if (svgEl && svgEl.tagName.toLowerCase() === 'svg') {
+      const w = parseFloat(svgEl.getAttribute('width') || '') || 0
+      const h = parseFloat(svgEl.getAttribute('height') || '') || 0
+      let viewBox = svgEl.getAttribute('viewBox') || ''
+
+      if (!viewBox && w && h) {
+        viewBox = `0 0 ${w} ${h}`
+        svgEl.setAttribute('viewBox', viewBox)
+      }
+
+      // 移除固定像素宽高，让 SVG 自适应容器宽度
+      svgEl.removeAttribute('width')
+      svgEl.removeAttribute('height')
+      svgEl.setAttribute('width', '100%')
+      if (!svgEl.getAttribute('preserveAspectRatio')) {
+        svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet')
+      }
+
+      return new XMLSerializer().serializeToString(svgEl)
+    }
+  } catch (e) {
+    console.warn('[Export Mermaid] SVG 规范化失败，使用原始 SVG', e)
+  }
+  return svgMarkup
 }
 
 /**

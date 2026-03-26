@@ -504,6 +504,7 @@ export const zhCNMessages: MessageDictionary = {
     wordMermaidFallbackConfirm:
       '当前系统未安装 Inkscape。Mermaid 图表将回退为现有导出方式，清晰度可能受影响。是否继续导出 Word？',
     htmlRenderingMind: '正在渲染思维导图...',
+    renderingMermaid: '正在预渲染 Mermaid 图表...',
     htmlBuildingPage: '正在构建页面结构...',
     htmlProcessingImages: '正在处理图片资源...',
     htmlSaving: '正在保存到磁盘...',
