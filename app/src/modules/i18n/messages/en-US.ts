@@ -194,7 +194,7 @@ export const enUSMessages: MessageDictionary = {
     viewMarkdownSource: 'View Markdown source',
     removeImage: 'Remove image',
     askAnything: 'Ask anything to AI',
-    uploadImage: 'Upload image',
+    uploadImage: 'Upload file',
     stopGenerating: 'Stop generating',
     send: 'Send',
   },

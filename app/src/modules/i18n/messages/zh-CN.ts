@@ -194,7 +194,7 @@ export const zhCNMessages: MessageDictionary = {
     viewMarkdownSource: '查看 Markdown 源代码',
     removeImage: '移除图片',
     askAnything: '向 AI 提问任何内容',
-    uploadImage: '上传图片',
+    uploadImage: '上传文件',
     stopGenerating: '停止生成',
     send: '发送',
   },

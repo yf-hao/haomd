@@ -28,6 +28,7 @@ import { loadSystemPromptInfo, getSystemPromptByRoleId } from './systemPromptSer
 import { createStreamingClientFromSettings } from '../streamingClientFactory'
 import { createAttachmentUploadService } from './attachmentUploadService'
 import { docConversationService } from './docConversationService'
+import { inferAttachmentKind } from './attachmentKind'
 
 export type StartChatOptions = {
   entryMode: ChatEntryMode
@@ -460,13 +461,17 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
 
       await runStreamWithCurrentHistory(assistantId, chatAttachments, clientOverride)
     },
-    async uploadAttachment(file: File, kind: AttachmentKind = 'image'): Promise<UploadedFileRef> {
+    async uploadAttachment(file: File, kind?: AttachmentKind): Promise<UploadedFileRef> {
       if (disposed) throw new Error('Session disposed')
       if (!provider) throw new Error('AI Chat 未配置 Provider')
+      const resolvedKind = kind ?? inferAttachmentKind(file)
+      if (!resolvedKind) {
+        throw new Error(`Unsupported attachment type: ${file.type || file.name}`)
+      }
 
       return attachmentUploadService.uploadAttachment({
         provider,
-        kind,
+        kind: resolvedKind,
         file,
         fileName: file.name,
         userId: 'ai-chat-user',

@@ -1130,6 +1130,53 @@ button.ghost.ghost-subtle:hover {
   padding: 4px 0;
 }
 
+.badge-select-group-menu {
+  display: flex;
+  align-items: stretch;
+  min-width: 320px;
+}
+
+.badge-select-group-list {
+  min-width: 150px;
+  border-right: 1px solid var(--theme-border-subtle);
+  padding: 4px 0;
+}
+
+.badge-select-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 12px;
+  font-size: 12px;
+  color: var(--theme-text-default);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.badge-select-group:hover,
+.badge-select-group.active {
+  background: var(--theme-surface-card);
+}
+
+.badge-select-group.selected .badge-select-group-label {
+  color: var(--theme-text-accent);
+}
+
+.badge-select-group-chevron {
+  color: var(--theme-text-muted);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.badge-select-submenu {
+  min-width: 170px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
 .badge-select-option {
   padding: 6px 12px;
   font-size: 12px;

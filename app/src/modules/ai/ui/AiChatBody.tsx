@@ -13,10 +13,14 @@ import type { ChatMessageView } from '../domain/chatSession'
 import type { VisionMode, UploadedFileRef } from '../domain/types'
 import { useAiSlashCommandHints } from './hooks/useAiSlashCommandHints'
 import { AiSlashCommandHintPanel } from './AiSlashCommandHintPanel'
-import { BadgeSelect } from './BadgeSelect'
+import { BadgeSelect, type BadgeSelectGroup } from './BadgeSelect'
 import { useThemeContext } from '../../theme/ThemeContext'
 import { resolveManagedBackgroundImageUrl } from '../../theme/backgroundImageRuntime'
 import { useI18n } from '../../i18n/I18nContext'
+import { inferAttachmentKind, isPreviewableImage } from '../application/attachmentKind'
+
+const FILE_INPUT_ACCEPT =
+  'image/*,audio/*,.pdf,application/pdf,.txt,text/plain,.md,text/markdown,.csv,text/csv,.json,application/json,.doc,.docx,.xls,.xlsx,.ppt,.pptx'
 
 type MessageViewMode = 'rendered' | 'source'
 
@@ -136,6 +140,23 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
     return shortName
   }
 
+  const modelGroups: BadgeSelectGroup[] = useMemo(() => {
+    const grouped = new Map<string, { id: string; label: string; options: { value: string; label: string }[] }>()
+    for (const model of models ?? []) {
+      const group = grouped.get(model.providerName) ?? {
+        id: model.providerName,
+        label: model.providerName,
+        options: [],
+      }
+      group.options.push({
+        value: model.id,
+        label: `${getModelDisplayName(model.id)}${model.visionMode === 'enabled' ? '  👁' : ''}`,
+      })
+      grouped.set(model.providerName, group)
+    }
+    return Array.from(grouped.values())
+  }, [models])
+
   // 默认视觉提示词（用于图片-only场景）
   const DEFAULT_VISION_PROMPT = '解析图片并根据上下文回复图片中内容的含义'
 
@@ -176,23 +197,23 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
 
     if (files.length === 0) return
 
-    const images = files.filter(f => f.type.startsWith('image/'))
-    if (images.length === 0) {
-      console.warn('[AiChatBody] No image files selected')
-      return
-    }
-
     // 如果提供了批量上传回调，优先使用（Dify 方案）
     if (onUploadFiles) {
+      const supportedFiles = files.filter((file) => inferAttachmentKind(file))
+      if (supportedFiles.length === 0) {
+        console.warn('[AiChatBody] No supported files selected')
+        e.target.value = ''
+        return
+      }
       console.warn('[AiChatBody] Using onUploadFiles (Dify path)')
-      onUploadFiles(images)
+      onUploadFiles(supportedFiles)
       e.target.value = ''
       return
     }
 
     console.warn('[AiChatBody] Fast-track to onAttachImage (Legacy path)')
     // 传统方案：仅取第一张
-    const file = images[0]
+    const file = files.find((candidate) => isPreviewableImage(candidate))
     if (!file) return
     const reader = new FileReader()
     reader.onload = () => {
@@ -422,9 +443,14 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
           {((pendingAttachments && pendingAttachments.length > 0) || attachedImageDataUrl || isUploading) && (
             <div className="ai-chat-attachment-preview-bar">
               {pendingAttachments && pendingAttachments.map((att) => (
-                <div key={att.id} className="ai-chat-attachment-item">
-                  {att.sourceUrl && (
+                <div key={att.id} className="ai-chat-attachment-item" title={att.name}>
+                  {att.sourceUrl && att.kind === 'image' && (
                     <img src={att.sourceUrl} alt={att.name} className="ai-chat-attachment-thumb" />
+                  )}
+                  {att.kind !== 'image' && (
+                    <div className="ai-chat-attachment-thumb ai-chat-attachment-file-badge">
+                      <span>{att.name.split('.').pop()?.toUpperCase() ?? 'FILE'}</span>
+                    </div>
                   )}
                   <button
                     type="button"
@@ -482,7 +508,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
             <div className="ai-chat-input-tools-left">
               <input
                 type="file"
-                accept="image/*"
+                accept={FILE_INPUT_ACCEPT}
                 style={{ display: 'none' }}
                 ref={fileInputRef}
                 onChange={handleFileChange}
@@ -500,6 +526,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
                   value: m.id,
                   label: `${getModelDisplayName(m.id)} (${m.providerName})${m.visionMode === 'enabled' ? '  👁' : ''}`,
                 }))}
+                groups={modelGroups}
                 value={activeModelId ?? ''}
                 onChange={(v) => onChangeModel?.(v)}
               />

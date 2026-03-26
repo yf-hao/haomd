@@ -4,6 +4,8 @@
  */
 
 import { prepareExportHtmlContents } from '../html'
+// HLJS CSS 仅含 .hljs-* 语法高亮颜色规则，不影响排版，安全注入
+import hljsCssRaw from 'highlight.js/styles/github.css?raw'
 
 /**
  * 导出为 PDF
@@ -38,11 +40,17 @@ export async function exportToPdf(ctx: any) {
  * 通过主窗口 Portal 唤起打印
  * Mermaid/Mind/KaTeX 已在 prepareExportHtmlContents 阶段预渲染为静态内容，
  * 无需加载外部 JS，直接注入 DOM 并打印。
+ *
+ * 设计原则（避免预览布局闪变）：
+ * - 不将模板排版 CSS（body/markdown-body 规则）注入 <head>，防止全局样式重算
+ * - app 已通过 MarkdownViewer 懒加载 KaTeX CSS，portal 天然继承，无需重复注入
+ * - 仅注入 HLJS CSS（纯 .hljs-* 颜色规则，不影响排版）用于代码高亮
+ * - 打印 CSS 用 body{visibility:hidden} 而非 display:none，保持布局稳定
  */
 async function printViaMainPortal(html: string, title: string): Promise<void> {
     // 1. 清理旧环境
     const cleanupOld = () => {
-        const ids = ['haomd-print-portal', 'haomd-print-override', 'haomd-print-assets']
+        const ids = ['haomd-print-portal', 'haomd-print-override', 'haomd-print-hljs-css']
         ids.forEach(id => {
             const el = document.getElementById(id)
             if (el) el.parentNode?.removeChild(el)
@@ -53,66 +61,30 @@ async function printViaMainPortal(html: string, title: string): Promise<void> {
     const originalTitle = document.title
     document.title = title
 
-    // 2. 解析 HTML
+    // 2. 解析 HTML，只取 body 内容（head 样式不注入，避免破坏主应用布局）
     const parser = new DOMParser()
     const doc = parser.parseFromString(html, 'text/html')
     const bodyContent = doc.body.innerHTML
 
-    // 3. 注入 Portal 和样式
+    // 3. 注入 Portal（离屏，保持可见以正确计算 SVG 尺寸）
     const portal = document.createElement('div')
     portal.id = 'haomd-print-portal'
     portal.innerHTML = `<div class="markdown-body">${bodyContent}</div>`
     document.body.appendChild(portal)
 
-    // 注入样式时，排版规则（id="haomd-tpl-typography"）使用 @scope 限定到 portal，
-    // 避免其 body/markdown-body 等全局规则影响主应用的预览布局。
-    // KaTeX / HLJS 等库 CSS 正常全局注入（只定义 .katex/.hljs-* 类，不干扰应用排版）。
-    const assetContainer = document.createElement('div')
-    assetContainer.id = 'haomd-print-assets'
-    for (const el of Array.from(doc.head.querySelectorAll('style, link'))) {
-        if (el.tagName.toLowerCase() === 'style') {
-            const srcStyle = el as HTMLStyleElement
-            const newStyle = document.createElement('style')
-            if (srcStyle.id === 'haomd-tpl-typography') {
-                // 限定到 portal 范围，防止 .markdown-body { line-height: 1.7 } 等规则
-                // 泄漏并改变主应用预览的段间距和行高
-                newStyle.textContent = `@scope (#haomd-print-portal) {\n${srcStyle.textContent}\n}`
-            } else {
-                newStyle.textContent = srcStyle.textContent
-            }
-            assetContainer.appendChild(newStyle)
-        } else {
-            assetContainer.appendChild(el.cloneNode(true))
-        }
-    }
-    document.head.appendChild(assetContainer)
+    // 4. 注入 HLJS 语法高亮 CSS（仅含 .hljs-* 规则，不影响主应用排版）
+    //    KaTeX CSS 已由 MarkdownViewer 懒加载，无需重复注入
+    const hljsStyle = document.createElement('style')
+    hljsStyle.id = 'haomd-print-hljs-css'
+    hljsStyle.textContent = hljsCssRaw
+    document.head.appendChild(hljsStyle)
 
+    // 5. 注入打印控制样式（仅包含 portal 定位和打印规则，不含全局排版规则）
     const style = document.createElement('style')
     style.id = 'haomd-print-override'
     style.innerHTML = `
-        /*
-         * 防止模板 body 样式（padding/color/font-family）泄漏到主应用。
-         * 模板的 <style> 包含 body { padding: 20px } 等全局规则，
-         * 注入到主文档后会给 body 加上 padding，在深色主题下形成黑边。
-         */
-        html, body {
-            padding: 0 !important;
-        }
-
-        /*
-         * Fallback（针对不支持 @scope 的旧版 WebKit）：
-         * 抵消模板 .markdown-body 排版规则对主应用预览的影响。
-         * 支持 @scope 时，这些规则会被 @scope 的更高优先级覆盖。
-         */
-        .markdown-body:not(#haomd-print-portal .markdown-body) {
-            line-height: inherit !important;
-            max-width: none !important;
-            margin-left: 0 !important;
-            margin-right: 0 !important;
-        }
-
         /* 离屏渲染：保持可见以正确计算 SVG 尺寸 */
-        #haomd-print-portal { 
+        #haomd-print-portal {
             position: fixed !important;
             left: -9999px !important;
             top: 0 !important;
@@ -123,31 +95,31 @@ async function printViaMainPortal(html: string, title: string): Promise<void> {
         }
 
         @media print {
-            html, body { 
-                background: white !important; 
-                margin: 0 !important;
-                padding: 0 !important;
-            }
-            body > *:not(#haomd-print-portal) {
-                display: none !important;
-            }
+            /*
+             * visibility:hidden 而非 display:none：
+             * 保持布局不变（元素仍占空间），避免触发 reflow 导致视觉抖动
+             */
+            body { visibility: hidden !important; }
+            html { background: white !important; }
+
             #haomd-print-portal {
-                visibility: visible !important; 
+                visibility: visible !important;
                 display: block !important;
-                position: absolute !important; 
-                left: 0 !important; 
+                position: absolute !important;
+                left: 0 !important;
                 top: 0 !important;
-                width: 100% !important; 
+                width: 100% !important;
                 height: auto !important;
-                background: white !important; 
+                background: white !important;
                 z-index: 2147483647 !important;
                 color: #1a1a1a !important;
             }
-            .markdown-body { 
-                max-width: none !important; 
-                background: white !important; 
-                color: #1a1a1a !important; 
-                font-size: 12pt !important; 
+            .markdown-body {
+                max-width: none !important;
+                background: white !important;
+                color: #1a1a1a !important;
+                font-size: 12pt !important;
+                line-height: 1.7 !important;
             }
             .markdown-body code { background-color: rgba(27, 31, 35, 0.05) !important; color: #24292e !important; text-shadow: none !important; }
             .markdown-body pre { background-color: #f6f8fa !important; border: 1px solid #dfe2e5 !important; white-space: pre-wrap !important; }
@@ -158,11 +130,11 @@ async function printViaMainPortal(html: string, title: string): Promise<void> {
     `
     document.head.appendChild(style)
 
-    // 4. 等待 SVG/图片资源完成渲染（短延时即可，无需加载外部 JS）
+    // 6. 等待一帧让浏览器完成 DOM 渲染（内容已预渲染，无需长时间等待）
     console.log('[Print] 内容已注入，等待渲染稳定...')
-    await new Promise(resolve => setTimeout(resolve, 300))
+    await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 50)))
 
-    // 5. 唤起打印
+    // 7. 唤起打印
     console.log('[Print] 准备唤起打印预览...')
     return new Promise((resolve) => {
         const cleanup = () => {

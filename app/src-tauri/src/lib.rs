@@ -5437,7 +5437,7 @@ struct MenuTexts {
     report_issue: &'static str,
     about: &'static str,
     html: &'static str,
-    pdf_text_only: &'static str,
+    print: &'static str,
     word_docx: &'static str,
 }
 
@@ -5516,7 +5516,7 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             report_issue: "报告问题",
             about: "关于",
             html: "HTML",
-            pdf_text_only: "PDF（仅文本）",
+            print: "打印",
             word_docx: "Word (.docx)",
         },
         MenuLocale::EnUs => MenuTexts {
@@ -5592,7 +5592,7 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             report_issue: "Report Issue",
             about: "About",
             html: "HTML",
-            pdf_text_only: "PDF (Text only)",
+            print: "Print",
             word_docx: "Word (.docx)",
         },
     }
@@ -5751,11 +5751,6 @@ pub(crate) async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri:
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new(texts.pdf_text_only)
-                .id("export_pdf")
-                .build(app)?,
-        )
-        .item(
             &MenuItemBuilder::new(texts.word_docx)
                 .id("export_word")
                 .build(app)?,
@@ -5795,6 +5790,12 @@ pub(crate) async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri:
             &MenuItemBuilder::new(texts.save_as)
                 .id("save_as")
                 .accelerator("CmdOrCtrl+Shift+s")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.print)
+                .id("export_pdf")
+                .accelerator("CmdOrCtrl+p")
                 .build(app)?,
         )
         .separator()

@@ -208,6 +208,34 @@ describe('SimpleChat', () => {
     })
   })
 
+  it('buildRequestBody should preserve document attachment type', () => {
+    const chat = new SimpleChat()
+    chat.init(createConfig())
+
+    const body = (chat as any).buildRequestBody(
+      'hello',
+      'streaming',
+      'conv-1',
+      undefined,
+      undefined,
+      [
+        {
+          kind: 'document',
+          source: { kind: 'uploaded', fileId: 'file-pdf-1' },
+        },
+      ],
+    )
+
+    expect(body.files).toEqual([
+      {
+        type: 'document',
+        transfer_method: 'local_file',
+        url: '',
+        upload_file_id: 'file-pdf-1',
+      },
+    ])
+  })
+
   it('convertToChunk should map different Dify event types correctly', () => {
     const chat = new SimpleChat()
 

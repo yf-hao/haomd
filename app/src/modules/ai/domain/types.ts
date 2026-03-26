@@ -126,8 +126,8 @@ export type ChatMessage = {
   content: string
 }
 
-// 附件类型（目前实现 image，未来可以扩展 audio 等）
-export type AttachmentKind = 'image' | 'audio'
+// 附件类型。Dify 侧当前使用 image / audio / document。
+export type AttachmentKind = 'image' | 'audio' | 'document'
 
 // 已上传到远端后的文件引用（例如 Dify /files/upload 的返回）
 export type UploadedFileRef = {
