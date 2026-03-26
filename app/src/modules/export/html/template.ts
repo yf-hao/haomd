@@ -146,7 +146,7 @@ export function generateHTMLTemplate(options: TemplateOptions): string {
       }
     })();
   </script>
-  <style>
+  <style id="haomd-tpl-typography">
     body { font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Source Han Sans CN', 'Segoe UI', Helvetica, Arial, sans-serif; padding: 20px; color: #1a1a1a; }
     .markdown-body {
       max-width: 800px;

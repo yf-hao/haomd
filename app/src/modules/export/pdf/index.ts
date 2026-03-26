@@ -57,7 +57,6 @@ async function printViaMainPortal(html: string, title: string): Promise<void> {
     const parser = new DOMParser()
     const doc = parser.parseFromString(html, 'text/html')
     const bodyContent = doc.body.innerHTML
-    const styleAssets = Array.from(doc.head.querySelectorAll('style, link')).map(el => el.outerHTML).join('\n')
 
     // 3. 注入 Portal 和样式
     const portal = document.createElement('div')
@@ -65,9 +64,27 @@ async function printViaMainPortal(html: string, title: string): Promise<void> {
     portal.innerHTML = `<div class="markdown-body">${bodyContent}</div>`
     document.body.appendChild(portal)
 
+    // 注入样式时，排版规则（id="haomd-tpl-typography"）使用 @scope 限定到 portal，
+    // 避免其 body/markdown-body 等全局规则影响主应用的预览布局。
+    // KaTeX / HLJS 等库 CSS 正常全局注入（只定义 .katex/.hljs-* 类，不干扰应用排版）。
     const assetContainer = document.createElement('div')
     assetContainer.id = 'haomd-print-assets'
-    assetContainer.innerHTML = styleAssets
+    for (const el of Array.from(doc.head.querySelectorAll('style, link'))) {
+        if (el.tagName.toLowerCase() === 'style') {
+            const srcStyle = el as HTMLStyleElement
+            const newStyle = document.createElement('style')
+            if (srcStyle.id === 'haomd-tpl-typography') {
+                // 限定到 portal 范围，防止 .markdown-body { line-height: 1.7 } 等规则
+                // 泄漏并改变主应用预览的段间距和行高
+                newStyle.textContent = `@scope (#haomd-print-portal) {\n${srcStyle.textContent}\n}`
+            } else {
+                newStyle.textContent = srcStyle.textContent
+            }
+            assetContainer.appendChild(newStyle)
+        } else {
+            assetContainer.appendChild(el.cloneNode(true))
+        }
+    }
     document.head.appendChild(assetContainer)
 
     const style = document.createElement('style')
@@ -80,6 +97,18 @@ async function printViaMainPortal(html: string, title: string): Promise<void> {
          */
         html, body {
             padding: 0 !important;
+        }
+
+        /*
+         * Fallback（针对不支持 @scope 的旧版 WebKit）：
+         * 抵消模板 .markdown-body 排版规则对主应用预览的影响。
+         * 支持 @scope 时，这些规则会被 @scope 的更高优先级覆盖。
+         */
+        .markdown-body:not(#haomd-print-portal .markdown-body) {
+            line-height: inherit !important;
+            max-width: none !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
         }
 
         /* 离屏渲染：保持可见以正确计算 SVG 尺寸 */
