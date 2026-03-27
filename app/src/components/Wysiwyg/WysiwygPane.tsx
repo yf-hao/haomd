@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, useMemo, type CSSProperties, type ChangeEvent } from 'react'
 import { Editor, rootCtx, defaultValueCtx, schemaCtx } from '@milkdown/kit/core'
-import { commandsCtx, editorViewCtx, prosePluginsCtx } from '@milkdown/core'
+import { commandsCtx, editorViewCtx, prosePluginsCtx, serializerCtx } from '@milkdown/core'
 import { commonmark, codeBlockSchema, imageSchema } from '@milkdown/kit/preset/commonmark'
 import { codeBlockKeymap } from '@milkdown/preset-commonmark'
 import { gfm } from '@milkdown/kit/preset/gfm'
@@ -31,6 +31,7 @@ import { InlineMathView } from './views/InlineMathView'
 import { CodeBlockView } from './views/CodeBlockView'
 import { ImageView } from './views/ImageView'
 import { normalizeCodeBlockLanguage } from './codeLanguage'
+import { BlockCacheManager } from './blockCache'
 import './WysiwygPane.css'
 
 export interface WysiwygPaneProps {
@@ -382,6 +383,9 @@ function WysiwygEditor({
   const idleCallbackRef = useRef<IdleHandle | null>(null)
   const delayedSyncTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null)
 
+  // Block-level incremental serialization cache
+  const blockCacheRef = useRef(new BlockCacheManager())
+
   // Capture nodeViewFactory in a ref so initEditor callback doesn't change
   const nodeViewFactoryRef = useRef(nodeViewFactory)
   nodeViewFactoryRef.current = nodeViewFactory
@@ -392,12 +396,60 @@ function WysiwygEditor({
     return editor.action(getMarkdown())
   }, [])
 
-  // Serialize the current ProseMirror doc and push it through onChange.
+  /**
+   * Incrementally serialize only the changed blocks, then push through onChange.
+   * Falls back to full serialization when the cache is not initialized.
+   */
+  const incrementalSerializeAndPush = useCallback((
+    newDoc: ProseMirrorNode,
+    prevDoc: ProseMirrorNode | null,
+    serializer: (content: ProseMirrorNode) => string,
+  ) => {
+    const cache = blockCacheRef.current
+
+    let md: string
+    if (!prevDoc || !cache.isInitialized) {
+      md = cache.buildFull(newDoc, serializer)
+    } else {
+      md = cache.incrementalUpdate(prevDoc, newDoc, serializer)
+    }
+
+    // Dev-mode verification: compare incremental result against full serialization
+    if (import.meta.env.DEV && prevDoc && cache.isInitialized) {
+      const fullMd = serializer(newDoc)
+      if (md !== fullMd) {
+        console.warn(
+          '[BlockCache] Incremental/full mismatch detected — rebuilding cache.\n' +
+          `  incremental length: ${md.length}, full length: ${fullMd.length}`,
+        )
+        md = cache.buildFull(newDoc, serializer)
+      }
+    }
+
+    if (md !== valueRef.current) {
+      isInternalUpdate.current = true
+      lastSyncedValueRef.current = md
+      onChangeRef.current(md)
+      queueMicrotask(() => { isInternalUpdate.current = false })
+    }
+  }, [])
+
+  // Full serialization (used by flushPending, scheduleDelayedSync, and format actions)
   const serializeAndPush = useCallback((requireInteraction = true) => {
     const editor = editorRef.current
     if (!editor) return
     if (requireInteraction && !hasUserInteractedRef.current) return
+
+    // Full serialization via getMarkdown() — also rebuilds block cache
     const md = getCurrentMarkdown()
+
+    // Rebuild cache so subsequent incremental updates have a correct baseline
+    editor.action((ctx) => {
+      const view = ctx.get(editorViewCtx)
+      const ser = ctx.get(serializerCtx)
+      blockCacheRef.current.buildFull(view.state.doc, ser)
+    })
+
     if (md !== valueRef.current) {
       isInternalUpdate.current = true
       lastSyncedValueRef.current = md
@@ -574,7 +626,10 @@ function WysiwygEditor({
           ...plugins,
         ])
 
-        ctx.get(listenerCtx).updated((_ctx, _doc, _prevDoc) => {
+        // Capture the serializer for incremental block-level serialization
+        const serializer = ctx.get(serializerCtx)
+
+        ctx.get(listenerCtx).updated((_ctx, doc, prevDoc) => {
           if (!hasUserInteractedRef.current) return
 
           onDirtyRef.current?.()
@@ -584,7 +639,8 @@ function WysiwygEditor({
           }
           idleCallbackRef.current = requestIdleWork(() => {
             idleCallbackRef.current = null
-            serializeAndPush()
+            // Use incremental serialization: only re-serialize changed blocks
+            incrementalSerializeAndPush(doc, prevDoc, serializer)
           }, 2000)
         })
       })
@@ -612,7 +668,14 @@ function WysiwygEditor({
 
     editorRef.current?.destroy()
     editorRef.current = editor
-  }, [scheduleDelayedSync, serializeAndPush])
+
+    // Initialize block cache from the initial document
+    editor.action((ctx) => {
+      const view = ctx.get(editorViewCtx)
+      const ser = ctx.get(serializerCtx)
+      blockCacheRef.current.buildFull(view.state.doc, ser)
+    })
+  }, [scheduleDelayedSync, serializeAndPush, incrementalSerializeAndPush])
 
   useEffect(() => {
     onFlushReadyRef.current?.(flushPending)
@@ -714,6 +777,12 @@ function WysiwygEditor({
       const currentMarkdown = editor.action(getMarkdown())
       if (currentMarkdown !== value) {
         editor.action(replaceAll(value))
+        // Rebuild block cache after external doc replacement
+        editor.action((ctx) => {
+          const view = ctx.get(editorViewCtx)
+          const serializer = ctx.get(serializerCtx)
+          blockCacheRef.current.buildFull(view.state.doc, serializer)
+        })
       }
       lastSyncedValueRef.current = value
     } catch {
