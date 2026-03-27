@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { EditorView } from '@codemirror/view'
 import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
@@ -38,10 +39,17 @@ import { onNativePasteImage } from '../modules/platform/clipboardEvents'
 import { openTerminalAt } from '../modules/platform/terminalService'
 import { openInFileManager } from '../modules/platform/fileExplorerService'
 import { loadDefaultImagePathStrategyConfig, resolveImageTarget } from '../modules/images/imagePasteStrategy'
-import { registerApplyHeadingLevel, registerResetHeadingToParagraph, registerEmphasizeSelection, registerInsertCodeBlock } from '../modules/editor/formatService'
+import {
+  registerApplyHeadingLevel,
+  registerResetHeadingToParagraph,
+  registerEmphasizeSelection,
+  registerToggleStrikethrough,
+  registerInsertCodeBlock,
+} from '../modules/editor/formatService'
 import { useI18n } from '../modules/i18n/I18nContext'
 import { useThemeContext } from '../modules/theme/ThemeContext'
 import { buildBackgroundImageVars, resolveManagedBackgroundImageUrl } from '../modules/theme/backgroundImageRuntime'
+import type { WysiwygFormatActions } from './Wysiwyg/WysiwygPane'
 // 改为从内部动态加载，优化编辑性能
 // import { exportToHtml } from '../modules/export/html'
 
@@ -76,6 +84,13 @@ const GlobalMemoryDialogLazy = lazy(() =>
 const RecentFilesDialogLazy = lazy(() =>
   import('./RecentFilesDialog').then((m) => ({ default: m.RecentFilesDialog }))
 )
+
+const WysiwygPaneLazy = lazy(() =>
+  import('./Wysiwyg/WysiwygPane').then((m) => ({ default: m.WysiwygPane }))
+)
+
+export type EditMode = 'source' | 'wysiwyg'
+const STORAGE_EDIT_MODE = 'haomd:editMode'
 
 export type LeftPanelId = 'files' | 'outline' | 'pdf' | 'sessions' | null
 export type InitialWorkspaceAction = 'new' | 'open' | 'open_folder' | 'open_recent' | null
@@ -156,6 +171,14 @@ export function WorkspaceShell({
   const [focusRequest, setFocusRequest] = useState<{ localLine: number; searchText?: string } | null>(null)
   const [previewSelectionText, setPreviewSelectionText] = useState<string | null>(null)
   const pdfSelectionGetterRef = useRef<(() => string | null) | null>(null)
+  const wysiwygSelectionGetterRef = useRef<(() => string | null) | null>(null)
+  const wysiwygMarkdownGetterRef = useRef<(() => string) | null>(null)
+  const wysiwygOutlineNavigatorRef = useRef<((target: { headingIndex: number; text: string; level: 1 | 2 | 3 | 4 | 5 | 6 }) => boolean) | null>(null)
+  const wysiwygFormatActionsRef = useRef<WysiwygFormatActions | null>(null)
+  const syncWysiwygMarkdownRef = useRef<((markdown: string) => void) | null>(null)
+  const guardedSaveRef = useRef<(() => Promise<any>) | null>(null)
+  // Holds the flush function from WysiwygPane for forcing serialization before save
+  const wysiwygFlushRef = useRef<(() => void) | null>(null)
   const isProgrammaticScrollRef = useRef(false)
 
   // 将编辑器的实时行号节流后再传给预览，使用 rAF 节流（~16ms）降低重渲染频率
@@ -189,6 +212,37 @@ export function WorkspaceShell({
     previewWidthForRender,
     startDragging,
   } = useWorkspaceLayout()
+
+  // 编辑模式：source（CodeMirror + 预览）或 wysiwyg（Milkdown 所见即所得）
+  const [editMode, setEditMode] = useState<EditMode>(() => {
+    if (typeof localStorage === 'undefined') return 'source'
+    return (localStorage.getItem(STORAGE_EDIT_MODE) as EditMode) || 'source'
+  })
+  const editModeRef = useRef<EditMode>(editMode)
+  useEffect(() => {
+    editModeRef.current = editMode
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(STORAGE_EDIT_MODE, editMode)
+    }
+  }, [editMode])
+
+  const setEditModeWithFlush = useCallback((next: EditMode) => {
+    if (editMode === 'wysiwyg' && next === 'source') {
+      const latest = wysiwygMarkdownGetterRef.current?.()
+      if (latest !== undefined) {
+        // Read directly from the WYSIWYG instance before source mode mounts,
+        // so the source editor never boots from stale React state.
+        flushSync(() => {
+          syncWysiwygMarkdownRef.current?.(latest)
+        })
+      } else if (wysiwygFlushRef.current) {
+        flushSync(() => {
+          wysiwygFlushRef.current?.()
+        })
+      }
+    }
+    setEditMode(next)
+  }, [editMode])
 
   const isPreviewVisible = effectiveLayout !== 'editor-only'
   const prevIsPreviewVisibleRef = useRef(isPreviewVisible)
@@ -249,6 +303,7 @@ export function WorkspaceShell({
     updateActiveContent,
     updateActiveMeta,
     updateTabsPathByPath,
+    markActiveTabDirty,
   } = useTabs({
     onRequestCloseCurrentTab: () => {
       if (closeCurrentTabRef.current) {
@@ -336,6 +391,16 @@ export function WorkspaceShell({
       return null
     }
 
+    if (editMode === 'wysiwyg') {
+      const getter = wysiwygSelectionGetterRef.current
+      if (getter) {
+        const text = getter()
+        if (text && text.trim()) {
+          return text
+        }
+      }
+    }
+
     // 非 PDF：优先使用 Markdown 预览的选区
     if (previewSelectionText && previewSelectionText.trim()) {
       return previewSelectionText
@@ -345,9 +410,20 @@ export function WorkspaceShell({
     const view = editorViewRef.current
     if (!view || view.state.selection.main.empty) return null
     return view.state.doc.sliceString(view.state.selection.main.from, view.state.selection.main.to)
-  }, [isPdfActive, previewSelectionText])
+  }, [editMode, isPdfActive, previewSelectionText])
 
   const outlineItems = useOutline(markdown)
+  const flatOutlineItems = useMemo(() => {
+    const flattened: OutlineItem[] = []
+    const visit = (items: OutlineItem[]) => {
+      for (const item of items) {
+        flattened.push(item)
+        if (item.children?.length) visit(item.children)
+      }
+    }
+    visit(outlineItems)
+    return flattened
+  }, [outlineItems])
 
   const [confirmDialog, setConfirmDialog] = useState<any>(null)
   const [searchPrefillText, setSearchPrefillText] = useState('')
@@ -537,6 +613,28 @@ export function WorkspaceShell({
     updateActiveContent(val)
   }, [applyChunkEdit, markDirty, updateActiveContent])
 
+  const handleWysiwygChange = useCallback((sourceTabId: string, val: string) => {
+    if (activeIdRef.current !== sourceTabId) {
+      return
+    }
+    handleMarkdownChange(val)
+  }, [handleMarkdownChange])
+  syncWysiwygMarkdownRef.current = handleMarkdownChange
+
+  const getLatestWysiwygMarkdown = useCallback(() => {
+    if (editMode !== 'wysiwyg' || isPdfActive) return null
+    return wysiwygMarkdownGetterRef.current?.() ?? null
+  }, [editMode, isPdfActive])
+
+  const syncLatestWysiwygToReact = useCallback(() => {
+    const latest = getLatestWysiwygMarkdown()
+    if (latest === null) return null
+    flushSync(() => {
+      handleMarkdownChange(latest)
+    })
+    return latest
+  }, [getLatestWysiwygMarkdown, handleMarkdownChange])
+
   // 当前激活的 PDF 文件路径（仅在 isPdfActive 时有值）
   const activePdfPath = isPdfActive ? activeTab?.path ?? null : null
 
@@ -556,6 +654,11 @@ export function WorkspaceShell({
 
     return getChunkContent() ?? markdown
   }, [isPdfActive, activePdfPath, pdfNotes, getChunkContent, markdown])
+
+  const wysiwygMarkdown = useMemo(() => {
+    if (isPdfActive) return ''
+    return activeTab?.content ?? markdown
+  }, [isPdfActive, activeTab?.content, markdown])
 
   // 统一的编辑器 onChange：
   // - PDF 标签：只更新 pdfNotes，不碰 markdown/tab 内容
@@ -583,6 +686,18 @@ export function WorkspaceShell({
       if (!view) return
       const next = view.state.doc.toString()
       handleMarkdownChange(next)
+    }
+
+    /** WYSIWYG: flush pending idle serialization, get latest markdown,
+     *  apply a string-level mutation, then push through handleMarkdownChange
+     *  so React state, tabs, and the Milkdown sync effect all update. */
+    const wysiwygMutate = (mutator: (md: string) => string) => {
+      wysiwygFlushRef.current?.()
+      const current = wysiwygMarkdownGetterRef.current?.() ?? markdownRef.current
+      const next = mutator(current)
+      if (next !== current) {
+        handleMarkdownChange(next)
+      }
     }
 
     const runInsertBelow = (text: string) => {
@@ -614,6 +729,11 @@ export function WorkspaceShell({
     registerEditorInsertBelow(async ({ text, sourceTabId }) => {
       if (!text) return
 
+      if (editMode === 'wysiwyg') {
+        wysiwygMutate((md) => md + '\n' + text)
+        return
+      }
+
       const performInsert = () => {
         runInsertBelow(text)
         syncEditorToReactState()
@@ -622,7 +742,6 @@ export function WorkspaceShell({
       const hasSourceTab = !!sourceTabId && tabs.some((t) => t.id === sourceTabId)
 
       if (hasSourceTab && activeIdRef.current !== sourceTabId) {
-        // 切回发起 AI 动作的标签页，避免内容串到其他标签
         setActiveTab(sourceTabId)
         activeIdRef.current = sourceTabId
         setTimeout(performInsert, 50)
@@ -633,6 +752,21 @@ export function WorkspaceShell({
 
     registerEditorReplaceSelection(async ({ text, sourceTabId }) => {
       if (!text) return
+
+      if (editMode === 'wysiwyg') {
+        const selectedText = wysiwygSelectionGetterRef.current?.() ?? ''
+        wysiwygMutate((md) => {
+          if (selectedText) {
+            const idx = md.indexOf(selectedText)
+            if (idx >= 0) {
+              return md.slice(0, idx) + text + md.slice(idx + selectedText.length)
+            }
+          }
+          // No selection or not found — append
+          return md + '\n' + text
+        })
+        return
+      }
 
       const performReplace = () => {
         runReplaceSelection(text)
@@ -662,6 +796,11 @@ export function WorkspaceShell({
     })
 
     registerApplyHeadingLevel(async (level: number) => {
+      if (editModeRef.current === 'wysiwyg') {
+        wysiwygFormatActionsRef.current?.setHeading(Math.min(6, Math.max(1, level)) as 1 | 2 | 3 | 4 | 5 | 6)
+        return
+      }
+
       const view = editorViewRef.current
       if (!view) return
 
@@ -689,6 +828,11 @@ export function WorkspaceShell({
     })
 
     registerResetHeadingToParagraph(async () => {
+      if (editModeRef.current === 'wysiwyg') {
+        wysiwygFormatActionsRef.current?.setHeading(0)
+        return
+      }
+
       const view = editorViewRef.current
       if (!view) return
 
@@ -711,6 +855,11 @@ export function WorkspaceShell({
     })
 
     registerEmphasizeSelection(async () => {
+      if (editModeRef.current === 'wysiwyg') {
+        wysiwygFormatActionsRef.current?.toggleBold()
+        return
+      }
+
       const view = editorViewRef.current
       if (!view) return
 
@@ -733,6 +882,11 @@ export function WorkspaceShell({
     })
 
     registerInsertCodeBlock(async () => {
+      if (editModeRef.current === 'wysiwyg') {
+        wysiwygFormatActionsRef.current?.insertCodeBlock()
+        return
+      }
+
       const view = editorViewRef.current
       if (!view) return
 
@@ -774,6 +928,31 @@ export function WorkspaceShell({
 
       syncEditorToReactState()
     })
+
+    registerToggleStrikethrough(async () => {
+      if (editModeRef.current === 'wysiwyg') {
+        wysiwygFormatActionsRef.current?.toggleStrikethrough()
+        return
+      }
+
+      const view = editorViewRef.current
+      if (!view) return
+
+      const { state } = view
+      const { from, to } = state.selection.main
+      if (from === to) return
+
+      const selected = state.doc.sliceString(from, to)
+      const struck = `~~${selected}~~`
+
+      view.dispatch(state.update({
+        changes: { from, to, insert: struck },
+        selection: { anchor: from + struck.length },
+        scrollIntoView: true,
+      }))
+
+      syncEditorToReactState()
+    })
   }, [createTab, isCreatingTab, setActiveTab, handleMarkdownChange, tabs])
 
   const getCurrentFilePath = useCallback(() => {
@@ -801,7 +980,7 @@ export function WorkspaceShell({
         variant: 'stacked',
         onConfirm: async () => {
           setConfirmDialog(null)
-          const res = await save()
+          const res = await guardedSaveRef.current?.()
           if ((res as any)?.ok !== false) closeTabWithAiSession(activeId)
         },
         onExtra: () => {
@@ -812,7 +991,7 @@ export function WorkspaceShell({
     } else {
       closeTabWithAiSession(activeId)
     }
-  }, [isCreatingTab, activeId, tabs, closeTabWithAiSession, save])
+  }, [isCreatingTab, activeId, tabs, closeTabWithAiSession])
 
   closeCurrentTabRef.current = handleCurrentTabClose
 
@@ -844,7 +1023,7 @@ export function WorkspaceShell({
         for (const tab of unsaved) {
           setActiveTab(tab.id)
           await new Promise(r => setTimeout(r, 10))
-          const res = await save()
+          const res = await guardedSaveRef.current?.()
           if ((res as any)?.ok === false) return
         }
         if (isTauriEnv()) invoke('quit_app').catch(() => { })
@@ -856,7 +1035,7 @@ export function WorkspaceShell({
         else window.close()
       }
     })
-  }, [isCreatingTab, getUnsavedTabs, isTauriEnv, save, setActiveTab, setConfirmDialog])
+  }, [isCreatingTab, getUnsavedTabs, isTauriEnv, setActiveTab, setConfirmDialog])
 
   // 预览内容只在预览可见时才节流同步，避免 editor-only 模式下做无意义渲染
   useEffect(() => {
@@ -913,16 +1092,28 @@ export function WorkspaceShell({
       setStatusMessage(t('workspace.saveUnsupportedPdf'))
       return { ok: false as const, error: { code: 'UNSUPPORTED', message: t('workspace.saveUnsupportedPdfError'), traceId: undefined } }
     }
+    const latest = syncLatestWysiwygToReact()
+    if (latest !== null) {
+      return await save(latest)
+    }
+    if (wysiwygFlushRef.current) {
+      flushSync(() => { wysiwygFlushRef.current!() })
+    }
     return await save()
-  }, [isPdfActive, save, setStatusMessage, t])
+  }, [isPdfActive, save, setStatusMessage, syncLatestWysiwygToReact, t])
+  guardedSaveRef.current = saveWithPdfGuard
 
   const saveAsWithPdfGuard = useCallback(async () => {
     if (isPdfActive) {
       setStatusMessage(t('workspace.saveUnsupportedPdf'))
       return { ok: false as const, error: { code: 'UNSUPPORTED', message: t('workspace.saveAsUnsupportedPdfError'), traceId: undefined } }
     }
+    const latest = syncLatestWysiwygToReact()
+    if (latest !== null) {
+      return await saveAs(latest)
+    }
     return await saveAs()
-  }, [isPdfActive, saveAs, setStatusMessage, t])
+  }, [isPdfActive, saveAs, setStatusMessage, syncLatestWysiwygToReact, t])
 
   const markPendingRestoreRef = useRef<((tabId: string) => void) | null>(null)
 
@@ -1674,16 +1865,22 @@ export function WorkspaceShell({
         return
       }
 
+      if (editMode === 'wysiwyg') {
+        wysiwygFormatActionsRef.current?.insertTable(rows, cols)
+        return
+      }
+
       const tableMarkdown = generateMarkdownTable(rows, cols)
       await insertMarkdownAtCursorBelow(tableMarkdown)
     },
-    [generateMarkdownTable, insertMarkdownAtCursorBelow, isPdfActive, setStatusMessage, t],
+    [editMode, generateMarkdownTable, insertMarkdownAtCursorBelow, isPdfActive, setStatusMessage, t],
   )
 
   const { dispatchAction } = useCommandSystem({
     layout, setLayout: setLayout as any, setShowPreview, setStatusMessage,
     aiChatMode, setAiChatMode, aiChatDockSide, setAiChatDockSide, aiChatOpen,
     editorZoom, setEditorZoom,
+    editMode, setEditMode: setEditModeWithFlush,
     confirmLoseChanges, hasUnsavedChanges, newDocument, setFilePath, applyOpenedContent,
     openFile, save: saveWithPdfGuard, saveAs: saveAsWithPdfGuard, handleShowRecent: undefined, clearRecentAll,
     createTab, updateActiveMeta, openFolderInSidebar, closeCurrentTab,
@@ -1849,8 +2046,19 @@ export function WorkspaceShell({
   const handleOutlineSelect = useCallback((item: OutlineItem) => {
     setActiveOutlineId(item.id)
     if (effectiveLayout === 'preview-only') setLayout('preview-left')
+    if (editModeRef.current === 'wysiwyg') {
+      const headingIndex = flatOutlineItems.findIndex((outlineItem) => outlineItem.id === item.id)
+      const didNavigate = headingIndex >= 0
+        ? wysiwygOutlineNavigatorRef.current?.({
+            headingIndex,
+            text: item.text,
+            level: item.level,
+          })
+        : false
+      if (didNavigate) return
+    }
     focusEditorOnGlobalLine(item.line, item.searchText)
-  }, [effectiveLayout, setLayout, focusEditorOnGlobalLine])
+  }, [effectiveLayout, flatOutlineItems, setLayout, focusEditorOnGlobalLine])
 
   const handleTabSaveAndClose = useCallback(async (id: string) => {
     const isActive = id === activeId
@@ -2264,7 +2472,50 @@ export function WorkspaceShell({
                     </div>
                   </>
                 )}
-                <section className="pane-group editor-preview-group" style={{ gridTemplateColumns }} ref={workspaceRef}>
+                <section className="pane-group editor-preview-group" style={{ gridTemplateColumns: editMode === 'wysiwyg' && !isPdfActive ? '1fr' : gridTemplateColumns }} ref={workspaceRef}>
+                  {editMode === 'wysiwyg' && !isPdfActive ? (
+                    /* WYSIWYG 所见即所得模式 */
+                    <section className="pane editor-pane" style={{ gridColumn: '1/-1' }}>
+                      <Suspense fallback={<div className="code-editor" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13 }}>{t('workspace.loadingEditor')}</div>}>
+                        <TabBar
+                          tabs={tabs}
+                          activeId={activeId}
+                          onTabClick={setActiveTab}
+                          onTabClose={closeTabWithAiSession}
+                          onRequestSaveAndClose={handleTabSaveAndClose}
+                        />
+                        <WysiwygPaneLazy
+                          key={activeId ?? 'wysiwyg-empty'}
+                          value={wysiwygMarkdown}
+                          editorZoom={editorZoom}
+                          onChange={(val) => {
+                            if (!activeId) return
+                            handleWysiwygChange(activeId, val)
+                          }}
+                          onSelectionGetterReady={(getter) => {
+                            wysiwygSelectionGetterRef.current = getter
+                          }}
+                          onMarkdownGetterReady={(getter) => {
+                            wysiwygMarkdownGetterRef.current = getter
+                          }}
+                          onOutlineNavigatorReady={(navigator) => {
+                            wysiwygOutlineNavigatorRef.current = navigator
+                          }}
+                          onFormatActionsReady={(actions) => {
+                            wysiwygFormatActionsRef.current = actions
+                          }}
+                          onFlushReady={(flush) => {
+                            wysiwygFlushRef.current = flush
+                          }}
+                          onDirty={() => { markDirty(); markActiveTabDirty() }}
+                          filePath={filePath}
+                          effectiveLayout="preview-only"
+                        />
+                      </Suspense>
+                    </section>
+                  ) : (
+                    /* 源码编辑模式（原有逻辑） */
+                    <>
                   <section
                     className={`pane ${effectiveLayout === 'preview-only' ? '' : 'editor-pane'}`}
                     style={
@@ -2353,8 +2604,10 @@ export function WorkspaceShell({
                     )}
                   </Suspense>
                   </PreviewErrorBoundary>
+                    </>
+                  )}
 
-                  {(effectiveLayout === 'preview-left' || effectiveLayout === 'preview-right') && (
+                  {effectiveLayout !== 'editor-only' && editMode !== 'wysiwyg' && (effectiveLayout === 'preview-left' || effectiveLayout === 'preview-right') && (
                     <div className={`divider-hotzone editor-preview-divider ${dragging ? 'active' : ''}`} style={{ left: effectiveLayout === 'preview-left' ? `${previewWidthForRender}%` : `${100 - previewWidthForRender}%` }} onMouseDown={startDragging}>
                       <div className="divider-rail"><span className="divider-handle" /></div>
                     </div>
@@ -2384,7 +2637,7 @@ export function WorkspaceShell({
           <ConflictModal
             error={conflictError}
             onRetrySave={async () => {
-              await save()
+              await guardedSaveRef.current?.()
             }}
             onCancel={() => setConflictError(null)}
           />

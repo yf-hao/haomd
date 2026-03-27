@@ -98,6 +98,7 @@ describe('editorSettings', () => {
         const typography = await getUiTypographySettings()
         expect(typography.appFontSize).toBe(13)
         expect(typography.previewFontSize).toBe(15)
+        expect(typography.wysiwygFontSize).toBe(15)
         expect(typography.aiChatInputFontSize).toBe(13)
     })
 

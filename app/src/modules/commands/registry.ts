@@ -29,6 +29,8 @@ export type LayoutCommandContext = StatusContext & {
   openSearch?: () => void
   editorZoom: number
   setEditorZoom: (value: number | ((prev: number) => number)) => void
+  editMode?: 'source' | 'wysiwyg'
+  setEditMode?: (mode: 'source' | 'wysiwyg') => void
 }
 
 /**
@@ -235,6 +237,16 @@ function createLayoutCommands(ctx: LayoutCommandContext): CommandRegistry {
         }
         return !v
       })
+    },
+    toggle_wysiwyg: () => {
+      if (!ctx.setEditMode) return
+      const next = ctx.editMode === 'wysiwyg' ? 'source' : 'wysiwyg'
+      ctx.setEditMode(next)
+      ctx.setStatusMessage(
+        next === 'wysiwyg'
+          ? tr(ctx, 'commands.editModeWysiwyg', '编辑模式：所见即所得')
+          : tr(ctx, 'commands.editModeSource', '编辑模式：源码'),
+      )
     },
   }
 }

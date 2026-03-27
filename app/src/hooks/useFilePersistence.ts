@@ -63,6 +63,11 @@ export type FilePersistenceOptions = {
 }
 
 export function useFilePersistence(markdown: string, options?: FilePersistenceOptions) {
+  // Keep a ref so the save callback always reads the latest markdown
+  // without needing to be recreated on every keystroke.
+  const markdownRef = useRef(markdown)
+  markdownRef.current = markdown
+
   const [filePath, setFilePath] = useState<string>(DEFAULT_PATH)
   const pathRef = useRef<string>(DEFAULT_PATH)
   const [dirty, setDirty] = useState(false)
@@ -97,16 +102,17 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
   }, [filePath])
 
   const handleSave = useCallback(
-    async (targetPath?: string): Promise<Result<WriteResult>> => {
+    async (targetPath?: string, contentOverride?: string): Promise<Result<WriteResult>> => {
       if (saveInFlightRef.current) {
         return { ok: false, error: { code: 'CANCELLED', message: '保存进行中，请稍后重试', traceId: undefined } }
       }
       saveInFlightRef.current = true
       try {
         const pathToUse = targetPath ?? pathRef.current
+        const contentToWrite = contentOverride ?? markdownRef.current
         const resp = await writeFile({
           path: pathToUse,
-          content: markdown,
+          content: contentToWrite,
           expectedHash: currentHash,
           expectedMtime: currentMtime,
         })
@@ -137,7 +143,7 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
         saveInFlightRef.current = false
       }
     },
-    [markdown, currentHash, currentMtime, upsertRecentLocal, options],
+    [currentHash, currentMtime, upsertRecentLocal, options],
   )
 
   const dialogInFlightRef = useRef(false)
@@ -147,7 +153,7 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
 
   const hasRealPathNow = useCallback(() => pathRef.current !== DEFAULT_PATH, [])
 
-  const saveAs = useCallback(async () => {
+  const saveAs = useCallback(async (contentOverride?: string) => {
     // 防止重复触发导致系统对话框弹多次
     if (dialogInFlightRef.current) {
       return { ok: false as const, error: { code: 'CANCELLED', message: '已在打开保存对话框', traceId: undefined } }
@@ -216,7 +222,7 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
 
       setSaveStatus('saving')
       setStatusMessage('保存中...')
-      const resp = await handleSave(finalPath)
+      const resp = await handleSave(finalPath, contentOverride)
       if (resp.ok) {
         // 已保存
       } else if (resp.error.code === 'CONFLICT') {
@@ -232,7 +238,7 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
     }
   }, [filePath, handleSave])
 
-  const saveToPath = useCallback(async () => {
+  const saveToPath = useCallback(async (contentOverride?: string) => {
     if (!hasRealPathNow()) {
       return {
         ok: false as const,
@@ -242,7 +248,7 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
 
     setSaveStatus('saving')
     setStatusMessage('保存中...')
-    const resp = await handleSave()
+    const resp = await handleSave(undefined, contentOverride)
     if (resp.ok) {
       // 已保存
     } else if (resp.error.code === 'CONFLICT') {
@@ -255,10 +261,10 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
     return resp
   }, [handleSave, hasRealPathNow])
 
-  const save = useCallback(async () => {
+  const save = useCallback(async (contentOverride?: string) => {
     // 关键：这里不要依赖渲染期的 memo/state，直接读 ref，避免“刚保存完又触发保存”时判断失真
-    if (hasRealPathNow()) return await saveToPath()
-    return await saveAs()
+    if (hasRealPathNow()) return await saveToPath(contentOverride)
+    return await saveAs(contentOverride)
   }, [hasRealPathNow, saveAs, saveToPath])
 
   useEffect(() => {

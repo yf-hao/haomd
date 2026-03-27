@@ -1,5 +1,11 @@
 import type { CommandRegistry } from './types'
-import { applyHeadingLevel, resetHeadingToParagraph, emphasizeSelection, insertCodeBlock } from '../editor/formatService'
+import {
+  applyHeadingLevel,
+  resetHeadingToParagraph,
+  emphasizeSelection,
+  toggleStrikethrough,
+  insertCodeBlock,
+} from '../editor/formatService'
 
 export type FormatCommandContext = {
   setStatusMessage: (msg: string) => void
@@ -47,6 +53,10 @@ export function createFormatCommands(ctx: FormatCommandContext): CommandRegistry
     format_emphasize_selection: async () => {
       await emphasizeSelection()
       ctx.setStatusMessage(tr(ctx, 'commands.formatBold', '已加粗选中内容'))
+    },
+    format_strikethrough: async () => {
+      await toggleStrikethrough()
+      ctx.setStatusMessage(tr(ctx, 'commands.formatStrikethrough', '已添加删除线'))
     },
     format_insert_table: () => {
       if (ctx.openInsertTableDialog) {

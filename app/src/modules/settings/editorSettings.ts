@@ -41,6 +41,7 @@ export type UiTypographySettings = {
   statusBarFontSize: number
   editorFontSize: number
   previewFontSize: number
+  wysiwygFontSize: number
   aiChatMessageFontSize: number
   aiChatInputFontSize: number
 }
@@ -117,7 +118,7 @@ const defaultTheme: ThemeSettings = {
     path: null,
     opacity: 0.22,
     overlayOpacity: 0.12,
-    blurPx: 2,
+    blurPx: 0,
     brightness: 100,
     size: 'height-fill',
     positionX: 50,
@@ -129,7 +130,7 @@ const defaultTheme: ThemeSettings = {
     path: null,
     opacity: 0.3,
     overlayOpacity: 0,
-    blurPx: 1,
+    blurPx: 0,
     brightness: 100,
     size: 'height-fill',
     positionX: 50,
@@ -140,7 +141,7 @@ const defaultTheme: ThemeSettings = {
     path: null,
     opacity: 0.22,
     overlayOpacity: 0.12,
-    blurPx: 2,
+    blurPx: 0,
     brightness: 100,
     size: 'height-fill',
     positionX: 50,
@@ -151,7 +152,7 @@ const defaultTheme: ThemeSettings = {
     path: null,
     opacity: 0.3,
     overlayOpacity: 0,
-    blurPx: 1,
+    blurPx: 0,
     brightness: 100,
     size: 'height-fill',
     positionX: 50,
@@ -162,7 +163,7 @@ const defaultTheme: ThemeSettings = {
     path: null,
     opacity: 0.2,
     overlayOpacity: 0.16,
-    blurPx: 2,
+    blurPx: 0,
     brightness: 100,
     size: 'height-fill',
     positionX: 50,
@@ -178,6 +179,7 @@ const defaultUiTypography: UiTypographySettings = {
   statusBarFontSize: 12,
   editorFontSize: 14,
   previewFontSize: 15,
+  wysiwygFontSize: 15,
   aiChatMessageFontSize: 13,
   aiChatInputFontSize: 13,
 }
@@ -262,7 +264,7 @@ export async function getThemeSettings(): Promise<ThemeSettings> {
       opacity: cfg.workspaceBackground?.opacity ?? defaultTheme.workspaceBackground?.opacity ?? 0.22,
       overlayOpacity:
         cfg.workspaceBackground?.overlayOpacity ?? defaultTheme.workspaceBackground?.overlayOpacity ?? 0.12,
-      blurPx: cfg.workspaceBackground?.blurPx ?? defaultTheme.workspaceBackground?.blurPx ?? 2,
+      blurPx: cfg.workspaceBackground?.blurPx ?? defaultTheme.workspaceBackground?.blurPx ?? 0,
       brightness: cfg.workspaceBackground?.brightness ?? defaultTheme.workspaceBackground?.brightness ?? 100,
       size: cfg.workspaceBackground?.size ?? defaultTheme.workspaceBackground?.size ?? 'height-fill',
       positionX: cfg.workspaceBackground?.positionX ?? defaultTheme.workspaceBackground?.positionX ?? 50,
@@ -275,7 +277,7 @@ export async function getThemeSettings(): Promise<ThemeSettings> {
       path: cfg.editorBackground?.path ?? defaultTheme.editorBackground?.path ?? null,
       opacity: cfg.editorBackground?.opacity ?? defaultTheme.editorBackground?.opacity ?? 0.3,
       overlayOpacity: cfg.editorBackground?.overlayOpacity ?? defaultTheme.editorBackground?.overlayOpacity ?? 0,
-      blurPx: cfg.editorBackground?.blurPx ?? defaultTheme.editorBackground?.blurPx ?? 1,
+      blurPx: cfg.editorBackground?.blurPx ?? defaultTheme.editorBackground?.blurPx ?? 0,
       brightness: cfg.editorBackground?.brightness ?? defaultTheme.editorBackground?.brightness ?? 100,
       size: cfg.editorBackground?.size ?? defaultTheme.editorBackground?.size ?? 'height-fill',
       positionX: cfg.editorBackground?.positionX ?? defaultTheme.editorBackground?.positionX ?? 50,
@@ -287,7 +289,7 @@ export async function getThemeSettings(): Promise<ThemeSettings> {
       opacity: cfg.previewBackground?.opacity ?? defaultTheme.previewBackground?.opacity ?? 0.22,
       overlayOpacity:
         cfg.previewBackground?.overlayOpacity ?? defaultTheme.previewBackground?.overlayOpacity ?? 0.12,
-      blurPx: cfg.previewBackground?.blurPx ?? defaultTheme.previewBackground?.blurPx ?? 2,
+      blurPx: cfg.previewBackground?.blurPx ?? defaultTheme.previewBackground?.blurPx ?? 0,
       brightness: cfg.previewBackground?.brightness ?? defaultTheme.previewBackground?.brightness ?? 100,
       size: cfg.previewBackground?.size ?? defaultTheme.previewBackground?.size ?? 'height-fill',
       positionX: cfg.previewBackground?.positionX ?? defaultTheme.previewBackground?.positionX ?? 50,
@@ -298,7 +300,7 @@ export async function getThemeSettings(): Promise<ThemeSettings> {
       path: cfg.aiChatBackground?.path ?? defaultTheme.aiChatBackground?.path ?? null,
       opacity: cfg.aiChatBackground?.opacity ?? defaultTheme.aiChatBackground?.opacity ?? 0.3,
       overlayOpacity: cfg.aiChatBackground?.overlayOpacity ?? defaultTheme.aiChatBackground?.overlayOpacity ?? 0,
-      blurPx: cfg.aiChatBackground?.blurPx ?? defaultTheme.aiChatBackground?.blurPx ?? 1,
+      blurPx: cfg.aiChatBackground?.blurPx ?? defaultTheme.aiChatBackground?.blurPx ?? 0,
       brightness: cfg.aiChatBackground?.brightness ?? defaultTheme.aiChatBackground?.brightness ?? 100,
       size: cfg.aiChatBackground?.size ?? defaultTheme.aiChatBackground?.size ?? 'height-fill',
       positionX: cfg.aiChatBackground?.positionX ?? defaultTheme.aiChatBackground?.positionX ?? 50,
@@ -310,7 +312,7 @@ export async function getThemeSettings(): Promise<ThemeSettings> {
       opacity: cfg.sidebarBackground?.opacity ?? defaultTheme.sidebarBackground?.opacity ?? 0.2,
       overlayOpacity:
         cfg.sidebarBackground?.overlayOpacity ?? defaultTheme.sidebarBackground?.overlayOpacity ?? 0.16,
-      blurPx: cfg.sidebarBackground?.blurPx ?? defaultTheme.sidebarBackground?.blurPx ?? 2,
+      blurPx: cfg.sidebarBackground?.blurPx ?? defaultTheme.sidebarBackground?.blurPx ?? 0,
       brightness: cfg.sidebarBackground?.brightness ?? defaultTheme.sidebarBackground?.brightness ?? 100,
       size: cfg.sidebarBackground?.size ?? defaultTheme.sidebarBackground?.size ?? 'height-fill',
       positionX: cfg.sidebarBackground?.positionX ?? defaultTheme.sidebarBackground?.positionX ?? 50,
@@ -335,6 +337,7 @@ export async function getUiTypographySettings(): Promise<UiTypographySettings> {
     statusBarFontSize: cfg.statusBarFontSize ?? defaultUiTypography.statusBarFontSize,
     editorFontSize: cfg.editorFontSize ?? defaultUiTypography.editorFontSize,
     previewFontSize: cfg.previewFontSize ?? defaultUiTypography.previewFontSize,
+    wysiwygFontSize: cfg.wysiwygFontSize ?? defaultUiTypography.wysiwygFontSize,
     aiChatMessageFontSize:
       cfg.aiChatMessageFontSize ?? defaultUiTypography.aiChatMessageFontSize,
     aiChatInputFontSize: cfg.aiChatInputFontSize ?? defaultUiTypography.aiChatInputFontSize,

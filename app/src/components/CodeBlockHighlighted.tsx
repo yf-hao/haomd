@@ -8,6 +8,7 @@ type CodeBlockProps = {
   lang?: string
   content: string
   className?: string
+  showCopyButton?: boolean
 }
 
 async function copyTextToClipboard(text: string): Promise<boolean> {
@@ -55,7 +56,7 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
 }
 
 const CodeBlock = memo(
-  ({ lang, content, ...rest }: CodeBlockProps) => {
+  ({ lang, content, showCopyButton = true, ...rest }: CodeBlockProps) => {
     const { t } = useI18n()
     const [copied, setCopied] = React.useState(false)
     const themeMode = useResolvedThemeMode()
@@ -72,14 +73,16 @@ const CodeBlock = memo(
 
     return (
       <div className="code-block-wrapper">
-        <button
-          type="button"
-          className={`code-copy-button${copied ? ' copied' : ''}`}
-          onClick={handleCopy}
-          aria-label={copied ? t('editor.copiedCode') : t('editor.copyCode')}
-        >
-          {copied ? t('editor.copied') : t('editor.copy')}
-        </button>
+        {showCopyButton ? (
+          <button
+            type="button"
+            className={`code-copy-button${copied ? ' copied' : ''}`}
+            onClick={handleCopy}
+            aria-label={copied ? t('editor.copiedCode') : t('editor.copyCode')}
+          >
+            {copied ? t('editor.copied') : t('editor.copy')}
+          </button>
+        ) : null}
         <SyntaxHighlighter
           language={lang}
           style={themeMode === 'light' ? oneLight : oneDark}
@@ -103,7 +106,8 @@ const CodeBlock = memo(
   (prev, next) =>
     prev.lang === next.lang &&
     prev.content === next.content &&
-    prev.className === next.className,
+    prev.className === next.className &&
+    prev.showCopyButton === next.showCopyButton,
 )
 
 export default CodeBlock

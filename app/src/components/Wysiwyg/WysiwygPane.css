@@ -1,0 +1,616 @@
+/* ============================================================
+ * WysiwygPane — Milkdown WYSIWYG 编辑器样式
+ * 继承 github-markdown-css 基础排版，适配应用暗色/亮色主题
+ * ============================================================ */
+
+.wysiwyg-pane {
+  overflow: hidden;
+  height: 100%;
+  position: relative;
+  background: var(--markdown-preview-bg);
+}
+
+.wysiwyg-background,
+.wysiwyg-background-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.wysiwyg-background {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: var(--background-image-position-x, 50%) var(--background-image-position-y, 50%);
+  opacity: var(--background-image-opacity, 0);
+  filter: blur(var(--background-image-blur, 0px)) brightness(var(--background-image-brightness, 100%));
+  transform: scale(1.03);
+}
+
+.wysiwyg-pane.has-wysiwyg-background.wysiwyg-bg-fit-contain .wysiwyg-background {
+  object-fit: contain;
+}
+
+.wysiwyg-pane.has-wysiwyg-background.wysiwyg-bg-fit-height-fill .wysiwyg-background {
+  width: auto;
+  min-width: 100%;
+  height: 100%;
+  max-width: none;
+  left: var(--background-image-position-x, 50%);
+  top: var(--background-image-position-y, 50%);
+  transform: translate(
+      calc(-1 * var(--background-image-position-x, 50%)),
+      calc(-1 * var(--background-image-position-y, 50%))
+    )
+    scale(1.03);
+  object-fit: fill;
+}
+
+.wysiwyg-pane.has-wysiwyg-background.wysiwyg-bg-fit-width-fill .wysiwyg-background {
+  width: 100%;
+  min-height: 100%;
+  height: auto;
+  max-height: none;
+  left: var(--background-image-position-x, 50%);
+  top: var(--background-image-position-y, 50%);
+  transform: translate(
+      calc(-1 * var(--background-image-position-x, 50%)),
+      calc(-1 * var(--background-image-position-y, 50%))
+    )
+    scale(1.03);
+  object-fit: fill;
+}
+
+.wysiwyg-pane.has-wysiwyg-background.wysiwyg-bg-fit-auto .wysiwyg-background {
+  object-fit: none;
+}
+
+.wysiwyg-background-overlay {
+  background: #000;
+  opacity: var(--background-image-overlay-opacity, 0);
+}
+
+.wysiwyg-editor {
+  position: relative;
+  z-index: 1;
+  width: min(60vw, 100%);
+  max-width: 100%;
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: 24px 32px;
+  min-height: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: transparent;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.wysiwyg-editor::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.wysiwyg-plain-textarea {
+  width: 100%;
+  min-height: 100%;
+  resize: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--theme-text-default);
+  font: inherit;
+  font-size: var(--ui-font-wysiwyg, var(--ui-font-preview, 15px));
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.wysiwyg-plain-textarea::placeholder {
+  color: var(--theme-text-muted);
+}
+
+.wysiwyg-plain-textarea::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+/* ── Milkdown ProseMirror 编辑区 ── */
+.wysiwyg-editor .milkdown {
+  outline: none;
+  background: transparent !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Noto Sans CJK SC', 'Source Han Sans CN', 'Segoe UI',
+    Helvetica, Arial, sans-serif;
+  font-size: var(--ui-font-wysiwyg, var(--ui-font-preview, 15px));
+  line-height: 1.6;
+  color: var(--theme-text-default);
+}
+
+.wysiwyg-editor .milkdown .editor {
+  outline: none;
+  background: transparent !important;
+  font-size: inherit !important;
+}
+
+.wysiwyg-editor .milkdown .editor .ProseMirror,
+.wysiwyg-editor .milkdown .ProseMirror {
+  font-size: inherit !important;
+  line-height: inherit;
+  color: inherit;
+}
+
+/* ── 标题 ── */
+.wysiwyg-editor .milkdown h1 { font-size: 2em; margin: 0.67em 0; font-weight: 600; border-bottom: 1px solid var(--theme-border-subtle, #30363d); padding-bottom: 0.3em; }
+.wysiwyg-editor .milkdown h2 { font-size: 1.5em; margin: 0.83em 0; font-weight: 600; border-bottom: 1px solid var(--theme-border-subtle, #30363d); padding-bottom: 0.3em; }
+.wysiwyg-editor .milkdown h3 { font-size: 1.25em; margin: 1em 0; font-weight: 600; }
+.wysiwyg-editor .milkdown h4 { font-size: 1em; margin: 1.33em 0; font-weight: 600; }
+.wysiwyg-editor .milkdown h5 { font-size: 0.875em; margin: 1.67em 0; font-weight: 600; }
+.wysiwyg-editor .milkdown h6 { font-size: 0.85em; margin: 2.33em 0; font-weight: 600; color: var(--theme-text-muted, #8b949e); }
+
+/* ── 段落与行距 ── */
+.wysiwyg-editor .milkdown p {
+  margin-bottom: 1em;
+}
+
+/* ── 链接 ── */
+.wysiwyg-editor .milkdown a {
+  color: var(--theme-accent, #58a6ff);
+  text-decoration: none;
+}
+.wysiwyg-editor .milkdown a:hover {
+  text-decoration: underline;
+}
+
+/* ── 行内代码 ── */
+.wysiwyg-editor .milkdown code:not(pre code) {
+  background-color: var(--theme-surface-card-active, rgba(110, 118, 129, 0.2));
+  color: var(--theme-text-default);
+  border: 1px solid var(--theme-border-subtle, #30363d);
+  border-radius: 4px;
+  padding: 0.15em 0.4em;
+  font-size: 0.9em;
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+
+/* ── 代码块 ── */
+.wysiwyg-editor .milkdown pre {
+  background-color: var(--theme-surface-card, #161b22);
+  border: 1px solid var(--theme-border-subtle, #30363d);
+  border-radius: 6px;
+  padding: 12px 16px;
+  overflow-x: auto;
+  font-size: 0.9em;
+  line-height: 1.45;
+}
+.wysiwyg-editor .milkdown pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+
+/* ── 引用块 ── */
+.wysiwyg-editor .milkdown blockquote {
+  border-left: 4px solid var(--theme-accent, #58a6ff);
+  margin: 0 0 1em;
+  padding: 0.5em 1em;
+  color: var(--theme-text-muted, #8b949e);
+}
+.wysiwyg-editor .milkdown blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* ── 列表 ── */
+.wysiwyg-editor .milkdown ul,
+.wysiwyg-editor .milkdown ol {
+  padding-left: 2em;
+  margin-bottom: 1em;
+}
+.wysiwyg-editor .milkdown li {
+  margin-bottom: 0.25em;
+}
+.wysiwyg-editor .milkdown li p {
+  margin-bottom: 0.25em;
+}
+
+/* ── 任务列表（GFM） ── */
+.wysiwyg-editor .milkdown li[data-checked] {
+  list-style: none;
+  position: relative;
+  padding-left: 0.5em;
+}
+.wysiwyg-editor .milkdown li[data-checked]::before {
+  content: '';
+  position: absolute;
+  left: -1.5em;
+  top: 0.25em;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--theme-border-input, #444c56);
+  border-radius: 3px;
+  background: transparent;
+}
+.wysiwyg-editor .milkdown li[data-checked="true"]::before {
+  background-color: var(--theme-accent, #58a6ff);
+  border-color: var(--theme-accent, #58a6ff);
+}
+
+/* ── 表格 ── */
+.wysiwyg-editor .milkdown table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 1em;
+}
+.wysiwyg-editor .milkdown th,
+.wysiwyg-editor .milkdown td {
+  border: 1px solid var(--theme-border-subtle, #30363d);
+  padding: 6px 13px;
+}
+.wysiwyg-editor .milkdown th {
+  font-weight: 600;
+  background-color: var(--theme-surface-card, #161b22);
+}
+
+/* ── 分隔线 ── */
+.wysiwyg-editor .milkdown hr {
+  border: none;
+  border-top: 1px solid var(--theme-border-subtle, #30363d);
+  margin: 1.5em 0;
+}
+
+/* ── 图片 ── */
+.wysiwyg-editor .milkdown img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+/* ── 选中态 ── */
+.wysiwyg-editor .milkdown .ProseMirror-selectednode {
+  outline: 2px solid var(--theme-accent, #58a6ff);
+  border-radius: 4px;
+}
+
+/* ── 光标占位文字 ── */
+.wysiwyg-editor .milkdown .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--theme-text-muted, #484f58);
+  pointer-events: none;
+  height: 0;
+}
+
+/* ── 亮色主题覆盖 ── */
+.wysiwyg-pane.light .wysiwyg-editor .milkdown pre {
+  background-color: #f6f8fa;
+  border-color: #d0d7de;
+}
+.wysiwyg-pane.light .wysiwyg-editor .milkdown code:not(pre code) {
+  background-color: rgba(175, 184, 193, 0.2);
+  border-color: #d0d7de;
+}
+.wysiwyg-pane.light .wysiwyg-editor .milkdown blockquote {
+  border-left-color: #d0d7de;
+  color: #57606a;
+}
+.wysiwyg-pane.light .wysiwyg-editor .milkdown th {
+  background-color: #f6f8fa;
+}
+
+/* ── 覆盖 nord 主题中不适配暗色应用的规则 ── */
+.wysiwyg-pane.dark .wysiwyg-editor .milkdown {
+  --nord0: transparent;
+  color: var(--theme-text-default);
+}
+
+/* ================================================================
+ * Math (KaTeX) 节点样式
+ * ================================================================ */
+
+/* KaTeX 颜色适配：让公式文字跟随主题色 */
+.wysiwyg-pane .katex,
+.wysiwyg-pane .katex-display {
+  color: var(--theme-text-default);
+}
+.wysiwyg-pane .katex .mord,
+.wysiwyg-pane .katex .mop,
+.wysiwyg-pane .katex .mbin,
+.wysiwyg-pane .katex .mrel,
+.wysiwyg-pane .katex .mopen,
+.wysiwyg-pane .katex .mclose,
+.wysiwyg-pane .katex .mpunct,
+.wysiwyg-pane .katex .minner {
+  color: inherit;
+}
+
+.wysiwyg-math-block {
+  margin: 1em 0;
+  padding: 12px 16px;
+  border-radius: 6px;
+  background: var(--theme-surface-card, #161b22);
+  border: 1px solid var(--theme-border-subtle, #30363d);
+  cursor: pointer;
+  text-align: center;
+}
+.wysiwyg-math-block.selected {
+  outline: 2px solid var(--theme-accent, #58a6ff);
+}
+.wysiwyg-math-block.editing {
+  background: var(--theme-surface-card-active, #1c2128);
+  text-align: left;
+}
+.wysiwyg-math-label {
+  font-size: 0.75em;
+  color: var(--theme-text-muted, #8b949e);
+  font-family: monospace;
+  user-select: none;
+}
+.wysiwyg-math-source {
+  padding: 4px 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.9em;
+  white-space: pre-wrap;
+  background: transparent !important;
+  color: var(--theme-text-default);
+}
+.wysiwyg-math-rendered {
+  overflow-x: auto;
+}
+.wysiwyg-math-error {
+  color: var(--theme-accent-danger, #f85149);
+  font-size: 0.85em;
+}
+
+/* Inline math */
+.wysiwyg-math-inline {
+  display: inline;
+  cursor: pointer;
+}
+.wysiwyg-math-inline.selected {
+  outline: 1px solid var(--theme-accent, #58a6ff);
+  border-radius: 2px;
+}
+.wysiwyg-math-inline.editing {
+  background: var(--theme-surface-card-active, #1c2128);
+  border-radius: 2px;
+  padding: 0 2px;
+}
+.wysiwyg-math-dollar {
+  font-size: 0.75em;
+  color: var(--theme-text-muted, #8b949e);
+  font-family: monospace;
+}
+.wysiwyg-math-source-inline {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.9em;
+  background: transparent !important;
+  color: var(--theme-text-default);
+}
+
+/* Light theme math overrides */
+.wysiwyg-pane.light .wysiwyg-math-block {
+  background: var(--theme-surface-card, #f6f8fa);
+  border-color: var(--theme-border-subtle, #d0d7de);
+}
+.wysiwyg-pane.light .wysiwyg-math-block.editing {
+  background: var(--theme-surface-card-active, #eef2f6);
+}
+
+/* ================================================================
+ * Custom code block (Mermaid / Mind / plain) 样式
+ * ================================================================ */
+
+.wysiwyg-codeblock,
+.wysiwyg-codeblock-special {
+  margin: 1em 0;
+  border-radius: 6px;
+  background: var(--theme-surface-card, #161b22);
+  border: 1px solid var(--theme-border-subtle, #30363d);
+  overflow: hidden;
+}
+.wysiwyg-codeblock.selected,
+.wysiwyg-codeblock-special.selected {
+  outline: 2px solid var(--theme-accent, #58a6ff);
+}
+
+.wysiwyg-codeblock-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 12px;
+  background: rgba(0, 0, 0, 0.15);
+  border-bottom: 1px solid var(--theme-border-subtle, #30363d);
+}
+.wysiwyg-codeblock-toolbar-spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.wysiwyg-codeblock-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+}
+.wysiwyg-codeblock-lang {
+  font-size: 0.75em;
+  color: var(--theme-text-muted, #8b949e);
+  text-transform: uppercase;
+  font-family: monospace;
+  letter-spacing: 0.5px;
+}
+.wysiwyg-codeblock-lang-select {
+  height: 28px;
+  padding: 3px 10px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--theme-border-subtle, #30363d) 72%, transparent);
+  background: transparent;
+  min-width: 0;
+  max-width: none;
+  color: var(--theme-text-default);
+  font-size: 12px;
+  font-family: ui-monospace, 'JetBrains Mono', monospace;
+  line-height: 1.2;
+  box-shadow: none;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  background-image: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  outline: none;
+}
+.wysiwyg-codeblock-lang-select:hover {
+  background: transparent;
+}
+.wysiwyg-codeblock-lang-select:focus {
+  border-color: var(--theme-border-input-strong, var(--theme-accent, #58a6ff));
+  box-shadow: inset 0 0 0 1px var(--theme-border-input-strong, var(--theme-accent, #58a6ff));
+}
+.wysiwyg-codeblock-lang-select option {
+  background: var(--theme-surface-panel, var(--theme-surface-modal, #161b22));
+  color: var(--theme-text-default, #e6edf3);
+}
+.wysiwyg-codeblock-edit-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  opacity: 0.7;
+}
+.wysiwyg-codeblock-edit-btn:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.wysiwyg-codeblock pre {
+  margin: 0;
+  padding: 12px 16px;
+  overflow-x: auto;
+  border: none;
+  background: var(--theme-surface-card, #161b22);
+}
+.wysiwyg-codeblock-preview {
+  cursor: text;
+}
+.wysiwyg-codeblock-preview .code-block-wrapper {
+  position: relative;
+}
+.wysiwyg-codeblock-preview .code-block-wrapper > pre {
+  margin: 0 !important;
+  border-radius: 0 0 6px 6px;
+}
+.wysiwyg-codeblock-preview .code-copy-button {
+  opacity: 0;
+}
+.wysiwyg-codeblock-preview:hover .code-copy-button,
+.wysiwyg-codeblock-preview .code-copy-button:focus-visible {
+  opacity: 1;
+}
+.wysiwyg-codeblock-source {
+  display: block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.9em;
+  line-height: 1.45;
+  background: var(--theme-surface-card, #161b22);
+  color: var(--theme-text-default);
+  border: none;
+  padding: 0;
+  white-space: pre-wrap;
+}
+.wysiwyg-codeblock-source[contenteditable="true"],
+.wysiwyg-codeblock-source .ProseMirror,
+.wysiwyg-codeblock-source [data-node-view-content="true"],
+.wysiwyg-codeblock-source [data-node-view-content="true"] *,
+.wysiwyg-codeblock-source * {
+  background: var(--theme-surface-card, #161b22) !important;
+  color: inherit;
+}
+
+/* Mermaid SVG container */
+.wysiwyg-mermaid-svg {
+  padding: 16px;
+  display: flex;
+  justify-content: center;
+  background: transparent;
+}
+.wysiwyg-mermaid-svg svg {
+  max-width: 100%;
+  height: auto;
+  opacity: 1;
+}
+
+/* Mind-elixir container — 背景透明以继承父元素主题色 */
+.wysiwyg-mind-container {
+  min-height: 300px;
+  background: var(--theme-surface-card, #161b22);
+  border-radius: 0 0 6px 6px;
+}
+
+/* Diagram loading/error */
+.wysiwyg-diagram-loading {
+  padding: 16px;
+  text-align: center;
+  color: var(--theme-text-muted, #8b949e);
+  font-size: 0.85em;
+}
+.wysiwyg-diagram-error {
+  padding: 16px;
+  color: var(--theme-accent-danger, #f85149);
+  font-size: 0.85em;
+}
+
+/* Light theme code block overrides */
+.wysiwyg-pane.light .wysiwyg-codeblock,
+.wysiwyg-pane.light .wysiwyg-codeblock-special {
+  background: var(--theme-surface-card, #f6f8fa);
+  border-color: var(--theme-border-subtle, #d0d7de);
+}
+.wysiwyg-pane.light .wysiwyg-codeblock pre,
+.wysiwyg-pane.light .wysiwyg-codeblock-source,
+.wysiwyg-pane.light .wysiwyg-codeblock-source .ProseMirror,
+.wysiwyg-pane.light .wysiwyg-codeblock-source [data-node-view-content="true"],
+.wysiwyg-pane.light .wysiwyg-codeblock-source [data-node-view-content="true"] * {
+  background: var(--theme-surface-card, #f6f8fa) !important;
+}
+.wysiwyg-pane.light .wysiwyg-codeblock-toolbar {
+  background: rgba(0, 0, 0, 0.04);
+  border-bottom-color: var(--theme-border-subtle, #d0d7de);
+}
+.wysiwyg-pane.light .wysiwyg-codeblock-lang-select {
+  border-color: color-mix(in srgb, var(--theme-border-subtle, #d0d7de) 68%, transparent);
+}
+.wysiwyg-pane.light .wysiwyg-codeblock-edit-btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+.wysiwyg-pane.light .wysiwyg-mind-container {
+  background: var(--theme-surface-card, #f6f8fa);
+}
+
+/* ================================================================
+ * Image / Media 样式
+ * ================================================================ */
+
+.wysiwyg-image,
+.wysiwyg-media {
+  display: inline-block;
+}
+.wysiwyg-image.selected,
+.wysiwyg-media.selected {
+  outline: 2px solid var(--theme-accent, #58a6ff);
+  border-radius: 4px;
+}
+.wysiwyg-image img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+}

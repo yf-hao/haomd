@@ -39,6 +39,7 @@ export const zhCNMessages: MessageDictionary = {
     statusBarFontSize: '状态栏',
     editorFontSize: '编辑区',
     previewFontSize: '预览区',
+    wysiwygFontSize: '所见即所得',
     aiChatMessageFontSize: 'AI Chat 消息',
     aiChatInputFontSize: 'AI Chat 输入',
     groups: {
@@ -454,6 +455,8 @@ export const zhCNMessages: MessageDictionary = {
     aiChatDockLeft: 'AI Chat：Dock 在左侧',
     aiChatDockRight: 'AI Chat：Dock 在右侧',
     editorZoomPercent: 'Editor Zoom：{percent}%',
+    editModeWysiwyg: '编辑模式：所见即所得',
+    editModeSource: '编辑模式：源码',
     openFolderSidebarUnsupported: '当前版本暂不支持 Sidebar 打开文件夹',
     recentPanelRemoved: '最近文件面板已移除，请使用菜单 File → Open Recent',
     recentDialogUnavailable: '当前版本未挂载最近文件模态窗',

@@ -25,6 +25,8 @@ import {
 } from '../modules/settings/editorSettings'
 import { resolveManagedBackgroundImageUrl } from '../modules/theme/backgroundImageRuntime'
 import type { ThemeMode } from '../modules/theme/schema'
+import { subscribeUiTypographyChanged } from '../modules/settings/uiTypographyRuntime'
+import { builtinBackgroundPresets, getBuiltinBackgroundPresetLabel } from '../modules/theme/backgroundPresets'
 
 export type SettingsDialogProps = {
   open: boolean
@@ -141,23 +143,23 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
         setWordExport(loadedWordExport)
         setWorkspaceBackgroundOpacityInput(String(loadedTheme.workspaceBackground?.opacity ?? getDefaultThemeSettings().workspaceBackground?.opacity ?? 0.22))
         setWorkspaceBackgroundOverlayOpacityInput(String(loadedTheme.workspaceBackground?.overlayOpacity ?? getDefaultThemeSettings().workspaceBackground?.overlayOpacity ?? 0.12))
-        setWorkspaceBackgroundBlurInput(String(loadedTheme.workspaceBackground?.blurPx ?? getDefaultThemeSettings().workspaceBackground?.blurPx ?? 2))
+        setWorkspaceBackgroundBlurInput(String(loadedTheme.workspaceBackground?.blurPx ?? getDefaultThemeSettings().workspaceBackground?.blurPx ?? 0))
         setWorkspaceBackgroundBrightnessInput(String(loadedTheme.workspaceBackground?.brightness ?? getDefaultThemeSettings().workspaceBackground?.brightness ?? 100))
         setEditorBackgroundOpacityInput(String(loadedTheme.editorBackground?.opacity ?? getDefaultThemeSettings().editorBackground?.opacity ?? 0.3))
         setEditorBackgroundOverlayOpacityInput(String(loadedTheme.editorBackground?.overlayOpacity ?? getDefaultThemeSettings().editorBackground?.overlayOpacity ?? 0))
-        setEditorBackgroundBlurInput(String(loadedTheme.editorBackground?.blurPx ?? getDefaultThemeSettings().editorBackground?.blurPx ?? 1))
+        setEditorBackgroundBlurInput(String(loadedTheme.editorBackground?.blurPx ?? getDefaultThemeSettings().editorBackground?.blurPx ?? 0))
         setEditorBackgroundBrightnessInput(String(loadedTheme.editorBackground?.brightness ?? getDefaultThemeSettings().editorBackground?.brightness ?? 100))
         setPreviewBackgroundOpacityInput(String(loadedTheme.previewBackground?.opacity ?? getDefaultThemeSettings().previewBackground?.opacity ?? 0.22))
         setPreviewBackgroundOverlayOpacityInput(String(loadedTheme.previewBackground?.overlayOpacity ?? getDefaultThemeSettings().previewBackground?.overlayOpacity ?? 0.12))
-        setPreviewBackgroundBlurInput(String(loadedTheme.previewBackground?.blurPx ?? getDefaultThemeSettings().previewBackground?.blurPx ?? 2))
+        setPreviewBackgroundBlurInput(String(loadedTheme.previewBackground?.blurPx ?? getDefaultThemeSettings().previewBackground?.blurPx ?? 0))
         setPreviewBackgroundBrightnessInput(String(loadedTheme.previewBackground?.brightness ?? getDefaultThemeSettings().previewBackground?.brightness ?? 100))
         setAiChatBackgroundOpacityInput(String(loadedTheme.aiChatBackground?.opacity ?? getDefaultThemeSettings().aiChatBackground?.opacity ?? 0.3))
         setAiChatBackgroundOverlayOpacityInput(String(loadedTheme.aiChatBackground?.overlayOpacity ?? getDefaultThemeSettings().aiChatBackground?.overlayOpacity ?? 0))
-        setAiChatBackgroundBlurInput(String(loadedTheme.aiChatBackground?.blurPx ?? getDefaultThemeSettings().aiChatBackground?.blurPx ?? 1))
+        setAiChatBackgroundBlurInput(String(loadedTheme.aiChatBackground?.blurPx ?? getDefaultThemeSettings().aiChatBackground?.blurPx ?? 0))
         setAiChatBackgroundBrightnessInput(String(loadedTheme.aiChatBackground?.brightness ?? getDefaultThemeSettings().aiChatBackground?.brightness ?? 100))
         setSidebarBackgroundOpacityInput(String(loadedTheme.sidebarBackground?.opacity ?? getDefaultThemeSettings().sidebarBackground?.opacity ?? 0.2))
         setSidebarBackgroundOverlayOpacityInput(String(loadedTheme.sidebarBackground?.overlayOpacity ?? getDefaultThemeSettings().sidebarBackground?.overlayOpacity ?? 0.16))
-        setSidebarBackgroundBlurInput(String(loadedTheme.sidebarBackground?.blurPx ?? getDefaultThemeSettings().sidebarBackground?.blurPx ?? 2))
+        setSidebarBackgroundBlurInput(String(loadedTheme.sidebarBackground?.blurPx ?? getDefaultThemeSettings().sidebarBackground?.blurPx ?? 0))
         setSidebarBackgroundBrightnessInput(String(loadedTheme.sidebarBackground?.brightness ?? getDefaultThemeSettings().sidebarBackground?.brightness ?? 100))
         setError(null)
       } catch (err) {
@@ -169,6 +171,14 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
       cancelled = true
       themePreviewReadyRef.current = false
     }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    return subscribeUiTypographyChanged((nextTypography) => {
+      setUiTypography(nextTypography)
+      originalTypographyRef.current = nextTypography
+    })
   }, [open])
 
   useEffect(() => {
@@ -196,23 +206,23 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   useEffect(() => {
     setWorkspaceBackgroundOpacityInput(String(theme.workspaceBackground?.opacity ?? getDefaultThemeSettings().workspaceBackground?.opacity ?? 0.22))
     setWorkspaceBackgroundOverlayOpacityInput(String(theme.workspaceBackground?.overlayOpacity ?? getDefaultThemeSettings().workspaceBackground?.overlayOpacity ?? 0.12))
-    setWorkspaceBackgroundBlurInput(String(theme.workspaceBackground?.blurPx ?? getDefaultThemeSettings().workspaceBackground?.blurPx ?? 2))
+    setWorkspaceBackgroundBlurInput(String(theme.workspaceBackground?.blurPx ?? getDefaultThemeSettings().workspaceBackground?.blurPx ?? 0))
     setWorkspaceBackgroundBrightnessInput(String(theme.workspaceBackground?.brightness ?? getDefaultThemeSettings().workspaceBackground?.brightness ?? 100))
     setEditorBackgroundOpacityInput(String(theme.editorBackground?.opacity ?? getDefaultThemeSettings().editorBackground?.opacity ?? 0.3))
     setEditorBackgroundOverlayOpacityInput(String(theme.editorBackground?.overlayOpacity ?? getDefaultThemeSettings().editorBackground?.overlayOpacity ?? 0))
-    setEditorBackgroundBlurInput(String(theme.editorBackground?.blurPx ?? getDefaultThemeSettings().editorBackground?.blurPx ?? 1))
+    setEditorBackgroundBlurInput(String(theme.editorBackground?.blurPx ?? getDefaultThemeSettings().editorBackground?.blurPx ?? 0))
     setEditorBackgroundBrightnessInput(String(theme.editorBackground?.brightness ?? getDefaultThemeSettings().editorBackground?.brightness ?? 100))
     setPreviewBackgroundOpacityInput(String(theme.previewBackground?.opacity ?? getDefaultThemeSettings().previewBackground?.opacity ?? 0.22))
     setPreviewBackgroundOverlayOpacityInput(String(theme.previewBackground?.overlayOpacity ?? getDefaultThemeSettings().previewBackground?.overlayOpacity ?? 0.12))
-    setPreviewBackgroundBlurInput(String(theme.previewBackground?.blurPx ?? getDefaultThemeSettings().previewBackground?.blurPx ?? 2))
+    setPreviewBackgroundBlurInput(String(theme.previewBackground?.blurPx ?? getDefaultThemeSettings().previewBackground?.blurPx ?? 0))
     setPreviewBackgroundBrightnessInput(String(theme.previewBackground?.brightness ?? getDefaultThemeSettings().previewBackground?.brightness ?? 100))
     setAiChatBackgroundOpacityInput(String(theme.aiChatBackground?.opacity ?? getDefaultThemeSettings().aiChatBackground?.opacity ?? 0.3))
     setAiChatBackgroundOverlayOpacityInput(String(theme.aiChatBackground?.overlayOpacity ?? getDefaultThemeSettings().aiChatBackground?.overlayOpacity ?? 0))
-    setAiChatBackgroundBlurInput(String(theme.aiChatBackground?.blurPx ?? getDefaultThemeSettings().aiChatBackground?.blurPx ?? 1))
+    setAiChatBackgroundBlurInput(String(theme.aiChatBackground?.blurPx ?? getDefaultThemeSettings().aiChatBackground?.blurPx ?? 0))
     setAiChatBackgroundBrightnessInput(String(theme.aiChatBackground?.brightness ?? getDefaultThemeSettings().aiChatBackground?.brightness ?? 100))
     setSidebarBackgroundOpacityInput(String(theme.sidebarBackground?.opacity ?? getDefaultThemeSettings().sidebarBackground?.opacity ?? 0.2))
     setSidebarBackgroundOverlayOpacityInput(String(theme.sidebarBackground?.overlayOpacity ?? getDefaultThemeSettings().sidebarBackground?.overlayOpacity ?? 0.16))
-    setSidebarBackgroundBlurInput(String(theme.sidebarBackground?.blurPx ?? getDefaultThemeSettings().sidebarBackground?.blurPx ?? 2))
+    setSidebarBackgroundBlurInput(String(theme.sidebarBackground?.blurPx ?? getDefaultThemeSettings().sidebarBackground?.blurPx ?? 0))
     setSidebarBackgroundBrightnessInput(String(theme.sidebarBackground?.brightness ?? getDefaultThemeSettings().sidebarBackground?.brightness ?? 100))
   }, [
     theme.workspaceBackground?.opacity,
@@ -397,6 +407,13 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     })
   }
 
+  const selectBuiltinBackgroundImage = (target: BackgroundTarget, presetId: string) => {
+    updateThemeBackground(target, {
+      enabled: true,
+      path: `builtin:${presetId}`,
+    })
+  }
+
   const commitBackgroundNumber = (
     target: BackgroundTarget,
     key: 'opacity' | 'overlayOpacity' | 'blurPx' | 'brightness',
@@ -544,7 +561,9 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
           ? aiChatBackgroundBrightnessInput
           : sidebarBackgroundBrightnessInput
   const selectedImageName = currentBackground.path
-    ? currentBackground.path.split(/[\\/]/).pop()
+    ? currentBackground.path.startsWith('builtin:')
+      ? getBuiltinBackgroundPresetLabel(currentBackground.path.slice('builtin:'.length)) ?? currentBackground.path
+      : currentBackground.path.split(/[\\/]/).pop()
     : t('theme.image')
   const currentBackgroundPreviewUrl = resolveManagedBackgroundImageUrl(currentBackground.path)
   const clampDialogOffset = (nextX: number, nextY: number) => {
@@ -864,6 +883,54 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                                 {t('common.clear')}
                               </Button>
                             </div>
+                            <div
+                              style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                                gap: 10,
+                                width: '100%',
+                                marginTop: 10,
+                              }}
+                            >
+                              {builtinBackgroundPresets.map((preset) => {
+                                const isSelected = currentBackground.path === `builtin:${preset.id}`
+                                return (
+                                  <button
+                                    key={preset.id}
+                                    type="button"
+                                    onClick={() => selectBuiltinBackgroundImage(currentBackgroundTarget, preset.id)}
+                                    style={{
+                                      position: 'relative',
+                                      borderRadius: 10,
+                                      border: isSelected
+                                        ? '2px solid var(--theme-accent, #58a6ff)'
+                                        : '1px solid var(--theme-border-subtle, rgba(255,255,255,0.14))',
+                                      padding: 0,
+                                      overflow: 'hidden',
+                                      background: 'var(--theme-surface-card, rgba(255,255,255,0.04))',
+                                      cursor: 'pointer',
+                                      textAlign: 'left',
+                                    }}
+                                  >
+                                    <img
+                                      src={preset.url}
+                                      alt={preset.label}
+                                      style={{ display: 'block', width: '100%', aspectRatio: '16 / 10', objectFit: 'cover' }}
+                                    />
+                                    <div
+                                      style={{
+                                        padding: '8px 10px',
+                                        fontSize: 12,
+                                        color: 'var(--theme-text-default)',
+                                        background: 'var(--theme-surface-panel, rgba(0,0,0,0.16))',
+                                      }}
+                                    >
+                                      {preset.label}
+                                    </div>
+                                  </button>
+                                )
+                              })}
+                            </div>
                           </div>
                         </div>
 
@@ -1055,6 +1122,10 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                         <div style={fieldGridStyle}>
                           <div className="settings-field-label">{t('typography.previewFontSize')}</div>
                           <input className="field-input settings-number-input" type="number" min={10} max={24} step={1} value={uiTypography.previewFontSize} onChange={updateTypographyNumber('previewFontSize')} />
+                        </div>
+                        <div style={fieldGridStyle}>
+                          <div className="settings-field-label">{t('typography.wysiwygFontSize')}</div>
+                          <input className="field-input settings-number-input" type="number" min={10} max={24} step={1} value={uiTypography.wysiwygFontSize} onChange={updateTypographyNumber('wysiwygFontSize')} />
                         </div>
                       </div>
                     </div>

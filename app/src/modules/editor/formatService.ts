@@ -11,11 +11,14 @@ type ResetHeadingImpl = (() => void | Promise<void>) | null
 
 type EmphasizeSelectionImpl = (() => void | Promise<void>) | null
 
+type ToggleStrikethroughImpl = (() => void | Promise<void>) | null
+
 type InsertCodeBlockImpl = (() => void | Promise<void>) | null
 
 let applyHeadingImpl: ApplyHeadingImpl = null
 let resetHeadingImpl: ResetHeadingImpl = null
 let emphasizeSelectionImpl: EmphasizeSelectionImpl = null
+let toggleStrikethroughImpl: ToggleStrikethroughImpl = null
 let insertCodeBlockImpl: InsertCodeBlockImpl = null
 
 export function registerApplyHeadingLevel(fn: (level: HeadingLevel) => void | Promise<void>): void {
@@ -57,6 +60,20 @@ export async function emphasizeSelection(): Promise<void> {
     return
   }
   await Promise.resolve(emphasizeSelectionImpl())
+}
+
+// ===== 删除线 =====
+
+export function registerToggleStrikethrough(fn: () => void | Promise<void>): void {
+  toggleStrikethroughImpl = fn
+}
+
+export async function toggleStrikethrough(): Promise<void> {
+  if (!toggleStrikethroughImpl) {
+    console.warn('[formatService] toggleStrikethrough called but no implementation registered')
+    return
+  }
+  await Promise.resolve(toggleStrikethroughImpl())
 }
 
 // ===== Code Block 插入 =====

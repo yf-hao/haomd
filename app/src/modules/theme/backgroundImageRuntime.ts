@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react'
 import type { ThemeBackgroundSettings } from '../settings/editorSettings'
+import { getBuiltinBackgroundPresetUrl } from './backgroundPresets'
 
 const backgroundImageUrlCache = new Map<string, string>()
 
@@ -7,6 +8,9 @@ export function resolveManagedBackgroundImageUrl(path: string | null | undefined
   if (!path) return null
   const normalizedPath = path.trim()
   if (!normalizedPath) return null
+  if (normalizedPath.startsWith('builtin:')) {
+    return getBuiltinBackgroundPresetUrl(normalizedPath.slice('builtin:'.length))
+  }
   if (/^(data:|blob:|https?:)/i.test(normalizedPath)) return normalizedPath
 
   const isWindows = normalizedPath.includes('\\') || navigator.userAgent.includes('Windows')

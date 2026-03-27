@@ -4,6 +4,12 @@ import { createCommandRegistry } from '../modules/commands/registry'
 import { onMenuAction } from '../modules/platform/menuEvents'
 import type { IAiClient } from '../modules/ai/client'
 import { createDefaultAiClient } from '../modules/ai/client'
+import {
+  getUiTypographySettings,
+  loadEditorSettings,
+  saveEditorSettings,
+} from '../modules/settings/editorSettings'
+import { applyUiTypography, emitUiTypographyChanged } from '../modules/settings/uiTypographyRuntime'
 
 export type CommandSystemParams = CommandContext & {
   /**
@@ -44,6 +50,8 @@ export function useCommandSystem(params: CommandSystemParams) {
     aiChatOpen,
     editorZoom,
     setEditorZoom,
+    editMode,
+    setEditMode,
     confirmLoseChanges,
     hasUnsavedChanges,
     newDocument,
@@ -87,6 +95,30 @@ export function useCommandSystem(params: CommandSystemParams) {
     return aiClientFromParams ?? createDefaultAiClient()
   }, [aiClientFromParams])
 
+  const adjustWysiwygFontSize = useCallback(async (delta: number) => {
+    const typography = await getUiTypographySettings()
+    const next = Math.min(24, Math.max(10, typography.wysiwygFontSize + delta))
+    if (next === typography.wysiwygFontSize) return
+
+    const nextTypography = {
+      ...typography,
+      wysiwygFontSize: next,
+    }
+
+    applyUiTypography(nextTypography)
+    emitUiTypographyChanged(nextTypography)
+
+    const settings = await loadEditorSettings()
+    await saveEditorSettings({
+      ...settings,
+      uiTypography: {
+        ...(settings.uiTypography ?? {}),
+        wysiwygFontSize: next,
+      },
+    })
+    setStatusMessage(`WYSIWYG Font: ${next}px`)
+  }, [setStatusMessage])
+
   const commands: CommandRegistry = useMemo(
     () =>
       createCommandRegistry({
@@ -101,6 +133,8 @@ export function useCommandSystem(params: CommandSystemParams) {
         aiChatOpen,
         editorZoom,
         setEditorZoom,
+        editMode,
+        setEditMode,
         confirmLoseChanges,
         hasUnsavedChanges,
         newDocument,
@@ -150,6 +184,8 @@ export function useCommandSystem(params: CommandSystemParams) {
       aiChatOpen,
       editorZoom,
       setEditorZoom,
+      editMode,
+      setEditMode,
       confirmLoseChanges,
       hasUnsavedChanges,
       newDocument,
@@ -217,6 +253,7 @@ export function useCommandSystem(params: CommandSystemParams) {
 
       const isMac = typeof navigator !== 'undefined' && /macintosh|mac os x/i.test(navigator.userAgent)
       const isTauri = typeof isTauriEnv === 'function' && !!isTauriEnv()
+      const isWysiwygMode = editMode === 'wysiwyg'
 
       // 避免在 Tauri Mac 中与系统菜单快捷键（会发 menu://action 事件）重复触发。
       // Windows/Linux 下原生菜单加速键响应不如 Mac 稳定，且 JS 处理与原生通常不冲突，因此仅在 Mac 下阻断。
@@ -250,6 +287,10 @@ export function useCommandSystem(params: CommandSystemParams) {
         } else {
           void dispatchAction('toggle_preview')
         }
+      } else if (key === 'c' && e.altKey) {
+        if (isWysiwygMode) return
+        e.preventDefault()
+        void dispatchAction('format_insert_code_block')
       } else if (key === 'c') {
         // Tauri 下的复制交给系统 / WebView 处理，避免与原生快捷键或菜单重复触发。
         if (isTauri) return
@@ -293,19 +334,29 @@ export function useCommandSystem(params: CommandSystemParams) {
         e.preventDefault()
         void dispatchAction('find')
       } else if (key === '=' || key === '+') {
+        if (isWysiwygMode) {
+          e.preventDefault()
+          void adjustWysiwygFontSize(1)
+          return
+        }
         // Zoom In: Ctrl+=  (Windows/Linux 下原生菜单加速键不稳定，需 JS 兜底；
         // 同时 preventDefault 阻止 WebView2 默认缩放)
-        if (isTauri && isMac) return
+        if (isTauri && isMac && !isWysiwygMode) return
         e.preventDefault()
         void dispatchAction('zoom_in')
       } else if (key === '-') {
+        if (isWysiwygMode) {
+          e.preventDefault()
+          void adjustWysiwygFontSize(-1)
+          return
+        }
         // Zoom Out: Ctrl+-
-        if (isTauri && isMac) return
+        if (isTauri && isMac && !isWysiwygMode) return
         e.preventDefault()
         void dispatchAction('zoom_out')
       } else if (key === '0' && e.shiftKey) {
         // Reset Zoom: Ctrl+Shift+0
-        if (isTauri && isMac) return
+        if (isTauri && isMac && editMode !== 'wysiwyg') return
         e.preventDefault()
         void dispatchAction('zoom_reset')
       }
@@ -313,14 +364,13 @@ export function useCommandSystem(params: CommandSystemParams) {
 
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [dispatchAction, isTauriEnv])
+  }, [adjustWysiwygFontSize, dispatchAction, editMode, isTauriEnv])
 
   // 统一处理来自 Tauri 原生菜单的命令分发
   useEffect(() => {
     const unlisten = onMenuAction((actionId) => {
       // 这些菜单在 App 层或其他地方单独处理，这里忽略
       if (actionId === 'haomd_settings' || actionId === 'ai_settings' || actionId === 'ai_prompt_settings' || actionId === 'toggle_status_bar') return
-      console.log('[useCommandSystem] Native menu action triggered:', actionId)
       void dispatchAction(actionId)
     })
 

@@ -39,6 +39,7 @@ export const enUSMessages: MessageDictionary = {
     statusBarFontSize: 'Status Bar',
     editorFontSize: 'Editor',
     previewFontSize: 'Preview',
+    wysiwygFontSize: 'WYSIWYG',
     aiChatMessageFontSize: 'AI Chat Messages',
     aiChatInputFontSize: 'AI Chat Input',
     groups: {
@@ -460,6 +461,8 @@ export const enUSMessages: MessageDictionary = {
     aiChatDockLeft: 'AI Chat: dock on the left',
     aiChatDockRight: 'AI Chat: dock on the right',
     editorZoomPercent: 'Editor Zoom: {percent}%',
+    editModeWysiwyg: 'Edit Mode: WYSIWYG',
+    editModeSource: 'Edit Mode: Source',
     openFolderSidebarUnsupported: 'Opening folders in Sidebar is not supported in this version',
     recentPanelRemoved: 'The recent files panel has been removed. Please use File → Open Recent',
     recentDialogUnavailable: 'The recent files dialog is not mounted in this version',

@@ -19,7 +19,7 @@ import {
   type ThemeSettings,
   type UiTypographySettings,
 } from './modules/settings/editorSettings'
-import { applyUiTypography } from './modules/settings/uiTypographyRuntime'
+import { applyUiTypography, subscribeUiTypographyChanged } from './modules/settings/uiTypographyRuntime'
 import {
   applyResolvedTheme,
   getSystemPrefersDark,
@@ -194,6 +194,13 @@ function App() {
   useEffect(() => {
     applyUiTypography(uiTypography)
   }, [uiTypography])
+
+  useEffect(() => {
+    return subscribeUiTypographyChanged((settings) => {
+      hasPreviewTypographyOverrideRef.current = true
+      setUiTypography(settings)
+    })
+  }, [])
 
   return (
     <I18nProvider

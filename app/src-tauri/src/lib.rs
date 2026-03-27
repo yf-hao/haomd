@@ -1053,11 +1053,29 @@ fn import_editor_background_image_sync(
         .map(sanitize_file_stem)
         .unwrap_or_else(|| "background".to_string());
     let digest = hash_bytes(&bytes);
-    let file_name = format!("{stem}-{}.webp", &digest[..12]);
+    let output_ext = source_path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_ascii_lowercase())
+        .map(|value| match value.as_str() {
+            "jpeg" => "jpg".to_string(),
+            "png" | "jpg" | "gif" | "bmp" | "webp" => value,
+            _ => "png".to_string(),
+        })
+        .unwrap_or_else(|| "png".to_string());
+    let output_format = match output_ext.as_str() {
+        "png" => ImageFormat::Png,
+        "jpg" => ImageFormat::Jpeg,
+        "gif" => ImageFormat::Gif,
+        "bmp" => ImageFormat::Bmp,
+        "webp" => ImageFormat::WebP,
+        _ => ImageFormat::Png,
+    };
+    let file_name = format!("{stem}-{}.{}", &digest[..12], output_ext);
     let output_path = backgrounds_dir.join(file_name);
 
     processed
-        .save_with_format(&output_path, ImageFormat::WebP)
+        .save_with_format(&output_path, output_format)
         .map_err(|err| format!("保存导入图片失败: {err}"))?;
 
     Ok(output_path)
@@ -5410,6 +5428,7 @@ struct MenuTexts {
     view: &'static str,
     toggle_editor: &'static str,
     toggle_preview_only: &'static str,
+    toggle_wysiwyg: &'static str,
     toggle_sidebar: &'static str,
     toggle_status_bar: &'static str,
     zoom_in: &'static str,
@@ -5489,6 +5508,7 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             view: "视图",
             toggle_editor: "切换编辑器 ",
             toggle_preview_only: "切换仅预览",
+            toggle_wysiwyg: "所见即所得模式",
             toggle_sidebar: "切换侧边栏",
             toggle_status_bar: "切换状态栏",
             zoom_in: "放大",
@@ -5565,6 +5585,7 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             view: "View",
             toggle_editor: "Toggle Editor",
             toggle_preview_only: "Toggle Preview Only",
+            toggle_wysiwyg: "WYSIWYG Mode",
             toggle_sidebar: "Toggle Sidebar",
             toggle_status_bar: "Toggle Status Bar",
             zoom_in: "Zoom In",
@@ -5976,6 +5997,12 @@ pub(crate) async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri:
             &MenuItemBuilder::new(texts.toggle_preview_only)
                 .id("toggle_preview_only")
                 .accelerator("CmdOrCtrl+Shift+P")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.toggle_wysiwyg)
+                .id("toggle_wysiwyg")
+                .accelerator("CmdOrCtrl+Alt+W")
                 .build(app)?,
         )
         // .item(&MenuItemBuilder::new("Split View").id("split_view").build(app)?)

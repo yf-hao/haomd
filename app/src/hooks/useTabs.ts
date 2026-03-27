@@ -238,6 +238,11 @@ export function useTabs(options?: UseTabsOptions) {
     return tabs.filter(t => t.dirty)
   }, [tabs])
 
+  const markActiveTabDirty = useCallback(() => {
+    if (!activeId) return
+    setTabs(prev => prev.map(t => t.id === activeId ? { ...t, dirty: true } : t))
+  }, [activeId])
+
   return {
     tabs,
     activeId,
@@ -251,5 +256,6 @@ export function useTabs(options?: UseTabsOptions) {
     updateActiveContent,
     updateActiveMeta,
     updateTabsPathByPath,
+    markActiveTabDirty,
   }
 }

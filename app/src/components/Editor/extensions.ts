@@ -59,7 +59,7 @@ function createBaseTheme(themeMode: ResolvedThemeMode) {
         backgroundColor: 'var(--theme-editor-active-gutter-bg)',
         position: 'relative',
       },
-      '.cm-gutter .cm-activeLineGutter::after': {
+      '.cm-lineNumbers .cm-activeLineGutter::after': {
         content: '""',
         position: 'absolute',
         top: 0,
