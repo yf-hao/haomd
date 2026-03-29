@@ -41,6 +41,26 @@ export const emptySettings: AiSettingsState = {
   defaultProviderId: undefined,
 }
 
+export type AgentPlatform = 'dify' | 'coze' | 'other'
+
+export type AgentProvider = {
+  id: string
+  name: string
+  baseUrl: string
+  apiKey: string
+  platform: AgentPlatform
+}
+
+export type AgentSettingsState = {
+  providers: AgentProvider[]
+  defaultProviderId?: string
+}
+
+export const emptyAgentSettings: AgentSettingsState = {
+  providers: [],
+  defaultProviderId: undefined,
+}
+
 export type DefaultChatConfig = {
   baseUrl: string
   apiKey: string

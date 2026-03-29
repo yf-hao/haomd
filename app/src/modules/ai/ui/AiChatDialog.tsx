@@ -15,8 +15,12 @@ import { tryHandleSlashCommand, parseHistoryRecallCommand } from './aiSlashComma
 import { AiChatCommandBridgeContext } from './AiChatCommandBridgeContext'
 import { ConfirmDialog } from '../../../components/ConfirmDialog'
 import { AiChatHistoryDialog } from './AiChatHistoryDialog'
+import { loadAgentSettingsState } from '../config/agentSettingsRepo'
+import type { AgentProvider } from '../domain/types'
 
 const EMPTY_MESSAGES: ChatMessageView[] = []
+const AI_CHAT_AGENT_STORAGE_KEY = 'haomd_ai_chat_selected_agent_id'
+const EMPTY_AGENT_OPTION = { id: '', name: 'Agent' }
 
 export type AiChatDialogProps = {
   open: boolean
@@ -39,6 +43,8 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
   const [slashModalMessage, setSlashModalMessage] = useState<string | null>(null)
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
   const [historyDialogDirKey, setHistoryDialogDirKey] = useState<string | null>(null)
+  const [agents, setAgents] = useState<AgentProvider[]>([])
+  const [activeAgentId, setActiveAgentId] = useState<string | null>(null)
   // 仅在通过 /list 打开输入历史弹窗时，才允许使用 `!n` 本地历史回填命令
   const [historyRecallEnabled, setHistoryRecallEnabled] = useState(false)
   const commandBridge = useContext(AiChatCommandBridgeContext)
@@ -141,6 +147,46 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     }
     setContextPlaceholderMode('none')
   }, [open, entryMode, initialContext])
+
+  useEffect(() => {
+    let cancelled = false
+    const loadAgents = async () => {
+      try {
+        const state = await loadAgentSettingsState()
+        if (cancelled) return
+        const providers = state.providers ?? []
+        setAgents(providers)
+
+        const storedId =
+          typeof localStorage !== 'undefined'
+            ? localStorage.getItem(AI_CHAT_AGENT_STORAGE_KEY)
+            : null
+        const preferredId =
+          (storedId && providers.some((item) => item.id === storedId) ? storedId : null)
+          ?? null
+        setActiveAgentId(preferredId)
+      } catch (error) {
+        console.warn('[AiChatDialog] load agents failed', error)
+        if (!cancelled) {
+          setAgents([])
+          setActiveAgentId(null)
+        }
+      }
+    }
+
+    if (open) {
+      void loadAgents()
+    }
+
+    return () => {
+      cancelled = true
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!activeAgentId || typeof localStorage === 'undefined') return
+    localStorage.setItem(AI_CHAT_AGENT_STORAGE_KEY, activeAgentId)
+  }, [activeAgentId])
 
   useEffect(() => {
     const unPaste = onNativePaste((text) => {
@@ -806,6 +852,9 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
           models={availableModels}
           activeModelId={activeModelId}
           onChangeModel={handleModelChange}
+          agents={[EMPTY_AGENT_OPTION, ...agents.map((agent) => ({ id: agent.id, name: agent.name }))]}
+          activeAgentId={activeAgentId ?? ''}
+          onChangeAgent={(value) => setActiveAgentId(value || null)}
           attachedImageDataUrl={attachedImageDataUrl}
           onAttachImage={(dataUrl) => {
             if (providerType !== 'dify') {

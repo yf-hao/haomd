@@ -100,7 +100,7 @@ const MermaidPreview = memo(function MermaidPreview({ code }: { code: string }) 
     // Debounce Mermaid rendering (500ms — diagrams are expensive)
     if (renderTimer.current) clearTimeout(renderTimer.current)
     renderTimer.current = setTimeout(() => {
-      let cancelled = false
+      const cancelled = false
       renderMermaidToSvg(code, mermaidId, { themeMode }).then((result) => {
         if (cancelled) return
         setSvg(result)

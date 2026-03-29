@@ -563,6 +563,23 @@ struct PromptSettingsCfg {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+struct AgentProviderCfg {
+    id: String,
+    name: String,
+    base_url: String,
+    api_key: String,
+    #[serde(default)]
+    platform: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct AgentSettingsCfg {
+    providers: Vec<AgentProviderCfg>,
+    #[serde(default)]
+    default_provider_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct ClipboardImageResult {
     file_name: String,
 }
@@ -957,6 +974,17 @@ fn prompt_settings_path(app: &AppHandle) -> std::io::Result<PathBuf> {
 
     let dir = std::env::current_dir()?;
     Ok(dir.join("prompt_settings.json"))
+}
+
+fn agent_settings_path(app: &AppHandle) -> std::io::Result<PathBuf> {
+    if let Ok(mut dir) = app.path().config_dir() {
+        dir.push("haomd");
+        std::fs::create_dir_all(&dir)?;
+        return Ok(dir.join("agent_providers.json"));
+    }
+
+    let dir = std::env::current_dir()?;
+    Ok(dir.join("agent_providers.json"))
 }
 
 fn editor_settings_path(app: &AppHandle) -> std::io::Result<PathBuf> {
@@ -5444,6 +5472,8 @@ struct MenuTexts {
     history: &'static str,
     compress: &'static str,
     clear: &'static str,
+    tools: &'static str,
+    agent_settings: &'static str,
     ai: &'static str,
     provider_settings: &'static str,
     prompt_settings: &'static str,
@@ -5524,6 +5554,8 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             history: "历史记录",
             compress: "压缩",
             clear: "清空",
+            tools: "工具",
+            agent_settings: "Agent 设置",
             ai: "AI",
             provider_settings: "模型服务设置",
             prompt_settings: "提示词设置",
@@ -5601,6 +5633,8 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             history: "History",
             compress: "Compress",
             clear: "Clear",
+            tools: "Tools",
+            agent_settings: "Agent Settings",
             ai: "AI",
             provider_settings: "Provider Settings",
             prompt_settings: "Prompt Settings",
@@ -6090,6 +6124,14 @@ pub(crate) async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri:
         .item(&global_memory_menu)
         .build()?;
 
+    let tools_menu = SubmenuBuilder::new(app, texts.tools)
+        .item(
+            &MenuItemBuilder::new(texts.agent_settings)
+                .id("agent_settings")
+                .build(app)?,
+        )
+        .build()?;
+
     let ai_menu = SubmenuBuilder::new(app, texts.ai)
         .item(
             &MenuItemBuilder::new(texts.provider_settings)
@@ -6151,6 +6193,7 @@ pub(crate) async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri:
         .item(&edit_menu)
         .item(&format_menu)
         .item(&view_menu)
+        .item(&tools_menu)
         .item(&ai_menu)
         .item(&help_menu)
         .build()?;
@@ -6306,6 +6349,78 @@ async fn save_prompt_settings(app: AppHandle, cfg: PromptSettingsCfg) -> ResultP
         Err(err) => err_payload(
             ErrorCode::IoError,
             format!("写入 prompt_settings 失败: {err}"),
+            trace,
+        ),
+    }
+}
+
+#[tauri::command]
+async fn load_agent_settings(app: AppHandle) -> ResultPayload<AgentSettingsCfg> {
+    let trace = new_trace_id();
+    let path = match agent_settings_path(&app) {
+        Ok(p) => p,
+        Err(err) => {
+            return err_payload(
+                ErrorCode::IoError,
+                format!("获取 agent_settings 路径失败: {err}"),
+                trace,
+            );
+        }
+    };
+
+    match fs::read(&path).await {
+        Ok(bytes) => {
+            let cfg: AgentSettingsCfg = serde_json::from_slice(&bytes).unwrap_or(AgentSettingsCfg {
+                providers: Vec::new(),
+                default_provider_id: None,
+            });
+            ok(cfg, trace)
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => ok(
+            AgentSettingsCfg {
+                providers: Vec::new(),
+                default_provider_id: None,
+            },
+            trace,
+        ),
+        Err(err) => err_payload(
+            ErrorCode::IoError,
+            format!("读取 agent_settings 失败: {err}"),
+            trace,
+        ),
+    }
+}
+
+#[tauri::command]
+async fn save_agent_settings(app: AppHandle, cfg: AgentSettingsCfg) -> ResultPayload<()> {
+    let trace = new_trace_id();
+    let path = match agent_settings_path(&app) {
+        Ok(p) => p,
+        Err(err) => {
+            return err_payload(
+                ErrorCode::IoError,
+                format!("获取 agent_settings 路径失败: {err}"),
+                trace,
+            );
+        }
+    };
+
+    let bytes = match serde_json::to_vec_pretty(&cfg) {
+        Ok(b) => b,
+        Err(err) => {
+            return err_payload(
+                ErrorCode::IoError,
+                format!("序列化 agent_settings 失败: {err}"),
+                trace,
+            );
+        }
+    };
+
+    match fs::write(&path, bytes).await {
+        Ok(()) => ok((), trace),
+        Err(err) => err_payload(
+            ErrorCode::IoError,
+            format!("写入 agent_settings 失败: {err}"),
             trace,
         ),
     }
@@ -7081,6 +7196,8 @@ pub fn run() {
       save_ai_settings,
       load_prompt_settings,
       save_prompt_settings,
+      load_agent_settings,
+      save_agent_settings,
       editor_settings::load_editor_settings,
       editor_settings::save_editor_settings,
       font_catalog::list_system_fonts,

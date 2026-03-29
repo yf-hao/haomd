@@ -49,6 +49,9 @@ export interface AiChatBodyProps {
   models?: { id: string; providerName: string; visionMode?: VisionMode }[]
   activeModelId?: string | null
   onChangeModel?: (modelId: string) => void
+  agents?: { id: string; name: string }[]
+  activeAgentId?: string | null
+  onChangeAgent?: (agentId: string) => void
   /** 当前输入区已附加的图片（data URL），用于控制发送按钮状态与提示 */
   attachedImageDataUrl?: string | null
   /** 选择图片并转换为 data URL 后的回调 */
@@ -93,6 +96,9 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
   models,
   activeModelId,
   onChangeModel,
+  agents,
+  activeAgentId,
+  onChangeAgent,
   attachedImageDataUrl,
   onAttachImage,
   onClearImage,
@@ -538,6 +544,16 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
                 value={activeRoleId ?? ''}
                 onChange={(v) => onChangeRole?.(v)}
               />
+              {!!agents?.length && (
+                <BadgeSelect
+                  options={agents.map((agent) => ({
+                    value: agent.id,
+                    label: agent.name,
+                  }))}
+                  value={activeAgentId ?? ''}
+                  onChange={(v) => onChangeAgent?.(v)}
+                />
+              )}
             </div>
             <div className="ai-chat-input-tools-right">
               <button

@@ -601,6 +601,9 @@ export function WorkspaceShell({
   const handleMarkdownChange = useCallback((val: string) => {
     const patchedDoc = applyChunkEdit(val)
     if (patchedDoc !== null) {
+      if (patchedDoc === markdownRef.current) {
+        return
+      }
       setMarkdown(patchedDoc)
       markDirty()
       updateActiveContent(patchedDoc)
@@ -608,6 +611,9 @@ export function WorkspaceShell({
     }
 
     // 普通模式：直接用整篇文档更新
+    if (val === markdownRef.current) {
+      return
+    }
     setMarkdown(val)
     markDirty()
     updateActiveContent(val)

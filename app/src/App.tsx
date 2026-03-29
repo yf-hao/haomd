@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import './App.css'
 import WorkspaceShell, { type LeftPanelId, type InitialWorkspaceAction } from './components/WorkspaceShell'
 import { AiSettingsDialog } from './components/AiSettingsDialog'
+import { AgentSettingsDialog } from './components/AgentSettingsDialog'
 import { PromptSettingsDialog } from './components/PromptSettingsDialog'
 import { SettingsDialog } from './components/SettingsDialog'
 import { I18nProvider, useI18n } from './modules/i18n/I18nContext'
@@ -38,6 +39,7 @@ function App() {
   const [initialOpenRecentPath, setInitialOpenRecentPath] = useState<string | null>(null)
   const [initialOpenRecentIsFolder, setInitialOpenRecentIsFolder] = useState<boolean | null>(null)
   const [isAiSettingsOpen, setAiSettingsOpen] = useState(false)
+  const [isAgentSettingsOpen, setAgentSettingsOpen] = useState(false)
   const [isPromptSettingsOpen, setPromptSettingsOpen] = useState(false)
   const [isSettingsOpen, setSettingsOpen] = useState(false)
   const [isStatusBarVisible, setStatusBarVisible] = useState(true)
@@ -97,6 +99,10 @@ function App() {
       }
       if (actionId === 'ai_settings') {
         setAiSettingsOpen(true)
+        return
+      }
+      if (actionId === 'agent_settings') {
+        setAgentSettingsOpen(true)
         return
       }
       if (actionId === 'ai_prompt_settings') {
@@ -223,6 +229,7 @@ function App() {
           initialOpenRecentPath={initialOpenRecentPath}
           initialOpenRecentIsFolder={initialOpenRecentIsFolder}
           isAiSettingsOpen={isAiSettingsOpen}
+          isAgentSettingsOpen={isAgentSettingsOpen}
           isPromptSettingsOpen={isPromptSettingsOpen}
           isSettingsOpen={isSettingsOpen}
           isStatusBarVisible={isStatusBarVisible}
@@ -239,12 +246,12 @@ function App() {
             hasPreviewTypographyOverrideRef.current = true
             setUiTypography(settings)
           }}
-          setAiSettingsOpen={setAiSettingsOpen}
-          setPromptSettingsOpen={setPromptSettingsOpen}
-          setSettingsOpen={setSettingsOpen}
-          setStatusBarVisible={setStatusBarVisible}
           setDocCharCount={setDocCharCount}
           setStatusMessage={setStatusMessage}
+          setAiSettingsOpen={setAiSettingsOpen}
+          setAgentSettingsOpen={setAgentSettingsOpen}
+          setPromptSettingsOpen={setPromptSettingsOpen}
+          setSettingsOpen={setSettingsOpen}
         />
       </ThemeModeProvider>
     </I18nProvider>
@@ -257,6 +264,7 @@ type AppShellContentProps = {
   initialOpenRecentPath: string | null
   initialOpenRecentIsFolder: boolean | null
   isAiSettingsOpen: boolean
+  isAgentSettingsOpen: boolean
   isPromptSettingsOpen: boolean
   isSettingsOpen: boolean
   isStatusBarVisible: boolean
@@ -267,12 +275,12 @@ type AppShellContentProps = {
   onThemeSettingsChange: (settings: ThemeSettings) => void
   onLanguageModeChange: (mode: LanguageMode) => void
   onUiTypographyChange: (settings: UiTypographySettings) => void
-  setAiSettingsOpen: (open: boolean) => void
-  setPromptSettingsOpen: (open: boolean) => void
-  setSettingsOpen: (open: boolean) => void
-  setStatusBarVisible: Dispatch<SetStateAction<boolean>>
   setDocCharCount: (count: number | null) => void
   setStatusMessage: (message: string) => void
+  setAiSettingsOpen: Dispatch<SetStateAction<boolean>>
+  setAgentSettingsOpen: Dispatch<SetStateAction<boolean>>
+  setPromptSettingsOpen: Dispatch<SetStateAction<boolean>>
+  setSettingsOpen: Dispatch<SetStateAction<boolean>>
 }
 
 function AppShellContent({
@@ -281,6 +289,7 @@ function AppShellContent({
   initialOpenRecentPath,
   initialOpenRecentIsFolder,
   isAiSettingsOpen,
+  isAgentSettingsOpen,
   isPromptSettingsOpen,
   isSettingsOpen,
   isStatusBarVisible,
@@ -291,11 +300,12 @@ function AppShellContent({
   onThemeSettingsChange,
   onLanguageModeChange,
   onUiTypographyChange,
-  setAiSettingsOpen,
-  setPromptSettingsOpen,
-  setSettingsOpen,
   setDocCharCount,
   setStatusMessage,
+  setAiSettingsOpen,
+  setAgentSettingsOpen,
+  setPromptSettingsOpen,
+  setSettingsOpen,
 }: AppShellContentProps) {
   const { t } = useI18n()
 
@@ -371,6 +381,7 @@ function AppShellContent({
       )}
 
       <AiSettingsDialog open={isAiSettingsOpen} onClose={() => setAiSettingsOpen(false)} />
+      <AgentSettingsDialog open={isAgentSettingsOpen} onClose={() => setAgentSettingsOpen(false)} />
       <PromptSettingsDialog open={isPromptSettingsOpen} onClose={() => setPromptSettingsOpen(false)} />
       <SettingsDialog
         open={isSettingsOpen}

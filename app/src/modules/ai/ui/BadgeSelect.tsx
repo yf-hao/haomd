@@ -17,13 +17,22 @@ export interface BadgeSelectProps {
   value: string
   onChange: (value: string) => void
   groups?: BadgeSelectGroup[]
+  disabled?: boolean
+  title?: string
 }
 
-export const BadgeSelect: FC<BadgeSelectProps> = ({ options, value, onChange, groups }) => {
+export const BadgeSelect: FC<BadgeSelectProps> = ({ options, value, onChange, groups, disabled = false, title }) => {
   const [open, setOpen] = useState(false)
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   const hasGroups = !!groups?.length
+
+  useEffect(() => {
+    if (disabled) {
+      setOpen(false)
+      return
+    }
+  }, [disabled])
 
   useEffect(() => {
     if (!open) {
@@ -52,9 +61,14 @@ export const BadgeSelect: FC<BadgeSelectProps> = ({ options, value, onChange, gr
 
   return (
     <div
-      className="ai-chat-input-badge ai-chat-role-badge"
+      className={`ai-chat-input-badge ai-chat-role-badge${disabled ? ' is-disabled' : ''}`}
       ref={ref}
-      onClick={() => setOpen((prev) => !prev)}
+      title={title}
+      aria-disabled={disabled}
+      onClick={() => {
+        if (disabled) return
+        setOpen((prev) => !prev)
+      }}
     >
       <span className="ai-chat-icon-chevron-up" aria-hidden="true" />
       <span className="badge-select-label">{selectedLabel}</span>
@@ -70,7 +84,7 @@ export const BadgeSelect: FC<BadgeSelectProps> = ({ options, value, onChange, gr
                     <div
                       key={group.id}
                       className={`badge-select-group${isActive ? ' active' : ''}${groupHasSelected ? ' selected' : ''}`}
-                      onMouseEnter={() => setActiveGroupId(group.id)}
+                      onClick={(e) => { e.stopPropagation(); setActiveGroupId(group.id) }}
                     >
                       <span className="badge-select-group-label">{group.label}</span>
                       <span className="badge-select-group-chevron" aria-hidden="true">›</span>
