@@ -57,7 +57,9 @@ export const BadgeSelect: FC<BadgeSelectProps> = ({ options, value, onChange, gr
 
   const flatOptions = hasGroups ? (groups ?? []).flatMap((group) => group.options) : options
   const selectedLabel = flatOptions.find((o) => o.value === value)?.label ?? ''
-  const activeGroup = groups?.find((group) => group.id === activeGroupId) ?? groups?.[0]
+  // Fallback: use the group containing the currently selected model (not the first group)
+  const selectedGroup = groups?.find((group) => group.options.some((opt) => opt.value === value))
+  const activeGroup = groups?.find((group) => group.id === activeGroupId) ?? selectedGroup ?? groups?.[0]
 
   return (
     <div
