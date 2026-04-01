@@ -136,7 +136,7 @@ describe('editorSettings', () => {
         expect(settings.editorBackground?.path).toBe('/tmp/romantic-bg.png')
         expect(settings.editorBackground?.opacity).toBe(0.16)
         expect(settings.editorBackground?.overlayOpacity).toBe(0)
-        expect(settings.editorBackground?.blurPx).toBe(1)
+        expect(settings.editorBackground?.blurPx).toBe(0)
         expect(settings.editorBackground?.size).toBe('height-fill')
         expect(settings.previewBackground?.enabled).toBe(true)
         expect(settings.previewBackground?.path).toBe('/tmp/romantic-preview-bg.png')

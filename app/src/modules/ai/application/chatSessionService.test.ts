@@ -5,6 +5,7 @@ import { loadSystemPromptInfo } from './systemPromptService'
 import { createInitialConversationState } from '../domain/chatSession'
 import { createStreamingClientFromSettings } from '../streamingClientFactory'
 import { appendAssistantChunk } from '../domain/chatSession'
+import { loadAgentSettingsState } from '../config/agentSettingsRepo'
 
 // Mock dependencies
 vi.mock('../settings', () => ({
@@ -43,6 +44,10 @@ vi.mock('../streamingClientFactory', () => ({
     createStreamingClientFromSettings: vi.fn(() => ({
         askStream: vi.fn().mockResolvedValue({ content: 'response', tokenCount: 10, completed: true })
     }))
+}))
+
+vi.mock('../config/agentSettingsRepo', () => ({
+    loadAgentSettingsState: vi.fn(),
 }))
 
 vi.mock('./attachmentUploadService', () => ({
@@ -91,6 +96,7 @@ describe('ChatSessionService', () => {
         vi.clearAllMocks()
             ; (loadAiSettingsState as any).mockResolvedValue(mockAiState)
             ; (loadSystemPromptInfo as any).mockResolvedValue(mockSystemInfo)
+            ; (loadAgentSettingsState as any).mockResolvedValue({ providers: [], defaultProviderId: undefined })
     })
 
     it('should create a chat session with default settings', async () => {
@@ -215,4 +221,3 @@ describe('ChatSessionService', () => {
         expect(truncateAssistantMessage).toHaveBeenCalledWith(expect.anything(), 'm1', 5)
     })
 })
-

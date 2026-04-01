@@ -6370,10 +6370,11 @@ async fn load_agent_settings(app: AppHandle) -> ResultPayload<AgentSettingsCfg> 
 
     match fs::read(&path).await {
         Ok(bytes) => {
-            let cfg: AgentSettingsCfg = serde_json::from_slice(&bytes).unwrap_or(AgentSettingsCfg {
-                providers: Vec::new(),
-                default_provider_id: None,
-            });
+            let cfg: AgentSettingsCfg =
+                serde_json::from_slice(&bytes).unwrap_or(AgentSettingsCfg {
+                    providers: Vec::new(),
+                    default_provider_id: None,
+                });
             ok(cfg, trace)
         }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => ok(
