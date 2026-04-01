@@ -50,7 +50,8 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
   const commandBridge = useContext(AiChatCommandBridgeContext)
   const [isComposing, setIsComposing] = useState(false)
   const [compositionEndTime, setCompositionEndTime] = useState(0)
-  const [historyCursor, setHistoryCursor] = useState<number | null>(null)
+  const historyCursorRef = useRef<number | null>(null)
+  const [, setHistoryCursor] = useState<number | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const messagesContainerRef = useRef<HTMLDivElement | null>(null)
 
@@ -61,6 +62,11 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     const maxHeight = 120
     const next = Math.min(maxHeight, el.scrollHeight)
     el.style.height = `${next}px`
+  }
+
+  const clearHistoryBrowse = () => {
+    historyCursorRef.current = null
+    setHistoryCursor(null)
   }
 
   const dirKey = currentFilePath ? getDirKeyFromDocPath(currentFilePath) : undefined
@@ -89,6 +95,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     entryMode,
     initialContext,
     open,
+    selectedAgentId: activeAgentId,
     docPath: dirKey,
     legacyDocPath: currentFilePath ?? undefined,
   })
@@ -184,7 +191,11 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
   }, [open])
 
   useEffect(() => {
-    if (!activeAgentId || typeof localStorage === 'undefined') return
+    if (typeof localStorage === 'undefined') return
+    if (!activeAgentId) {
+      localStorage.removeItem(AI_CHAT_AGENT_STORAGE_KEY)
+      return
+    }
     localStorage.setItem(AI_CHAT_AGENT_STORAGE_KEY, activeAgentId)
   }, [activeAgentId])
 
@@ -203,6 +214,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
       const next = value.slice(0, start) + text + value.slice(end)
       el.value = next
       setInput(next)
+      clearHistoryBrowse()
       const pos = start + text.length
       el.setSelectionRange(pos, pos)
     })
@@ -285,6 +297,8 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
       const entry = resolveHistoryEntryByOrdinal(directoryKey, ordinal)
       if (entry && entry.text.trim()) {
         const nextText = entry.text
+        historyCursorRef.current = null
+        setHistoryCursor(null)
         setInput(nextText)
         requestAnimationFrame(() => {
           const el = inputRef.current
@@ -297,12 +311,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
       return
     }
 
-    // 记录本次输入到当前目录的输入历史（包含普通提问和 /history /list 等指令）
-    if (contentToSend.trim()) {
-      appendAiInputHistory(directoryKey, contentToSend)
-    }
-
-    // 非本地历史命令：正常进入 slash 命令和模型发送流程
+    clearHistoryBrowse()
     setInput('')
 
     const handled = await tryHandleSlashCommand(contentToSend, {
@@ -319,6 +328,9 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
       },
     })
     if (handled === 'handled') {
+      if (contentToSend.trim()) {
+        appendAiInputHistory(directoryKey, contentToSend)
+      }
       return
     }
 
@@ -351,7 +363,8 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
   }
 
   const handleInputKeyDown = async (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    const isHistoryMode = historyCursor != null
+    const currentHistoryCursor = historyCursorRef.current
+    const isHistoryMode = currentHistoryCursor != null
 
     // 当输入框为空或已处于历史模式时，使用 ArrowUp / ArrowDown 在当前目录的输入历史中导航
     if (
@@ -371,7 +384,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
         if (historyList.length === 0) return
 
         const direction = e.key === 'ArrowUp' ? 'up' as const : 'down' as const
-        let nextCursor = historyCursor
+        let nextCursor = currentHistoryCursor
 
         if (direction === 'up') {
           if (nextCursor == null) {
@@ -399,6 +412,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
         if (!el) return
 
         e.preventDefault()
+        historyCursorRef.current = nextCursor
         setHistoryCursor(nextCursor)
         setInput(entry.text)
         // 将光标移动到末尾
@@ -833,6 +847,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
             setInput(value)
             autoResizeInput()
           }}
+          onManualInputChange={clearHistoryBrowse}
           onSubmit={handleSubmit}
           onInputKeyDown={handleInputKeyDown}
           onCompositionStart={handleCompositionStart}

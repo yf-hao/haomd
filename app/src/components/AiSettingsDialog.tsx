@@ -32,12 +32,12 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
     setEditingProviderId,
     error,
     setError,
-    initialSnapshot,
     setInitialSnapshot,
     defaultProvider,
     updateDraftField,
     resetDraft,
     addOrMergeProviderFromDraft,
+    updateProviderFromDraft,
     deleteProvider,
     removeModel,
     setDefaultModel,
@@ -128,6 +128,12 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
 
   if (!open) return null
 
+  const editingProvider =
+    editingProviderId != null
+      ? settings.providers.find((provider) => provider.id === editingProviderId) ?? null
+      : null
+  const isEditingProvider = !!editingProvider
+
   const handleDraftChange = (field: keyof ProviderDraft) => (
     e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
@@ -199,8 +205,15 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
     }
   }
 
-  const handleTestAndAdd = (e: FormEvent) => {
+  const handleSubmitDraft = (e: FormEvent) => {
     e.preventDefault()
+    if (editingProviderId) {
+      const updated = updateProviderFromDraft(editingProviderId)
+      if (updated) {
+        setTestResult(null)
+      }
+      return
+    }
     const result = addOrMergeProviderFromDraft()
     if (result === 'key-only') {
       setShowKeyOnlyModal(true)
@@ -301,31 +314,44 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
       }
     }
 
-    // 情况 2：已有 Provider，支持在 Save 时根据草稿覆盖 API Key / Vision / Type
-    if (settings.providers.length && editingProviderId && initialSnapshot) {
-      const providerIndex = stateToSave.providers.findIndex((p) => p.id === editingProviderId)
-      if (providerIndex !== -1) {
-        const currentProvider = stateToSave.providers[providerIndex]
-        const originalProvider =
-          initialSnapshot.providers.find((p) => p.id === editingProviderId) ?? currentProvider
-        const oldApiKey = originalProvider.apiKey
-        const newApiKeyCandidate = draft.apiKey.trim()
+    if (settings.providers.length && editingProviderId) {
+      const updated = updateProviderFromDraft(editingProviderId)
+      if (!updated) {
+        return
+      }
+      const models = parseModelsInput(draft.modelsInput)
+      const currentProvider = stateToSave.providers.find((p) => p.id === editingProviderId)
+      if (currentProvider) {
+        const existingModelsById = new Map(currentProvider.models.map((m) => [m.id, m]))
+        const nextModels = models.map((id) => {
+          const existingModel = existingModelsById.get(id)
+          if (existingModel) return existingModel
+          return {
+            id,
+            visionMode: draft.visionMode || 'disabled',
+          }
+        })
 
-        const shouldUpdateApiKey = !!newApiKeyCandidate && newApiKeyCandidate !== oldApiKey
-
-        const updatedProvider: UiProvider = {
-          ...currentProvider,
-          apiKey: shouldUpdateApiKey ? newApiKeyCandidate : currentProvider.apiKey,
-          // Type 与 Vision 都从草稿同步；空字符串表示“自动/默认”
-          providerType: (draft.providerType || 'dify') as ProviderType,
-          visionMode: draft.visionMode || undefined,
-        }
-
-        const nextProviders = [...stateToSave.providers]
-        nextProviders[providerIndex] = updatedProvider
         stateToSave = {
           ...stateToSave,
-          providers: nextProviders,
+          providers: stateToSave.providers.map((p) =>
+            p.id !== editingProviderId
+              ? p
+              : {
+                  ...p,
+                  name: draft.name.trim(),
+                  baseUrl: draft.baseUrl.trim(),
+                  apiKey: draft.apiKey.trim(),
+                  description: draft.description.trim() || undefined,
+                  providerType: (draft.providerType || 'dify') as ProviderType,
+                  visionMode: draft.visionMode || 'disabled',
+                  models: nextModels,
+                  defaultModelId:
+                    p.defaultModelId && nextModels.some((m) => m.id === p.defaultModelId)
+                      ? p.defaultModelId
+                      : nextModels[0]?.id,
+                },
+          ),
         }
       }
     }
@@ -349,7 +375,12 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
         <div className="modal-title">{t('provider.title')}</div>
         <div className="modal-content ai-settings-body">
           <div className="ai-settings-column-left">
-            <form onSubmit={handleTestAndAdd} className="ai-settings-form">
+            <form onSubmit={handleSubmitDraft} className="ai-settings-form">
+              <div className="providers-header">
+                {isEditingProvider
+                  ? t('provider.editingProvider', { name: editingProvider?.name ?? '' })
+                  : t('provider.newProviderDraft')}
+              </div>
               {AI_FORM_FIELDS.map((field) => (
                 <FieldGroup key={field.key} label={field.label}>
                   {field.type === 'textarea' ? (
@@ -402,13 +433,13 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
 
               <div className="ai-settings-form-actions">
                 <Button type="button" variant="tertiary" onClick={handleResetDraft}>
-                  {t('provider.resetForm')}
+                  {isEditingProvider ? t('common.cancel') : t('provider.resetForm')}
                 </Button>
                 <Button type="button" variant="secondary" onClick={handleTestConnection}>
                   {t('provider.test')}
                 </Button>
                 <Button type="submit" variant="primary">
-                  {t('provider.add')}
+                  {isEditingProvider ? t('provider.update') : t('provider.add')}
                 </Button>
               </div>
             </form>

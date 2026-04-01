@@ -57,6 +57,7 @@ const createRecord = (messages: DocConversationMessage[]): DocConversationRecord
 const mockConfig: CompressionConfig = {
   minMessagesToCompress: 5,
   keepRecentRounds: 1,
+  maxPreservedUserMessages: 2,
   maxMessagesAfterCompress: 10,
   maxMessagesPerSummaryBatch: 10,
   maxSummaryCharsPerLevel: () => 1000,
@@ -103,11 +104,17 @@ describe('createConversationCompressor', () => {
 
     const result = await compressor.compress(record, mockConfig)
 
-    expect(result.messages).toHaveLength(3)
-    expect(result.messages[0].role).toBe('system')
-    expect(result.messages[0].content).toBe('Summary of old messages')
-    expect(result.messages[1].id).toBe('5')
-    expect(result.messages[2].id).toBe('6')
+    expect(result.messages).toHaveLength(5)
+    const summary = result.messages.find((message) => message.role === 'system')
+    expect(summary?.content).toBe('Summary of old messages')
+    expect(summary?.meta?.preservedUserInputs).toEqual(['u1', 'u2'])
+    expect(result.messages.map((message) => message.id)).toEqual([
+      '1',
+      '3',
+      summary!.id,
+      '5',
+      '6',
+    ])
   })
 
   it('should generate second level summary if first level exceeds threshold', async () => {
@@ -147,9 +154,17 @@ describe('createConversationCompressor', () => {
 
     const result = await compressor.compress(record, configWithSmallLevel1)
 
-    expect(result.messages).toHaveLength(3)
-    expect(result.messages[0].meta?.summaryLevel).toBe(2)
-    expect(result.messages[0].content).toBe('FinalS2')
+    expect(result.messages).toHaveLength(5)
+    const level2Summary = result.messages.find((message) => (message.meta?.summaryLevel ?? 0) === 2)
+    expect(level2Summary?.content).toBe('FinalS2')
+    expect(level2Summary?.meta?.preservedUserInputs).toEqual(['u1', 'u2'])
+    expect(result.messages.map((message) => message.id)).toEqual([
+      '1',
+      '3',
+      level2Summary!.id,
+      '5',
+      '6',
+    ])
   })
 })
 
@@ -167,6 +182,7 @@ describe('loadCompressionConfig', () => {
     expect(cfg).toMatchObject({
       minMessagesToCompress: 10,
       keepRecentRounds: 3,
+      maxPreservedUserMessages: 12,
       maxMessagesAfterCompress: 100,
       maxMessagesPerSummaryBatch: 50,
     })
@@ -196,6 +212,8 @@ describe('createSimpleSummaryProvider', () => {
     expect(summary).toContain('会话摘要（Level 1）')
     expect(summary).toContain('文档：doc.md')
     expect(summary).toContain('覆盖消息数：2')
+    expect(summary).toContain('用户输入摘录')
+    expect(summary).toContain('hello world')
     expect(summary).toMatch(/User @ /)
     expect(summary).toMatch(/Assistant @ /)
   })
@@ -298,6 +316,7 @@ describe('createLLMSummaryProvider', () => {
     expect(mockedCreateStreamingClientFromSettings).toHaveBeenCalledTimes(1)
     const [, systemPrompt, modelId] = mockedCreateStreamingClientFromSettings.mock.calls[0]
     expect(systemPrompt).toContain('会话压缩助手')
+    expect(systemPrompt).toContain('用户输入摘录')
     expect(modelId).toBe('m1')
 
     expect(askStream).toHaveBeenCalledTimes(1)

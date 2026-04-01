@@ -93,6 +93,15 @@ function buildMarkdownFromDocRecord(record: DocConversationRecord, groups: Conve
         lines.push('')
         lines.push(`> ${m.content}`)
         lines.push('')
+        const preservedUserInputs = m.meta?.preservedUserInputs ?? []
+        if (preservedUserInputs.length) {
+          lines.push('**保留的用户输入摘录**')
+          lines.push('')
+          preservedUserInputs.forEach((item) => {
+            lines.push(`- ${item}`)
+          })
+          lines.push('')
+        }
       })
     }
 
@@ -265,6 +274,22 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
 
   if (!open) return null
 
+  const renderPreservedUserInputs = (message: DocConversationMessage) => {
+    const items = message.meta?.preservedUserInputs ?? []
+    if (!items.length) return null
+
+    return (
+      <div className="ai-history-preserved-user-inputs">
+        <div className="ai-history-preserved-user-title">{t('aiHistory.preservedUserInputs')}</div>
+        <ul className="ai-history-preserved-user-list">
+          {items.map((item, index) => (
+            <li key={`${message.id}-${index}`}>{item}</li>
+          ))}
+        </ul>
+      </div>
+    )
+  }
+
   const handleExportMarkdown = useCallback(async () => {
     if (!record) return
     try {
@@ -404,6 +429,7 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
                           })()}
                         </div>
                         <div className="ai-history-message-content">{m.content}</div>
+                        {renderPreservedUserInputs(m)}
                       </div>
                     ))}
 

@@ -21,6 +21,7 @@ export interface ChatConfig {
   systemPrompt?: string
   temperature?: number
   maxTokens?: number
+  omitModelInput?: boolean
 }
 
 export interface StreamConfig {
@@ -150,6 +151,16 @@ export class SimpleChat {
         request.maxTokens,
         request.attachments,
       )
+      this.logger.info('Dify request body prepared', {
+        conversationIdSent: body.conversation_id || '(none)',
+        hasModelInput: !!((body.inputs as Record<string, unknown> | undefined)?.model),
+        systemLength:
+          typeof (body.inputs as Record<string, unknown> | undefined)?.system === 'string'
+            ? String((body.inputs as Record<string, unknown>).system).length
+            : 0,
+        queryLength: typeof body.query === 'string' ? body.query.length : 0,
+        attachmentCount: Array.isArray(body.files) ? body.files.length : 0,
+      })
 
       this.logger.info('Sending fetch request', { url })
       const response = await this.fetchWithTimeout(url, body, signal)
@@ -346,11 +357,16 @@ export class SimpleChat {
     maxTokens?: number,
     attachments?: ChatAttachment[],
   ) {
+    const inputs: Record<string, unknown> = {
+      system: this.config?.systemPrompt || '',
+    }
+
+    if (!this.config?.omitModelInput && this.config?.model) {
+      inputs.model = this.config.model
+    }
+
     const body: Record<string, unknown> = {
-      inputs: {
-        system: this.config?.systemPrompt || '',
-        model: this.config?.model,
-      },
+      inputs,
       query,
       response_mode: mode,
       user: 'ai-settings-tester',

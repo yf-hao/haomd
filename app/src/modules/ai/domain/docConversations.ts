@@ -16,6 +16,8 @@ export type DocConversationMessageMeta = {
   coversMessageIds?: string[]
   /** 仅摘要消息使用：覆盖的时间范围 */
   coveredTimeRange?: { from: number; to: number }
+  /** 仅摘要消息使用：从旧会话中保留下来的关键用户输入摘录 */
+  preservedUserInputs?: string[]
 }
 
 // 单条消息（用于文档会话时间线与非 Dify 模型上下文来源）

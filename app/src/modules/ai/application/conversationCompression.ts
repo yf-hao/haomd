@@ -11,6 +11,8 @@ export type CompressionConfig = {
   minMessagesToCompress: number
   /** 保留最近多少轮完整对话（Tail），例如 8 轮 */
   keepRecentRounds: number
+  /** 从被压缩的旧轮次中最多保留多少条原始 user 消息 */
+  maxPreservedUserMessages: number
   /** 压缩后允许的最大消息条数，用于兜底保护（当前实现暂未使用） */
   maxMessagesAfterCompress: number
   /** 不同摘要层级允许的最大摘要字符数 */
@@ -114,13 +116,62 @@ function pickOldAndRecentGroups(groups: ConversationGroup[], keepRecentRounds: n
   }
 }
 
+function pickPreservedUserMessages(groups: ConversationGroup[], maxCount: number): DocConversationMessage[] {
+  if (maxCount <= 0 || !groups.length) return []
+
+  const picked = groups
+    .map((group) => group.userMessages[0])
+    .filter((message): message is DocConversationMessage => Boolean(message))
+
+  if (picked.length <= maxCount) return picked
+  return picked.slice(-maxCount)
+}
+
+function toPreservedUserInputSnippet(message: DocConversationMessage): string {
+  const normalized = message.content.replace(/\s+/g, ' ').trim()
+  if (normalized.length <= 240) return normalized
+  return `${normalized.slice(0, 240)}...`
+}
+
+function buildPreservedUserInputs(messages: DocConversationMessage[]): string[] {
+  const seen = new Set<string>()
+  const snippets: string[] = []
+
+  for (const message of messages) {
+    const snippet = toPreservedUserInputSnippet(message)
+    if (!snippet || seen.has(snippet)) continue
+    seen.add(snippet)
+    snippets.push(snippet)
+  }
+
+  return snippets
+}
+
+function collectPreservedUserInputsFromMessages(messages: DocConversationMessage[]): string[] {
+  const snippets: string[] = []
+  const seen = new Set<string>()
+
+  for (const message of messages) {
+    const items = message.meta?.preservedUserInputs ?? []
+    for (const item of items) {
+      const normalized = item.trim()
+      if (!normalized || seen.has(normalized)) continue
+      seen.add(normalized)
+      snippets.push(normalized)
+    }
+  }
+
+  return snippets
+}
+
 function createSummaryMessage(options: {
   docPath: string
   level: SummaryLevel
   content: string
   sourceMessages: DocConversationMessage[]
+  preservedUserInputs?: string[]
 }): DocConversationMessage {
-  const { docPath, level, content, sourceMessages } = options
+  const { docPath, level, content, sourceMessages, preservedUserInputs = [] } = options
 
   const now = Date.now()
   const timestamps = sourceMessages.map((m) => m.timestamp)
@@ -137,6 +188,7 @@ function createSummaryMessage(options: {
       summaryLevel: level,
       coversMessageIds: sourceMessages.map((m) => m.id),
       coveredTimeRange: { from, to },
+      preservedUserInputs,
     },
   }
 }
@@ -164,6 +216,8 @@ export function createConversationCompressor(summaryProvider: SummaryProvider): 
 
       // 控制参与摘要的旧消息数量：优先使用最近的旧消息
       const sampledOldMessages = oldMessagesAll.slice(-config.maxMessagesPerSummaryBatch)
+      const preservedUserMessages = pickPreservedUserMessages(oldGroups, config.maxPreservedUserMessages)
+      const preservedUserInputs = buildPreservedUserInputs(preservedUserMessages)
 
       // 先生成一级摘要
       const level1SummaryContent = await summaryProvider.summarizeBatch({
@@ -176,6 +230,7 @@ export function createConversationCompressor(summaryProvider: SummaryProvider): 
         level: 1,
         content: level1SummaryContent,
         sourceMessages: sampledOldMessages,
+        preservedUserInputs,
       })
 
       // 检查是否需要多级摘要：如果现有摘要内容总体超过阈值，则对摘要再做一次总结，生成二级摘要
@@ -186,6 +241,7 @@ export function createConversationCompressor(summaryProvider: SummaryProvider): 
       let finalSummaries: DocConversationMessage[]
 
       if (totalLevel1Chars > config.maxSummaryCharsPerLevel(1)) {
+        const level2PreservedUserInputs = collectPreservedUserInputsFromMessages(allLevel1Summaries)
         // 生成二级摘要：对所有一级摘要再次总结
         const level2SummaryContent = await summaryProvider.summarizeBatch({
           docPath: record.docPath,
@@ -197,6 +253,7 @@ export function createConversationCompressor(summaryProvider: SummaryProvider): 
           level: 2,
           content: level2SummaryContent,
           sourceMessages: allLevel1Summaries,
+          preservedUserInputs: level2PreservedUserInputs,
         })
         finalSummaries = [level2Summary]
       } else {
@@ -209,7 +266,7 @@ export function createConversationCompressor(summaryProvider: SummaryProvider): 
       const next: DocConversationRecord = {
         ...record,
         lastActiveAt: Date.now(),
-        messages: [...finalSummaries, ...recentMessages].sort((a, b) => a.timestamp - b.timestamp),
+        messages: [...finalSummaries, ...preservedUserMessages, ...recentMessages].sort((a, b) => a.timestamp - b.timestamp),
       }
 
       return next
@@ -221,6 +278,7 @@ export function createConversationCompressor(summaryProvider: SummaryProvider): 
 export const defaultCompressionConfig: CompressionConfig = {
   minMessagesToCompress: 80,
   keepRecentRounds: 8,
+  maxPreservedUserMessages: 12,
   maxMessagesAfterCompress: 200,
   maxMessagesPerSummaryBatch: 200,
   maxSummaryCharsPerLevel: (level: SummaryLevel) => {
@@ -237,6 +295,7 @@ export async function loadCompressionConfig(): Promise<CompressionConfig> {
     return {
       minMessagesToCompress: uiCfg.minMessagesToCompress,
       keepRecentRounds: uiCfg.keepRecentRounds,
+      maxPreservedUserMessages: defaultCompressionConfig.maxPreservedUserMessages,
       maxMessagesAfterCompress: uiCfg.maxMessagesAfterCompress,
       maxMessagesPerSummaryBatch: uiCfg.maxMessagesPerSummaryBatch,
       maxSummaryCharsPerLevel: defaultCompressionConfig.maxSummaryCharsPerLevel,
@@ -266,9 +325,23 @@ export function createSimpleSummaryProvider(): SummaryProvider {
         const roleLabel = m.role === 'user' ? 'User' : m.role === 'assistant' ? 'Assistant' : 'System'
         const ts = new Date(m.timestamp).toLocaleString()
         const snippet = m.content.length > 200 ? `${m.content.slice(0, 200)}...` : m.content
-        lines.push(`- **${roleLabel} @ ${ts}**`)
+      lines.push(`- **${roleLabel} @ ${ts}**`)
+      lines.push('')
+      lines.push(`  ${snippet.replace(/\n/g, ' ')}`)
+      lines.push('')
+      }
+
+      const userSnippets = tail
+        .filter((m) => m.role === 'user')
+        .map((m) => {
+          const snippet = m.content.length > 120 ? `${m.content.slice(0, 120)}...` : m.content
+          return `- ${snippet.replace(/\n/g, ' ')}`
+        })
+
+      if (userSnippets.length) {
+        lines.push('### 用户输入摘录')
         lines.push('')
-        lines.push(`  ${snippet.replace(/\n/g, ' ')}`)
+        lines.push(...userSnippets)
         lines.push('')
       }
 
@@ -295,9 +368,12 @@ function buildSummarySystemPrompt(level: SummaryLevel): string {
   lines.push('- 摘要内容应包括：')
   lines.push('  - 主要目标与问题背景')
   lines.push('  - 关键结论与设计/实现决策')
+  lines.push('  - 用户输入摘录（保留用户的关键问题、需求、约束、限制条件）')
   lines.push('  - 重要约定（参数、配置、接口约定等）')
   lines.push('  - 已完成的工作与落地方案')
   lines.push('  - 后续 TODO 或风险点')
+  lines.push('- 必须输出“用户输入摘录”这一节，并尽量保留用户原始措辞中的关键词。')
+  lines.push('- 不能只总结 assistant 的回答，必须体现用户到底问了什么、要求了什么、限制了什么。')
   lines.push('')
   if (level >= 2) {
     lines.push('当前是更高层次的二级摘要，请聚焦更宏观的主题和结论，可以省略底层实现细节。')

@@ -42,6 +42,7 @@ export function createStreamingClientFromSettings(
         systemPrompt,
         temperature: 0,
         maxTokens: 256,
+        omitModelInput: provider.omitDifyModelInput,
         initialConversationId,
       })
   }

@@ -1108,6 +1108,15 @@ button.ghost.ghost-subtle:hover {
   border-color: var(--theme-accent-primary-soft);
 }
 
+.ai-chat-input-badge.is-disabled,
+.ai-chat-input-badge.is-disabled:hover {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--theme-surface-input);
+  border-color: var(--theme-border-subtle);
+  color: var(--theme-text-muted);
+}
+
 .badge-select-label {
   font-size: inherit;
   color: inherit;
@@ -1160,7 +1169,8 @@ button.ghost.ghost-subtle:hover {
   background: var(--theme-surface-card);
 }
 
-.badge-select-group.selected .badge-select-group-label {
+/* 蓝色只用于当前展开的 Provider（active 分组），不再跟随 selected 分组 */
+.badge-select-group.active .badge-select-group-label {
   color: var(--theme-text-accent);
 }
 
@@ -1383,6 +1393,22 @@ button.ghost.ghost-subtle:hover {
   overflow-wrap: break-word;
   padding: 0px 12px;
   font-size: var(--ai-chat-message-font-size);
+}
+
+.ai-chat-message-badge {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 12px 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.ai-chat-message-badge-summary-preserved {
+  color: var(--theme-text-muted);
+  background: color-mix(in srgb, var(--theme-surface-card) 82%, transparent);
+  border: 1px dashed var(--theme-border-subtle);
 }
 
 /* AI Chat 窗口中的 gh-markdown 字体调小一些 */
@@ -1925,6 +1951,30 @@ button.ghost.ghost-subtle:hover {
 .ai-history-message-system {
   background: rgba(30, 64, 175, 0.18);
   border: 1px dashed rgba(148, 163, 184, 0.6);
+}
+
+.ai-history-preserved-user-inputs {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(148, 163, 184, 0.35);
+}
+
+.ai-history-preserved-user-title {
+  font-size: 12px;
+  color: #cbd5e1;
+  margin-bottom: 4px;
+}
+
+.ai-history-preserved-user-list {
+  margin: 0;
+  padding-left: 18px;
+  color: #e5e7eb;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.ai-history-preserved-user-list li + li {
+  margin-top: 2px;
 }
 
 .ai-history-group-divider {

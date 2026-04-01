@@ -1,5 +1,6 @@
 import type { UiProvider } from '../settings'
 import { loadAiSettingsState } from '../settings'
+import { loadAgentSettingsState } from '../config/agentSettingsRepo'
 import type {
   IStreamingChatClient,
   ChatMessage,
@@ -8,6 +9,7 @@ import type {
   AttachmentKind,
   ChatAttachment,
   UploadedFileRef,
+  AgentProvider,
 } from '../domain/types'
 import { createVisionClientFromProvider } from '../vision/visionClientFactory'
 import { buildGlobalMemorySystemPrompt, type RequestContext } from '../globalMemory/context'
@@ -29,10 +31,12 @@ import { createStreamingClientFromSettings } from '../streamingClientFactory'
 import { createAttachmentUploadService } from './attachmentUploadService'
 import { docConversationService } from './docConversationService'
 import { inferAttachmentKind } from './attachmentKind'
+import { resolveDifyConversationId } from './difyConversationResolvers'
 
 export type StartChatOptions = {
   entryMode: ChatEntryMode
   initialContext?: EntryContext
+  selectedAgentId?: string | null
   /**
    * 可选：用于从持久化快照中恢复会话时，直接注入完整的 ConversationState。
    * 若提供，则不会再次根据 entryMode/initialContext 构造初始状态。
@@ -87,12 +91,37 @@ export type LocalAttachment = {
   fileName: string
 }
 
+type StreamRunOptions = {
+  attachments?: ChatAttachment[]
+  clientOverride?: IStreamingChatClient | null
+  messageOverride?: ChatMessage[]
+  persistConversation?: boolean
+  useConversationId?: boolean
+}
+
 function pickDefaultProvider(state: Awaited<ReturnType<typeof loadAiSettingsState>>): UiProvider {
   if (!state.providers.length) {
     throw new Error('AI Chat 未配置：请先在 AI Settings 中设置默认 Provider/Model')
   }
   const byDefaultId = state.providers.find((p) => p.id === state.defaultProviderId)
   return byDefaultId ?? state.providers[0]!
+}
+
+function agentToUiProvider(agent: AgentProvider): UiProvider {
+  if (agent.platform !== 'dify') {
+    throw new Error(`当前暂不支持 ${agent.platform} Agent 接入 AI Chat`)
+  }
+
+  return {
+    id: `agent:${agent.id}`,
+    name: agent.name,
+    baseUrl: agent.baseUrl,
+    apiKey: agent.apiKey,
+    providerType: 'dify',
+    models: [{ id: `agent:${agent.id}:default` }],
+    defaultModelId: `agent:${agent.id}:default`,
+    omitDifyModelInput: true,
+  }
 }
 
 function genId(): string {
@@ -106,11 +135,19 @@ function engineHistoryToChatMessages(history: EngineMessage[]): ChatMessage[] {
 }
 
 export async function createChatSession(options: StartChatOptions): Promise<ChatSession> {
-  const [aiState, systemInfo] = await Promise.all([loadAiSettingsState(), loadSystemPromptInfo()])
+  const [aiState, agentState, systemInfo] = await Promise.all([
+    loadAiSettingsState(),
+    loadAgentSettingsState(),
+    loadSystemPromptInfo(),
+  ])
   const attachmentUploadService = createAttachmentUploadService()
   const docPath = options.docPath
   const entryMode = options.entryMode
-  let provider = pickDefaultProvider(aiState)
+  const selectedAgent = options.selectedAgentId
+    ? agentState.providers.find((item) => item.id === options.selectedAgentId) ?? null
+    : null
+  const shouldPersistDocConversation = !selectedAgent
+  let provider = selectedAgent ? agentToUiProvider(selectedAgent) : pickDefaultProvider(aiState)
 
   let currentModelId = provider.defaultModelId ?? provider.models[0]?.id
   let providerType: ProviderType = provider.providerType ?? 'dify'
@@ -119,8 +156,11 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
 
   let systemPromptInfo: SystemPromptInfo = systemInfo
   const difyProviderConversations: Record<string, string> = options.initialDifyProviderConversations ?? {}
-  // 查找当前 provider 下是否有已存的会话 ID
-  let difyConversationId: string | undefined = difyProviderConversations[provider.id] ?? options.initialDifyConversationId
+  let difyConversationId: string | undefined = resolveDifyConversationId({
+    provider,
+    initialDifyConversationId: options.initialDifyConversationId,
+    difyProviderConversations,
+  })
   let state: ConversationState =
     options.initialState ??
     createInitialConversationState(
@@ -169,14 +209,14 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
     options.onStateChange(state)
   }
 
-  async function runStreamWithCurrentHistory(
+  async function runStream(
     assistantId: string,
-    attachments?: ChatAttachment[],
-    clientOverride?: IStreamingChatClient | null,
+    options: StreamRunOptions = {},
   ): Promise<void> {
-    const usedClient = clientOverride ?? client
+    const usedClient = options.clientOverride ?? client
     if (!usedClient) return
-    const messages = engineHistoryToChatMessages(state.engineHistory)
+    const messages =
+      options.messageOverride ?? engineHistoryToChatMessages(state.engineHistory)
     if (!messages.length) return
 
     currentAbortController = new AbortController()
@@ -188,7 +228,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
           temperature: 0,
           maxTokens: defaultMaxTokens,
           signal: currentAbortController.signal,
-          attachments,
+          attachments: options.attachments,
         },
         {
           onChunk: (chunk) => {
@@ -219,7 +259,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
         return
       }
 
-      if (providerType === 'dify' && result.conversationId) {
+      if ((options.useConversationId ?? true) && providerType === 'dify' && result.conversationId) {
         const prev = difyConversationId
         difyConversationId = result.conversationId
         // 【关键修复】：不仅更新当前变量，还要同步更新映射表，确保切换回来时能找回
@@ -253,7 +293,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
         state = completeAssistantMessage(state, assistantId)
         notifyStateChange()
 
-        if (docPath) {
+        if ((options.persistConversation ?? true) && docPath && shouldPersistDocConversation) {
           console.warn('[ChatSession] Persisting doc conversation', {
             docPath,
             providerType,
@@ -290,7 +330,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
         '当前模型未开启视觉模式，图片内容不会被解析，本次仅按文本问题进行回答。\n\n',
       )
       notifyStateChange()
-      await runStreamWithCurrentHistory(assistantId)
+      await runStream(assistantId)
       return
     }
 
@@ -324,7 +364,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
         state = completeAssistantMessage(state, assistantId)
         notifyStateChange()
 
-        if (docPath) {
+        if (docPath && shouldPersistDocConversation) {
           void docConversationService
             .upsertFromState({
               docPath,
@@ -370,9 +410,12 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       }
       // 重新创建客户端以应用新的 system prompt
       if (provider) {
-        // 【同步刷新】：确保在创建客户端前，使用的是对应当前 Provider 的 ID
         if (providerType === 'dify') {
-          difyConversationId = difyProviderConversations[provider.id]
+          difyConversationId = resolveDifyConversationId({
+            provider,
+            initialDifyConversationId: options.initialDifyConversationId,
+            difyProviderConversations,
+          })
         }
         const initialConversationIdForClient = providerType === 'dify' ? difyConversationId : undefined
         client = createStreamingClientFromSettings(
@@ -401,10 +444,12 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       providerType = provider.providerType ?? 'dify'
       defaultMaxTokens = provider.models.find((m) => m.id === modelId)?.maxTokens ?? 2048
 
-      // 【核心修复】：切换 Provider 时，根据映射表恢复对应的 Dify 会话 ID
-      // 如果映射表中没有（说明该 Provider 是第一次用），则 ID 会置为 undefined，从而在下一次对话时生成新会话
       if (providerType === 'dify') {
-        difyConversationId = difyProviderConversations[provider.id]
+        difyConversationId = resolveDifyConversationId({
+          provider,
+          initialDifyConversationId: options.initialDifyConversationId,
+          difyProviderConversations,
+        })
       } else {
         difyConversationId = undefined
       }
@@ -446,20 +491,35 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
           userInput: content,
           docPath,
         }
-        const systemPromptWithMemory = buildGlobalMemorySystemPrompt(
+        const systemPromptForRequest = buildGlobalMemorySystemPrompt(
           systemPromptInfo.systemPrompt,
           reqContext,
         )
-        const initialConversationIdForClient = providerType === 'dify' ? difyConversationId : undefined
+        const initialConversationIdForClient =
+          providerType === 'dify' ? difyConversationId : undefined
+        console.warn('[ChatSession] sendUserMessage creating client', {
+          providerId: provider.id,
+          providerName: provider.name,
+          providerType,
+          currentModelId,
+          selectedAgentId: selectedAgent?.id ?? '(none)',
+          initialConversationIdForClient: initialConversationIdForClient || '(none)',
+          engineHistoryLength: state.engineHistory.length,
+          omitDifyModelInput: provider.omitDifyModelInput ?? false,
+          baseUrl: provider.baseUrl,
+        })
         clientOverride = createStreamingClientFromSettings(
           provider,
-          systemPromptWithMemory,
+          systemPromptForRequest,
           currentModelId,
           initialConversationIdForClient,
         )
       }
 
-      await runStreamWithCurrentHistory(assistantId, chatAttachments, clientOverride)
+      await runStream(assistantId, {
+        attachments: chatAttachments,
+        clientOverride,
+      })
     },
     async uploadAttachment(file: File, kind?: AttachmentKind): Promise<UploadedFileRef> {
       if (disposed) throw new Error('Session disposed')
@@ -500,20 +560,36 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
           userInput: content,
           docPath,
         }
-        const systemPromptWithMemory = buildGlobalMemorySystemPrompt(
+        const systemPromptForRequest = buildGlobalMemorySystemPrompt(
           systemPromptInfo.systemPrompt,
           reqContext,
         )
-        const initialConversationIdForClient = providerType === 'dify' ? difyConversationId : undefined
+        const initialConversationIdForClient =
+          providerType === 'dify' ? difyConversationId : undefined
+        console.warn('[ChatSession] sendUserMessageWithAttachments creating client', {
+          providerId: provider.id,
+          providerName: provider.name,
+          providerType,
+          currentModelId,
+          selectedAgentId: selectedAgent?.id ?? '(none)',
+          initialConversationIdForClient: initialConversationIdForClient || '(none)',
+          engineHistoryLength: state.engineHistory.length,
+          omitDifyModelInput: provider.omitDifyModelInput ?? false,
+          baseUrl: provider.baseUrl,
+          attachmentCount: chatAttachments.length,
+        })
         clientOverride = createStreamingClientFromSettings(
           provider,
-          systemPromptWithMemory,
+          systemPromptForRequest,
           currentModelId,
           initialConversationIdForClient,
         )
       }
 
-      await runStreamWithCurrentHistory(assistantId, chatAttachments, clientOverride)
+      await runStream(assistantId, {
+        attachments: chatAttachments,
+        clientOverride,
+      })
     },
     async sendVisionTask(task: VisionTask, options?: { hideInView?: boolean; viewContent?: string }): Promise<void> {
       if (disposed) return

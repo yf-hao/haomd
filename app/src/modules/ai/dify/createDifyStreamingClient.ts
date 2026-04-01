@@ -8,6 +8,7 @@ export type DifyChatClientConfig = {
   systemPrompt?: string
   temperature?: number
   maxTokens?: number
+  omitModelInput?: boolean
   /**
    * 可选：用于从持久化记录中恢复 Dify conversationId，
    * 便于在应用重启后续接同一云端会话。
@@ -32,6 +33,7 @@ export function createDifyStreamingClient(config: DifyChatClientConfig): IStream
     systemPrompt: config.systemPrompt,
     temperature: config.temperature,
     maxTokens: config.maxTokens,
+    omitModelInput: config.omitModelInput,
   })
 
   if (config.initialConversationId) {

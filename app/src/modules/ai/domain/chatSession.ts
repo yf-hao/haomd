@@ -16,6 +16,7 @@ export type ChatMessageView = {
   id: string
   role: ChatRole
   content: string
+  source?: 'original' | 'summary-preserved'
   /** 是否仍在流式输出中 */
   streaming?: boolean
   /** 是否在 UI 中隐藏该条消息（仍保留在 engineHistory 中） */

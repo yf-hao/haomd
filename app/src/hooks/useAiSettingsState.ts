@@ -166,6 +166,74 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
     return true
   }, [draft, settings])
 
+  const updateProviderFromDraft = useCallback((providerId: string) => {
+    const models = parseModelsInput(draft.modelsInput)
+    if (!draft.name.trim() || !draft.baseUrl.trim() || !draft.apiKey.trim()) {
+      setError('请填写 Provider Name / Base URL / API Key')
+      return false
+    }
+    if (models.length === 0) {
+      setError('请至少填写一个 ModelID')
+      return false
+    }
+
+    const targetName = normalizeProviderName(draft.name)
+    const targetUrl = normalizeBaseUrl(draft.baseUrl)
+    const duplicated = settings.providers.find(
+      (p) =>
+        p.id !== providerId &&
+        normalizeProviderName(p.name) === targetName &&
+        normalizeBaseUrl(p.baseUrl) === targetUrl,
+    )
+    if (duplicated) {
+      setError('已存在相同 Provider Name 与 Base URL 的配置')
+      return false
+    }
+
+    const currentProvider = settings.providers.find((p) => p.id === providerId)
+    if (!currentProvider) {
+      setError('找不到当前正在编辑的 Provider')
+      return false
+    }
+
+    setSettings((prev) => {
+      const providers = prev.providers.map((p) => {
+        if (p.id !== providerId) return p
+
+        const existingModelsById = new Map(p.models.map((m) => [m.id, m]))
+        const nextModels = models.map((id) => {
+          const existingModel = existingModelsById.get(id)
+          if (existingModel) return existingModel
+          return {
+            id,
+            visionMode: draft.visionMode || 'disabled',
+          }
+        })
+
+        const nextDefaultModelId =
+          p.defaultModelId && nextModels.some((m) => m.id === p.defaultModelId)
+            ? p.defaultModelId
+            : nextModels[0]?.id
+
+        return {
+          ...p,
+          name: draft.name.trim(),
+          baseUrl: draft.baseUrl.trim(),
+          apiKey: draft.apiKey.trim(),
+          description: draft.description.trim() || undefined,
+          providerType: (draft.providerType || 'dify') as ProviderType,
+          visionMode: draft.visionMode || 'disabled',
+          models: nextModels,
+          defaultModelId: nextDefaultModelId,
+        }
+      })
+      return { ...prev, providers }
+    })
+
+    setError(null)
+    return true
+  }, [draft, settings])
+
   const deleteProvider = useCallback((id: string) => {
     setSettings((prev) => {
       const providers = prev.providers.filter((p) => p.id !== id)
@@ -292,6 +360,7 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
     updateDraftField,
     resetDraft,
     addOrMergeProviderFromDraft,
+    updateProviderFromDraft,
     deleteProvider,
     removeModel,
     setDefaultModel,

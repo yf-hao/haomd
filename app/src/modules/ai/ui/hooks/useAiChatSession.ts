@@ -22,10 +22,41 @@ export type UseAiChatSessionOptions = {
   entryMode: ChatEntryMode
   initialContext?: EntryContext
   open: boolean
+  selectedAgentId?: string | null
   /** 当前会话关联的文档路径（目录级 key），用于文档级会话历史持久化与恢复 */
   docPath?: string
   /** 旧版文档级会话使用的原始 docPath（文件路径），用于懒迁移 */
   legacyDocPath?: string
+}
+
+function buildRestoredViewMessages(record: DocConversationRecord): ChatMessageView[] {
+  const viewMessages: ChatMessageView[] = []
+
+  for (const message of record.messages) {
+    if (message.role === 'user' || message.role === 'assistant') {
+      viewMessages.push({
+        id: message.id,
+        role: message.role as ChatRole,
+        content: message.content,
+        source: 'original',
+      })
+      continue
+    }
+
+    const preservedUserInputs = message.meta?.preservedUserInputs ?? []
+    preservedUserInputs.forEach((content, index) => {
+      const trimmed = content.trim()
+      if (!trimmed) return
+      viewMessages.push({
+        id: `${message.id}:preserved-user:${index}`,
+        role: 'user',
+        content: trimmed,
+        source: 'summary-preserved',
+      })
+    })
+  }
+
+  return viewMessages
 }
 
 function buildStateFromDocRecord(record: DocConversationRecord, entryMode: ChatEntryMode): ConversationState {
@@ -34,13 +65,7 @@ function buildStateFromDocRecord(record: DocConversationRecord, entryMode: ChatE
     content: m.content,
   }))
 
-  const viewMessages: ChatMessageView[] = record.messages
-    .filter((m) => m.role === 'user' || m.role === 'assistant')
-    .map((m): ChatMessageView => ({
-      id: m.id,
-      role: m.role as ChatRole,
-      content: m.content,
-    }))
+  const viewMessages = buildRestoredViewMessages(record)
 
   return {
     engineHistory,
@@ -50,7 +75,8 @@ function buildStateFromDocRecord(record: DocConversationRecord, entryMode: ChatE
 }
 
 export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatResult {
-  const { entryMode, initialContext, open, docPath, legacyDocPath } = options
+  const { entryMode, initialContext, open, selectedAgentId, docPath, legacyDocPath } = options
+  const shouldUseDocPersistence = !selectedAgentId
 
   const [session, setSession] = useState<ChatSession | null>(null)
   const [loading, setLoading] = useState(false)
@@ -103,7 +129,7 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
         let initialDifyConversationId: string | undefined
         let initialDifyMapping: Record<string, string> | undefined
 
-        if (docPath) {
+        if (docPath && shouldUseDocPersistence) {
           let saved: DocConversationRecord | null = await docConversationService.getByDocPath(docPath)
 
           // 懒迁移：如果目录级 docPath 下没有记录，且提供了旧版文件级 docPath，则尝试回退加载
@@ -125,8 +151,9 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
         const startOptions: StartChatOptions = {
           entryMode,
           initialContext,
+          selectedAgentId,
           ...(initialState ? { initialState } : {}),
-          ...(docPath ? { docPath } : {}),
+          ...(docPath && shouldUseDocPersistence ? { docPath } : {}),
           ...(initialDifyConversationId ? { initialDifyConversationId } : {}),
           ...(initialDifyMapping ? { initialDifyProviderConversations: initialDifyMapping } : {}),
           onStateChange: (nextState) => {
@@ -167,7 +194,7 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
         return null
       })
     }
-  }, [open, entryMode, initialContext, docPath, legacyDocPath, reloadToken])
+  }, [open, entryMode, initialContext, selectedAgentId, docPath, legacyDocPath, reloadToken, shouldUseDocPersistence])
 
   // Load available models
   useEffect(() => {

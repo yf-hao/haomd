@@ -54,7 +54,8 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   const paneRootRef = useRef<HTMLElement>(null)
   const isComposingRef = useRef(false)
   const lockEnterRef = useRef(false)
-  const [historyCursor, setHistoryCursor] = useState<number | null>(null)
+  const historyCursorRef = useRef<number | null>(null)
+  const [, setHistoryCursor] = useState<number | null>(null)
 
   const autoResizeInput = () => {
     const el = inputRef.current
@@ -63,6 +64,11 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
     const maxHeight = 120
     const next = Math.min(maxHeight, el.scrollHeight)
     el.style.height = `${next}px`
+  }
+
+  const clearHistoryBrowse = () => {
+    historyCursorRef.current = null
+    setHistoryCursor(null)
   }
 
   const dirKey = currentFilePath ? getDirKeyFromDocPath(currentFilePath) : undefined
@@ -91,6 +97,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
     entryMode,
     initialContext,
     open: true,
+    selectedAgentId: activeAgentId,
     docPath: dirKey,
     legacyDocPath: currentFilePath ?? undefined,
   })
@@ -191,7 +198,11 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   }, [])
 
   useEffect(() => {
-    if (!activeAgentId || typeof localStorage === 'undefined') return
+    if (typeof localStorage === 'undefined') return
+    if (!activeAgentId) {
+      localStorage.removeItem(AI_CHAT_AGENT_STORAGE_KEY)
+      return
+    }
     localStorage.setItem(AI_CHAT_AGENT_STORAGE_KEY, activeAgentId)
   }, [activeAgentId])
 
@@ -210,6 +221,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
       const next = value.slice(0, start) + text + value.slice(end)
       el.value = next
       setInput(next)
+      clearHistoryBrowse()
       const pos = start + text.length
       el.setSelectionRange(pos, pos)
     })
@@ -281,6 +293,8 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
       const entry = resolveHistoryEntryByOrdinal(directoryKey, ordinal)
       if (entry && entry.text.trim()) {
         const nextText = entry.text
+        historyCursorRef.current = null
+        setHistoryCursor(null)
         setInput(nextText)
         requestAnimationFrame(() => {
           const el = inputRef.current
@@ -293,12 +307,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
       return
     }
 
-    // 记录本次输入到当前目录的输入历史（包含普通提问和 /history /list 等指令）
-    if (contentToSend.trim()) {
-      appendAiInputHistory(directoryKey, contentToSend)
-    }
-
-    // 非本地历史命令：正常进入 slash 命令和模型发送流程
+    clearHistoryBrowse()
     setInput('')
 
     const handled = await tryHandleSlashCommand(contentToSend, {
@@ -315,6 +324,9 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
       },
     })
     if (handled === 'handled') {
+      if (contentToSend.trim()) {
+        appendAiInputHistory(directoryKey, contentToSend)
+      }
       return
     }
 
@@ -341,7 +353,8 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   const handleInputKeyDown = async (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (isComposingRef.current) return
 
-    const isHistoryMode = historyCursor != null
+    const currentHistoryCursor = historyCursorRef.current
+    const isHistoryMode = currentHistoryCursor != null
 
     // 当输入框为空或已处于历史模式时，使用 ArrowUp / ArrowDown 在当前目录的输入历史中导航
     if (
@@ -358,7 +371,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
         const historyList = getAiInputHistory(directoryKey)
         if (historyList.length > 0) {
           const direction = e.key === 'ArrowUp' ? 'up' as const : 'down' as const
-          let nextCursor = historyCursor
+          let nextCursor = currentHistoryCursor
 
           if (direction === 'up') {
             if (nextCursor == null) {
@@ -384,6 +397,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
             const el = inputRef.current
             if (el) {
               e.preventDefault()
+              historyCursorRef.current = nextCursor
               setHistoryCursor(nextCursor)
               setInput(entry.text)
               requestAnimationFrame(() => {
@@ -756,6 +770,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
             setInput(value)
             autoResizeInput()
           }}
+          onManualInputChange={clearHistoryBrowse}
           onSubmit={handleSubmit}
           onInputKeyDown={handleInputKeyDown}
           onCompositionStart={handleCompositionStart}

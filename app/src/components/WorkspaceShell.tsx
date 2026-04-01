@@ -706,6 +706,29 @@ export function WorkspaceShell({
       }
     }
 
+    const scrollEditorToSelection = () => {
+      const view = editorViewRef.current
+      if (!view) return
+      const scroller = view.scrollDOM
+      const pos = view.state.selection.main.head
+      window.requestAnimationFrame(() => {
+        const coords = view.coordsAtPos(pos)
+        if (!coords) return
+        const scrollerRect = scroller.getBoundingClientRect()
+        const topGap = coords.top - scrollerRect.top
+        const bottomGap = coords.bottom - scrollerRect.bottom
+
+        if (topGap < 0) {
+          scroller.scrollTop += topGap - 16
+          return
+        }
+
+        if (bottomGap > 0) {
+          scroller.scrollTop += bottomGap + 16
+        }
+      })
+    }
+
     const runInsertBelow = (text: string) => {
       const view = editorViewRef.current
       if (!view || !text) return
@@ -716,8 +739,8 @@ export function WorkspaceShell({
       view.dispatch(state.update({
         changes: { from: line.to, to: line.to, insert: insertText },
         selection: { anchor: line.to + insertText.length },
-        scrollIntoView: true,
       }))
+      scrollEditorToSelection()
     }
 
     const runReplaceSelection = (text: string) => {
@@ -728,8 +751,8 @@ export function WorkspaceShell({
       view.dispatch(state.update({
         changes: { from, to, insert: text },
         selection: { anchor: from + text.length },
-        scrollIntoView: true,
       }))
+      scrollEditorToSelection()
     }
 
     registerEditorInsertBelow(async ({ text, sourceTabId }) => {

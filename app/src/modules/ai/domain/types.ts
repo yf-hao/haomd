@@ -29,6 +29,8 @@ export type UiProvider = {
   providerType?: ProviderType
   /** Vision 能力模式；缺省或 'auto' 表示自动检测 */
   visionMode?: VisionMode
+  /** 运行时标记：Dify 请求体中是否省略 model 输入。 */
+  omitDifyModelInput?: boolean
 }
 
 export type AiSettingsState = {

@@ -30,6 +30,7 @@ export interface AiChatBodyProps {
   error: { message: string } | null
   input: string
   onInputChange: (value: string) => void
+  onManualInputChange?: () => void
   onSubmit: (e: FormEvent<HTMLFormElement>) => void
   onInputKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => void
   onCompositionStart?: () => void
@@ -77,6 +78,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
   error,
   input,
   onInputChange,
+  onManualInputChange,
   onSubmit,
   onInputKeyDown,
   onCompositionStart,
@@ -162,6 +164,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
     }
     return Array.from(grouped.values())
   }, [models])
+  const modelSelectDisabled = !!activeAgentId
 
   // 默认视觉提示词（用于图片-only场景）
   const DEFAULT_VISION_PROMPT = '解析图片并根据上下文回复图片中内容的含义'
@@ -348,6 +351,11 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
 
               return (
                 <div key={msg.id} className={`ai-chat-message ai-chat-message-${msg.role}`}>
+                  {msg.source === 'summary-preserved' && (
+                    <div className="ai-chat-message-badge ai-chat-message-badge-summary-preserved">
+                      {t('ai.summaryPreservedUserInput')}
+                    </div>
+                  )}
                   {msg.role === 'assistant' ? (
                     showStreamingIndicator ? (
                       <div className="ai-chat-loading-indicator ai-chat-loading-indicator-inline" aria-label={t('ai.stopGenerating')}>
@@ -496,6 +504,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
             value={input}
             onChange={(e) => {
               updateCursorIndex(e.target)
+              onManualInputChange?.()
               onInputChange(e.target.value)
             }}
             onClick={(e) => {
@@ -534,6 +543,8 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
                 }))}
                 groups={modelGroups}
                 value={activeModelId ?? ''}
+                disabled={modelSelectDisabled}
+                title={modelSelectDisabled ? '已选择 Agent，当前请求不使用模型多轮链路' : undefined}
                 onChange={(v) => onChangeModel?.(v)}
               />
               <BadgeSelect
