@@ -1,7 +1,10 @@
 .tab-bar {
   display: flex;
   align-items: center;
+  height: var(--theme-component-tabbar-height);
   min-height: var(--theme-component-tabbar-height);
+  max-height: var(--theme-component-tabbar-height);
+  flex: 0 0 var(--theme-component-tabbar-height);
   gap: 4px;
   padding-left: 10px;
   padding-right: 10px;

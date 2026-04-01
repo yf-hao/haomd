@@ -163,6 +163,11 @@
   color: var(--theme-text-muted);
 }
 
+.settings-inline-help {
+  font-size: calc(var(--ui-font-settings) - 1px);
+  color: var(--theme-text-subtle);
+}
+
 .settings-number-input::-webkit-outer-spin-button,
 .settings-number-input::-webkit-inner-spin-button {
   -webkit-appearance: none;

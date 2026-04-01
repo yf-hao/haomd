@@ -38,7 +38,14 @@ export type SettingsDialogProps = {
 
 type SettingsSectionId = 'theme' | 'typography' | 'word-export'
 type ThemePanelTabId = 'theme-preset' | 'backgrounds'
-type WordExportTabId = 'document' | 'layout' | 'diagrams'
+type WordExportTabId = 'document' | 'layout' | 'diagrams' | 'templates'
+type WordTemplateOption = {
+  id: string
+  name: string
+  dir: string
+  docxPath: string
+  jsonPath: string
+}
 type BackgroundTarget =
   | 'workspaceBackground'
   | 'editorBackground'
@@ -69,6 +76,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('theme')
   const [activeThemeTab, setActiveThemeTab] = useState<ThemePanelTabId>('theme-preset')
   const [activeWordExportTab, setActiveWordExportTab] = useState<WordExportTabId>('document')
+  const [wordTemplates, setWordTemplates] = useState<WordTemplateOption[]>([])
   const [currentBackgroundTarget, setCurrentBackgroundTarget] = useState<BackgroundTarget>('workspaceBackground')
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -170,6 +178,25 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     return () => {
       cancelled = true
       themePreviewReadyRef.current = false
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const items = await invoke<WordTemplateOption[]>('list_word_templates')
+        if (cancelled) return
+        setWordTemplates(items)
+      } catch (err) {
+        if (cancelled) return
+        console.warn('[SettingsDialog] list_word_templates failed', err)
+        setWordTemplates([])
+      }
+    })()
+    return () => {
+      cancelled = true
     }
   }, [open])
 
@@ -514,6 +541,17 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
       onUiTypographyChange?.(originalTypographyRef.current)
     }
     onClose()
+  }
+
+  const handleOpenWordTemplatesDir = async () => {
+    try {
+      setError(null)
+      await invoke('open_word_templates_dir')
+      const items = await invoke<WordTemplateOption[]>('list_word_templates')
+      setWordTemplates(items)
+    } catch (err) {
+      setError((err as Error).message || 'Failed to open word_templates directory')
+    }
   }
 
   const currentBackground = getBackgroundSettings(currentBackgroundTarget)
@@ -1180,6 +1218,15 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                         >
                           {t('wordExport.tabs.diagrams')}
                         </button>
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={activeWordExportTab === 'templates'}
+                          className={`settings-panel-tab ${activeWordExportTab === 'templates' ? 'active' : ''}`}
+                          onClick={() => setActiveWordExportTab('templates')}
+                        >
+                          {t('wordExport.tabs.templates')}
+                        </button>
                       </div>
                     </div>
                     <div className="settings-panel-description">
@@ -1187,7 +1234,9 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                         ? t('wordExport.documentDescription')
                         : activeWordExportTab === 'layout'
                           ? t('wordExport.layoutDescription')
-                          : t('wordExport.diagramsDescription')}
+                          : activeWordExportTab === 'diagrams'
+                            ? t('wordExport.diagramsDescription')
+                            : t('wordExport.templatesDescription')}
                     </div>
                   </div>
 
@@ -1243,7 +1292,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                         </div>
                       </div>
                     </div>
-                  ) : (
+                  ) : activeWordExportTab === 'diagrams' ? (
                     <div className="settings-subgroup">
                       <div className="settings-subgroup-title">{t('wordExport.groups.diagrams')}</div>
                       <div style={{ display: 'grid', gap: 14 }}>
@@ -1296,6 +1345,53 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                             <option value="cancel">{t('wordExport.fallbackModes.cancel')}</option>
                           </select>
                         </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="settings-subgroup">
+                      <div className="settings-subgroup-title">{t('wordExport.groups.templates')}</div>
+                      <div style={{ display: 'grid', gap: 14 }}>
+                        <div style={fieldGridStyle}>
+                          <div className="settings-field-label">{t('wordExport.selectedTemplate')}</div>
+                          <select
+                            className="field-select"
+                            value={wordExport.selectedWordTemplateId ?? ''}
+                            onChange={(event) =>
+                              setWordExport((prev) => ({
+                                ...prev,
+                                selectedWordTemplateId: event.target.value || null,
+                              }))}
+                          >
+                            <option value="">{t('wordExport.noTemplateSelected')}</option>
+                            {wordTemplates.map((template) => (
+                              <option key={template.id} value={template.id}>
+                                {template.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div style={fieldGridStyle}>
+                          <div className="settings-field-label">{t('wordExport.wordTemplatesFolder')}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                            <Button variant="tertiary" type="button" onClick={handleOpenWordTemplatesDir}>
+                              {t('wordExport.openWordTemplatesFolder')}
+                            </Button>
+                            <span className="settings-inline-help">{t('wordExport.wordTemplatesFolderHint')}</span>
+                          </div>
+                        </div>
+                        {wordTemplates.length > 0 ? (
+                          <div style={fieldGridStyle}>
+                            <div className="settings-field-label">{t('wordExport.availableTemplates')}</div>
+                            <div className="settings-inline-help">
+                              {wordTemplates.map((template) => template.name).join(' / ')}
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={fieldGridStyle}>
+                            <div className="settings-field-label">{t('wordExport.availableTemplates')}</div>
+                            <div className="settings-inline-help">{t('wordExport.noTemplatesFound')}</div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}

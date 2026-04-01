@@ -4,6 +4,8 @@ import { collectWordAssets } from './collectAssets'
 import { markdownToWordModel, plainTextToWordModel } from './markdownToWordModel'
 import { renderWordDiagramAssets } from './renderDiagramAssets'
 import { getWordExportStyleSettings } from '../../settings/editorSettings'
+import { parseMarkdownToTemplateModel, resolveWordTemplateId } from './template/parseMarkdownToTemplateModel'
+import type { WordTemplateConfig } from './template/types'
 
 export async function exportToWord(ctx: {
   setStatusMessage: (msg: string) => void
@@ -27,6 +29,7 @@ export async function exportToWord(ctx: {
     const markdown = ctx.getCurrentMarkdown()
     const isPlainText = /\.txt$/i.test(rawTitle) || /\.txt$/i.test(filePath || '')
     const styleSettings = await getWordExportStyleSettings()
+    const selectedTemplateId = resolveWordTemplateId(markdown, styleSettings.selectedWordTemplateId)
     let preferInkscapeForMermaid = false
     let mermaidExportFormat = styleSettings.mermaidExportFormat
     const inkscapeFallback = mermaidExportFormat === 'png' ? 'png' : 'ask'
@@ -69,6 +72,23 @@ export async function exportToWord(ctx: {
       filters: [{ name: 'Word 文件', extensions: ['docx'] }],
     })
     if (!outputPath) return false
+
+    if (selectedTemplateId && !isPlainText) {
+      ctx.setStatusMessage(tr('export.wordParsing', '正在解析 Markdown 结构...'))
+      const templateConfig = await loadWordTemplateConfig(selectedTemplateId)
+      const parsed = parseMarkdownToTemplateModel(markdown, templateConfig)
+
+      ctx.setStatusMessage(tr('export.wordGenerating', '正在生成 Word 文档...'))
+      await invoke('fill_docx_template', {
+        templateId: selectedTemplateId,
+        modelJson: JSON.stringify(parsed.model),
+        richBlocksJson: JSON.stringify(parsed.richBlocksByField),
+        outputPath,
+      })
+
+      ctx.setStatusMessage(tr('export.wordSuccess', `Word 导出成功: ${outputPath}`, { path: outputPath }))
+      return true
+    }
 
     ctx.setStatusMessage(tr('export.wordParsing', '正在解析 Markdown 结构...'))
     let payload = isPlainText
@@ -117,4 +137,9 @@ async function checkInkscapeAvailability(): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+async function loadWordTemplateConfig(templateId: string): Promise<WordTemplateConfig> {
+  const configJson = await invoke<string>('get_word_template_config', { templateId })
+  return JSON.parse(configJson) as WordTemplateConfig
 }

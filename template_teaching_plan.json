@@ -1,0 +1,145 @@
+{
+  "templateId": "teaching_plan",
+  "name": "教学教案模板",
+  "bindings": [
+    {
+      "field": "meta.week_range",
+      "placeholder": "${week_range}",
+      "type": "text",
+      "source": { "kind": "frontMatter", "key": "week_range" }
+    },
+    {
+      "field": "meta.date_range",
+      "placeholder": "${date_range}",
+      "type": "text",
+      "source": { "kind": "frontMatter", "key": "date_range" }
+    },
+    {
+      "field": "meta.chapter_title",
+      "placeholder": "${chapter_title}",
+      "type": "text",
+      "source": { "kind": "frontMatter", "key": "chapter_title" }
+    },
+    {
+      "field": "meta.teaching_type",
+      "placeholder": "${teaching_type}",
+      "type": "text",
+      "source": { "kind": "frontMatter", "key": "teaching_type" }
+    },
+    {
+      "field": "meta.teaching_hours",
+      "placeholder": "${teaching_hours}",
+      "type": "text",
+      "source": { "kind": "frontMatter", "key": "teaching_hours" }
+    },
+    {
+      "field": "sections.teaching_objectives",
+      "placeholder": "${teaching_objectives}",
+      "type": "richText",
+      "source": {
+        "kind": "heading",
+        "matchAny": ["教学目的", "教学目标"],
+        "includeHeading": true,
+        "headingBold": true,
+        "headingFontSizePt": 18
+      }
+    },
+    {
+      "field": "sections.teaching_requirements",
+      "placeholder": "${teaching_requirements}",
+      "type": "richText",
+      "source": {
+        "kind": "heading",
+        "matchAny": ["教学要求", "课程要求"],
+        "includeHeading": true,
+        "headingBold": true,
+        "headingFontSizePt": 18
+      }
+    },
+    {
+      "field": "sections.teaching_focus",
+      "placeholder": "${teaching_focus}",
+      "type": "richText",
+      "source": {
+        "kind": "heading",
+        "matchAny": ["教学重点"],
+        "includeHeading": true,
+        "headingBold": true,
+        "headingFontSizePt": 18
+      }
+    },
+    {
+      "field": "sections.teaching_difficulties",
+      "placeholder": "${teaching_difficulties}",
+      "type": "richText",
+      "source": {
+        "kind": "heading",
+        "matchAny": ["教学难点"],
+        "includeHeading": true,
+        "headingBold": true,
+        "headingFontSizePt": 18
+      }
+    },
+    {
+      "field": "sections.student_notes",
+      "placeholder": "${student_notes}",
+      "type": "richText",
+      "source": {
+        "kind": "heading",
+        "matchAny": ["学生应注意的问题"],
+        "includeHeading": true,
+        "headingBold": true,
+        "headingFontSizePt": 18
+      }
+    },
+    {
+      "field": "sections.teaching_methods",
+      "placeholder": "${teaching_methods}",
+      "type": "richText",
+      "source": {
+        "kind": "heading",
+        "matchAny": ["教学方法"],
+        "includeHeading": true,
+        "headingBold": true,
+        "headingFontSizePt": 18
+      }
+    },
+    {
+      "field": "sections.discussion_exercises_homework",
+      "placeholder": "${discussion_exercises_homework}",
+      "type": "richText",
+      "source": {
+        "kind": "heading",
+        "matchAny": ["讨论练习作业", "讨论与作业"],
+        "includeHeading": true,
+        "headingBold": true,
+        "headingFontSizePt": 18
+      }
+    },
+    {
+      "field": "sections.content_outline",
+      "placeholder": "${content_outline}",
+      "type": "richText",
+      "source": {
+        "kind": "heading",
+        "matchAny": ["教学内容要点", "教学内容"],
+        "includeHeading": true,
+        "headingBold": true,
+        "headingFontSizePt": 18,
+        "childHeadingBold": true
+      }
+    },
+    {
+      "field": "sections.teaching_postscript",
+      "placeholder": "${teaching_postscript}",
+      "type": "richText",
+      "source": {
+        "kind": "heading",
+        "matchAny": ["教学后记", "课后总结"],
+        "includeHeading": true,
+        "headingBold": true,
+        "headingFontSizePt": 18
+      }
+    }
+  ]
+}

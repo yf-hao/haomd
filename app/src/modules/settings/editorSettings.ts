@@ -77,6 +77,7 @@ export type WordExportStyleSettings = {
   enableInkscapeForWordExport: boolean
   mermaidExportFormat: 'png' | 'svg' | 'emf'
   inkscapeFallback: 'ask' | 'png' | 'cancel'
+  selectedWordTemplateId: string | null
 }
 
 export type EditorSettings = {
@@ -198,6 +199,7 @@ const defaultWordExport: WordExportStyleSettings = {
   enableInkscapeForWordExport: false,
   mermaidExportFormat: 'png',
   inkscapeFallback: 'png',
+  selectedWordTemplateId: null,
 }
 
 let cachedSettings: EditorSettings | null = null
@@ -363,6 +365,7 @@ export async function getWordExportStyleSettings(): Promise<WordExportStyleSetti
       cfg.enableInkscapeForWordExport ?? defaultWordExport.enableInkscapeForWordExport,
     mermaidExportFormat,
     inkscapeFallback: mermaidExportFormat === 'png' ? 'png' : 'ask',
+    selectedWordTemplateId: cfg.selectedWordTemplateId ?? defaultWordExport.selectedWordTemplateId,
   }
 }
 
