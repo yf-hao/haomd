@@ -5503,6 +5503,14 @@ struct MenuTexts {
     strikethrough: &'static str,
     table: &'static str,
     code_block: &'static str,
+    math_symbols: &'static str,
+    math_greek: &'static str,
+    math_discrete: &'static str,
+    math_calculus: &'static str,
+    math_linear_algebra: &'static str,
+    math_relations: &'static str,
+    math_arrows: &'static str,
+    math_structures: &'static str,
     layout: &'static str,
     preview_left: &'static str,
     preview_right: &'static str,
@@ -5585,6 +5593,14 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             strikethrough: "删除线",
             table: "表格",
             code_block: "代码块",
+            math_symbols: "数学符号",
+            math_greek: "希腊字母",
+            math_discrete: "离散数学",
+            math_calculus: "高等数学",
+            math_linear_algebra: "线性代数",
+            math_relations: "关系运算",
+            math_arrows: "箭头",
+            math_structures: "常用结构",
             layout: "布局",
             preview_left: "预览在左",
             preview_right: "预览在右",
@@ -5664,6 +5680,14 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             strikethrough: "Strikethrough",
             table: "Table",
             code_block: "Code Block",
+            math_symbols: "Math Symbols",
+            math_greek: "Greek Letters",
+            math_discrete: "Discrete Math",
+            math_calculus: "Calculus",
+            math_linear_algebra: "Linear Algebra",
+            math_relations: "Relations",
+            math_arrows: "Arrows",
+            math_structures: "Structures",
             layout: "Layout",
             preview_left: "Preview Left",
             preview_right: "Preview Right",
@@ -6007,6 +6031,45 @@ pub(crate) async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri:
         )
         .build()?;
 
+    // Math Symbols 子菜单（各分类点击后在前端弹出符号选择对话框）
+    let math_symbols_menu = SubmenuBuilder::new(app, texts.math_symbols)
+        .item(
+            &MenuItemBuilder::new(texts.math_greek)
+                .id("format_math_cat_greek")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.math_discrete)
+                .id("format_math_cat_discrete")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.math_calculus)
+                .id("format_math_cat_calculus")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.math_linear_algebra)
+                .id("format_math_cat_linear_algebra")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.math_relations)
+                .id("format_math_cat_relations")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.math_arrows)
+                .id("format_math_cat_arrows")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.math_structures)
+                .id("format_math_cat_structures")
+                .build(app)?,
+        )
+        .build()?;
+
     // Format 菜单
     let format_menu = SubmenuBuilder::new(app, texts.format)
         .item(&heading_menu)
@@ -6033,6 +6096,8 @@ pub(crate) async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri:
                 .accelerator("CmdOrCtrl+Alt+C")
                 .build(app)?,
         )
+        .separator()
+        .item(&math_symbols_menu)
         .build()?;
 
     let layout_menu = SubmenuBuilder::new(app, texts.layout)

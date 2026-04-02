@@ -7,6 +7,7 @@ import { ConflictModal } from './ConflictModal'
 import { ConfirmDialog } from './ConfirmDialog'
 import PreviewErrorBoundary from './PreviewErrorBoundary'
 import { InsertTableDialog } from './InsertTableDialog'
+import { MathSymbolDialog } from './MathSymbolDialog'
 import { AboutDialog } from './AboutDialog'
 import { TabBar } from './TabBar'
 import { FileContextMenu } from './FileContextMenu'
@@ -45,6 +46,7 @@ import {
   registerEmphasizeSelection,
   registerToggleStrikethrough,
   registerInsertCodeBlock,
+  registerInsertMathSymbol,
 } from '../modules/editor/formatService'
 import { useI18n } from '../modules/i18n/I18nContext'
 import { useThemeContext } from '../modules/theme/ThemeContext'
@@ -430,6 +432,7 @@ export function WorkspaceShell({
   const [searchPrefillVersion, setSearchPrefillVersion] = useState(0)
   const [quitConfirmDialog, setQuitConfirmDialog] = useState<any>(null)
   const [isInsertTableDialogOpen, setIsInsertTableDialogOpen] = useState(false)
+  const [mathSymbolDialog, setMathSymbolDialog] = useState<{ open: boolean; categoryKey: string }>({ open: false, categoryKey: 'greek' })
   const [recentDialogOpen, setRecentDialogOpen] = useState(false)
 
   const workspaceBackground = themeSettings.workspaceBackground
@@ -977,6 +980,22 @@ export function WorkspaceShell({
       view.dispatch(state.update({
         changes: { from, to, insert: struck },
         selection: { anchor: from + struck.length },
+        scrollIntoView: true,
+      }))
+
+      syncEditorToReactState()
+    })
+
+    registerInsertMathSymbol(async (latex: string) => {
+      const view = editorViewRef.current
+      if (!view) return
+
+      const { state } = view
+      const { from, to } = state.selection.main
+
+      view.dispatch(state.update({
+        changes: { from, to, insert: latex },
+        selection: { anchor: from + latex.length },
         scrollIntoView: true,
       }))
 
@@ -1869,6 +1888,10 @@ export function WorkspaceShell({
     setIsInsertTableDialogOpen(true)
   }, [isPdfActive, setStatusMessage, t])
 
+  const openMathSymbolDialog = useCallback((categoryKey: string) => {
+    setMathSymbolDialog({ open: true, categoryKey })
+  }, [])
+
   const generateMarkdownTable = useCallback((rows: number, cols: number): string => {
     const safeRows = Math.max(1, rows)
     const safeCols = Math.max(1, cols)
@@ -1915,6 +1938,7 @@ export function WorkspaceShell({
     createTab, updateActiveMeta, openFolderInSidebar, closeCurrentTab,
     openSearch: openSearchWithSelection,
     openInsertTableDialog,
+    openMathSymbolDialog,
     openAiChatDialog: (options: any) => openAiChatDialog(options as any),
     closeAiChatDialog,
     openGlobalMemoryDialog,
@@ -2678,6 +2702,12 @@ export function WorkspaceShell({
           open={isInsertTableDialogOpen}
           onConfirm={handleInsertTableConfirm}
           onCancel={() => setIsInsertTableDialogOpen(false)}
+        />
+
+        <MathSymbolDialog
+          open={mathSymbolDialog.open}
+          categoryKey={mathSymbolDialog.categoryKey}
+          onClose={() => setMathSymbolDialog({ open: false, categoryKey: mathSymbolDialog.categoryKey })}
         />
 
         {aiChatMode === 'floating' && aiChatOpen && aiChatState?.open && (

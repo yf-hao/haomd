@@ -6,10 +6,12 @@ import {
   toggleStrikethrough,
   insertCodeBlock,
 } from '../editor/formatService'
+import { MATH_CAT_PREFIX, MATH_CATEGORIES } from '../editor/mathSymbols'
 
 export type FormatCommandContext = {
   setStatusMessage: (msg: string) => void
   openInsertTableDialog?: () => void
+  openMathSymbolDialog?: (categoryKey: string) => void
   t?: (key: string, params?: Record<string, string | number>) => string
 }
 
@@ -67,7 +69,17 @@ export function createFormatCommands(ctx: FormatCommandContext): CommandRegistry
     },
     format_insert_code_block: async () => {
       await insertCodeBlock()
-      // ctx.setStatusMessage('已插入 Code Block')
     },
+    // Math symbol category commands — open dialog with the selected category
+    ...Object.fromEntries(
+      MATH_CATEGORIES.map((cat) => [
+        `${MATH_CAT_PREFIX}${cat.key}`,
+        () => {
+          if (ctx.openMathSymbolDialog) {
+            ctx.openMathSymbolDialog(cat.key)
+          }
+        },
+      ]),
+    ),
   }
 }

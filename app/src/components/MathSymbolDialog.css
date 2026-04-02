@@ -1,0 +1,114 @@
+.modal.modal-math-symbols {
+  min-width: 520px;
+  max-width: 680px;
+  width: calc(100vw - 120px);
+  max-height: calc(100vh - 96px);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Header */
+.math-symbol-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--theme-border-default);
+  flex-shrink: 0;
+}
+
+.math-symbol-dialog-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+
+.math-symbol-dialog-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: var(--theme-text-secondary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.math-symbol-dialog-close:hover {
+  background: var(--theme-surface-hover);
+  color: var(--theme-text-primary);
+}
+
+/* Symbol card grid */
+.math-symbol-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 8px;
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Individual card */
+.math-symbol-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 6px 10px;
+  border: 1px solid var(--theme-border-default);
+  border-radius: 8px;
+  background: var(--theme-surface-primary);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  min-height: 72px;
+}
+
+.math-symbol-card:hover {
+  border-color: var(--theme-accent-text, #3b82f6);
+  background: var(--theme-surface-hover);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.math-symbol-card:active {
+  transform: scale(0.96);
+}
+
+/* Preview — the rendered Unicode character */
+.math-symbol-preview {
+  font-size: 22px;
+  line-height: 1.2;
+  color: var(--theme-text-primary);
+  font-family: 'KaTeX_Main', 'Times New Roman', 'Latin Modern Math', serif;
+  user-select: none;
+}
+
+/* LaTeX code below */
+.math-symbol-code {
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--theme-text-tertiary, var(--theme-text-secondary));
+  font-family: var(--theme-font-mono, 'SF Mono', 'Fira Code', 'Consolas', monospace);
+  word-break: break-all;
+  text-align: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 600px) {
+  .modal.modal-math-symbols {
+    min-width: unset;
+    width: calc(100vw - 32px);
+  }
+
+  .math-symbol-grid {
+    grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+    gap: 6px;
+    padding: 12px;
+  }
+}

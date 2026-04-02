@@ -15,11 +15,14 @@ type ToggleStrikethroughImpl = (() => void | Promise<void>) | null
 
 type InsertCodeBlockImpl = (() => void | Promise<void>) | null
 
+type InsertMathSymbolImpl = ((latex: string) => void | Promise<void>) | null
+
 let applyHeadingImpl: ApplyHeadingImpl = null
 let resetHeadingImpl: ResetHeadingImpl = null
 let emphasizeSelectionImpl: EmphasizeSelectionImpl = null
 let toggleStrikethroughImpl: ToggleStrikethroughImpl = null
 let insertCodeBlockImpl: InsertCodeBlockImpl = null
+let insertMathSymbolImpl: InsertMathSymbolImpl = null
 
 export function registerApplyHeadingLevel(fn: (level: HeadingLevel) => void | Promise<void>): void {
   applyHeadingImpl = fn
@@ -88,4 +91,18 @@ export async function insertCodeBlock(): Promise<void> {
     return
   }
   await Promise.resolve(insertCodeBlockImpl())
+}
+
+// ===== 数学符号插入 =====
+
+export function registerInsertMathSymbol(fn: (latex: string) => void | Promise<void>): void {
+  insertMathSymbolImpl = fn
+}
+
+export async function insertMathSymbol(latex: string): Promise<void> {
+  if (!insertMathSymbolImpl) {
+    console.warn('[formatService] insertMathSymbol called but no implementation registered')
+    return
+  }
+  await Promise.resolve(insertMathSymbolImpl(latex))
 }

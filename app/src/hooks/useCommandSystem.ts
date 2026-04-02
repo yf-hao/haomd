@@ -27,6 +27,10 @@ export type CommandSystemParams = CommandContext & {
    */
   openInsertTableDialog?: () => void
   /**
+   * 打开"数学符号"对话框的 UI 回调，由 WorkspaceShell 提供。
+   */
+  openMathSymbolDialog?: (categoryKey: string) => void
+  /**
    * 打开最近文件模态窗的 UI 回调，由 WorkspaceShell 提供。
    */
   openRecentDialog?: () => void
@@ -87,6 +91,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     openSearch,
     closeAiChatDialog,
     openInsertTableDialog,
+    openMathSymbolDialog,
     openRecentDialog,
     t,
   } = params
@@ -168,6 +173,7 @@ export function useCommandSystem(params: CommandSystemParams) {
         exportWord,
         openSearch,
         openInsertTableDialog,
+        openMathSymbolDialog,
         closeAiChatDialog,
         openRecentDialog,
         t,
@@ -219,6 +225,7 @@ export function useCommandSystem(params: CommandSystemParams) {
       exportWord,
       openSearch,
       openInsertTableDialog,
+      openMathSymbolDialog,
       closeAiChatDialog,
       t,
     ],

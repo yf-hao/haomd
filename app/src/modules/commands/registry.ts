@@ -128,6 +128,8 @@ export type AiCommandContext = StatusContext & {
 export type FormatUiCommandContext = StatusContext & {
   /** 打开“插入表格”对话框的 UI 回调，由 WorkspaceShell 提供 */
   openInsertTableDialog?: () => void
+  /** 打开"数学符号"对话框的 UI 回调，由 WorkspaceShell 提供 */
+  openMathSymbolDialog?: (categoryKey: string) => void
 }
 
 /**
