@@ -6801,39 +6801,77 @@ fn replace_placeholder_paragraph(
     placeholder: &str,
     replacement_xml: &str,
 ) -> String {
-    let Some(placeholder_index) = document_xml.find(placeholder) else {
-        return document_xml.to_string();
-    };
-    let Some(paragraph_start) = find_paragraph_start_before(document_xml, placeholder_index) else {
-        return document_xml.replace(placeholder, replacement_xml);
-    };
-    let Some(paragraph_end_rel) = document_xml[placeholder_index..].find("</w:p>") else {
-        return document_xml.replace(placeholder, replacement_xml);
-    };
-    let paragraph_end = placeholder_index + paragraph_end_rel + "</w:p>".len();
+    let mut xml = document_xml.to_string();
+    while let Some(placeholder_index) = xml.find(placeholder) {
+        let Some((paragraph_start, paragraph_end)) =
+            find_enclosing_paragraph_range(&xml, placeholder_index)
+        else {
+            xml = xml.replacen(placeholder, replacement_xml, 1);
+            continue;
+        };
 
-    let mut out = String::with_capacity(
-        document_xml
-            .len()
-            .saturating_sub(paragraph_end - paragraph_start)
-            + replacement_xml.len(),
-    );
-    out.push_str(&document_xml[..paragraph_start]);
-    out.push_str(replacement_xml);
-    out.push_str(&document_xml[paragraph_end..]);
-    out
+        let mut out = String::with_capacity(
+            xml.len().saturating_sub(paragraph_end - paragraph_start) + replacement_xml.len(),
+        );
+        out.push_str(&xml[..paragraph_start]);
+        out.push_str(replacement_xml);
+        out.push_str(&xml[paragraph_end..]);
+        xml = out;
+    }
+    xml
 }
 
-fn find_paragraph_start_before(document_xml: &str, end_index: usize) -> Option<usize> {
-    let mut search_end = end_index;
-    while let Some(candidate) = document_xml[..search_end].rfind("<w:p") {
-        let tail = &document_xml[candidate..];
-        if tail.starts_with("<w:p>") || tail.starts_with("<w:p ") || tail.starts_with("<w:p w") {
-            return Some(candidate);
+fn find_enclosing_paragraph_range(
+    document_xml: &str,
+    target_index: usize,
+) -> Option<(usize, usize)> {
+    for (start, end) in iter_paragraph_ranges(document_xml) {
+        if start <= target_index && target_index < end {
+            return Some((start, end));
         }
-        search_end = candidate;
     }
     None
+}
+
+fn iter_paragraph_ranges(document_xml: &str) -> Vec<(usize, usize)> {
+    let bytes = document_xml.as_bytes();
+    let mut ranges = Vec::new();
+    let mut current_start: Option<usize> = None;
+    let mut index = 0usize;
+
+    while index < bytes.len() {
+        if bytes[index] != b'<' {
+            index += 1;
+            continue;
+        }
+
+        if document_xml[index..].starts_with("<w:p>") {
+            current_start = Some(index);
+            index += "<w:p>".len();
+            continue;
+        }
+
+        if document_xml[index..].starts_with("<w:p ") {
+            current_start = Some(index);
+            if let Some(tag_end_rel) = document_xml[index..].find('>') {
+                index += tag_end_rel + 1;
+                continue;
+            }
+            break;
+        }
+
+        if document_xml[index..].starts_with("</w:p>") {
+            if let Some(start) = current_start.take() {
+                ranges.push((start, index + "</w:p>".len()));
+            }
+            index += "</w:p>".len();
+            continue;
+        }
+
+        index += 1;
+    }
+
+    ranges
 }
 
 fn open_markdown_handbook(app: &AppHandle) {

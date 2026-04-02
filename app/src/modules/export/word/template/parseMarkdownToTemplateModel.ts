@@ -53,10 +53,9 @@ export function parseMarkdownToTemplateModel(
 
 export function resolveWordTemplateId(
   markdown: string,
-  selectedWordTemplateId: string | null | undefined,
 ): string | null {
   const { frontMatter } = extractFrontMatter(markdown)
-  const raw = frontMatter.word_template || selectedWordTemplateId || ''
+  const raw = frontMatter.word_template || ''
   const normalized = raw.trim()
   return normalized || null
 }
@@ -172,7 +171,8 @@ function prependHeadingBlockIfNeeded(
         type: 'text',
         value: sectionTitle,
         bold: source.headingBold ?? true,
-        fontSizePt: source.headingFontSizePt,
+        fontSizePt:
+          typeof source.headingFontSizePt === 'number' ? source.headingFontSizePt : undefined,
       },
     ],
   }

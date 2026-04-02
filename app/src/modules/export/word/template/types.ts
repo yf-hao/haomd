@@ -11,7 +11,7 @@ export type TemplateContentSource =
       matchAny?: string[]
       includeHeading?: boolean
       headingBold?: boolean
-      headingFontSizePt?: number
+      headingFontSizePt?: number | null
       childHeadingBold?: boolean
     }
 

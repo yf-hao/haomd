@@ -1352,25 +1352,6 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                       <div className="settings-subgroup-title">{t('wordExport.groups.templates')}</div>
                       <div style={{ display: 'grid', gap: 14 }}>
                         <div style={fieldGridStyle}>
-                          <div className="settings-field-label">{t('wordExport.selectedTemplate')}</div>
-                          <select
-                            className="field-select"
-                            value={wordExport.selectedWordTemplateId ?? ''}
-                            onChange={(event) =>
-                              setWordExport((prev) => ({
-                                ...prev,
-                                selectedWordTemplateId: event.target.value || null,
-                              }))}
-                          >
-                            <option value="">{t('wordExport.noTemplateSelected')}</option>
-                            {wordTemplates.map((template) => (
-                              <option key={template.id} value={template.id}>
-                                {template.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div style={fieldGridStyle}>
                           <div className="settings-field-label">{t('wordExport.wordTemplatesFolder')}</div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                             <Button variant="tertiary" type="button" onClick={handleOpenWordTemplatesDir}>
@@ -1378,6 +1359,10 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                             </Button>
                             <span className="settings-inline-help">{t('wordExport.wordTemplatesFolderHint')}</span>
                           </div>
+                        </div>
+                        <div style={fieldGridStyle}>
+                          <div className="settings-field-label">{t('wordExport.availableTemplates')}</div>
+                          <div className="settings-inline-help">{t('wordExport.templatesResolutionHint')}</div>
                         </div>
                         {wordTemplates.length > 0 ? (
                           <div style={fieldGridStyle}>

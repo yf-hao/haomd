@@ -29,7 +29,7 @@ export async function exportToWord(ctx: {
     const markdown = ctx.getCurrentMarkdown()
     const isPlainText = /\.txt$/i.test(rawTitle) || /\.txt$/i.test(filePath || '')
     const styleSettings = await getWordExportStyleSettings()
-    const selectedTemplateId = resolveWordTemplateId(markdown, styleSettings.selectedWordTemplateId)
+    const selectedTemplateId = resolveWordTemplateId(markdown)
     let preferInkscapeForMermaid = false
     let mermaidExportFormat = styleSettings.mermaidExportFormat
     const inkscapeFallback = mermaidExportFormat === 'png' ? 'png' : 'ask'
