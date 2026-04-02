@@ -20,7 +20,7 @@ export const enUSMessages: MessageDictionary = {
     categories: 'Categories',
     theme: 'Theme',
     typography: 'Typography',
-    wordExport: 'Word Export',
+    wordExport: 'Word',
     language: 'Language',
     languageDescription: 'Choose the HaoMD interface language. `System` follows the OS language.',
     system: 'System',
@@ -130,7 +130,7 @@ export const enUSMessages: MessageDictionary = {
     },
   },
   wordExport: {
-    title: 'Word Export',
+    title: 'Word',
     description: 'Customize default fonts, spacing, and margins for `.docx` export.',
     sections: 'Word export setting groups',
     documentDescription: 'Adjust document fonts, font sizes, and heading styles for exported files.',

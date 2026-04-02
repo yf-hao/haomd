@@ -63,32 +63,17 @@ export function resolveWordTemplateId(
 
 function createEmptyTemplateContentModel(): TemplateContentModel {
   return {
-    meta: {
-      week_range: '',
-      date_range: '',
-      chapter_title: '',
-      teaching_type: '',
-      teaching_hours: '',
-    },
-    sections: {
-      teaching_objectives: '',
-      teaching_requirements: '',
-      teaching_focus: '',
-      teaching_difficulties: '',
-      student_notes: '',
-      teaching_methods: '',
-      discussion_exercises_homework: '',
-      content_outline: '',
-      teaching_postscript: '',
-    },
+    meta: {},
+    sections: {},
   }
 }
 
 function setModelValue(model: TemplateContentModel, path: string, value: string) {
-  const [scope, key] = path.split('.') as [keyof TemplateContentModel, string | undefined]
+  const [scope, ...rest] = path.split('.')
+  const key = rest.join('.')
   if (!scope || !key) return
-  const target = model[scope] as Record<string, string> | undefined
-  if (!target || !(key in target)) return
+  if (scope !== 'meta' && scope !== 'sections') return
+  const target = model[scope]
   target[key] = value
 }
 

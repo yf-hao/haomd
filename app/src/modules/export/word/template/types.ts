@@ -29,24 +29,8 @@ export type WordTemplateConfig = {
 }
 
 export type TemplateContentModel = {
-  meta: {
-    week_range: string
-    date_range: string
-    chapter_title: string
-    teaching_type: string
-    teaching_hours: string
-  }
-  sections: {
-    teaching_objectives: string
-    teaching_requirements: string
-    teaching_focus: string
-    teaching_difficulties: string
-    student_notes: string
-    teaching_methods: string
-    discussion_exercises_homework: string
-    content_outline: string
-    teaching_postscript: string
-  }
+  meta: Record<string, string>
+  sections: Record<string, string>
 }
 
 export type ParsedTemplateMarkdown = {

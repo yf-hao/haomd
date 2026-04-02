@@ -6804,7 +6804,7 @@ fn replace_placeholder_paragraph(
     let Some(placeholder_index) = document_xml.find(placeholder) else {
         return document_xml.to_string();
     };
-    let Some(paragraph_start) = document_xml[..placeholder_index].rfind("<w:p") else {
+    let Some(paragraph_start) = find_paragraph_start_before(document_xml, placeholder_index) else {
         return document_xml.replace(placeholder, replacement_xml);
     };
     let Some(paragraph_end_rel) = document_xml[placeholder_index..].find("</w:p>") else {
@@ -6822,6 +6822,18 @@ fn replace_placeholder_paragraph(
     out.push_str(replacement_xml);
     out.push_str(&document_xml[paragraph_end..]);
     out
+}
+
+fn find_paragraph_start_before(document_xml: &str, end_index: usize) -> Option<usize> {
+    let mut search_end = end_index;
+    while let Some(candidate) = document_xml[..search_end].rfind("<w:p") {
+        let tail = &document_xml[candidate..];
+        if tail.starts_with("<w:p>") || tail.starts_with("<w:p ") || tail.starts_with("<w:p w") {
+            return Some(candidate);
+        }
+        search_end = candidate;
+    }
+    None
 }
 
 fn open_markdown_handbook(app: &AppHandle) {
