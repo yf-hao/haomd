@@ -5511,6 +5511,7 @@ struct MenuTexts {
     math_relations: &'static str,
     math_arrows: &'static str,
     math_structures: &'static str,
+    math_annotation: &'static str,
     layout: &'static str,
     preview_left: &'static str,
     preview_right: &'static str,
@@ -5601,6 +5602,7 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             math_relations: "关系运算",
             math_arrows: "箭头",
             math_structures: "常用结构",
+            math_annotation: "标注",
             layout: "布局",
             preview_left: "预览在左",
             preview_right: "预览在右",
@@ -5688,6 +5690,7 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             math_relations: "Relations",
             math_arrows: "Arrows",
             math_structures: "Structures",
+            math_annotation: "Annotation",
             layout: "Layout",
             preview_left: "Preview Left",
             preview_right: "Preview Right",
@@ -6066,6 +6069,11 @@ pub(crate) async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri:
         .item(
             &MenuItemBuilder::new(texts.math_structures)
                 .id("format_math_cat_structures")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.math_annotation)
+                .id("format_math_cat_annotation")
                 .build(app)?,
         )
         .build()?;

@@ -221,6 +221,24 @@ export function createExtensions(options: EditorOptions = {}): Extension[] {
       key: 'Mod-Shift-d',
       run: deleteLine,
     },
+    {
+      // Shift+4 types '$'. When there's a selection, wrap it with $...$
+      key: '$',
+      run: (view: EditorView): boolean => {
+        const { state } = view
+        const { from, to } = state.selection.main
+        if (from === to) return false // no selection — let default input handle it
+        const selected = state.doc.sliceString(from, to)
+        const wrapped = `$${selected}$`
+        view.dispatch(state.update({
+          changes: { from, to, insert: wrapped },
+          selection: { anchor: from + wrapped.length },
+          scrollIntoView: true,
+          userEvent: 'input',
+        }))
+        return true
+      },
+    },
   ]
 
   const extensions: Extension[] = [

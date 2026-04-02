@@ -1,4 +1,8 @@
 .modal.modal-math-symbols {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   min-width: 520px;
   max-width: 680px;
   width: calc(100vw - 120px);
@@ -7,6 +11,8 @@
   flex-direction: column;
   padding: 0;
   overflow: hidden;
+  z-index: var(--z-modal);
+  animation: slideIn 0.2s ease;
 }
 
 /* Header */
