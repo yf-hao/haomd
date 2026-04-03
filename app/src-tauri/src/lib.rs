@@ -128,7 +128,7 @@ fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::error:
     handle.plugin(tauri_plugin_opener::init())?;
 
     tauri::async_runtime::block_on(async {
-        let menu = build_app_menu(&handle).await?;
+        let menu = build_app_menu(handle).await?;
         handle.set_menu(menu)?;
         Ok::<(), tauri::Error>(())
     })?;

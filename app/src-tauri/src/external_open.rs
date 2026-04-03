@@ -1,7 +1,10 @@
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
+
+#[cfg(target_os = "macos")]
+use tauri::Emitter;
 
 #[cfg(target_os = "macos")]
 use tauri::RunEvent;
@@ -71,8 +74,8 @@ pub fn take_pending_external_open_items() -> Vec<ExternalOpenItem> {
     std::mem::take(&mut *pending)
 }
 
+#[cfg(target_os = "macos")]
 pub fn handle_app_run_event(app_handle: &AppHandle, event: &tauri::RunEvent) {
-    #[cfg(target_os = "macos")]
     if let RunEvent::Opened { urls } = event {
         let items: Vec<ExternalOpenItem> = urls
             .iter()
@@ -84,3 +87,6 @@ pub fn handle_app_run_event(app_handle: &AppHandle, event: &tauri::RunEvent) {
         }
     }
 }
+
+#[cfg(not(target_os = "macos"))]
+pub fn handle_app_run_event(_app_handle: &AppHandle, _event: &tauri::RunEvent) {}
