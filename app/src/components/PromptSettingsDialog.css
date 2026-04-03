@@ -6,6 +6,10 @@
   min-width: 760px;
   padding: 20px 24px 18px;
   font-size: var(--ui-font-settings);
+  display: flex;
+  flex-direction: column;
+  max-height: 72vh;
+  overflow: hidden;
 }
 
 .modal.modal-prompt-settings .field-label,
@@ -19,6 +23,13 @@
   font-size: var(--ui-font-settings);
 }
 
+.modal.modal-prompt-settings .modal-content.prompt-settings-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-bottom: 0;
+  overflow-y: auto;
+}
+
 .prompt-settings-body {
   display: flex;
   gap: 20px;
@@ -29,6 +40,7 @@
 .prompt-settings-column-right {
   flex: 1;
   min-width: 0;
+  min-height: 0;
 }
 
 .prompt-settings-column-left {
@@ -40,12 +52,21 @@
   padding-left: 4px;
   display: flex;
   flex-direction: column;
+  gap: 6px;
 }
 
 .prompt-settings-form {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.prompt-settings-prompt-textarea {
+  height: calc(10 * 1.6em + 14px);
+  min-height: calc(10 * 1.6em + 14px);
+  max-height: calc(10 * 1.6em + 14px);
+  resize: none;
+  overflow-y: auto;
 }
 
 .prompt-settings-form-actions {
@@ -58,6 +79,10 @@
 /* Prompt roles draggable list */
 .prompt-roles-list {
   cursor: default;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: min(48vh, 520px);
+  overflow-y: auto;
 }
 
 /* 单个角色 item，用于放插入预览线 */

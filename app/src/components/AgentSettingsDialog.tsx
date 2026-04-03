@@ -172,6 +172,19 @@ export const AgentSettingsDialog: FC<AgentSettingsDialogProps> = ({ open, onClos
 
   useEffect(() => {
     if (!open) return
+    const handleEsc = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        handleCancelWithReset()
+      }
+    }
+    document.addEventListener('keydown', handleEsc)
+    return () => {
+      document.removeEventListener('keydown', handleEsc)
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
 
     const unPaste = onNativePaste((text) => {
       if (!text) return
@@ -401,10 +414,10 @@ export const AgentSettingsDialog: FC<AgentSettingsDialogProps> = ({ open, onClos
               </FieldGroup>
 
               <div className="agent-settings-actions">
-                <Button type="submit">{editingId ? t('agent.update') : t('agent.add')}</Button>
                 <Button variant="tertiary" type="button" onClick={handleResetDraft}>
                   {t('agent.resetDraft')}
                 </Button>
+                <Button type="submit">{editingId ? t('agent.update') : t('agent.add')}</Button>
               </div>
             </form>
           </div>

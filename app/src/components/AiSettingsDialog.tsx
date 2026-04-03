@@ -126,8 +126,6 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
     }
   }, [open, activeField, setDraft])
 
-  if (!open) return null
-
   const editingProvider =
     editingProviderId != null
       ? settings.providers.find((provider) => provider.id === editingProviderId) ?? null
@@ -271,6 +269,21 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
     applyInitialSnapshot()
     onClose()
   }
+
+  useEffect(() => {
+    if (!open) return
+    const handleEsc = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        handleCancel()
+      }
+    }
+    document.addEventListener('keydown', handleEsc)
+    return () => {
+      document.removeEventListener('keydown', handleEsc)
+    }
+  }, [open])
+
+  if (!open) return null
 
   const handleSave = async () => {
     let stateToSave = settings

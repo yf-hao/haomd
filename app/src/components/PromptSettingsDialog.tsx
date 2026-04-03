@@ -205,8 +205,6 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
     window.addEventListener('mouseup', handleMouseUp)
   }
 
-  if (!open) return null
-
   const handleDraftChange = (field: keyof PromptRoleDraft) => (
     e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
@@ -245,6 +243,21 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
     onClose()
   }
 
+  useEffect(() => {
+    if (!open) return
+    const handleEsc = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        handleCancel()
+      }
+    }
+    document.addEventListener('keydown', handleEsc)
+    return () => {
+      document.removeEventListener('keydown', handleEsc)
+    }
+  }, [open])
+
+  if (!open) return null
+
   const handleSave = async () => {
     const stateToSave = settings
 
@@ -278,8 +291,8 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
                 <FieldGroup key={field.key} label={field.label}>
                   {field.type === 'textarea' ? (
                     <textarea
-                      className="field-textarea"
-                      rows={1}
+                      className={`field-textarea${field.key === 'prompt' ? ' prompt-settings-prompt-textarea' : ''}`}
+                      rows={field.key === 'prompt' ? 10 : 1}
                       value={draft[field.key]}
                       onChange={handleDraftChange(field.key)}
                       placeholder={field.placeholder}
@@ -305,14 +318,13 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
                   {t('prompt.resetDraft')}
                 </Button>
                 <Button type="submit" variant="primary">
-                  {t('prompt.add')}
+                  {draft.id ? t('prompt.update') : t('prompt.add')}
                 </Button>
               </div>
             </form>
           </div>
 
           <div className="prompt-settings-column-right">
-            <div className="providers-header">{t('prompt.savedRoles')}</div>
             {settings.roles.length === 0 ? (
               <div className="providers-empty">{t('prompt.noRoles')}</div>
             ) : (

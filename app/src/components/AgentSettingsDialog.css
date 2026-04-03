@@ -72,6 +72,13 @@
   font-size: calc(var(--ui-font-settings) - 1px);
 }
 
+.modal.modal-agent-settings .modal-content.agent-settings-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-bottom: 0;
+  overflow-y: auto;
+}
+
 .modal.modal-agent-settings .field-input,
 .modal.modal-agent-settings .field-textarea,
 .modal.modal-agent-settings .field-select {
@@ -212,6 +219,11 @@
   gap: 8px;
 }
 
+.agent-settings-form .agent-settings-actions {
+  margin-top: 4px;
+  justify-content: space-between;
+}
+
 .agent-settings-column-right {
   display: flex;
   flex-direction: column;
@@ -292,4 +304,9 @@
 .agent-settings-footer .form-error {
   flex: 1;
   color: var(--theme-text-danger);
+}
+
+.agent-settings-footer .agent-settings-actions {
+  margin-left: auto;
+  justify-content: flex-end;
 }
