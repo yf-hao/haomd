@@ -1,13 +1,462 @@
 use crate::{
-    default_editor_settings, editor_settings_path, err_payload, new_trace_id, ok, ErrorCode,
-    ResultPayload,
+    err_payload, new_trace_id, ok, word::WordExportStyleSettingsCfg,
+    word::WordExportStyleSettingsResolved, ErrorCode, ResultPayload,
 };
-use std::path::PathBuf;
-use tauri::AppHandle;
+use image::ImageFormat;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use tauri::{AppHandle, Manager};
+use tauri_plugin_dialog::DialogExt;
 use tokio::fs;
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AiCompressionCfg {
+    #[serde(default)]
+    pub min_messages_to_compress: Option<u32>,
+    #[serde(default)]
+    pub keep_recent_rounds: Option<u32>,
+    #[serde(default)]
+    pub max_messages_after_compress: Option<u32>,
+    #[serde(default)]
+    pub max_messages_per_summary_batch: Option<u32>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct HugeDocCfg {
+    #[serde(default)]
+    pub enabled: Option<bool>,
+    #[serde(default)]
+    pub line_threshold: Option<u32>,
+    #[serde(default)]
+    pub chunk_context_lines: Option<u32>,
+    #[serde(default)]
+    pub chunk_max_lines: Option<u32>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AiChatUiCfg {
+    #[serde(default)]
+    pub max_visible_messages_dialog: Option<u32>,
+    #[serde(default)]
+    pub max_visible_messages_pane: Option<u32>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ThemeEditorBackgroundCfg {
+    #[serde(default)]
+    pub enabled: Option<bool>,
+    #[serde(default)]
+    pub path: Option<String>,
+    #[serde(default)]
+    pub opacity: Option<f32>,
+    #[serde(default)]
+    pub overlay_opacity: Option<f32>,
+    #[serde(default)]
+    pub blur_px: Option<f32>,
+    #[serde(default)]
+    pub brightness: Option<f32>,
+    #[serde(default)]
+    pub size: Option<String>,
+    #[serde(default)]
+    pub position_x: Option<f32>,
+    #[serde(default)]
+    pub position_y: Option<f32>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ThemeSettingsCfg {
+    #[serde(default)]
+    pub mode: Option<String>,
+    #[serde(default)]
+    pub custom_theme_id: Option<String>,
+    #[serde(default)]
+    pub workspace_background: Option<ThemeEditorBackgroundCfg>,
+    #[serde(default)]
+    pub workspace_background_include_sidebar: Option<bool>,
+    #[serde(default)]
+    pub editor_background: Option<ThemeEditorBackgroundCfg>,
+    #[serde(default)]
+    pub preview_background: Option<ThemeEditorBackgroundCfg>,
+    #[serde(default)]
+    pub ai_chat_background: Option<ThemeEditorBackgroundCfg>,
+    #[serde(default)]
+    pub sidebar_background: Option<ThemeEditorBackgroundCfg>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct UiTypographySettingsCfg {
+    #[serde(default)]
+    pub app_font_size: Option<f32>,
+    #[serde(default)]
+    pub settings_font_size: Option<f32>,
+    #[serde(default)]
+    pub sidebar_font_size: Option<f32>,
+    #[serde(default)]
+    pub tab_bar_font_size: Option<f32>,
+    #[serde(default)]
+    pub status_bar_font_size: Option<f32>,
+    #[serde(default)]
+    pub editor_font_size: Option<f32>,
+    #[serde(default)]
+    pub preview_font_size: Option<f32>,
+    #[serde(default)]
+    pub ai_chat_message_font_size: Option<f32>,
+    #[serde(default)]
+    pub ai_chat_input_font_size: Option<f32>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct EditorSettingsCfg {
+    #[serde(default)]
+    pub ai_compression: Option<AiCompressionCfg>,
+    #[serde(default)]
+    pub huge_doc: Option<HugeDocCfg>,
+    #[serde(default)]
+    pub ai_chat: Option<AiChatUiCfg>,
+    #[serde(default)]
+    pub language: Option<String>,
+    #[serde(default)]
+    pub theme: Option<ThemeSettingsCfg>,
+    #[serde(default)]
+    pub ui_typography: Option<UiTypographySettingsCfg>,
+    #[serde(default)]
+    pub word_export: Option<WordExportStyleSettingsCfg>,
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
+}
+
+pub fn default_editor_settings() -> EditorSettingsCfg {
+    EditorSettingsCfg {
+        ai_compression: Some(AiCompressionCfg {
+            min_messages_to_compress: Some(80),
+            keep_recent_rounds: Some(8),
+            max_messages_after_compress: Some(200),
+            max_messages_per_summary_batch: Some(200),
+        }),
+        huge_doc: Some(HugeDocCfg {
+            enabled: Some(true),
+            line_threshold: Some(1000),
+            chunk_context_lines: Some(200),
+            chunk_max_lines: Some(400),
+        }),
+        ai_chat: Some(AiChatUiCfg {
+            max_visible_messages_dialog: Some(10),
+            max_visible_messages_pane: Some(10),
+        }),
+        language: Some("system".to_string()),
+        theme: Some(default_theme_settings_cfg()),
+        ui_typography: Some(default_ui_typography_settings_cfg()),
+        word_export: Some(default_word_export_style_settings_cfg()),
+        extra: HashMap::new(),
+    }
+}
+
+pub fn default_theme_settings_cfg() -> ThemeSettingsCfg {
+    ThemeSettingsCfg {
+        mode: Some("system".to_string()),
+        custom_theme_id: None,
+        workspace_background: Some(ThemeEditorBackgroundCfg {
+            enabled: Some(false),
+            path: None,
+            opacity: Some(0.22),
+            overlay_opacity: Some(0.12),
+            blur_px: Some(2.0),
+            brightness: Some(100.0),
+            size: Some("height-fill".to_string()),
+            position_x: Some(50.0),
+            position_y: Some(50.0),
+        }),
+        workspace_background_include_sidebar: Some(false),
+        editor_background: Some(ThemeEditorBackgroundCfg {
+            enabled: Some(false),
+            path: None,
+            opacity: Some(0.3),
+            overlay_opacity: Some(0.0),
+            blur_px: Some(1.0),
+            brightness: Some(100.0),
+            size: Some("height-fill".to_string()),
+            position_x: Some(50.0),
+            position_y: Some(50.0),
+        }),
+        preview_background: Some(ThemeEditorBackgroundCfg {
+            enabled: Some(false),
+            path: None,
+            opacity: Some(0.22),
+            overlay_opacity: Some(0.12),
+            blur_px: Some(2.0),
+            brightness: Some(100.0),
+            size: Some("height-fill".to_string()),
+            position_x: Some(50.0),
+            position_y: Some(50.0),
+        }),
+        ai_chat_background: Some(ThemeEditorBackgroundCfg {
+            enabled: Some(false),
+            path: None,
+            opacity: Some(0.3),
+            overlay_opacity: Some(0.0),
+            blur_px: Some(1.0),
+            brightness: Some(100.0),
+            size: Some("height-fill".to_string()),
+            position_x: Some(50.0),
+            position_y: Some(50.0),
+        }),
+        sidebar_background: Some(ThemeEditorBackgroundCfg {
+            enabled: Some(false),
+            path: None,
+            opacity: Some(0.2),
+            overlay_opacity: Some(0.16),
+            blur_px: Some(2.0),
+            brightness: Some(100.0),
+            size: Some("height-fill".to_string()),
+            position_x: Some(50.0),
+            position_y: Some(50.0),
+        }),
+    }
+}
+
+pub fn default_ui_typography_settings_cfg() -> UiTypographySettingsCfg {
+    UiTypographySettingsCfg {
+        app_font_size: Some(13.0),
+        settings_font_size: Some(13.0),
+        sidebar_font_size: Some(13.0),
+        tab_bar_font_size: Some(13.0),
+        status_bar_font_size: Some(12.0),
+        editor_font_size: Some(14.0),
+        preview_font_size: Some(15.0),
+        ai_chat_message_font_size: Some(13.0),
+        ai_chat_input_font_size: Some(13.0),
+    }
+}
+
+pub fn default_word_export_style_settings_cfg() -> WordExportStyleSettingsCfg {
+    WordExportStyleSettingsCfg {
+        body_font_family: Some("Times New Roman".to_string()),
+        body_font_size_pt: Some(12.0),
+        heading_font_family: Some("Calibri".to_string()),
+        heading1_size_pt: Some(16.0),
+        heading2_size_pt: Some(15.0),
+        heading3_size_pt: Some(14.0),
+        paragraph_spacing_after_pt: Some(8.0),
+        line_spacing: Some(1.25),
+        code_font_size_pt: Some(10.5),
+        page_margin_cm: Some(2.54),
+        enable_inkscape_for_word_export: Some(false),
+        mermaid_export_format: Some("png".to_string()),
+        inkscape_fallback: Some("ask".to_string()),
+        selected_word_template_id: None,
+    }
+}
+
+pub fn resolve_word_export_style_settings(
+    cfg: Option<&WordExportStyleSettingsCfg>,
+) -> WordExportStyleSettingsResolved {
+    let default_cfg = default_word_export_style_settings_cfg();
+    let cfg = cfg.cloned().unwrap_or(default_cfg.clone());
+    let body_font_family = cfg
+        .body_font_family
+        .filter(|v| !v.trim().is_empty())
+        .or(default_cfg.body_font_family)
+        .unwrap_or_else(|| "Times New Roman".to_string());
+    let heading_font_family = cfg
+        .heading_font_family
+        .filter(|v| !v.trim().is_empty())
+        .or(default_cfg.heading_font_family)
+        .unwrap_or_else(|| "Calibri".to_string());
+
+    WordExportStyleSettingsResolved {
+        body_font_family,
+        body_font_size_half_points: pt_to_half_points(
+            cfg.body_font_size_pt
+                .or(default_cfg.body_font_size_pt)
+                .unwrap_or(12.0),
+        ),
+        heading_font_family,
+        heading1_size_half_points: pt_to_half_points(
+            cfg.heading1_size_pt
+                .or(default_cfg.heading1_size_pt)
+                .unwrap_or(16.0),
+        ),
+        heading2_size_half_points: pt_to_half_points(
+            cfg.heading2_size_pt
+                .or(default_cfg.heading2_size_pt)
+                .unwrap_or(14.0),
+        ),
+        heading3_size_half_points: pt_to_half_points(
+            cfg.heading3_size_pt
+                .or(default_cfg.heading3_size_pt)
+                .unwrap_or(13.0),
+        ),
+        paragraph_spacing_after_twips: pt_to_twips(
+            cfg.paragraph_spacing_after_pt
+                .or(default_cfg.paragraph_spacing_after_pt)
+                .unwrap_or(8.0),
+        ),
+        line_spacing_twips: line_spacing_to_twips(
+            cfg.line_spacing
+                .or(default_cfg.line_spacing)
+                .unwrap_or(1.25),
+        ),
+        code_font_size_half_points: pt_to_half_points(
+            cfg.code_font_size_pt
+                .or(default_cfg.code_font_size_pt)
+                .unwrap_or(10.0),
+        ),
+        page_margin_twips: cm_to_twips(
+            cfg.page_margin_cm
+                .or(default_cfg.page_margin_cm)
+                .unwrap_or(2.54),
+        ),
+    }
+}
+
+pub(crate) fn pt_to_half_points(value: f32) -> u32 {
+    (value.clamp(8.0, 48.0) * 2.0).round() as u32
+}
+
+pub(crate) fn pt_to_twips(value: f32) -> u32 {
+    (value.clamp(0.0, 72.0) * 20.0).round() as u32
+}
+
+pub(crate) fn line_spacing_to_twips(value: f32) -> u32 {
+    (value.clamp(1.0, 3.0) * 240.0).round() as u32
+}
+
+pub(crate) fn cm_to_twips(value: f32) -> u32 {
+    ((value.clamp(1.0, 5.0) / 2.54) * 1440.0).round() as u32
+}
+
+pub fn editor_settings_path(app: &AppHandle) -> std::io::Result<PathBuf> {
+    if let Ok(mut dir) = app.path().config_dir() {
+        dir.push("haomd");
+        std::fs::create_dir_all(&dir)?;
+        return Ok(dir.join("editor_settings.json"));
+    }
+
+    let dir = std::env::current_dir()?;
+    Ok(dir.join("editor_settings.json"))
+}
+
+pub fn editor_backgrounds_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
+    if let Ok(mut dir) = app.path().config_dir() {
+        dir.push("haomd");
+        dir.push("editor-backgrounds");
+        std::fs::create_dir_all(&dir)?;
+        return Ok(dir);
+    }
+
+    let dir = std::env::current_dir()?.join("editor-backgrounds");
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir)
+}
+
+pub fn should_cleanup_managed_editor_background(
+    backgrounds_dir: &Path,
+    previous_path: &Path,
+    new_path: &Path,
+) -> bool {
+    if previous_path == new_path {
+        return false;
+    }
+    previous_path.starts_with(backgrounds_dir) && previous_path.is_file()
+}
+
+pub(crate) fn clamp_image_to_long_edge(width: u32, height: u32, max_long_edge: u32) -> (u32, u32) {
+    if width == 0 || height == 0 || max_long_edge == 0 {
+        return (width.max(1), height.max(1));
+    }
+
+    let long_edge = width.max(height);
+    if long_edge <= max_long_edge {
+        return (width, height);
+    }
+
+    let scale = max_long_edge as f32 / long_edge as f32;
+    let next_width = ((width as f32) * scale).round().max(1.0) as u32;
+    let next_height = ((height as f32) * scale).round().max(1.0) as u32;
+    (next_width, next_height)
+}
+
+fn sanitize_file_stem(input: &str) -> String {
+    let sanitized: String = input
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_lowercase()
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let collapsed = sanitized.trim_matches('_').to_string();
+    if collapsed.is_empty() {
+        "background".to_string()
+    } else {
+        collapsed
+    }
+}
+
+pub fn import_editor_background_image_sync(
+    backgrounds_dir: &Path,
+    source_path: &Path,
+) -> Result<PathBuf, String> {
+    let bytes = std::fs::read(source_path).map_err(|err| format!("读取图片失败: {err}"))?;
+    let original = image::load_from_memory(&bytes).map_err(|err| format!("解析图片失败: {err}"))?;
+    let (width, height) = (original.width(), original.height());
+    let (target_width, target_height) = clamp_image_to_long_edge(width, height, 1080);
+    let processed = if target_width == width && target_height == height {
+        original
+    } else {
+        original.resize(
+            target_width,
+            target_height,
+            image::imageops::FilterType::Lanczos3,
+        )
+    };
+
+    let stem = source_path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .map(sanitize_file_stem)
+        .unwrap_or_else(|| "background".to_string());
+    let digest = crate::hash_bytes(&bytes);
+    let output_ext = source_path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_ascii_lowercase())
+        .map(|value| match value.as_str() {
+            "jpeg" => "jpg".to_string(),
+            "png" | "jpg" | "gif" | "bmp" | "webp" => value,
+            _ => "png".to_string(),
+        })
+        .unwrap_or_else(|| "png".to_string());
+    let output_format = match output_ext.as_str() {
+        "png" => ImageFormat::Png,
+        "jpg" => ImageFormat::Jpeg,
+        "gif" => ImageFormat::Gif,
+        "bmp" => ImageFormat::Bmp,
+        "webp" => ImageFormat::WebP,
+        _ => ImageFormat::Png,
+    };
+    let file_name = format!("{stem}-{}.{}", &digest[..12], output_ext);
+    let output_path = backgrounds_dir.join(file_name);
+
+    processed
+        .save_with_format(&output_path, output_format)
+        .map_err(|err| format!("保存导入图片失败: {err}"))?;
+
+    Ok(output_path)
+}
+
 #[tauri::command]
-pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::EditorSettingsCfg> {
+pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<EditorSettingsCfg> {
     let trace = new_trace_id();
     let path: PathBuf = match editor_settings_path(&app) {
         Ok(p) => p,
@@ -22,7 +471,7 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::Editor
 
     match fs::read(&path).await {
         Ok(bytes) => {
-            let mut cfg: crate::EditorSettingsCfg =
+            let mut cfg: EditorSettingsCfg =
                 serde_json::from_slice(&bytes).unwrap_or_else(|_| default_editor_settings());
             let default_cfg = default_editor_settings();
             let mut changed = false;
@@ -478,10 +927,7 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<crate::Editor
 }
 
 #[tauri::command]
-pub async fn save_editor_settings(
-    app: AppHandle,
-    cfg: crate::EditorSettingsCfg,
-) -> ResultPayload<()> {
+pub async fn save_editor_settings(app: AppHandle, cfg: EditorSettingsCfg) -> ResultPayload<()> {
     let trace = new_trace_id();
     let path: PathBuf = match editor_settings_path(&app) {
         Ok(p) => p,
@@ -516,4 +962,59 @@ pub async fn save_editor_settings(
             trace,
         ),
     }
+}
+
+#[tauri::command]
+pub async fn pick_editor_background_image(
+    app: AppHandle,
+    current_path: Option<String>,
+) -> Result<Option<String>, String> {
+    let (tx, rx) = tokio::sync::oneshot::channel::<Option<String>>();
+    let tx = std::sync::Arc::new(std::sync::Mutex::new(Some(tx)));
+
+    app.dialog()
+        .file()
+        .set_title("Choose Background Image")
+        .add_filter("Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])
+        .pick_file(move |file_path| {
+            let selected = file_path.and_then(|path| {
+                path.as_path()
+                    .map(|value| value.to_string_lossy().to_string())
+            });
+            if let Ok(mut guard) = tx.lock() {
+                if let Some(sender) = guard.take() {
+                    let _ = sender.send(selected);
+                }
+            }
+        });
+
+    let selected = rx
+        .await
+        .map_err(|err| format!("等待图片选择结果失败: {err}"))?;
+
+    let Some(selected) = selected else {
+        return Ok(None);
+    };
+
+    let backgrounds_dir =
+        editor_backgrounds_dir(&app).map_err(|err| format!("创建背景图目录失败: {err}"))?;
+    let source_path = PathBuf::from(selected);
+    let previous_path = current_path
+        .as_deref()
+        .map(PathBuf::from)
+        .filter(|path| !path.as_os_str().is_empty());
+    let imported = tokio::task::spawn_blocking(move || {
+        let imported = import_editor_background_image_sync(&backgrounds_dir, &source_path)?;
+        if let Some(previous_path) = previous_path {
+            if should_cleanup_managed_editor_background(&backgrounds_dir, &previous_path, &imported)
+            {
+                let _ = std::fs::remove_file(&previous_path);
+            }
+        }
+        Ok::<PathBuf, String>(imported)
+    })
+    .await
+    .map_err(|err| format!("导入背景图任务失败: {err}"))??;
+
+    Ok(Some(imported.to_string_lossy().to_string()))
 }
