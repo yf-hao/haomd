@@ -70,6 +70,8 @@ export interface AiChatBodyProps {
   /** Optional placeholder text for the input textarea */
   inputPlaceholder?: string
   isResizing?: boolean
+  /** Full-page mode: centered input when empty, messages above input when not */
+  fullPage?: boolean
 }
 
 export const AiChatBody: FC<AiChatBodyProps> = ({
@@ -110,6 +112,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
   onUploadFiles,
   inputPlaceholder,
   isResizing = false,
+  fullPage = false,
 }) => {
   const { themeSettings } = useThemeContext()
   const { t } = useI18n()
@@ -315,8 +318,11 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
     onInputKeyDown(e)
   }
 
+  const hasMessages = messages.length > 0 || loading
+  const fullPageClass = fullPage ? (hasMessages ? 'ai-chat-body-fullpage has-messages' : 'ai-chat-body-fullpage') : ''
+
   return (
-    <div className="modal-content ai-chat-body">
+    <div className={`modal-content ai-chat-body ${fullPageClass}`.trim()}>
       <div
         className={`ai-chat-messages ${aiChatBackgroundUrl ? 'has-ai-chat-background' : ''} ${isResizing ? 'is-ai-chat-resizing' : ''} ai-chat-bg-fit-${aiChatBackground?.size ?? 'cover'}`}
         style={aiChatBackgroundStyle}

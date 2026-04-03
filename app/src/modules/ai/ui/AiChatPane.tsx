@@ -32,9 +32,11 @@ export interface AiChatPaneProps {
   currentFilePath?: string | null
   /** 触发 AI 操作的编辑器标签 ID，用于避免内容串到其他标签 */
   sourceTabId?: string | null
+  /** Full-page mode: centered input when empty, messages above input when not */
+  fullPage?: boolean
 }
 
-export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initialContext, onClose, currentFilePath, sourceTabId }) => {
+export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initialContext, onClose, currentFilePath, sourceTabId, fullPage = false }) => {
   const { themeSettings } = useThemeContext()
   const [input, setInput] = useState('')
   const [contextPrefix, setContextPrefix] = useState<string | null>(null)
@@ -737,7 +739,8 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
 
   return (
     <>
-    <section className={`pane ai-chat-pane ${hasLocalBackground ? 'has-ai-chat-local-background' : ''}`.trim()} ref={paneRootRef}>
+    <section className={`pane ai-chat-pane ${fullPage ? 'ai-chat-pane-fullpage' : ''} ${hasLocalBackground ? 'has-ai-chat-local-background' : ''}`.trim()} ref={paneRootRef}>
+      {!fullPage && (
       <div className="ai-chat-pane-header">
         <div className="ai-chat-pane-title">
           {(() => {
@@ -759,6 +762,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
           <span className="ai-chat-close-icon" aria-hidden="true" />
         </button>
       </div>
+      )}
 
       <div className="ai-chat-pane-body">
         <AiChatBody
@@ -809,6 +813,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
           })()}
           inputPlaceholder={inputPlaceholder}
           isResizing={false}
+          fullPage={fullPage}
         />
       </div>
     </section>

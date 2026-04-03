@@ -2479,10 +2479,6 @@ export function WorkspaceShell({
             activeSessionKey={aiChatSessionKey}
             onSelectSession={(key) => {
               setAiChatSessionKey(key as AiChatSessionKey)
-              // Auto-open AI Chat when selecting a session
-              if (!aiChatOpen) {
-                openAiChatDialog({ entryMode: 'chat' })
-              }
             }}
           />
         )}
@@ -2501,7 +2497,18 @@ export function WorkspaceShell({
             </>
           ) : null}
           <div className="workspace-column-content">
-          {tabs.length === 0 ? (
+          {aiChatSessionKey.startsWith('session:') ? (
+            <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13, height: '100%' }}>{t('workspace.loadingAiPane')}</div>}>
+              <AiChatPaneLazy
+                sessionKey={aiChatSessionKey}
+                entryMode="chat"
+                onClose={() => setAiChatSessionKey('global')}
+                currentFilePath={null}
+                sourceTabId={null}
+                fullPage
+              />
+            </Suspense>
+          ) : tabs.length === 0 ? (
             <Welcome
               onNewFile={() => createTab()}
               onOpenFile={() => void dispatchAction('open_file')}

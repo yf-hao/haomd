@@ -1297,6 +1297,86 @@ button:disabled {
   display: block;
 }
 
+/* ─── Full-page chat mode (ChatGPT-style) ─── */
+.ai-chat-pane-fullpage {
+  display: flex;
+  flex-direction: column;
+}
+
+.ai-chat-pane-fullpage .ai-chat-pane-body {
+  flex: 1;
+  min-height: 0;
+  background: var(--theme-surface-panel);
+}
+
+/* Empty state: center the input vertically */
+.ai-chat-body-fullpage:not(.has-messages) {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  flex: 1;
+  min-height: 0;
+}
+
+.ai-chat-body-fullpage:not(.has-messages) .ai-chat-messages {
+  display: none;
+}
+
+.ai-chat-body-fullpage:not(.has-messages) .ai-chat-input {
+  width: 100%;
+  max-width: 680px;
+  padding: 0 24px;
+  box-sizing: border-box;
+}
+
+.ai-chat-body-fullpage:not(.has-messages) .ai-chat-input-container {
+  border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* With messages: standard layout with centered content column */
+.ai-chat-body-fullpage.has-messages {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.ai-chat-body-fullpage.has-messages .ai-chat-messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  max-height: none;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.ai-chat-body-fullpage.has-messages .ai-chat-messages::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.ai-chat-body-fullpage.has-messages .ai-chat-messages-content {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 24px 24px 16px;
+}
+
+.ai-chat-body-fullpage.has-messages .ai-chat-input {
+  max-width: 760px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 24px 20px;
+  box-sizing: border-box;
+}
+
+.ai-chat-body-fullpage.has-messages .ai-chat-input-container {
+  border-radius: 16px;
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.06);
+}
+
 .floating-toggle {
   position: absolute;
   top: 12px;
