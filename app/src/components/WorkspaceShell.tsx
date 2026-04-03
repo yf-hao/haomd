@@ -2500,6 +2500,7 @@ export function WorkspaceShell({
           {aiChatSessionKey.startsWith('session:') ? (
             <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13, height: '100%' }}>{t('workspace.loadingAiPane')}</div>}>
               <AiChatPaneLazy
+                key={aiChatSessionKey}
                 sessionKey={aiChatSessionKey}
                 entryMode="chat"
                 onClose={() => setAiChatSessionKey('global')}
