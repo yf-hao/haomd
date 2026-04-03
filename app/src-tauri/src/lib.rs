@@ -3,6 +3,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 mod ai_config;
+mod ai_sessions;
 mod clipboard_io;
 mod dialog_io;
 mod doc_conversations;
@@ -23,6 +24,7 @@ mod word;
 mod word_commands;
 
 use ai_config::*;
+use ai_sessions::*;
 use clipboard_io::*;
 use dialog_io::*;
 use doc_conversations::*;
@@ -95,6 +97,10 @@ macro_rules! app_invoke_handler {
             font_catalog::list_system_fonts,
             load_doc_conversations,
             save_doc_conversations,
+            load_ai_sessions_index,
+            load_ai_session,
+            save_ai_session,
+            delete_ai_session,
             // Platform integration and export utilities
             open_terminal,
             open_in_file_explorer,

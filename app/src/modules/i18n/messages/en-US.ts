@@ -258,6 +258,7 @@ export const enUSMessages: MessageDictionary = {
     promptPlaceholder: 'You are an expert Markdown editor...',
     resetDraft: 'Reset Draft',
     add: 'Add',
+    update: 'Update',
     savedRoles: 'Saved Roles',
     noRoles: 'No roles configured yet.',
     dragToReorder: 'Drag to reorder',
@@ -563,5 +564,13 @@ export const enUSMessages: MessageDictionary = {
     pdfPrinting: 'Opening system print dialog...',
     pdfCompleted: 'PDF export completed',
     pdfFailed: 'PDF export failed: {message}',
+  },
+  sessions: {
+    title: 'Sessions',
+    newSession: 'New Session',
+    delete: 'Delete',
+    untitled: 'New Chat',
+    empty: 'No sessions yet. Click + to create one.',
+    loading: 'Loading...',
   },
 }

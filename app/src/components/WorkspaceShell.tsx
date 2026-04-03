@@ -13,6 +13,7 @@ import { TabBar } from './TabBar'
 import { FileContextMenu } from './FileContextMenu'
 import { Sidebar, type SidebarContextActionPayload } from './Sidebar'
 import { OutlinePanel } from './OutlinePanel'
+import { SessionsPanel } from './SessionsPanel'
 import { SidebarBackgroundShell } from './SidebarBackgroundShell'
 import { Welcome } from './Welcome'
 import { SearchBar } from './Editor/SearchBar'
@@ -142,7 +143,7 @@ export function WorkspaceShell({
 
   const [aboutOpen, setAboutOpen] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
-  const aiChatSessionKey: AiChatSessionKey = 'global'
+  const [aiChatSessionKey, setAiChatSessionKey] = useState<AiChatSessionKey>('global')
 
   // Other States
   const [editorZoom, setEditorZoom] = useState(() => {
@@ -2471,6 +2472,19 @@ export function WorkspaceShell({
               )}
             </div>
           </SidebarBackgroundShell>
+        )}
+        {activeLeftPanel === 'sessions' && (
+          <SessionsPanel
+            panelWidth={sidebarWidth}
+            activeSessionKey={aiChatSessionKey}
+            onSelectSession={(key) => {
+              setAiChatSessionKey(key as AiChatSessionKey)
+              // Auto-open AI Chat when selecting a session
+              if (!aiChatOpen) {
+                openAiChatDialog({ entryMode: 'chat' })
+              }
+            }}
+          />
         )}
         {(activeLeftPanel === 'files' || activeLeftPanel === 'outline' || activeLeftPanel === 'pdf' || activeLeftPanel === 'sessions') && (
           <div className={`sidebar-resizer ${isSidebarResizing ? 'active' : ''}`} onMouseDown={handleSidebarResizeStart} />

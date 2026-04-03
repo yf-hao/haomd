@@ -257,6 +257,7 @@ export const zhCNMessages: MessageDictionary = {
     promptPlaceholder: '你是一名专业的 Markdown 编辑助手……',
     resetDraft: '重置草稿',
     add: '添加',
+    update: '更新',
     savedRoles: '已保存角色',
     noRoles: '还没有配置任何角色。',
     dragToReorder: '拖动以排序',
@@ -556,5 +557,13 @@ export const zhCNMessages: MessageDictionary = {
     pdfPrinting: '正在唤起系统打印对话框...',
     pdfCompleted: 'PDF 导出任务已完成',
     pdfFailed: 'PDF 导出失败: {message}',
+  },
+  sessions: {
+    title: '会话',
+    newSession: '新建会话',
+    delete: '删除',
+    untitled: '新对话',
+    empty: '暂无会话，点击 + 创建',
+    loading: '加载中...',
   },
 }
