@@ -6,6 +6,7 @@ import rehypeRaw from 'rehype-raw'
 import 'github-markdown-css/github-markdown.css'
 import './MarkdownViewer.css'
 import { getRenderer } from '../modules/markdown/plugins'
+import { extractFrontMatter } from '../modules/markdown/frontMatter'
 import { normalizeLatexDelimiters } from '../modules/markdown/normalizeLatexDelimiters'
 import { remarkToc } from '../modules/markdown/remarkToc'
 import { DownloadOnClickUseCase, TauriWebviewOpener } from '../modules/download/handleMarkdownLinkClick'
@@ -407,7 +408,11 @@ function MarkdownViewerComponent(
 
   const { value, activeLine, previewWidth, filePath, foldRegions, mode = 'rendered', onLineClick, onSelectionChange } = props
   const plainTextMode = isPlainTextFile(filePath)
-  const renderedValue = useMemo(() => normalizeLatexDelimiters(value), [value])
+  const renderedMarkdownBody = useMemo(() => extractFrontMatter(value).body, [value])
+  const renderedValue = useMemo(
+    () => normalizeLatexDelimiters(renderedMarkdownBody),
+    [renderedMarkdownBody],
+  )
 
   // KaTeX 按需加载：检测文档是否包含数学公式
   const hasMath = useMemo(() => /\$/.test(renderedValue), [renderedValue])

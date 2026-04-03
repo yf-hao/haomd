@@ -10,6 +10,32 @@
   background: var(--markdown-preview-bg);
 }
 
+.wysiwyg-scroll {
+  position: relative;
+  z-index: 1;
+  width: min(60vw, 100%);
+  max-width: 100%;
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: 24px 32px;
+  min-height: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: transparent;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.wysiwyg-scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
 .wysiwyg-background,
 .wysiwyg-background-overlay {
   position: absolute;
@@ -72,25 +98,67 @@
 
 .wysiwyg-editor {
   position: relative;
-  z-index: 1;
-  width: min(60vw, 100%);
-  max-width: 100%;
-  box-sizing: border-box;
-  margin: 0 auto;
-  padding: 24px 32px;
-  min-height: 100%;
-  height: 100%;
-  overflow-y: auto;
-  overflow-x: hidden;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   background: transparent;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
 }
 
-.wysiwyg-editor::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-  display: none;
+.wysiwyg-frontmatter-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--theme-border-subtle, #d0d7de);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--markdown-preview-bg) 84%, transparent);
+  backdrop-filter: blur(6px);
+}
+
+.wysiwyg-frontmatter-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.wysiwyg-frontmatter-label {
+  font-size: 12px;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--theme-text-muted, #59636e);
+}
+
+.wysiwyg-frontmatter-chevron {
+  font-size: 12px;
+  line-height: 1;
+  color: var(--theme-text-muted, #59636e);
+  transition: transform 0.16s ease;
+}
+
+.wysiwyg-frontmatter-chevron.collapsed {
+  transform: rotate(-90deg);
+}
+
+.wysiwyg-frontmatter-textarea {
+  min-height: 120px;
+  resize: vertical;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--theme-text-default);
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre;
+  overflow: auto;
 }
 
 .wysiwyg-plain-textarea {

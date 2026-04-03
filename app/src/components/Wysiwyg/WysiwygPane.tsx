@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useMemo, type CSSProperties, type ChangeEvent } from 'react'
+import { useEffect, useRef, useCallback, useMemo, useState, type CSSProperties, type ChangeEvent } from 'react'
 import { Editor, rootCtx, defaultValueCtx, schemaCtx } from '@milkdown/kit/core'
 import { commandsCtx, editorViewCtx, prosePluginsCtx, serializerCtx } from '@milkdown/core'
 import { commonmark, codeBlockSchema, imageSchema } from '@milkdown/kit/preset/commonmark'
@@ -32,10 +32,12 @@ import { CodeBlockView } from './views/CodeBlockView'
 import { ImageView } from './views/ImageView'
 import { normalizeCodeBlockLanguage } from './codeLanguage'
 import { BlockCacheManager } from './blockCache'
+import { composeMarkdownWithFrontMatter } from '../../modules/markdown/frontMatter'
 import './WysiwygPane.css'
 
 export interface WysiwygPaneProps {
   value: string
+  frontMatterBlock?: string
   onChange: (markdown: string) => void
   filePath?: string | null
   effectiveLayout: LayoutType
@@ -200,6 +202,7 @@ function isPlainTextFile(path: string | null | undefined): boolean {
 
 function PlainTextWysiwyg({
   value,
+  frontMatterBlock,
   onChange,
   effectiveLayout,
   editorZoom,
@@ -209,6 +212,7 @@ function PlainTextWysiwyg({
   onOutlineNavigatorReady,
 }: WysiwygPaneProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const [isFrontMatterCollapsed, setIsFrontMatterCollapsed] = useState(false)
   const { themeSettings, resolvedMode } = useThemeContext()
   const isDark = resolvedMode === 'dark'
   const wysiwygBackground = themeSettings.workspaceBackground
@@ -258,10 +262,10 @@ function PlainTextWysiwyg({
   }, [onOutlineNavigatorReady])
 
   useEffect(() => {
-    const getter = () => textareaRef.current?.value ?? value
+    const getter = () => composeMarkdownWithFrontMatter(frontMatterBlock, textareaRef.current?.value ?? value)
     onMarkdownGetterReady?.(getter)
     return () => onMarkdownGetterReady?.(null)
-  }, [onMarkdownGetterReady, value])
+  }, [frontMatterBlock, onMarkdownGetterReady, value])
 
   const style: CSSProperties & { '--wysiwyg-zoom'?: string } = {}
   if (effectiveLayout === 'preview-only') {
@@ -271,7 +275,7 @@ function PlainTextWysiwyg({
   style['--wysiwyg-zoom'] = String(editorZoom ?? 1)
 
   const handleChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
-    onChange(event.target.value)
+    onChange(composeMarkdownWithFrontMatter(frontMatterBlock, event.target.value))
   }
 
   return (
@@ -285,14 +289,37 @@ function PlainTextWysiwyg({
           <div className="wysiwyg-background-overlay" aria-hidden="true" />
         </>
       ) : null}
-      <div className="wysiwyg-editor">
-        <textarea
-          ref={textareaRef}
-          className="wysiwyg-plain-textarea"
-          value={value}
-          onChange={handleChange}
-          spellCheck={false}
-        />
+      <div className="wysiwyg-scroll">
+        {frontMatterBlock ? (
+          <section className="wysiwyg-frontmatter-panel">
+            <button
+              type="button"
+              className="wysiwyg-frontmatter-toggle"
+              onClick={() => setIsFrontMatterCollapsed((prev) => !prev)}
+              aria-expanded={!isFrontMatterCollapsed}
+            >
+              <span className="wysiwyg-frontmatter-label">YAML Front Matter</span>
+              <span className={`wysiwyg-frontmatter-chevron ${isFrontMatterCollapsed ? 'collapsed' : ''}`} aria-hidden="true">▾</span>
+            </button>
+            {!isFrontMatterCollapsed ? (
+              <textarea
+                className="wysiwyg-frontmatter-textarea"
+                value={frontMatterBlock}
+                onChange={(event) => onChange(composeMarkdownWithFrontMatter(event.target.value, value))}
+                spellCheck={false}
+              />
+            ) : null}
+          </section>
+        ) : null}
+        <div className="wysiwyg-editor">
+          <textarea
+            ref={textareaRef}
+            className="wysiwyg-plain-textarea"
+            value={value}
+            onChange={handleChange}
+            spellCheck={false}
+          />
+        </div>
       </div>
     </section>
   )
@@ -303,6 +330,7 @@ function PlainTextWysiwyg({
  */
 function WysiwygEditor({
   value,
+  frontMatterBlock,
   onChange,
   filePath,
   effectiveLayout,
@@ -314,10 +342,12 @@ function WysiwygEditor({
   onFlushReady,
   onDirty,
 }: WysiwygPaneProps) {
+  const [isFrontMatterCollapsed, setIsFrontMatterCollapsed] = useState(false)
   if (isPlainTextFile(filePath)) {
     return (
       <PlainTextWysiwyg
         value={value}
+        frontMatterBlock={frontMatterBlock}
         onChange={onChange}
         filePath={filePath}
         effectiveLayout={effectiveLayout}
@@ -367,6 +397,8 @@ function WysiwygEditor({
   onFlushReadyRef.current = onFlushReady
   const onDirtyRef = useRef(onDirty)
   onDirtyRef.current = onDirty
+  const frontMatterBlockRef = useRef(frontMatterBlock ?? '')
+  frontMatterBlockRef.current = frontMatterBlock ?? ''
   const onSelectionGetterReadyRef = useRef(onSelectionGetterReady)
   onSelectionGetterReadyRef.current = onSelectionGetterReady
   const onMarkdownGetterReadyRef = useRef(onMarkdownGetterReady)
@@ -390,11 +422,15 @@ function WysiwygEditor({
   const nodeViewFactoryRef = useRef(nodeViewFactory)
   nodeViewFactoryRef.current = nodeViewFactory
 
-  const getCurrentMarkdown = useCallback(() => {
+  const getCurrentMarkdownBody = useCallback(() => {
     const editor = editorRef.current
     if (!editor) return valueRef.current
     return editor.action(getMarkdown())
   }, [])
+
+  const getCurrentMarkdown = useCallback(() => {
+    return composeMarkdownWithFrontMatter(frontMatterBlockRef.current, getCurrentMarkdownBody())
+  }, [getCurrentMarkdownBody])
 
   /**
    * Incrementally serialize only the changed blocks, then push through onChange.
@@ -426,10 +462,12 @@ function WysiwygEditor({
       }
     }
 
-    if (md !== valueRef.current) {
+    const nextMarkdown = composeMarkdownWithFrontMatter(frontMatterBlockRef.current, md)
+    const currentMarkdown = composeMarkdownWithFrontMatter(frontMatterBlockRef.current, valueRef.current)
+    if (nextMarkdown !== currentMarkdown) {
       isInternalUpdate.current = true
       lastSyncedValueRef.current = md
-      onChangeRef.current(md)
+      onChangeRef.current(nextMarkdown)
       queueMicrotask(() => { isInternalUpdate.current = false })
     }
   }, [])
@@ -441,7 +479,7 @@ function WysiwygEditor({
     if (requireInteraction && !hasUserInteractedRef.current) return
 
     // Full serialization via getMarkdown() — also rebuilds block cache
-    const md = getCurrentMarkdown()
+    const md = getCurrentMarkdownBody()
 
     // Rebuild cache so subsequent incremental updates have a correct baseline
     editor.action((ctx) => {
@@ -450,13 +488,15 @@ function WysiwygEditor({
       blockCacheRef.current.buildFull(view.state.doc, ser)
     })
 
-    if (md !== valueRef.current) {
+    const nextMarkdown = composeMarkdownWithFrontMatter(frontMatterBlockRef.current, md)
+    const currentMarkdown = composeMarkdownWithFrontMatter(frontMatterBlockRef.current, valueRef.current)
+    if (nextMarkdown !== currentMarkdown) {
       isInternalUpdate.current = true
       lastSyncedValueRef.current = md
-      onChangeRef.current(md)
+      onChangeRef.current(nextMarkdown)
       queueMicrotask(() => { isInternalUpdate.current = false })
     }
-  }, [getCurrentMarkdown])
+  }, [getCurrentMarkdownBody])
 
   const flushPending = useCallback(() => {
     if (idleCallbackRef.current !== null) {
@@ -689,6 +729,11 @@ function WysiwygEditor({
     return () => onMarkdownGetterReadyRef.current?.(null)
   }, [getCurrentMarkdown])
 
+  const handleFrontMatterChange = useCallback((event: ChangeEvent<HTMLTextAreaElement>) => {
+    frontMatterBlockRef.current = event.target.value.replace(/\r\n/g, '\n')
+    onChangeRef.current(composeMarkdownWithFrontMatter(frontMatterBlockRef.current, getCurrentMarkdownBody()))
+  }, [getCurrentMarkdownBody])
+
   useEffect(() => {
     onOutlineNavigatorReadyRef.current?.(navigateToHeadingByIndex)
     return () => onOutlineNavigatorReadyRef.current?.(null)
@@ -873,7 +918,30 @@ function WysiwygEditor({
           <div className="wysiwyg-background-overlay" aria-hidden="true" />
         </>
       ) : null}
-      <div ref={containerRef} className="wysiwyg-editor" />
+      <div className="wysiwyg-scroll">
+        {frontMatterBlock ? (
+          <section className="wysiwyg-frontmatter-panel">
+            <button
+              type="button"
+              className="wysiwyg-frontmatter-toggle"
+              onClick={() => setIsFrontMatterCollapsed((prev) => !prev)}
+              aria-expanded={!isFrontMatterCollapsed}
+            >
+              <span className="wysiwyg-frontmatter-label">YAML Front Matter</span>
+              <span className={`wysiwyg-frontmatter-chevron ${isFrontMatterCollapsed ? 'collapsed' : ''}`} aria-hidden="true">▾</span>
+            </button>
+            {!isFrontMatterCollapsed ? (
+              <textarea
+                className="wysiwyg-frontmatter-textarea"
+                value={frontMatterBlock}
+                onChange={handleFrontMatterChange}
+                spellCheck={false}
+              />
+            ) : null}
+          </section>
+        ) : null}
+        <div ref={containerRef} className="wysiwyg-editor" />
+      </div>
     </section>
   )
 }

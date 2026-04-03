@@ -5,6 +5,7 @@ import type {
   WordTemplateConfig,
   WordTemplateBinding,
 } from './types'
+import { extractFrontMatter } from '../../../markdown/frontMatter'
 import { markdownToWordModel } from '../markdownToWordModel'
 import type { WordBlock } from '../types'
 
@@ -74,35 +75,6 @@ function setModelValue(model: TemplateContentModel, path: string, value: string)
   if (scope !== 'meta' && scope !== 'sections') return
   const target = model[scope]
   target[key] = value
-}
-
-function extractFrontMatter(markdown: string): { frontMatter: Record<string, string>; body: string } {
-  const normalized = markdown.replace(/\r\n/g, '\n')
-  if (!normalized.startsWith('---\n')) {
-    return { frontMatter: {}, body: normalized }
-  }
-
-  const endIndex = normalized.indexOf('\n---\n', 4)
-  if (endIndex < 0) {
-    return { frontMatter: {}, body: normalized }
-  }
-
-  const rawFrontMatter = normalized.slice(4, endIndex)
-  const body = normalized.slice(endIndex + 5)
-  const frontMatter: Record<string, string> = {}
-
-  for (const line of rawFrontMatter.split('\n')) {
-    const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith('#')) continue
-    const separatorIndex = trimmed.indexOf(':')
-    if (separatorIndex < 0) continue
-    const key = trimmed.slice(0, separatorIndex).trim()
-    const value = trimmed.slice(separatorIndex + 1).trim()
-    if (!key) continue
-    frontMatter[key] = stripWrappingQuotes(value)
-  }
-
-  return { frontMatter, body }
 }
 
 function splitTemplateSections(
@@ -340,14 +312,4 @@ function flattenListItemBlocks(blocks: WordBlock[], prefix: string, depth: numbe
 function getLastFieldSegment(path: string): string {
   const parts = path.split('.')
   return parts[parts.length - 1] ?? path
-}
-
-function stripWrappingQuotes(value: string): string {
-  if (
-    (value.startsWith('"') && value.endsWith('"')) ||
-    (value.startsWith("'") && value.endsWith("'"))
-  ) {
-    return value.slice(1, -1)
-  }
-  return value
 }

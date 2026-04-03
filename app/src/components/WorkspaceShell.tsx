@@ -51,6 +51,7 @@ import {
 import { useI18n } from '../modules/i18n/I18nContext'
 import { useThemeContext } from '../modules/theme/ThemeContext'
 import { buildBackgroundImageVars, resolveManagedBackgroundImageUrl } from '../modules/theme/backgroundImageRuntime'
+import { extractFrontMatter } from '../modules/markdown/frontMatter'
 import type { WysiwygFormatActions } from './Wysiwyg/WysiwygPane'
 // 改为从内部动态加载，优化编辑性能
 // import { exportToHtml } from '../modules/export/html'
@@ -668,6 +669,10 @@ export function WorkspaceShell({
     if (isPdfActive) return ''
     return activeTab?.content ?? markdown
   }, [isPdfActive, activeTab?.content, markdown])
+
+  const wysiwygDocument = useMemo(() => extractFrontMatter(wysiwygMarkdown), [wysiwygMarkdown])
+  const wysiwygFrontMatterBlock = wysiwygDocument.rawBlock
+  const wysiwygBodyMarkdown = wysiwygDocument.body
 
   // 统一的编辑器 onChange：
   // - PDF 标签：只更新 pdfNotes，不碰 markdown/tab 内容
@@ -2539,7 +2544,8 @@ export function WorkspaceShell({
                         />
                         <WysiwygPaneLazy
                           key={activeId ?? 'wysiwyg-empty'}
-                          value={wysiwygMarkdown}
+                          value={wysiwygBodyMarkdown}
+                          frontMatterBlock={wysiwygFrontMatterBlock}
                           editorZoom={editorZoom}
                           onChange={(val) => {
                             if (!activeId) return
