@@ -1330,6 +1330,10 @@ button:disabled {
   box-sizing: border-box;
 }
 
+.ai-chat-body-fullpage .ai-chat-input::before {
+  display: none;
+}
+
 .ai-chat-body-fullpage:not(.has-messages) .ai-chat-input-container {
   border-radius: 16px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
