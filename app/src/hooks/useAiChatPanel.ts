@@ -23,6 +23,8 @@ export interface UseAiChatPanelReturn {
   aiChatMode: 'floating' | 'docked'
   setAiChatMode: React.Dispatch<React.SetStateAction<'floating' | 'docked'>>
   aiChatOpen: boolean
+  /** Synchronously updated ref — immune to stale closures in async command handlers */
+  aiChatOpenRef: React.RefObject<boolean>
   aiChatDockSide: 'left' | 'right'
   setAiChatDockSide: React.Dispatch<React.SetStateAction<'left' | 'right'>>
   aiChatWidthLeft: number
@@ -47,6 +49,7 @@ export function useAiChatPanel({
   const [aiChatState, setAiChatState] = useState<AiChatState | null>(null)
   const [aiChatMode, setAiChatMode] = useState<'floating' | 'docked'>('docked')
   const [aiChatOpen, setAiChatOpen] = useState(false)
+  const aiChatOpenRef = useRef(false)
   const [aiChatDockSide, setAiChatDockSide] = useState<'left' | 'right'>('right')
   const [aiChatWidthLeft, setAiChatWidthLeft] = useState(400)
   const [aiChatWidthRight, setAiChatWidthRight] = useState(400)
@@ -200,6 +203,7 @@ export function useAiChatPanel({
     (options: { entryMode: ChatEntryMode; initialContext?: EntryContext }) => {
       // 保持当前模式（floating/docked），只负责打开和设置会话参数
       const tabId = activeTabId ?? 'global'
+      aiChatOpenRef.current = true
       setAiChatOpen(true)
       setAiChatState({ open: true, tabId, ...options })
     },
@@ -207,6 +211,7 @@ export function useAiChatPanel({
   )
 
   const closeAiChatDialog = useCallback(() => {
+    aiChatOpenRef.current = false
     setAiChatOpen(false)
     setAiChatState(null)
   }, [])
@@ -232,6 +237,7 @@ export function useAiChatPanel({
     aiChatMode,
     setAiChatMode,
     aiChatOpen,
+    aiChatOpenRef,
     aiChatDockSide,
     setAiChatDockSide,
     aiChatWidthLeft,

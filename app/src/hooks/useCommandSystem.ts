@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { CommandContext, CommandRegistry } from '../modules/commands/registry'
 import { createCommandRegistry } from '../modules/commands/registry'
 import { onMenuAction } from '../modules/platform/menuEvents'
@@ -52,6 +52,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     aiChatDockSide,
     setAiChatDockSide,
     aiChatOpen,
+    aiChatOpenRef,
     editorZoom,
     setEditorZoom,
     editMode,
@@ -96,6 +97,8 @@ export function useCommandSystem(params: CommandSystemParams) {
     t,
   } = params
 
+  const aiChatOpeningRef = useRef(false)
+
   const aiClient = useMemo<IAiClient>(() => {
     return aiClientFromParams ?? createDefaultAiClient()
   }, [aiClientFromParams])
@@ -136,6 +139,8 @@ export function useCommandSystem(params: CommandSystemParams) {
         aiChatDockSide,
         setAiChatDockSide,
         aiChatOpen,
+        aiChatOpenRef,
+        aiChatOpeningRef,
         editorZoom,
         setEditorZoom,
         editMode,
@@ -188,6 +193,8 @@ export function useCommandSystem(params: CommandSystemParams) {
       aiChatDockSide,
       setAiChatDockSide,
       aiChatOpen,
+      aiChatOpenRef,
+      aiChatOpeningRef,
       editorZoom,
       setEditorZoom,
       editMode,

@@ -321,7 +321,7 @@ export function WorkspaceShell({
   const {
     aiChatState,
     aiChatMode, setAiChatMode,
-    aiChatOpen,
+    aiChatOpen, aiChatOpenRef,
     aiChatDockSide, setAiChatDockSide,
     aiChatWidthLeft: _aiChatWidthLeft, aiChatWidthRight: _aiChatWidthRight,
     isAiChatResizing: _isAiChatResizing,
@@ -1935,7 +1935,7 @@ export function WorkspaceShell({
 
   const { dispatchAction } = useCommandSystem({
     layout, setLayout: setLayout as any, setShowPreview, setStatusMessage,
-    aiChatMode, setAiChatMode, aiChatDockSide, setAiChatDockSide, aiChatOpen,
+    aiChatMode, setAiChatMode, aiChatDockSide, setAiChatDockSide, aiChatOpen, aiChatOpenRef,
     editorZoom, setEditorZoom,
     editMode, setEditMode: setEditModeWithFlush,
     confirmLoseChanges, hasUnsavedChanges, newDocument, setFilePath, applyOpenedContent,

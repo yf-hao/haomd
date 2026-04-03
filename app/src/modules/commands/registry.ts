@@ -104,6 +104,10 @@ export type AiCommandContext = StatusContext & {
   closeAiChatDialog?: () => void
   /** 当前 AI Chat 是否处于打开状态（来自 LayoutCommandContext） */
   aiChatOpen?: boolean
+  /** 同步更新的 ref，避免 async 命令中读到过时的 aiChatOpen 闭包值 */
+  aiChatOpenRef?: { readonly current: boolean }
+  /** 防止 async openChat() 期间重复触发打开操作的守卫 ref */
+  aiChatOpeningRef?: { current: boolean }
   /** 打开 Global Memory 对话框的 UI 回调，由 WorkspaceShell 提供。 */
   openGlobalMemoryDialog?: (options: { initialTab: 'persona' | 'manage' }) => void
   /** 获取当前编辑器中的完整 Markdown 文本 */
@@ -496,13 +500,20 @@ function createHelpCommands(ctx: HelpCommandContext): CommandRegistry {
 function createAiCommands(ctx: AiCommandContext): CommandRegistry {
   return {
     ai_chat: async () => {
+      // 优先使用同步 ref（不受闭包过时影响），降级使用闭包值
+      const isOpen = ctx.aiChatOpenRef ? ctx.aiChatOpenRef.current : ctx.aiChatOpen
+
       // 如果当前 AI Chat 已经打开，并且提供了关闭回调，则作为 toggle 行为优先关闭
-      if (ctx.aiChatOpen && ctx.closeAiChatDialog) {
+      if (isOpen && ctx.closeAiChatDialog) {
         ctx.closeAiChatDialog()
         ctx.setStatusMessage(tr(ctx, 'commands.aiChatClosed', 'AI Chat：已关闭'))
         return
       }
 
+      // 防止 async openChat() 期间重复触发
+      if (ctx.aiChatOpeningRef?.current) return
+
+      if (ctx.aiChatOpeningRef) ctx.aiChatOpeningRef.current = true
       try {
         if (!ctx.aiClient) {
           ctx.setStatusMessage(tr(ctx, 'commands.aiChatUnconfigured', 'AI Chat 未配置：AI 客户端未初始化'))
@@ -522,6 +533,8 @@ function createAiCommands(ctx: AiCommandContext): CommandRegistry {
       } catch (err) {
         console.error('[commands] ai_chat error', err)
         ctx.setStatusMessage(tr(ctx, 'commands.aiChatError', 'AI Chat 调用出错，请检查控制台日志'))
+      } finally {
+        if (ctx.aiChatOpeningRef) ctx.aiChatOpeningRef.current = false
       }
     },
     ai_ask_file: async () => {
