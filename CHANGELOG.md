@@ -2,6 +2,67 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.5.0] - 2026-04-03
+
+### 中文
+
+本次更新带来了**性能上的重大突破**以及**专业文档处理能力的进一步增强**。重点包括 WYSIWYG 编辑器的块级增量序列化、Word 导出引擎的模板化重构、数学符号库的深度扩展，以及 AI 文档对话与系统级打印的支持。
+
+#### ✨ 新特性
+
+*   **WYSIWYG 块级增量序列化**：大幅优化了大文档的编辑性能。现在仅对发生变更的区块进行实时序列化，性能提升 **15-50 倍**，彻底告别长文档编辑卡顿。
+*   **Word 导出模板系统升级**：
+    *   **模板填充支持**：现支持通过预设的 Word 模板文件进行数据填充，并可直接在导出时解析 Markdown 内容填充占位符。
+    *   **Front Matter 配置**：支持在文档属性（Front Matter）中通过 `word_template` 字段直接指定模板，移除了设置中冗余的通用模板选择。
+*   **数学符号库与预览对话框**：
+    *   新增希腊字母、离散数学、高等数学等分类的快捷插入子菜单。
+    *   配备了基于 KaTeX 的实时渲染预览对话框，确保插入前即可确认符号形态。
+*   **专业打印与 PDF 优化**：
+    *   **原生打印支持**：新增系统级打印能力，可代替旧版 PDF 导出以获得更好的排版一致性。
+    *   **导出预渲染**：优化了 Mermaid 和 KaTeX 在 PDF/打印时的处理逻辑，采用静态预渲染确保无黑边、无偏移。
+*   **AI 增强与文档对话**：
+    *   **文档对话模块**：新增独立的文档对话功能模块，提升了 AI 对当前文档上下文的感知能力。
+    *   **Provider 配置编辑**：AI 设置面板现支持对现有 Provider 信息的修改与禁用。
+*   **文档上传支持**：重构了附件处理逻辑，现支持 PDF 等多种文档格式的上传管理。
+
+#### 🔧 系统改进 与修复
+
+*   **核心层 (lib.rs) 重构**：对底层架构进行了系统级梳理，提升了资源管理与跨平台接口的稳定性。
+*   **样式一致性修复**：修复了 PDF 导出期间可能导致的预览区样式污染（段间距/行高改变）以及界面黑边问题。
+*   **交互细节优化**：模型选择器由“悬停触发展开”改为“点击展开”，有效避免了操作干扰。
+
+---
+
+### English
+
+This milestone release introduces **major performance breakthroughs** and **enhanced professional document capabilities**. Highlights include block-level incremental serialization for the WYSIWYG editor, a templated overhaul of the Word export engine, deep expansion of math symbol libraries, and new support for AI-driven document conversations and system-grade printing.
+
+#### ✨ New Features
+
+*   **Block-level Incremental WYSIWYG Serialization**: Massively optimized editing performance for large documents. By re-serializing only the actually modified blocks, performance is boosted by **15-50x**, ensuring fluid interaction with massive files.
+*   **Upgraded Word Export Template System**:
+    *   **Template Filling**: Now supports populating pre-defined Word templates with Markdown content during export.
+    *   **Front Matter Configuration**: Control export templates directly via the `word_template` field in document properties, replacing the redundant global template selector.
+*   **Math Symbol Library & Preview Dialog**:
+    *   Added submenus for quick insertion of Greek letters, discrete math, and advanced calculus symbols.
+    *   Featured a KaTeX-powered real-time preview dialog to verify symbol appearance before insertion.
+*   **Native Printing & PDF Optimization**:
+    *   **System Printing Support**: Added native system printing capability as a robust alternative to PDF export for superior layout consistency.
+    *   **Export Pre-rendering**: Refined Mermaid and KaTeX processing for PDF/Printing, using static pre-rendering to eliminate black borders and layout shifts.
+*   **AI & Document Conversations**:
+    *   **Document Context Conversations**: A new dedicated module for AI interactions focused specifically on the active document’s context.
+    *   **Provider Management**: AI settings now support editing and disabling existing custom Provider configurations.
+*   **Multipart Document Upload**: Overhauled attachment handling to support uploading and managing PDF and other document types.
+
+#### 🔧 System Refinements & Fixes
+
+*   **Core Architectural Refactor (lib.rs)**: Systematically overhauled the Rust backend for improved resource management and API reliability.
+*   **Visual Consistency Fixes**: Resolved style pollution issues where PDF export preparation would inadvertently alter editor layout (line height/spacing) or cause visual artifacts.
+*   **Interaction Polish**: Changed the model selector trigger from "hover" to "click" to prevent accidental menu expansions.
+
+---
+
+
 ## [v0.4.3] - 2026-03-25
 
 ### 中文
