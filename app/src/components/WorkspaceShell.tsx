@@ -145,6 +145,13 @@ export function WorkspaceShell({
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [aiChatSessionKey, setAiChatSessionKey] = useState<AiChatSessionKey>('global')
 
+  // Reset session key when switching away from the sessions panel
+  useEffect(() => {
+    if (activeLeftPanel !== 'sessions' && aiChatSessionKey.startsWith('session:')) {
+      setAiChatSessionKey('global')
+    }
+  }, [activeLeftPanel])
+
   // Other States
   const [editorZoom, setEditorZoom] = useState(() => {
     if (typeof localStorage === 'undefined') return 1.0
