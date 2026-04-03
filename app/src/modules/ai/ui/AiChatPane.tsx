@@ -73,7 +73,9 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
     setHistoryCursor(null)
   }
 
-  const dirKey = currentFilePath ? getDirKeyFromDocPath(currentFilePath) : undefined
+  const dirKey = currentFilePath
+    ? getDirKeyFromDocPath(currentFilePath)
+    : sessionKey.startsWith('session:') ? sessionKey : undefined
 
   const {
     loading,
