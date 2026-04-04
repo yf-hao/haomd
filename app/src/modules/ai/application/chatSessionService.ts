@@ -10,6 +10,8 @@ import type {
   ChatAttachment,
   UploadedFileRef,
   AgentProvider,
+  OpenAIToolDef,
+  ToolCallRequest,
 } from '../domain/types'
 import { createVisionClientFromProvider } from '../vision/visionClientFactory'
 import { buildGlobalMemorySystemPrompt, type RequestContext } from '../globalMemory/context'
@@ -32,6 +34,7 @@ import { createAttachmentUploadService } from './attachmentUploadService'
 import { docConversationService } from './docConversationService'
 import { inferAttachmentKind } from './attachmentKind'
 import { resolveDifyConversationId } from './difyConversationResolvers'
+import { getEnabledTools, toOpenAITools, executeTool, buildToolsPromptForDify, type AggregatedTool } from './mcpToolService'
 
 export type StartChatOptions = {
   entryMode: ChatEntryMode
@@ -97,6 +100,13 @@ type StreamRunOptions = {
   messageOverride?: ChatMessage[]
   persistConversation?: boolean
   useConversationId?: boolean
+  /** OpenAI function calling tools */
+  tools?: OpenAIToolDef[]
+}
+
+type StreamRunResult = {
+  toolCalls?: ToolCallRequest[]
+  error?: boolean
 }
 
 function pickDefaultProvider(state: Awaited<ReturnType<typeof loadAiSettingsState>>): UiProvider {
@@ -212,12 +222,12 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
   async function runStream(
     assistantId: string,
     options: StreamRunOptions = {},
-  ): Promise<void> {
+  ): Promise<StreamRunResult> {
     const usedClient = options.clientOverride ?? client
-    if (!usedClient) return
+    if (!usedClient) return {}
     const messages =
       options.messageOverride ?? engineHistoryToChatMessages(state.engineHistory)
-    if (!messages.length) return
+    if (!messages.length) return {}
 
     currentAbortController = new AbortController()
 
@@ -229,6 +239,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
           maxTokens: defaultMaxTokens,
           signal: currentAbortController.signal,
           attachments: options.attachments,
+          tools: options.tools,
         },
         {
           onChunk: (chunk) => {
@@ -256,7 +267,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
           '当前模型连接失败，请检查 Base URL / 网关配置。',
         )
         notifyStateChange()
-        return
+        return { error: true }
       }
 
       if ((options.useConversationId ?? true) && providerType === 'dify' && result.conversationId) {
@@ -270,12 +281,14 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
           newConversationId: difyConversationId,
         })
       }
+
+      return { toolCalls: result.toolCalls }
     } catch (e) {
-      if (disposed) return
+      if (disposed) return {}
       const error = e as Error
 
       if (error.name === 'AbortError') {
-        return
+        return {}
       }
 
       // 其他异常同样视为“连接异常”，在助手气泡中给出统一提示
@@ -285,7 +298,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
         '当前模型连接失败，请检查 Base URL / 网关配置。',
       )
       notifyStateChange()
-      return
+      return { error: true }
     } finally {
       if (!disposed) {
         // 最终兜底：统一在这里将消息标记为完成并存入 history
@@ -317,6 +330,107 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
         }
       }
       currentAbortController = null
+    }
+  }
+
+  const MAX_TOOL_ROUNDS = 10
+
+  /**
+   * Multi-round tool calling loop for OpenAI providers with MCP role active.
+   * 1. Call model with tools
+   * 2. If model returns tool_calls, execute them, add results as tool messages
+   * 3. Re-call model with updated messages (up to MAX_TOOL_ROUNDS)
+   * 4. When model responds with content only (no tool_calls), done
+   */
+  async function runStreamWithToolLoop(
+    assistantId: string,
+    clientOverride: IStreamingChatClient | null,
+    mcpTools: AggregatedTool[],
+    attachments?: ChatAttachment[],
+  ): Promise<void> {
+    const openaiTools = toOpenAITools(mcpTools)
+    const conversationMessages = engineHistoryToChatMessages(state.engineHistory)
+
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      const result = await runStream(assistantId, {
+        clientOverride,
+        messageOverride: conversationMessages,
+        attachments: round === 0 ? attachments : undefined,
+        tools: openaiTools,
+        persistConversation: false,
+      })
+
+      if (result.error || !result.toolCalls?.length) {
+        // No tool calls — final answer or error, done
+        break
+      }
+
+      // Model wants to call tools: complete current message, then execute tools
+      state = completeAssistantMessage(state, assistantId)
+      notifyStateChange()
+
+      // Add assistant message with tool_calls to conversation
+      const assistantMsg: ChatMessage = {
+        role: 'assistant',
+        content: '',
+        tool_calls: result.toolCalls,
+      }
+      conversationMessages.push(assistantMsg)
+
+      // Show tool execution status in the chat
+      for (const tc of result.toolCalls) {
+        const toolLabel = tc.function.name.replace(/^mcp__/, '').replace(/__/g, '/')
+        state = appendAssistantChunk(
+          state,
+          assistantId,
+          `\n🔧 Calling tool: \`${toolLabel}\`...\n`,
+        )
+        notifyStateChange()
+
+        try {
+          let parsedArgs = {}
+          try {
+            parsedArgs = JSON.parse(tc.function.arguments)
+          } catch { /* empty args */ }
+
+          const toolResult = await executeTool(tc.function.name, parsedArgs, mcpTools)
+          const resultStr = typeof toolResult === 'string'
+            ? toolResult
+            : JSON.stringify(toolResult, null, 2)
+
+          conversationMessages.push({
+            role: 'tool',
+            content: resultStr,
+            tool_call_id: tc.id,
+          })
+
+          state = appendAssistantChunk(
+            state,
+            assistantId,
+            `✅ Tool result received (${resultStr.length} chars)\n`,
+          )
+          notifyStateChange()
+        } catch (err) {
+          const errMsg = String(err)
+          conversationMessages.push({
+            role: 'tool',
+            content: `Error: ${errMsg}`,
+            tool_call_id: tc.id,
+          })
+          state = appendAssistantChunk(
+            state,
+            assistantId,
+            `❌ Tool error: ${errMsg}\n`,
+          )
+          notifyStateChange()
+        }
+      }
+
+      // Prepare for next round — new assistant placeholder
+      const nextAssistantId = genId()
+      assistantId = nextAssistantId
+      state = appendAssistantPlaceholder(state, assistantId)
+      notifyStateChange()
     }
   }
 
@@ -484,6 +598,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       }))
 
       let clientOverride: IStreamingChatClient | null = null
+      let systemPromptForRequest = systemPromptInfo.systemPrompt
       if (provider) {
         const reqContext: RequestContext = {
           source: 'chat-pane',
@@ -491,7 +606,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
           userInput: content,
           docPath,
         }
-        const systemPromptForRequest = buildGlobalMemorySystemPrompt(
+        systemPromptForRequest = buildGlobalMemorySystemPrompt(
           systemPromptInfo.systemPrompt,
           reqContext,
         )
@@ -514,6 +629,39 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
           currentModelId,
           initialConversationIdForClient,
         )
+      }
+
+      // Check if MCP tool calling is active
+      const isMcpRoleActive = state.activeRoleId === 'builtin_mcp_tool_calling'
+      if (isMcpRoleActive) {
+        try {
+          const mcpTools = await getEnabledTools()
+          if (mcpTools.length > 0) {
+            if (providerType === 'openai') {
+              // OpenAI: real function calling loop
+              await runStreamWithToolLoop(assistantId, clientOverride, mcpTools, chatAttachments)
+              return
+            } else {
+              // Dify: prompt injection — append tool descriptions to system prompt
+              const toolsPrompt = buildToolsPromptForDify(mcpTools)
+              const enhancedSystemPrompt = systemPromptForRequest
+                ? `${systemPromptForRequest}\n\n${toolsPrompt}`
+                : toolsPrompt
+              if (provider) {
+                const initialConversationIdForClient =
+                  providerType === 'dify' ? difyConversationId : undefined
+                clientOverride = createStreamingClientFromSettings(
+                  provider,
+                  enhancedSystemPrompt,
+                  currentModelId,
+                  initialConversationIdForClient,
+                )
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('[ChatSession] Failed to load MCP tools, falling back to normal chat', err)
+        }
       }
 
       await runStream(assistantId, {

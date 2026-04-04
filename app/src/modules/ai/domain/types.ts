@@ -143,8 +143,12 @@ export interface IAiClient {
 
 // 通用流式聊天接口（用于 Provider 适配，比如 Dify / OpenAI 等）
 export type ChatMessage = {
-  role: 'user' | 'assistant'
+  role: 'user' | 'assistant' | 'tool'
   content: string
+  /** For role='assistant' with tool calls */
+  tool_calls?: ToolCallRequest[]
+  /** For role='tool': the tool call ID this result responds to */
+  tool_call_id?: string
 }
 
 // 附件类型。Dify 侧当前使用 image / audio / document。
@@ -174,6 +178,27 @@ export type StreamingChatRequest = {
   maxTokens?: number
   signal?: AbortSignal
   attachments?: ChatAttachment[]
+  /** OpenAI function calling: tool definitions */
+  tools?: OpenAIToolDef[]
+}
+
+/** OpenAI function calling tool definition */
+export type OpenAIToolDef = {
+  type: 'function'
+  function: {
+    name: string
+    description: string
+    parameters: unknown
+  }
+}
+
+/** A tool call requested by the model */
+export type ToolCallRequest = {
+  id: string
+  function: {
+    name: string
+    arguments: string
+  }
 }
 
 export type StreamingChatResult = {
@@ -185,6 +210,8 @@ export type StreamingChatResult = {
    * 其他 Provider 可忽略或返回 undefined。
    */
   conversationId?: string
+  /** Tool calls requested by the model (OpenAI FC) */
+  toolCalls?: ToolCallRequest[]
   error?: Error
 }
 

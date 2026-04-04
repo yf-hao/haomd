@@ -1,4 +1,4 @@
-import type { IStreamingChatClient, StreamingChatRequest, StreamingChatResult } from '../domain/types'
+import type { IStreamingChatClient, StreamingChatRequest, StreamingChatResult, ToolCallRequest } from '../domain/types'
 
 export type OpenAIChatClientConfig = {
   apiKey: string
@@ -22,17 +22,40 @@ export function createOpenAIStreamingClient(config: OpenAIChatClientConfig): ISt
 
   return {
     async askStream(request: StreamingChatRequest, handlers): Promise<StreamingChatResult> {
-      const body = {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const body: any = {
         model: config.modelId,
         messages: [
           ...(config.systemPrompt
             ? [{ role: 'system', content: config.systemPrompt }]
             : []),
-          ...request.messages.map((m) => ({ role: m.role, content: m.content })),
+          ...request.messages.map((m) => {
+            if (m.role === 'tool') {
+              return { role: 'tool', content: m.content, tool_call_id: m.tool_call_id }
+            }
+            if (m.role === 'assistant' && m.tool_calls?.length) {
+              return {
+                role: 'assistant',
+                content: m.content || null,
+                tool_calls: m.tool_calls.map((tc) => ({
+                  id: tc.id,
+                  type: 'function',
+                  function: { name: tc.function.name, arguments: tc.function.arguments },
+                })),
+              }
+            }
+            return { role: m.role, content: m.content }
+          }),
         ],
         temperature: request.temperature ?? config.temperature ?? 0,
         max_tokens: request.maxTokens ?? config.maxTokens,
         stream: true,
+      }
+
+      // Inject tools if provided
+      if (request.tools && request.tools.length > 0) {
+        body.tools = request.tools
+        body.tool_choice = 'auto'
       }
 
       const response = await fetch(url, {
@@ -55,9 +78,10 @@ export function createOpenAIStreamingClient(config: OpenAIChatClientConfig): ISt
       const reader = response.body.getReader()
       const decoder = new TextDecoder('utf-8')
       let fullContent = ''
+      // Accumulate tool_calls from deltas
+      const toolCallsMap = new Map<number, { id: string; name: string; arguments: string }>()
 
       try {
-        // 按行解析 SSE: data: {...}
         let buffer = ''
         while (true) {
           const { done, value } = await reader.read()
@@ -75,17 +99,52 @@ export function createOpenAIStreamingClient(config: OpenAIChatClientConfig): ISt
               continue
             }
             try {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const json = JSON.parse(payload) as any
-              const delta: string | undefined = json.choices?.[0]?.delta?.content
-              if (delta) {
-                fullContent += delta
+              const choice = json.choices?.[0]
+              if (!choice) continue
+
+              const delta = choice.delta
+
+              // Text content
+              if (delta?.content) {
+                fullContent += delta.content
                 if (handlers.onChunk) {
-                  handlers.onChunk({ content: delta })
+                  handlers.onChunk({ content: delta.content })
+                }
+              }
+
+              // Tool calls delta accumulation
+              if (delta?.tool_calls) {
+                for (const tc of delta.tool_calls) {
+                  const idx = tc.index ?? 0
+                  if (!toolCallsMap.has(idx)) {
+                    toolCallsMap.set(idx, {
+                      id: tc.id ?? '',
+                      name: tc.function?.name ?? '',
+                      arguments: '',
+                    })
+                  }
+                  const entry = toolCallsMap.get(idx)!
+                  if (tc.id) entry.id = tc.id
+                  if (tc.function?.name) entry.name = tc.function.name
+                  if (tc.function?.arguments) entry.arguments += tc.function.arguments
                 }
               }
             } catch {
-              // 忽略单行解析错误
+              // ignore single-line parse errors
             }
+          }
+        }
+
+        // Build tool calls result
+        const toolCalls: ToolCallRequest[] = []
+        for (const [, entry] of toolCallsMap) {
+          if (entry.name) {
+            toolCalls.push({
+              id: entry.id,
+              function: { name: entry.name, arguments: entry.arguments },
+            })
           }
         }
 
@@ -93,7 +152,13 @@ export function createOpenAIStreamingClient(config: OpenAIChatClientConfig): ISt
           handlers.onComplete(fullContent, fullContent.length)
         }
 
-        return { content: fullContent, tokenCount: fullContent.length, completed: true, error: undefined }
+        return {
+          content: fullContent,
+          tokenCount: fullContent.length,
+          completed: true,
+          error: undefined,
+          toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+        }
       } catch (e) {
         const error = e as Error
         if (error.name === 'AbortError') {
