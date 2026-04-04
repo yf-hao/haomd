@@ -245,24 +245,22 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
   const [envString, setEnvString] = useState('')
   const [headersString, setHeadersString] = useState('')
 
-  // Sync textarea strings when selecting a different server (draft.id changes)
-  const prevDraftIdRef = useRef(draft.id)
+  // Sync textarea strings only when the selected server changes (draft.id changes)
+  // NOT when the user is editing fields — that would discard their partial input
   useEffect(() => {
-    if (draft.id !== prevDraftIdRef.current) {
-      prevDraftIdRef.current = draft.id
-      setArgsString((draft.args ?? []).join(' '))
-      setEnvString(
-        draft.env
-          ? Object.entries(draft.env).map(([k, v]) => `${k}=${v}`).join('\n')
-          : '',
-      )
-      setHeadersString(
-        draft.headers
-          ? Object.entries(draft.headers).map(([k, v]) => `${k}: ${v}`).join('\n')
-          : '',
-      )
-    }
-  }, [draft.id, draft.args, draft.env, draft.headers])
+    setArgsString((draft.args ?? []).join(' '))
+    setEnvString(
+      draft.env
+        ? Object.entries(draft.env).map(([k, v]) => `${k}=${v}`).join('\n')
+        : '',
+    )
+    setHeadersString(
+      draft.headers
+        ? Object.entries(draft.headers).map(([k, v]) => `${k}: ${v}`).join('\n')
+        : '',
+    )
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft.id])
 
   if (!open) return null
 
