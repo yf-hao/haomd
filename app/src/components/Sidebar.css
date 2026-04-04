@@ -713,6 +713,35 @@
   gap: 4px;
 }
 
+.sidebar-section-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.sidebar-section-toggle:hover .sidebar-section-title,
+.sidebar-section-toggle:hover .sidebar-section-toggle-icon {
+  color: var(--theme-text-default);
+}
+
+.sidebar-section-toggle-icon {
+  width: 14px;
+  text-align: center;
+  font-size: 10px;
+  color: var(--theme-text-muted);
+  transition: transform 0.12s ease-out;
+}
+
+.sidebar-section-toggle-icon.collapsed {
+  transform: rotate(-90deg);
+}
+
 .files-virtual-folder-add-btn {
   width: 18px;
   height: 18px;

@@ -348,6 +348,22 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
   const { t } = useI18n()
   const hasStandalone = standaloneFiles.length > 0
   const hasTree = folderRoots.some((rootPath) => (treesByRoot[rootPath]?.length ?? 0) > 0)
+  const [collapsedSections, setCollapsedSections] = useState<{ files: boolean; folders: boolean }>(() => {
+    if (typeof localStorage === 'undefined') {
+      return { files: false, folders: false }
+    }
+    try {
+      const raw = localStorage.getItem('haomd:sidebar:collapsed-sections')
+      if (!raw) return { files: false, folders: false }
+      const parsed = JSON.parse(raw)
+      return {
+        files: !!parsed?.files,
+        folders: !!parsed?.folders,
+      }
+    } catch {
+      return { files: false, folders: false }
+    }
+  })
 
   const [menuState, setMenuState] = useState<{
     visible: boolean
@@ -384,6 +400,10 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
   }>({ visible: false, x: 0, y: 0, targetPath: null })
 
   const closeMenu = () => setMenuState({ visible: false, x: 0, y: 0, target: null })
+
+  const toggleSectionCollapse = (section: 'files' | 'folders') => {
+    setCollapsedSections((prev) => ({ ...prev, [section]: !prev[section] }))
+  }
 
   const triggerContextAction = (action: SidebarContextAction) => {
     if (!menuState.visible || !menuState.target || !onContextAction) return
@@ -595,6 +615,15 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
   }, [collapsedFileVirtualFolders])
 
   useEffect(() => {
+    if (typeof localStorage === 'undefined') return
+    try {
+      localStorage.setItem('haomd:sidebar:collapsed-sections', JSON.stringify(collapsedSections))
+    } catch (e) {
+      console.warn('[Sidebar] persist collapsedSections failed', e)
+    }
+  }, [collapsedSections])
+
+  useEffect(() => {
     let cancelled = false
 
     const load = async () => {
@@ -711,7 +740,22 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
         {hasStandalone && (
           <section className="sidebar-section">
             <div className="sidebar-section-header">
-              <div className="sidebar-section-title">{t('sidebar.files')}</div>
+              <button
+                type="button"
+                className="sidebar-section-toggle"
+                aria-expanded={!collapsedSections.files}
+                aria-label={collapsedSections.files ? t('outline.expand') : t('outline.collapse')}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  e.preventDefault()
+                  toggleSectionCollapse('files')
+                }}
+              >
+                <span className={`sidebar-section-toggle-icon ${collapsedSections.files ? 'collapsed' : 'expanded'}`} aria-hidden="true">
+                  ▾
+                </span>
+                <span className="sidebar-section-title">{t('sidebar.files')}</span>
+              </button>
               <div className="files-section-actions">
                 <button
                   type="button"
@@ -728,165 +772,169 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
               </div>
             </div>
 
-            {creatingFileFolder && (
-              <div className="sidebar-virtual-folder-inline-create">
-                <input
-                  type="text"
-                  className="sidebar-virtual-folder-inline-input"
-                  placeholder={t('sidebar.virtualFolderPlaceholder')}
-                  autoFocus
-                  value={creatingFileFolderName}
-                  onChange={(e) => handleFileFolderInlineNameChange(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      handleFileFolderInlineConfirm()
-                    } else if (e.key === 'Escape') {
-                      e.preventDefault()
-                      handleFileFolderInlineCancel()
+            {collapsedSections.files ? null : (
+              <>
+                {creatingFileFolder && (
+                  <div className="sidebar-virtual-folder-inline-create">
+                    <input
+                      type="text"
+                      className="sidebar-virtual-folder-inline-input"
+                      placeholder={t('sidebar.virtualFolderPlaceholder')}
+                      autoFocus
+                      value={creatingFileFolderName}
+                      onChange={(e) => handleFileFolderInlineNameChange(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          handleFileFolderInlineConfirm()
+                        } else if (e.key === 'Escape') {
+                          e.preventDefault()
+                          handleFileFolderInlineCancel()
+                        }
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                )}
+
+                <ul className="sidebar-file-list">
+                  {rootFiles.map((file) => {
+                    const isActive = activePath === file.path
+                    const isRenaming = inlineRenamePath === file.path
+                    if (isRenaming) {
+                      return (
+                        <li key={file.path} className="sidebar-file-row">
+                          <InlineRenameRow
+                            level={0}
+                            isFolder={false}
+                            initialName={file.name}
+                            onConfirm={onInlineRenameConfirm}
+                            onCancel={onInlineRenameCancel}
+                          />
+                        </li>
+                      )
                     }
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                />
-              </div>
-            )}
-
-            <ul className="sidebar-file-list">
-              {rootFiles.map((file) => {
-                const isActive = activePath === file.path
-                const isRenaming = inlineRenamePath === file.path
-                if (isRenaming) {
-                  return (
-                    <li key={file.path} className="sidebar-file-row">
-                      <InlineRenameRow
-                        level={0}
-                        isFolder={false}
-                        initialName={file.name}
-                        onConfirm={onInlineRenameConfirm}
-                        onCancel={onInlineRenameCancel}
-                      />
-                    </li>
-                  )
-                }
-                return (
-                  <li
-                    key={file.path}
-                    className={`sidebar-file-row tree-row file ${isActive ? 'active' : ''}`}
-                    onClick={() => onFileClick(file.path)}
-                    onContextMenu={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      setMenuState({
-                        visible: true,
-                        x: e.clientX,
-                        y: e.clientY,
-                        target: { path: file.path, kind: 'standalone-file' },
-                      })
-                    }}
-                    title={file.path}
-                  >
-                    <span className="tree-icon">📄</span>
-                    <span className="tree-name">{file.name}</span>
-                  </li>
-                )
-              })}
-            </ul>
-
-            {fileVirtualFolders.length > 0 && (
-              <div className="sidebar-virtual-folders">
-                {fileVirtualFolders.map((folder) => {
-                  const files = filesByFolderId.get(folder.id) ?? []
-                  const isCollapsed = collapsedFileVirtualFolders[folder.id] ?? false
-                  const isRenaming = renamingFileFolderId === folder.id
-                  return (
-                    <div key={folder.id} className="sidebar-virtual-folder-section">
-                      <div
-                        className="sidebar-virtual-folder-header"
-                        onClick={() => {
-                          if (!isRenaming) {
-                            toggleFileVirtualFolderCollapse(folder.id)
-                          }
+                    return (
+                      <li
+                        key={file.path}
+                        className={`sidebar-file-row tree-row file ${isActive ? 'active' : ''}`}
+                        onClick={() => onFileClick(file.path)}
+                        onContextMenu={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setMenuState({
+                            visible: true,
+                            x: e.clientX,
+                            y: e.clientY,
+                            target: { path: file.path, kind: 'standalone-file' },
+                          })
                         }}
+                        title={file.path}
                       >
-                        <span className="sidebar-virtual-folder-toggle-icon">{isCollapsed ? '▸' : '▾'}</span>
-                        {isRenaming ? (
-                          <input
-                            type="text"
-                            className="sidebar-virtual-folder-inline-input"
-                            autoFocus
-                            value={renamingFileFolderName}
-                            onChange={(e) => handleFileVirtualFolderRenameChange(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault()
-                                handleFileVirtualFolderRenameConfirm()
-                              } else if (e.key === 'Escape') {
-                                e.preventDefault()
-                                handleFileVirtualFolderRenameCancel()
+                        <span className="tree-icon">📄</span>
+                        <span className="tree-name">{file.name}</span>
+                      </li>
+                    )
+                  })}
+                </ul>
+
+                {fileVirtualFolders.length > 0 && (
+                  <div className="sidebar-virtual-folders">
+                    {fileVirtualFolders.map((folder) => {
+                      const files = filesByFolderId.get(folder.id) ?? []
+                      const isCollapsed = collapsedFileVirtualFolders[folder.id] ?? false
+                      const isRenaming = renamingFileFolderId === folder.id
+                      return (
+                        <div key={folder.id} className="sidebar-virtual-folder-section">
+                          <div
+                            className="sidebar-virtual-folder-header"
+                            onClick={() => {
+                              if (!isRenaming) {
+                                toggleFileVirtualFolderCollapse(folder.id)
                               }
                             }}
-                            onClick={(e) => e.stopPropagation()}
-                            onBlur={() => handleFileVirtualFolderRenameCancel()}
-                          />
-                        ) : (
-                          <span
-                            className="sidebar-virtual-folder-name"
-                            onDoubleClick={(e) => {
-                              e.stopPropagation()
-                              startFileVirtualFolderRename(folder)
-                            }}
                           >
-                            {folder.name}
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          className="sidebar-virtual-folder-delete-btn"
-                          title={t('sidebar.deleteVirtualFolder')}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            e.preventDefault()
-                            requestDeleteFileVirtualFolder(folder)
-                          }}
-                        >
-                          ×
-                        </button>
-                      </div>
-                      {isCollapsed ? null : (
-                        files.length === 0 ? (
-                          <div className="sidebar-virtual-folder-empty">
-                            {t('sidebar.noFilesInVirtualFolder')}
-                          </div>
-                        ) : (
-                          <ul className="sidebar-file-list">
-                            {files.map((file) => (
-                              <li
-                                key={file.path}
-                                className={`sidebar-file-row tree-row file ${activePath === file.path ? 'active' : ''}`}
-                                onClick={() => onFileClick(file.path)}
-                                onContextMenu={(e) => {
-                                  e.preventDefault()
-                                  e.stopPropagation()
-                                  setMenuState({
-                                    visible: true,
-                                    x: e.clientX,
-                                    y: e.clientY,
-                                    target: { path: file.path, kind: 'standalone-file' },
-                                  })
+                            <span className="sidebar-virtual-folder-toggle-icon">{isCollapsed ? '▸' : '▾'}</span>
+                            {isRenaming ? (
+                              <input
+                                type="text"
+                                className="sidebar-virtual-folder-inline-input"
+                                autoFocus
+                                value={renamingFileFolderName}
+                                onChange={(e) => handleFileVirtualFolderRenameChange(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault()
+                                    handleFileVirtualFolderRenameConfirm()
+                                  } else if (e.key === 'Escape') {
+                                    e.preventDefault()
+                                    handleFileVirtualFolderRenameCancel()
+                                  }
                                 }}
-                                title={file.path}
+                                onClick={(e) => e.stopPropagation()}
+                                onBlur={() => handleFileVirtualFolderRenameCancel()}
+                              />
+                            ) : (
+                              <span
+                                className="sidebar-virtual-folder-name"
+                                onDoubleClick={(e) => {
+                                  e.stopPropagation()
+                                  startFileVirtualFolderRename(folder)
+                                }}
                               >
-                                <span className="tree-icon">📄</span>
-                                <span className="tree-name">{file.name}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        )
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
+                                {folder.name}
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              className="sidebar-virtual-folder-delete-btn"
+                              title={t('sidebar.deleteVirtualFolder')}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                e.preventDefault()
+                                requestDeleteFileVirtualFolder(folder)
+                              }}
+                            >
+                              ×
+                            </button>
+                          </div>
+                          {isCollapsed ? null : (
+                            files.length === 0 ? (
+                              <div className="sidebar-virtual-folder-empty">
+                                {t('sidebar.noFilesInVirtualFolder')}
+                              </div>
+                            ) : (
+                              <ul className="sidebar-file-list">
+                                {files.map((file) => (
+                                  <li
+                                    key={file.path}
+                                    className={`sidebar-file-row tree-row file ${activePath === file.path ? 'active' : ''}`}
+                                    onClick={() => onFileClick(file.path)}
+                                    onContextMenu={(e) => {
+                                      e.preventDefault()
+                                      e.stopPropagation()
+                                      setMenuState({
+                                        visible: true,
+                                        x: e.clientX,
+                                        y: e.clientY,
+                                        target: { path: file.path, kind: 'standalone-file' },
+                                      })
+                                    }}
+                                    title={file.path}
+                                  >
+                                    <span className="tree-icon">📄</span>
+                                    <span className="tree-name">{file.name}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </>
             )}
           </section>
         )}
@@ -894,7 +942,22 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
         {hasTree && (
           <section className="sidebar-section">
             <div className="sidebar-section-header">
-              <div className="sidebar-section-title">{t('sidebar.folders')}</div>
+              <button
+                type="button"
+                className="sidebar-section-toggle"
+                aria-expanded={!collapsedSections.folders}
+                aria-label={collapsedSections.folders ? t('outline.expand') : t('outline.collapse')}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  e.preventDefault()
+                  toggleSectionCollapse('folders')
+                }}
+              >
+                <span className={`sidebar-section-toggle-icon ${collapsedSections.folders ? 'collapsed' : 'expanded'}`} aria-hidden="true">
+                  ▾
+                </span>
+                <span className="sidebar-section-title">{t('sidebar.folders')}</span>
+              </button>
               <div className="folder-section-actions">
                 <button
                   type="button"
@@ -928,7 +991,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                 />
               </div>
             </div>
-            {folderRoots.length > 0 && (
+            {!collapsedSections.folders && folderRoots.length > 0 && (
               <ul className="sidebar-folder-list">
                 {folderRoots.map((rootPath) => {
                   const name = rootPath.split(/[/\\]/).pop() ?? rootPath
