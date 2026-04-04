@@ -14,7 +14,7 @@ export type McpServerCfg = {
   name: string
   groupId?: string | null
   enabled: boolean
-  transport: 'stdio' | 'sse'
+  transport: 'stdio' | 'sse' | 'streamable-http'
   // stdio
   command?: string | null
   args?: string[] | null

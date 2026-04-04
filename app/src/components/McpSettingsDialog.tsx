@@ -111,6 +111,10 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
       setError(t('mcp.urlRequired'))
       return
     }
+    if (draft.transport === 'streamable-http' && !draft.url?.trim()) {
+      setError(t('mcp.urlRequired'))
+      return
+    }
 
     setSettings((prev) => {
       const existing = prev.servers.findIndex((s) => s.id === draft.id)
@@ -297,6 +301,7 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
                   onChange={(e) => updateDraft('transport', e.target.value)}
                 >
                   <option value="stdio">stdio</option>
+                  <option value="streamable-http">Streamable HTTP</option>
                   <option value="sse">SSE</option>
                 </select>
               </FieldGroup>
@@ -353,6 +358,35 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
                       value={draft.url ?? ''}
                       onChange={(e) => updateDraft('url', e.target.value)}
                       placeholder="http://localhost:3001/sse"
+                    />
+                  </FieldGroup>
+                  <FieldGroup label="Headers">
+                    <textarea
+                      className="field-textarea"
+                      rows={2}
+                      value={headersString}
+                      onChange={(e) => {
+                        const headers: Record<string, string> = {}
+                        for (const line of e.target.value.split('\n')) {
+                          const idx = line.indexOf(':')
+                          if (idx > 0) headers[line.slice(0, idx).trim()] = line.slice(idx + 1).trim()
+                        }
+                        updateDraft('headers', Object.keys(headers).length > 0 ? headers : null)
+                      }}
+                      placeholder="Authorization: Bearer xxx"
+                    />
+                  </FieldGroup>
+                </>
+              )}
+
+              {draft.transport === 'streamable-http' && (
+                <>
+                  <FieldGroup label="URL">
+                    <input
+                      className="field-input"
+                      value={draft.url ?? ''}
+                      onChange={(e) => updateDraft('url', e.target.value)}
+                      placeholder="http://localhost:3001/mcp"
                     />
                   </FieldGroup>
                   <FieldGroup label="Headers">

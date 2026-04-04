@@ -64,7 +64,7 @@ struct JsonRpcError {
     data: Option<serde_json::Value>,
 }
 
-// ─── Transport abstraction ──────────────────────────────────────────
+// ─── Transport: Stdio ───────────────────────────────────────────────
 
 struct StdioTransport {
     #[allow(dead_code)]
@@ -74,13 +74,30 @@ struct StdioTransport {
     next_id: u64,
 }
 
+// ─── Transport: Streamable HTTP ─────────────────────────────────────
+
+struct HttpTransport {
+    url: String,
+    custom_headers: HashMap<String, String>,
+    session_id: Option<String>,
+    client: reqwest::Client,
+    next_id: u64,
+}
+
+// ─── Transport enum ─────────────────────────────────────────────────
+
+enum McpTransport {
+    Stdio(StdioTransport),
+    Http(HttpTransport),
+}
+
 // ─── Server instance ────────────────────────────────────────────────
 
 pub(crate) struct McpServerInstance {
     #[allow(dead_code)]
     server_id: String,
     server_name: String,
-    transport: StdioTransport,
+    transport: McpTransport,
     tools: Vec<McpToolDef>,
 }
 
@@ -98,7 +115,7 @@ impl McpProcessManager {
     }
 }
 
-// ─── Internal helpers ───────────────────────────────────────────────
+// ─── Stdio helpers ──────────────────────────────────────────────────
 
 async fn stdio_send_request(
     t: &mut StdioTransport,
@@ -124,7 +141,6 @@ async fn stdio_send_request(
         .await
         .map_err(|e| format!("flush stdin 失败: {e}"))?;
 
-    // Read lines until we get a response matching our id
     let expected_id = t.next_id;
     let mut line = String::new();
     loop {
@@ -149,7 +165,6 @@ async fn stdio_send_request(
                 }
                 return resp.result.ok_or_else(|| "empty result".to_string());
             }
-            // id mismatch (notification or other) — keep reading
         }
     }
 }
@@ -212,10 +227,195 @@ fn spawn_stdio_process(cfg: &McpServerCfg) -> Result<StdioTransport, String> {
     })
 }
 
-async fn initialize_and_list_tools(
-    t: &mut StdioTransport,
+// ─── Streamable HTTP helpers ────────────────────────────────────────
+
+fn create_http_transport(cfg: &McpServerCfg) -> Result<HttpTransport, String> {
+    let url = cfg.url.as_deref().ok_or("streamable-http server 未配置 URL")?;
+    let custom_headers = cfg.headers.clone().unwrap_or_default();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .map_err(|e| format!("创建 HTTP client 失败: {e}"))?;
+
+    Ok(HttpTransport {
+        url: url.to_string(),
+        custom_headers,
+        session_id: None,
+        client,
+        next_id: 0,
+    })
+}
+
+/// Send a JSON-RPC request over Streamable HTTP (POST).
+/// Handles both `application/json` and `text/event-stream` responses.
+/// Captures `Mcp-Session-Id` from response headers for session stickiness.
+async fn http_send_request(
+    t: &mut HttpTransport,
+    method: &str,
+    params: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    t.next_id += 1;
+    let req = JsonRpcRequest {
+        jsonrpc: "2.0",
+        id: t.next_id,
+        method: method.to_string(),
+        params,
+    };
+    let body = serde_json::to_string(&req).map_err(|e| e.to_string())?;
+
+    let mut builder = t
+        .client
+        .post(&t.url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json, text/event-stream");
+
+    if let Some(sid) = &t.session_id {
+        builder = builder.header("Mcp-Session-Id", sid);
+    }
+    for (k, v) in &t.custom_headers {
+        builder = builder.header(k, v);
+    }
+
+    let resp = builder
+        .body(body)
+        .send()
+        .await
+        .map_err(|e| format!("HTTP request 失败: {e}"))?;
+
+    // Capture session id from response
+    if let Some(sid) = resp.headers().get("mcp-session-id") {
+        if let Ok(s) = sid.to_str() {
+            t.session_id = Some(s.to_string());
+        }
+    }
+
+    let status = resp.status();
+    if !status.is_success() {
+        let text = resp.text().await.unwrap_or_default();
+        return Err(format!("HTTP {status}: {text}"));
+    }
+
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+
+    let expected_id = t.next_id;
+
+    if content_type.contains("text/event-stream") {
+        // Parse SSE stream — look for the JSON-RPC response matching our id
+        let text = resp.text().await.map_err(|e| format!("读取 SSE 响应失败: {e}"))?;
+        for line in text.lines() {
+            let line = line.trim();
+            if let Some(data) = line.strip_prefix("data:") {
+                let data = data.trim();
+                if data.is_empty() || data == "[DONE]" {
+                    continue;
+                }
+                if let Ok(rpc_resp) = serde_json::from_str::<JsonRpcResponse>(data) {
+                    if rpc_resp.id == Some(expected_id) {
+                        if let Some(err) = rpc_resp.error {
+                            return Err(format!("JSON-RPC error {}: {}", err.code, err.message));
+                        }
+                        return rpc_resp.result.ok_or_else(|| "empty result".to_string());
+                    }
+                }
+            }
+        }
+        Err("SSE 响应中未找到匹配的 JSON-RPC 结果".to_string())
+    } else {
+        // application/json — single JSON-RPC response
+        let rpc_resp: JsonRpcResponse = resp
+            .json()
+            .await
+            .map_err(|e| format!("解析 JSON-RPC 响应失败: {e}"))?;
+
+        if rpc_resp.id != Some(expected_id) {
+            return Err("JSON-RPC response id 不匹配".to_string());
+        }
+        if let Some(err) = rpc_resp.error {
+            return Err(format!("JSON-RPC error {}: {}", err.code, err.message));
+        }
+        rpc_resp.result.ok_or_else(|| "empty result".to_string())
+    }
+}
+
+/// Send a JSON-RPC notification (no id, no response expected) over Streamable HTTP.
+async fn http_send_notification(
+    t: &mut HttpTransport,
+    method: &str,
+    params: Option<serde_json::Value>,
+) -> Result<(), String> {
+    let notif = JsonRpcNotification {
+        jsonrpc: "2.0",
+        method: method.to_string(),
+        params,
+    };
+    let body = serde_json::to_string(&notif).map_err(|e| e.to_string())?;
+
+    let mut builder = t
+        .client
+        .post(&t.url)
+        .header("Content-Type", "application/json");
+
+    if let Some(sid) = &t.session_id {
+        builder = builder.header("Mcp-Session-Id", sid);
+    }
+    for (k, v) in &t.custom_headers {
+        builder = builder.header(k, v);
+    }
+
+    let resp = builder
+        .body(body)
+        .send()
+        .await
+        .map_err(|e| format!("HTTP notification 失败: {e}"))?;
+
+    // Capture session id
+    if let Some(sid) = resp.headers().get("mcp-session-id") {
+        if let Ok(s) = sid.to_str() {
+            t.session_id = Some(s.to_string());
+        }
+    }
+
+    let status = resp.status();
+    // 200 OK or 202 Accepted or 204 No Content are all valid
+    if !status.is_success() {
+        let text = resp.text().await.unwrap_or_default();
+        return Err(format!("HTTP notification {status}: {text}"));
+    }
+    Ok(())
+}
+
+// ─── Unified transport helpers ──────────────────────────────────────
+
+async fn transport_send_request(
+    t: &mut McpTransport,
+    method: &str,
+    params: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    match t {
+        McpTransport::Stdio(s) => stdio_send_request(s, method, params).await,
+        McpTransport::Http(h) => http_send_request(h, method, params).await,
+    }
+}
+
+async fn transport_send_notification(
+    t: &mut McpTransport,
+    method: &str,
+    params: Option<serde_json::Value>,
+) -> Result<(), String> {
+    match t {
+        McpTransport::Stdio(s) => stdio_send_notification(s, method, params).await,
+        McpTransport::Http(h) => http_send_notification(h, method, params).await,
+    }
+}
+
+async fn transport_initialize_and_list_tools(
+    t: &mut McpTransport,
 ) -> Result<Vec<McpToolDef>, String> {
-    // 1. initialize handshake
     let init_params = serde_json::json!({
         "protocolVersion": "2024-11-05",
         "capabilities": {},
@@ -224,19 +424,15 @@ async fn initialize_and_list_tools(
             "version": "0.5.0"
         }
     });
-    let _server_info = stdio_send_request(t, "initialize", Some(init_params)).await?;
+    let _server_info = transport_send_request(t, "initialize", Some(init_params)).await?;
+    transport_send_notification(t, "notifications/initialized", None).await?;
 
-    // 2. send initialized notification
-    stdio_send_notification(t, "notifications/initialized", None).await?;
-
-    // 3. list tools
-    let tools_result = stdio_send_request(t, "tools/list", None).await?;
+    let tools_result = transport_send_request(t, "tools/list", None).await?;
     let tools_array = tools_result
         .get("tools")
         .cloned()
         .unwrap_or(serde_json::Value::Array(vec![]));
     let tools: Vec<McpToolDef> = serde_json::from_value(tools_array).unwrap_or_default();
-
     Ok(tools)
 }
 
@@ -280,22 +476,33 @@ pub async fn mcp_start_server(
         }
     };
 
-    if cfg.transport != "stdio" {
-        return err_payload(
-            ErrorCode::IoError,
-            format!("暂不支持 '{}' 传输方式，目前仅支持 stdio", cfg.transport),
-            trace,
-        );
-    }
-
-    // Spawn process
-    let mut transport = match spawn_stdio_process(&cfg) {
-        Ok(t) => t,
-        Err(e) => return err_payload(ErrorCode::IoError, e, trace),
+    // Create transport based on type
+    let mut transport = match cfg.transport.as_str() {
+        "stdio" => {
+            let t = match spawn_stdio_process(&cfg) {
+                Ok(t) => t,
+                Err(e) => return err_payload(ErrorCode::IoError, e, trace),
+            };
+            McpTransport::Stdio(t)
+        }
+        "streamable-http" => {
+            let t = match create_http_transport(&cfg) {
+                Ok(t) => t,
+                Err(e) => return err_payload(ErrorCode::IoError, e, trace),
+            };
+            McpTransport::Http(t)
+        }
+        other => {
+            return err_payload(
+                ErrorCode::IoError,
+                format!("不支持的传输方式 '{other}'，支持 stdio / streamable-http"),
+                trace,
+            )
+        }
     };
 
     // Initialize + list tools
-    let tools = match initialize_and_list_tools(&mut transport).await {
+    let tools = match transport_initialize_and_list_tools(&mut transport).await {
         Ok(t) => t,
         Err(e) => return err_payload(ErrorCode::IoError, format!("MCP 初始化失败: {e}"), trace),
     };
@@ -323,7 +530,10 @@ pub async fn mcp_stop_server(
     let mut instances = mgr.instances.lock().await;
 
     if let Some(mut inst) = instances.remove(&server_id) {
-        let _ = inst.transport.child.kill().await;
+        match &mut inst.transport {
+            McpTransport::Stdio(s) => { let _ = s.child.kill().await; }
+            McpTransport::Http(_) => { /* stateless — nothing to kill */ }
+        }
         ok((), trace)
     } else {
         err_payload(
@@ -380,7 +590,7 @@ pub async fn mcp_call_tool(
         "arguments": arguments,
     });
 
-    match stdio_send_request(&mut inst.transport, "tools/call", Some(params)).await {
+    match transport_send_request(&mut inst.transport, "tools/call", Some(params)).await {
         Ok(result) => ok(result, trace),
         Err(e) => err_payload(
             ErrorCode::IoError,

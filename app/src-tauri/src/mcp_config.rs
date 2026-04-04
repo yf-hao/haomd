@@ -25,7 +25,7 @@ pub struct McpServerCfg {
     pub group_id: Option<String>,
     #[serde(default)]
     pub enabled: bool,
-    /// "stdio" | "sse"
+    /// "stdio" | "sse" | "streamable-http"
     pub transport: String,
     // stdio fields
     #[serde(default)]
