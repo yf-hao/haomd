@@ -300,17 +300,14 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
     if (!firstUser?.content?.trim()) return
 
     namingAttemptedRef.current = true
-    console.log('[AiChatPane] auto-naming: triggered for', sessionKey, 'firstUser:', firstUser.content.slice(0, 30))
 
     void (async () => {
       try {
         // Only rename if the session has no custom title yet
         const existing = await loadSession(sessionKey)
-        console.log('[AiChatPane] auto-naming: existing title=', existing?.title)
         if (existing?.title) return
 
         const title = await generateSessionTitle(firstUser.content)
-        console.log('[AiChatPane] auto-naming: generated title=', title)
         if (!title) return
 
         const now = Date.now()
