@@ -120,9 +120,12 @@ export const SessionsPanel = memo(function SessionsPanel({
 
   const formatTime = (ts: number) => {
     const d = new Date(ts)
-    const dateStr = d.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
-    const timeStr = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
-    return `${dateStr} ${timeStr}`
+    const yyyy = d.getFullYear()
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    const hh = String(d.getHours()).padStart(2, '0')
+    const min = String(d.getMinutes()).padStart(2, '0')
+    return `${yyyy}-${mm}-${dd} ${hh}:${min}`
   }
 
   return (
