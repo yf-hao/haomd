@@ -13,21 +13,23 @@
 
 import { SimpleChat } from '../dify/SimpleChat'
 import { loadAiSettingsState } from '../config/aiSettingsRepo'
+import { loadNamingConv, saveNamingConv } from '../config/aiSessionsRepo'
 
-// ─── localStorage key for the shared Dify naming conversation ────────
-const NAMING_CONV_KEY_PREFIX = 'haomd:ai:naming-conv-id:'
-
-function getNamingConvId(providerId: string): string | null {
+// ─── Tauri-persisted naming conversation ID per provider ─────────────
+async function getNamingConvId(providerId: string): Promise<string | null> {
   try {
-    return localStorage.getItem(`${NAMING_CONV_KEY_PREFIX}${providerId}`)
+    const cfg = await loadNamingConv()
+    return cfg.convIds[providerId] ?? null
   } catch {
     return null
   }
 }
 
-function setNamingConvId(providerId: string, convId: string): void {
+async function setNamingConvId(providerId: string, convId: string): Promise<void> {
   try {
-    localStorage.setItem(`${NAMING_CONV_KEY_PREFIX}${providerId}`, convId)
+    const cfg = await loadNamingConv()
+    cfg.convIds[providerId] = convId
+    await saveNamingConv(cfg)
   } catch {
     // ignore
   }
@@ -51,7 +53,7 @@ async function generateTitleViaDify(
   chat.init({ apiKey, baseURL, model })
 
   // Restore the shared naming conversation_id for this provider
-  const savedConvId = getNamingConvId(providerId)
+  const savedConvId = await getNamingConvId(providerId)
   if (savedConvId) {
     chat.setConversationId(savedConvId)
   }
@@ -74,7 +76,7 @@ async function generateTitleViaDify(
   // Persist updated conversationId for future calls
   const newConvId = chat.getConversationId()
   if (newConvId) {
-    setNamingConvId(providerId, newConvId)
+    await setNamingConvId(providerId, newConvId)
   }
 
   return cleanTitle(title)

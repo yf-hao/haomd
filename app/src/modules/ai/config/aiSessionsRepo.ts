@@ -58,3 +58,23 @@ export async function deleteSession(id: string): Promise<void> {
     console.warn('[ai/sessions] delete_ai_session error', resp.Err.error)
   }
 }
+
+// ─── Naming conversation persistence ────────────────────────────────
+
+export type AiNamingConvCfg = {
+  convIds: Record<string, string>
+}
+
+export async function loadNamingConv(): Promise<AiNamingConvCfg> {
+  const resp = await invoke<BackendResult<AiNamingConvCfg>>('load_ai_naming_conv')
+  if ('Ok' in resp) return resp.Ok.data
+  console.warn('[ai/sessions] load_ai_naming_conv error', resp.Err.error)
+  return { convIds: {} }
+}
+
+export async function saveNamingConv(cfg: AiNamingConvCfg): Promise<void> {
+  const resp = await invoke<BackendResult<null>>('save_ai_naming_conv', { cfg })
+  if ('Err' in resp) {
+    console.warn('[ai/sessions] save_ai_naming_conv error', resp.Err.error)
+  }
+}

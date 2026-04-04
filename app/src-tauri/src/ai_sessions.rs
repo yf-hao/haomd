@@ -44,6 +44,16 @@ pub struct AiChatSessionIndexEntry {
     pub updated_at: i64,
 }
 
+// ─── Naming conversation record ─────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AiNamingConvCfg {
+    /// Map of provider_id → Dify conversation_id used for session titling
+    #[serde(default)]
+    pub conv_ids: std::collections::HashMap<String, String>,
+}
+
 // ─── File paths ─────────────────────────────────────────────────────
 
 fn ai_sessions_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
@@ -58,6 +68,12 @@ fn ai_sessions_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
         std::fs::create_dir_all(&dir)?;
         Ok(dir)
     }
+}
+
+fn naming_conv_path(app: &AppHandle) -> std::io::Result<PathBuf> {
+    let mut dir = ai_sessions_dir(app)?;
+    dir.push("ai-naming-conv.json");
+    Ok(dir)
 }
 
 fn sessions_data_path(app: &AppHandle) -> std::io::Result<PathBuf> {
@@ -218,5 +234,48 @@ pub async fn delete_ai_session(
             format!("读取 sessions_data 失败: {err}"),
             trace,
         ),
+    }
+}
+
+// ─── Naming conversation persistence ────────────────────────────────
+
+#[tauri::command]
+pub async fn load_ai_naming_conv(app: AppHandle) -> ResultPayload<AiNamingConvCfg> {
+    let trace = new_trace_id();
+    let path = match naming_conv_path(&app) {
+        Ok(p) => p,
+        Err(err) => {
+            return err_payload(ErrorCode::IoError, format!("获取 naming_conv 路径失败: {err}"), trace);
+        }
+    };
+    match fs::read(&path).await {
+        Ok(bytes) => {
+            let cfg: AiNamingConvCfg = serde_json::from_slice(&bytes).unwrap_or_default();
+            ok(cfg, trace)
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => ok(AiNamingConvCfg::default(), trace),
+        Err(err) => err_payload(
+            ErrorCode::IoError,
+            format!("读取 naming_conv 失败: {err}"),
+            trace,
+        ),
+    }
+}
+
+#[tauri::command]
+pub async fn save_ai_naming_conv(app: AppHandle, cfg: AiNamingConvCfg) -> ResultPayload<()> {
+    let trace = new_trace_id();
+    let path = match naming_conv_path(&app) {
+        Ok(p) => p,
+        Err(err) => {
+            return err_payload(ErrorCode::IoError, format!("获取 naming_conv 路径失败: {err}"), trace);
+        }
+    };
+    match serde_json::to_vec_pretty(&cfg) {
+        Ok(bytes) => match fs::write(&path, bytes).await {
+            Ok(()) => ok((), trace),
+            Err(err) => err_payload(ErrorCode::IoError, format!("写入 naming_conv 失败: {err}"), trace),
+        },
+        Err(err) => err_payload(ErrorCode::IoError, format!("序列化 naming_conv 失败: {err}"), trace),
     }
 }

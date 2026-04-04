@@ -101,6 +101,8 @@ macro_rules! app_invoke_handler {
             load_ai_session,
             save_ai_session,
             delete_ai_session,
+            load_ai_naming_conv,
+            save_ai_naming_conv,
             // Platform integration and export utilities
             open_terminal,
             open_in_file_explorer,
