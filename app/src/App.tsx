@@ -238,6 +238,7 @@ function App() {
           isAgentSettingsOpen={isAgentSettingsOpen}
           isPromptSettingsOpen={isPromptSettingsOpen}
           isSettingsOpen={isSettingsOpen}
+          isMcpSettingsOpen={isMcpSettingsOpen}
           isStatusBarVisible={isStatusBarVisible}
           docCharCount={docCharCount}
           statusMessage={statusMessage}
@@ -258,6 +259,7 @@ function App() {
           setAgentSettingsOpen={setAgentSettingsOpen}
           setPromptSettingsOpen={setPromptSettingsOpen}
           setSettingsOpen={setSettingsOpen}
+          setMcpSettingsOpen={setMcpSettingsOpen}
         />
       </ThemeModeProvider>
     </I18nProvider>
@@ -273,6 +275,7 @@ type AppShellContentProps = {
   isAgentSettingsOpen: boolean
   isPromptSettingsOpen: boolean
   isSettingsOpen: boolean
+  isMcpSettingsOpen: boolean
   isStatusBarVisible: boolean
   docCharCount: number | null
   statusMessage: string
@@ -287,6 +290,7 @@ type AppShellContentProps = {
   setAgentSettingsOpen: Dispatch<SetStateAction<boolean>>
   setPromptSettingsOpen: Dispatch<SetStateAction<boolean>>
   setSettingsOpen: Dispatch<SetStateAction<boolean>>
+  setMcpSettingsOpen: Dispatch<SetStateAction<boolean>>
 }
 
 function AppShellContent({
@@ -298,6 +302,7 @@ function AppShellContent({
   isAgentSettingsOpen,
   isPromptSettingsOpen,
   isSettingsOpen,
+  isMcpSettingsOpen,
   isStatusBarVisible,
   docCharCount,
   statusMessage,
@@ -312,6 +317,7 @@ function AppShellContent({
   setAgentSettingsOpen,
   setPromptSettingsOpen,
   setSettingsOpen,
+  setMcpSettingsOpen,
 }: AppShellContentProps) {
   const { t } = useI18n()
 
