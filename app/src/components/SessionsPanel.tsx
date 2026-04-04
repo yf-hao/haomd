@@ -121,11 +121,11 @@ export const SessionsPanel = memo(function SessionsPanel({
   const formatTime = (ts: number) => {
     const d = new Date(ts)
     const now = new Date()
-    const timeStr = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+    const timeStr = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
     if (d.toDateString() === now.toDateString()) {
       return timeStr
     }
-    const dateStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    const dateStr = d.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
     return `${dateStr} ${timeStr}`
   }
 
