@@ -19,3 +19,6 @@
 # macOS system files
 .DS_Store
 **/.DS_Store
+
+# Local session data files (Tauri dev working directory)
+app/src-tauri/session:*/
