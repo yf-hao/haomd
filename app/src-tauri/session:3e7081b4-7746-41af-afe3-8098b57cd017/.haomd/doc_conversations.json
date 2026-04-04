@@ -1,0 +1,32 @@
+[
+  {
+    "docPath": "6a34d96a-c86f-4e33-b090-322572bde632",
+    "sessionId": "1775277161294_c194xn",
+    "lastActiveAt": 1775277161294,
+    "difyProviderConversations": {},
+    "messages": [
+      {
+        "id": "1775277157557_qu8icn",
+        "docPath": "6a34d96a-c86f-4e33-b090-322572bde632",
+        "timestamp": 1775277161294,
+        "role": "user",
+        "content": "你好",
+        "meta": {
+          "providerType": "openai",
+          "modelName": "gpt-5.4"
+        }
+      },
+      {
+        "id": "1775277157557_59k994",
+        "docPath": "6a34d96a-c86f-4e33-b090-322572bde632",
+        "timestamp": 1775277161294,
+        "role": "assistant",
+        "content": "",
+        "meta": {
+          "providerType": "openai",
+          "modelName": "gpt-5.4"
+        }
+      }
+    ]
+  }
+]

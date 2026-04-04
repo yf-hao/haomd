@@ -1,0 +1,35 @@
+[
+  {
+    "docPath": "a133be42-cb00-404b-b548-f36bca0ee4e3",
+    "sessionId": "1775263144546_d2beo7",
+    "lastActiveAt": 1775263144546,
+    "difyConversationId": "aed6f3a4-a66a-4ec6-b835-0da7c63f7de0",
+    "difyProviderConversations": {
+      "1770434252163_bg8e4j": "aed6f3a4-a66a-4ec6-b835-0da7c63f7de0"
+    },
+    "messages": [
+      {
+        "id": "1775263120592_zrq284",
+        "docPath": "a133be42-cb00-404b-b548-f36bca0ee4e3",
+        "timestamp": 1775263144546,
+        "role": "user",
+        "content": "怎么学习LLM",
+        "meta": {
+          "providerType": "dify",
+          "modelName": "GPT-5.2-chat"
+        }
+      },
+      {
+        "id": "1775263120592_xlb50o",
+        "docPath": "a133be42-cb00-404b-b548-f36bca0ee4e3",
+        "timestamp": 1775263144546,
+        "role": "assistant",
+        "content": "学习 **LLM（Large Language Model，大语言模型）** 可以分为**认知层、原理层、工程层、研究层**四个递进阶段。下面给出一条**系统、可执行、从零到进阶**的学习路径，并标明每一步的**目标、核心知识、实践建议和常见误区**。\n\n---\n\n## 一、认知层：先“用明白”，建立正确直觉\n\n### 1. LLM 是什么\n**定义**  \nLLM 是在大规模语料上训练的参数量极大的神经网络，其核心目标是学习条件概率分布：\n\n$$\nP(w_t \\mid w_1, w_2, \\dots, w_{t-1})\n$$\n\n即：**在给定上下文的条件下预测下一个 token**。\n\n### 2. 你需要先理解的几个事实\n- LLM **不是搜索引擎**\n- LLM **不具备真实理解或意识**\n- 所有能力（推理、代码、对话）都来自：\n  - 规模\n  - 统计学习\n  - 表示能力\n\n### 3. 必做实践\n- 使用 ChatGPT / Claude / Gemini\n- 对比不同 prompt 的输出差异\n- 观察 hallucination（编造）\n\n✅ 目标：**形成“概率生成器 + 语言接口”的直觉**\n\n---\n\n## 二、原理层：搞懂“为什么它能这样工作”\n\n### 1. 必备数学基础（不要求推导，但要能看懂）\n| 领域 | 关键点 |\n|---|---|\n| 线性代数 | 向量、矩阵乘法 |\n| 概率论 | 概率分布、交叉熵 |\n| 微积分 | 梯度下降直觉 |\n| 信息论 | Cross Entropy Loss |\n\n核心损失函数：\n\n$$\n\\mathcal{L} = -\\sum_{t=1}^{T} \\log P_\\theta(w_t \\mid w_{<t})\n$$\n\n---\n\n### 2. Transformer 架构（LLM 的核心）\n\n#### (1) 整体结构\n- Embedding\n- Positional Encoding\n- 多层 Transformer Block\n- Output Projection\n\n#### (2) Self-Attention（最关键）\n注意力公式：\n\n$$\n\\text{Attention}(Q, K, V)\n= \\text{softmax}\\left(\\frac{QK^\\top}{\\sqrt{d_k}}\\right)V\n$$\n\n你要理解的是：\n- **不是按顺序看，而是“全局加权”**\n- 权重是学出来的\n\n---\n\n### 3. 推荐学习资料\n- 《Attention Is All You Need》\n- Jay Alammar Transformer 可视化博客\n- Karpathy《Neural Networks: Zero to Hero》\n\n✅ 目标：**能向别人解释 Transformer 在干什么**\n\n---\n\n## 三、工程层：真正“会用 LLM”\n\n这是大多数人**最有价值的一层**。\n\n---\n\n### 1. API 使用（基础能力）\n掌握以下内容：\n- Prompt Engineering\n- Function Calling / Tool Use\n- Context 管理\n- Token 成本控制\n\n示例（伪代码）：\n```python\nresponse = llm.chat(\n    messages=[\n        {\"role\": \"system\", \"content\": \"You are a tutor\"},\n        {\"role\": \"user\", \"content\": \"Explain attention\"}\n    ]\n)\n```\n\n---\n\n### 2. RAG（检索增强生成）\n**为什么需要 RAG？**\n- LLM 不可靠\n- LLM 没有最新知识\n- LLM 上下文有限\n\nRAG 逻辑：\n\n$$\n\\text{Answer} = \\text{LLM}(\\text{Query} + \\text{Retrieved Docs})\n$$\n\n组件：\n- Embedding Model\n- Vector Database\n- Retriever\n- Generator\n\n✅ 必学工具：\n- LangChain / LlamaIndex\n- FAISS / Milvus / Pinecone\n\n---\n\n### 3. 微调（Fine-tuning）\n你需要知道：\n- 什么时候**不应该微调**\n- LoRA / QLoRA 是主流\n- 微调 ≠ 教知识，更多是**风格与行为约束**\n\n---\n\n### 4. Agent 与工作流\n从“问答”升级到“任务执行”：\n- Planner\n- Tool\n- Memory\n- Reflection\n\n---\n\n## 四、研究层：如果你想深入或做创新\n\n### 1. 训练层面\n- 预训练 vs 指令微调\n- RLHF / DPO\n- Scaling Law\n\n### 2. 推理与能力\n- Chain-of-Thought\n- Self-Consistency\n- Tool-Augmented Reasoning\n\n### 3. 评测\n- MMLU\n- GSM8K\n- Human Eval\n\n✅ 目标：**能读懂 arXiv 上的新论文**\n\n---\n\n## 五、推荐学习路径（时间线）\n\n### 0–2 周\n- 用好 LLM\n- 学会写 prompt\n- 理解 Transformer\n\n### 1–2 个月\n- RAG 项目\n- API + 向量数据库\n- 简单 Agent\n\n### 3–6 个月\n- 微调开源模型\n- 阅读论文\n- 做完整 LLM 应用\n\n---\n\n## 六、常见误区（一定要避开）\n- ❌ 一开始就想训练大模型\n- ❌ 只看论文不写代码\n- ❌ 把 LLM 当“智能体”\n\n---\n\n## 七、你可以告诉我\n为了给你**更精准的学习路线**，你可以回答我三个问题：\n1. 你的背景（学生 / 程序员 / 产品 / 研究）\n2. 目标（用 / 做应用 / 做研究 / 做模型）\n3. 时间投入（每天多久）\n\n我可以直接给你一份 **「个性化 LLM 学习地图 + 资源清单」**。",
+        "meta": {
+          "providerType": "dify",
+          "modelName": "GPT-5.2-chat"
+        }
+      }
+    ]
+  }
+]

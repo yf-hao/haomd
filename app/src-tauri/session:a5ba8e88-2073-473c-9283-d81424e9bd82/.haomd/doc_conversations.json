@@ -1,0 +1,35 @@
+[
+  {
+    "docPath": "c3db4130-ad8f-4207-bfd3-84efa2f4a0af",
+    "sessionId": "1775276918688_by443c",
+    "lastActiveAt": 1775276918688,
+    "difyConversationId": "a5c64c59-7312-40e9-8099-1896669a04a7",
+    "difyProviderConversations": {
+      "1770434252163_bg8e4j": "a5c64c59-7312-40e9-8099-1896669a04a7"
+    },
+    "messages": [
+      {
+        "id": "1775276897790_ifxo7u",
+        "docPath": "c3db4130-ad8f-4207-bfd3-84efa2f4a0af",
+        "timestamp": 1775276918687,
+        "role": "user",
+        "content": "如何学习LLM",
+        "meta": {
+          "providerType": "dify",
+          "modelName": "GPT-5.2-chat"
+        }
+      },
+      {
+        "id": "1775276897790_7vua9h",
+        "docPath": "c3db4130-ad8f-4207-bfd3-84efa2f4a0af",
+        "timestamp": 1775276918687,
+        "role": "assistant",
+        "content": "学习 **LLM（Large Language Model，大语言模型）** 可以系统化推进，否则容易停留在“会用但不懂”“懂概念但不会做”。下面给出一条 **从原理 → 工程 → 应用 → 前沿** 的完整学习路径，适合不同起点的人逐步深入。\n\n---\n\n## 一、整体学习路线概览\n\n```mermaid\nflowchart TD\n    A[数学与基础能力] --> B[深度学习与NLP基础]\n    B --> C[Transformer与LLM原理]\n    C --> D[模型训练与微调]\n    D --> E[推理优化与部署]\n    E --> F[LLM应用与Agent系统]\n    F --> G[前沿研究与系统设计]\n```\n\n---\n\n## 二、第一阶段：基础能力（必须但不必过深）\n\n### 1. 数学基础（够用即可）\n\n重点是**理解概念，不是刷题**。\n\n| 领域 | 关键内容 | 在LLM中的作用 |\n|---|---|---|\n| 线性代数 | 向量、矩阵乘法、特征空间 | Embedding、Attention |\n| 概率论 | 条件概率、极大似然 | 语言建模目标 |\n| 微积分 | 梯度、链式法则 | 反向传播 |\n| 信息论 | 交叉熵、KL散度 | 训练损失函数 |\n\n**核心公式（语言模型目标）**：\n$$\n\\max_{\\theta} \\sum_{t=1}^{T} \\log P_\\theta(x_t \\mid x_1,\\dots,x_{t-1})\n$$\n\n---\n\n### 2. 编程基础\n\n- **Python**（必须）\n- 熟悉：\n  - NumPy\n  - PyTorch（比 TensorFlow 更主流）\n  - 基本 Linux / GPU 使用\n\n---\n\n## 三、第二阶段：深度学习 & NLP 基础\n\n### 1. 深度学习核心概念\n\n必须真正理解：\n\n- 神经网络 = 函数逼近\n- 反向传播（不是背公式）\n- 过拟合、正则化、Dropout\n- Optimizer（SGD / Adam）\n\n### 2. NLP 传统方法（为理解 LLM 做铺垫）\n\n- Tokenization\n- n-gram 语言模型\n- Word2Vec / GloVe\n- RNN / LSTM 的局限\n\n👉 目的：**理解为什么 Transformer 会出现**\n\n---\n\n## 四、第三阶段：Transformer 与 LLM 原理（核心）\n\n### 1. Transformer 结构（必须吃透）\n\n```mermaid\nflowchart TB\n    A[Input Tokens] --> B[Embedding + Position Encoding]\n    B --> C[Multi-Head Self-Attention]\n    C --> D[Feed Forward Network]\n    D --> E[Layer Norm + Residual]\n    E --> F[Output]\n```\n\n### 2. Self-Attention 数学本质\n\n$$\n\\text{Attention}(Q, K, V) =\n\\text{softmax}\\left(\\frac{QK^T}{\\sqrt{d_k}}\\right)V\n$$\n\n你必须能回答：\n\n- 为什么要除以 $\\sqrt{d_k}$？\n- 为什么 Self-Attention 可以并行？\n- 为什么能建模长依赖？\n\n---\n\n### 3. LLM 的三种典型结构\n\n| 类型 | 代表模型 | 用途 |\n|---|---|---|\n| Encoder-only | BERT | 理解、检索 |\n| Decoder-only | GPT | 生成（主流） |\n| Encoder-Decoder | T5 | 翻译、摘要 |\n\n---\n\n## 五、第四阶段：模型训练与微调（工程能力）\n\n### 1. 预训练（了解即可）\n\n- 海量文本\n- 自回归训练\n- 成本极高（普通人不复现）\n\n### 2. 微调方式（重点）\n\n| 方法 | 特点 |\n|---|---|\n| Full Fine-tune | 效果最好，成本最高 |\n| LoRA | 主流、低成本 |\n| Prefix / Prompt Tuning | 参数最少 |\n\n**LoRA 本质**：\n$$\nW' = W + \\Delta W,\\quad \\Delta W = AB\n$$\n\n---\n\n### 3. 指令微调 & 对齐\n\n- Instruction Tuning\n- RLHF / DPO\n- Safety & Alignment\n\n---\n\n## 六、第五阶段：推理优化与部署（非常重要）\n\n### 1. 推理优化\n\n- KV Cache\n- FlashAttention\n- Quantization（INT8 / INT4）\n- Speculative Decoding\n\n### 2. 部署架构\n\n```mermaid\nflowchart LR\n    A[User] --> B[API Gateway]\n    B --> C[LLM Inference Server]\n    C --> D[GPU / TPU]\n    C --> E[Vector DB]\n```\n\n---\n\n## 七、第六阶段：LLM 应用与 Agent 系统\n\n### 1. 核心应用模式\n\n| 模式 | 说明 |\n|---|---|\n| Prompt Engineering | 最低门槛 |\n| RAG | 真实业务必备 |\n| Tool Calling | 连接外部世界 |\n| Agent | 自动任务执行 |\n\n### 2. RAG 基本公式\n\n$$\n\\text{Answer} = \\text{LLM}(q, \\text{Retrieve}(q, D))\n$$\n\n---\n\n## 八、第七阶段：前沿与系统级能力\n\n- 长上下文（RoPE / YaRN）\n- 多模态（文本 + 图像 + 音频）\n- Mixture of Experts\n- LLM OS / AI Agent Framework\n- 评测（MMLU / Human Eval）\n\n---\n\n## 九、学习资源推荐（高性价比）\n\n### 理论\n- 《Attention Is All You Need》\n- 《The Illustrated Transformer》\n- Stanford CS224N\n\n### 实践\n- HuggingFace Transformers\n- llama.cpp / vLLM\n- OpenAI / Anthropic API\n\n---\n\n## 十、不同目标的学习建议\n\n| 你的目标 | 建议深度 |\n|---|---|\n| 会用 LLM | Prompt + RAG |\n| AI 应用工程师 | 微调 + 部署 |\n| 算法工程师 | Attention / 优化 |\n| 研究人员 | 训练、对齐、理论 |\n\n---\n\n## 十一、一个现实建议（非常重要）\n\n> **LLM 不要“只学论文”，一定要“跑模型 + 改代码 + 看显存”**\n\n否则永远停留在概念层。\n\n---\n\n如果你愿意，我可以：\n- ✅ 给你 **3 个月 / 6 个月学习计划**\n- ✅ 按你的背景定制路线（学生 / 后端 / 算法）\n- ✅ 带你 **从零实现一个 mini-GPT**\n- ✅ 推荐 **最少但高质量**的学习资料\n\n你可以直接告诉我：  \n**你的背景 + 学到什么程度 + 目标是什么**。",
+        "meta": {
+          "providerType": "dify",
+          "modelName": "GPT-5.2-chat"
+        }
+      }
+    ]
+  }
+]

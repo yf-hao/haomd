@@ -1,0 +1,35 @@
+[
+  {
+    "docPath": "6b004434-2f43-46a7-874e-b1a17e3c5ef4",
+    "sessionId": "1775297861168_oig16o",
+    "lastActiveAt": 1775297861168,
+    "difyConversationId": "ac64b94b-e0db-481e-ba25-17dd8042316b",
+    "difyProviderConversations": {
+      "1770434252163_bg8e4j": "ac64b94b-e0db-481e-ba25-17dd8042316b"
+    },
+    "messages": [
+      {
+        "id": "1775297853867_qza9au",
+        "docPath": "6b004434-2f43-46a7-874e-b1a17e3c5ef4",
+        "timestamp": 1775297861168,
+        "role": "user",
+        "content": "你好",
+        "meta": {
+          "providerType": "dify",
+          "modelName": "GPT-5.2-chat"
+        }
+      },
+      {
+        "id": "1775297853867_ox8er9",
+        "docPath": "6b004434-2f43-46a7-874e-b1a17e3c5ef4",
+        "timestamp": 1775297861168,
+        "role": "assistant",
+        "content": "你好！欢迎你 😊  \n\n我可以在以下方面为你提供系统、深入且结构化的帮助，例如：\n\n- **数学与逻辑**：定理证明、公式推导、建模分析（可用 KaTeX 表达）\n- **计算机与工程**：算法、系统设计、架构图（Mermaid）\n- **百科与通识**：概念解释、原理剖析、历史与技术脉络\n- **学习与写作**：教材级改写、讲义整理、例题与习题生成\n- **图表与结构化表达**：流程图、类图、部署图等（严格按规范）\n\n你可以直接提出问题，或告诉我**想解决什么问题、达到什么目标**。  \n我会按“清晰定义 → 原理分析 → 结构化说明 → 示例或结论”的方式来回答。",
+        "meta": {
+          "providerType": "dify",
+          "modelName": "GPT-5.2-chat"
+        }
+      }
+    ]
+  }
+]

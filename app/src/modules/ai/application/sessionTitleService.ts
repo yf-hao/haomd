@@ -19,8 +19,10 @@ import { loadNamingConv, saveNamingConv } from '../config/aiSessionsRepo'
 async function getNamingConvId(providerId: string): Promise<string | null> {
   try {
     const cfg = await loadNamingConv()
+    console.log('[sessionTitleService] getNamingConvId provider=', providerId, 'found=', cfg.convIds[providerId])
     return cfg.convIds[providerId] ?? null
-  } catch {
+  } catch (e) {
+    console.warn('[sessionTitleService] getNamingConvId error', e)
     return null
   }
 }
@@ -30,8 +32,9 @@ async function setNamingConvId(providerId: string, convId: string): Promise<void
     const cfg = await loadNamingConv()
     cfg.convIds[providerId] = convId
     await saveNamingConv(cfg)
-  } catch {
-    // ignore
+    console.log('[sessionTitleService] setNamingConvId saved', providerId, convId)
+  } catch (e) {
+    console.warn('[sessionTitleService] setNamingConvId error', e)
   }
 }
 
@@ -143,6 +146,7 @@ export async function generateSessionTitle(userMessage: string): Promise<string 
   try {
     const settings = await loadAiSettingsState()
     const provider = settings.providers.find((p) => p.id === settings.defaultProviderId)
+    console.log('[sessionTitleService] provider=', provider?.id, 'type=', provider?.providerType, 'model=', provider?.defaultModelId)
     if (!provider || !provider.defaultModelId) return null
 
     const providerType = provider.providerType ?? 'dify'
