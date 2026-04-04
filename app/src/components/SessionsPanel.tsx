@@ -46,6 +46,19 @@ export const SessionsPanel = memo(function SessionsPanel({
     void refreshList()
   }, [refreshList])
 
+  // ─── Listen for auto-naming updates from AiChatPane ─────────────────
+  useEffect(() => {
+    const bc = new BroadcastChannel('haomd-sessions')
+    bc.onmessage = (ev: MessageEvent<{ type: string }>) => {
+      if (ev.data?.type === 'session-updated') {
+        void refreshList()
+      }
+    }
+    return () => {
+      bc.close()
+    }
+  }, [refreshList])
+
   const handleCreate = useCallback(async () => {
     const now = Date.now()
     const newSession: AiChatSessionCfg = {
