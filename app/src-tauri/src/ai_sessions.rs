@@ -71,9 +71,13 @@ fn ai_sessions_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
 }
 
 fn naming_conv_path(app: &AppHandle) -> std::io::Result<PathBuf> {
-    let mut dir = ai_sessions_dir(app)?;
-    dir.push("ai-naming-conv.json");
-    Ok(dir)
+    if let Ok(mut dir) = app.path().config_dir() {
+        dir.push("haomd");
+        std::fs::create_dir_all(&dir)?;
+        Ok(dir.join("ai-naming-conv.json"))
+    } else {
+        Ok(std::env::current_dir()?.join("ai-naming-conv.json"))
+    }
 }
 
 fn sessions_data_path(app: &AppHandle) -> std::io::Result<PathBuf> {
