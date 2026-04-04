@@ -240,20 +240,29 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
     [],
   )
 
-  const argsString = useMemo(() => (draft.args ?? []).join(' '), [draft.args])
-  const envString = useMemo(() => {
-    if (!draft.env) return ''
-    return Object.entries(draft.env)
-      .map(([k, v]) => `${k}=${v}`)
-      .join('\n')
-  }, [draft.env])
+  // Local string states for textareas so partial/unparsed input is preserved while typing
+  const [argsString, setArgsString] = useState(() => (draft.args ?? []).join(' '))
+  const [envString, setEnvString] = useState('')
+  const [headersString, setHeadersString] = useState('')
 
-  const headersString = useMemo(() => {
-    if (!draft.headers) return ''
-    return Object.entries(draft.headers)
-      .map(([k, v]) => `${k}: ${v}`)
-      .join('\n')
-  }, [draft.headers])
+  // Sync textarea strings when selecting a different server (draft.id changes)
+  const prevDraftIdRef = useRef(draft.id)
+  useEffect(() => {
+    if (draft.id !== prevDraftIdRef.current) {
+      prevDraftIdRef.current = draft.id
+      setArgsString((draft.args ?? []).join(' '))
+      setEnvString(
+        draft.env
+          ? Object.entries(draft.env).map(([k, v]) => `${k}=${v}`).join('\n')
+          : '',
+      )
+      setHeadersString(
+        draft.headers
+          ? Object.entries(draft.headers).map(([k, v]) => `${k}: ${v}`).join('\n')
+          : '',
+      )
+    }
+  }, [draft.id, draft.args, draft.env, draft.headers])
 
   if (!open) return null
 
@@ -320,14 +329,10 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
                     <input
                       className="field-input"
                       value={argsString}
-                      onChange={(e) =>
-                        updateDraft(
-                          'args',
-                          e.target.value
-                            .split(/\s+/)
-                            .filter(Boolean),
-                        )
-                      }
+                      onChange={(e) => {
+                        setArgsString(e.target.value)
+                        updateDraft('args', e.target.value.split(/\s+/).filter(Boolean))
+                      }}
                       placeholder="-y @modelcontextprotocol/server-filesystem /path"
                     />
                   </FieldGroup>
@@ -337,6 +342,7 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
                       rows={2}
                       value={envString}
                       onChange={(e) => {
+                        setEnvString(e.target.value)
                         const env: Record<string, string> = {}
                         for (const line of e.target.value.split('\n')) {
                           const idx = line.indexOf('=')
@@ -366,6 +372,7 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
                       rows={2}
                       value={headersString}
                       onChange={(e) => {
+                        setHeadersString(e.target.value)
                         const headers: Record<string, string> = {}
                         for (const line of e.target.value.split('\n')) {
                           const idx = line.indexOf(':')
@@ -395,6 +402,7 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
                       rows={2}
                       value={headersString}
                       onChange={(e) => {
+                        setHeadersString(e.target.value)
                         const headers: Record<string, string> = {}
                         for (const line of e.target.value.split('\n')) {
                           const idx = line.indexOf(':')
