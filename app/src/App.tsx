@@ -6,6 +6,7 @@ import { AiSettingsDialog } from './components/AiSettingsDialog'
 import { AgentSettingsDialog } from './components/AgentSettingsDialog'
 import { PromptSettingsDialog } from './components/PromptSettingsDialog'
 import { SettingsDialog } from './components/SettingsDialog'
+import { McpSettingsDialog } from './components/McpSettingsDialog'
 import { I18nProvider, useI18n } from './modules/i18n/I18nContext'
 import { getSystemResolvedLanguage, normalizeLanguageTag, resolveLanguageMode } from './modules/i18n/languageResolver'
 import type { LanguageMode, ResolvedLanguage } from './modules/i18n/schema'
@@ -42,6 +43,7 @@ function App() {
   const [isAgentSettingsOpen, setAgentSettingsOpen] = useState(false)
   const [isPromptSettingsOpen, setPromptSettingsOpen] = useState(false)
   const [isSettingsOpen, setSettingsOpen] = useState(false)
+  const [isMcpSettingsOpen, setMcpSettingsOpen] = useState(false)
   const [isStatusBarVisible, setStatusBarVisible] = useState(true)
   const [docCharCount, setDocCharCount] = useState<number | null>(null)
   const [statusMessage, setStatusMessage] = useState('')
@@ -107,6 +109,10 @@ function App() {
       }
       if (actionId === 'ai_prompt_settings') {
         setPromptSettingsOpen(true)
+        return
+      }
+      if (actionId === 'mcp_settings') {
+        setMcpSettingsOpen(true)
         return
       }
       if (actionId === 'toggle_status_bar') {
@@ -383,6 +389,7 @@ function AppShellContent({
       <AiSettingsDialog open={isAiSettingsOpen} onClose={() => setAiSettingsOpen(false)} />
       <AgentSettingsDialog open={isAgentSettingsOpen} onClose={() => setAgentSettingsOpen(false)} />
       <PromptSettingsDialog open={isPromptSettingsOpen} onClose={() => setPromptSettingsOpen(false)} />
+      <McpSettingsDialog open={isMcpSettingsOpen} onClose={() => setMcpSettingsOpen(false)} />
       <SettingsDialog
         open={isSettingsOpen}
         onClose={() => setSettingsOpen(false)}

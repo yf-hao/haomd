@@ -15,6 +15,8 @@ mod fs_commands;
 mod fs_types;
 mod inkscape;
 mod locale;
+mod mcp_config;
+mod mcp_manager;
 mod menu;
 mod platform;
 mod protocol;
@@ -35,6 +37,8 @@ use fs_commands::*;
 use fs_types::{ErrorCode, FilePayload, ResultPayload, ServiceError, WriteResult};
 use inkscape::*;
 use locale::*;
+use mcp_config::*;
+use mcp_manager::*;
 use menu::*;
 use platform::*;
 use protocol::*;
@@ -121,7 +125,15 @@ macro_rules! app_invoke_handler {
             read_clipboard_image_as_base64,
             take_pending_external_open_items,
             save_text_with_dialog,
-            save_ai_sessions_json_with_dialog
+            save_ai_sessions_json_with_dialog,
+            // MCP config and server management
+            load_mcp_settings,
+            save_mcp_settings,
+            mcp_start_server,
+            mcp_stop_server,
+            mcp_list_tools,
+            mcp_call_tool,
+            mcp_list_running_servers
         ]
     };
 }
@@ -156,6 +168,7 @@ fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::error:
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
+        .manage(McpProcessManager::new())
         .register_uri_scheme_protocol("haomd", handle_haomd_protocol)
         .setup(setup_app)
         .invoke_handler(app_invoke_handler!())

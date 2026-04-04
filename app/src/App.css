@@ -2274,3 +2274,234 @@ button:disabled {
   line-height: 1.2;
   white-space: nowrap;
 }
+
+/* ─── MCP Settings Dialog ─────────────────────────────────────────── */
+
+.modal.modal-mcp-settings {
+  max-width: 860px;
+  width: 840px;
+  min-width: 640px;
+  max-height: 76vh;
+  overflow: hidden;
+  font-size: var(--ui-font-settings);
+}
+
+.mcp-settings-body {
+  display: flex;
+  gap: 20px;
+  min-height: 0;
+}
+
+.mcp-settings-column-left {
+  flex: 1 1 45%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mcp-settings-column-right {
+  flex: 1 1 55%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.mcp-form-scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: 4px;
+}
+
+/* Groups section */
+.mcp-groups-section {
+  margin-bottom: 12px;
+}
+
+.mcp-groups-section .providers-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mcp-add-group-btn {
+  background: none;
+  border: 1px solid var(--border-secondary);
+  border-radius: 4px;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 14px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mcp-add-group-btn:hover {
+  background: var(--hover-background);
+}
+
+.mcp-group-input-row {
+  display: flex;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.mcp-group-input-row .field-input {
+  flex: 1;
+}
+
+.mcp-group-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.mcp-group-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--hover-background);
+  border: 1px solid var(--border-secondary);
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.mcp-group-tag-delete {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0;
+  line-height: 1;
+}
+
+.mcp-group-tag-delete:hover {
+  color: var(--error);
+}
+
+/* Server list */
+.mcp-server-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.mcp-server-group {
+  margin-bottom: 8px;
+}
+
+.mcp-group-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  padding: 4px 8px;
+  letter-spacing: 0.5px;
+}
+
+.mcp-server-item {
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  margin-bottom: 4px;
+  transition: background 0.15s;
+}
+
+.mcp-server-item:hover {
+  background: var(--hover-background);
+}
+
+.mcp-server-item.selected {
+  background: var(--hover-background);
+  border-color: var(--accent);
+}
+
+.mcp-server-item.disabled {
+  opacity: 0.5;
+}
+
+.mcp-server-item-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mcp-server-name {
+  font-weight: 500;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcp-server-transport-badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--hover-background);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-secondary);
+}
+
+.mcp-server-transport-badge.sse {
+  background: rgba(var(--accent-rgb, 59, 130, 246), 0.1);
+}
+
+.mcp-server-running-badge {
+  color: #22c55e;
+  font-size: 10px;
+}
+
+.mcp-server-item-meta {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcp-server-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.mcp-toggle-label {
+  cursor: pointer;
+}
+
+.mcp-action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  color: var(--text-secondary);
+}
+
+.mcp-action-btn:hover {
+  background: var(--hover-background);
+}
+
+.mcp-action-btn.delete:hover {
+  color: var(--error);
+}
+
+.mcp-action-btn.start {
+  color: #22c55e;
+}
+
+.mcp-action-btn.stop {
+  color: var(--error);
+}
