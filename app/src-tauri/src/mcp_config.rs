@@ -86,8 +86,7 @@ pub async fn load_mcp_settings(app: AppHandle) -> ResultPayload<McpSettingsCfg> 
 
     match fs::read(&path).await {
         Ok(bytes) => {
-            let cfg: McpSettingsCfg =
-                serde_json::from_slice(&bytes).unwrap_or_default();
+            let cfg: McpSettingsCfg = serde_json::from_slice(&bytes).unwrap_or_default();
             ok(cfg, trace)
         }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {

@@ -10,6 +10,11 @@ import type { BackendResult } from '../modules/platform/backendTypes'
 import type { LanguageMode } from '../modules/i18n/schema'
 import {
   getDefaultWebDavBackupSettings,
+  loadBackupSettings,
+  saveBackupSettings,
+  type WebDavBackupSettings,
+} from '../modules/settings/backupSettings'
+import {
   DEFAULT_WEBDAV_REMOTE_PATH,
   getDefaultLanguageSetting,
   getDefaultThemeSettings,
@@ -27,7 +32,6 @@ import {
   type ThemeSettings,
   type UiTypographySettings,
   type WordExportStyleSettings,
-  type WebDavBackupSettings,
 } from '../modules/settings/editorSettings'
 import { resolveManagedBackgroundImageUrl } from '../modules/theme/backgroundImageRuntime'
 import type { ThemeMode } from '../modules/theme/schema'
@@ -148,12 +152,13 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     let cancelled = false
     ;(async () => {
       try {
-        const [loadedSettings, loadedTheme, loadedLanguage, loadedTypography, loadedWordExport] = await Promise.all([
+        const [loadedSettings, loadedTheme, loadedLanguage, loadedTypography, loadedWordExport, loadedBackupSettings] = await Promise.all([
           loadEditorSettings(),
           getThemeSettings(),
           getLanguageSetting(),
           getUiTypographySettings(),
           getWordExportStyleSettings(),
+          loadBackupSettings(),
         ])
         if (cancelled) return
         if (hasLocalPreviewEditsRef.current) return
@@ -166,13 +171,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
         originalTypographyRef.current = loadedTypography
         themePreviewReadyRef.current = true
         setWordExport(loadedWordExport)
-        setWebdavBackup({
-          enabled: loadedSettings.backup?.webdav?.enabled ?? getDefaultWebDavBackupSettings().enabled,
-          url: loadedSettings.backup?.webdav?.url ?? getDefaultWebDavBackupSettings().url,
-          username: loadedSettings.backup?.webdav?.username ?? getDefaultWebDavBackupSettings().username,
-          password: loadedSettings.backup?.webdav?.password ?? getDefaultWebDavBackupSettings().password,
-          remotePath: DEFAULT_WEBDAV_REMOTE_PATH,
-        })
+        setWebdavBackup(loadedBackupSettings)
         setWorkspaceBackgroundOpacityInput(String(loadedTheme.workspaceBackground?.opacity ?? getDefaultThemeSettings().workspaceBackground?.opacity ?? 0.22))
         setWorkspaceBackgroundOverlayOpacityInput(String(loadedTheme.workspaceBackground?.overlayOpacity ?? getDefaultThemeSettings().workspaceBackground?.overlayOpacity ?? 0.12))
         setWorkspaceBackgroundBlurInput(String(loadedTheme.workspaceBackground?.blurPx ?? getDefaultThemeSettings().workspaceBackground?.blurPx ?? 0))
@@ -697,18 +696,18 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     setIsSaving(true)
     setError(null)
     try {
+      const { backup: _legacyBackup, ...settingsWithoutBackup } = settings
       const nextSettings: EditorSettings = {
-        ...settings,
+        ...settingsWithoutBackup,
         language: languageMode,
         theme,
         uiTypography,
         wordExport,
-        backup: {
-          ...(settings.backup ?? {}),
-          webdav: webdavBackup,
-        },
       }
-      await saveEditorSettings(nextSettings)
+      await Promise.all([
+        saveEditorSettings(nextSettings),
+        saveBackupSettings(webdavBackup),
+      ])
       setSettings(nextSettings)
       originalThemeRef.current = theme
       originalLanguageRef.current = languageMode

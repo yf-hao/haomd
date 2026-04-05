@@ -98,6 +98,11 @@ export function useCommandSystem(params: CommandSystemParams) {
   } = params
 
   const aiChatOpeningRef = useRef(false)
+  const isAiChatOpen = useCallback(() => aiChatOpenRef?.current ?? aiChatOpen, [aiChatOpenRef, aiChatOpen])
+  const isAiChatOpening = useCallback(() => aiChatOpeningRef.current, [])
+  const setAiChatOpening = useCallback((opening: boolean) => {
+    aiChatOpeningRef.current = opening
+  }, [])
 
   const aiClient = useMemo<IAiClient>(() => {
     return aiClientFromParams ?? createDefaultAiClient()
@@ -129,6 +134,8 @@ export function useCommandSystem(params: CommandSystemParams) {
 
   const commands: CommandRegistry = useMemo(
     () =>
+      // createCommandRegistry only stores callbacks; ref access happens later in command handlers, not during render.
+      // eslint-disable-next-line react-hooks/refs
       createCommandRegistry({
         layout,
         setLayout,
@@ -139,8 +146,9 @@ export function useCommandSystem(params: CommandSystemParams) {
         aiChatDockSide,
         setAiChatDockSide,
         aiChatOpen,
-        aiChatOpenRef,
-        aiChatOpeningRef,
+        isAiChatOpen,
+        isAiChatOpening,
+        setAiChatOpening,
         editorZoom,
         setEditorZoom,
         editMode,
@@ -193,8 +201,9 @@ export function useCommandSystem(params: CommandSystemParams) {
       aiChatDockSide,
       setAiChatDockSide,
       aiChatOpen,
-      aiChatOpenRef,
-      aiChatOpeningRef,
+      isAiChatOpen,
+      isAiChatOpening,
+      setAiChatOpening,
       editorZoom,
       setEditorZoom,
       editMode,

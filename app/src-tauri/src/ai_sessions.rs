@@ -130,16 +130,17 @@ async fn read_session(app: &AppHandle, id: &str) -> std::io::Result<Option<AiCha
     let path = session_data_path(app, id)?;
     match fs::read(&path).await {
         Ok(bytes) => {
-            let session: AiChatSessionCfg = serde_json::from_slice(&bytes).unwrap_or(AiChatSessionCfg {
-                id: id.to_string(),
-                title: None,
-                entry_mode: None,
-                messages: vec![],
-                provider_type: None,
-                active_role_id: None,
-                created_at: 0,
-                updated_at: 0,
-            });
+            let session: AiChatSessionCfg =
+                serde_json::from_slice(&bytes).unwrap_or(AiChatSessionCfg {
+                    id: id.to_string(),
+                    title: None,
+                    entry_mode: None,
+                    messages: vec![],
+                    provider_type: None,
+                    active_role_id: None,
+                    created_at: 0,
+                    updated_at: 0,
+                });
             Ok(Some(session))
         }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -157,9 +158,7 @@ async fn write_session(app: &AppHandle, session: &AiChatSessionCfg) -> std::io::
 // ─── Tauri commands ─────────────────────────────────────────────────
 
 #[tauri::command]
-pub async fn load_ai_sessions_index(
-    app: AppHandle,
-) -> ResultPayload<Vec<AiChatSessionIndexEntry>> {
+pub async fn load_ai_sessions_index(app: AppHandle) -> ResultPayload<Vec<AiChatSessionIndexEntry>> {
     let trace = new_trace_id();
     match read_session_index(&app).await {
         Ok(entries) => ok(entries, trace),
@@ -188,45 +187,40 @@ pub async fn load_ai_session(
 }
 
 #[tauri::command]
-pub async fn save_ai_session(
-    app: AppHandle,
-    session: AiChatSessionCfg,
-) -> ResultPayload<()> {
+pub async fn save_ai_session(app: AppHandle, session: AiChatSessionCfg) -> ResultPayload<()> {
     let trace = new_trace_id();
     match write_session(&app, &session).await {
-        Ok(()) => {
-            match read_session_index(&app).await {
-                Ok(mut entries) => {
-                    let next_entry = AiChatSessionIndexEntry {
-                        id: session.id.clone(),
-                        title: session.title.clone(),
-                        message_count: session.messages.len(),
-                        created_at: session.created_at,
-                        updated_at: session.updated_at,
-                    };
+        Ok(()) => match read_session_index(&app).await {
+            Ok(mut entries) => {
+                let next_entry = AiChatSessionIndexEntry {
+                    id: session.id.clone(),
+                    title: session.title.clone(),
+                    message_count: session.messages.len(),
+                    created_at: session.created_at,
+                    updated_at: session.updated_at,
+                };
 
-                    if let Some(pos) = entries.iter().position(|s| s.id == session.id) {
-                        entries[pos] = next_entry;
-                    } else {
-                        entries.push(next_entry);
-                    }
-
-                    match write_session_index(&app, &entries).await {
-                        Ok(()) => ok((), trace),
-                        Err(err) => err_payload(
-                            ErrorCode::IoError,
-                            format!("写入 sessions_index 失败: {err}"),
-                            trace,
-                        ),
-                    }
+                if let Some(pos) = entries.iter().position(|s| s.id == session.id) {
+                    entries[pos] = next_entry;
+                } else {
+                    entries.push(next_entry);
                 }
-                Err(err) => err_payload(
-                    ErrorCode::IoError,
-                    format!("读取 sessions_index 失败: {err}"),
-                    trace,
-                ),
+
+                match write_session_index(&app, &entries).await {
+                    Ok(()) => ok((), trace),
+                    Err(err) => err_payload(
+                        ErrorCode::IoError,
+                        format!("写入 sessions_index 失败: {err}"),
+                        trace,
+                    ),
+                }
             }
-        }
+            Err(err) => err_payload(
+                ErrorCode::IoError,
+                format!("读取 sessions_index 失败: {err}"),
+                trace,
+            ),
+        },
         Err(err) => err_payload(
             ErrorCode::IoError,
             format!("写入 session 失败: {err}"),
@@ -236,15 +230,16 @@ pub async fn save_ai_session(
 }
 
 #[tauri::command]
-pub async fn delete_ai_session(
-    app: AppHandle,
-    id: String,
-) -> ResultPayload<()> {
+pub async fn delete_ai_session(app: AppHandle, id: String) -> ResultPayload<()> {
     let trace = new_trace_id();
     let session_path = match session_data_path(&app, &id) {
         Ok(path) => path,
         Err(err) => {
-            return err_payload(ErrorCode::IoError, format!("获取 session 路径失败: {err}"), trace);
+            return err_payload(
+                ErrorCode::IoError,
+                format!("获取 session 路径失败: {err}"),
+                trace,
+            );
         }
     };
 
@@ -287,7 +282,11 @@ pub async fn load_ai_naming_conv(app: AppHandle) -> ResultPayload<AiNamingConvCf
     let path = match naming_conv_path(&app) {
         Ok(p) => p,
         Err(err) => {
-            return err_payload(ErrorCode::IoError, format!("获取 naming_conv 路径失败: {err}"), trace);
+            return err_payload(
+                ErrorCode::IoError,
+                format!("获取 naming_conv 路径失败: {err}"),
+                trace,
+            );
         }
     };
     match fs::read(&path).await {
@@ -295,7 +294,9 @@ pub async fn load_ai_naming_conv(app: AppHandle) -> ResultPayload<AiNamingConvCf
             let cfg: AiNamingConvCfg = serde_json::from_slice(&bytes).unwrap_or_default();
             ok(cfg, trace)
         }
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => ok(AiNamingConvCfg::default(), trace),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            ok(AiNamingConvCfg::default(), trace)
+        }
         Err(err) => err_payload(
             ErrorCode::IoError,
             format!("读取 naming_conv 失败: {err}"),
@@ -310,14 +311,26 @@ pub async fn save_ai_naming_conv(app: AppHandle, cfg: AiNamingConvCfg) -> Result
     let path = match naming_conv_path(&app) {
         Ok(p) => p,
         Err(err) => {
-            return err_payload(ErrorCode::IoError, format!("获取 naming_conv 路径失败: {err}"), trace);
+            return err_payload(
+                ErrorCode::IoError,
+                format!("获取 naming_conv 路径失败: {err}"),
+                trace,
+            );
         }
     };
     match serde_json::to_vec_pretty(&cfg) {
         Ok(bytes) => match fs::write(&path, bytes).await {
             Ok(()) => ok((), trace),
-            Err(err) => err_payload(ErrorCode::IoError, format!("写入 naming_conv 失败: {err}"), trace),
+            Err(err) => err_payload(
+                ErrorCode::IoError,
+                format!("写入 naming_conv 失败: {err}"),
+                trace,
+            ),
         },
-        Err(err) => err_payload(ErrorCode::IoError, format!("序列化 naming_conv 失败: {err}"), trace),
+        Err(err) => err_payload(
+            ErrorCode::IoError,
+            format!("序列化 naming_conv 失败: {err}"),
+            trace,
+        ),
     }
 }

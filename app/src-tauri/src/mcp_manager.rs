@@ -230,7 +230,10 @@ fn spawn_stdio_process(cfg: &McpServerCfg) -> Result<StdioTransport, String> {
 // ─── Streamable HTTP helpers ────────────────────────────────────────
 
 fn create_http_transport(cfg: &McpServerCfg) -> Result<HttpTransport, String> {
-    let url = cfg.url.as_deref().ok_or("streamable-http server 未配置 URL")?;
+    let url = cfg
+        .url
+        .as_deref()
+        .ok_or("streamable-http server 未配置 URL")?;
     let custom_headers = cfg.headers.clone().unwrap_or_default();
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(60))
@@ -306,7 +309,10 @@ async fn http_send_request(
 
     if content_type.contains("text/event-stream") {
         // Parse SSE stream — look for the JSON-RPC response matching our id
-        let text = resp.text().await.map_err(|e| format!("读取 SSE 响应失败: {e}"))?;
+        let text = resp
+            .text()
+            .await
+            .map_err(|e| format!("读取 SSE 响应失败: {e}"))?;
         for line in text.lines() {
             let line = line.trim();
             if let Some(data) = line.strip_prefix("data:") {
@@ -454,10 +460,7 @@ async fn load_settings(app: &AppHandle) -> Result<McpSettingsCfg, String> {
 // ─── Tauri commands ─────────────────────────────────────────────────
 
 #[tauri::command]
-pub async fn mcp_start_server(
-    app: AppHandle,
-    server_id: String,
-) -> ResultPayload<Vec<McpToolDef>> {
+pub async fn mcp_start_server(app: AppHandle, server_id: String) -> ResultPayload<Vec<McpToolDef>> {
     let trace = new_trace_id();
     let mgr = app.state::<McpProcessManager>();
 
@@ -522,9 +525,7 @@ pub async fn mcp_start_server(
 }
 
 #[tauri::command]
-pub async fn mcp_test_server(
-    cfg: McpServerCfg,
-) -> ResultPayload<Vec<McpToolDef>> {
+pub async fn mcp_test_server(cfg: McpServerCfg) -> ResultPayload<Vec<McpToolDef>> {
     let trace = new_trace_id();
 
     let mut transport = match cfg.transport.as_str() {
@@ -564,17 +565,16 @@ pub async fn mcp_test_server(
 }
 
 #[tauri::command]
-pub async fn mcp_stop_server(
-    app: AppHandle,
-    server_id: String,
-) -> ResultPayload<()> {
+pub async fn mcp_stop_server(app: AppHandle, server_id: String) -> ResultPayload<()> {
     let trace = new_trace_id();
     let mgr = app.state::<McpProcessManager>();
     let mut instances = mgr.instances.lock().await;
 
     if let Some(mut inst) = instances.remove(&server_id) {
         match &mut inst.transport {
-            McpTransport::Stdio(s) => { let _ = s.child.kill().await; }
+            McpTransport::Stdio(s) => {
+                let _ = s.child.kill().await;
+            }
             McpTransport::Http(_) => { /* stateless — nothing to kill */ }
         }
         ok((), trace)
@@ -588,10 +588,7 @@ pub async fn mcp_stop_server(
 }
 
 #[tauri::command]
-pub async fn mcp_list_tools(
-    app: AppHandle,
-    server_id: String,
-) -> ResultPayload<Vec<McpToolDef>> {
+pub async fn mcp_list_tools(app: AppHandle, server_id: String) -> ResultPayload<Vec<McpToolDef>> {
     let trace = new_trace_id();
     let mgr = app.state::<McpProcessManager>();
     let instances = mgr.instances.lock().await;
@@ -644,9 +641,7 @@ pub async fn mcp_call_tool(
 }
 
 #[tauri::command]
-pub async fn mcp_list_running_servers(
-    app: AppHandle,
-) -> ResultPayload<Vec<McpRunningServerInfo>> {
+pub async fn mcp_list_running_servers(app: AppHandle) -> ResultPayload<Vec<McpRunningServerInfo>> {
     let trace = new_trace_id();
     let mgr = app.state::<McpProcessManager>();
     let instances = mgr.instances.lock().await;

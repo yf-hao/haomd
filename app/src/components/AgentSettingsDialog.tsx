@@ -165,24 +165,6 @@ export const AgentSettingsDialog: FC<AgentSettingsDialogProps> = ({ open, onClos
     setPlatformOpen(false)
   }
 
-  const handleCancelWithReset = () => {
-    setPlatformOpen(false)
-    handleCancel()
-  }
-
-  useEffect(() => {
-    if (!open) return
-    const handleEsc = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        handleCancelWithReset()
-      }
-    }
-    document.addEventListener('keydown', handleEsc)
-    return () => {
-      document.removeEventListener('keydown', handleEsc)
-    }
-  }, [open])
-
   useEffect(() => {
     if (!open) return
 
@@ -319,6 +301,24 @@ export const AgentSettingsDialog: FC<AgentSettingsDialogProps> = ({ open, onClos
     setError(null)
     onClose()
   }
+
+  const handleCancelWithReset = () => {
+    setPlatformOpen(false)
+    handleCancel()
+  }
+
+  useEffect(() => {
+    if (!open) return
+    const handleEsc = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        handleCancelWithReset()
+      }
+    }
+    document.addEventListener('keydown', handleEsc)
+    return () => {
+      document.removeEventListener('keydown', handleEsc)
+    }
+  }, [open, handleCancelWithReset])
 
   const handleSave = async () => {
     const hasDraft = draft.name.trim() || draft.baseUrl.trim() || draft.apiKey.trim()

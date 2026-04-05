@@ -73,7 +73,10 @@ fn resolve_webdav_sync_target(url: &str, remote_path: &str) -> Result<(String, S
     };
     base.set_path(&parent_path);
 
-    Ok((base.to_string().trim_end_matches('/').to_string(), remote_root))
+    Ok((
+        base.to_string().trim_end_matches('/').to_string(),
+        remote_root,
+    ))
 }
 
 fn normalize_remote_root_path(remote_path: &str) -> String {
@@ -100,7 +103,13 @@ fn join_remote_relative(root: &str, relative: &str) -> String {
     }
 }
 
-fn webdav_request(client: &Client, method: Method, target: &str, username: &str, password: &str) -> reqwest::RequestBuilder {
+fn webdav_request(
+    client: &Client,
+    method: Method,
+    target: &str,
+    username: &str,
+    password: &str,
+) -> reqwest::RequestBuilder {
     let request = client.request(method, target);
     if username.trim().is_empty() {
         request
@@ -130,10 +139,16 @@ async fn ensure_remote_dir(
         }
 
         let target = resolve_webdav_url(base_url, &current);
-        let response = webdav_request(client, Method::from_bytes(b"MKCOL").unwrap(), &target, username, password)
-            .send()
-            .await
-            .map_err(|err| format!("创建远程目录失败 {current}: {err}"))?;
+        let response = webdav_request(
+            client,
+            Method::from_bytes(b"MKCOL").unwrap(),
+            &target,
+            username,
+            password,
+        )
+        .send()
+        .await
+        .map_err(|err| format!("创建远程目录失败 {current}: {err}"))?;
 
         if response.status().is_success()
             || response.status() == StatusCode::METHOD_NOT_ALLOWED
@@ -157,7 +172,8 @@ fn collect_local_entries(
     dirs: &mut Vec<String>,
     files: &mut Vec<(String, PathBuf)>,
 ) -> Result<(), String> {
-    for entry in std::fs::read_dir(path).map_err(|err| format!("读取本地配置目录失败: {err}"))? {
+    for entry in std::fs::read_dir(path).map_err(|err| format!("读取本地配置目录失败: {err}"))?
+    {
         let entry = entry.map_err(|err| format!("读取本地配置目录失败: {err}"))?;
         let entry_path = entry.path();
         let file_name = entry.file_name();
@@ -211,11 +227,15 @@ async fn upload_directory_to_webdav(
         ensure_remote_dir(&client, base_url, username, password, remote_root, &dir).await?;
     }
 
-    let file_paths = files.iter().map(|(relative, _)| relative.clone()).collect::<Vec<_>>();
+    let file_paths = files
+        .iter()
+        .map(|(relative, _)| relative.clone())
+        .collect::<Vec<_>>();
 
     for (relative, path) in &files {
         let target = resolve_webdav_url(base_url, &join_remote_relative(remote_root, &relative));
-        let bytes = std::fs::read(path).map_err(|err| format!("读取本地文件失败 {relative}: {err}"))?;
+        let bytes =
+            std::fs::read(path).map_err(|err| format!("读取本地文件失败 {relative}: {err}"))?;
         let response = webdav_request(&client, Method::PUT, &target, username, password)
             .body(bytes)
             .send()
@@ -223,7 +243,10 @@ async fn upload_directory_to_webdav(
             .map_err(|err| format!("上传文件失败 {relative}: {err}"))?;
 
         if !response.status().is_success() {
-            return Err(format!("上传文件失败 {relative}: HTTP {}", response.status()));
+            return Err(format!(
+                "上传文件失败 {relative}: HTTP {}",
+                response.status()
+            ));
         }
     }
 
@@ -238,7 +261,10 @@ async fn upload_directory_to_webdav(
         &join_remote_relative(remote_root, WEBDAV_SYNC_INDEX_FILE),
     );
     let response = webdav_request(&client, Method::PUT, &index_target, username, password)
-        .header(reqwest::header::CONTENT_TYPE, "application/json; charset=utf-8")
+        .header(
+            reqwest::header::CONTENT_TYPE,
+            "application/json; charset=utf-8",
+        )
         .body(index_bytes)
         .send()
         .await
@@ -369,30 +395,24 @@ fn restore_backup_from_reader<R: Read + Seek>(reader: R, root: &Path) -> Result<
 
         let out_path = root.join(relative);
         if entry.is_dir() {
-            std::fs::create_dir_all(&out_path)
-                .map_err(|err| format!("创建恢复目录失败: {err}"))?;
+            std::fs::create_dir_all(&out_path).map_err(|err| format!("创建恢复目录失败: {err}"))?;
             continue;
         }
 
         if let Some(parent) = out_path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|err| format!("创建恢复目录失败: {err}"))?;
+            std::fs::create_dir_all(parent).map_err(|err| format!("创建恢复目录失败: {err}"))?;
         }
 
         let mut output =
             File::create(&out_path).map_err(|err| format!("创建恢复文件失败: {err}"))?;
-        std::io::copy(&mut entry, &mut output)
-            .map_err(|err| format!("写入恢复文件失败: {err}"))?;
+        std::io::copy(&mut entry, &mut output).map_err(|err| format!("写入恢复文件失败: {err}"))?;
     }
 
     Ok(())
 }
 
 #[tauri::command]
-pub async fn export_settings_backup(
-    app: AppHandle,
-    output_path: String,
-) -> ResultPayload<()> {
+pub async fn export_settings_backup(app: AppHandle, output_path: String) -> ResultPayload<()> {
     let trace = new_trace_id();
     let root = match backup_root_dir(&app) {
         Ok(dir) => dir,
@@ -490,7 +510,9 @@ pub async fn test_webdav_connection(
     }
 
     match request.send().await {
-        Ok(resp) if resp.status().is_success() || resp.status() == StatusCode::METHOD_NOT_ALLOWED => {
+        Ok(resp)
+            if resp.status().is_success() || resp.status() == StatusCode::METHOD_NOT_ALLOWED =>
+        {
             ok((), trace)
         }
         Ok(resp) if resp.status() == StatusCode::UNAUTHORIZED => err_payload(
@@ -498,29 +520,16 @@ pub async fn test_webdav_connection(
             "HTTP 401 Unauthorized".to_string(),
             trace,
         ),
-        Ok(resp) if resp.status() == StatusCode::FORBIDDEN => err_payload(
-            ErrorCode::UNKNOWN,
-            "HTTP 403 Forbidden".to_string(),
-            trace,
-        ),
-        Ok(resp) => err_payload(
-            ErrorCode::UNKNOWN,
-            format!("HTTP {}", resp.status()),
-            trace,
-        ),
-        Err(err) => err_payload(
-            ErrorCode::UNKNOWN,
-            err.to_string(),
-            trace,
-        ),
+        Ok(resp) if resp.status() == StatusCode::FORBIDDEN => {
+            err_payload(ErrorCode::UNKNOWN, "HTTP 403 Forbidden".to_string(), trace)
+        }
+        Ok(resp) => err_payload(ErrorCode::UNKNOWN, format!("HTTP {}", resp.status()), trace),
+        Err(err) => err_payload(ErrorCode::UNKNOWN, err.to_string(), trace),
     }
 }
 
 #[tauri::command]
-pub async fn import_settings_backup(
-    app: AppHandle,
-    backup_path: String,
-) -> ResultPayload<()> {
+pub async fn import_settings_backup(app: AppHandle, backup_path: String) -> ResultPayload<()> {
     let trace = new_trace_id();
     let root = match backup_root_dir(&app) {
         Ok(dir) => dir,
@@ -574,7 +583,8 @@ pub async fn import_settings_backup_from_webdav(
         Err(message) => return err_payload(ErrorCode::UNKNOWN, message, trace),
     };
 
-    match download_directory_from_webdav(&root, &base_url, &username, &password, &remote_root).await {
+    match download_directory_from_webdav(&root, &base_url, &username, &password, &remote_root).await
+    {
         Ok(()) => ok((), trace),
         Err(message) => err_payload(ErrorCode::UNKNOWN, message, trace),
     }
