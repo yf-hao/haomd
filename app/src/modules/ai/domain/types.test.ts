@@ -34,9 +34,8 @@ describe('AI Domain Types and Constants', () => {
         expect(builtinPromptSettings.defaultRoleId).toBe(builtinPromptRoles[0].id)
     })
 
-    it('should include "提示词优化专家" in builtin roles', () => {
+    it('should not include removed builtin role "提示词优化专家"', () => {
         const optimizerRole = builtinPromptRoles.find(r => r.name === '提示词优化专家')
-        expect(optimizerRole).toBeDefined()
-        expect(optimizerRole?.prompt).toContain('master-level AI prompt optimization specialist')
+        expect(optimizerRole).toBeUndefined()
     })
 })
