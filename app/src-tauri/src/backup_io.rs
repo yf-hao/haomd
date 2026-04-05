@@ -233,7 +233,7 @@ async fn upload_directory_to_webdav(
         .collect::<Vec<_>>();
 
     for (relative, path) in &files {
-        let target = resolve_webdav_url(base_url, &join_remote_relative(remote_root, &relative));
+        let target = resolve_webdav_url(base_url, &join_remote_relative(remote_root, relative));
         let bytes =
             std::fs::read(path).map_err(|err| format!("读取本地文件失败 {relative}: {err}"))?;
         let response = webdav_request(&client, Method::PUT, &target, username, password)

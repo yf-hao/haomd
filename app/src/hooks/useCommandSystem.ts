@@ -52,7 +52,6 @@ export function useCommandSystem(params: CommandSystemParams) {
     aiChatDockSide,
     setAiChatDockSide,
     aiChatOpen,
-    aiChatOpenRef,
     editorZoom,
     setEditorZoom,
     editMode,
@@ -98,7 +97,7 @@ export function useCommandSystem(params: CommandSystemParams) {
   } = params
 
   const aiChatOpeningRef = useRef(false)
-  const isAiChatOpen = useCallback(() => aiChatOpenRef?.current ?? aiChatOpen, [aiChatOpenRef, aiChatOpen])
+  const isAiChatOpen = useCallback(() => aiChatOpen, [aiChatOpen])
   const isAiChatOpening = useCallback(() => aiChatOpeningRef.current, [])
   const setAiChatOpening = useCallback((opening: boolean) => {
     aiChatOpeningRef.current = opening
