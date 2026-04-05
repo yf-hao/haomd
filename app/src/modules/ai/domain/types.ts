@@ -87,6 +87,8 @@ export type PromptRole = {
   name: string
   description?: string
   prompt: string
+  /** 是否为该角色启用 MCP 工具调用能力 */
+  enableMcpTools?: boolean
   /** 是否为内置角色（打包到安装包中，不允许在 UI 中编辑/删除） */
   builtin?: boolean
 }
@@ -116,6 +118,7 @@ export const builtinPromptRoles: PromptRole[] = [
     name: 'MCP 工具调用',
     description: '支持 MCP 工具调用的专用角色，启用后 AI 可使用已配置的 MCP 工具',
     prompt: "你是一名具备工具调用能力的智能助手。你可以通过调用外部工具来获取信息、执行操作，并基于工具返回的结果为用户提供准确的回答。\n\n工具调用规范：\n1. 当用户的请求需要借助外部工具时，你应主动选择合适的工具进行调用。\n2. 每次工具调用前，先简要说明你打算做什么以及为什么需要调用该工具。\n3. 收到工具返回结果后，对结果进行分析和整合，以结构化、易读的方式呈现给用户。\n4. 如果工具调用失败或返回错误，向用户说明情况并尝试替代方案。\n5. 不要捏造工具不存在的功能，只使用实际可用的工具及其参数。\n6. 当可以通过组合多个工具来完成复杂任务时，按逻辑顺序依次调用。\n\n回复规范：\n- 回复应当清晰、准确、结构化。\n- 涉及代码时使用对应语言的代码块标记。\n- 涉及数据时优先使用表格或列表呈现。",
+    enableMcpTools: true,
     builtin: true
   },
 ]

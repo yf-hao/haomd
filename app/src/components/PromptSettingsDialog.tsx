@@ -212,6 +212,12 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
     updateDraftField(field, value)
   }
 
+  const handleDraftCheckboxChange = (field: keyof PromptRoleDraft) => (
+    e: ChangeEvent<HTMLInputElement>,
+  ) => {
+    updateDraftField(field, e.target.checked)
+  }
+
   const handleResetDraft = () => {
     resetDraft()
   }
@@ -274,7 +280,7 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
     onClose()
   }
 
-  const ROLE_FORM_FIELDS: { key: keyof PromptRoleDraft; label: string; type: 'text' | 'textarea'; placeholder: string; ref: any }[] = [
+  const ROLE_FORM_FIELDS: { key: 'name' | 'description' | 'prompt'; label: string; type: 'text' | 'textarea'; placeholder: string; ref: any }[] = [
     { key: 'name', label: t('prompt.roleName'), type: 'text', placeholder: t('prompt.roleNamePlaceholder'), ref: nameInputRef },
     { key: 'description', label: t('prompt.parametersOptional'), type: 'text', placeholder: t('prompt.parametersPlaceholder'), ref: descInputRef },
     { key: 'prompt', label: t('prompt.prompt'), type: 'textarea', placeholder: t('prompt.promptPlaceholder'), ref: promptTextareaRef },
@@ -310,6 +316,17 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
                   )}
                 </FieldGroup>
               ))}
+
+              <FieldGroup label={t('prompt.enableMcpTools')}>
+                <label className="checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={draft.enableMcpTools}
+                    onChange={handleDraftCheckboxChange('enableMcpTools')}
+                  />
+                  <span>{t('prompt.enableMcpToolsHelp')}</span>
+                </label>
+              </FieldGroup>
 
               {error && <div className="form-error">{error}</div>}
 

@@ -358,7 +358,8 @@ async fn http_send_notification(
     let mut builder = t
         .client
         .post(&t.url)
-        .header("Content-Type", "application/json");
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json, text/event-stream");
 
     if let Some(sid) = &t.session_id {
         builder = builder.header("Mcp-Session-Id", sid);
@@ -516,6 +517,48 @@ pub async fn mcp_start_server(
 
     let mut instances = mgr.instances.lock().await;
     instances.insert(server_id, instance);
+
+    ok(tools, trace)
+}
+
+#[tauri::command]
+pub async fn mcp_test_server(
+    cfg: McpServerCfg,
+) -> ResultPayload<Vec<McpToolDef>> {
+    let trace = new_trace_id();
+
+    let mut transport = match cfg.transport.as_str() {
+        "stdio" => {
+            let t = match spawn_stdio_process(&cfg) {
+                Ok(t) => t,
+                Err(e) => return err_payload(ErrorCode::IoError, e, trace),
+            };
+            McpTransport::Stdio(t)
+        }
+        "streamable-http" => {
+            let t = match create_http_transport(&cfg) {
+                Ok(t) => t,
+                Err(e) => return err_payload(ErrorCode::IoError, e, trace),
+            };
+            McpTransport::Http(t)
+        }
+        other => {
+            return err_payload(
+                ErrorCode::IoError,
+                format!("不支持的传输方式 '{other}'，支持 stdio / streamable-http"),
+                trace,
+            )
+        }
+    };
+
+    let tools = match transport_initialize_and_list_tools(&mut transport).await {
+        Ok(t) => t,
+        Err(e) => return err_payload(ErrorCode::IoError, format!("MCP 初始化失败: {e}"), trace),
+    };
+
+    if let McpTransport::Stdio(s) = &mut transport {
+        let _ = s.child.kill().await;
+    }
 
     ok(tools, trace)
 }

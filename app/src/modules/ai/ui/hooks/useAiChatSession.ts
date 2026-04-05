@@ -16,6 +16,7 @@ import { createChatSession } from '../../application/chatSessionService'
 import { docConversationService, subscribeDocConversationEvents, type DocConversationEvent } from '../../application/docConversationService'
 import type { DocConversationRecord } from '../../domain/docConversations'
 import { appendAiInputHistory } from '../../application/localStorageAiChatInputHistory'
+import { loadSession, saveSession, type AiChatSessionCfg, type AiChatMessageCfg } from '../../config/aiSessionsRepo'
 
 export type UseAiChatSessionOptions = {
   sessionKey: AiChatSessionKey
@@ -74,8 +75,37 @@ function buildStateFromDocRecord(record: DocConversationRecord, entryMode: ChatE
   }
 }
 
+function isPersistedSessionKey(sessionKey: AiChatSessionKey): boolean {
+  return sessionKey.startsWith('session:')
+}
+
+function buildStateFromAiSessionRecord(record: AiChatSessionCfg, entryMode: ChatEntryMode): ConversationState {
+  const engineHistory: EngineMessage[] = record.messages
+    .filter((m): m is AiChatMessageCfg & { role: 'user' | 'assistant' } => m.role === 'user' || m.role === 'assistant')
+    .map((m) => ({
+      role: m.role,
+      content: m.content,
+    }))
+
+  const viewMessages: ChatMessageView[] = record.messages
+    .filter((m): m is AiChatMessageCfg & { role: 'user' | 'assistant' } => m.role === 'user' || m.role === 'assistant')
+    .map((m) => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      source: 'original',
+    }))
+
+  return {
+    engineHistory,
+    viewMessages,
+    entryMode: (record.entryMode as ChatEntryMode | null | undefined) ?? entryMode,
+    activeRoleId: record.activeRoleId ?? undefined,
+  }
+}
+
 export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatResult {
-  const { entryMode, initialContext, open, selectedAgentId, docPath, legacyDocPath } = options
+  const { sessionKey, entryMode, initialContext, open, selectedAgentId, docPath, legacyDocPath } = options
   const shouldUseDocPersistence = !selectedAgentId
 
   const [session, setSession] = useState<ChatSession | null>(null)
@@ -129,7 +159,12 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
         let initialDifyConversationId: string | undefined
         let initialDifyMapping: Record<string, string> | undefined
 
-        if (docPath && shouldUseDocPersistence) {
+        if (isPersistedSessionKey(sessionKey)) {
+          const savedSession = await loadSession(sessionKey)
+          if (savedSession) {
+            initialState = buildStateFromAiSessionRecord(savedSession, entryMode)
+          }
+        } else if (docPath && shouldUseDocPersistence) {
           let saved: DocConversationRecord | null = await docConversationService.getByDocPath(docPath)
 
           // 懒迁移：如果目录级 docPath 下没有记录，且提供了旧版文件级 docPath，则尝试回退加载
@@ -194,7 +229,49 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
         return null
       })
     }
-  }, [open, entryMode, initialContext, selectedAgentId, docPath, legacyDocPath, reloadToken, shouldUseDocPersistence])
+  }, [open, sessionKey, entryMode, initialContext, selectedAgentId, docPath, legacyDocPath, reloadToken, shouldUseDocPersistence])
+
+  useEffect(() => {
+    if (!open || !isPersistedSessionKey(sessionKey) || !state) return
+
+    const timeout = window.setTimeout(() => {
+      const now = Date.now()
+      void (async () => {
+        const existing = await loadSession(sessionKey)
+        const prevTimestamps = new Map(
+          (existing?.messages ?? []).map((message) => [message.id, message.timestamp]),
+        )
+
+        const messages: AiChatMessageCfg[] = state.viewMessages
+          .filter((message) => (message.role === 'user' || message.role === 'assistant') && !message.hidden)
+          .map((message, index) => ({
+            id: message.id,
+            role: message.role,
+            content: message.content,
+            timestamp: prevTimestamps.get(message.id) ?? now + index,
+          }))
+
+        const sessionRecord: AiChatSessionCfg = {
+          id: sessionKey,
+          title: existing?.title ?? null,
+          entryMode,
+          messages,
+          providerType,
+          activeRoleId: state.activeRoleId ?? existing?.activeRoleId ?? null,
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+        }
+
+        await saveSession(sessionRecord)
+      })().catch((err) => {
+        console.warn('[useAiChatSession] failed to persist session history', err)
+      })
+    }, state.viewMessages.some((message) => message.streaming) ? 800 : 150)
+
+    return () => {
+      window.clearTimeout(timeout)
+    }
+  }, [open, sessionKey, entryMode, state, providerType])
 
   // Load available models
   useEffect(() => {

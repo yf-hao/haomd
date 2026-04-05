@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FC } from 'reac
 import { useI18n } from '../modules/i18n/I18nContext'
 import { Button } from './Button'
 import { FieldGroup } from './FieldGroup'
+import { onNativePaste, onNativePasteError } from '../modules/platform/clipboardEvents'
 import {
   loadMcpSettings,
   saveMcpSettings,
   mcpStartServer,
+  mcpTestServer,
   mcpStopServer,
   mcpListRunningServers,
   type McpGroupCfg,
@@ -23,16 +25,135 @@ function uuid(): string {
   return crypto.randomUUID()
 }
 
-const EMPTY_SERVER_DRAFT: Omit<McpServerCfg, 'id' | 'order'> = {
-  name: '',
-  groupId: null,
-  enabled: true,
-  transport: 'stdio',
-  command: null,
-  args: null,
-  env: null,
-  url: null,
-  headers: null,
+type McpServerDraftForm = {
+  id: string
+  order: number
+  name: string
+  groupId: string
+  enabled: boolean
+  transport: McpServerCfg['transport']
+  command: string
+  args: string
+  env: string
+  url: string
+  headers: string
+}
+
+function serverToForm(srv: McpServerCfg): McpServerDraftForm {
+  return {
+    id: srv.id,
+    order: srv.order,
+    name: srv.name ?? '',
+    groupId: srv.groupId ?? '',
+    enabled: srv.enabled,
+    transport: srv.transport,
+    command: srv.command ?? '',
+    args: (srv.args ?? []).join(' '),
+    env: srv.env ? Object.entries(srv.env).map(([k, v]) => `${k}=${v}`).join('\n') : '',
+    url: srv.url ?? '',
+    headers: srv.headers
+      ? Object.entries(srv.headers).map(([k, v]) => `${k}: ${v}`).join('\n')
+      : '',
+  }
+}
+
+function emptyServerForm(order: number): McpServerDraftForm {
+  return {
+    id: `srv-${uuid()}`,
+    order,
+    name: '',
+    groupId: '',
+    enabled: true,
+    transport: 'stdio',
+    command: '',
+    args: '',
+    env: '',
+    url: '',
+    headers: '',
+  }
+}
+
+function parseEnvMap(value: string): Record<string, string> | null {
+  const env: Record<string, string> = {}
+  for (const line of value.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+
+    const eqIdx = trimmed.indexOf('=')
+    if (eqIdx > 0) {
+      env[trimmed.slice(0, eqIdx).trim()] = trimmed.slice(eqIdx + 1).trim()
+      continue
+    }
+
+    const jsonLike = trimmed.match(/^["']?([^"':=]+)["']?\s*:\s*["']?(.*?)["']?\s*,?$/)
+    if (!jsonLike) continue
+
+    const key = jsonLike[1]?.trim()
+    const rawValue = jsonLike[2] ?? ''
+    const normalizedValue = rawValue.replace(/["']\s*,?\s*$/, '').trim()
+    if (key) {
+      env[key] = normalizedValue
+    }
+  }
+  return Object.keys(env).length > 0 ? env : null
+}
+
+function parseHeadersMap(value: string): Record<string, string> | null {
+  const headers: Record<string, string> = {}
+  for (const line of value.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+
+    const jsonLike = trimmed.match(/^["']?([^"':]+)["']?\s*:\s*["']?(.*?)["']?\s*,?$/)
+    if (!jsonLike) continue
+
+    const key = jsonLike[1]?.trim()
+    const rawValue = jsonLike[2] ?? ''
+    const normalizedValue = rawValue.replace(/["']\s*,?\s*$/, '').trim()
+
+    if (key) {
+      headers[key] = normalizedValue
+    }
+  }
+  return Object.keys(headers).length > 0 ? headers : null
+}
+
+function parseArgsInput(value: string): string[] | null {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+
+  if (trimmed.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(trimmed)
+      if (Array.isArray(parsed)) {
+        const args = parsed
+          .map((item) => (typeof item === 'string' ? item.trim() : String(item).trim()))
+          .filter(Boolean)
+        return args.length > 0 ? args : null
+      }
+    } catch {
+      // Fall through to plain whitespace-separated parsing.
+    }
+  }
+
+  const args = trimmed.split(/\s+/).filter(Boolean)
+  return args.length > 0 ? args : null
+}
+
+function formToServer(form: McpServerDraftForm): McpServerCfg {
+  return {
+    id: form.id,
+    order: form.order,
+    name: form.name,
+    groupId: form.groupId || null,
+    enabled: form.enabled,
+    transport: form.transport,
+    command: form.command.trim() ? form.command : null,
+    args: parseArgsInput(form.args),
+    env: parseEnvMap(form.env),
+    url: form.url.trim() ? form.url : null,
+    headers: parseHeadersMap(form.headers),
+  }
 }
 
 export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose }) => {
@@ -40,12 +161,13 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
   const [settings, setSettings] = useState<McpSettingsCfg>({ groups: [], servers: [] })
   const [runningServers, setRunningServers] = useState<McpRunningServerInfo[]>([])
   const [selectedServerId, setSelectedServerId] = useState<string | null>(null)
-  const [draft, setDraft] = useState<McpServerCfg>({ ...EMPTY_SERVER_DRAFT, id: '', order: 0 })
+  const [draftForm, setDraftForm] = useState<McpServerDraftForm>(() => emptyServerForm(0))
   const [isEditing, setIsEditing] = useState(false)
   const [error, setError] = useState('')
   const [testResult, setTestResult] = useState('')
   const [groupDraft, setGroupDraft] = useState('')
   const [showGroupInput, setShowGroupInput] = useState(false)
+  const [activeField, setActiveField] = useState<keyof McpServerDraftForm | null>(null)
   const loadedRef = useRef(false)
 
   // Load settings when opened
@@ -73,6 +195,47 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
     return () => document.removeEventListener('keydown', handler)
   }, [open, onClose])
 
+  useEffect(() => {
+    if (!open) return
+
+    const unPaste = onNativePaste((text) => {
+      if (!text || !activeField) return
+
+      setDraftForm((prev) => {
+        const key = activeField
+        const current = prev[key]
+        if (typeof current !== 'string') return prev
+
+        let start = current.length
+        let end = current.length
+
+        if (typeof document !== 'undefined') {
+          const el = document.activeElement as HTMLInputElement | HTMLTextAreaElement | null
+          if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
+            if (typeof el.selectionStart === 'number') start = el.selectionStart
+            if (typeof el.selectionEnd === 'number') end = el.selectionEnd ?? start
+          }
+        }
+
+        const before = current.slice(0, start)
+        const after = current.slice(end)
+        return {
+          ...prev,
+          [key]: before + text + after,
+        }
+      })
+    })
+
+    const unError = onNativePasteError((message) => {
+      console.warn('[McpSettingsDialog] native paste error:', message)
+    })
+
+    return () => {
+      unPaste()
+      unError()
+    }
+  }, [open, activeField])
+
   const isServerRunning = useCallback(
     (id: string) => runningServers.some((s) => s.id === id),
     [runningServers],
@@ -81,7 +244,7 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
   const handleSelectServer = useCallback(
     (srv: McpServerCfg) => {
       setSelectedServerId(srv.id)
-      setDraft({ ...srv })
+      setDraftForm(serverToForm(srv))
       setIsEditing(true)
       setError('')
       setTestResult('')
@@ -90,8 +253,7 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
   )
 
   const handleNewServer = useCallback(() => {
-    const id = `srv-${uuid()}`
-    setDraft({ ...EMPTY_SERVER_DRAFT, id, order: settings.servers.length })
+    setDraftForm(emptyServerForm(settings.servers.length))
     setSelectedServerId(null)
     setIsEditing(false)
     setError('')
@@ -99,6 +261,7 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
   }, [settings.servers.length])
 
   const handleSaveDraft = useCallback(() => {
+    const draft = formToServer(draftForm)
     if (!draft.name.trim()) {
       setError(t('mcp.nameRequired'))
       return
@@ -127,7 +290,7 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
     setSelectedServerId(draft.id)
     setIsEditing(true)
     setError('')
-  }, [draft, t])
+  }, [draftForm, t])
 
   const handleDeleteServer = useCallback(
     (id: string) => {
@@ -138,7 +301,7 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
       if (selectedServerId === id) {
         setSelectedServerId(null)
         setIsEditing(false)
-        setDraft({ ...EMPTY_SERVER_DRAFT, id: '', order: 0 })
+        setDraftForm(emptyServerForm(0))
       }
     },
     [selectedServerId],
@@ -152,16 +315,16 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
   }, [])
 
   const handleTestConnection = useCallback(async () => {
+    const draft = formToServer(draftForm)
     setError('')
     setTestResult('')
     try {
-      const tools = await mcpStartServer(draft.id)
+      const tools = await mcpTestServer(draft)
       setTestResult(t('mcp.testSuccess', { count: String(tools.length) }))
-      await mcpStopServer(draft.id)
     } catch (e) {
       setError(String(e))
     }
-  }, [draft.id, t])
+  }, [draftForm, t])
 
   const handleStartServer = useCallback(
     async (id: string) => {
@@ -233,34 +396,12 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
     return map
   }, [settings])
 
-  const updateDraft = useCallback(
-    (field: keyof McpServerCfg, value: unknown) => {
-      setDraft((prev) => ({ ...prev, [field]: value }))
+  const updateDraftForm = useCallback(
+    <K extends keyof McpServerDraftForm>(field: K, value: McpServerDraftForm[K]) => {
+      setDraftForm((prev) => ({ ...prev, [field]: value }))
     },
     [],
   )
-
-  // Local string states for textareas so partial/unparsed input is preserved while typing
-  const [argsString, setArgsString] = useState(() => (draft.args ?? []).join(' '))
-  const [envString, setEnvString] = useState('')
-  const [headersString, setHeadersString] = useState('')
-
-  // Sync textarea strings only when the selected server changes (draft.id changes)
-  // NOT when the user is editing fields — that would discard their partial input
-  useEffect(() => {
-    setArgsString((draft.args ?? []).join(' '))
-    setEnvString(
-      draft.env
-        ? Object.entries(draft.env).map(([k, v]) => `${k}=${v}`).join('\n')
-        : '',
-    )
-    setHeadersString(
-      draft.headers
-        ? Object.entries(draft.headers).map(([k, v]) => `${k}: ${v}`).join('\n')
-        : '',
-    )
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft.id])
 
   if (!open) return null
 
@@ -280,8 +421,9 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
               <FieldGroup label={t('mcp.serverName')}>
                 <input
                   className="field-input"
-                  value={draft.name}
-                  onChange={(e) => updateDraft('name', e.target.value)}
+                  value={draftForm.name}
+                  onFocus={() => setActiveField('name')}
+                  onChange={(e) => updateDraftForm('name', e.target.value)}
                   placeholder="e.g. Filesystem"
                 />
               </FieldGroup>
@@ -289,8 +431,8 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
               <FieldGroup label={t('mcp.group')}>
                 <select
                   className="field-select"
-                  value={draft.groupId ?? ''}
-                  onChange={(e) => updateDraft('groupId', e.target.value || null)}
+                  value={draftForm.groupId}
+                  onChange={(e) => updateDraftForm('groupId', e.target.value)}
                 >
                   <option value="">{t('mcp.noGroup')}</option>
                   {settings.groups.map((g) => (
@@ -304,8 +446,8 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
               <FieldGroup label={t('mcp.transport')}>
                 <select
                   className="field-select"
-                  value={draft.transport}
-                  onChange={(e) => updateDraft('transport', e.target.value)}
+                  value={draftForm.transport}
+                  onChange={(e) => updateDraftForm('transport', e.target.value as McpServerCfg['transport'])}
                 >
                   <option value="stdio">stdio</option>
                   <option value="streamable-http">Streamable HTTP</option>
@@ -313,24 +455,23 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
                 </select>
               </FieldGroup>
 
-              {draft.transport === 'stdio' && (
+              {draftForm.transport === 'stdio' && (
                 <>
                   <FieldGroup label={t('mcp.command')}>
                     <input
                       className="field-input"
-                      value={draft.command ?? ''}
-                      onChange={(e) => updateDraft('command', e.target.value)}
+                      value={draftForm.command}
+                      onFocus={() => setActiveField('command')}
+                      onChange={(e) => updateDraftForm('command', e.target.value)}
                       placeholder="e.g. npx"
                     />
                   </FieldGroup>
                   <FieldGroup label={t('mcp.args')}>
                     <input
                       className="field-input"
-                      value={argsString}
-                      onChange={(e) => {
-                        setArgsString(e.target.value)
-                        updateDraft('args', e.target.value.split(/\s+/).filter(Boolean))
-                      }}
+                      value={draftForm.args}
+                      onFocus={() => setActiveField('args')}
+                      onChange={(e) => updateDraftForm('args', e.target.value)}
                       placeholder="-y @modelcontextprotocol/server-filesystem /path"
                     />
                   </FieldGroup>
@@ -338,29 +479,23 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
                     <textarea
                       className="field-textarea"
                       rows={2}
-                      value={envString}
-                      onChange={(e) => {
-                        setEnvString(e.target.value)
-                        const env: Record<string, string> = {}
-                        for (const line of e.target.value.split('\n')) {
-                          const idx = line.indexOf('=')
-                          if (idx > 0) env[line.slice(0, idx).trim()] = line.slice(idx + 1).trim()
-                        }
-                        updateDraft('env', Object.keys(env).length > 0 ? env : null)
-                      }}
+                      value={draftForm.env}
+                      onFocus={() => setActiveField('env')}
+                      onChange={(e) => updateDraftForm('env', e.target.value)}
                       placeholder="KEY=value"
                     />
                   </FieldGroup>
                 </>
               )}
 
-              {draft.transport === 'sse' && (
+              {draftForm.transport === 'sse' && (
                 <>
                   <FieldGroup label="URL">
                     <input
                       className="field-input"
-                      value={draft.url ?? ''}
-                      onChange={(e) => updateDraft('url', e.target.value)}
+                      value={draftForm.url}
+                      onFocus={() => setActiveField('url')}
+                      onChange={(e) => updateDraftForm('url', e.target.value)}
                       placeholder="http://localhost:3001/sse"
                     />
                   </FieldGroup>
@@ -368,29 +503,23 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
                     <textarea
                       className="field-textarea"
                       rows={2}
-                      value={headersString}
-                      onChange={(e) => {
-                        setHeadersString(e.target.value)
-                        const headers: Record<string, string> = {}
-                        for (const line of e.target.value.split('\n')) {
-                          const idx = line.indexOf(':')
-                          if (idx > 0) headers[line.slice(0, idx).trim()] = line.slice(idx + 1).trim()
-                        }
-                        updateDraft('headers', Object.keys(headers).length > 0 ? headers : null)
-                      }}
+                      value={draftForm.headers}
+                      onFocus={() => setActiveField('headers')}
+                      onChange={(e) => updateDraftForm('headers', e.target.value)}
                       placeholder="Authorization: Bearer xxx"
                     />
                   </FieldGroup>
                 </>
               )}
 
-              {draft.transport === 'streamable-http' && (
+              {draftForm.transport === 'streamable-http' && (
                 <>
                   <FieldGroup label="URL">
                     <input
                       className="field-input"
-                      value={draft.url ?? ''}
-                      onChange={(e) => updateDraft('url', e.target.value)}
+                      value={draftForm.url}
+                      onFocus={() => setActiveField('url')}
+                      onChange={(e) => updateDraftForm('url', e.target.value)}
                       placeholder="http://localhost:3001/mcp"
                     />
                   </FieldGroup>
@@ -398,16 +527,9 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
                     <textarea
                       className="field-textarea"
                       rows={2}
-                      value={headersString}
-                      onChange={(e) => {
-                        setHeadersString(e.target.value)
-                        const headers: Record<string, string> = {}
-                        for (const line of e.target.value.split('\n')) {
-                          const idx = line.indexOf(':')
-                          if (idx > 0) headers[line.slice(0, idx).trim()] = line.slice(idx + 1).trim()
-                        }
-                        updateDraft('headers', Object.keys(headers).length > 0 ? headers : null)
-                      }}
+                      value={draftForm.headers}
+                      onFocus={() => setActiveField('headers')}
+                      onChange={(e) => updateDraftForm('headers', e.target.value)}
                       placeholder="Authorization: Bearer xxx"
                     />
                   </FieldGroup>
@@ -417,8 +539,8 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
               <FieldGroup label={t('mcp.enabled')} inline>
                 <input
                   type="checkbox"
-                  checked={draft.enabled}
-                  onChange={(e) => updateDraft('enabled', e.target.checked)}
+                  checked={draftForm.enabled}
+                  onChange={(e) => updateDraftForm('enabled', e.target.checked)}
                 />
               </FieldGroup>
 

@@ -12,11 +12,19 @@ export type EngineMessage = {
 
 export type ChatRole = 'user' | 'assistant'
 
+export type AssistantToolExecutionView = {
+  id: string
+  label: string
+  status: 'running' | 'success' | 'error'
+  detail?: string
+}
+
 export type ChatMessageView = {
   id: string
   role: ChatRole
   content: string
   source?: 'original' | 'summary-preserved'
+  toolExecutions?: AssistantToolExecutionView[]
   /** 是否仍在流式输出中 */
   streaming?: boolean
   /** 是否在 UI 中隐藏该条消息（仍保留在 engineHistory 中） */
@@ -164,6 +172,96 @@ export function appendAssistantChunk(
         }
         : m,
     ),
+  }
+}
+
+export function upsertAssistantToolExecution(
+  state: ConversationState,
+  id: string,
+  execution: AssistantToolExecutionView,
+): ConversationState {
+  return {
+    ...state,
+    viewMessages: state.viewMessages.map((m) => {
+      if (m.id !== id || m.role !== 'assistant') return m
+
+      const existing = m.toolExecutions ?? []
+      const next =
+        existing.some((item) => item.id === execution.id)
+          ? existing.map((item) => (item.id === execution.id ? execution : item))
+          : [...existing, execution]
+
+      return {
+        ...m,
+        toolExecutions: next,
+      }
+    }),
+  }
+}
+
+export function hideViewMessage(
+  state: ConversationState,
+  id: string,
+): ConversationState {
+  return {
+    ...state,
+    viewMessages: state.viewMessages.map((m) =>
+      m.id === id
+        ? {
+            ...m,
+            hidden: true,
+          }
+        : m,
+    ),
+  }
+}
+
+export function replaceAssistantMessageContent(
+  state: ConversationState,
+  id: string,
+  content: string,
+): ConversationState {
+  return {
+    ...state,
+    viewMessages: state.viewMessages.map((m) =>
+      m.id === id && m.role === 'assistant'
+        ? {
+            ...m,
+            content,
+          }
+        : m,
+    ),
+  }
+}
+
+export function removeLastAssistantEngineMessageIfMatches(
+  state: ConversationState,
+  content: string,
+): ConversationState {
+  if (!content.trim() || state.engineHistory.length === 0) return state
+  const last = state.engineHistory[state.engineHistory.length - 1]
+  if (last?.role !== 'assistant' || last.content !== content) return state
+  return {
+    ...state,
+    engineHistory: state.engineHistory.slice(0, -1),
+  }
+}
+
+export function replaceLastAssistantEngineMessageIfMatches(
+  state: ConversationState,
+  previousContent: string,
+  nextContent: string,
+): ConversationState {
+  if (!previousContent.trim() || state.engineHistory.length === 0) return state
+  const last = state.engineHistory[state.engineHistory.length - 1]
+  if (last?.role !== 'assistant' || last.content !== previousContent) return state
+
+  return {
+    ...state,
+    engineHistory: [
+      ...state.engineHistory.slice(0, -1),
+      { role: 'assistant', content: nextContent },
+    ],
   }
 }
 

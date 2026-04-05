@@ -45,6 +45,8 @@ pub struct PromptRoleCfg {
     pub description: Option<String>,
     pub prompt: String,
     #[serde(default)]
+    pub enable_mcp_tools: Option<bool>,
+    #[serde(default)]
     pub is_default: Option<bool>,
 }
 

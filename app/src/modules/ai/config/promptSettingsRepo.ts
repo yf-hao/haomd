@@ -8,6 +8,7 @@ export type PromptRoleCfg = {
   name: string
   description?: string | null
   prompt: string
+  enable_mcp_tools?: boolean | null
   is_default?: boolean | null
 }
 
@@ -25,6 +26,7 @@ export function fromCfg(cfg: PromptSettingsCfg | null | undefined): PromptSettin
       name: r.name,
       description: r.description ?? undefined,
       prompt: r.prompt,
+      enableMcpTools: r.enable_mcp_tools ?? false,
       // 从配置文件加载的角色一律视为用户自定义角色
       builtin: false,
     } as PromptRole)),
@@ -42,6 +44,7 @@ export function toCfg(state: PromptSettingsState): PromptSettingsCfg {
       name: r.name,
       description: r.description ?? null,
       prompt: r.prompt,
+      enable_mcp_tools: r.enableMcpTools ?? false,
       is_default: (state.defaultRoleId ?? null) === r.id,
     })),
     default_role_id: state.defaultRoleId ?? null,

@@ -17,6 +17,7 @@ describe('promptSettingsRepo fromCfg / toCfg', () => {
           name: 'Role 1',
           description: null,
           prompt: 'prompt-1',
+          enable_mcp_tools: true,
           is_default: true,
         },
       ],
@@ -31,6 +32,7 @@ describe('promptSettingsRepo fromCfg / toCfg', () => {
       name: 'Role 1',
       description: undefined,
       prompt: 'prompt-1',
+      enableMcpTools: true,
       builtin: false,
     })
   })
@@ -50,6 +52,7 @@ describe('promptSettingsRepo fromCfg / toCfg', () => {
           name: 'User 1',
           description: undefined,
           prompt: 'user-prompt',
+          enableMcpTools: true,
           builtin: false,
         },
       ],
@@ -63,6 +66,7 @@ describe('promptSettingsRepo fromCfg / toCfg', () => {
       name: 'User 1',
       description: null,
       prompt: 'user-prompt',
+      enable_mcp_tools: true,
       is_default: true,
     })
     expect(cfg.default_role_id).toBe('user-1')
@@ -77,7 +81,7 @@ describe('promptSettingsRepo load/save', () => {
   it('loadPromptSettingsState should return mapped state when backend succeeds', async () => {
     const cfg: PromptSettingsCfg = {
       roles: [
-        { id: 'r1', name: 'R1', description: 'd', prompt: 'p', is_default: true },
+        { id: 'r1', name: 'R1', description: 'd', prompt: 'p', enable_mcp_tools: true, is_default: true },
       ],
       default_role_id: 'r1',
     }
@@ -105,7 +109,7 @@ describe('promptSettingsRepo load/save', () => {
   it('savePromptSettingsState should invoke backend with converted cfg', async () => {
     const state: PromptSettingsState = {
       roles: [
-        { id: 'r1', name: 'R1', description: undefined, prompt: 'p', builtin: false },
+        { id: 'r1', name: 'R1', description: undefined, prompt: 'p', enableMcpTools: true, builtin: false },
       ],
       defaultRoleId: 'r1',
     }
@@ -122,6 +126,7 @@ describe('promptSettingsRepo load/save', () => {
             name: 'R1',
             description: null,
             prompt: 'p',
+            enable_mcp_tools: true,
             is_default: true,
           },
         ],

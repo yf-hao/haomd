@@ -67,6 +67,13 @@ export async function mcpStartServer(serverId: string): Promise<McpToolDef[]> {
   throw new Error(resp.Err.error.message)
 }
 
+export async function mcpTestServer(cfg: McpServerCfg): Promise<McpToolDef[]> {
+  const resp = await invoke<BackendResult<McpToolDef[]>>('mcp_test_server', { cfg })
+  if ('Ok' in resp) return resp.Ok.data
+  console.error('[mcp] mcp_test_server error', resp.Err.error)
+  throw new Error(resp.Err.error.message)
+}
+
 export async function mcpStopServer(serverId: string): Promise<void> {
   const resp = await invoke<BackendResult<void>>('mcp_stop_server', { serverId })
   if ('Err' in resp) {

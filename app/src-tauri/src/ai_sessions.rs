@@ -80,58 +80,77 @@ fn naming_conv_path(app: &AppHandle) -> std::io::Result<PathBuf> {
     }
 }
 
-fn sessions_data_path(app: &AppHandle) -> std::io::Result<PathBuf> {
-    let mut dir = ai_sessions_dir(app)?;
-    dir.push("sessions_data.json");
-    Ok(dir)
-}
-
 fn sessions_index_path(app: &AppHandle) -> std::io::Result<PathBuf> {
     let mut dir = ai_sessions_dir(app)?;
     dir.push("sessions_index.json");
     Ok(dir)
 }
 
+fn session_file_name(id: &str) -> String {
+    let hex = id
+        .as_bytes()
+        .iter()
+        .map(|b| format!("{:02x}", b))
+        .collect::<String>();
+    format!("{hex}.json")
+}
+
+fn session_data_path(app: &AppHandle, id: &str) -> std::io::Result<PathBuf> {
+    let mut dir = ai_sessions_dir(app)?;
+    dir.push(session_file_name(id));
+    Ok(dir)
+}
+
 // ─── Internal read / write helpers ──────────────────────────────────
 
-async fn read_all_sessions(app: &AppHandle) -> std::io::Result<Vec<AiChatSessionCfg>> {
-    let path = sessions_data_path(app)?;
+async fn read_session_index(app: &AppHandle) -> std::io::Result<Vec<AiChatSessionIndexEntry>> {
+    let path = sessions_index_path(app)?;
     match fs::read(&path).await {
         Ok(bytes) => {
-            let records: Vec<AiChatSessionCfg> =
+            let entries: Vec<AiChatSessionIndexEntry> =
                 serde_json::from_slice(&bytes).unwrap_or_default();
-            Ok(records)
+            Ok(entries)
         }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(vec![]),
         Err(err) => Err(err),
     }
 }
 
-async fn write_all_sessions(
+async fn write_session_index(
     app: &AppHandle,
-    records: &[AiChatSessionCfg],
+    entries: &[AiChatSessionIndexEntry],
 ) -> std::io::Result<()> {
-    // Write full data
-    let data_path = sessions_data_path(app)?;
-    let data_bytes = serde_json::to_vec_pretty(records)?;
-    fs::write(&data_path, data_bytes).await?;
-
-    // Write lightweight index
-    let index_entries: Vec<AiChatSessionIndexEntry> = records
-        .iter()
-        .map(|s| AiChatSessionIndexEntry {
-            id: s.id.clone(),
-            title: s.title.clone(),
-            message_count: s.messages.len(),
-            created_at: s.created_at,
-            updated_at: s.updated_at,
-        })
-        .collect();
-
     let index_path = sessions_index_path(app)?;
-    let index_bytes = serde_json::to_vec_pretty(&index_entries)?;
+    let index_bytes = serde_json::to_vec_pretty(entries)?;
     fs::write(&index_path, index_bytes).await?;
+    Ok(())
+}
 
+async fn read_session(app: &AppHandle, id: &str) -> std::io::Result<Option<AiChatSessionCfg>> {
+    let path = session_data_path(app, id)?;
+    match fs::read(&path).await {
+        Ok(bytes) => {
+            let session: AiChatSessionCfg = serde_json::from_slice(&bytes).unwrap_or(AiChatSessionCfg {
+                id: id.to_string(),
+                title: None,
+                entry_mode: None,
+                messages: vec![],
+                provider_type: None,
+                active_role_id: None,
+                created_at: 0,
+                updated_at: 0,
+            });
+            Ok(Some(session))
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(err),
+    }
+}
+
+async fn write_session(app: &AppHandle, session: &AiChatSessionCfg) -> std::io::Result<()> {
+    let path = session_data_path(app, &session.id)?;
+    let bytes = serde_json::to_vec_pretty(session)?;
+    fs::write(&path, bytes).await?;
     Ok(())
 }
 
@@ -142,21 +161,8 @@ pub async fn load_ai_sessions_index(
     app: AppHandle,
 ) -> ResultPayload<Vec<AiChatSessionIndexEntry>> {
     let trace = new_trace_id();
-    // Try to read index file first for fast loading
-    let index_path = match sessions_index_path(&app) {
-        Ok(p) => p,
-        Err(err) => {
-            return err_payload(ErrorCode::IoError, format!("获取 ai-sessions 路径失败: {err}"), trace);
-        }
-    };
-
-    match fs::read(&index_path).await {
-        Ok(bytes) => {
-            let entries: Vec<AiChatSessionIndexEntry> =
-                serde_json::from_slice(&bytes).unwrap_or_default();
-            ok(entries, trace)
-        }
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => ok(vec![], trace),
+    match read_session_index(&app).await {
+        Ok(entries) => ok(entries, trace),
         Err(err) => err_payload(
             ErrorCode::IoError,
             format!("读取 sessions_index 失败: {err}"),
@@ -171,14 +177,11 @@ pub async fn load_ai_session(
     id: String,
 ) -> ResultPayload<Option<AiChatSessionCfg>> {
     let trace = new_trace_id();
-    match read_all_sessions(&app).await {
-        Ok(records) => {
-            let found = records.into_iter().find(|s| s.id == id);
-            ok(found, trace)
-        }
+    match read_session(&app, &id).await {
+        Ok(found) => ok(found, trace),
         Err(err) => err_payload(
             ErrorCode::IoError,
-            format!("读取 sessions_data 失败: {err}"),
+            format!("读取 session 失败: {err}"),
             trace,
         ),
     }
@@ -190,26 +193,43 @@ pub async fn save_ai_session(
     session: AiChatSessionCfg,
 ) -> ResultPayload<()> {
     let trace = new_trace_id();
-    match read_all_sessions(&app).await {
-        Ok(mut records) => {
-            // Upsert: replace existing or append new
-            if let Some(pos) = records.iter().position(|s| s.id == session.id) {
-                records[pos] = session;
-            } else {
-                records.push(session);
-            }
-            match write_all_sessions(&app, &records).await {
-                Ok(()) => ok((), trace),
+    match write_session(&app, &session).await {
+        Ok(()) => {
+            match read_session_index(&app).await {
+                Ok(mut entries) => {
+                    let next_entry = AiChatSessionIndexEntry {
+                        id: session.id.clone(),
+                        title: session.title.clone(),
+                        message_count: session.messages.len(),
+                        created_at: session.created_at,
+                        updated_at: session.updated_at,
+                    };
+
+                    if let Some(pos) = entries.iter().position(|s| s.id == session.id) {
+                        entries[pos] = next_entry;
+                    } else {
+                        entries.push(next_entry);
+                    }
+
+                    match write_session_index(&app, &entries).await {
+                        Ok(()) => ok((), trace),
+                        Err(err) => err_payload(
+                            ErrorCode::IoError,
+                            format!("写入 sessions_index 失败: {err}"),
+                            trace,
+                        ),
+                    }
+                }
                 Err(err) => err_payload(
                     ErrorCode::IoError,
-                    format!("写入 sessions_data 失败: {err}"),
+                    format!("读取 sessions_index 失败: {err}"),
                     trace,
                 ),
             }
         }
         Err(err) => err_payload(
             ErrorCode::IoError,
-            format!("读取 sessions_data 失败: {err}"),
+            format!("写入 session 失败: {err}"),
             trace,
         ),
     }
@@ -221,21 +241,39 @@ pub async fn delete_ai_session(
     id: String,
 ) -> ResultPayload<()> {
     let trace = new_trace_id();
-    match read_all_sessions(&app).await {
-        Ok(mut records) => {
-            records.retain(|s| s.id != id);
-            match write_all_sessions(&app, &records).await {
+    let session_path = match session_data_path(&app, &id) {
+        Ok(path) => path,
+        Err(err) => {
+            return err_payload(ErrorCode::IoError, format!("获取 session 路径失败: {err}"), trace);
+        }
+    };
+
+    let remove_result = fs::remove_file(&session_path).await;
+    if let Err(err) = remove_result {
+        if err.kind() != std::io::ErrorKind::NotFound {
+            return err_payload(
+                ErrorCode::IoError,
+                format!("删除 session 文件失败: {err}"),
+                trace,
+            );
+        }
+    }
+
+    match read_session_index(&app).await {
+        Ok(mut entries) => {
+            entries.retain(|s| s.id != id);
+            match write_session_index(&app, &entries).await {
                 Ok(()) => ok((), trace),
                 Err(err) => err_payload(
                     ErrorCode::IoError,
-                    format!("写入 sessions_data 失败: {err}"),
+                    format!("写入 sessions_index 失败: {err}"),
                     trace,
                 ),
             }
         }
         Err(err) => err_payload(
             ErrorCode::IoError,
-            format!("读取 sessions_data 失败: {err}"),
+            format!("读取 sessions_index 失败: {err}"),
             trace,
         ),
     }

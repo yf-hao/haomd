@@ -6,6 +6,7 @@ export type PromptRoleDraft = {
   name: string
   description: string
   prompt: string
+  enableMcpTools: boolean
 }
 
 const emptyDraft: PromptRoleDraft = {
@@ -13,6 +14,7 @@ const emptyDraft: PromptRoleDraft = {
   name: '',
   description: '',
   prompt: '',
+  enableMcpTools: false,
 }
 
 export function usePromptSettingsState(initial: PromptSettingsState | null) {
@@ -27,7 +29,7 @@ export function usePromptSettingsState(initial: PromptSettingsState | null) {
     [settings],
   )
 
-  const updateDraftField = useCallback((field: keyof PromptRoleDraft, value: string) => {
+  const updateDraftField = useCallback((field: keyof PromptRoleDraft, value: string | boolean) => {
     setDraft((prev) => ({ ...prev, [field]: value }))
   }, [])
 
@@ -61,6 +63,7 @@ export function usePromptSettingsState(initial: PromptSettingsState | null) {
       name: draft.name.trim(),
       description: draft.description.trim() || undefined,
       prompt: draft.prompt,
+      enableMcpTools: draft.enableMcpTools,
       builtin: false,
     }
 
@@ -144,6 +147,7 @@ export function usePromptSettingsState(initial: PromptSettingsState | null) {
       name: role.name,
       description: role.description ?? '',
       prompt: role.prompt,
+      enableMcpTools: role.enableMcpTools ?? false,
     })
     setExpandedId(role.id)
   }, [])

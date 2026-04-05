@@ -130,6 +130,7 @@ macro_rules! app_invoke_handler {
             load_mcp_settings,
             save_mcp_settings,
             mcp_start_server,
+            mcp_test_server,
             mcp_stop_server,
             mcp_list_tools,
             mcp_call_tool,
