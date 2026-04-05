@@ -168,6 +168,32 @@
   color: var(--theme-text-subtle);
 }
 
+.settings-status-message {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--theme-border-subtle);
+  font-size: calc(var(--ui-font-settings) - 1px);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--theme-surface-editor);
+  color: var(--theme-text-default);
+}
+
+.settings-status-success {
+  border-color: color-mix(in srgb, var(--theme-accent-success) 45%, var(--theme-border-subtle));
+  background: color-mix(in srgb, var(--theme-accent-success) 12%, var(--theme-surface-editor));
+  color: var(--theme-text-default);
+  box-shadow: inset 3px 0 0 var(--theme-accent-success);
+}
+
+.settings-status-error {
+  border-color: color-mix(in srgb, var(--theme-accent-soft-danger-fg) 42%, var(--theme-border-subtle));
+  background: color-mix(in srgb, var(--theme-accent-soft-danger-bg) 78%, var(--theme-surface-editor));
+  color: var(--theme-accent-soft-danger-fg);
+  box-shadow: inset 3px 0 0 var(--theme-accent-soft-danger-fg);
+}
+
 .settings-number-input::-webkit-outer-spin-button,
 .settings-number-input::-webkit-inner-spin-button {
   -webkit-appearance: none;

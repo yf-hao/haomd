@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 mod ai_config;
 mod ai_sessions;
+mod backup_io;
 mod clipboard_io;
 mod dialog_io;
 mod doc_conversations;
@@ -27,6 +28,7 @@ mod word_commands;
 
 use ai_config::*;
 use ai_sessions::*;
+use backup_io::*;
 use clipboard_io::*;
 use dialog_io::*;
 use doc_conversations::*;
@@ -118,6 +120,11 @@ macro_rules! app_invoke_handler {
             export_word_docx,
             fill_docx_template,
             get_system_language,
+            export_settings_backup,
+            test_webdav_connection,
+            export_settings_backup_to_webdav,
+            import_settings_backup,
+            import_settings_backup_from_webdav,
             is_inkscape_available,
             convert_svg_to_emf,
             convert_svg_to_plain_svg,

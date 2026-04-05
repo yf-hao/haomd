@@ -1,11 +1,16 @@
 import { type ChangeEvent, type FC, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 import './SettingsDialog.css'
 import { Button } from './Button'
 import { FontSelectField } from './settings/FontSelectField'
 import { useI18n } from '../modules/i18n/I18nContext'
+import { onNativePaste } from '../modules/platform/clipboardEvents'
+import type { BackendResult } from '../modules/platform/backendTypes'
 import type { LanguageMode } from '../modules/i18n/schema'
 import {
+  getDefaultWebDavBackupSettings,
+  DEFAULT_WEBDAV_REMOTE_PATH,
   getDefaultLanguageSetting,
   getDefaultThemeSettings,
   getDefaultUiTypographySettings,
@@ -22,6 +27,7 @@ import {
   type ThemeSettings,
   type UiTypographySettings,
   type WordExportStyleSettings,
+  type WebDavBackupSettings,
 } from '../modules/settings/editorSettings'
 import { resolveManagedBackgroundImageUrl } from '../modules/theme/backgroundImageRuntime'
 import type { ThemeMode } from '../modules/theme/schema'
@@ -36,7 +42,7 @@ export type SettingsDialogProps = {
   onUiTypographyChange?: (settings: UiTypographySettings) => void
 }
 
-type SettingsSectionId = 'theme' | 'typography' | 'word-export'
+type SettingsSectionId = 'theme' | 'typography' | 'word-export' | 'backup'
 type ThemePanelTabId = 'theme-preset' | 'backgrounds'
 type WordExportTabId = 'document' | 'layout' | 'diagrams' | 'templates'
 type WordTemplateOption = {
@@ -46,6 +52,7 @@ type WordTemplateOption = {
   docxPath: string
   jsonPath: string
 }
+type WebDavField = 'url' | 'username' | 'password'
 type BackgroundTarget =
   | 'workspaceBackground'
   | 'editorBackground'
@@ -72,6 +79,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const [theme, setTheme] = useState<ThemeSettings>(getDefaultThemeSettings())
   const [languageMode, setLanguageMode] = useState<LanguageMode>(getDefaultLanguageSetting())
   const [wordExport, setWordExport] = useState<WordExportStyleSettings>(getDefaultWordExportStyleSettings())
+  const [webdavBackup, setWebdavBackup] = useState<WebDavBackupSettings>(getDefaultWebDavBackupSettings())
   const [uiTypography, setUiTypography] = useState<UiTypographySettings>(getDefaultUiTypographySettings())
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('theme')
   const [activeThemeTab, setActiveThemeTab] = useState<ThemePanelTabId>('theme-preset')
@@ -79,6 +87,10 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const [wordTemplates, setWordTemplates] = useState<WordTemplateOption[]>([])
   const [currentBackgroundTarget, setCurrentBackgroundTarget] = useState<BackgroundTarget>('workspaceBackground')
   const [isSaving, setIsSaving] = useState(false)
+  const [backupBusy, setBackupBusy] = useState<
+    'export' | 'import' | 'webdav-test' | 'webdav-export' | 'webdav-import' | null
+  >(null)
+  const [backupStatus, setBackupStatus] = useState<{ tone: 'success' | 'error'; message: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [workspaceBackgroundOpacityInput, setWorkspaceBackgroundOpacityInput] = useState('')
   const [workspaceBackgroundOverlayOpacityInput, setWorkspaceBackgroundOverlayOpacityInput] = useState('')
@@ -103,6 +115,9 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const previewDragRef = useRef(false)
   const modalRef = useRef<HTMLDivElement | null>(null)
+  const webdavUrlInputRef = useRef<HTMLInputElement | null>(null)
+  const webdavUsernameInputRef = useRef<HTMLInputElement | null>(null)
+  const webdavPasswordInputRef = useRef<HTMLInputElement | null>(null)
   const originalThemeRef = useRef<ThemeSettings>(getDefaultThemeSettings())
   const originalLanguageRef = useRef<LanguageMode>(getDefaultLanguageSetting())
   const originalTypographyRef = useRef<UiTypographySettings>(getDefaultUiTypographySettings())
@@ -127,6 +142,8 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   useEffect(() => {
     if (!open) return
     setDragOffset({ x: 0, y: 0 })
+    setBackupBusy(null)
+    setBackupStatus(null)
     hasLocalPreviewEditsRef.current = false
     let cancelled = false
     ;(async () => {
@@ -149,6 +166,13 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
         originalTypographyRef.current = loadedTypography
         themePreviewReadyRef.current = true
         setWordExport(loadedWordExport)
+        setWebdavBackup({
+          enabled: loadedSettings.backup?.webdav?.enabled ?? getDefaultWebDavBackupSettings().enabled,
+          url: loadedSettings.backup?.webdav?.url ?? getDefaultWebDavBackupSettings().url,
+          username: loadedSettings.backup?.webdav?.username ?? getDefaultWebDavBackupSettings().username,
+          password: loadedSettings.backup?.webdav?.password ?? getDefaultWebDavBackupSettings().password,
+          remotePath: DEFAULT_WEBDAV_REMOTE_PATH,
+        })
         setWorkspaceBackgroundOpacityInput(String(loadedTheme.workspaceBackground?.opacity ?? getDefaultThemeSettings().workspaceBackground?.opacity ?? 0.22))
         setWorkspaceBackgroundOverlayOpacityInput(String(loadedTheme.workspaceBackground?.overlayOpacity ?? getDefaultThemeSettings().workspaceBackground?.overlayOpacity ?? 0.12))
         setWorkspaceBackgroundBlurInput(String(loadedTheme.workspaceBackground?.blurPx ?? getDefaultThemeSettings().workspaceBackground?.blurPx ?? 0))
@@ -219,6 +243,51 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   }, [open, uiTypography, onUiTypographyChange])
 
   useEffect(() => {
+    if (!open) return
+
+    const unPaste = onNativePaste((text) => {
+      if (!text || typeof document === 'undefined') return
+
+      const active = document.activeElement as HTMLElement | null
+      if (!active) return
+
+      let el: HTMLInputElement | null = null
+      let field: WebDavField | null = null
+
+      if (active === webdavUrlInputRef.current) {
+        el = active as HTMLInputElement
+        field = 'url'
+      } else if (active === webdavUsernameInputRef.current) {
+        el = active as HTMLInputElement
+        field = 'username'
+      } else if (active === webdavPasswordInputRef.current) {
+        el = active as HTMLInputElement
+        field = 'password'
+      } else {
+        return
+      }
+
+      const start = el.selectionStart ?? el.value.length
+      const end = el.selectionEnd ?? el.value.length
+      const current = el.value
+      const next = current.slice(0, start) + text + current.slice(end)
+
+      el.value = next
+      setWebdavBackup((prev) => ({
+        ...prev,
+        [field]: next,
+      }))
+
+      const pos = start + text.length
+      el.setSelectionRange(pos, pos)
+    })
+
+    return () => {
+      unPaste()
+    }
+  }, [open])
+
+  useEffect(() => {
     if (!open || !themePreviewReadyRef.current || !hasLocalPreviewEditsRef.current) return
     onThemeSettingsChange?.({
       ...theme,
@@ -275,6 +344,120 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   ])
 
   if (!open) return null
+
+  const expectBackendOk = <T,>(resp: BackendResult<T>): T => {
+    if ('Ok' in resp) {
+      return resp.Ok.data
+    }
+    throw new Error(resp.Err.error.message)
+  }
+
+  const handleExportBackup = async () => {
+    try {
+      setBackupStatus(null)
+      const now = new Date()
+      const yyyy = now.getFullYear()
+      const mm = String(now.getMonth() + 1).padStart(2, '0')
+      const dd = String(now.getDate()).padStart(2, '0')
+      const hh = String(now.getHours()).padStart(2, '0')
+      const min = String(now.getMinutes()).padStart(2, '0')
+      const suggested = `haomd-backup-${yyyy}${mm}${dd}-${hh}${min}.zip`
+      const selected = await saveDialog({
+        title: t('backup.exportDialogTitle'),
+        defaultPath: suggested,
+        filters: [{ name: 'ZIP', extensions: ['zip'] }],
+      })
+      const outputPath = Array.isArray(selected) ? selected[0] : selected
+      if (!outputPath || typeof outputPath !== 'string') return
+
+      setBackupBusy('export')
+      const resp = await invoke<BackendResult<null>>('export_settings_backup', { outputPath })
+      expectBackendOk(resp)
+      setBackupStatus({ tone: 'success', message: t('backup.exportSuccess', { path: outputPath }) })
+    } catch (err) {
+      setBackupStatus({ tone: 'error', message: t('backup.exportFailed', { message: (err as Error).message }) })
+    } finally {
+      setBackupBusy(null)
+    }
+  }
+
+  const handleImportBackup = async () => {
+    try {
+      setBackupStatus(null)
+      const selected = await openDialog({
+        title: t('backup.importDialogTitle'),
+        multiple: false,
+        filters: [{ name: 'ZIP', extensions: ['zip'] }],
+      })
+      const backupPath = Array.isArray(selected) ? selected[0] : selected
+      if (!backupPath || typeof backupPath !== 'string') return
+
+      setBackupBusy('import')
+      const resp = await invoke<BackendResult<null>>('import_settings_backup', { backupPath })
+      expectBackendOk(resp)
+      setBackupStatus({ tone: 'success', message: t('backup.importSuccess') })
+    } catch (err) {
+      setBackupStatus({ tone: 'error', message: t('backup.importFailed', { message: (err as Error).message }) })
+    } finally {
+      setBackupBusy(null)
+    }
+  }
+
+  const handleExportBackupToWebDav = async () => {
+    try {
+      setBackupStatus(null)
+      setBackupBusy('webdav-export')
+      const resp = await invoke<BackendResult<null>>('export_settings_backup_to_webdav', {
+        url: webdavBackup.url,
+        username: webdavBackup.username,
+        password: webdavBackup.password,
+        remotePath: DEFAULT_WEBDAV_REMOTE_PATH,
+      })
+      expectBackendOk(resp)
+      setBackupStatus({ tone: 'success', message: t('backup.webdavExportSuccess') })
+    } catch (err) {
+      setBackupStatus({ tone: 'error', message: t('backup.webdavExportFailed', { message: (err as Error).message }) })
+    } finally {
+      setBackupBusy(null)
+    }
+  }
+
+  const handleTestWebDavConnection = async () => {
+    try {
+      setBackupStatus(null)
+      setBackupBusy('webdav-test')
+      const resp = await invoke<BackendResult<null>>('test_webdav_connection', {
+        url: webdavBackup.url,
+        username: webdavBackup.username,
+        password: webdavBackup.password,
+      })
+      expectBackendOk(resp)
+      setBackupStatus({ tone: 'success', message: t('backup.webdavTestSuccess') })
+    } catch (err) {
+      setBackupStatus({ tone: 'error', message: t('backup.webdavTestFailed', { message: (err as Error).message }) })
+    } finally {
+      setBackupBusy(null)
+    }
+  }
+
+  const handleImportBackupFromWebDav = async () => {
+    try {
+      setBackupStatus(null)
+      setBackupBusy('webdav-import')
+      const resp = await invoke<BackendResult<null>>('import_settings_backup_from_webdav', {
+        url: webdavBackup.url,
+        username: webdavBackup.username,
+        password: webdavBackup.password,
+        remotePath: DEFAULT_WEBDAV_REMOTE_PATH,
+      })
+      expectBackendOk(resp)
+      setBackupStatus({ tone: 'success', message: t('backup.webdavImportSuccess') })
+    } catch (err) {
+      setBackupStatus({ tone: 'error', message: t('backup.webdavImportFailed', { message: (err as Error).message }) })
+    } finally {
+      setBackupBusy(null)
+    }
+  }
 
   const updateNumber =
     (key: keyof WordExportStyleSettings) =>
@@ -520,6 +703,10 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
         theme,
         uiTypography,
         wordExport,
+        backup: {
+          ...(settings.backup ?? {}),
+          webdav: webdavBackup,
+        },
       }
       await saveEditorSettings(nextSettings)
       setSettings(nextSettings)
@@ -696,6 +883,13 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                 className={`settings-sidebar-item ${activeSection === 'word-export' ? 'active' : ''}`}
               >
                 {t('settings.wordExport')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveSection('backup')}
+                className={`settings-sidebar-item ${activeSection === 'backup' ? 'active' : ''}`}
+              >
+                {t('settings.backup')}
               </button>
             </div>
 
@@ -1360,10 +1554,6 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                             <span className="settings-inline-help">{t('wordExport.wordTemplatesFolderHint')}</span>
                           </div>
                         </div>
-                        <div style={fieldGridStyle}>
-                          <div className="settings-field-label">{t('wordExport.availableTemplates')}</div>
-                          <div className="settings-inline-help">{t('wordExport.templatesResolutionHint')}</div>
-                        </div>
                         {wordTemplates.length > 0 ? (
                           <div style={fieldGridStyle}>
                             <div className="settings-field-label">{t('wordExport.availableTemplates')}</div>
@@ -1380,6 +1570,156 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                       </div>
                     </div>
                   )}
+                </>
+              )}
+
+              {activeSection === 'backup' && (
+                <>
+                  <div className="settings-panel-header">
+                    <div className="settings-panel-header-top">
+                      <div className="settings-panel-title">{t('backup.title')}</div>
+                    </div>
+                    <div className="settings-panel-description">{t('backup.description')}</div>
+                  </div>
+
+                  <div className="settings-subgroup">
+                    <div className="settings-subgroup-title">{t('backup.groups.sync')}</div>
+                    <div style={{ display: 'grid', gap: 14 }}>
+                      <div style={fieldGridStyle}>
+                        <div className="settings-field-label">{t('backup.exportLabel')}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                          <Button
+                            variant="tertiary"
+                            type="button"
+                            onClick={() => void handleExportBackup()}
+                            disabled={backupBusy !== null}
+                            loading={backupBusy === 'export'}
+                          >
+                            {t('backup.exportAction')}
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div style={fieldGridStyle}>
+                        <div className="settings-field-label">{t('backup.importLabel')}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                          <Button
+                            variant="tertiary"
+                            type="button"
+                            onClick={() => void handleImportBackup()}
+                            disabled={backupBusy !== null}
+                            loading={backupBusy === 'import'}
+                          >
+                            {t('backup.importAction')}
+                          </Button>
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+
+                  <div className="settings-subsection">
+                    <div className="settings-subgroup">
+                      <div className="settings-subgroup-title">{t('backup.groups.webdav')}</div>
+                      <div style={{ display: 'grid', gap: 14 }}>
+                      <div style={fieldGridStyle}>
+                        <div className="settings-field-label">{t('backup.webdavEnabled')}</div>
+                        <label className="settings-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={webdavBackup.enabled}
+                            onChange={(event) =>
+                              setWebdavBackup((prev) => ({ ...prev, enabled: event.target.checked }))}
+                          />
+                        </label>
+                      </div>
+                      <div style={fieldGridStyle}>
+                        <div className="settings-field-label">{t('backup.webdavUrl')}</div>
+                        <input
+                          ref={webdavUrlInputRef}
+                          className="field-input"
+                          value={webdavBackup.url}
+                          onChange={(event) =>
+                            setWebdavBackup((prev) => ({ ...prev, url: event.target.value }))}
+                          placeholder="https://example.com/dav"
+                        />
+                      </div>
+                      <div style={fieldGridStyle}>
+                        <div className="settings-field-label">{t('backup.webdavUsername')}</div>
+                        <input
+                          ref={webdavUsernameInputRef}
+                          className="field-input"
+                          value={webdavBackup.username}
+                          onChange={(event) =>
+                            setWebdavBackup((prev) => ({ ...prev, username: event.target.value }))}
+                        />
+                      </div>
+                      <div style={fieldGridStyle}>
+                        <div className="settings-field-label">{t('backup.webdavPassword')}</div>
+                        <input
+                          ref={webdavPasswordInputRef}
+                          className="field-input"
+                          type="password"
+                          value={webdavBackup.password}
+                          onChange={(event) =>
+                            setWebdavBackup((prev) => ({ ...prev, password: event.target.value }))}
+                        />
+                      </div>
+                      <div style={fieldGridStyle}>
+                        <div className="settings-field-label">{t('backup.webdavTestLabel')}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                          <Button
+                            variant="tertiary"
+                            type="button"
+                            onClick={() => void handleTestWebDavConnection()}
+                            disabled={backupBusy !== null}
+                            loading={backupBusy === 'webdav-test'}
+                          >
+                            {t('backup.webdavTestAction')}
+                          </Button>
+                        </div>
+                      </div>
+                      <div style={fieldGridStyle}>
+                        <div className="settings-field-label">{t('backup.webdavExportLabel')}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                          <Button
+                            variant="tertiary"
+                            type="button"
+                            onClick={() => void handleExportBackupToWebDav()}
+                            disabled={backupBusy !== null}
+                            loading={backupBusy === 'webdav-export'}
+                          >
+                            {t('backup.webdavExportAction')}
+                          </Button>
+                        </div>
+                      </div>
+                      <div style={fieldGridStyle}>
+                        <div className="settings-field-label">{t('backup.webdavImportLabel')}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                          <Button
+                            variant="tertiary"
+                            type="button"
+                            onClick={() => void handleImportBackupFromWebDav()}
+                            disabled={backupBusy !== null}
+                            loading={backupBusy === 'webdav-import'}
+                          >
+                            {t('backup.webdavImportAction')}
+                          </Button>
+                        </div>
+                      </div>
+                      {backupStatus ? (
+                        <div style={fieldGridStyle}>
+                          <div className="settings-field-label">{t('backup.statusLabel')}</div>
+                          <div
+                            className={`settings-status-message settings-status-${backupStatus.tone}`}
+                          >
+                            {backupStatus.message}
+                          </div>
+                        </div>
+                      ) : null}
+                      </div>
+                    </div>
+                  </div>
                 </>
               )}
 

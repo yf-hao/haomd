@@ -114,6 +114,28 @@ pub struct UiTypographySettingsCfg {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct WebDavBackupSettingsCfg {
+    #[serde(default)]
+    pub enabled: Option<bool>,
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub username: Option<String>,
+    #[serde(default)]
+    pub password: Option<String>,
+    #[serde(default)]
+    pub remote_path: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupSettingsCfg {
+    #[serde(default)]
+    pub webdav: Option<WebDavBackupSettingsCfg>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct EditorSettingsCfg {
     #[serde(default)]
     pub ai_compression: Option<AiCompressionCfg>,
@@ -129,6 +151,8 @@ pub struct EditorSettingsCfg {
     pub ui_typography: Option<UiTypographySettingsCfg>,
     #[serde(default)]
     pub word_export: Option<WordExportStyleSettingsCfg>,
+    #[serde(default)]
+    pub backup: Option<BackupSettingsCfg>,
     #[serde(flatten)]
     pub extra: HashMap<String, serde_json::Value>,
 }
@@ -155,6 +179,15 @@ pub fn default_editor_settings() -> EditorSettingsCfg {
         theme: Some(default_theme_settings_cfg()),
         ui_typography: Some(default_ui_typography_settings_cfg()),
         word_export: Some(default_word_export_style_settings_cfg()),
+        backup: Some(BackupSettingsCfg {
+            webdav: Some(WebDavBackupSettingsCfg {
+                enabled: Some(false),
+                url: Some(String::new()),
+                username: Some(String::new()),
+                password: Some(String::new()),
+                remote_path: Some(String::new()),
+            }),
+        }),
         extra: HashMap::new(),
     }
 }

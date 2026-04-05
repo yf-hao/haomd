@@ -80,6 +80,20 @@ export type WordExportStyleSettings = {
   selectedWordTemplateId: string | null
 }
 
+export type WebDavBackupSettings = {
+  enabled: boolean
+  url: string
+  username: string
+  password: string
+  remotePath: string
+}
+
+export const DEFAULT_WEBDAV_REMOTE_PATH = '/HaoMD'
+
+export type BackupSettings = {
+  webdav?: Partial<WebDavBackupSettings>
+}
+
 export type EditorSettings = {
   aiCompression?: Partial<AiCompressionSettings>
   hugeDoc?: HugeDocSettings
@@ -88,6 +102,7 @@ export type EditorSettings = {
   theme?: Partial<ThemeSettings>
   uiTypography?: Partial<UiTypographySettings>
   wordExport?: Partial<WordExportStyleSettings>
+  backup?: Partial<BackupSettings>
 }
 
 const defaultCompression: AiCompressionSettings = {
@@ -200,6 +215,14 @@ const defaultWordExport: WordExportStyleSettings = {
   mermaidExportFormat: 'png',
   inkscapeFallback: 'png',
   selectedWordTemplateId: null,
+}
+
+const defaultWebDavBackup: WebDavBackupSettings = {
+  enabled: false,
+  url: '',
+  username: '',
+  password: '',
+  remotePath: DEFAULT_WEBDAV_REMOTE_PATH,
 }
 
 let cachedSettings: EditorSettings | null = null
@@ -379,6 +402,10 @@ export async function saveEditorSettings(settings: EditorSettings): Promise<void
 
 export function getDefaultWordExportStyleSettings(): WordExportStyleSettings {
   return { ...defaultWordExport }
+}
+
+export function getDefaultWebDavBackupSettings(): WebDavBackupSettings {
+  return { ...defaultWebDavBackup }
 }
 
 export function getDefaultThemeSettings(): ThemeSettings {

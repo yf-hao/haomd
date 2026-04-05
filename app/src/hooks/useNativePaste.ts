@@ -21,6 +21,11 @@ export function useNativePaste(
         // 焦点在可编辑输入控件上（如 search-bar 输入框）：优先将文本粘贴到该输入内
         // textarea 由各组件自行处理（通过 onNativePaste + setInput），此处仅处理 input
         if (active && !(view && view.dom.contains(active))) {
+          if (active instanceof HTMLElement && active.closest('.modal')) {
+            console.log('[native://paste] skip: active element is inside modal dialog')
+            return
+          }
+
           if (active instanceof HTMLInputElement) {
             const el = active
             const start = el.selectionStart ?? el.value.length
