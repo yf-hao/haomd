@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { setSearchQuery, findNext, findPrevious, SearchQuery, replaceNext, replaceAll } from '@codemirror/search'
 import { setCustomSearchQuery } from './searchHighlight'
 import { useI18n } from '../../modules/i18n/I18nContext'
+import { onNativePaste } from '../../modules/platform/clipboardEvents'
 import './SearchBar.css'
 
 interface SearchBarProps {
@@ -30,6 +31,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose, prefillText
     const [currentMatchIndex, setCurrentMatchIndex] = useState<number>(0)
 
     const inputRef = useRef<HTMLInputElement>(null)
+    const replaceInputRef = useRef<HTMLInputElement>(null)
 
     // Focus input on mount, and cleanup on unmount
     useEffect(() => {
@@ -58,6 +60,20 @@ export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose, prefillText
             inputRef.current?.select()
         })
     }, [prefillText, prefillVersion])
+
+    useEffect(() => {
+        const unlisten = onNativePaste((text) => {
+            const active = typeof document !== 'undefined' ? document.activeElement : null
+            if (active === inputRef.current) {
+                setSearchText((prev) => prev + text)
+                return
+            }
+            if (active === replaceInputRef.current) {
+                setReplaceText((prev) => prev + text)
+            }
+        })
+        return unlisten
+    }, [])
 
     const updateIndex = useCallback(() => {
         if (!view || !searchText) return;
@@ -307,6 +323,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose, prefillText
                     <div className="replace-row">
                         <div className="replace-input-wrapper">
                             <input
+                                ref={replaceInputRef}
                                 type="text"
                                 className="replace-input"
                                 placeholder={t('editor.replacePlaceholder')}

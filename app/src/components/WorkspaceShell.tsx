@@ -616,6 +616,7 @@ export function WorkspaceShell({
       if (patchedDoc === markdownRef.current) {
         return
       }
+      markdownRef.current = patchedDoc
       setMarkdown(patchedDoc)
       markDirty()
       updateActiveContent(patchedDoc)
@@ -626,6 +627,7 @@ export function WorkspaceShell({
     if (val === markdownRef.current) {
       return
     }
+    markdownRef.current = val
     setMarkdown(val)
     markDirty()
     updateActiveContent(val)

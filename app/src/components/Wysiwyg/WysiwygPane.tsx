@@ -33,6 +33,7 @@ import { ImageView } from './views/ImageView'
 import { normalizeCodeBlockLanguage } from './codeLanguage'
 import { BlockCacheManager } from './blockCache'
 import { composeMarkdownWithFrontMatter } from '../../modules/markdown/frontMatter'
+import { onNativePaste } from '../../modules/platform/clipboardEvents'
 import './WysiwygPane.css'
 
 export interface WysiwygPaneProps {
@@ -899,6 +900,31 @@ function WysiwygEditor({
       container.removeEventListener('compositionstart', markUserInteracted)
     }
   }, [flushPending, insertCodeBlockWithInheritedLanguage, scheduleDelayedSync])
+
+  useEffect(() => {
+    const unlisten = onNativePaste((text) => {
+      const container = containerRef.current
+      const editor = editorRef.current
+      const active = typeof document !== 'undefined' ? document.activeElement : null
+      if (!container || !editor || !active) return
+      if (!container.contains(active)) return
+
+      hasUserInteractedRef.current = true
+      editor.action((ctx) => {
+        const view = ctx.get(editorViewCtx)
+        const selection = view.state.selection as typeof view.state.selection & { main?: { from: number; to: number } }
+        const from = selection.main?.from ?? selection.from
+        const to = selection.main?.to ?? selection.to
+        view.dispatch(
+          view.state.tr.insertText(text, from, to).scrollIntoView(),
+        )
+        view.focus()
+      })
+      scheduleDelayedSync()
+    })
+
+    return unlisten
+  }, [scheduleDelayedSync])
 
   const style: CSSProperties & { '--wysiwyg-zoom'?: string } = {}
   if (effectiveLayout === 'preview-only') {
