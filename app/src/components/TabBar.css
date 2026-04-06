@@ -1,18 +1,16 @@
 .tab-bar {
   display: flex;
   align-items: center;
-  height: var(--theme-component-tabbar-height);
   min-height: var(--theme-component-tabbar-height);
-  max-height: var(--theme-component-tabbar-height);
-  flex: 0 0 var(--theme-component-tabbar-height);
+  flex: 0 0 auto;
   gap: 4px;
-  padding-left: 10px;
-  padding-right: 10px;
+  padding: 0 10px;
   border-bottom: 1px solid var(--theme-border-subtle);
   background: var(--theme-surface-input-soft);
   backdrop-filter: blur(6px);
   position: relative;
-  overflow: hidden;
+  overflow: visible;
+  box-sizing: border-box;
 }
 
 .tab-bar-list {
@@ -27,7 +25,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  padding: 0 10px;
   border-radius: 0;
   font-size: var(--ui-font-tabbar);
   cursor: pointer;
@@ -36,6 +34,8 @@
   transition: background 0.15s ease, color 0.15s ease;
   min-width: 0;
   flex: 0 0 auto;
+  min-height: calc(var(--theme-component-tabbar-height) - 1px);
+  box-sizing: border-box;
 }
 
 .tab-item:hover {
@@ -63,10 +63,22 @@
 .tab-title {
   display: flex;
   align-items: center;
+  min-width: 0;
+  line-height: 1.2;
   max-width: 160px;
+  overflow: visible;
+}
+
+.tab-title-text {
+  min-width: 0;
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
+}
+
+.tab-overflow-title .tab-title-text {
+  display: inline-block;
+  max-width: 100%;
 }
 
 .tab-dirty-dot {

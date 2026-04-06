@@ -139,7 +139,7 @@ export const TabBar = memo(function TabBar({ tabs, activeId, onTabClick, onTabCl
     >
       <span className="tab-title">
         {tab.dirty && <span className="tab-dirty-dot" />}
-        {tab.title}
+        <span className="tab-title-text">{tab.title}</span>
       </span>
       <button
         type="button"
@@ -196,7 +196,7 @@ export const TabBar = memo(function TabBar({ tabs, activeId, onTabClick, onTabCl
                 >
                   <span className="tab-overflow-title">
                     {tab.dirty && <span className="tab-dirty-dot" />}
-                    {tab.title}
+                    <span className="tab-title-text">{tab.title}</span>
                   </span>
                 </button>
               ))}
@@ -215,7 +215,7 @@ export const TabBar = memo(function TabBar({ tabs, activeId, onTabClick, onTabCl
           >
             <span className="tab-title">
               {tab.dirty && <span className="tab-dirty-dot" />}
-              {tab.title}
+              <span className="tab-title-text">{tab.title}</span>
             </span>
             <button type="button" className="tab-close" tabIndex={-1}>
               ×

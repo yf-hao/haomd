@@ -9,6 +9,8 @@
 
 .preview-top-offset {
   flex: 0 0 var(--theme-component-tabbar-height);
+  min-height: var(--theme-component-tabbar-height);
+  box-sizing: border-box;
   border-bottom: 1px solid var(--theme-border-input);
   background: var(--theme-surface-editor);
 }
