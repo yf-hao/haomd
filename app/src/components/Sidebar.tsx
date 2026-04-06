@@ -245,7 +245,7 @@ function InlineNewFileRow({ level, onConfirm, onCancel, isFolder }: InlineNewFil
     onConfirm?.(name)
   }
 
-  const placeholder = isFolder ? 'new folder' : 'new file'
+  const placeholder = isFolder ? 'new folder' : 'untitled'
   const icon = isFolder ? '📁' : '📄'
   const rowClass = isFolder ? 'tree-row dir new-file-editing' : 'tree-row file new-file-editing'
 

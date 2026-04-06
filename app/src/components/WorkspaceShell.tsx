@@ -1999,7 +1999,7 @@ export function WorkspaceShell({
         }
       }
 
-      if (!filePath || filePath === 'untitled.md') {
+      if (!filePath || filePath === 'untitled') {
         console.warn('[WorkspaceShell] onNativePasteImage: no filePath, cannot determine images dir')
         setConfirmDialogRef.current({
           title: t('workspace.cannotInsertImageTitle'),

@@ -1212,7 +1212,7 @@ button:disabled {
   align-items: center;
   gap: 8px;
   justify-content: space-between;
-  padding: 0 12px;
+  padding: 1px 12px 0;
   height: var(--theme-component-tabbar-height);
   min-height: var(--theme-component-tabbar-height);
   box-sizing: border-box;
@@ -1225,9 +1225,11 @@ button:disabled {
   align-items: center;
   font-size: 13px;
   font-weight: 600;
-  line-height: 28px;
-  min-height: 28px;
+  line-height: 1.25;
+  min-height: 0;
   align-self: center;
+  overflow: visible;
+  padding-block: 1px;
 }
 
 .ai-chat-pane-body {

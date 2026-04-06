@@ -5,7 +5,7 @@ export type UseTabsOptions = {
   onRequestCloseCurrentTab?: () => void
 }
 
-const DEFAULT_UNTITLED = 'untitled.md'
+const DEFAULT_UNTITLED = 'untitled'
 
 function deriveTitleFromPath(path: string): string {
   if (!path) return DEFAULT_UNTITLED

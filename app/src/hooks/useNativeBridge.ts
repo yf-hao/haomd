@@ -95,7 +95,7 @@ export function useNativeBridge(options: NativeBridgeOptions) {
                 if (active && !contains) return
             }
 
-            if (!filePath || filePath === 'untitled.md') {
+            if (!filePath || filePath === 'untitled') {
                 setConfirmDialog({
                     title: 'Cannot Insert Image',
                     message: 'Please save the file first (Ctrl/Cmd+S) before inserting images.',
