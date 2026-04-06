@@ -2,6 +2,51 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.6.0] - 2026-04-06
+
+### 中文
+
+本次更新带来了多项重量级功能，重点包括 **MCP (Model Context Protocol) 集成**、**AI 会话侧边栏与 ChatGPT 布局**、**设置同步**以及**文件管理优化**。
+
+#### ✨ 新特性
+
+*   **MCP (Model Context Protocol) 深度集成**：支持工具服务与函数调用（Function Calling），AI 现在可以调用外部工具（如计算、搜索、API 等）来辅助创作。
+*   **AI 会话管理侧边栏**：新增了独立的 AI 会话历史管理面板，支持历史记录的持久化存储与快速切换。
+*   **ChatGPT 式对话布局**：引入全新的全屏（Fullpage）对话 UI，提供更纯粹、沉浸式的 AI 交互体验。
+*   **设置备份与 WebDAV 服务器同步**：支持应用配置的自动化备份与多设备同步，确保体验的一致性。
+*   **侧边栏文件管理优化**：文件树现在支持折叠/展开，并优化了文件夹的展现形式，提升大型项目的管理效率。
+*   **AI 会话自动命名**：在 AI 首次回复后，系统会自动根据对话上下文生成直观的会话标题。
+*   **Dify Naming ID 持久化**：增强了与 Dify 的集成，会话命名 ID 现在可通过 Tauri 后端稳定持久化。
+
+#### 🔧 系统改进 与修复
+
+*   **侧边栏交互优化**：修复了在不同面板间切换时 sessionKey 可能丢失的问题，确保会话上下文的连续性。
+*   **样式打磨**：优化了全屏对话模式下的输入框样式，隐藏了冗余的装饰条。
+*   **时间格式转换**：统一了会话面板的时间显示格式为 `yyyy-MM-dd HH:mm`。
+
+---
+
+### English
+
+This release introduces several major features, including **MCP (Model Context Protocol) integration**, **AI Chat Sessions Sidebar & ChatGPT Layout**, **Settings Sync**, and **enhanced file management**.
+
+#### ✨ New Features
+
+*   **Deep MCP (Model Context Protocol) Integration**: Support for tool services and Function Calling, allowing AI to invoke external tools (e.g., calculations, searches, APIs) during document assistance.
+*   **AI Session Management Sidebar**: A dedicated panel for managing chat history with persistent storage and rapid switching.
+*   **Fullpage ChatGPT-style Layout**: A brand-new immersive conversation UI for a more focused AI interaction experience.
+*   **Settings Backup & WebDAV Sync**: Automated backup and cross-device synchronization of application preferences via WebDAV.
+*   **Optimized Sidebar Management**: Collapsible folder structures in the file tree for better organization of complex workspaces.
+*   **Auto-session Naming**: Automatically generates descriptive titles for AI conversations based on initial responses.
+*   **Persistent Naming Context**: Improved Dify integration with backend-level persistence for conversational metadata.
+
+#### 🔧 System Refinements & Fixes
+
+*   **Sidebar Interaction Polish**: Resolved issues where session keys would reset during panel switching, ensuring consistent context tracking.
+*   **Visual Refinements**: Cleaned up input box styles in full-page mode and standardized time formatting to `yyyy-MM-dd HH:mm`.
+
+---
+
 ## [v0.5.0] - 2026-04-03
 
 ### 中文
