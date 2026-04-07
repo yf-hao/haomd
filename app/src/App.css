@@ -2281,17 +2281,21 @@ button:disabled {
 
 .modal.modal-mcp-settings {
   max-width: 860px;
-  width: 840px;
-  min-width: 640px;
-  max-height: 76vh;
+  width: min(840px, calc(100vw - 32px));
+  min-width: min(640px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
   overflow: hidden;
   font-size: var(--ui-font-settings);
+  display: flex;
+  flex-direction: column;
 }
 
 .mcp-settings-body {
   display: flex;
   gap: 20px;
   min-height: 0;
+  flex: 1;
+  overflow: hidden;
 }
 
 .mcp-settings-column-left {
@@ -2299,6 +2303,7 @@ button:disabled {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 .mcp-settings-column-right {
@@ -2314,6 +2319,24 @@ button:disabled {
   overflow-y: auto;
   min-height: 0;
   padding-right: 4px;
+}
+
+.mcp-form-actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding-top: 12px;
+  margin-top: 12px;
+  border-top: 1px solid var(--theme-border-subtle);
+}
+
+@media (max-height: 820px) {
+  .modal-backdrop:has(.modal.modal-mcp-settings) {
+    align-items: flex-start;
+    padding: 16px 0;
+    overflow-y: auto;
+  }
 }
 
 /* Groups section */

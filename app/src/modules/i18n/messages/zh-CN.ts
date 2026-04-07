@@ -78,7 +78,7 @@ export const zhCNMessages: MessageDictionary = {
     title: '字体',
     description: '调整 HaoMD 界面、工作区面板和 AI Chat 的字号。',
     appFontSize: '应用界面',
-    settingsFontSize: '按钮 / 弹窗',
+    settingsFontSize: '按钮 / 弹窗',  
     sidebarFontSize: '侧边栏',
     tabBarFontSize: '标签栏',
     statusBarFontSize: '状态栏',

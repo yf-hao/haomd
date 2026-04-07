@@ -851,11 +851,6 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new(texts.agent_settings)
-                .id("agent_settings")
-                .build(app)?,
-        )
-        .item(
             &MenuItemBuilder::new(texts.prompt_settings)
                 .id("ai_prompt_settings")
                 .build(app)?,
@@ -863,6 +858,11 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         .item(
             &MenuItemBuilder::new(texts.mcp_settings)
                 .id("mcp_settings")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.agent_settings)
+                .id("agent_settings")
                 .build(app)?,
         )
         .item(

@@ -546,18 +546,18 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
 
               {error && <div className="form-error">{error}</div>}
               {testResult && !error && <div className="form-success">{testResult}</div>}
+            </div>
 
-              <div className="ai-settings-form-actions">
-                <Button type="button" variant="tertiary" onClick={handleNewServer}>
-                  {t('mcp.resetForm')}
-                </Button>
-                <Button type="button" variant="secondary" onClick={handleTestConnection}>
-                  {t('mcp.testConnection')}
-                </Button>
-                <Button type="button" variant="primary" onClick={handleSaveDraft}>
-                  {isEditing ? t('mcp.updateServer') : t('mcp.addServer')}
-                </Button>
-              </div>
+            <div className="mcp-form-actions">
+              <Button type="button" variant="tertiary" onClick={handleNewServer}>
+                {t('mcp.resetForm')}
+              </Button>
+              <Button type="button" variant="secondary" onClick={handleTestConnection}>
+                {t('mcp.testConnection')}
+              </Button>
+              <Button type="button" variant="primary" onClick={handleSaveDraft}>
+                {isEditing ? t('mcp.updateServer') : t('mcp.addServer')}
+              </Button>
             </div>
           </div>
 
