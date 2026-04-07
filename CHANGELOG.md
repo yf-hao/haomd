@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.6.1] - 2026-04-07
+
+### 中文
+
+#### 💄 体验优化
+
+*   **MCP 设置对话框优化**：优化了 MCP (Model Context Protocol) 设置界面的布局与响应式设计，提升了在不同窗口尺寸下的显示效果。
+
+---
+
+### English
+
+#### 💄 Improvements
+
+*   **MCP Settings Polish**: Refined the layout and responsiveness of the MCP (Model Context Protocol) settings dialog for a better experience across various window sizes.
+
+---
+
 ## [v0.6.0] - 2026-04-06
 
 ### 中文
