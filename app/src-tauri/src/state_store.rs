@@ -7,26 +7,57 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager};
 use tokio::fs;
 
-fn recent_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
+fn app_config_root_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
+    if let Ok(dir) = app.path().config_dir() {
+        std::fs::create_dir_all(&dir)?;
+        return Ok(dir);
+    }
+
+    std::env::current_dir()
+}
+
+fn app_state_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
+    let mut dir = app_config_root_dir(app)?;
+    dir.push(".state");
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir)
+}
+
+fn legacy_haomd_state_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
     if let Ok(mut dir) = app.path().config_dir() {
         dir.push("haomd");
         std::fs::create_dir_all(&dir)?;
-        return Ok(dir.join("recent.json"));
+        return Ok(dir);
     }
 
-    let dir = std::env::current_dir()?;
-    Ok(dir.join("recent.json"))
+    let mut dir = std::env::current_dir()?;
+    dir.push("haomd");
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir)
+}
+
+fn recent_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
+    Ok(app_state_dir(app)?.join("recent.json"))
+}
+
+fn legacy_recent_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
+    Ok(legacy_haomd_state_dir(app)?.join("recent.json"))
+}
+
+fn legacy_root_recent_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
+    Ok(app_config_root_dir(app)?.join("recent.json"))
 }
 
 fn pdf_recent_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
-    if let Ok(mut dir) = app.path().config_dir() {
-        dir.push("haomd");
-        std::fs::create_dir_all(&dir)?;
-        return Ok(dir.join("pdf_recent.json"));
-    }
+    Ok(app_state_dir(app)?.join("pdf_recent.json"))
+}
 
-    let dir = std::env::current_dir()?;
-    Ok(dir.join("pdf_recent.json"))
+fn legacy_pdf_recent_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
+    Ok(legacy_haomd_state_dir(app)?.join("pdf_recent.json"))
+}
+
+fn legacy_root_pdf_recent_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
+    Ok(app_config_root_dir(app)?.join("pdf_recent.json"))
 }
 
 fn pdf_folders_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
@@ -154,7 +185,26 @@ pub(crate) async fn read_recent_store(app: &AppHandle) -> std::io::Result<Vec<Re
             let items: Vec<RecentFile> = serde_json::from_slice(&bytes).unwrap_or_default();
             Ok(items)
         }
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(vec![]),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            let legacy_paths = [
+                legacy_root_recent_store_path(app)?,
+                legacy_recent_store_path(app)?,
+            ];
+            for legacy_path in legacy_paths {
+                match fs::read(&legacy_path).await {
+                    Ok(bytes) => {
+                        let items: Vec<RecentFile> =
+                            serde_json::from_slice(&bytes).unwrap_or_default();
+                        let migrated = serde_json::to_vec_pretty(&items)?;
+                        fs::write(&path, migrated).await?;
+                        return Ok(items);
+                    }
+                    Err(legacy_err) if legacy_err.kind() == std::io::ErrorKind::NotFound => continue,
+                    Err(legacy_err) => return Err(legacy_err),
+                }
+            }
+            Ok(vec![])
+        }
         Err(err) => Err(err),
     }
 }
@@ -175,7 +225,26 @@ pub(crate) async fn read_pdf_recent_store(app: &AppHandle) -> std::io::Result<Ve
             let items: Vec<PdfRecentEntry> = serde_json::from_slice(&bytes).unwrap_or_default();
             Ok(items)
         }
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(vec![]),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            let legacy_paths = [
+                legacy_root_pdf_recent_store_path(app)?,
+                legacy_pdf_recent_store_path(app)?,
+            ];
+            for legacy_path in legacy_paths {
+                match fs::read(&legacy_path).await {
+                    Ok(bytes) => {
+                        let items: Vec<PdfRecentEntry> =
+                            serde_json::from_slice(&bytes).unwrap_or_default();
+                        let migrated = serde_json::to_vec_pretty(&items)?;
+                        fs::write(&path, migrated).await?;
+                        return Ok(items);
+                    }
+                    Err(legacy_err) if legacy_err.kind() == std::io::ErrorKind::NotFound => continue,
+                    Err(legacy_err) => return Err(legacy_err),
+                }
+            }
+            Ok(vec![])
+        }
         Err(err) => Err(err),
     }
 }

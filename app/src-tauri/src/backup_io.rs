@@ -11,6 +11,14 @@ use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 const WEBDAV_SYNC_INDEX_FILE: &str = ".haomd-sync-index.json";
+const EXCLUDED_BACKUP_FILE_NAMES: &[&str] = &[
+    "recent.json",
+    "pdf_recent.json",
+    "sidebar_state.json",
+    "pdf_folders.json",
+    "file_virtual_folders.json",
+    "file_virtual_assignments.json",
+];
 
 fn backup_root_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
     if let Ok(mut dir) = app.path().config_dir() {
@@ -90,6 +98,13 @@ fn normalize_remote_root_path(remote_path: &str) -> String {
         .filter(|segment| !segment.is_empty())
         .collect::<Vec<_>>()
         .join("/")
+}
+
+fn should_include_backup_relative(relative: &Path) -> bool {
+    match relative.file_name().and_then(|name| name.to_str()) {
+        Some(name) => !EXCLUDED_BACKUP_FILE_NAMES.contains(&name),
+        None => true,
+    }
 }
 
 fn join_remote_relative(root: &str, relative: &str) -> String {
@@ -187,8 +202,13 @@ fn collect_local_entries(
         let relative = entry_path
             .strip_prefix(root)
             .map_err(|err| format!("解析本地相对路径失败: {err}"))?
-            .to_string_lossy()
-            .replace('\\', "/");
+            .to_path_buf();
+
+        if !should_include_backup_relative(&relative) {
+            continue;
+        }
+
+        let relative = relative.to_string_lossy().replace('\\', "/");
 
         if entry_path.is_dir() {
             dirs.push(relative.clone());
@@ -306,6 +326,9 @@ async fn download_directory_from_webdav(
         serde_json::from_slice(&bytes).map_err(|err| format!("解析同步索引失败: {err}"))?;
 
     for relative in index.files {
+        if !should_include_backup_relative(Path::new(&relative)) {
+            continue;
+        }
         let local_path = root.join(&relative);
         if let Some(parent) = local_path.parent() {
             std::fs::create_dir_all(parent)
@@ -355,6 +378,9 @@ fn add_path_to_zip(
         Ok(rel) => rel,
         Err(_) => return Ok(()),
     };
+    if !should_include_backup_relative(relative) {
+        return Ok(());
+    }
     let relative_name = relative.to_string_lossy().replace('\\', "/");
     writer.start_file(relative_name, options)?;
 
@@ -392,6 +418,9 @@ fn restore_backup_from_reader<R: Read + Seek>(reader: R, root: &Path) -> Result<
             Some(path) => path.to_path_buf(),
             None => continue,
         };
+        if !should_include_backup_relative(&relative) {
+            continue;
+        }
 
         let out_path = root.join(relative);
         if entry.is_dir() {
