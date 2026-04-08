@@ -351,39 +351,43 @@ pub fn handle_menu_action(app: &AppHandle, action: &str) -> bool {
 
     if action == "paste" {
         log::info!("[tauri] menu paste triggered");
-        match Clipboard::new() {
-            Ok(mut cb) => match cb.get_text() {
-                Ok(text) if !text.is_empty() => {
-                    log::info!("[tauri] paste: clipboard has text, len={}", text.len());
-                    let _ = app.emit("native://paste", text);
-                }
-                _ => {
-                    log::info!("[tauri] paste: no text, check image");
-                    match cb.get_image() {
-                        Ok(img) => {
-                            log::info!(
-                                "[tauri] paste: clipboard image detected, size={}x{}",
-                                img.width,
-                                img.height
-                            );
-                            let _ = app.emit("native://paste_image", "");
-                        }
-                        Err(err) => {
-                            log::error!(
-                                "[tauri] paste: clipboard has no usable text or image: {}",
-                                err
-                            );
-                            let _ =
-                                app.emit("native://paste_error", format!("读取剪贴板失败: {err}"));
+        let app_handle = app.clone();
+        tauri::async_runtime::spawn(async move {
+            match Clipboard::new() {
+                Ok(mut cb) => match cb.get_text() {
+                    Ok(text) if !text.is_empty() => {
+                        log::info!("[tauri] paste: clipboard has text, len={}", text.len());
+                        let _ = app_handle.emit("native://paste", text);
+                    }
+                    _ => {
+                        log::info!("[tauri] paste: no text, check image");
+                        match cb.get_image() {
+                            Ok(img) => {
+                                log::info!(
+                                    "[tauri] paste: clipboard image detected, size={}x{}",
+                                    img.width,
+                                    img.height
+                                );
+                                let _ = app_handle.emit("native://paste_image", "");
+                            }
+                            Err(err) => {
+                                log::error!(
+                                    "[tauri] paste: clipboard has no usable text or image: {}",
+                                    err
+                                );
+                                let _ = app_handle
+                                    .emit("native://paste_error", format!("读取剪贴板失败: {err}"));
+                            }
                         }
                     }
+                },
+                Err(err) => {
+                    log::error!("[tauri] paste: Clipboard::new() failed: {}", err);
+                    let _ =
+                        app_handle.emit("native://paste_error", format!("读取剪贴板失败: {err}"));
                 }
-            },
-            Err(err) => {
-                log::error!("[tauri] paste: Clipboard::new() failed: {}", err);
-                let _ = app.emit("native://paste_error", format!("读取剪贴板失败: {err}"));
             }
-        }
+        });
         return true;
     }
 

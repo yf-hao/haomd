@@ -199,7 +199,9 @@ pub(crate) async fn read_recent_store(app: &AppHandle) -> std::io::Result<Vec<Re
                         fs::write(&path, migrated).await?;
                         return Ok(items);
                     }
-                    Err(legacy_err) if legacy_err.kind() == std::io::ErrorKind::NotFound => continue,
+                    Err(legacy_err) if legacy_err.kind() == std::io::ErrorKind::NotFound => {
+                        continue
+                    }
                     Err(legacy_err) => return Err(legacy_err),
                 }
             }
@@ -239,7 +241,9 @@ pub(crate) async fn read_pdf_recent_store(app: &AppHandle) -> std::io::Result<Ve
                         fs::write(&path, migrated).await?;
                         return Ok(items);
                     }
-                    Err(legacy_err) if legacy_err.kind() == std::io::ErrorKind::NotFound => continue,
+                    Err(legacy_err) if legacy_err.kind() == std::io::ErrorKind::NotFound => {
+                        continue
+                    }
                     Err(legacy_err) => return Err(legacy_err),
                 }
             }
