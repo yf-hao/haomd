@@ -65,6 +65,7 @@ export const zhCNMessages: MessageDictionary = {
     webdavTestFailed: 'WebDAV 连接测试失败：{message}',
     webdavExportSuccess: '已上传当前配置到 WebDAV。',
     webdavExportFailed: 'WebDAV 上传失败：{message}',
+    webdavImportStarted: '已开始后台从 WebDAV 恢复，可先关闭设置面板继续操作。完成后会自动提示结果。',
     webdavImportSuccess: '已从 WebDAV 远程目录恢复。建议重新打开相关设置窗口，必要时重启应用。',
     webdavImportFailed: 'WebDAV 恢复失败：{message}',
     exportDialogTitle: '导出配置备份',
@@ -639,5 +640,7 @@ export const zhCNMessages: MessageDictionary = {
     commandRequired: 'stdio 模式需要配置命令',
     urlRequired: 'SSE 模式需要配置 URL',
     testSuccess: '连接成功，发现 {count} 个工具',
+    stdioVariables:
+      'stdio 支持 ${HOME}、${CURRENT_DIR}、${APP_CONFIG_DIR}、${APP_DATA_DIR} 和环境变量展开。启动前会检查本机是否能找到命令。',
   },
 }

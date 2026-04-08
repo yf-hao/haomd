@@ -485,6 +485,7 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
                       placeholder="KEY=value"
                     />
                   </FieldGroup>
+                  <div className="mcp-stdio-help">{t('mcp.stdioVariables')}</div>
                 </>
               )}
 

@@ -567,10 +567,6 @@ export function WorkspaceShell({
     isTauriEnv,
     sidebar,
     openRecentFileInNewTab: async (path: string) => await openRecentFileInNewTab(path),
-    editorViewRef,
-    filePath,
-    setStatusMessage,
-    setConfirmDialog,
   })
 
   // 将内部 statusMessage 同步到上层 App 的状态栏

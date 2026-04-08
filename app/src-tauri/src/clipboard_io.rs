@@ -2,9 +2,13 @@ use crate::{err_payload, new_trace_id, normalize_path, ok, ErrorCode, ResultPayl
 use arboard::Clipboard;
 use chrono::Local;
 use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba};
+use once_cell::sync::Lazy;
 use rand::{distributions::Alphanumeric, Rng};
 use serde::{Deserialize, Serialize};
 use std::io::Cursor;
+use tokio::sync::Mutex;
+
+static CLIPBOARD_IMAGE_SAVE_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ClipboardImageResult {
@@ -77,6 +81,7 @@ pub async fn save_clipboard_image_to_dir(
         };
 
     let base_name = suggested_name.unwrap_or_else(|| "image".to_string());
+    let _guard = CLIPBOARD_IMAGE_SAVE_LOCK.lock().await;
 
     let mut index: u32 = 1;
     let file_name = loop {

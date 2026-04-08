@@ -2,6 +2,7 @@ use crate::mcp_config::{McpServerCfg, McpSettingsCfg};
 use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tauri::{AppHandle, Manager};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -193,28 +194,168 @@ async fn stdio_send_notification(
     Ok(())
 }
 
-fn spawn_stdio_process(cfg: &McpServerCfg) -> Result<StdioTransport, String> {
+fn build_stdio_variable_map(
+    app: Option<&AppHandle>,
+    env: Option<&HashMap<String, String>>,
+) -> HashMap<String, String> {
+    let mut vars = HashMap::new();
+
+    if let Ok(home) = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")) {
+        vars.insert("HOME".to_string(), home);
+    }
+    if let Ok(current_dir) = std::env::current_dir() {
+        vars.insert(
+            "CURRENT_DIR".to_string(),
+            current_dir.to_string_lossy().into_owned(),
+        );
+    }
+    if let Some(app) = app {
+        if let Ok(config_dir) = app.path().config_dir() {
+            vars.insert(
+                "APP_CONFIG_DIR".to_string(),
+                config_dir.to_string_lossy().into_owned(),
+            );
+        }
+        if let Ok(app_data_dir) = app.path().app_data_dir() {
+            vars.insert(
+                "APP_DATA_DIR".to_string(),
+                app_data_dir.to_string_lossy().into_owned(),
+            );
+        }
+    }
+    if let Some(env) = env {
+        for (key, value) in env {
+            vars.insert(key.clone(), value.clone());
+        }
+    }
+
+    vars
+}
+
+fn expand_stdio_value(value: &str, vars: &HashMap<String, String>) -> String {
+    let mut expanded = String::with_capacity(value.len());
+    let mut rest = value;
+
+    while let Some(start) = rest.find("${") {
+        expanded.push_str(&rest[..start]);
+        let after_start = &rest[start + 2..];
+        if let Some(end) = after_start.find('}') {
+            let key = &after_start[..end];
+            let replacement = vars
+                .get(key)
+                .cloned()
+                .or_else(|| std::env::var(key).ok())
+                .unwrap_or_else(|| format!("${{{key}}}"));
+            expanded.push_str(&replacement);
+            rest = &after_start[end + 1..];
+        } else {
+            expanded.push_str(&rest[start..]);
+            return expanded;
+        }
+    }
+
+    expanded.push_str(rest);
+    expanded
+}
+
+fn is_path_like_command(command: &str) -> bool {
+    let path = Path::new(command);
+    path.is_absolute() || path.components().count() > 1
+}
+
+#[cfg(windows)]
+fn command_candidates(path: &Path) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    let has_ext = path.extension().is_some();
+    if has_ext {
+        candidates.push(path.to_path_buf());
+        return candidates;
+    }
+
+    let pathext = std::env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string());
+    for ext in pathext.split(';').filter(|s| !s.is_empty()) {
+        let trimmed = ext.trim_start_matches('.');
+        candidates.push(path.with_extension(trimmed));
+    }
+    candidates.push(path.to_path_buf());
+    candidates
+}
+
+#[cfg(not(windows))]
+fn command_candidates(path: &Path) -> Vec<PathBuf> {
+    vec![path.to_path_buf()]
+}
+
+fn resolve_stdio_executable(command: &str) -> Option<PathBuf> {
+    if is_path_like_command(command) {
+        let path = Path::new(command);
+        return command_candidates(path)
+            .into_iter()
+            .find(|candidate| candidate.is_file());
+    }
+
+    let path_env = std::env::var_os("PATH")?;
+    for dir in std::env::split_paths(&path_env) {
+        let joined = dir.join(command);
+        if let Some(path) = command_candidates(&joined)
+            .into_iter()
+            .find(|candidate| candidate.is_file())
+        {
+            return Some(path);
+        }
+    }
+    None
+}
+
+fn spawn_stdio_process(
+    app: Option<&AppHandle>,
+    cfg: &McpServerCfg,
+) -> Result<StdioTransport, String> {
     let command = cfg
         .command
         .as_deref()
         .ok_or("stdio server 未配置 command")?;
-    let args = cfg.args.as_deref().unwrap_or(&[]);
+    let vars = build_stdio_variable_map(app, cfg.env.as_ref());
+    let command = expand_stdio_value(command, &vars);
+    let args = cfg
+        .args
+        .as_deref()
+        .unwrap_or(&[])
+        .iter()
+        .map(|arg| expand_stdio_value(arg, &vars))
+        .collect::<Vec<_>>();
+    let env = cfg.env.as_ref().map(|env| {
+        env.iter()
+            .map(|(k, v)| (k.clone(), expand_stdio_value(v, &vars)))
+            .collect::<HashMap<_, _>>()
+    });
 
-    let mut cmd = tokio::process::Command::new(command);
-    cmd.args(args)
+    let executable = resolve_stdio_executable(&command).ok_or_else(|| {
+        format!(
+            "无法启动 stdio MCP Server：找不到命令 '{command}'。请确认目标机器已安装对应运行时/可执行程序，或检查 PATH、command、args 中的变量展开结果。支持变量：${{HOME}}、${{CURRENT_DIR}}、${{APP_CONFIG_DIR}}、${{APP_DATA_DIR}} 以及环境变量。"
+        )
+    })?;
+
+    let mut cmd = tokio::process::Command::new(&executable);
+    cmd.args(&args)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
 
-    if let Some(env) = &cfg.env {
+    if let Some(env) = &env {
         for (k, v) in env {
             cmd.env(k, v);
         }
     }
 
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| format!("启动 MCP Server 失败: {e}"))?;
+    let mut child = cmd.spawn().map_err(|e| {
+        format!(
+            "启动 MCP Server 失败: {e}（command='{}' resolved='{}' args={:?}）",
+            command,
+            executable.display(),
+            args
+        )
+    })?;
     let stdin = child.stdin.take().ok_or("无法获取 stdin")?;
     let stdout = child.stdout.take().ok_or("无法获取 stdout")?;
     let reader = BufReader::new(stdout);
@@ -483,7 +624,7 @@ pub async fn mcp_start_server(app: AppHandle, server_id: String) -> ResultPayloa
     // Create transport based on type
     let mut transport = match cfg.transport.as_str() {
         "stdio" => {
-            let t = match spawn_stdio_process(&cfg) {
+            let t = match spawn_stdio_process(Some(&app), &cfg) {
                 Ok(t) => t,
                 Err(e) => return err_payload(ErrorCode::IoError, e, trace),
             };
@@ -525,12 +666,12 @@ pub async fn mcp_start_server(app: AppHandle, server_id: String) -> ResultPayloa
 }
 
 #[tauri::command]
-pub async fn mcp_test_server(cfg: McpServerCfg) -> ResultPayload<Vec<McpToolDef>> {
+pub async fn mcp_test_server(app: AppHandle, cfg: McpServerCfg) -> ResultPayload<Vec<McpToolDef>> {
     let trace = new_trace_id();
 
     let mut transport = match cfg.transport.as_str() {
         "stdio" => {
-            let t = match spawn_stdio_process(&cfg) {
+            let t = match spawn_stdio_process(Some(&app), &cfg) {
                 Ok(t) => t,
                 Err(e) => return err_payload(ErrorCode::IoError, e, trace),
             };

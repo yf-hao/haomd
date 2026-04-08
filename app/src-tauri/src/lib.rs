@@ -129,6 +129,7 @@ macro_rules! app_invoke_handler {
             export_settings_backup_to_webdav,
             import_settings_backup,
             import_settings_backup_from_webdav,
+            start_import_settings_backup_from_webdav,
             is_inkscape_available,
             convert_svg_to_emf,
             convert_svg_to_plain_svg,

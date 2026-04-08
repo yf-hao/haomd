@@ -1,11 +1,13 @@
 use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
+use once_cell::sync::Lazy;
 use reqwest::StatusCode;
 use reqwest::{Client, Method};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{Cursor, Read, Seek, Write};
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, Manager};
+use std::sync::atomic::{AtomicBool, Ordering};
+use tauri::{AppHandle, Emitter, Manager};
 use url::Url;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
@@ -19,6 +21,15 @@ const EXCLUDED_BACKUP_FILE_NAMES: &[&str] = &[
     "file_virtual_folders.json",
     "file_virtual_assignments.json",
 ];
+const BACKUP_WEBDAV_IMPORT_FINISHED_EVENT: &str = "backup://webdav_import_finished";
+static WEBDAV_IMPORT_RUNNING: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct WebDavImportFinishedEvent {
+    pub success: bool,
+    pub message: Option<String>,
+}
 
 fn backup_root_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
     if let Ok(mut dir) = app.path().config_dir() {
@@ -617,4 +628,52 @@ pub async fn import_settings_backup_from_webdav(
         Ok(()) => ok((), trace),
         Err(message) => err_payload(ErrorCode::UNKNOWN, message, trace),
     }
+}
+
+#[tauri::command]
+pub async fn start_import_settings_backup_from_webdav(
+    app: AppHandle,
+    url: String,
+    username: String,
+    password: String,
+    remote_path: String,
+) -> ResultPayload<()> {
+    let trace = new_trace_id();
+
+    if WEBDAV_IMPORT_RUNNING
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        return err_payload(
+            ErrorCode::CONFLICT,
+            "已有 WebDAV 恢复任务正在后台运行".to_string(),
+            trace,
+        );
+    }
+
+    tauri::async_runtime::spawn(async move {
+        let payload = match import_settings_backup_from_webdav(
+            app.clone(),
+            url,
+            username,
+            password,
+            remote_path,
+        )
+        .await
+        {
+            ResultPayload::Ok { .. } => WebDavImportFinishedEvent {
+                success: true,
+                message: None,
+            },
+            ResultPayload::Err { error } => WebDavImportFinishedEvent {
+                success: false,
+                message: Some(error.message),
+            },
+        };
+
+        let _ = app.emit(BACKUP_WEBDAV_IMPORT_FINISHED_EVENT, payload);
+        WEBDAV_IMPORT_RUNNING.store(false, Ordering::SeqCst);
+    });
+
+    ok((), trace)
 }

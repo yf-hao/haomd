@@ -443,14 +443,14 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     try {
       setBackupStatus(null)
       setBackupBusy('webdav-import')
-      const resp = await invoke<BackendResult<null>>('import_settings_backup_from_webdav', {
+      const resp = await invoke<BackendResult<null>>('start_import_settings_backup_from_webdav', {
         url: webdavBackup.url,
         username: webdavBackup.username,
         password: webdavBackup.password,
         remotePath: DEFAULT_WEBDAV_REMOTE_PATH,
       })
       expectBackendOk(resp)
-      setBackupStatus({ tone: 'success', message: t('backup.webdavImportSuccess') })
+      setBackupStatus({ tone: 'success', message: t('backup.webdavImportStarted') })
     } catch (err) {
       setBackupStatus({ tone: 'error', message: t('backup.webdavImportFailed', { message: (err as Error).message }) })
     } finally {

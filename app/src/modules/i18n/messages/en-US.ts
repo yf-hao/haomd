@@ -65,6 +65,7 @@ export const enUSMessages: MessageDictionary = {
     webdavTestFailed: 'WebDAV connection test failed: {message}',
     webdavExportSuccess: 'Uploaded current configuration to WebDAV.',
     webdavExportFailed: 'WebDAV upload failed: {message}',
+    webdavImportStarted: 'Started restoring from WebDAV in the background. You can close Settings and continue working. A result notification will appear when it finishes.',
     webdavImportSuccess: 'Restored from the WebDAV remote directory. Reopen related settings dialogs, and restart the app if needed.',
     webdavImportFailed: 'WebDAV restore failed: {message}',
     exportDialogTitle: 'Export settings backup',
@@ -646,5 +647,7 @@ export const enUSMessages: MessageDictionary = {
     commandRequired: 'Command is required for stdio transport',
     urlRequired: 'URL is required for SSE transport',
     testSuccess: 'Connected! Found {count} tools',
+    stdioVariables:
+      'stdio supports ${HOME}, ${CURRENT_DIR}, ${APP_CONFIG_DIR}, ${APP_DATA_DIR}, and environment variable expansion. Startup also checks whether the command exists on this machine.',
   },
 }

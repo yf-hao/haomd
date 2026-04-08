@@ -7,10 +7,12 @@ import { AgentSettingsDialog } from './components/AgentSettingsDialog'
 import { PromptSettingsDialog } from './components/PromptSettingsDialog'
 import { SettingsDialog } from './components/SettingsDialog'
 import { McpSettingsDialog } from './components/McpSettingsDialog'
+import Toast from './components/Toast'
 import { I18nProvider, useI18n } from './modules/i18n/I18nContext'
 import { getSystemResolvedLanguage, normalizeLanguageTag, resolveLanguageMode } from './modules/i18n/languageResolver'
 import type { LanguageMode, ResolvedLanguage } from './modules/i18n/schema'
 import { onMenuAction } from './modules/platform/menuEvents'
+import { onWebDavImportFinished } from './modules/platform/backupEvents'
 import { isTauriEnv } from './modules/platform/runtime'
 import {
   getDefaultLanguageSetting,
@@ -320,6 +322,23 @@ function AppShellContent({
   setMcpSettingsOpen,
 }: AppShellContentProps) {
   const { t } = useI18n()
+  const [toastMessage, setToastMessage] = useState('')
+
+  useEffect(() => {
+    if (!isTauriEnv()) return
+
+    const unlisten = onWebDavImportFinished((payload) => {
+      if (payload.success) {
+        setToastMessage(t('backup.webdavImportSuccess'))
+      } else {
+        setToastMessage(t('backup.webdavImportFailed', { message: payload.message ?? 'Unknown error' }))
+      }
+    })
+
+    return () => {
+      unlisten()
+    }
+  }, [t])
 
   return (
     <div className="app-shell">
@@ -403,6 +422,7 @@ function AppShellContent({
         onLanguageModeChange={onLanguageModeChange}
         onUiTypographyChange={onUiTypographyChange}
       />
+      <Toast message={toastMessage} onDismiss={() => setToastMessage('')} />
     </div>
   )
 }
