@@ -2,6 +2,40 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.7.0] - 2026-04-09
+
+### 中文
+
+#### ✨ 新特性
+
+*   **WebDAV 后台恢复**：新增后台自动化备份恢复功能，支持在启动时通过云端数据自动恢复本地状态，并实时提示恢复进度。
+*   **MCP 进程控制优化**：全面重构了 MCP (Model Context Protocol) 服务的进程启动与 stdio 通道管理，显著提升了工具加载的稳定性。
+*   **异步系统交互**：将剪贴板读取等关键系统操作全量迁移为异步任务，彻底解决了在处理复杂剪贴板内容时的界面阻塞问题。
+
+#### 🔧 系统改进 与修复
+
+*   **并发冲突防护**：为图片保存流程引入互斥锁（Mutex），修复了在导出或同步过程中可能出现的并发访问冲突。
+*   **智能备份过滤**：新增备份排除机制，自动过滤临时状态文件，缩减备份体积并缩短同步时间。
+*   **数据平滑迁移**：重构了应用配置与状态的存储路径解析逻辑，增加了旧版本路径数据的自动迁移支持。
+
+---
+
+### English
+
+#### ✨ New Features
+
+*   **WebDAV Background Recovery**: Introduced automated background data restoration via WebDAV, allowing the app to sync local state with cloud backups at startup with live progress tracking.
+*   **Optimized MCP Process Lifecycle**: Overhauled MCP (Model Context Protocol) service initialization and stdio channel management, significantly boosting reliability and startup speed.
+*   **Non-blocking System I/O**: Transitioned all clipboard and critical system interactions to an asynchronous execution model, eliminating UI stutters when handling heavy content.
+
+#### 🔧 System Refinements & Fixes
+
+*   **Concurrency Guardrails**: Implemented a Mutex lock for image saving operations to resolve potential data race issues during high-frequency exports or syncs.
+*   **Smarter Backup Exclusion**: Added an intelligent exclusion list for temporary state files, optimizing backup size and reducing synchronization latency.
+*   **Seamless Path Migration**: Refactored application state and configuration path resolution to include automatic migration support for legacy storage locations.
+
+---
+
 ## [v0.6.1] - 2026-04-07
 
 ### 中文
