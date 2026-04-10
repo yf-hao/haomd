@@ -9,6 +9,7 @@ import PreviewErrorBoundary from './PreviewErrorBoundary'
 import { InsertTableDialog } from './InsertTableDialog'
 import { MathSymbolDialog } from './MathSymbolDialog'
 import { AboutDialog } from './AboutDialog'
+import { TextColorDialog } from './TextColorDialog'
 import { TabBar } from './TabBar'
 import { FileContextMenu } from './FileContextMenu'
 import { Sidebar, type SidebarContextActionPayload } from './Sidebar'
@@ -49,11 +50,27 @@ import {
   registerToggleStrikethrough,
   registerInsertCodeBlock,
   registerInsertMathSymbol,
+  registerApplyTextColor,
+  registerClearTextColor,
+  registerGetCurrentTextColor,
+  registerGetCurrentTextColorTarget,
+  registerApplyTextColorToTarget,
+  applyTextColor,
+  clearTextColor,
 } from '../modules/editor/formatService'
 import { useI18n } from '../modules/i18n/I18nContext'
 import { useThemeContext } from '../modules/theme/ThemeContext'
 import { buildBackgroundImageVars, resolveManagedBackgroundImageUrl } from '../modules/theme/backgroundImageRuntime'
+import {
+  applyTextColorSyntax,
+  clearTextColorSyntax,
+  getEnclosingTextColorBlock,
+  getTextColorAtRange,
+  normalizeTextColor,
+} from '../modules/markdown/extensions/colorMark'
 import { extractFrontMatter } from '../modules/markdown/frontMatter'
+import { MAX_RECENT_TEXT_COLORS, RECENT_TEXT_COLORS_STORAGE_KEY } from '../modules/editor/textColorPalette'
+import { createTextColorTarget, isTextColorTargetActive, type TextColorTarget } from '../modules/editor/textColorTarget'
 import type { WysiwygFormatActions } from './Wysiwyg/WysiwygPane'
 // 改为从内部动态加载，优化编辑性能
 // import { exportToHtml } from '../modules/export/html'
@@ -141,6 +158,8 @@ export function WorkspaceShell({
   const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null)
   const markdownRef = useRef(markdown)
   const lastActiveIdForPreviewRef = useRef<string | null>(null)
+  const textColorTargetRef = useRef<TextColorTarget | null>(null)
+  const preserveTextColorTargetOnNextChangeRef = useRef(false)
 
   const [aboutOpen, setAboutOpen] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
@@ -352,6 +371,12 @@ export function WorkspaceShell({
     activeIdRef.current = activeId
   }, [activeId])
 
+  const getActiveTextColorDocKey = useCallback(() => activeIdRef.current ?? null, [])
+
+  useEffect(() => {
+    textColorTargetRef.current = null
+  }, [activeId, editMode])
+
   useEffect(() => {
     markdownRef.current = markdown
   }, [markdown])
@@ -444,6 +469,22 @@ export function WorkspaceShell({
   const [isInsertTableDialogOpen, setIsInsertTableDialogOpen] = useState(false)
   const [mathSymbolDialog, setMathSymbolDialog] = useState<{ open: boolean; categoryKey: string }>({ open: false, categoryKey: 'greek' })
   const [recentDialogOpen, setRecentDialogOpen] = useState(false)
+  const [isTextColorDialogOpen, setIsTextColorDialogOpen] = useState(false)
+  const [recentTextColors, setRecentTextColors] = useState<string[]>(() => {
+    try {
+      if (typeof localStorage === 'undefined') return []
+      const raw = localStorage.getItem(RECENT_TEXT_COLORS_STORAGE_KEY)
+      if (!raw) return []
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) return []
+      return parsed
+        .map((value) => normalizeTextColor(String(value)))
+        .filter((value): value is string => Boolean(value))
+        .slice(0, MAX_RECENT_TEXT_COLORS)
+    } catch {
+      return []
+    }
+  })
 
   const workspaceBackground = themeSettings.workspaceBackground
   const workspaceBackgroundUrl = useMemo(
@@ -634,6 +675,11 @@ export function WorkspaceShell({
     if (activeIdRef.current !== sourceTabId) {
       return
     }
+    if (preserveTextColorTargetOnNextChangeRef.current) {
+      preserveTextColorTargetOnNextChangeRef.current = false
+    } else {
+      textColorTargetRef.current = null
+    }
     handleMarkdownChange(val)
   }, [handleMarkdownChange])
   syncWysiwygMarkdownRef.current = handleMarkdownChange
@@ -695,6 +741,11 @@ export function WorkspaceShell({
         return
       }
 
+      if (preserveTextColorTargetOnNextChangeRef.current) {
+        preserveTextColorTargetOnNextChangeRef.current = false
+      } else {
+        textColorTargetRef.current = null
+      }
       handleMarkdownChange(val)
     },
     [isPdfActive, activePdfPath, handleMarkdownChange],
@@ -718,6 +769,64 @@ export function WorkspaceShell({
       const next = mutator(current)
       if (next !== current) {
         handleMarkdownChange(next)
+      }
+    }
+
+    const getSourceSelectionTarget = () => {
+      const view = editorViewRef.current
+      const docKey = getActiveTextColorDocKey()
+      if (!view || !docKey) return null
+
+      const { from, to } = view.state.selection.main
+      if (from !== to) {
+        const target = createTextColorTarget(docKey, 'source', from, to)
+        textColorTargetRef.current = target
+        return target
+      }
+
+      if (isTextColorTargetActive(textColorTargetRef.current, docKey, 'source')) {
+        return textColorTargetRef.current
+      }
+
+      textColorTargetRef.current = null
+      return null
+    }
+
+    const buildSourceColoredTarget = (docKey: string, start: number, color: string, originalText: string) => {
+      const content = originalText.replace(/^\{color:#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})\}([\s\S]*?)\{\/color\}$/i, '$1')
+      const openTagLength = `{color:${color}}`.length
+      return createTextColorTarget(docKey, 'source', start + openTagLength, start + openTagLength + content.length)
+    }
+
+    const getSourceReplacementPayload = (markdownText: string, target: TextColorTarget, color: string | null) => {
+      const enclosing = getEnclosingTextColorBlock(markdownText, target.from, target.to)
+      if (enclosing) {
+        const replacement = color
+          ? applyTextColorSyntax(enclosing.content, color)
+          : enclosing.content
+        if (!replacement) return null
+        return {
+          replaceFrom: enclosing.blockStart,
+          replaceTo: enclosing.blockEnd,
+          replacement,
+          nextTarget: color
+            ? buildSourceColoredTarget(target.docKey, enclosing.blockStart, color, enclosing.content)
+            : createTextColorTarget(target.docKey, 'source', enclosing.blockStart, enclosing.blockStart + enclosing.content.length),
+        }
+      }
+
+      const selected = markdownText.slice(target.from, target.to)
+      const replacement = color
+        ? applyTextColorSyntax(selected, color)
+        : clearTextColorSyntax(selected)
+      if (!replacement || replacement === selected) return null
+      return {
+        replaceFrom: target.from,
+        replaceTo: target.to,
+        replacement,
+        nextTarget: color
+          ? buildSourceColoredTarget(target.docKey, target.from, color, selected)
+          : createTextColorTarget(target.docKey, 'source', target.from, target.from + replacement.length),
       }
     }
 
@@ -996,6 +1105,105 @@ export function WorkspaceShell({
       }))
 
       syncEditorToReactState()
+    })
+
+    registerApplyTextColor(async (color: string) => {
+      const normalizedColor = normalizeTextColor(color)
+      if (!normalizedColor) return
+
+      if (editModeRef.current === 'wysiwyg') {
+        wysiwygFormatActionsRef.current?.applyTextColor(normalizedColor)
+        return
+      }
+
+      const view = editorViewRef.current
+      const target = getSourceSelectionTarget()
+      if (!view || !target) return
+
+      const { state } = view
+      const payload = getSourceReplacementPayload(state.doc.toString(), target, normalizedColor)
+      if (!payload) return
+
+      preserveTextColorTargetOnNextChangeRef.current = true
+      textColorTargetRef.current = payload.nextTarget
+      const cursorPos = payload.replaceFrom + payload.replacement.length
+      view.dispatch(state.update({
+        changes: { from: payload.replaceFrom, to: payload.replaceTo, insert: payload.replacement },
+        selection: { anchor: cursorPos, head: cursorPos },
+        scrollIntoView: true,
+      }))
+
+      syncEditorToReactState()
+    })
+
+    registerClearTextColor(async () => {
+      if (editModeRef.current === 'wysiwyg') {
+        wysiwygFormatActionsRef.current?.clearTextColor()
+        return
+      }
+
+      const view = editorViewRef.current
+      const target = getSourceSelectionTarget()
+      if (!view || !target) return
+
+      const { state } = view
+      const payload = getSourceReplacementPayload(state.doc.toString(), target, null)
+      if (!payload) return
+
+      preserveTextColorTargetOnNextChangeRef.current = true
+      textColorTargetRef.current = payload.nextTarget
+      const cursorPos = payload.replaceFrom + payload.replacement.length
+      view.dispatch(state.update({
+        changes: { from: payload.replaceFrom, to: payload.replaceTo, insert: payload.replacement },
+        selection: { anchor: cursorPos, head: cursorPos },
+        scrollIntoView: true,
+      }))
+
+      syncEditorToReactState()
+    })
+
+    registerGetCurrentTextColor(async () => {
+      if (editModeRef.current === 'wysiwyg') {
+        return wysiwygFormatActionsRef.current?.getCurrentTextColor() ?? null
+      }
+
+      const view = editorViewRef.current
+      const target = getSourceSelectionTarget()
+      if (!view || !target) return null
+
+      const markdownText = view.state.doc.toString()
+      return getTextColorAtRange(markdownText, target.from, target.to)
+    })
+
+    registerGetCurrentTextColorTarget(async () => {
+      if (editModeRef.current === 'wysiwyg') {
+        return wysiwygFormatActionsRef.current?.getCurrentTextColorTarget() ?? null
+      }
+      return getSourceSelectionTarget()
+    })
+
+    registerApplyTextColorToTarget(async (color, target) => {
+      if (editModeRef.current === 'wysiwyg') {
+        return wysiwygFormatActionsRef.current?.applyTextColorToTarget(color, target) ?? false
+      }
+
+      const view = editorViewRef.current
+      const docKey = getActiveTextColorDocKey()
+      if (!view || !isTextColorTargetActive(target, docKey, 'source')) return false
+
+      const payload = getSourceReplacementPayload(view.state.doc.toString(), target, color)
+      if (!payload) return false
+
+      preserveTextColorTargetOnNextChangeRef.current = true
+      textColorTargetRef.current = payload.nextTarget
+      const cursorPos = payload.replaceFrom + payload.replacement.length
+      view.dispatch(view.state.update({
+        changes: { from: payload.replaceFrom, to: payload.replaceTo, insert: payload.replacement },
+        selection: { anchor: cursorPos, head: cursorPos },
+        scrollIntoView: true,
+      }))
+      syncEditorToReactState()
+      return true
     })
 
     registerInsertMathSymbol(async (latex: string) => {
@@ -1904,6 +2112,45 @@ export function WorkspaceShell({
     setMathSymbolDialog({ open: true, categoryKey })
   }, [])
 
+  const rememberRecentTextColor = useCallback((color: string) => {
+    const normalized = normalizeTextColor(color)
+    if (!normalized) return
+    setRecentTextColors((prev) => {
+      const next = [normalized, ...prev.filter((item) => item !== normalized)].slice(0, MAX_RECENT_TEXT_COLORS)
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(RECENT_TEXT_COLORS_STORAGE_KEY, JSON.stringify(next))
+        }
+      } catch {
+        // ignore local persistence failures
+      }
+      return next
+    })
+  }, [])
+
+  const openTextColorDialog = useCallback(() => {
+    if (isPdfActive) {
+      setStatusMessage(t('workspace.textColorUnsupportedPdf'))
+      return
+    }
+    setIsTextColorDialogOpen(true)
+  }, [isPdfActive, setStatusMessage, t])
+
+  const handleTextColorDialogConfirm = useCallback(async (color: string) => {
+    const normalized = normalizeTextColor(color)
+    if (!normalized) return
+    await applyTextColor(normalized)
+    rememberRecentTextColor(normalized)
+    setStatusMessage(t('commands.formatTextColorApplied', { color: normalized }))
+    setIsTextColorDialogOpen(false)
+  }, [rememberRecentTextColor, setStatusMessage, t])
+
+  const handleTextColorDialogClear = useCallback(async () => {
+    await clearTextColor()
+    setStatusMessage(t('commands.formatTextColorCleared'))
+    setIsTextColorDialogOpen(false)
+  }, [setStatusMessage, t])
+
   const generateMarkdownTable = useCallback((rows: number, cols: number): string => {
     const safeRows = Math.max(1, rows)
     const safeCols = Math.max(1, cols)
@@ -1951,6 +2198,7 @@ export function WorkspaceShell({
     openSearch: openSearchWithSelection,
     openInsertTableDialog,
     openMathSymbolDialog,
+    openTextColorDialog,
     openAiChatDialog: (options: any) => openAiChatDialog(options as any),
     closeAiChatDialog,
     openGlobalMemoryDialog,
@@ -2580,7 +2828,9 @@ export function WorkspaceShell({
                           key={activeId ?? 'wysiwyg-empty'}
                           value={wysiwygBodyMarkdown}
                           frontMatterBlock={wysiwygFrontMatterBlock}
+                          docKey={activeId ?? null}
                           editorZoom={editorZoom}
+                          onRequestTextColorDialog={openTextColorDialog}
                           onChange={(val) => {
                             if (!activeId) return
                             handleWysiwygChange(activeId, val)
@@ -2748,6 +2998,14 @@ export function WorkspaceShell({
           open={mathSymbolDialog.open}
           categoryKey={mathSymbolDialog.categoryKey}
           onClose={() => setMathSymbolDialog({ open: false, categoryKey: mathSymbolDialog.categoryKey })}
+        />
+
+        <TextColorDialog
+          open={isTextColorDialogOpen}
+          recentColors={recentTextColors}
+          onConfirm={(color) => { void handleTextColorDialogConfirm(color) }}
+          onClear={() => { void handleTextColorDialogClear() }}
+          onCancel={() => setIsTextColorDialogOpen(false)}
         />
 
         {aiChatMode === 'floating' && aiChatOpen && aiChatState?.open && (

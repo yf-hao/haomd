@@ -3,6 +3,7 @@ import remarkParse from 'remark-parse'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import katex from 'katex'
+import { replaceTextColorSyntaxWithHtml } from '../../markdown/extensions/colorMark'
 import { normalizeLatexDelimiters } from '../../markdown/normalizeLatexDelimiters'
 import type { Root, Content, Image, List, ListItem, PhrasingContent, TableCell, TableRow } from 'mdast'
 import { toString } from 'mdast-util-to-string'
@@ -20,7 +21,7 @@ type ParseContext = {
 }
 
 export function markdownToWordModel(markdown: string, title: string): WordDocPayload {
-  const normalizedMarkdown = normalizeLatexDelimiters(markdown)
+  const normalizedMarkdown = replaceTextColorSyntaxWithHtml(normalizeLatexDelimiters(markdown))
   const tree = unified()
     .use(remarkParse)
     .use(remarkGfm)
@@ -231,7 +232,9 @@ function transformInline(nodes: PhrasingContent[], ctx: ParseContext, marks: Tex
             break
           }
 
-          const tokenMarks = parseHtmlTextStyle(token.tag, token.attrs)
+          const tokenMarks = token.kind === 'close'
+            ? closingHtmlMarksForTag(token.tag)
+            : parseHtmlTextStyle(token.tag, token.attrs)
           if (Object.keys(tokenMarks).length > 0) {
             htmlMarks = token.kind === 'open'
               ? mergeMarks(htmlMarks, tokenMarks)
@@ -272,6 +275,38 @@ function clearHtmlMarks(current: TextMarks, removing: TextMarks): TextMarks {
     delete next[key]
   }
   return next
+}
+
+function closingHtmlMarksForTag(tag: string): TextMarks {
+  switch (tag) {
+    case 'strong':
+    case 'b':
+      return { bold: undefined }
+    case 'em':
+    case 'i':
+      return { italic: undefined }
+    case 'del':
+    case 's':
+      return { strike: undefined }
+    case 'u':
+      return { underline: undefined }
+    case 'code':
+      return { code: undefined }
+    case 'font':
+    case 'span':
+      return {
+        bold: undefined,
+        italic: undefined,
+        strike: undefined,
+        underline: undefined,
+        color: undefined,
+        backgroundColor: undefined,
+        fontSizePt: undefined,
+        fontFamily: undefined,
+      }
+    default:
+      return {}
+  }
 }
 
 function parseSimpleInlineHtmlTag(value: string): {
@@ -347,7 +382,12 @@ function mergeAdjacentTextRuns(runs: InlineRun[]): InlineRun[] {
       prev.bold === run.bold &&
       prev.italic === run.italic &&
       prev.code === run.code &&
-      prev.strike === run.strike
+      prev.strike === run.strike &&
+      prev.underline === run.underline &&
+      prev.color === run.color &&
+      prev.backgroundColor === run.backgroundColor &&
+      prev.fontSizePt === run.fontSizePt &&
+      prev.fontFamily === run.fontFamily
     ) {
       prev.value += run.value
     } else {

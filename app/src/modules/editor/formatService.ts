@@ -1,3 +1,5 @@
+import type { TextColorTarget } from './textColorTarget'
+
 export type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6
 
 /**
@@ -17,12 +19,27 @@ type InsertCodeBlockImpl = (() => void | Promise<void>) | null
 
 type InsertMathSymbolImpl = ((latex: string) => void | Promise<void>) | null
 
+type ApplyTextColorImpl = ((color: string) => void | Promise<void>) | null
+
+type ClearTextColorImpl = (() => void | Promise<void>) | null
+
+type GetCurrentTextColorImpl = (() => string | null | Promise<string | null>) | null
+
+type GetCurrentTextColorTargetImpl = (() => TextColorTarget | null | Promise<TextColorTarget | null>) | null
+
+type ApplyTextColorToTargetImpl = ((color: string | null, target: TextColorTarget) => boolean | Promise<boolean>) | null
+
 let applyHeadingImpl: ApplyHeadingImpl = null
 let resetHeadingImpl: ResetHeadingImpl = null
 let emphasizeSelectionImpl: EmphasizeSelectionImpl = null
 let toggleStrikethroughImpl: ToggleStrikethroughImpl = null
 let insertCodeBlockImpl: InsertCodeBlockImpl = null
 let insertMathSymbolImpl: InsertMathSymbolImpl = null
+let applyTextColorImpl: ApplyTextColorImpl = null
+let clearTextColorImpl: ClearTextColorImpl = null
+let getCurrentTextColorImpl: GetCurrentTextColorImpl = null
+let getCurrentTextColorTargetImpl: GetCurrentTextColorTargetImpl = null
+let applyTextColorToTargetImpl: ApplyTextColorToTargetImpl = null
 
 export function registerApplyHeadingLevel(fn: (level: HeadingLevel) => void | Promise<void>): void {
   applyHeadingImpl = fn
@@ -105,4 +122,68 @@ export async function insertMathSymbol(latex: string): Promise<void> {
     return
   }
   await Promise.resolve(insertMathSymbolImpl(latex))
+}
+
+// ===== 文字颜色 =====
+
+export function registerApplyTextColor(fn: (color: string) => void | Promise<void>): void {
+  applyTextColorImpl = fn
+}
+
+export async function applyTextColor(color: string): Promise<void> {
+  if (!applyTextColorImpl) {
+    console.warn('[formatService] applyTextColor called but no implementation registered')
+    return
+  }
+  await Promise.resolve(applyTextColorImpl(color))
+}
+
+export function registerClearTextColor(fn: () => void | Promise<void>): void {
+  clearTextColorImpl = fn
+}
+
+export async function clearTextColor(): Promise<void> {
+  if (!clearTextColorImpl) {
+    console.warn('[formatService] clearTextColor called but no implementation registered')
+    return
+  }
+  await Promise.resolve(clearTextColorImpl())
+}
+
+export function registerGetCurrentTextColor(fn: () => string | null | Promise<string | null>): void {
+  getCurrentTextColorImpl = fn
+}
+
+export async function getCurrentTextColor(): Promise<string | null> {
+  if (!getCurrentTextColorImpl) {
+    console.warn('[formatService] getCurrentTextColor called but no implementation registered')
+    return null
+  }
+  return await Promise.resolve(getCurrentTextColorImpl())
+}
+
+export function registerGetCurrentTextColorTarget(fn: () => TextColorTarget | null | Promise<TextColorTarget | null>): void {
+  getCurrentTextColorTargetImpl = fn
+}
+
+export async function getCurrentTextColorTarget(): Promise<TextColorTarget | null> {
+  if (!getCurrentTextColorTargetImpl) {
+    console.warn('[formatService] getCurrentTextColorTarget called but no implementation registered')
+    return null
+  }
+  return await Promise.resolve(getCurrentTextColorTargetImpl())
+}
+
+export function registerApplyTextColorToTarget(
+  fn: (color: string | null, target: TextColorTarget) => boolean | Promise<boolean>,
+): void {
+  applyTextColorToTargetImpl = fn
+}
+
+export async function applyTextColorToTarget(color: string | null, target: TextColorTarget): Promise<boolean> {
+  if (!applyTextColorToTargetImpl) {
+    console.warn('[formatService] applyTextColorToTarget called but no implementation registered')
+    return false
+  }
+  return await Promise.resolve(applyTextColorToTargetImpl(color, target))
 }

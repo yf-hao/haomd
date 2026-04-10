@@ -4,6 +4,7 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import rehypeRaw from 'rehype-raw'
 import rehypeHighlight from 'rehype-highlight'
+import { replaceTextColorSyntaxWithHtml } from '../../../markdown/extensions/colorMark'
 import { normalizeLatexDelimiters } from '../../../markdown/normalizeLatexDelimiters'
 import { remarkToc } from '../../../markdown/remarkToc'
 
@@ -54,7 +55,7 @@ function ExportImage(props: any) {
 }
 
 export function ExportWrapper({ markdown }: { markdown: string }) {
-    const normalizedMarkdown = normalizeLatexDelimiters(markdown)
+    const normalizedMarkdown = replaceTextColorSyntaxWithHtml(normalizeLatexDelimiters(markdown))
     return (
         <div className="markdown-body">
             <ReactMarkdown

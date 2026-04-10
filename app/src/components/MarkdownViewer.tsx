@@ -7,6 +7,7 @@ import 'github-markdown-css/github-markdown.css'
 import './MarkdownViewer.css'
 import { getRenderer } from '../modules/markdown/plugins'
 import { extractFrontMatter } from '../modules/markdown/frontMatter'
+import { replaceTextColorSyntaxWithHtml } from '../modules/markdown/extensions/colorMark'
 import { normalizeLatexDelimiters } from '../modules/markdown/normalizeLatexDelimiters'
 import { remarkToc } from '../modules/markdown/remarkToc'
 import { DownloadOnClickUseCase, TauriWebviewOpener } from '../modules/download/handleMarkdownLinkClick'
@@ -410,7 +411,7 @@ function MarkdownViewerComponent(
   const plainTextMode = isPlainTextFile(filePath)
   const renderedMarkdownBody = useMemo(() => extractFrontMatter(value).body, [value])
   const renderedValue = useMemo(
-    () => normalizeLatexDelimiters(renderedMarkdownBody),
+    () => replaceTextColorSyntaxWithHtml(normalizeLatexDelimiters(renderedMarkdownBody)),
     [renderedMarkdownBody],
   )
 

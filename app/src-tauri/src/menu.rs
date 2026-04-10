@@ -78,6 +78,17 @@ struct MenuTexts {
     format: &'static str,
     emphasis: &'static str,
     strikethrough: &'static str,
+    text_color: &'static str,
+    text_color_red: &'static str,
+    text_color_orange: &'static str,
+    text_color_yellow: &'static str,
+    text_color_green: &'static str,
+    text_color_cyan: &'static str,
+    text_color_blue: &'static str,
+    text_color_purple: &'static str,
+    text_color_cycle: &'static str,
+    text_color_custom: &'static str,
+    text_color_clear: &'static str,
     table: &'static str,
     code_block: &'static str,
     math_symbols: &'static str,
@@ -170,6 +181,17 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             format: "格式",
             emphasis: "强调",
             strikethrough: "删除线",
+            text_color: "文字颜色",
+            text_color_red: "红色",
+            text_color_orange: "橙色",
+            text_color_yellow: "黄色",
+            text_color_green: "绿色",
+            text_color_cyan: "青色",
+            text_color_blue: "蓝色",
+            text_color_purple: "紫色",
+            text_color_cycle: "循环颜色",
+            text_color_custom: "自定义…",
+            text_color_clear: "清除颜色",
             table: "表格",
             code_block: "代码块",
             math_symbols: "数学符号",
@@ -259,6 +281,17 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             format: "Format",
             emphasis: "Emphasis",
             strikethrough: "Strikethrough",
+            text_color: "Text Color",
+            text_color_red: "Red",
+            text_color_orange: "Orange",
+            text_color_yellow: "Yellow",
+            text_color_green: "Green",
+            text_color_cyan: "Cyan",
+            text_color_blue: "Blue",
+            text_color_purple: "Purple",
+            text_color_cycle: "Cycle Colors",
+            text_color_custom: "Custom...",
+            text_color_clear: "Clear Color",
             table: "Table",
             code_block: "Code Block",
             math_symbols: "Math Symbols",
@@ -672,6 +705,62 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         )
         .build()?;
 
+    let text_color_menu = SubmenuBuilder::new(app, texts.text_color)
+        .item(
+            &MenuItemBuilder::new(texts.text_color_cycle)
+                .id("format_text_color_cycle")
+                .accelerator("CmdOrCtrl+Shift+C")
+                .build(app)?,
+        )
+        .separator()
+        .item(
+            &MenuItemBuilder::new(texts.text_color_red)
+                .id("format_text_color_red")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.text_color_orange)
+                .id("format_text_color_orange")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.text_color_yellow)
+                .id("format_text_color_yellow")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.text_color_green)
+                .id("format_text_color_green")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.text_color_cyan)
+                .id("format_text_color_cyan")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.text_color_blue)
+                .id("format_text_color_blue")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.text_color_purple)
+                .id("format_text_color_purple")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.text_color_custom)
+                .id("format_text_color_custom")
+                .build(app)?,
+        )
+        .separator()
+        .item(
+            &MenuItemBuilder::new(texts.text_color_clear)
+                .id("format_text_color_clear")
+                .build(app)?,
+        )
+        .build()?;
+
     let format_menu = SubmenuBuilder::new(app, texts.format)
         .item(&heading_menu)
         .item(
@@ -685,6 +774,7 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
                 .id("format_strikethrough")
                 .build(app)?,
         )
+        .item(&text_color_menu)
         .item(
             &MenuItemBuilder::new(texts.table)
                 .id("format_insert_table")

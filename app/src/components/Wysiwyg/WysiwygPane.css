@@ -104,6 +104,18 @@
   background: transparent;
 }
 
+.wysiwyg-inline-tools {
+  display: flex;
+  justify-content: flex-end;
+  margin: -4px 0 0;
+}
+
+.wysiwyg-inline-tools .modal-btn {
+  min-width: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
 .wysiwyg-frontmatter-panel {
   display: flex;
   flex-direction: column;

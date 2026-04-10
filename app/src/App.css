@@ -2005,6 +2005,72 @@ button:disabled {
   color: var(--theme-accent-soft-danger-fg);
 }
 
+.text-color-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.text-color-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.text-color-row-split {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(120px, 160px) minmax(180px, 1fr);
+}
+
+.text-color-label {
+  font-size: 13px;
+  color: var(--theme-text-default);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.text-color-swatch-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.text-color-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--theme-border-input-strong) 80%, transparent);
+  background: var(--text-color-swatch);
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+.text-color-swatch.active {
+  outline: 2px solid var(--theme-component-focus-ring);
+  outline-offset: 1px;
+}
+
+.text-color-picker {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--theme-border-input-strong);
+  background: var(--theme-surface-input);
+  cursor: pointer;
+}
+
+.text-color-hex-label {
+  min-width: 0;
+}
+
+.text-color-hex-input {
+  width: 100%;
+}
+
 /* 全局 Ghost 按钮样式：所有模态框统一视觉风格 */
 .modal .modal-actions .ghost {
   border-radius: 999px;

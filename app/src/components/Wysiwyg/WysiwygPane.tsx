@@ -19,13 +19,18 @@ import type { Node as ProseMirrorNode, NodeType as ProseMirrorNodeType } from '@
 import type { EditorView } from '@milkdown/prose/view'
 import { nord } from '@milkdown/theme-nord'
 import { ProsemirrorAdapterProvider, useNodeViewFactory } from '@prosemirror-adapter/react'
+import { Button } from '../Button'
+import { useI18n } from '../../modules/i18n/I18nContext'
 import { useThemeContext } from '../../modules/theme/ThemeContext'
+import { createTextColorTarget, isTextColorTargetActive, type TextColorTarget } from '../../modules/editor/textColorTarget'
 import type { LayoutType } from '../../hooks/useWorkspaceLayout'
 import {
   buildBackgroundImageVars,
   resolveManagedBackgroundImageUrl,
 } from '../../modules/theme/backgroundImageRuntime'
+import { normalizeTextColor } from '../../modules/markdown/extensions/colorMark'
 import { mathPlugin, mathBlockSchema, mathInlineNode } from './plugins/mathPlugin'
+import { colorMarkPlugin, textColorMark } from './plugins/colorMark'
 import { MathBlockView } from './views/MathBlockView'
 import { InlineMathView } from './views/InlineMathView'
 import { CodeBlockView } from './views/CodeBlockView'
@@ -41,12 +46,14 @@ export interface WysiwygPaneProps {
   frontMatterBlock?: string
   onChange: (markdown: string) => void
   filePath?: string | null
+  docKey?: string | null
   effectiveLayout: LayoutType
   editorZoom?: number
   onSelectionGetterReady?: (getter: (() => string | null) | null) => void
   onFormatActionsReady?: (actions: WysiwygFormatActions | null) => void
   onMarkdownGetterReady?: (getter: (() => string) | null) => void
   onOutlineNavigatorReady?: (navigator: ((target: { headingIndex: number; text: string; level: 1 | 2 | 3 | 4 | 5 | 6 }) => boolean) | null) => void
+  onRequestTextColorDialog?: (() => void) | null
   /** Called with a flush function when the editor mounts, null on unmount.
    *  Calling flush() synchronously serializes the current ProseMirror doc
    *  and pushes it through onChange — useful before save / tab-close. */
@@ -60,6 +67,11 @@ export interface WysiwygFormatActions {
   setHeading: (level: 0 | 1 | 2 | 3 | 4 | 5 | 6) => void
   toggleBold: () => void
   toggleStrikethrough: () => void
+  getCurrentTextColor: () => string | null
+  getCurrentTextColorTarget: () => TextColorTarget | null
+  applyTextColorToTarget: (color: string | null, target: TextColorTarget) => boolean
+  applyTextColor: (color: string) => void
+  clearTextColor: () => void
   insertCodeBlock: () => void
   insertTable: (rows: number, cols: number) => void
 }
@@ -211,9 +223,11 @@ function PlainTextWysiwyg({
   onFormatActionsReady,
   onMarkdownGetterReady,
   onOutlineNavigatorReady,
+  onRequestTextColorDialog,
 }: WysiwygPaneProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const [isFrontMatterCollapsed, setIsFrontMatterCollapsed] = useState(false)
+  const { t } = useI18n()
   const { themeSettings, resolvedMode } = useThemeContext()
   const isDark = resolvedMode === 'dark'
   const wysiwygBackground = themeSettings.workspaceBackground
@@ -312,6 +326,13 @@ function PlainTextWysiwyg({
             ) : null}
           </section>
         ) : null}
+        {onRequestTextColorDialog ? (
+          <div className="wysiwyg-inline-tools">
+            <Button variant="secondary" type="button" onClick={onRequestTextColorDialog}>
+              {t('workspace.textColorDialogTitle')}
+            </Button>
+          </div>
+        ) : null}
         <div className="wysiwyg-editor">
           <textarea
             ref={textareaRef}
@@ -334,16 +355,20 @@ function WysiwygEditor({
   frontMatterBlock,
   onChange,
   filePath,
+  docKey,
   effectiveLayout,
   editorZoom,
   onSelectionGetterReady,
   onFormatActionsReady,
   onMarkdownGetterReady,
   onOutlineNavigatorReady,
+  onRequestTextColorDialog,
   onFlushReady,
   onDirty,
 }: WysiwygPaneProps) {
   const [isFrontMatterCollapsed, setIsFrontMatterCollapsed] = useState(false)
+  const [hasInlineSelection, setHasInlineSelection] = useState(false)
+  const { t } = useI18n()
   if (isPlainTextFile(filePath)) {
     return (
       <PlainTextWysiwyg
@@ -351,11 +376,13 @@ function WysiwygEditor({
         frontMatterBlock={frontMatterBlock}
         onChange={onChange}
         filePath={filePath}
+        docKey={docKey}
         effectiveLayout={effectiveLayout}
         editorZoom={editorZoom}
         onSelectionGetterReady={onSelectionGetterReady}
         onMarkdownGetterReady={onMarkdownGetterReady}
         onOutlineNavigatorReady={onOutlineNavigatorReady}
+        onRequestTextColorDialog={onRequestTextColorDialog}
       />
     )
   }
@@ -410,6 +437,8 @@ function WysiwygEditor({
   onOutlineNavigatorReadyRef.current = onOutlineNavigatorReady
 
   const isInternalUpdate = useRef(false)
+  const textColorTargetRef = useRef<TextColorTarget | null>(null)
+  const preserveTextColorTargetOnNextDocChangeRef = useRef(false)
   // Track the last value we synced TO the editor (to avoid needless getMarkdown)
   const lastSyncedValueRef = useRef(value)
   const hasUserInteractedRef = useRef(false)
@@ -432,6 +461,16 @@ function WysiwygEditor({
   const getCurrentMarkdown = useCallback(() => {
     return composeMarkdownWithFrontMatter(frontMatterBlockRef.current, getCurrentMarkdownBody())
   }, [getCurrentMarkdownBody])
+
+  const getEffectiveTextColorTarget = useCallback((from: number, to: number): TextColorTarget | null => {
+    if (!docKey) return null
+    if (from !== to) return createTextColorTarget(docKey, 'wysiwyg', from, to)
+    if (isTextColorTargetActive(textColorTargetRef.current, docKey, 'wysiwyg')) {
+      return textColorTargetRef.current
+    }
+    textColorTargetRef.current = null
+    return null
+  }, [docKey])
 
   /**
    * Incrementally serialize only the changed blocks, then push through onChange.
@@ -673,6 +712,12 @@ function WysiwygEditor({
         ctx.get(listenerCtx).updated((_ctx, doc, prevDoc) => {
           if (!hasUserInteractedRef.current) return
 
+          if (preserveTextColorTargetOnNextDocChangeRef.current) {
+            preserveTextColorTargetOnNextDocChangeRef.current = false
+          } else {
+            textColorTargetRef.current = null
+          }
+
           onDirtyRef.current?.()
           if (idleCallbackRef.current !== null) {
             cancelIdleWork(idleCallbackRef.current)
@@ -692,6 +737,7 @@ function WysiwygEditor({
       .use(clipboard)
       .use(indent)
       .use(trailing)
+      .use(colorMarkPlugin)
       // Math support
       .use(mathPlugin)
       .use(mathBlockView)
@@ -768,6 +814,123 @@ function WysiwygEditor({
           editor.action((ctx) => {
             const view = ctx.get(editorViewCtx)
             toggleMark(strikethroughSchema.type(ctx))(view.state, view.dispatch, view)
+            view.focus()
+          })
+        })
+      },
+      getCurrentTextColor: () => {
+        const editor = editorRef.current
+        if (!editor) return null
+
+        let currentColor: string | null = null
+        editor.action((ctx) => {
+          const view = ctx.get(editorViewCtx)
+          const selection = view.state.selection as typeof view.state.selection & { main?: { from: number; to: number } }
+          const from = selection.main?.from ?? selection.from
+          const to = selection.main?.to ?? selection.to
+          const target = getEffectiveTextColorTarget(from, to)
+          if (!target) return
+
+          const markType = textColorMark.type(ctx)
+          let foundText = false
+          let mixed = false
+
+          view.state.doc.nodesBetween(target.from, target.to, (node) => {
+            if (!node.isText) return
+            foundText = true
+            const mark = node.marks.find((item) => item.type === markType)
+            const color = normalizeTextColor(String(mark?.attrs?.color ?? ''))
+            if (currentColor === null) {
+              currentColor = color
+              return
+            }
+            if (currentColor !== color) {
+              mixed = true
+            }
+          })
+
+          if (!foundText || mixed) currentColor = null
+        })
+        return currentColor
+      },
+      getCurrentTextColorTarget: () => {
+        const editor = editorRef.current
+        if (!editor) return null
+
+        let target: TextColorTarget | null = null
+        editor.action((ctx) => {
+          const view = ctx.get(editorViewCtx)
+          const selection = view.state.selection as typeof view.state.selection & { main?: { from: number; to: number } }
+          const from = selection.main?.from ?? selection.from
+          const to = selection.main?.to ?? selection.to
+          target = getEffectiveTextColorTarget(from, to)
+          if (target) {
+            textColorTargetRef.current = target
+          }
+        })
+        return target
+      },
+      applyTextColorToTarget: (color, target) => {
+        const editor = editorRef.current
+        if (!editor || !isTextColorTargetActive(target, docKey, 'wysiwyg')) return false
+
+        let applied = false
+        editor.action((ctx) => {
+          const view = ctx.get(editorViewCtx)
+          const markType = textColorMark.type(ctx)
+          let tr = view.state.tr.removeMark(target.from, target.to, markType)
+          const normalizedColor = normalizeTextColor(color)
+          if (normalizedColor) {
+            tr = tr.addMark(target.from, target.to, markType.create({ color: normalizedColor }))
+          }
+          preserveTextColorTargetOnNextDocChangeRef.current = true
+          textColorTargetRef.current = createTextColorTarget(target.docKey, 'wysiwyg', target.from, target.to)
+          view.dispatch(tr.scrollIntoView())
+          view.focus()
+          applied = true
+        })
+        return applied
+      },
+      applyTextColor: (color) => {
+        const normalizedColor = normalizeTextColor(color)
+        if (!normalizedColor) return
+        runAction((editor) => {
+          editor.action((ctx) => {
+            const view = ctx.get(editorViewCtx)
+            const selection = view.state.selection as typeof view.state.selection & { main?: { from: number; to: number } }
+            const from = selection.main?.from ?? selection.from
+            const to = selection.main?.to ?? selection.to
+            if (from === to) return
+
+            const markType = textColorMark.type(ctx)
+            const mark = markType.create({ color: normalizedColor })
+            const target = getEffectiveTextColorTarget(from, to)
+            if (target) {
+              preserveTextColorTargetOnNextDocChangeRef.current = true
+              textColorTargetRef.current = target
+            }
+            const tr = view.state.tr.removeMark(from, to, markType).addMark(from, to, mark).scrollIntoView()
+            view.dispatch(tr)
+            view.focus()
+          })
+        })
+      },
+      clearTextColor: () => {
+        runAction((editor) => {
+          editor.action((ctx) => {
+            const view = ctx.get(editorViewCtx)
+            const selection = view.state.selection as typeof view.state.selection & { main?: { from: number; to: number } }
+            const from = selection.main?.from ?? selection.from
+            const to = selection.main?.to ?? selection.to
+            if (from === to) return
+
+            const markType = textColorMark.type(ctx)
+            const target = getEffectiveTextColorTarget(from, to)
+            if (target) {
+              preserveTextColorTargetOnNextDocChangeRef.current = true
+              textColorTargetRef.current = target
+            }
+            view.dispatch(view.state.tr.removeMark(from, to, markType).scrollIntoView())
             view.focus()
           })
         })
@@ -857,6 +1020,50 @@ function WysiwygEditor({
 
     onSelectionGetterReadyRef.current?.(getter)
     return () => onSelectionGetterReadyRef.current?.(null)
+  }, [])
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const updateSelectionState = () => {
+      const selection = window.getSelection()
+      if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+        setHasInlineSelection(false)
+        return
+      }
+
+      const anchorNode = selection.anchorNode
+      const focusNode = selection.focusNode
+      if (!anchorNode || !focusNode) {
+        setHasInlineSelection(false)
+        return
+      }
+
+      const isInsideEditor =
+        container.contains(anchorNode) &&
+        container.contains(focusNode) &&
+        selection.toString().trim().length > 0
+
+      setHasInlineSelection(isInsideEditor)
+    }
+
+    const handleSelectionChange = () => {
+      updateSelectionState()
+    }
+
+    container.addEventListener('mouseup', handleSelectionChange)
+    container.addEventListener('keyup', handleSelectionChange)
+    container.addEventListener('focusout', handleSelectionChange)
+    document.addEventListener('selectionchange', handleSelectionChange)
+    updateSelectionState()
+
+    return () => {
+      container.removeEventListener('mouseup', handleSelectionChange)
+      container.removeEventListener('keyup', handleSelectionChange)
+      container.removeEventListener('focusout', handleSelectionChange)
+      document.removeEventListener('selectionchange', handleSelectionChange)
+    }
   }, [])
 
   useEffect(() => {
@@ -965,6 +1172,13 @@ function WysiwygEditor({
               />
             ) : null}
           </section>
+        ) : null}
+        {onRequestTextColorDialog && hasInlineSelection ? (
+          <div className="wysiwyg-inline-tools">
+            <Button variant="secondary" type="button" onClick={onRequestTextColorDialog}>
+              {t('workspace.textColorDialogTitle')}
+            </Button>
+          </div>
         ) : null}
         <div ref={containerRef} className="wysiwyg-editor" />
       </div>
