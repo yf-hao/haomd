@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { homeDir } from '@tauri-apps/api/path'
 import type { BackendResult } from '../platform/backendTypes'
 import type { LanguageMode } from '../i18n/schema'
 import type { ThemeMode } from '../theme/schema'
@@ -94,6 +95,11 @@ export type BackupSettings = {
   webdav?: Partial<WebDavBackupSettings>
 }
 
+export type NotesConfig = {
+  /** 随笔文件保存目录的绝对路径，null 表示尚未配置 */
+  notesDirectory: string | null
+}
+
 export type EditorSettings = {
   aiCompression?: Partial<AiCompressionSettings>
   hugeDoc?: HugeDocSettings
@@ -103,6 +109,7 @@ export type EditorSettings = {
   uiTypography?: Partial<UiTypographySettings>
   wordExport?: Partial<WordExportStyleSettings>
   backup?: Partial<BackupSettings>
+  notes?: Partial<NotesConfig>
 }
 
 const defaultCompression: AiCompressionSettings = {
@@ -430,4 +437,55 @@ export function getDefaultUiTypographySettings(): UiTypographySettings {
 /** 仅供测试使用：清除单例缓存 */
 export function resetSettingsCache() {
   cachedSettings = null
+}
+
+const DEFAULT_NOTES_CONFIG: NotesConfig = {
+  notesDirectory: null,
+}
+
+/** 将绝对路径中的 home 目录前缀替换为 ~，便于跨设备迁移 */
+async function normalizeNotesPath(p: string): Promise<string> {
+  try {
+    const home = await homeDir()
+    const homeNorm = home.endsWith('/') ? home.slice(0, -1) : home
+    if (p.startsWith(homeNorm + '/') || p === homeNorm) {
+      return '~' + p.slice(homeNorm.length)
+    }
+  } catch { /* ignore */ }
+  return p
+}
+
+/** 将 ~ 展开为实际 home 目录 */
+async function expandNotesPath(p: string): Promise<string> {
+  if (p.startsWith('~/') || p === '~') {
+    try {
+      const home = await homeDir()
+      const homeNorm = home.endsWith('/') ? home.slice(0, -1) : home
+      return homeNorm + p.slice(1)
+    } catch { /* ignore */ }
+  }
+  return p
+}
+
+/**
+ * 读取随笔配置，存储于 com.yfhao.haomd/notes_config.json
+ * 存储值使用 ~ 前缀，读取时展开为完整路径
+ */
+export async function getNotesConfig(): Promise<NotesConfig> {
+  try {
+    const resp = await invoke<BackendResult<{ notesDirectory: string | null }>>(
+      'load_notes_config',
+    )
+    if ('Ok' in resp) {
+      const raw = resp.Ok.data.notesDirectory ?? null
+      const expanded = raw ? await expandNotesPath(raw) : null
+      return { notesDirectory: expanded }
+    }
+  } catch { /* ignore — return default */ }
+  return { ...DEFAULT_NOTES_CONFIG }
+}
+
+export async function saveNotesConfig(cfg: NotesConfig): Promise<void> {
+  const normalizedDir = cfg.notesDirectory ? await normalizeNotesPath(cfg.notesDirectory) : null
+  await invoke('save_notes_config', { cfg: { notesDirectory: normalizedDir } })
 }

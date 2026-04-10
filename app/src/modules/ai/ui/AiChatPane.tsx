@@ -21,6 +21,8 @@ import { loadAgentSettingsState } from '../config/agentSettingsRepo'
 import type { AgentProvider } from '../domain/types'
 import { generateSessionTitle } from '../application/sessionTitleService'
 import { loadSession, saveSession } from '../config/aiSessionsRepo'
+import { getNotesConfig } from '../../settings/editorSettings'
+import { createNote } from '../../notes/notesFileService'
 
 const EMPTY_MESSAGES = [] as const
 const AI_CHAT_AGENT_STORAGE_KEY = 'haomd_ai_chat_selected_agent_id'
@@ -505,6 +507,16 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
     await createTabAndInsertContent(content)
   }
 
+  const handleSaveToNotes = async (content: string) => {
+    const cfg = await getNotesConfig()
+    if (!cfg.notesDirectory) {
+      // TODO: show toast when toast service is accessible
+      console.warn('[Notes] 未配置随笔目录，请先在随笔侧边栏配置保存目录')
+      return
+    }
+    await createNote(cfg.notesDirectory, content)
+  }
+
   const handleChangeRole = async (roleId: string) => {
     if (!roleId) return
     await changeRole(roleId)
@@ -836,6 +848,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
           onInsert={handleInsert}
           onReplace={handleReplace}
           onSave={handleSave}
+          onSaveToNotes={handleSaveToNotes}
           onStop={handleStop}
           resetError={resetError}
           roles={roles}

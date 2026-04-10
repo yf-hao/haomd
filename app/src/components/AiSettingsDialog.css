@@ -1780,6 +1780,35 @@ button.ghost.ghost-subtle:hover {
   transform: rotate(-45deg) scale(0.95);
 }
 
+/* 随笔图标：便签形状 */
+.ai-chat-icon-note {
+  width: 16px;
+  height: 16px;
+  position: relative;
+}
+
+.ai-chat-icon-note::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 1px;
+  width: 10px;
+  height: 12px;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+}
+
+.ai-chat-icon-note::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 4px;
+  width: 5px;
+  height: 1.5px;
+  background: currentColor;
+  box-shadow: 0 3px 0 currentColor, 0 6px 0 currentColor;
+}
+
 /* Doc Conversation History dialog layout */
 .modal.modal-ai-chat.modal-ai-history {
   /* 固定大小，避免随内容无限增长 */

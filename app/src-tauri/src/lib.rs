@@ -6,6 +6,7 @@ mod ai_config;
 mod ai_sessions;
 mod backup_io;
 mod backup_settings;
+mod notes_config;
 mod clipboard_io;
 mod dialog_io;
 mod doc_conversations;
@@ -31,6 +32,7 @@ use ai_config::*;
 use ai_sessions::*;
 use backup_io::*;
 use backup_settings::*;
+use notes_config::*;
 use clipboard_io::*;
 use dialog_io::*;
 use doc_conversations::*;
@@ -102,6 +104,8 @@ macro_rules! app_invoke_handler {
             save_agent_settings,
             load_backup_settings,
             save_backup_settings,
+            load_notes_config,
+            save_notes_config,
             editor_settings::load_editor_settings,
             editor_settings::save_editor_settings,
             font_catalog::list_system_fonts,

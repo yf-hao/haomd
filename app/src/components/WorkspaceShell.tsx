@@ -14,6 +14,7 @@ import { FileContextMenu } from './FileContextMenu'
 import { Sidebar, type SidebarContextActionPayload } from './Sidebar'
 import { OutlinePanel } from './OutlinePanel'
 import { SessionsPanel } from './SessionsPanel'
+import { NotesPanel } from './NotesPanel'
 import { SidebarBackgroundShell } from './SidebarBackgroundShell'
 import { Welcome } from './Welcome'
 import { SearchBar } from './Editor/SearchBar'
@@ -96,7 +97,7 @@ const WysiwygPaneLazy = lazy(() =>
 export type EditMode = 'source' | 'wysiwyg'
 const STORAGE_EDIT_MODE = 'haomd:editMode'
 
-export type LeftPanelId = 'files' | 'outline' | 'pdf' | 'sessions' | null
+export type LeftPanelId = 'files' | 'outline' | 'pdf' | 'sessions' | 'notes' | null
 export type InitialWorkspaceAction = 'new' | 'open' | 'open_folder' | 'open_recent' | null
 
 export interface WorkspaceShellProps {
@@ -2487,7 +2488,13 @@ export function WorkspaceShell({
             }}
           />
         )}
-        {(activeLeftPanel === 'files' || activeLeftPanel === 'outline' || activeLeftPanel === 'pdf' || activeLeftPanel === 'sessions') && (
+        {activeLeftPanel === 'notes' && (
+          <NotesPanel
+            panelWidth={sidebarWidth}
+            onOpenFile={openFileFromSidebar}
+          />
+        )}
+        {(activeLeftPanel === 'files' || activeLeftPanel === 'outline' || activeLeftPanel === 'pdf' || activeLeftPanel === 'sessions' || activeLeftPanel === 'notes') && (
           <div className={`sidebar-resizer ${isSidebarResizing ? 'active' : ''}`} onMouseDown={handleSidebarResizeStart} />
         )}
 

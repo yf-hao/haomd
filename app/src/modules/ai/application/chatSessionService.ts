@@ -36,6 +36,11 @@ import { docConversationService } from './docConversationService'
 import { inferAttachmentKind } from './attachmentKind'
 import { resolveDifyConversationId } from './difyConversationResolvers'
 import { getEnabledTools, toOpenAITools, executeTool, buildToolCatalog, filterToolsByRelevance, type AggregatedTool } from './mcpToolService'
+import {
+  WRITE_TO_NOTES_TOOL_NAME,
+  writeToNotesToolSchema,
+  executeWriteToNotes,
+} from '../../notes/notesBuiltinTool'
 
 export type StartChatOptions = {
   entryMode: ChatEntryMode
@@ -384,11 +389,13 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
     schemaTools: AggregatedTool[],
     attachments?: ChatAttachment[],
     allTools?: AggregatedTool[],
+    builtinToolSchemas: OpenAIToolDef[] = [],
   ): Promise<void> {
     // schemaTools: only tools whose full schemas are sent to the model
     // allTools: full list for execution routing (includes tools not in schemas)
     const routingTools = allTools ?? schemaTools
-    const openaiTools = toOpenAITools(schemaTools)
+    // Merge MCP tool schemas + built-in tool schemas
+    const openaiTools = [...toOpenAITools(schemaTools), ...builtinToolSchemas]
     const conversationMessages = engineHistoryToChatMessages(state.engineHistory)
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
@@ -433,7 +440,13 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
             parsedArgs = JSON.parse(tc.function.arguments)
           } catch { /* empty args */ }
 
-          const toolResult = await executeTool(tc.function.name, parsedArgs, routingTools)
+          // Built-in tools are handled locally; MCP tools are routed to servers
+          let toolResult: unknown
+          if (tc.function.name === WRITE_TO_NOTES_TOOL_NAME) {
+            toolResult = await executeWriteToNotes(parsedArgs as { content?: string })
+          } else {
+            toolResult = await executeTool(tc.function.name, parsedArgs, routingTools)
+          }
           const resultStr = typeof toolResult === 'string'
             ? toolResult
             : JSON.stringify(toolResult, null, 2)
@@ -692,6 +705,11 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
         )
       }
 
+      // Built-in tools (write_to_notes etc.) are available for all OpenAI-compatible providers.
+      // They are always injected regardless of MCP role.
+      const isOpenAIProvider = providerType === 'openai'
+      const builtinTools: OpenAIToolDef[] = isOpenAIProvider ? [writeToNotesToolSchema] : []
+
       if (isMcpRoleActive) {
         if (providerType !== 'openai') {
           state = appendAssistantChunk(
@@ -720,6 +738,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
             relevantTools,   // schemas injected into OpenAI tools array
             chatAttachments,
             allMcpTools,     // full list for execution routing
+            builtinTools,    // built-in tools always included
           )
           return
         } else {
@@ -731,6 +750,19 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
           notifyStateChange()
           return
         }
+      }
+
+      // Non-MCP path: still run tool loop if built-in tools are available (OpenAI only)
+      if (builtinTools.length > 0) {
+        await runStreamWithToolLoop(
+          assistantId,
+          clientOverride,
+          [],             // no MCP schema tools
+          chatAttachments,
+          [],             // no MCP routing tools
+          builtinTools,   // only built-in tools
+        )
+        return
       }
 
       await runStream(assistantId, {

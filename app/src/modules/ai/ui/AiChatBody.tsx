@@ -42,6 +42,7 @@ export interface AiChatBodyProps {
   onInsert: (content: string) => void | Promise<void>
   onReplace: (content: string) => void | Promise<void>
   onSave: (content: string) => void | Promise<void>
+  onSaveToNotes?: (content: string) => void | Promise<void>
   onStop: () => void
   resetError: () => void
   roles?: { id: string; name: string }[]
@@ -92,6 +93,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
   onInsert,
   onReplace,
   onSave,
+  onSaveToNotes,
   onStop,
   resetError,
   roles,
@@ -413,6 +415,17 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
                       >
                         <span className="ai-chat-icon ai-chat-icon-save" aria-hidden="true" />
                       </button>
+                      {onSaveToNotes && (
+                        <button
+                          type="button"
+                          className="icon-button ai-chat-icon-button"
+                          title={t('notes.saveToNotes')}
+                          aria-label={t('notes.saveToNotes')}
+                          onClick={() => void onSaveToNotes(msg.content)}
+                        >
+                          <span className="ai-chat-icon ai-chat-icon-note" aria-hidden="true" />
+                        </button>
+                      )}
                       <button
                         type="button"
                         className={`icon-button ai-chat-icon-button ${viewMode === 'source' ? 'ai-chat-icon-button-active' : ''}`}
