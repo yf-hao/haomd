@@ -12,7 +12,7 @@ import { I18nProvider, useI18n } from './modules/i18n/I18nContext'
 import { getSystemResolvedLanguage, normalizeLanguageTag, resolveLanguageMode } from './modules/i18n/languageResolver'
 import type { LanguageMode, ResolvedLanguage } from './modules/i18n/schema'
 import { onMenuAction } from './modules/platform/menuEvents'
-import { onWebDavImportFinished } from './modules/platform/backupEvents'
+import { onWebDavImportFinished, onWebDavImportStarted } from './modules/platform/backupEvents'
 import { isTauriEnv } from './modules/platform/runtime'
 import {
   getDefaultLanguageSetting,
@@ -323,11 +323,17 @@ function AppShellContent({
 }: AppShellContentProps) {
   const { t } = useI18n()
   const [toastMessage, setToastMessage] = useState('')
+  const [backgroundStatusMessage, setBackgroundStatusMessage] = useState('')
 
   useEffect(() => {
     if (!isTauriEnv()) return
 
+    const unlistenStarted = onWebDavImportStarted(() => {
+      setBackgroundStatusMessage(t('backup.webdavImportRunningStatus'))
+    })
+
     const unlisten = onWebDavImportFinished((payload) => {
+      setBackgroundStatusMessage('')
       if (payload.success) {
         setToastMessage(t('backup.webdavImportSuccess'))
       } else {
@@ -336,9 +342,12 @@ function AppShellContent({
     })
 
     return () => {
+      unlistenStarted()
       unlisten()
     }
   }, [t])
+
+  const displayedStatusMessage = backgroundStatusMessage || statusMessage
 
   return (
     <div className="app-shell">
@@ -402,11 +411,11 @@ function AppShellContent({
           <div className="status-bar-left">{t('app.statusBarTitle')}</div>
           <div className="status-bar-right">
             {docCharCount != null && (
-              <span style={{ marginRight: statusMessage ? 12 : 0 }}>
+              <span style={{ marginRight: displayedStatusMessage ? 12 : 0 }}>
                 {t('app.characters', { count: docCharCount.toLocaleString() })}
               </span>
             )}
-            <span>{statusMessage || '\u00A0'}</span>
+            <span>{displayedStatusMessage || '\u00A0'}</span>
           </div>
         </div>
       )}

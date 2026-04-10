@@ -66,6 +66,7 @@ export const enUSMessages: MessageDictionary = {
     webdavExportSuccess: 'Uploaded current configuration to WebDAV.',
     webdavExportFailed: 'WebDAV upload failed: {message}',
     webdavImportStarted: 'Started restoring from WebDAV in the background. You can close Settings and continue working. A result notification will appear when it finishes.',
+    webdavImportRunningStatus: 'Restoring from WebDAV...',
     webdavImportSuccess: 'Restored from the WebDAV remote directory. Reopen related settings dialogs, and restart the app if needed.',
     webdavImportFailed: 'WebDAV restore failed: {message}',
     exportDialogTitle: 'Export settings backup',

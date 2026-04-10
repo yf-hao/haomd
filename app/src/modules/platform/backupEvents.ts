@@ -7,6 +7,48 @@ export type WebDavImportFinishedPayload = {
   message?: string | null
 }
 
+export function onWebDavImportStarted(handler: () => void): Unlisten {
+  let unlisten: Unlisten | undefined
+  let disposed = false
+  let unlistenCalled = false
+
+  const setup = async () => {
+    try {
+      const un = await listen('backup://webdav_import_started', () => {
+        handler()
+      })
+      if (disposed) {
+        if (!unlistenCalled) {
+          unlistenCalled = true
+          try {
+            un()
+          } catch (err) {
+            console.warn('[backupEvents] unlisten backup://webdav_import_started failed', err)
+          }
+        }
+      } else {
+        unlisten = un
+      }
+    } catch (err) {
+      console.error('[backupEvents] listen backup://webdav_import_started failed', err)
+    }
+  }
+
+  void setup()
+
+  return () => {
+    disposed = true
+    if (unlisten && !unlistenCalled) {
+      unlistenCalled = true
+      try {
+        unlisten()
+      } catch (err) {
+        console.warn('[backupEvents] manual unlisten backup://webdav_import_started failed', err)
+      }
+    }
+  }
+}
+
 export function onWebDavImportFinished(
   handler: (payload: WebDavImportFinishedPayload) => void,
 ): Unlisten {

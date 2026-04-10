@@ -66,6 +66,7 @@ export const zhCNMessages: MessageDictionary = {
     webdavExportSuccess: '已上传当前配置到 WebDAV。',
     webdavExportFailed: 'WebDAV 上传失败：{message}',
     webdavImportStarted: '已开始后台从 WebDAV 恢复，可先关闭设置面板继续操作。完成后会自动提示结果。',
+    webdavImportRunningStatus: 'WebDAV 恢复中...',
     webdavImportSuccess: '已从 WebDAV 远程目录恢复。建议重新打开相关设置窗口，必要时重启应用。',
     webdavImportFailed: 'WebDAV 恢复失败：{message}',
     exportDialogTitle: '导出配置备份',

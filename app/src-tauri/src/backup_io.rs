@@ -21,6 +21,7 @@ const EXCLUDED_BACKUP_FILE_NAMES: &[&str] = &[
     "file_virtual_folders.json",
     "file_virtual_assignments.json",
 ];
+const BACKUP_WEBDAV_IMPORT_STARTED_EVENT: &str = "backup://webdav_import_started";
 const BACKUP_WEBDAV_IMPORT_FINISHED_EVENT: &str = "backup://webdav_import_finished";
 static WEBDAV_IMPORT_RUNNING: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
 
@@ -650,6 +651,8 @@ pub async fn start_import_settings_backup_from_webdav(
             trace,
         );
     }
+
+    let _ = app.emit(BACKUP_WEBDAV_IMPORT_STARTED_EVENT, ());
 
     tauri::async_runtime::spawn(async move {
         let payload = match import_settings_backup_from_webdav(
