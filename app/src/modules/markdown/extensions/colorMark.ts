@@ -109,9 +109,7 @@ export function replaceTextColorSyntaxWithHtml(markdown: string): string {
 }
 
 export function remarkTextColorSyntax(this: { data: () => Record<string, unknown> }) {
-  // eslint-disable-next-line unicorn/no-this-assignment
-  const self = this
-  const data = self.data()
+  const data = this.data()
   const toMarkdownExtensions = (data.toMarkdownExtensions ??= []) as Array<Record<string, unknown>>
   toMarkdownExtensions.push({
     handlers: {
