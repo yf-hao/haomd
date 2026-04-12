@@ -73,6 +73,7 @@ export type ChatSession = {
   getSystemPromptInfo(): SystemPromptInfo
   getProviderType(): ProviderType
   getActiveModelId(): string
+  getProviderContext(): ChatSessionProviderContext | null
   setActiveRole(roleId: string): Promise<void>
   setActiveModel(modelId: string): Promise<void>
   sendUserMessage(
@@ -92,6 +93,14 @@ export type ChatSession = {
   stopRunningStream(): void
   stopAndTruncate(messageId: string, length: number): void
   dispose(): void
+}
+
+export type ChatSessionProviderContext = {
+  providerId: string
+  providerType: ProviderType
+  baseUrl: string
+  apiKey: string
+  modelId: string
 }
 
 export type LocalAttachment = {
@@ -568,6 +577,16 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
     },
     getActiveModelId() {
       return currentModelId || ''
+    },
+    getProviderContext() {
+      if (!provider || !currentModelId) return null
+      return {
+        providerId: provider.id,
+        providerType,
+        baseUrl: provider.baseUrl,
+        apiKey: provider.apiKey,
+        modelId: currentModelId,
+      }
     },
     async setActiveRole(roleId: string): Promise<void> {
       if (disposed) return

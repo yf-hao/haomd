@@ -128,6 +128,13 @@ export const SessionsPanel = memo(function SessionsPanel({
     return `${yyyy}-${mm}-${dd} ${hh}:${min}`
   }
 
+  const getAutoTitleStatusLabel = useCallback((session: AiChatSessionIndexEntry) => {
+    if (session.title?.trim()) return null
+    if (session.autoTitleStatus === 'pending') return t('sessions.autoTitlePending')
+    if (session.autoTitleStatus === 'failed') return t('sessions.autoTitleFailed')
+    return null
+  }, [t])
+
   return (
     <SidebarBackgroundShell className="sessions-panel" style={style}>
       <div className="sessions-panel-header">
@@ -176,8 +183,15 @@ export const SessionsPanel = memo(function SessionsPanel({
                 ) : (
                   <>
                     <div className="sessions-item-info">
-                      <span className="sessions-item-title">
-                        {s.title || t('sessions.untitled')}
+                      <span className="sessions-item-title-row">
+                        <span className="sessions-item-title">
+                          {s.title || t('sessions.untitled')}
+                        </span>
+                        {getAutoTitleStatusLabel(s) && (
+                          <span className={`sessions-item-status ${s.autoTitleStatus ?? 'idle'}`}>
+                            {getAutoTitleStatusLabel(s)}
+                          </span>
+                        )}
                       </span>
                       <span className="sessions-item-meta">
                         {s.messageCount > 0 && (

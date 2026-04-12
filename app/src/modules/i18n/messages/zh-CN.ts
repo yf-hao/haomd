@@ -627,6 +627,8 @@ export const zhCNMessages: MessageDictionary = {
     newSession: '新建会话',
     delete: '删除',
     untitled: '新对话',
+    autoTitlePending: '命名中',
+    autoTitleFailed: '命名失败',
     empty: '暂无会话，点击 + 创建',
     loading: '加载中...',
   },

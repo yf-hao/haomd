@@ -19,8 +19,6 @@ import { AiChatHistoryDialog } from './AiChatHistoryDialog'
 import { useThemeContext } from '../../theme/ThemeContext'
 import { loadAgentSettingsState } from '../config/agentSettingsRepo'
 import type { AgentProvider } from '../domain/types'
-import { generateSessionTitle } from '../application/sessionTitleService'
-import { loadSession, saveSession } from '../config/aiSessionsRepo'
 import { getNotesConfig } from '../../settings/editorSettings'
 import { createNote } from '../../notes/notesFileService'
 
@@ -286,52 +284,6 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
       unlisten()
     }
   }, [currentFilePath, providerType, uploadFiles])
-
-  // ─── Auto-name session after first assistant response ───────────────
-  const namingAttemptedRef = useRef(false)
-  useEffect(() => {
-    if (!sessionKey.startsWith('session:')) return
-    if (namingAttemptedRef.current) return
-
-    const msgs = state?.viewMessages ?? []
-    // Wait until the first assistant message has finished streaming
-    const firstAssistant = msgs.find((m) => m.role === 'assistant' && !m.streaming)
-    if (!firstAssistant) return
-
-    const firstUser = msgs.find((m) => m.role === 'user')
-    if (!firstUser?.content?.trim()) return
-
-    namingAttemptedRef.current = true
-
-    void (async () => {
-      try {
-        // Only rename if the session has no custom title yet
-        const existing = await loadSession(sessionKey)
-        if (existing?.title) return
-
-        const title = await generateSessionTitle(firstUser.content)
-        if (!title) return
-
-        const now = Date.now()
-        const updated = {
-          id: sessionKey,
-          title,
-          messages: existing?.messages ?? [],
-          createdAt: existing?.createdAt ?? now,
-          updatedAt: now,
-        }
-        await saveSession(updated)
-
-        // Notify SessionsPanel to refresh
-        const bc = new BroadcastChannel('haomd-sessions')
-        bc.postMessage({ type: 'session-updated', id: sessionKey, title })
-        bc.close()
-      } catch (e) {
-        console.warn('[AiChatPane] auto-naming failed', e)
-      }
-    })()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state?.viewMessages])
 
   const doSend = async () => {
     const contentToSend = input

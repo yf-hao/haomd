@@ -29,6 +29,12 @@ pub struct AiChatSessionCfg {
     pub provider_type: Option<String>,
     #[serde(default)]
     pub active_role_id: Option<String>,
+    #[serde(default)]
+    pub auto_title_status: Option<String>,
+    #[serde(default)]
+    pub auto_title_attempt_count: Option<i64>,
+    #[serde(default)]
+    pub auto_title_last_attempt_at: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -39,6 +45,12 @@ pub struct AiChatSessionIndexEntry {
     pub id: String,
     #[serde(default)]
     pub title: Option<String>,
+    #[serde(default)]
+    pub auto_title_status: Option<String>,
+    #[serde(default)]
+    pub auto_title_attempt_count: Option<i64>,
+    #[serde(default)]
+    pub auto_title_last_attempt_at: Option<i64>,
     pub message_count: usize,
     pub created_at: i64,
     pub updated_at: i64,
@@ -138,6 +150,9 @@ async fn read_session(app: &AppHandle, id: &str) -> std::io::Result<Option<AiCha
                     messages: vec![],
                     provider_type: None,
                     active_role_id: None,
+                    auto_title_status: None,
+                    auto_title_attempt_count: None,
+                    auto_title_last_attempt_at: None,
                     created_at: 0,
                     updated_at: 0,
                 });
@@ -195,6 +210,9 @@ pub async fn save_ai_session(app: AppHandle, session: AiChatSessionCfg) -> Resul
                 let next_entry = AiChatSessionIndexEntry {
                     id: session.id.clone(),
                     title: session.title.clone(),
+                    auto_title_status: session.auto_title_status.clone(),
+                    auto_title_attempt_count: session.auto_title_attempt_count,
+                    auto_title_last_attempt_at: session.auto_title_last_attempt_at,
                     message_count: session.messages.len(),
                     created_at: session.created_at,
                     updated_at: session.updated_at,

@@ -14,6 +14,8 @@
 import { SimpleChat } from '../dify/SimpleChat'
 import { loadAiSettingsState } from '../config/aiSettingsRepo'
 import { loadNamingConv, saveNamingConv } from '../config/aiSessionsRepo'
+import { createOpenAIStreamingClient } from '../openai/createOpenAIStreamingClient'
+import type { ChatSessionProviderContext } from './chatSessionService'
 
 // ─── Tauri-persisted naming conversation ID per provider ─────────────
 async function getNamingConvId(providerId: string): Promise<string | null> {
@@ -90,37 +92,31 @@ async function generateTitleViaOpenAI(
   apiKey: string,
   model: string,
 ): Promise<string | null> {
-  const trimmed = baseUrl.replace(/\/+$/, '')
-  const url = /\/(v\d+|beta)$/.test(trimmed)
-    ? `${trimmed}/chat/completions`
-    : `${trimmed}/v1/chat/completions`
-
-  const body = {
-    model,
-    messages: [
-      {
-        role: 'user',
-        content: buildTitlePrompt(userMessage),
-      },
-    ],
-    max_tokens: 30,
-    temperature: 0.3,
-    stream: false,
-  }
-
   try {
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
+    const client = createOpenAIStreamingClient({
+      apiKey,
+      baseUrl,
+      modelId: model,
+      temperature: 0.3,
+      maxTokens: 30,
     })
-    if (!resp.ok) return null
-    const json = await resp.json() as { choices?: { message?: { content?: string } }[] }
-    const content = json.choices?.[0]?.message?.content ?? ''
-    return cleanTitle(content)
+
+    const result = await client.askStream(
+      {
+        messages: [
+          {
+            role: 'user',
+            content: buildTitlePrompt(userMessage),
+          },
+        ],
+        temperature: 0.3,
+        maxTokens: 30,
+      },
+      {},
+    )
+
+    if (!result.completed && !result.content) return null
+    return cleanTitle(result.content)
   } catch {
     return null
   }
@@ -142,6 +138,39 @@ export async function generateSessionTitle(userMessage: string): Promise<string 
   if (!userMessage.trim()) return null
 
   try {
+    return await generateSessionTitleWithProvider(userMessage)
+  } catch (e) {
+    console.warn('[sessionTitleService] generateSessionTitle error', e)
+    return null
+  }
+}
+
+export async function generateSessionTitleWithProvider(
+  userMessage: string,
+  providerContext?: ChatSessionProviderContext | null,
+): Promise<string | null> {
+  if (!userMessage.trim()) return null
+
+  try {
+    if (providerContext?.providerId && providerContext.modelId) {
+      if (providerContext.providerType === 'openai') {
+        return await generateTitleViaOpenAI(
+          userMessage,
+          providerContext.baseUrl,
+          providerContext.apiKey,
+          providerContext.modelId,
+        )
+      }
+
+      return await generateTitleViaDify(
+        userMessage,
+        providerContext.providerId,
+        providerContext.baseUrl,
+        providerContext.apiKey,
+        providerContext.modelId,
+      )
+    }
+
     const settings = await loadAiSettingsState()
     const provider = settings.providers.find((p) => p.id === settings.defaultProviderId)
     if (!provider || !provider.defaultModelId) return null
@@ -166,7 +195,7 @@ export async function generateSessionTitle(userMessage: string): Promise<string 
       provider.defaultModelId,
     )
   } catch (e) {
-    console.warn('[sessionTitleService] generateSessionTitle error', e)
+    console.warn('[sessionTitleService] generateSessionTitleWithProvider error', e)
     return null
   }
 }

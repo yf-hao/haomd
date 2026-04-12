@@ -14,6 +14,7 @@ import type { AiChatSessionKey } from '../../application/aiChatSessionService'
 import type { ChatSession, StartChatOptions } from '../../application/chatSessionService'
 import { createChatSession } from '../../application/chatSessionService'
 import { docConversationService, subscribeDocConversationEvents, type DocConversationEvent } from '../../application/docConversationService'
+import { ensureSessionAutoTitle } from '../../application/sessionAutoTitleService'
 import type { DocConversationRecord } from '../../domain/docConversations'
 import { appendAiInputHistory } from '../../application/localStorageAiChatInputHistory'
 import { loadSession, saveSession, type AiChatSessionCfg, type AiChatMessageCfg } from '../../config/aiSessionsRepo'
@@ -258,11 +259,20 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
           messages,
           providerType,
           activeRoleId: state.activeRoleId ?? existing?.activeRoleId ?? null,
+          autoTitleStatus: existing?.autoTitleStatus ?? null,
+          autoTitleAttemptCount: existing?.autoTitleAttemptCount ?? null,
+          autoTitleLastAttemptAt: existing?.autoTitleLastAttemptAt ?? null,
           createdAt: existing?.createdAt ?? now,
           updatedAt: now,
         }
 
         await saveSession(sessionRecord)
+        await ensureSessionAutoTitle({
+          sessionKey,
+          state,
+          entryMode,
+          providerContext: session?.getProviderContext() ?? null,
+        })
       })().catch((err) => {
         console.warn('[useAiChatSession] failed to persist session history', err)
       })
@@ -271,7 +281,7 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
     return () => {
       window.clearTimeout(timeout)
     }
-  }, [open, sessionKey, entryMode, state, providerType])
+  }, [open, sessionKey, entryMode, state, providerType, session])
 
   // Load available models
   useEffect(() => {

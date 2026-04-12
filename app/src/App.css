@@ -656,6 +656,36 @@ button:disabled {
   white-space: nowrap;
 }
 
+.sessions-item-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sessions-item-status {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: calc(var(--ui-font-sidebar) - 4px);
+  line-height: 1.4;
+  color: var(--theme-text-subtle);
+  border: 1px solid var(--theme-border-subtle);
+  background: color-mix(in srgb, var(--theme-surface-panel) 86%, transparent);
+}
+
+.sessions-item-status.pending {
+  color: #b45309;
+  border-color: color-mix(in srgb, #f59e0b 45%, var(--theme-border-subtle));
+  background: color-mix(in srgb, #fef3c7 72%, var(--theme-surface-panel) 28%);
+}
+
+.sessions-item-status.failed {
+  color: #b91c1c;
+  border-color: color-mix(in srgb, #ef4444 45%, var(--theme-border-subtle));
+  background: color-mix(in srgb, #fee2e2 72%, var(--theme-surface-panel) 28%);
+}
+
 .sessions-item-meta {
   display: flex;
   align-items: center;

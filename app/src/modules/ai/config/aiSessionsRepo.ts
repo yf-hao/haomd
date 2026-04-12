@@ -17,6 +17,9 @@ export type AiChatSessionCfg = {
   messages: AiChatMessageCfg[]
   providerType?: string | null
   activeRoleId?: string | null
+  autoTitleStatus?: 'idle' | 'pending' | 'done' | 'failed' | null
+  autoTitleAttemptCount?: number | null
+  autoTitleLastAttemptAt?: number | null
   createdAt: number
   updatedAt: number
 }
@@ -24,6 +27,9 @@ export type AiChatSessionCfg = {
 export type AiChatSessionIndexEntry = {
   id: string
   title?: string | null
+  autoTitleStatus?: 'idle' | 'pending' | 'done' | 'failed' | null
+  autoTitleAttemptCount?: number | null
+  autoTitleLastAttemptAt?: number | null
   messageCount: number
   createdAt: number
   updatedAt: number

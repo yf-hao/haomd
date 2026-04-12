@@ -634,6 +634,8 @@ export const enUSMessages: MessageDictionary = {
     newSession: 'New Session',
     delete: 'Delete',
     untitled: 'New Chat',
+    autoTitlePending: 'Naming...',
+    autoTitleFailed: 'Title failed',
     empty: 'No sessions yet. Click + to create one.',
     loading: 'Loading...',
   },
