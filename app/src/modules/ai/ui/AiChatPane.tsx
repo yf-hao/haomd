@@ -884,6 +884,8 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
       <div className="ai-chat-pane-body">
         <AiChatBody
           messages={messages}
+          activeDisplayAssistantId={isDifyProvider ? activeTypewriterId : latestStreamingAssistantId}
+          historyIdentity={`${sessionKey}:${fullPage ? 'full' : 'dock'}`}
           loading={isProcessing}
           error={error}
           input={input}

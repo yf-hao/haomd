@@ -1351,6 +1351,8 @@ button.ghost.ghost-subtle:hover {
   max-width: 100%;
   position: relative;
   line-height: 1.5;
+  content-visibility: auto;
+  contain-intrinsic-size: 220px;
 }
 
 .ai-chat-message-user {

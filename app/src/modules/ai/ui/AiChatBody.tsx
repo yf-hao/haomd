@@ -7,9 +7,10 @@ import type {
   ClipboardEvent,
   CSSProperties,
 } from 'react'
-import { useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { MarkdownViewer } from '../../../components/MarkdownViewer'
 import type { ChatMessageView } from '../domain/chatSession'
+import type { AssistantToolExecutionView } from '../domain/chatSession'
 import type { VisionMode, UploadedFileRef } from '../domain/types'
 import { useAiSlashCommandHints } from './hooks/useAiSlashCommandHints'
 import { AiSlashCommandHintPanel } from './AiSlashCommandHintPanel'
@@ -26,6 +27,8 @@ type MessageViewMode = 'rendered' | 'source'
 
 export interface AiChatBodyProps {
   messages: ChatMessageView[]
+  activeDisplayAssistantId?: string | null
+  historyIdentity?: string
   loading: boolean
   error: { message: string } | null
   input: string
@@ -75,8 +78,193 @@ export interface AiChatBodyProps {
   fullPage?: boolean
 }
 
+const INITIAL_HISTORY_RENDER_COUNT = 5
+const HISTORY_RENDER_INCREMENT = 10
+
+type AiChatMessageItemProps = {
+  msg: ChatMessageView
+  displayContent: string
+  viewMode: MessageViewMode
+  onCopy: (content: string) => void | Promise<void>
+  onInsert: (content: string) => void | Promise<void>
+  onReplace: (content: string) => void | Promise<void>
+  onSave: (content: string) => void | Promise<void>
+  onSaveToNotes?: (content: string) => void | Promise<void>
+  onToggleViewMode?: () => void
+  toolExecutionDetailsLabel: string
+  copyMarkdownLabel: string
+  insertIntoEditorLabel: string
+  replaceSelectionLabel: string
+  saveAsNewDocumentLabel: string
+  saveToNotesLabel: string
+  showRenderedMarkdownLabel: string
+  viewMarkdownSourceLabel: string
+  summaryPreservedUserInputLabel: string
+}
+
+const areToolExecutionsEqual = (
+  left: AssistantToolExecutionView[] | undefined,
+  right: AssistantToolExecutionView[] | undefined,
+) => {
+  if (left === right) return true
+  if (!left || !right) return !left && !right
+  if (left.length !== right.length) return false
+  return left.every((item, index) => {
+    const candidate = right[index]
+    return candidate
+      && candidate.id === item.id
+      && candidate.label === item.label
+      && candidate.status === item.status
+      && candidate.detail === item.detail
+  })
+}
+
+const AiChatMessageItem = memo(({
+  msg,
+  displayContent,
+  viewMode,
+  onCopy,
+  onInsert,
+  onReplace,
+  onSave,
+  onSaveToNotes,
+  onToggleViewMode,
+  toolExecutionDetailsLabel,
+  copyMarkdownLabel,
+  insertIntoEditorLabel,
+  replaceSelectionLabel,
+  saveAsNewDocumentLabel,
+  saveToNotesLabel,
+  showRenderedMarkdownLabel,
+  viewMarkdownSourceLabel,
+  summaryPreservedUserInputLabel,
+}: AiChatMessageItemProps) => {
+  const showStreamingIndicator =
+    msg.role === 'assistant' && msg.streaming && displayContent.trim().length === 0
+  const toolExecutions = msg.role === 'assistant' ? (msg.toolExecutions ?? []) : []
+  const showToolExecutions = toolExecutions.length > 0
+
+  return (
+    <div className={`ai-chat-message ai-chat-message-${msg.role}`}>
+      {msg.source === 'summary-preserved' && (
+        <div className="ai-chat-message-badge ai-chat-message-badge-summary-preserved">
+          {summaryPreservedUserInputLabel}
+        </div>
+      )}
+      {msg.role === 'assistant' ? (
+        showStreamingIndicator ? (
+          <div className="ai-chat-loading-indicator ai-chat-loading-indicator-inline" aria-label={showRenderedMarkdownLabel}>
+            <span className="ai-typing-dot" />
+            <span className="ai-typing-dot" />
+            <span className="ai-typing-dot" />
+          </div>
+        ) : displayContent.trim() ? (
+          <MarkdownViewer value={displayContent} mode={viewMode} />
+        ) : null
+      ) : (
+        <div className="ai-chat-message-content">{displayContent}</div>
+      )}
+      {msg.role === 'assistant' && showToolExecutions && (
+        <details className="ai-chat-tool-executions" open>
+          <summary className="ai-chat-tool-executions-summary">
+            {toolExecutionDetailsLabel}
+          </summary>
+          <div className="ai-chat-tool-executions-list">
+            {toolExecutions.map((execution) => (
+              <div key={execution.id} className="ai-chat-tool-execution-item">
+                <div className="ai-chat-tool-execution-header">
+                  <span
+                    className={`ai-chat-tool-execution-status ai-chat-tool-execution-status-${execution.status}`}
+                    aria-hidden="true"
+                  />
+                  <span className="ai-chat-tool-execution-label">{execution.label}</span>
+                </div>
+                {execution.detail?.trim() && (
+                  <div className="ai-chat-tool-execution-detail">{execution.detail}</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+      {msg.role === 'assistant' && !msg.streaming && msg.content.trim() && (
+        <div className="ai-chat-message-actions">
+          <button
+            type="button"
+            className="icon-button ai-chat-icon-button"
+            title={copyMarkdownLabel}
+            aria-label={copyMarkdownLabel}
+            onClick={() => void onCopy(msg.content)}
+          >
+            <span className="ai-chat-icon ai-chat-icon-copy" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="icon-button ai-chat-icon-button"
+            title={insertIntoEditorLabel}
+            aria-label={insertIntoEditorLabel}
+            onClick={() => void onInsert(msg.content)}
+          >
+            <span className="ai-chat-icon ai-chat-icon-insert" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="icon-button ai-chat-icon-button"
+            title={replaceSelectionLabel}
+            aria-label={replaceSelectionLabel}
+            onClick={() => void onReplace(msg.content)}
+          >
+            <span className="ai-chat-icon ai-chat-icon-replace" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="icon-button ai-chat-icon-button"
+            title={saveAsNewDocumentLabel}
+            aria-label={saveAsNewDocumentLabel}
+            onClick={() => void onSave(msg.content)}
+          >
+            <span className="ai-chat-icon ai-chat-icon-save" aria-hidden="true" />
+          </button>
+          {onSaveToNotes && (
+            <button
+              type="button"
+              className="icon-button ai-chat-icon-button"
+              title={saveToNotesLabel}
+              aria-label={saveToNotesLabel}
+              onClick={() => void onSaveToNotes(msg.content)}
+            >
+              <span className="ai-chat-icon ai-chat-icon-note" aria-hidden="true" />
+            </button>
+          )}
+          <button
+            type="button"
+            className={`icon-button ai-chat-icon-button ${viewMode === 'source' ? 'ai-chat-icon-button-active' : ''}`}
+            title={viewMode === 'source' ? showRenderedMarkdownLabel : viewMarkdownSourceLabel}
+            aria-label={viewMode === 'source' ? showRenderedMarkdownLabel : viewMarkdownSourceLabel}
+            aria-pressed={viewMode === 'source'}
+            onClick={onToggleViewMode}
+          >
+            <span className="ai-chat-icon ai-chat-icon-source" aria-hidden="true" />
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}, (prev, next) => (
+  prev.msg.id === next.msg.id
+  && prev.msg.role === next.msg.role
+  && prev.msg.source === next.msg.source
+  && prev.msg.streaming === next.msg.streaming
+  && prev.msg.content === next.msg.content
+  && prev.displayContent === next.displayContent
+  && prev.viewMode === next.viewMode
+  && areToolExecutionsEqual(prev.msg.toolExecutions, next.msg.toolExecutions)
+))
+
 export const AiChatBody: FC<AiChatBodyProps> = ({
   messages,
+  activeDisplayAssistantId,
+  historyIdentity,
   loading,
   error,
   input,
@@ -121,6 +309,8 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [messageViewModes, setMessageViewModes] = useState<Record<string, MessageViewMode>>({})
   const [cursorIndex, setCursorIndex] = useState(input.length)
+  const [renderCount, setRenderCount] = useState(INITIAL_HISTORY_RENDER_COUNT)
+  const pendingPrependDeltaRef = useRef<number | null>(null)
   const aiChatBackground = themeSettings.aiChatBackground
   const visibleMessages = useMemo(
     () =>
@@ -133,6 +323,55 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
       }),
     [messages],
   )
+  const latestDynamicAssistantId = useMemo(() => {
+    if (activeDisplayAssistantId) return activeDisplayAssistantId
+    return [...visibleMessages]
+      .reverse()
+      .find((msg) => msg.role === 'assistant' && msg.streaming)?.id ?? null
+  }, [activeDisplayAssistantId, visibleMessages])
+  const renderedMessages = useMemo(() => {
+    if (visibleMessages.length <= renderCount) return visibleMessages
+    return visibleMessages.slice(-renderCount)
+  }, [visibleMessages, renderCount])
+  const renderedStaticMessages = useMemo(
+    () => renderedMessages.filter((msg) => msg.id !== latestDynamicAssistantId),
+    [renderedMessages, latestDynamicAssistantId],
+  )
+  const renderedDynamicMessage = useMemo(
+    () => renderedMessages.find((msg) => msg.id === latestDynamicAssistantId) ?? null,
+    [renderedMessages, latestDynamicAssistantId],
+  )
+
+  useEffect(() => {
+    setRenderCount(INITIAL_HISTORY_RENDER_COUNT)
+    pendingPrependDeltaRef.current = null
+  }, [historyIdentity])
+
+  useEffect(() => {
+    const el = messagesContainerRef.current
+    if (!el) return
+
+    const handleScroll = () => {
+      if (el.scrollTop > 80) return
+      if (visibleMessages.length <= renderCount) return
+      pendingPrependDeltaRef.current = el.scrollHeight
+      setRenderCount((prev) => Math.min(visibleMessages.length, prev + HISTORY_RENDER_INCREMENT))
+    }
+
+    el.addEventListener('scroll', handleScroll, { passive: true })
+    return () => {
+      el.removeEventListener('scroll', handleScroll)
+    }
+  }, [messagesContainerRef, renderCount, visibleMessages.length])
+
+  useLayoutEffect(() => {
+    const previousScrollHeight = pendingPrependDeltaRef.current
+    const el = messagesContainerRef.current
+    if (!el || previousScrollHeight == null) return
+    const delta = el.scrollHeight - previousScrollHeight
+    el.scrollTop += delta
+    pendingPrependDeltaRef.current = null
+  }, [renderCount, messagesContainerRef])
 
   const aiChatBackgroundUrl = useMemo(() => {
     if (!aiChatBackground?.enabled || !aiChatBackground.path) return null
@@ -320,133 +559,81 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
             {visibleMessages.length === 0 && !loading && (
               <div className="ai-chat-empty muted small"></div>
             )}
-            {visibleMessages.map((msg) => {
+            {renderedStaticMessages.map((msg) => {
+              const viewMode: MessageViewMode = messageViewModes[msg.id] ?? 'rendered'
+              const displayContent =
+                msg.role === 'assistant'
+                  ? msg.content
+                  : getUserDisplayContent(msg.content)
+              return (
+                <AiChatMessageItem
+                  key={msg.id}
+                  msg={msg}
+                  displayContent={displayContent}
+                  viewMode={viewMode}
+                  onCopy={onCopy}
+                  onInsert={onInsert}
+                  onReplace={onReplace}
+                  onSave={onSave}
+                  onSaveToNotes={onSaveToNotes}
+                  onToggleViewMode={() => {
+                    setMessageViewModes((prev) => {
+                      const current = prev[msg.id] ?? 'rendered'
+                      const next: MessageViewMode = current === 'rendered' ? 'source' : 'rendered'
+                      return { ...prev, [msg.id]: next }
+                    })
+                  }}
+                  toolExecutionDetailsLabel={t('ai.toolExecutionDetails')}
+                  copyMarkdownLabel={t('ai.copyMarkdown')}
+                  insertIntoEditorLabel={t('ai.insertIntoEditor')}
+                  replaceSelectionLabel={t('ai.replaceSelection')}
+                  saveAsNewDocumentLabel={t('ai.saveAsNewDocument')}
+                  saveToNotesLabel={t('notes.saveToNotes')}
+                  showRenderedMarkdownLabel={t('ai.showRenderedMarkdown')}
+                  viewMarkdownSourceLabel={t('ai.viewMarkdownSource')}
+                  summaryPreservedUserInputLabel={t('ai.summaryPreservedUserInput')}
+                />
+              )
+            })}
+            {renderedDynamicMessage && (() => {
+              const msg = renderedDynamicMessage
               const viewMode: MessageViewMode = messageViewModes[msg.id] ?? 'rendered'
               const displayContent =
                 msg.role === 'assistant'
                   ? (viewMode === 'source'
                     ? msg.content
-                    : getDisplayContent(msg.id, msg.content, msg.streaming)
-                  )
+                    : getDisplayContent(msg.id, msg.content, msg.streaming))
                   : getUserDisplayContent(msg.content)
-              const showStreamingIndicator =
-                msg.role === 'assistant' && msg.streaming && displayContent.trim().length === 0
-              const toolExecutions = msg.role === 'assistant' ? (msg.toolExecutions ?? []) : []
-              const showToolExecutions = toolExecutions.length > 0
-
               return (
-                <div key={msg.id} className={`ai-chat-message ai-chat-message-${msg.role}`}>
-                  {msg.source === 'summary-preserved' && (
-                    <div className="ai-chat-message-badge ai-chat-message-badge-summary-preserved">
-                      {t('ai.summaryPreservedUserInput')}
-                    </div>
-                  )}
-                  {msg.role === 'assistant' ? (
-                    showStreamingIndicator ? (
-                      <div className="ai-chat-loading-indicator ai-chat-loading-indicator-inline" aria-label={t('ai.stopGenerating')}>
-                        <span className="ai-typing-dot" />
-                        <span className="ai-typing-dot" />
-                        <span className="ai-typing-dot" />
-                      </div>
-                    ) : displayContent.trim() ? (
-                      <MarkdownViewer value={displayContent} mode={viewMode} />
-                    ) : null
-                  ) : (
-                    <div className="ai-chat-message-content">{displayContent}</div>
-                  )}
-                  {msg.role === 'assistant' && showToolExecutions && (
-                    <details className="ai-chat-tool-executions" open>
-                      <summary className="ai-chat-tool-executions-summary">
-                        {t('ai.toolExecutionDetails')}
-                      </summary>
-                      <div className="ai-chat-tool-executions-list">
-                        {toolExecutions.map((execution) => (
-                          <div key={execution.id} className="ai-chat-tool-execution-item">
-                            <div className="ai-chat-tool-execution-header">
-                              <span
-                                className={`ai-chat-tool-execution-status ai-chat-tool-execution-status-${execution.status}`}
-                                aria-hidden="true"
-                              />
-                              <span className="ai-chat-tool-execution-label">{execution.label}</span>
-                            </div>
-                            {execution.detail?.trim() && (
-                              <div className="ai-chat-tool-execution-detail">{execution.detail}</div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </details>
-                  )}
-                  {msg.role === 'assistant' && !msg.streaming && msg.content.trim() && (
-                    <div className="ai-chat-message-actions">
-                      <button
-                        type="button"
-                        className="icon-button ai-chat-icon-button"
-                        title={t('ai.copyMarkdown')}
-                        aria-label={t('ai.copyMarkdown')}
-                        onClick={() => void onCopy(msg.content)}
-                      >
-                        <span className="ai-chat-icon ai-chat-icon-copy" aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-button ai-chat-icon-button"
-                        title={t('ai.insertIntoEditor')}
-                        aria-label={t('ai.insertIntoEditor')}
-                        onClick={() => void onInsert(msg.content)}
-                      >
-                        <span className="ai-chat-icon ai-chat-icon-insert" aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-button ai-chat-icon-button"
-                        title={t('ai.replaceSelection')}
-                        aria-label={t('ai.replaceSelection')}
-                        onClick={() => void onReplace(msg.content)}
-                      >
-                        <span className="ai-chat-icon ai-chat-icon-replace" aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-button ai-chat-icon-button"
-                        title={t('ai.saveAsNewDocument')}
-                        aria-label={t('ai.saveAsNewDocument')}
-                        onClick={() => void onSave(msg.content)}
-                      >
-                        <span className="ai-chat-icon ai-chat-icon-save" aria-hidden="true" />
-                      </button>
-                      {onSaveToNotes && (
-                        <button
-                          type="button"
-                          className="icon-button ai-chat-icon-button"
-                          title={t('notes.saveToNotes')}
-                          aria-label={t('notes.saveToNotes')}
-                          onClick={() => void onSaveToNotes(msg.content)}
-                        >
-                          <span className="ai-chat-icon ai-chat-icon-note" aria-hidden="true" />
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className={`icon-button ai-chat-icon-button ${viewMode === 'source' ? 'ai-chat-icon-button-active' : ''}`}
-                        title={viewMode === 'source' ? t('ai.showRenderedMarkdown') : t('ai.viewMarkdownSource')}
-                        aria-label={viewMode === 'source' ? t('ai.showRenderedMarkdown') : t('ai.viewMarkdownSource')}
-                        aria-pressed={viewMode === 'source'}
-                        onClick={() => {
-                          setMessageViewModes((prev) => {
-                            const current = prev[msg.id] ?? 'rendered'
-                            const next: MessageViewMode = current === 'rendered' ? 'source' : 'rendered'
-                            return { ...prev, [msg.id]: next }
-                          })
-                        }}
-                      >
-                        <span className="ai-chat-icon ai-chat-icon-source" aria-hidden="true" />
-                      </button>
-                    </div>
-                  )}
-                </div>
+                <AiChatMessageItem
+                  key={msg.id}
+                  msg={msg}
+                  displayContent={displayContent}
+                  viewMode={viewMode}
+                  onCopy={onCopy}
+                  onInsert={onInsert}
+                  onReplace={onReplace}
+                  onSave={onSave}
+                  onSaveToNotes={onSaveToNotes}
+                  onToggleViewMode={() => {
+                    setMessageViewModes((prev) => {
+                      const current = prev[msg.id] ?? 'rendered'
+                      const next: MessageViewMode = current === 'rendered' ? 'source' : 'rendered'
+                      return { ...prev, [msg.id]: next }
+                    })
+                  }}
+                  toolExecutionDetailsLabel={t('ai.toolExecutionDetails')}
+                  copyMarkdownLabel={t('ai.copyMarkdown')}
+                  insertIntoEditorLabel={t('ai.insertIntoEditor')}
+                  replaceSelectionLabel={t('ai.replaceSelection')}
+                  saveAsNewDocumentLabel={t('ai.saveAsNewDocument')}
+                  saveToNotesLabel={t('notes.saveToNotes')}
+                  showRenderedMarkdownLabel={t('ai.showRenderedMarkdown')}
+                  viewMarkdownSourceLabel={t('ai.viewMarkdownSource')}
+                  summaryPreservedUserInputLabel={t('ai.summaryPreservedUserInput')}
+                />
               )
-            })}
+            })()}
           </div>
         </div>
       </div>
