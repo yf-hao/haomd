@@ -211,6 +211,10 @@ export function WorkspaceShell({
   const guardedSaveRef = useRef<(() => Promise<any>) | null>(null)
   // Holds the flush function from WysiwygPane for forcing serialization before save
   const wysiwygFlushRef = useRef<(() => void) | null>(null)
+  // Tracks the original markdown at the moment WYSIWYG mode was entered, per tab
+  const wysiwygEntryMarkdownRef = useRef<string | null>(null)
+  // Tracks whether the user has actually made edits while in WYSIWYG mode
+  const wysiwygIsDirtyRef = useRef(false)
   const isProgrammaticScrollRef = useRef(false)
 
   // 将编辑器的实时行号节流后再传给预览，使用 rAF 节流（~16ms）降低重渲染频率
@@ -259,18 +263,31 @@ export function WorkspaceShell({
   }, [editMode])
 
   const setEditModeWithFlush = useCallback((next: EditMode) => {
+    if (editMode === 'source' && next === 'wysiwyg') {
+      // Save original markdown and reset dirty flag when entering WYSIWYG
+      wysiwygEntryMarkdownRef.current = markdownRef.current
+      wysiwygIsDirtyRef.current = false
+    }
     if (editMode === 'wysiwyg' && next === 'source') {
-      const latest = wysiwygMarkdownGetterRef.current?.()
-      if (latest !== undefined) {
-        // Read directly from the WYSIWYG instance before source mode mounts,
-        // so the source editor never boots from stale React state.
+      if (!wysiwygIsDirtyRef.current && wysiwygEntryMarkdownRef.current !== null) {
+        // No edits were made — restore the original source to avoid
+        // serializer escaping side effects (e.g. \= for lines starting with =)
         flushSync(() => {
-          syncWysiwygMarkdownRef.current?.(latest)
+          syncWysiwygMarkdownRef.current?.(wysiwygEntryMarkdownRef.current!)
         })
-      } else if (wysiwygFlushRef.current) {
-        flushSync(() => {
-          wysiwygFlushRef.current?.()
-        })
+      } else {
+        const latest = wysiwygMarkdownGetterRef.current?.()
+        if (latest !== undefined) {
+          // Read directly from the WYSIWYG instance before source mode mounts,
+          // so the source editor never boots from stale React state.
+          flushSync(() => {
+            syncWysiwygMarkdownRef.current?.(latest)
+          })
+        } else if (wysiwygFlushRef.current) {
+          flushSync(() => {
+            wysiwygFlushRef.current?.()
+          })
+        }
       }
     }
     setEditMode(next)
@@ -370,6 +387,10 @@ export function WorkspaceShell({
   const activeIdRef = useRef<string | null>(null)
   useEffect(() => {
     activeIdRef.current = activeId
+    // Reset WYSIWYG dirty tracking when the active tab changes —
+    // each tab starts fresh with the source it was loaded from.
+    wysiwygEntryMarkdownRef.current = markdownRef.current
+    wysiwygIsDirtyRef.current = false
   }, [activeId])
 
   const getActiveTextColorDocKey = useCallback(() => activeIdRef.current ?? null, [])
@@ -2856,7 +2877,7 @@ export function WorkspaceShell({
                           onFlushReady={(flush) => {
                             wysiwygFlushRef.current = flush
                           }}
-                          onDirty={() => { markDirty(); markActiveTabDirty() }}
+                          onDirty={() => { wysiwygIsDirtyRef.current = true; markDirty(); markActiveTabDirty() }}
                           filePath={filePath}
                           effectiveLayout="preview-only"
                         />
