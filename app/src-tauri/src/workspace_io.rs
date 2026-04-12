@@ -1,7 +1,7 @@
 use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
 use serde::{Deserialize, Serialize};
 use std::path::{Component, Path, PathBuf};
-use tauri::AppHandle;
+use tauri::{AppHandle, Runtime};
 use tokio::fs;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -323,7 +323,7 @@ fn resolve_target_directory_result(
 
 #[tauri::command]
 pub async fn resolve_workspace_directory(
-    _app: AppHandle,
+    _app: AppHandle<impl Runtime>,
     mounted_roots: Vec<String>,
     target_directory: String,
 ) -> ResultPayload<ResolveWorkspaceDirectoryResult> {
@@ -344,7 +344,7 @@ pub async fn resolve_workspace_directory(
 
 #[tauri::command]
 pub async fn write_workspace_file(
-    _app: AppHandle,
+    _app: AppHandle<impl Runtime>,
     mounted_roots: Vec<String>,
     target_directory: String,
     file_name: String,
@@ -382,7 +382,7 @@ pub async fn write_workspace_file(
 
 #[tauri::command]
 pub async fn create_workspace_directory(
-    _app: AppHandle,
+    _app: AppHandle<impl Runtime>,
     mounted_roots: Vec<String>,
     parent_directory: String,
     directory_name: String,
@@ -466,6 +466,7 @@ pub async fn create_workspace_directory(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tauri::Manager;
 
     fn unique_test_dir(prefix: &str) -> PathBuf {
         std::env::temp_dir().join(format!("{prefix}-{}", new_trace_id().replace("trace_", "")))
@@ -585,14 +586,18 @@ mod tests {
         .await;
 
         let payload = match result {
-            ResultPayload::Ok(ok) => ok.data,
-            ResultPayload::Err(err) => panic!("unexpected error: {:?}", err),
+            ResultPayload::Ok { data, .. } => data,
+            ResultPayload::Err { error } => panic!("unexpected error: {:?}", error),
         };
 
         assert!(payload.ok);
+        let created = payload
+            .created_directory_path
+            .as_deref()
+            .expect("created directory path should exist");
         assert_eq!(
-            payload.created_directory_path.as_deref(),
-            Some(normalize_display_path(&target).as_str())
+            std::fs::canonicalize(created).expect("canonical created path"),
+            std::fs::canonicalize(&target).expect("canonical target")
         );
         assert!(target.is_dir());
 
