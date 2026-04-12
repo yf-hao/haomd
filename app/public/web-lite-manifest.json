@@ -1,0 +1,24 @@
+{
+  "name": "HaoMD Lite",
+  "short_name": "HaoMD Lite",
+  "description": "HaoMD Web 轻应用，聚焦会话与随笔。",
+  "start_url": "/web-lite.html#/chat",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#08101d",
+  "theme_color": "#0ea5e9",
+  "icons": [
+    {
+      "src": "/web-lite-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/web-lite-mask-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -281,6 +281,22 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
     options.onStateChange(state)
   }
 
+  const persistDocConversationSnapshot = () => {
+    if (disposed || !docPath || !shouldPersistDocConversation || !provider) return
+    void docConversationService
+      .upsertFromState({
+        docPath,
+        state,
+        providerType,
+        modelName: currentModelId,
+        providerId: provider.id,
+        difyConversationId,
+      })
+      .catch((err) => {
+        console.error('[ChatSession] failed to persist doc conversation', err)
+      })
+  }
+
   async function runStream(
     assistantId: string,
     options: StreamRunOptions = {},
@@ -419,106 +435,110 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
     const openaiTools = [...toOpenAITools(schemaTools), ...builtinToolSchemas]
     const conversationMessages = engineHistoryToChatMessages(state.engineHistory)
 
-    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const result = await runStream(assistantId, {
-        clientOverride,
-        messageOverride: conversationMessages,
-        attachments: round === 0 ? attachments : undefined,
-        tools: openaiTools,
-        persistConversation: false,
-      })
-
-      if (result.error || !result.toolCalls?.length) {
-        // No tool calls — final answer or error, done
-        break
-      }
-
-      // Model wants to call tools: complete current message, then execute tools
-      state = completeAssistantMessage(state, assistantId)
-      notifyStateChange()
-
-      // Add assistant message with tool_calls to conversation
-      const assistantMsg: ChatMessage = {
-        role: 'assistant',
-        content: '',
-        tool_calls: result.toolCalls,
-      }
-      conversationMessages.push(assistantMsg)
-
-      // Show tool execution status in the chat
-      for (const tc of result.toolCalls) {
-        const toolLabel = tc.function.name.replace(/^mcp__/, '').replace(/__/g, '/')
-        state = upsertAssistantToolExecution(state, assistantId, {
-          id: tc.id,
-          label: toolLabel,
-          status: 'running',
+    try {
+      for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+        const result = await runStream(assistantId, {
+          clientOverride,
+          messageOverride: conversationMessages,
+          attachments: round === 0 ? attachments : undefined,
+          tools: openaiTools,
+          persistConversation: false,
         })
+
+        if (result.error || !result.toolCalls?.length) {
+          // No tool calls — final answer or error, done
+          break
+        }
+
+        // Model wants to call tools: complete current message, then execute tools
+        state = completeAssistantMessage(state, assistantId)
         notifyStateChange()
 
-        try {
-          let parsedArgs = {}
-          try {
-            parsedArgs = JSON.parse(tc.function.arguments)
-          } catch { /* empty args */ }
-
-          // Built-in tools are handled locally; MCP tools are routed to servers
-          let toolResult: unknown
-          if (tc.function.name === WRITE_TO_NOTES_TOOL_NAME) {
-            toolResult = await executeWriteToNotes(parsedArgs as { content?: string })
-          } else if (tc.function.name === RESOLVE_WORKSPACE_DIRECTORY_TOOL_NAME) {
-            toolResult = await executeResolveWorkspaceDirectory(
-              parsedArgs as { targetDirectory?: string },
-            )
-          } else if (tc.function.name === CREATE_WORKSPACE_DIRECTORY_TOOL_NAME) {
-            toolResult = await executeCreateWorkspaceDirectory(
-              parsedArgs as { parentDirectory?: string; directoryName?: string },
-            )
-          } else if (tc.function.name === WRITE_TO_WORKSPACE_TOOL_NAME) {
-            toolResult = await executeWriteToWorkspace(
-              parsedArgs as { targetDirectory?: string; fileName?: string; content?: string },
-            )
-          } else {
-            toolResult = await executeTool(tc.function.name, parsedArgs, routingTools)
-          }
-          const resultStr = typeof toolResult === 'string'
-            ? toolResult
-            : JSON.stringify(toolResult, null, 2)
-
-          conversationMessages.push({
-            role: 'tool',
-            content: resultStr,
-            tool_call_id: tc.id,
-          })
-
-          state = upsertAssistantToolExecution(state, assistantId, {
-            id: tc.id,
-            label: toolLabel,
-            status: 'success',
-            detail: resultStr,
-          })
-          notifyStateChange()
-        } catch (err) {
-          const errMsg = String(err)
-          conversationMessages.push({
-            role: 'tool',
-            content: `Error: ${errMsg}`,
-            tool_call_id: tc.id,
-          })
-          state = upsertAssistantToolExecution(state, assistantId, {
-            id: tc.id,
-            label: toolLabel,
-            status: 'error',
-            detail: errMsg,
-          })
-          notifyStateChange()
+        // Add assistant message with tool_calls to conversation
+        const assistantMsg: ChatMessage = {
+          role: 'assistant',
+          content: '',
+          tool_calls: result.toolCalls,
         }
-      }
+        conversationMessages.push(assistantMsg)
 
-      // Prepare for next round — new assistant placeholder
-      const nextAssistantId = genId()
-      assistantId = nextAssistantId
-      state = appendAssistantPlaceholder(state, assistantId)
-      notifyStateChange()
+        // Show tool execution status in the chat
+        for (const tc of result.toolCalls) {
+          const toolLabel = tc.function.name.replace(/^mcp__/, '').replace(/__/g, '/')
+          state = upsertAssistantToolExecution(state, assistantId, {
+            id: tc.id,
+            label: toolLabel,
+            status: 'running',
+          })
+          notifyStateChange()
+
+          try {
+            let parsedArgs = {}
+            try {
+              parsedArgs = JSON.parse(tc.function.arguments)
+            } catch { /* empty args */ }
+
+            // Built-in tools are handled locally; MCP tools are routed to servers
+            let toolResult: unknown
+            if (tc.function.name === WRITE_TO_NOTES_TOOL_NAME) {
+              toolResult = await executeWriteToNotes(parsedArgs as { content?: string })
+            } else if (tc.function.name === RESOLVE_WORKSPACE_DIRECTORY_TOOL_NAME) {
+              toolResult = await executeResolveWorkspaceDirectory(
+                parsedArgs as { targetDirectory?: string },
+              )
+            } else if (tc.function.name === CREATE_WORKSPACE_DIRECTORY_TOOL_NAME) {
+              toolResult = await executeCreateWorkspaceDirectory(
+                parsedArgs as { parentDirectory?: string; directoryName?: string },
+              )
+            } else if (tc.function.name === WRITE_TO_WORKSPACE_TOOL_NAME) {
+              toolResult = await executeWriteToWorkspace(
+                parsedArgs as { targetDirectory?: string; fileName?: string; content?: string },
+              )
+            } else {
+              toolResult = await executeTool(tc.function.name, parsedArgs, routingTools)
+            }
+            const resultStr = typeof toolResult === 'string'
+              ? toolResult
+              : JSON.stringify(toolResult, null, 2)
+
+            conversationMessages.push({
+              role: 'tool',
+              content: resultStr,
+              tool_call_id: tc.id,
+            })
+
+            state = upsertAssistantToolExecution(state, assistantId, {
+              id: tc.id,
+              label: toolLabel,
+              status: 'success',
+              detail: resultStr,
+            })
+            notifyStateChange()
+          } catch (err) {
+            const errMsg = String(err)
+            conversationMessages.push({
+              role: 'tool',
+              content: `Error: ${errMsg}`,
+              tool_call_id: tc.id,
+            })
+            state = upsertAssistantToolExecution(state, assistantId, {
+              id: tc.id,
+              label: toolLabel,
+              status: 'error',
+              detail: errMsg,
+            })
+            notifyStateChange()
+          }
+        }
+
+        // Prepare for next round — new assistant placeholder
+        const nextAssistantId = genId()
+        assistantId = nextAssistantId
+        state = appendAssistantPlaceholder(state, assistantId)
+        notifyStateChange()
+      }
+    } finally {
+      persistDocConversationSnapshot()
     }
   }
 
@@ -689,6 +709,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       state = appendUserInput(state, userId, content, { hidden: options?.hideInView })
       state = appendAssistantPlaceholder(state, assistantId)
       notifyStateChange()
+      persistDocConversationSnapshot()
 
       const chatAttachments: ChatAttachment[] | undefined = options?.attachments?.map((u) => ({
         kind: u.kind,
@@ -851,6 +872,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       state = appendUserInput(state, userId, content, { hidden: options?.hideInView })
       state = appendAssistantPlaceholder(state, assistantId)
       notifyStateChange()
+      persistDocConversationSnapshot()
 
       const chatAttachments = await uploadLocalAttachments(attachments)
 

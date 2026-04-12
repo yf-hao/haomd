@@ -25,6 +25,25 @@ const EMPTY_MESSAGES = [] as const
 const AI_CHAT_AGENT_STORAGE_KEY = 'haomd_ai_chat_selected_agent_id'
 const EMPTY_AGENT_OPTION = { id: '', name: 'Agent' }
 
+function resolveAiChatDocPath(currentFilePath?: string | null, sessionKey?: AiChatSessionKey): string | undefined {
+  if (!currentFilePath) {
+    return sessionKey?.startsWith('session:') ? sessionKey : undefined
+  }
+
+  const normalized = currentFilePath.replace(/\\/g, '/').trim()
+  if (!normalized) {
+    return sessionKey?.startsWith('session:') ? sessionKey : undefined
+  }
+
+  const lastSegment = normalized.split('/').pop() ?? ''
+  const looksLikeFile = /\.[^./\\]+$/.test(lastSegment)
+  if (!looksLikeFile) {
+    return normalized
+  }
+
+  return getDirKeyFromDocPath(normalized)
+}
+
 export interface AiChatPaneProps {
   sessionKey: AiChatSessionKey
   entryMode: ChatEntryMode
@@ -56,8 +75,10 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const paneRootRef = useRef<HTMLElement>(null)
   const shouldAutoScrollRef = useRef(true)
+  const programmaticScrollRef = useRef(false)
   const lastScrollTopRef = useRef(0)
   const pendingInitialScrollRef = useRef(true)
+  const lastTouchYRef = useRef<number | null>(null)
   const isComposingRef = useRef(false)
   const lockEnterRef = useRef(false)
   const historyCursorRef = useRef<number | null>(null)
@@ -77,9 +98,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
     setHistoryCursor(null)
   }
 
-  const dirKey = currentFilePath
-    ? getDirKeyFromDocPath(currentFilePath)
-    : sessionKey.startsWith('session:') ? sessionKey : undefined
+  const dirKey = resolveAiChatDocPath(currentFilePath, sessionKey)
 
   const {
     loading,
@@ -317,6 +336,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
 
     clearHistoryBrowse()
     setInput('')
+    shouldAutoScrollRef.current = true
 
     const handled = await tryHandleSlashCommand(contentToSend, {
       // slash 命令与文档会话保持一致：按目录共享会话
@@ -692,6 +712,10 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   const activeRoleId = systemPromptInfo?.activeRoleId
 
   const lastMessage = messages[messages.length - 1]
+  const latestStreamingAssistantId =
+    [...messages]
+      .reverse()
+      .find((message) => message.role === 'assistant' && message.streaming)?.id ?? null
   const lastMessageDisplayLength =
     lastMessage && lastMessage.role === 'assistant'
       ? getDisplayContent(lastMessage.id, lastMessage.content).length
@@ -700,26 +724,64 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   const lastMessageKey = lastMessage ? `${lastMessage.id}:${lastMessageDisplayLength}` : ''
   const hasLocalBackground = Boolean(themeSettings.aiChatBackground?.enabled && themeSettings.aiChatBackground?.path)
 
+  const scrollMessagesToBottom = () => {
+    const el = messagesContainerRef.current
+    if (!el) return
+    programmaticScrollRef.current = true
+    el.scrollTop = el.scrollHeight
+    lastScrollTopRef.current = el.scrollTop
+    requestAnimationFrame(() => {
+      programmaticScrollRef.current = false
+    })
+  }
+
   useEffect(() => {
     const el = messagesContainerRef.current
     if (!el) return
 
     const updateAutoScroll = () => {
-      const previousScrollTop = lastScrollTopRef.current
       const currentScrollTop = el.scrollTop
       const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-      if (currentScrollTop < previousScrollTop) {
-        shouldAutoScrollRef.current = false
-      } else if (distanceToBottom <= 24) {
+      if (distanceToBottom <= 24) {
         shouldAutoScrollRef.current = true
       }
       lastScrollTopRef.current = currentScrollTop
     }
 
+    const handleWheel = (event: WheelEvent) => {
+      if (programmaticScrollRef.current) return
+      if (event.deltaY < 0) {
+        shouldAutoScrollRef.current = false
+      }
+    }
+
+    const handleTouchStart = (event: TouchEvent) => {
+      const touch = event.touches[0]
+      lastTouchYRef.current = touch?.clientY ?? null
+    }
+
+    const handleTouchMove = (event: TouchEvent) => {
+      if (programmaticScrollRef.current) return
+      const touch = event.touches[0]
+      if (!touch) return
+      const previousY = lastTouchYRef.current
+      lastTouchYRef.current = touch.clientY
+      if (previousY == null) return
+      if (touch.clientY - previousY > 4) {
+        shouldAutoScrollRef.current = false
+      }
+    }
+
     updateAutoScroll()
     el.addEventListener('scroll', updateAutoScroll, { passive: true })
+    el.addEventListener('wheel', handleWheel, { passive: true })
+    el.addEventListener('touchstart', handleTouchStart, { passive: true })
+    el.addEventListener('touchmove', handleTouchMove, { passive: true })
     return () => {
       el.removeEventListener('scroll', updateAutoScroll)
+      el.removeEventListener('wheel', handleWheel)
+      el.removeEventListener('touchstart', handleTouchStart)
+      el.removeEventListener('touchmove', handleTouchMove)
     }
   }, [sessionKey])
 
@@ -734,10 +796,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
     if (messages.length === 0) return
 
     const scrollToBottom = () => {
-      const current = messagesContainerRef.current
-      if (!current) return
-      current.scrollTop = current.scrollHeight
-      lastScrollTopRef.current = current.scrollTop
+      scrollMessagesToBottom()
       pendingInitialScrollRef.current = false
     }
 
@@ -747,11 +806,32 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   }, [sessionKey, fullPage, messages.length, lastMessageKey])
 
   useEffect(() => {
-    const el = messagesContainerRef.current
-    if (!el) return
     if (!shouldAutoScrollRef.current) return
-    el.scrollTop = el.scrollHeight
+    scrollMessagesToBottom()
   }, [lastMessageKey])
+
+  useEffect(() => {
+    if (!latestStreamingAssistantId) return
+    shouldAutoScrollRef.current = true
+    scrollMessagesToBottom()
+  }, [latestStreamingAssistantId])
+
+  useEffect(() => {
+    const scrollContainer = messagesContainerRef.current
+    if (!scrollContainer) return
+    const content = scrollContainer.firstElementChild
+    if (!content || typeof ResizeObserver === 'undefined') return
+
+    const observer = new ResizeObserver(() => {
+      if (!shouldAutoScrollRef.current) return
+      scrollMessagesToBottom()
+    })
+
+    observer.observe(content)
+    return () => {
+      observer.disconnect()
+    }
+  }, [sessionKey, fullPage, messages.length])
 
   useEffect(() => {
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
