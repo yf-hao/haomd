@@ -94,6 +94,14 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
 
   const saverRef = useRef<AutoSaveHandle | null>(null)
 
+  // Refs that always point to the latest values — avoids adding them to
+  // handleSave's dep array, which would cause handleSave (and the entire
+  // save chain all the way to the menu listener) to be recreated on every render.
+  const optionsRef = useRef(options)
+  optionsRef.current = options
+  const upsertRecentLocalRef = useRef(upsertRecentLocal)
+  upsertRecentLocalRef.current = upsertRecentLocal
+
   const saveInFlightRef = useRef(false)
   const firstRenderRef = useRef(true)
 
@@ -131,19 +139,17 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
           if (isTauri()) {
             void logRecentFile(pathToUse, false)
           }
-          upsertRecentLocal()
+          upsertRecentLocalRef.current()
 
           // 通知外层：保存成功，可用于更新多标签元信息
-          if (options?.onSaved) {
-            options.onSaved(pathToUse)
-          }
+          optionsRef.current?.onSaved?.(pathToUse)
         }
         return resp
       } finally {
         saveInFlightRef.current = false
       }
     },
-    [currentHash, currentMtime, upsertRecentLocal, options],
+    [currentHash, currentMtime],
   )
 
   const dialogInFlightRef = useRef(false)
@@ -287,6 +293,8 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
         setCurrentHash(res.hash)
         setCurrentMtime(res.mtimeMs)
         setLastSavedAt(Date.now())
+        // 同步清除标签页脏标记（与手动保存保持一致）
+        optionsRef.current?.onSaved?.(res.path)
       },
       onConflict: (error) => {
         setSaveStatus('conflict')
