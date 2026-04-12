@@ -80,9 +80,13 @@ function isPersistedSessionKey(sessionKey: AiChatSessionKey): boolean {
   return sessionKey.startsWith('session:')
 }
 
+function isPersistedEngineRole(role: string): role is EngineMessage['role'] {
+  return role === 'system' || role === 'user' || role === 'assistant'
+}
+
 function buildStateFromAiSessionRecord(record: AiChatSessionCfg, entryMode: ChatEntryMode): ConversationState {
   const engineHistory: EngineMessage[] = record.messages
-    .filter((m): m is AiChatMessageCfg & { role: 'user' | 'assistant' } => m.role === 'user' || m.role === 'assistant')
+    .filter((m): m is AiChatMessageCfg & { role: EngineMessage['role'] } => isPersistedEngineRole(m.role))
     .map((m) => ({
       role: m.role,
       content: m.content,
@@ -239,18 +243,18 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
       const now = Date.now()
       void (async () => {
         const existing = await loadSession(sessionKey)
-        const prevTimestamps = new Map(
-          (existing?.messages ?? []).map((message) => [message.id, message.timestamp]),
-        )
+        const previousMessages = existing?.messages ?? []
 
-        const messages: AiChatMessageCfg[] = state.viewMessages
-          .filter((message) => (message.role === 'user' || message.role === 'assistant') && !message.hidden)
-          .map((message, index) => ({
-            id: message.id,
+        const messages: AiChatMessageCfg[] = state.engineHistory.map((message, index) => {
+          const previous = previousMessages[index]
+          const reuseIdentity = previous && previous.role === message.role
+          return {
+            id: reuseIdentity ? previous.id : `${sessionKey}:${message.role}:${now + index}`,
             role: message.role,
             content: message.content,
-            timestamp: prevTimestamps.get(message.id) ?? now + index,
-          }))
+            timestamp: reuseIdentity ? previous.timestamp : now + index,
+          }
+        })
 
         const sessionRecord: AiChatSessionCfg = {
           id: sessionKey,

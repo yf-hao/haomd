@@ -41,6 +41,15 @@ import {
   writeToNotesToolSchema,
   executeWriteToNotes,
 } from '../../notes/notesBuiltinTool'
+import {
+  RESOLVE_WORKSPACE_DIRECTORY_TOOL_NAME,
+  resolveWorkspaceDirectoryToolSchema,
+  executeResolveWorkspaceDirectory,
+  WRITE_TO_WORKSPACE_TOOL_NAME,
+  buildWorkspaceMountedRootsPrompt,
+  writeToWorkspaceToolSchema,
+  executeWriteToWorkspace,
+} from '../../workspace/workspaceBuiltinTool'
 
 export type StartChatOptions = {
   entryMode: ChatEntryMode
@@ -453,6 +462,14 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
           let toolResult: unknown
           if (tc.function.name === WRITE_TO_NOTES_TOOL_NAME) {
             toolResult = await executeWriteToNotes(parsedArgs as { content?: string })
+          } else if (tc.function.name === RESOLVE_WORKSPACE_DIRECTORY_TOOL_NAME) {
+            toolResult = await executeResolveWorkspaceDirectory(
+              parsedArgs as { targetDirectory?: string },
+            )
+          } else if (tc.function.name === WRITE_TO_WORKSPACE_TOOL_NAME) {
+            toolResult = await executeWriteToWorkspace(
+              parsedArgs as { targetDirectory?: string; fileName?: string; content?: string },
+            )
           } else {
             toolResult = await executeTool(tc.function.name, parsedArgs, routingTools)
           }
@@ -703,6 +720,9 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
         if (allMcpTools.length > 0) {
           systemPromptForRequest += buildToolCatalog(allMcpTools)
         }
+        if (providerType === 'openai') {
+          systemPromptForRequest += buildWorkspaceMountedRootsPrompt()
+        }
         const initialConversationIdForClient =
           providerType === 'dify' ? difyConversationId : undefined
         console.warn('[ChatSession] sendUserMessage creating client', {
@@ -727,7 +747,13 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       // Built-in tools (write_to_notes etc.) are available for all OpenAI-compatible providers.
       // They are always injected regardless of MCP role.
       const isOpenAIProvider = providerType === 'openai'
-      const builtinTools: OpenAIToolDef[] = isOpenAIProvider ? [writeToNotesToolSchema] : []
+      const builtinTools: OpenAIToolDef[] = isOpenAIProvider
+        ? [
+          writeToNotesToolSchema,
+          resolveWorkspaceDirectoryToolSchema,
+          writeToWorkspaceToolSchema,
+        ]
+        : []
 
       if (isMcpRoleActive) {
         if (providerType !== 'openai') {

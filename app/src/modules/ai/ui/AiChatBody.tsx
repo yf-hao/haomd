@@ -122,6 +122,17 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
   const [messageViewModes, setMessageViewModes] = useState<Record<string, MessageViewMode>>({})
   const [cursorIndex, setCursorIndex] = useState(input.length)
   const aiChatBackground = themeSettings.aiChatBackground
+  const visibleMessages = useMemo(
+    () =>
+      messages.filter((msg) => {
+        if (msg.hidden) return false
+        if (msg.role !== 'assistant') return true
+        if (msg.streaming) return true
+        if (msg.content.trim()) return true
+        return (msg.toolExecutions?.length ?? 0) > 0
+      }),
+    [messages],
+  )
 
   const aiChatBackgroundUrl = useMemo(() => {
     if (!aiChatBackground?.enabled || !aiChatBackground.path) return null
@@ -241,47 +252,11 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
   }
 
   const handlePaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
-    const dt = e.clipboardData
-    if (!dt) return
-
-    const text = dt.getData('text')
-    const items = Array.from(dt.items || [])
-    const imageItems = items.filter((item) => item.type.startsWith('image/'))
-
-    // 没有图片，直接交给浏览器默认粘贴逻辑（文本等）
-    if (imageItems.length === 0) return
-
-    // 如果剪贴板中包含可见文本，则优先保留文本粘贴行为
-    if (text && text.trim().length > 0) {
-      return
-    }
-
+    // AI Chat 输入框统一走 Tauri 原生粘贴桥：
+    // - 文本：AiChatPane 中的 onNativePaste 负责写回受控 state
+    // - 图片：AiChatPane 中的 onNativePasteImage 负责附加/上传
+    // 这里必须阻止浏览器默认 paste，否则会和 native://paste 双写。
     e.preventDefault()
-
-    const files = imageItems
-      .map((item) => item.getAsFile())
-      .filter((file): file is File => !!file)
-
-    if (files.length === 0) return
-
-    // Dify 方案：直接走批量上传路径（与“上传图片”按钮一致）
-    if (onUploadFiles) {
-      console.warn('[AiChatBody] handlePaste using onUploadFiles (Dify path)')
-      onUploadFiles(files)
-      return
-    }
-
-    // 非 Dify 方案：仅取第一张，转为 data URL
-    const file = files[0]
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = reader.result
-      if (typeof result === 'string') {
-        console.warn('[AiChatBody] handlePaste attaching image via data URL (Vision path)')
-        onAttachImage?.(result)
-      }
-    }
-    reader.readAsDataURL(file)
   }
 
   const handleTextareaKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -320,7 +295,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
     onInputKeyDown(e)
   }
 
-  const hasMessages = messages.length > 0 || loading
+  const hasMessages = visibleMessages.length > 0 || loading
   const fullPageClass = fullPage ? (hasMessages ? 'ai-chat-body-fullpage has-messages' : 'ai-chat-body-fullpage') : ''
 
   return (
@@ -342,10 +317,10 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
         ) : null}
         <div className="ai-chat-messages-scroll" ref={messagesContainerRef}>
           <div className="ai-chat-messages-content">
-            {messages.length === 0 && !loading && (
+            {visibleMessages.length === 0 && !loading && (
               <div className="ai-chat-empty muted small"></div>
             )}
-            {messages.map((msg) => {
+            {visibleMessages.map((msg) => {
               const viewMode: MessageViewMode = messageViewModes[msg.id] ?? 'rendered'
               const displayContent =
                 msg.role === 'assistant'
@@ -356,6 +331,8 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
                   : getUserDisplayContent(msg.content)
               const showStreamingIndicator =
                 msg.role === 'assistant' && msg.streaming && displayContent.trim().length === 0
+              const toolExecutions = msg.role === 'assistant' ? (msg.toolExecutions ?? []) : []
+              const showToolExecutions = toolExecutions.length > 0
 
               return (
                 <div key={msg.id} className={`ai-chat-message ai-chat-message-${msg.role}`}>
@@ -371,11 +348,34 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
                         <span className="ai-typing-dot" />
                         <span className="ai-typing-dot" />
                       </div>
-                    ) : (
+                    ) : displayContent.trim() ? (
                       <MarkdownViewer value={displayContent} mode={viewMode} />
-                    )
+                    ) : null
                   ) : (
                     <div className="ai-chat-message-content">{displayContent}</div>
+                  )}
+                  {msg.role === 'assistant' && showToolExecutions && (
+                    <details className="ai-chat-tool-executions" open>
+                      <summary className="ai-chat-tool-executions-summary">
+                        {t('ai.toolExecutionDetails')}
+                      </summary>
+                      <div className="ai-chat-tool-executions-list">
+                        {toolExecutions.map((execution) => (
+                          <div key={execution.id} className="ai-chat-tool-execution-item">
+                            <div className="ai-chat-tool-execution-header">
+                              <span
+                                className={`ai-chat-tool-execution-status ai-chat-tool-execution-status-${execution.status}`}
+                                aria-hidden="true"
+                              />
+                              <span className="ai-chat-tool-execution-label">{execution.label}</span>
+                            </div>
+                            {execution.detail?.trim() && (
+                              <div className="ai-chat-tool-execution-detail">{execution.detail}</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </details>
                   )}
                   {msg.role === 'assistant' && !msg.streaming && msg.content.trim() && (
                     <div className="ai-chat-message-actions">

@@ -71,6 +71,7 @@ import {
 import { extractFrontMatter } from '../modules/markdown/frontMatter'
 import { MAX_RECENT_TEXT_COLORS, RECENT_TEXT_COLORS_STORAGE_KEY } from '../modules/editor/textColorPalette'
 import { createTextColorTarget, isTextColorTargetActive, type TextColorTarget } from '../modules/editor/textColorTarget'
+import { setWorkspaceMountedRoots } from '../modules/workspace/workspaceMountedRoots'
 import type { WysiwygFormatActions } from './Wysiwyg/WysiwygPane'
 // 改为从内部动态加载，优化编辑性能
 // import { exportToHtml } from '../modules/export/html'
@@ -547,6 +548,10 @@ export function WorkspaceShell({
       void invoke('set_title', { title }).catch(() => { })
     }
   }, [activeTab, isTauriEnv])
+
+  useEffect(() => {
+    setWorkspaceMountedRoots(sidebar.folderRoots)
+  }, [sidebar.folderRoots])
 
   // 如果当前激活标签对应的文件曾经是“从文件分组收编”的高亮文件，则视为已访问，移除高亮
   useEffect(() => {

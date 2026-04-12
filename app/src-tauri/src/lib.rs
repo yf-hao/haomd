@@ -27,6 +27,7 @@ mod state_store;
 mod support;
 mod word;
 mod word_commands;
+mod workspace_io;
 
 use ai_config::*;
 use ai_sessions::*;
@@ -53,6 +54,7 @@ use state_store::*;
 pub(crate) use support::*;
 use word::*;
 use word_commands::*;
+use workspace_io::*;
 
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_opener::OpenerExt;
@@ -94,6 +96,8 @@ macro_rules! app_invoke_handler {
             set_title,
             delete_fs_entry,
             rename_fs_entry,
+            resolve_workspace_directory,
+            write_workspace_file,
             quit_app,
             // AI config and editor/document settings
             load_ai_settings,

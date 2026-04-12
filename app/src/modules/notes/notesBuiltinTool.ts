@@ -15,7 +15,8 @@ export const writeToNotesToolSchema: OpenAIToolDef = {
     name: WRITE_TO_NOTES_TOOL_NAME,
     description:
       '将内容保存为随笔/笔记文件。' +
-      '当用户要求将内容写入随笔、保存到笔记、记录到笔记中时调用此工具。' +
+      '当用户要求将内容写入随笔、保存到笔记、记录到笔记中，或只说“保存起来”但没有指定工作区目录时，调用此工具。' +
+      '如果用户没有明确指定当前文件浏览器中的课程目录、子目录、工作区目录，则默认使用此工具。' +
       '会在用户配置的随笔目录中自动创建以标题命名的 Markdown 文件。' +
       '如果用户要求先总结再保存，请先生成摘要，再将摘要内容和合适的标题传入此工具。',
     parameters: {
@@ -65,8 +66,7 @@ export async function executeWriteToNotes(args: { content?: string; title?: stri
 
   try {
     const filePath = await createNote(cfg.notesDirectory, content, title)
-    const filename = filePath.split('/').pop() ?? filePath
-    return `✅ 随笔已保存：${filename}`
+    return `✅ 随笔已保存：${filePath}`
   } catch (e) {
     return `❌ 保存失败：${String(e)}`
   }

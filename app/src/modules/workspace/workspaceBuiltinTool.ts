@@ -1,0 +1,202 @@
+import { invoke } from '@tauri-apps/api/core'
+import type { OpenAIToolDef } from '../ai/domain/types'
+import type { BackendResult } from '../platform/backendTypes'
+import { getWorkspaceMountedRoots } from './workspaceMountedRoots'
+
+export const WRITE_TO_WORKSPACE_TOOL_NAME = 'write_to_workspace'
+export const RESOLVE_WORKSPACE_DIRECTORY_TOOL_NAME = 'resolve_workspace_directory'
+
+type WriteWorkspaceResult =
+  | {
+    ok: true
+    resolvedDirectory: string
+    savedFilePath: string
+  }
+  | {
+    ok: false
+    reason: 'not_found' | 'ambiguous' | 'forbidden' | 'invalid_path'
+    candidates?: string[]
+  }
+
+type ResolveWorkspaceDirectoryResult =
+  | {
+    ok: true
+    resolvedDirectory: string
+  }
+  | {
+    ok: false
+    reason: 'not_found' | 'ambiguous' | 'forbidden' | 'invalid_path'
+    candidates?: string[]
+  }
+
+export const writeToWorkspaceToolSchema: OpenAIToolDef = {
+  type: 'function',
+  function: {
+    name: WRITE_TO_WORKSPACE_TOOL_NAME,
+    description:
+      '将内容保存到当前文件浏览器挂载目录树中的某个目录下。' +
+      '只有当用户明确要求将内容保存到某个课程目录、子目录、文件浏览器中的目录、或给出了明确的工作区目录路径时，才调用此工具。' +
+      '如果用户没有指定工作区目录，应改用 write_to_notes，将内容默认保存到随笔中。' +
+      '只能写入当前文件浏览器已挂载的目录树内，不能写到其它路径。' +
+      '目录名不唯一时应让用户确认。',
+    parameters: {
+      type: 'object',
+      properties: {
+        targetDirectory: {
+          type: 'string',
+          description: '目标目录名称或相对路径，例如“离散数学”或“离散数学/教案”或“教案”。',
+        },
+        fileName: {
+          type: 'string',
+          description: '要保存的文件名，例如“集合与关系教案.md”。未带扩展名时会自动补 .md。',
+        },
+        content: {
+          type: 'string',
+          description: '要保存的 Markdown 内容。',
+        },
+      },
+      required: ['targetDirectory', 'fileName', 'content'],
+    },
+  },
+}
+
+export const resolveWorkspaceDirectoryToolSchema: OpenAIToolDef = {
+  type: 'function',
+  function: {
+    name: RESOLVE_WORKSPACE_DIRECTORY_TOOL_NAME,
+    description:
+      '解析当前文件浏览器挂载目录树中的目标目录。' +
+      '只有当用户已经明确提到工作区目录、课程目录或子目录，但模型不确定目录是否唯一或真实存在时，才先调用此工具。' +
+      '如果用户根本没有指定工作区目录，不应调用此工具，而应默认使用 write_to_notes。' +
+      '该工具只解析目录，不写入文件。',
+    parameters: {
+      type: 'object',
+      properties: {
+        targetDirectory: {
+          type: 'string',
+          description: '目标目录名称或相对路径，例如“离散数学”或“离散数学/教案”或“教案”。',
+        },
+      },
+      required: ['targetDirectory'],
+    },
+  },
+}
+
+export function buildWorkspaceMountedRootsPrompt(): string {
+  const mountedRoots = getWorkspaceMountedRoots()
+  if (!mountedRoots.length) return ''
+
+  const labels = mountedRoots
+    .map((root) => root.split('/').filter(Boolean).pop() ?? root)
+    .slice(0, 8)
+
+  return (
+    '\n\n当前文件浏览器已挂载的可写目录根如下：\n' +
+    labels.map((label) => `- ${label}`).join('\n') +
+    '\n仅当用户明确要求保存到这些目录树内的目录或子目录时，才可调用 write_to_workspace。' +
+    '\n如果用户没有指定工作区目录，默认使用 write_to_notes，将内容保存到随笔中。' +
+    '\n当用户已指定工作区目录，但你不确定目录是否存在或是否唯一时，应先调用 resolve_workspace_directory，再决定是否写入。'
+  )
+}
+
+export async function executeResolveWorkspaceDirectory(args: {
+  targetDirectory?: string
+}): Promise<string> {
+  const targetDirectory = args.targetDirectory?.trim() ?? ''
+  const mountedRoots = getWorkspaceMountedRoots()
+
+  if (!mountedRoots.length) {
+    return '⚠️ 当前文件浏览器没有挂载目录，无法解析工作区目录。'
+  }
+  if (!targetDirectory) {
+    return '⚠️ 未提供目标目录。'
+  }
+
+  try {
+    const resp = await invoke<BackendResult<ResolveWorkspaceDirectoryResult>>(
+      'resolve_workspace_directory',
+      {
+        mountedRoots,
+        targetDirectory,
+      },
+    )
+
+    if ('Err' in resp) {
+      return `❌ 目录解析失败：${resp.Err.error.message || '未知错误'}`
+    }
+
+    const result = resp.Ok.data
+    if (result.ok) {
+      return `✅ 已解析目标目录：${result.resolvedDirectory}`
+    }
+    if (result.reason === 'ambiguous') {
+      const candidates = (result.candidates ?? []).join('、')
+      return `⚠️ 目录名存在歧义，请指定更完整的目录：${candidates}`
+    }
+    if (result.reason === 'not_found') {
+      return '⚠️ 未找到目标目录。请确认它位于当前文件浏览器挂载的目录树中。'
+    }
+    if (result.reason === 'forbidden') {
+      return '⚠️ 目标路径不在当前文件浏览器挂载目录树内，已拒绝解析。'
+    }
+    return '⚠️ 目标路径无效，无法解析。'
+  } catch (error) {
+    return `❌ 目录解析失败：${String(error)}`
+  }
+}
+
+export async function executeWriteToWorkspace(args: {
+  targetDirectory?: string
+  fileName?: string
+  content?: string
+}): Promise<string> {
+  const targetDirectory = args.targetDirectory?.trim() ?? ''
+  const fileName = args.fileName?.trim() ?? ''
+  const content = args.content ?? ''
+  const mountedRoots = getWorkspaceMountedRoots()
+
+  if (!mountedRoots.length) {
+    return '⚠️ 当前文件浏览器没有挂载目录，无法保存到工作区目录。'
+  }
+  if (!targetDirectory) {
+    return '⚠️ 未提供目标目录。'
+  }
+  if (!fileName) {
+    return '⚠️ 未提供文件名。'
+  }
+  if (!content.trim()) {
+    return '⚠️ 内容为空，未保存。'
+  }
+
+  try {
+    const resp = await invoke<BackendResult<WriteWorkspaceResult>>('write_workspace_file', {
+      mountedRoots,
+      targetDirectory,
+      fileName,
+      content,
+    })
+
+    if ('Err' in resp) {
+      return `❌ 保存失败：${resp.Err.error.message || '未知错误'}`
+    }
+
+    const result = resp.Ok.data
+    if (result.ok) {
+      return `✅ 已保存：${result.savedFilePath}`
+    }
+
+    if (result.reason === 'ambiguous') {
+      const candidates = (result.candidates ?? []).join('、')
+      return `⚠️ 目录名存在歧义，请指定更完整的目录：${candidates}`
+    }
+    if (result.reason === 'not_found') {
+      return '⚠️ 未找到目标目录。请确认它位于当前文件浏览器挂载的目录树中。'
+    }
+    if (result.reason === 'forbidden') {
+      return '⚠️ 目标路径不在当前文件浏览器挂载目录树内，已拒绝保存。'
+    }
+    return '⚠️ 目标路径无效，未保存。'
+  } catch (error) {
+    return `❌ 保存失败：${String(error)}`
+  }
+}
