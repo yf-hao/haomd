@@ -349,7 +349,7 @@ export function WorkspaceShell({
   // AI Chat hook
   const {
     aiChatState,
-    aiChatMode, setAiChatMode,
+    aiChatMode, effectiveAiChatMode, setAiChatMode,
     aiChatOpen, aiChatOpenRef,
     aiChatDockSide, setAiChatDockSide,
     aiChatWidthLeft: _aiChatWidthLeft, aiChatWidthRight: _aiChatWidthRight,
@@ -710,6 +710,7 @@ export function WorkspaceShell({
   // - Markdown 标签：使用当前文本文件的路径（filePath）
   // - PDF 标签：使用当前激活的 PDF 文件路径（activePdfPath）
   const aiChatFilePath = isPdfActive ? activePdfPath : filePath
+  const aiChatContextPath = selectedFolderPath ?? aiChatFilePath
 
   // 统一决定编辑器里展示的内容：
   // - Markdown 标签：走原来的 hugeDoc/markdown 逻辑
@@ -1229,11 +1230,14 @@ export function WorkspaceShell({
   }, [createTab, isCreatingTab, setActiveTab, handleMarkdownChange, tabs])
 
   const getCurrentFilePath = useCallback(() => {
+    if (selectedFolderPath) {
+      return selectedFolderPath
+    }
     if (isPdfActive) {
       return activePdfPath ?? null
     }
     return filePath ?? null
-  }, [isPdfActive, activePdfPath, filePath])
+  }, [selectedFolderPath, isPdfActive, activePdfPath, filePath])
 
   useEffect(() => {
     if (activeTab && !isPdfActive) setFilePath(activeTab.path)
@@ -2214,6 +2218,7 @@ export function WorkspaceShell({
     addStandaloneFile: sidebar.addStandaloneFile,
     openDocConversationsHistory: (docPath: string) => openDocHistoryDialog(docPath),
     refreshPdfRecent,
+    hasOpenTabs: () => tabs.length > 0,
     exportHtml: handleExportHtml,
     exportPdf: handleExportPdf,
     exportWord: handleExportWord,
@@ -2769,7 +2774,7 @@ export function WorkspaceShell({
                 sessionKey={aiChatSessionKey}
                 entryMode="chat"
                 onClose={() => setAiChatSessionKey('global')}
-                currentFilePath={null}
+                currentFilePath={aiChatContextPath}
                 sourceTabId={null}
                 fullPage
               />
@@ -2779,11 +2784,7 @@ export function WorkspaceShell({
               onNewFile={() => createTab()}
               onOpenFile={() => void dispatchAction('open_file')}
               onOpenAiChat={() => {
-                // 在没有任何标签时，优先使用浮窗模式打开 AI Chat
-                if (aiChatMode !== 'floating') {
-                  setAiChatMode('floating')
-                }
-                openAiChatDialog({ entryMode: 'chat' })
+                openAiChatDialog({ entryMode: 'chat', forceMode: 'floating' })
               }}
             />
           ) : (
@@ -2798,7 +2799,7 @@ export function WorkspaceShell({
                 />
               )}
               <main className={`workspace ${dragging ? 'dragging' : ''}`} style={{ gridTemplateColumns: outerGridTemplateColumns }}>
-                {aiChatMode === 'docked' && aiChatOpen && aiChatState && (
+                {effectiveAiChatMode === 'docked' && aiChatOpen && aiChatState && (
                   <>
                     {aiChatDockSide === 'left' && (
                       <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13, height: '100%' }}>{t('workspace.loadingAiPane')}</div>}>
@@ -2807,7 +2808,7 @@ export function WorkspaceShell({
                           entryMode={aiChatState.entryMode}
                           initialContext={aiChatState.initialContext}
                           onClose={closeAiChatDialog}
-                          currentFilePath={aiChatFilePath}
+                          currentFilePath={aiChatContextPath}
                           sourceTabId={activeTab?.id ?? null}
                         />
                       </Suspense>
@@ -2961,14 +2962,14 @@ export function WorkspaceShell({
                     </div>
                   )}
                 </section>
-                {aiChatMode === 'docked' && aiChatOpen && aiChatState && aiChatDockSide === 'right' && (
+                {effectiveAiChatMode === 'docked' && aiChatOpen && aiChatState && aiChatDockSide === 'right' && (
                   <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13, height: '100%' }}>{t('workspace.loadingAiPane')}</div>}>
                     <AiChatPaneLazy
                       sessionKey={aiChatSessionKey}
                       entryMode={aiChatState.entryMode}
                       initialContext={aiChatState.initialContext}
                       onClose={closeAiChatDialog}
-                      currentFilePath={aiChatFilePath}
+                      currentFilePath={aiChatContextPath}
                       sourceTabId={activeTab?.id ?? null}
                     />
                   </Suspense>
@@ -3013,14 +3014,14 @@ export function WorkspaceShell({
           onCancel={() => setIsTextColorDialogOpen(false)}
         />
 
-        {aiChatMode === 'floating' && aiChatOpen && aiChatState?.open && (
+        {effectiveAiChatMode === 'floating' && aiChatOpen && aiChatState?.open && (
           <Suspense fallback={null}>
             <AiChatDialogLazy
               open={aiChatOpen}
               entryMode={aiChatState.entryMode}
               initialContext={aiChatState.initialContext}
               onClose={closeAiChatDialog}
-              currentFilePath={aiChatFilePath}
+              currentFilePath={aiChatContextPath}
               tabId={aiChatState.tabId}
             />
           </Suspense>

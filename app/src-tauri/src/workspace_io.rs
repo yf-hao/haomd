@@ -30,6 +30,20 @@ pub struct ResolveWorkspaceDirectoryResult {
     pub candidates: Option<Vec<String>>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateWorkspaceDirectoryResult {
+    pub ok: bool,
+    #[serde(default)]
+    pub resolved_parent_directory: Option<String>,
+    #[serde(default)]
+    pub created_directory_path: Option<String>,
+    #[serde(default)]
+    pub reason: Option<String>,
+    #[serde(default)]
+    pub candidates: Option<Vec<String>>,
+}
+
 fn normalize_display_path(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
@@ -46,6 +60,22 @@ fn sanitize_file_name(input: &str) -> String {
         value.push_str(".md");
     }
     value
+}
+
+fn sanitize_directory_name(input: &str) -> Option<String> {
+    let value = input
+        .trim()
+        .replace(['\\', '/', ':', '*', '?', '"', '<', '>', '|'], "-")
+        .trim_matches('.')
+        .trim_matches('-')
+        .trim()
+        .to_string();
+
+    if value.is_empty() {
+        None
+    } else {
+        Some(value)
+    }
 }
 
 fn normalize_target_directory(input: &str) -> String {
@@ -350,6 +380,89 @@ pub async fn write_workspace_file(
     }
 }
 
+#[tauri::command]
+pub async fn create_workspace_directory(
+    _app: AppHandle,
+    mounted_roots: Vec<String>,
+    parent_directory: String,
+    directory_name: String,
+) -> ResultPayload<CreateWorkspaceDirectoryResult> {
+    let trace = new_trace_id();
+
+    let resolved_parent = match resolve_target_directory(&mounted_roots, &parent_directory) {
+        Ok(path) => path,
+        Err(result) => {
+            return ok(
+                CreateWorkspaceDirectoryResult {
+                    ok: false,
+                    resolved_parent_directory: None,
+                    created_directory_path: None,
+                    reason: result.reason,
+                    candidates: result.candidates,
+                },
+                trace,
+            );
+        }
+    };
+
+    let safe_directory_name = match sanitize_directory_name(&directory_name) {
+        Some(name) => name,
+        None => {
+            return ok(
+                CreateWorkspaceDirectoryResult {
+                    ok: false,
+                    resolved_parent_directory: None,
+                    created_directory_path: None,
+                    reason: Some("invalid_path".to_string()),
+                    candidates: None,
+                },
+                trace,
+            );
+        }
+    };
+
+    let target_path = resolved_parent.join(&safe_directory_name);
+
+    if target_path.exists() {
+        if target_path.is_dir() {
+            return ok(
+                CreateWorkspaceDirectoryResult {
+                    ok: false,
+                    resolved_parent_directory: Some(normalize_display_path(&resolved_parent)),
+                    created_directory_path: Some(normalize_display_path(&target_path)),
+                    reason: Some("already_exists".to_string()),
+                    candidates: None,
+                },
+                trace,
+            );
+        }
+
+        return err_payload(
+            ErrorCode::IoError,
+            "目标路径已存在同名文件，无法创建目录".to_string(),
+            trace,
+        );
+    }
+
+    match fs::create_dir(&target_path).await {
+        Ok(()) => ok(
+            CreateWorkspaceDirectoryResult {
+                ok: true,
+                resolved_parent_directory: Some(normalize_display_path(&resolved_parent)),
+                created_directory_path: Some(normalize_display_path(&target_path)),
+                reason: None,
+                candidates: None,
+            },
+            trace,
+        ),
+        Err(err) => err_payload(
+            ErrorCode::IoError,
+            format!("创建工作区目录失败: {err}"),
+            trace,
+        ),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -450,6 +563,38 @@ mod tests {
         .expect_err("absolute path outside root should be rejected");
 
         assert_eq!(err.reason.as_deref(), Some("forbidden"));
+
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[tokio::test]
+    async fn should_create_subdirectory_within_resolved_parent() {
+        let base = unique_test_dir("workspace-io-create-dir");
+        let root = base.join("离散数学");
+        let parent = root.join("教案");
+        let target = parent.join("第四章");
+
+        std::fs::create_dir_all(&parent).expect("parent dir should exist");
+
+        let result = create_workspace_directory(
+            tauri::test::mock_app().app_handle().clone(),
+            vec![normalize_display_path(&root)],
+            "离散数学/教案".to_string(),
+            "第四章".to_string(),
+        )
+        .await;
+
+        let payload = match result {
+            ResultPayload::Ok(ok) => ok.data,
+            ResultPayload::Err(err) => panic!("unexpected error: {:?}", err),
+        };
+
+        assert!(payload.ok);
+        assert_eq!(
+            payload.created_directory_path.as_deref(),
+            Some(normalize_display_path(&target).as_str())
+        );
+        assert!(target.is_dir());
 
         let _ = std::fs::remove_dir_all(base);
     }

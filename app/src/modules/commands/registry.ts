@@ -93,10 +93,11 @@ export type HelpCommandContext = StatusContext & {
  */
 export type AiCommandContext = StatusContext & {
   aiClient?: IAiClient
+  hasOpenTabs?: () => boolean
   /**
    * 打开 AI Chat 对话框的 UI 回调，由 WorkspaceShell 提供。
    */
-  openAiChatDialog?: (options: { entryMode: ChatEntryMode; initialContext?: EntryContext }) => void
+  openAiChatDialog?: (options: { entryMode: ChatEntryMode; initialContext?: EntryContext; forceMode?: 'floating' | 'docked' }) => void
   /**
    * 关闭 AI Chat 对话框的 UI 回调，由 WorkspaceShell 提供。
    * 用于实现快捷键/命令层的 toggle 行为。
@@ -532,7 +533,10 @@ function createAiCommands(ctx: AiCommandContext): CommandRegistry {
           ctx.setStatusMessage(tr(ctx, 'commands.aiChatUiUnavailable', 'AI Chat UI 未初始化'))
           return
         }
-        ctx.openAiChatDialog({ entryMode: 'chat' })
+        ctx.openAiChatDialog({
+          entryMode: 'chat',
+          forceMode: ctx.hasOpenTabs?.() === false ? 'floating' : undefined,
+        })
       } catch (err) {
         console.error('[commands] ai_chat error', err)
         ctx.setStatusMessage(tr(ctx, 'commands.aiChatError', 'AI Chat 调用出错，请检查控制台日志'))

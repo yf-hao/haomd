@@ -55,6 +55,9 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const paneRootRef = useRef<HTMLElement>(null)
+  const shouldAutoScrollRef = useRef(true)
+  const lastScrollTopRef = useRef(0)
+  const pendingInitialScrollRef = useRef(true)
   const isComposingRef = useRef(false)
   const lockEnterRef = useRef(false)
   const historyCursorRef = useRef<number | null>(null)
@@ -700,6 +703,53 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   useEffect(() => {
     const el = messagesContainerRef.current
     if (!el) return
+
+    const updateAutoScroll = () => {
+      const previousScrollTop = lastScrollTopRef.current
+      const currentScrollTop = el.scrollTop
+      const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+      if (currentScrollTop < previousScrollTop) {
+        shouldAutoScrollRef.current = false
+      } else if (distanceToBottom <= 24) {
+        shouldAutoScrollRef.current = true
+      }
+      lastScrollTopRef.current = currentScrollTop
+    }
+
+    updateAutoScroll()
+    el.addEventListener('scroll', updateAutoScroll, { passive: true })
+    return () => {
+      el.removeEventListener('scroll', updateAutoScroll)
+    }
+  }, [sessionKey])
+
+  useEffect(() => {
+    shouldAutoScrollRef.current = true
+    lastScrollTopRef.current = 0
+    pendingInitialScrollRef.current = true
+  }, [sessionKey, fullPage])
+
+  useEffect(() => {
+    if (!pendingInitialScrollRef.current) return
+    if (messages.length === 0) return
+
+    const scrollToBottom = () => {
+      const current = messagesContainerRef.current
+      if (!current) return
+      current.scrollTop = current.scrollHeight
+      lastScrollTopRef.current = current.scrollTop
+      pendingInitialScrollRef.current = false
+    }
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(scrollToBottom)
+    })
+  }, [sessionKey, fullPage, messages.length, lastMessageKey])
+
+  useEffect(() => {
+    const el = messagesContainerRef.current
+    if (!el) return
+    if (!shouldAutoScrollRef.current) return
     el.scrollTop = el.scrollHeight
   }, [lastMessageKey])
 

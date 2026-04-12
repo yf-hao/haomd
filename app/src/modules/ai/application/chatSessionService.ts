@@ -45,6 +45,9 @@ import {
   RESOLVE_WORKSPACE_DIRECTORY_TOOL_NAME,
   resolveWorkspaceDirectoryToolSchema,
   executeResolveWorkspaceDirectory,
+  CREATE_WORKSPACE_DIRECTORY_TOOL_NAME,
+  createWorkspaceDirectoryToolSchema,
+  executeCreateWorkspaceDirectory,
   WRITE_TO_WORKSPACE_TOOL_NAME,
   buildWorkspaceMountedRootsPrompt,
   writeToWorkspaceToolSchema,
@@ -466,6 +469,10 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
             toolResult = await executeResolveWorkspaceDirectory(
               parsedArgs as { targetDirectory?: string },
             )
+          } else if (tc.function.name === CREATE_WORKSPACE_DIRECTORY_TOOL_NAME) {
+            toolResult = await executeCreateWorkspaceDirectory(
+              parsedArgs as { parentDirectory?: string; directoryName?: string },
+            )
           } else if (tc.function.name === WRITE_TO_WORKSPACE_TOOL_NAME) {
             toolResult = await executeWriteToWorkspace(
               parsedArgs as { targetDirectory?: string; fileName?: string; content?: string },
@@ -751,6 +758,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
         ? [
           writeToNotesToolSchema,
           resolveWorkspaceDirectoryToolSchema,
+          createWorkspaceDirectoryToolSchema,
           writeToWorkspaceToolSchema,
         ]
         : []

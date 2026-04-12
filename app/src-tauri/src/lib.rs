@@ -97,6 +97,7 @@ macro_rules! app_invoke_handler {
             delete_fs_entry,
             rename_fs_entry,
             resolve_workspace_directory,
+            create_workspace_directory,
             write_workspace_file,
             quit_app,
             // AI config and editor/document settings

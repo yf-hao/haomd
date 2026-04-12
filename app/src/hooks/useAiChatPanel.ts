@@ -21,6 +21,7 @@ export interface UseAiChatPanelParams {
 export interface UseAiChatPanelReturn {
   aiChatState: AiChatState | null
   aiChatMode: 'floating' | 'docked'
+  effectiveAiChatMode: 'floating' | 'docked'
   setAiChatMode: React.Dispatch<React.SetStateAction<'floating' | 'docked'>>
   aiChatOpen: boolean
   /** Synchronously updated ref — immune to stale closures in async command handlers */
@@ -32,7 +33,7 @@ export interface UseAiChatPanelReturn {
   isAiChatResizing: boolean
   docHistoryState: { open: boolean; docPath: string | null }
   globalMemoryState: { open: boolean; initialTab: 'persona' | 'manage' }
-  openAiChatDialog: (options: { entryMode: ChatEntryMode; initialContext?: EntryContext }) => void
+  openAiChatDialog: (options: { entryMode: ChatEntryMode; initialContext?: EntryContext; forceMode?: 'floating' | 'docked' }) => void
   closeAiChatDialog: () => void
   openDocHistoryDialog: (docPath: string) => void
   closeDocHistoryDialog: () => void
@@ -48,6 +49,7 @@ export function useAiChatPanel({
 }: UseAiChatPanelParams): UseAiChatPanelReturn {
   const [aiChatState, setAiChatState] = useState<AiChatState | null>(null)
   const [aiChatMode, setAiChatMode] = useState<'floating' | 'docked'>('docked')
+  const [aiChatModeOverride, setAiChatModeOverride] = useState<'floating' | 'docked' | null>(null)
   const [aiChatOpen, setAiChatOpen] = useState(false)
   const aiChatOpenRef = useRef(false)
   const [aiChatDockSide, setAiChatDockSide] = useState<'left' | 'right'>('right')
@@ -70,18 +72,19 @@ export function useAiChatPanel({
   const aiChatPrevDockSideRef = useRef<'left' | 'right'>(aiChatDockSide)
 
   const aiChatWidth = aiChatDockSide === 'left' ? aiChatWidthLeft : aiChatWidthRight
+  const effectiveAiChatMode = aiChatModeOverride ?? aiChatMode
 
   const outerGridTemplateColumns = useMemo(() => {
     const aiChatCol = `${aiChatWidth}px`
     // 只有在 docked + 打开 + 有有效会话状态时，才为 AI Chat 预留布局空间
-    if (aiChatMode === 'docked' && aiChatOpen && aiChatState) {
+    if (effectiveAiChatMode === 'docked' && aiChatOpen && aiChatState) {
       if (aiChatDockSide === 'left') {
         return `${aiChatCol} 1fr`
       }
       return `1fr ${aiChatCol}`
     }
     return '1fr'
-  }, [aiChatMode, aiChatOpen, aiChatDockSide, aiChatWidth, aiChatState])
+  }, [effectiveAiChatMode, aiChatOpen, aiChatDockSide, aiChatWidth, aiChatState])
 
   const handleAiChatResizeStart = useCallback((event: any) => {
     const currentWidth = aiChatDockSide === 'left' ? aiChatWidthLeft : aiChatWidthRight
@@ -200,21 +203,38 @@ export function useAiChatPanel({
   }, [isAiChatResizing, aiChatDockSide])
 
   const openAiChatDialog = useCallback(
-    (options: { entryMode: ChatEntryMode; initialContext?: EntryContext }) => {
+    (options: { entryMode: ChatEntryMode; initialContext?: EntryContext; forceMode?: 'floating' | 'docked' }) => {
       // 保持当前模式（floating/docked），只负责打开和设置会话参数
       const tabId = activeTabId ?? 'global'
+      setAiChatModeOverride(options.forceMode ?? null)
       aiChatOpenRef.current = true
       setAiChatOpen(true)
-      setAiChatState({ open: true, tabId, ...options })
+      const { forceMode: _forceMode, ...nextState } = options
+      setAiChatState({ open: true, tabId, ...nextState })
     },
     [activeTabId],
   )
 
   const closeAiChatDialog = useCallback(() => {
+    setAiChatModeOverride(null)
     aiChatOpenRef.current = false
     setAiChatOpen(false)
     setAiChatState(null)
   }, [])
+
+  useEffect(() => {
+    if (!aiChatModeOverride) return
+    if (!activeTabId) return
+    setAiChatModeOverride(null)
+  }, [aiChatModeOverride, activeTabId])
+
+  const setAiChatModeWithOverrideReset = useCallback<React.Dispatch<React.SetStateAction<'floating' | 'docked'>>>(
+    (value) => {
+      setAiChatModeOverride(null)
+      setAiChatMode(value)
+    },
+    [],
+  )
 
   const openDocHistoryDialog = useCallback((docPath: string) => {
     setDocHistoryState({ open: true, docPath })
@@ -235,7 +255,8 @@ export function useAiChatPanel({
   return {
     aiChatState,
     aiChatMode,
-    setAiChatMode,
+    effectiveAiChatMode,
+    setAiChatMode: setAiChatModeWithOverrideReset,
     aiChatOpen,
     aiChatOpenRef,
     aiChatDockSide,
