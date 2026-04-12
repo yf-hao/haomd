@@ -42,9 +42,12 @@ export const textColorMark = $markSchema('text_color', () => ({
     match: (mark) => mark.type.name === 'text_color',
     runner: (state, mark) => {
       const color = normalizeTextColor(String(mark.attrs.color))
-      if (!color) return false
+      if (!color) return
+      // Do NOT return true here — that would prevent #runProseNode from being
+      // called, which means the wrapped text node would never be added as a
+      // child of the textColor mdast node, producing empty `{color:...}{/color}`.
+      // Like `strong`, we let the text node be serialized as a normal child.
       state.withMark(mark, 'textColor', undefined, { color })
-      return true
     },
   },
 }))

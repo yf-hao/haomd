@@ -963,8 +963,13 @@ function WysiwygEditor({
     initEditor()
     return () => {
       initRunIdRef.current += 1
-      // Flush any unserialized changes before destroying the editor
-      flushPending()
+      // Only flush if the user actually made edits — flushing without interaction
+      // would re-serialize and push content that may differ from the original
+      // source (e.g. escaped '=' at line starts, or empty color marks) and
+      // override the entry markdown that setEditModeWithFlush already restored.
+      if (hasUserInteractedRef.current) {
+        flushPending()
+      }
       hasUserInteractedRef.current = false
       onSelectionGetterReadyRef.current?.(null)
       onMarkdownGetterReadyRef.current?.(null)
