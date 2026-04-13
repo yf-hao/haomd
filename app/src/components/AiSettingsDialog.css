@@ -325,7 +325,7 @@
 .ai-chat-input {
   margin-top: 0;
   padding-top: 6px;
-  padding-bottom: 20px;
+  padding-bottom: 0px;
   position: relative;
   font-size: var(--ui-font-ai-chat-input);
 }

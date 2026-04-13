@@ -37,8 +37,10 @@ export function ChatDetailPage({
         {onSaveToNote ? <button onClick={() => void onSaveToNote()}>保存到随笔</button> : <span />}
       </header>
       {error ? <div className="web-error web-chat-error">{error}</div> : null}
-      <ChatMessageList messages={session.messages} />
-      <ChatComposer disabled={sending} onSend={onSend} onVoiceError={onVoiceError} />
+      <div className="web-chat-main">
+        <ChatMessageList messages={session.messages} />
+        <ChatComposer disabled={sending} onSend={onSend} onVoiceError={onVoiceError} />
+      </div>
     </section>
   )
 }

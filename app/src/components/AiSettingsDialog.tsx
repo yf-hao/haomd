@@ -54,7 +54,6 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
     { key: 'baseUrl', label: t('provider.baseUrl'), type: 'text' },
     { key: 'apiKey', label: t('provider.apiKey'), type: 'password' },
     { key: 'modelsInput', label: t('provider.models'), type: 'text', placeholder: t('provider.modelsPlaceholder') },
-    { key: 'description', label: t('provider.parameters'), type: 'textarea' },
   ]
 
   // 打开对话框时重置展开状态，确保所有提供商默认不展开
@@ -292,8 +291,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
       draft.name.trim() ||
       draft.baseUrl.trim() ||
       draft.apiKey.trim() ||
-      draft.modelsInput.trim() ||
-      draft.description.trim()
+      draft.modelsInput.trim()
 
     // 情况 1：当前还没有任何 Provider，但左侧表单里已经填写了内容，
     // Save 时自动把草稿作为首个 Provider 一并保存（不依赖异步 setState）
@@ -316,7 +314,6 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
         apiKey: draft.apiKey.trim(),
         models: models.map((m) => ({ id: m })),
         defaultModelId: models[0],
-        description: draft.description.trim() || undefined,
         providerType: (draft.providerType || 'dify') as ProviderType,
         visionMode: draft.visionMode || undefined,
       }
@@ -355,7 +352,6 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                   name: draft.name.trim(),
                   baseUrl: draft.baseUrl.trim(),
                   apiKey: draft.apiKey.trim(),
-                  description: draft.description.trim() || undefined,
                   providerType: (draft.providerType || 'dify') as ProviderType,
                   visionMode: draft.visionMode || 'disabled',
                   models: nextModels,

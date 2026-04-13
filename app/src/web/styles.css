@@ -37,14 +37,17 @@ button {
 }
 
 .web-app-shell {
+  min-height: 100dvh;
   min-height: 100%;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .web-app-content {
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .web-split {
@@ -73,6 +76,15 @@ button {
 }
 
 .web-chat-detail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.web-chat-main {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -226,7 +238,9 @@ button {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 12px;
+  flex: 0 0 auto;
   padding-top: 12px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   background: linear-gradient(180deg, rgba(9, 14, 26, 0.15), rgba(9, 14, 26, 0.98) 28%);
 }
 
@@ -418,7 +432,7 @@ button {
 
 @media (max-width: 860px) {
   .web-split {
-    height: calc(100vh - 72px);
+    height: calc(100dvh - 72px);
     grid-template-columns: 1fr;
   }
 
@@ -447,5 +461,26 @@ button {
   .web-composer-actions {
     flex-direction: row;
     justify-content: flex-end;
+  }
+
+  .web-detail.web-chat-detail {
+    padding: 0;
+  }
+
+  .web-detail.web-chat-detail .web-detail-header,
+  .web-detail.web-chat-detail .web-chat-error {
+    margin: 0;
+    padding: 16px 16px 0;
+  }
+
+  .web-detail.web-chat-detail .web-message-list {
+    padding: 0 16px;
+    margin-bottom: 0;
+  }
+
+  .web-detail.web-chat-detail .web-composer {
+    padding-left: 16px;
+    padding-right: 16px;
+    padding-top: 12px;
   }
 }

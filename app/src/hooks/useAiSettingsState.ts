@@ -147,7 +147,6 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
       apiKey: draft.apiKey.trim(),
       models: models.map((m) => ({ id: m, visionMode: draft.visionMode || 'disabled' })),
       defaultModelId: models[0],
-      description: draft.description.trim() || undefined,
       providerType: (draft.providerType || 'dify') as ProviderType,
       visionMode: draft.visionMode || 'disabled',
     }
@@ -220,7 +219,6 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
           name: draft.name.trim(),
           baseUrl: draft.baseUrl.trim(),
           apiKey: draft.apiKey.trim(),
-          description: draft.description.trim() || undefined,
           providerType: (draft.providerType || 'dify') as ProviderType,
           visionMode: draft.visionMode || 'disabled',
           models: nextModels,
