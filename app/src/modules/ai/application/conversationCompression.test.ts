@@ -182,7 +182,7 @@ describe('loadCompressionConfig', () => {
     expect(cfg).toMatchObject({
       minMessagesToCompress: 10,
       keepRecentRounds: 3,
-      maxPreservedUserMessages: Infinity,
+      maxPreservedUserMessages: 50,
       maxMessagesAfterCompress: 100,
       maxMessagesPerSummaryBatch: 50,
     })

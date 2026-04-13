@@ -124,7 +124,7 @@ function pickPreservedUserMessages(groups: ConversationGroup[], maxCount: number
     .flatMap((group) => group.userMessages)
     .filter((message): message is DocConversationMessage => Boolean(message))
 
-  if (!Number.isFinite(maxCount) || picked.length <= maxCount) return picked
+  if (picked.length <= maxCount) return picked
   return picked.slice(-maxCount)
 }
 
@@ -279,7 +279,7 @@ export function createConversationCompressor(summaryProvider: SummaryProvider): 
 export const defaultCompressionConfig: CompressionConfig = {
   minMessagesToCompress: 0,
   keepRecentRounds: 8,
-  maxPreservedUserMessages: Infinity,
+  maxPreservedUserMessages: 50,
   maxMessagesAfterCompress: 200,
   maxMessagesPerSummaryBatch: 200,
   maxSummaryCharsPerLevel: (level: SummaryLevel) => {
