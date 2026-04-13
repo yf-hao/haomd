@@ -122,7 +122,45 @@ function cursorSyncPlugin(onCursorChange?: (line: number) => void): Extension[] 
   ]
 }
 
-// 在输入内容时，仅在「回车产生换行」时才触发 scrollIntoView，避免每个字符输入都触发布局
+// 防止浏览器 contenteditable 焦点跟随导致 overflow:hidden 祖先容器被滚动。
+// 在 CM 编辑器挂载后，监听从 .cm-scroller 到 document 的所有祖先元素的 scroll 事件，
+// 对非 .cm-scroller 的容器立即重置 scrollTop/scrollLeft。
+function ancestorScrollGuardPlugin(): Extension {
+  return ViewPlugin.fromClass(class {
+    private cleanups: (() => void)[] = []
+
+    constructor(view: EditorView) {
+      // 延迟一帧，确保 DOM 已经完成挂载
+      requestAnimationFrame(() => this.attach(view))
+    }
+
+    private attach(view: EditorView) {
+      const scroller = view.scrollDOM
+      let el: HTMLElement | null = scroller.parentElement
+      while (el) {
+        const target = el
+        const handler = () => {
+          if (target.scrollTop !== 0 || target.scrollLeft !== 0) {
+            target.scrollTop = 0
+            target.scrollLeft = 0
+          }
+        }
+        target.addEventListener('scroll', handler)
+        this.cleanups.push(() => target.removeEventListener('scroll', handler))
+        el = el.parentElement
+      }
+    }
+
+    destroy() {
+      for (const fn of this.cleanups) fn()
+      this.cleanups.length = 0
+    }
+  })
+}
+
+// 在输入内容时，仅在「回车产生换行」时才触发滚动，避免每个字符输入都触发布局。
+// 直接调整 .cm-scroller 的 scrollTop 而非使用 EditorView.scrollIntoView，
+// 后者会触发浏览器原生的 focus-scroll 级联，导致 overflow:hidden 祖先容器被滚动。
 function smartScrollOnInputPlugin(): Extension {
   return EditorView.updateListener.of((update: any) => {
     if (!update.docChanged) return
@@ -138,17 +176,39 @@ function smartScrollOnInputPlugin(): Extension {
         },
       )
     } catch {
-      // 如果无法安全遍历 changes，就保守起见当作有换行处理
       insertedNewline = true
     }
 
     if (!insertedNewline) return
 
+    const view = update.view
     const head = update.state.selection.main.head
+    const scroller = view.scrollDOM
 
-    // 使用官方的滚动效果，把光标位置滚动到视窗的中部附近
-    update.view.dispatch({
-      effects: EditorView.scrollIntoView(head, { y: 'center' }),
+    requestAnimationFrame(() => {
+      try {
+        const coords = view.coordsAtPos(head)
+        if (!coords) return
+        const rect = scroller.getBoundingClientRect()
+        const topGap = coords.top - rect.top
+        const bottomGap = coords.bottom - rect.bottom
+
+        if (topGap < 0) {
+          scroller.scrollTop += topGap - 16
+        } else if (bottomGap > 0) {
+          scroller.scrollTop += bottomGap + 16
+        }
+      } catch { /* position may be stale */ }
+
+      // 重置祖先 overflow:hidden 容器的意外滚动偏移
+      let el: HTMLElement | null = scroller.parentElement as HTMLElement | null
+      while (el) {
+        if (el.scrollTop !== 0 || el.scrollLeft !== 0) {
+          el.scrollTop = 0
+          el.scrollLeft = 0
+        }
+        el = el.parentElement as HTMLElement | null
+      }
     })
   })
 }
@@ -254,6 +314,7 @@ export function createExtensions(options: EditorOptions = {}): Extension[] {
       ...foldKeymap,
     ] as any),
     EditorView.lineWrapping,
+    ancestorScrollGuardPlugin(),
     smartScrollOnInputPlugin(),
     search(), // 启用搜索逻辑
     customSearchHighlight(), // 自定义独立的高亮重绘层，彻底解决依赖冲突和样式被盖问题
