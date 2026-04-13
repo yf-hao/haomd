@@ -629,8 +629,13 @@ function createAiCommands(ctx: AiCommandContext): CommandRegistry {
         }
         const docPath = getDirKeyFromDocPath(filePath) ?? filePath
         ctx.setStatusMessage(tr(ctx, 'commands.conversationCompressing', '正在压缩会话历史…'))
-        await docConversationService.compressByDocPath(docPath)
-        ctx.setStatusMessage(tr(ctx, 'commands.conversationCompressed', '会话压缩完成 ✓'))
+        // fire-and-forget: don't await, let user continue chatting
+        docConversationService.compressByDocPath(docPath).then(() => {
+          ctx.setStatusMessage(tr(ctx, 'commands.conversationCompressed', '会话压缩完成 ✓'))
+        }).catch((err) => {
+          console.error('[commands] ai_conversation_compress error', err)
+          ctx.setStatusMessage(tr(ctx, 'commands.conversationCompressFailed', '压缩文档会话历史失败，请检查控制台日志'))
+        })
       } catch (err) {
         console.error('[commands] ai_conversation_compress error', err)
         ctx.setStatusMessage(tr(ctx, 'commands.conversationCompressFailed', '压缩文档会话历史失败，请检查控制台日志'))

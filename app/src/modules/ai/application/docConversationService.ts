@@ -516,6 +516,9 @@ export type DocConversationService = {
   getIndex(): Promise<ConversationIndexEntry[]>
 }
 
+// Re-entry guard for background compression
+const compressingPaths = new Set<string>()
+
 export function createDocConversationService(): DocConversationService {
   return {
     async loadAll(): Promise<DocConversationRecord[]> {
@@ -683,27 +686,46 @@ export function createDocConversationService(): DocConversationService {
 
     async compressByDocPath(docPath: string): Promise<void> {
       const stableKey = await toStableDocPathKey(docPath)
-      const workspaceContext = await ensureLoadedForDocPath(docPath)
-      const records = workspaceContext ? workspaceContext.cache.records : getCache()
-      const idx = records.findIndex((r) => {
-        if (r.docPath === stableKey || r.docPath === docPath) return true
-        if (typeof r.docPath === 'string' && r.docPath.endsWith(`::${stableKey}`)) return true
-        return false
-      })
 
-      if (idx < 0) {
-        // 没有对应文档记录，直接返回
+      // Re-entry guard: prevent concurrent compression on the same docPath
+      if (compressingPaths.has(stableKey)) {
+        console.warn('[docConversationService] compression already in progress for', stableKey)
         return
       }
+      compressingPaths.add(stableKey)
 
       try {
+        const workspaceContext = await ensureLoadedForDocPath(docPath)
+        const records = workspaceContext ? workspaceContext.cache.records : getCache()
+        const idx = records.findIndex((r) => {
+          if (r.docPath === stableKey || r.docPath === docPath) return true
+          if (typeof r.docPath === 'string' && r.docPath.endsWith(`::${stableKey}`)) return true
+          return false
+        })
+
+        if (idx < 0) {
+          return
+        }
+
         const existing = records[idx]
+
+        // Snapshot message IDs before compression to detect new messages sent during LLM call
+        const snapshotIds = new Set(existing.messages.map((m) => m.id))
+
         const cfg = await loadCompressionConfig().catch(() => defaultCompressionConfig)
         const summaryCreatedAfter = Date.now()
         const compressed = await conversationCompressor.compress(existing, cfg)
+
+        // Detect messages added during compression (user kept chatting)
+        const latest = records[idx]
+        const newMessagesDuringCompress = latest.messages.filter((m) => !snapshotIds.has(m.id))
+
         const merged: DocConversationRecord = {
           ...compressed,
           docPath: stableKey,
+          messages: newMessagesDuringCompress.length
+            ? [...compressed.messages, ...newMessagesDuringCompress].sort((a, b) => a.timestamp - b.timestamp)
+            : compressed.messages,
         }
         records[idx] = merged
         await persistForDocPath(docPath, records)
@@ -716,8 +738,9 @@ export function createDocConversationService(): DocConversationService {
           console.error('[docConversationService] enqueue SessionDigest failed', digestError)
         }
       } catch (e) {
-        // 保持与之前占位实现类似的容错行为，不向外抛出，只记录日志
         console.error('[docConversationService] compressByDocPath failed', e)
+      } finally {
+        compressingPaths.delete(stableKey)
       }
     },
 
