@@ -137,8 +137,8 @@ export const TabBar = memo(function TabBar({ tabs, activeId, onTabClick, onTabCl
       className={`tab-item ${tab.id === activeId ? 'active' : ''}`}
       onClick={() => onTabClick(tab.id)}
     >
+      {tab.dirty && <span className="tab-dirty-dot" />}
       <span className="tab-title">
-        {tab.dirty && <span className="tab-dirty-dot" />}
         <span className="tab-title-text">{tab.title}</span>
       </span>
       <button
@@ -213,8 +213,8 @@ export const TabBar = memo(function TabBar({ tabs, activeId, onTabClick, onTabCl
             }}
             className={`tab-item tab-item-measure ${tab.id === activeId ? 'active' : ''}`}
           >
+            {tab.dirty && <span className="tab-dirty-dot" />}
             <span className="tab-title">
-              {tab.dirty && <span className="tab-dirty-dot" />}
               <span className="tab-title-text">{tab.title}</span>
             </span>
             <button type="button" className="tab-close" tabIndex={-1}>
