@@ -21,7 +21,7 @@ describe('editorSettings', () => {
         vi.mocked(mockInvoke).mockResolvedValue({ Ok: { data: {} } })
 
         const settings = await getAiCompressionSettings()
-        expect(settings.minMessagesToCompress).toBe(80)
+        expect(settings.minMessagesToCompress).toBe(0)
         expect(mockInvoke).toHaveBeenCalledWith('load_editor_settings')
     })
 

@@ -32,11 +32,12 @@ export type UseAiChatSessionOptions = {
 }
 
 function buildRestoredViewMessages(record: DocConversationRecord): ChatMessageView[] {
-  const viewMessages: ChatMessageView[] = []
+  const originalMessages: ChatMessageView[] = []
+  const preservedMessages: ChatMessageView[] = []
 
   for (const message of record.messages) {
     if (message.role === 'user' || message.role === 'assistant') {
-      viewMessages.push({
+      originalMessages.push({
         id: message.id,
         role: message.role as ChatRole,
         content: message.content,
@@ -49,7 +50,7 @@ function buildRestoredViewMessages(record: DocConversationRecord): ChatMessageVi
     preservedUserInputs.forEach((content, index) => {
       const trimmed = content.trim()
       if (!trimmed) return
-      viewMessages.push({
+      preservedMessages.push({
         id: `${message.id}:preserved-user:${index}`,
         role: 'user',
         content: trimmed,
@@ -58,7 +59,7 @@ function buildRestoredViewMessages(record: DocConversationRecord): ChatMessageVi
     })
   }
 
-  return viewMessages
+  return originalMessages.length > 0 ? originalMessages : preservedMessages
 }
 
 function buildStateFromDocRecord(record: DocConversationRecord, entryMode: ChatEntryMode): ConversationState {
