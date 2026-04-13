@@ -182,7 +182,7 @@ describe('loadCompressionConfig', () => {
     expect(cfg).toMatchObject({
       minMessagesToCompress: 10,
       keepRecentRounds: 3,
-      maxPreservedUserMessages: 12,
+      maxPreservedUserMessages: Infinity,
       maxMessagesAfterCompress: 100,
       maxMessagesPerSummaryBatch: 50,
     })
@@ -212,7 +212,7 @@ describe('createSimpleSummaryProvider', () => {
     expect(summary).toContain('会话摘要（Level 1）')
     expect(summary).toContain('文档：doc.md')
     expect(summary).toContain('覆盖消息数：2')
-    expect(summary).toContain('用户输入摘录')
+    expect(summary).toContain('用户输入分类整理')
     expect(summary).toContain('hello world')
     expect(summary).toMatch(/User @ /)
     expect(summary).toMatch(/Assistant @ /)
@@ -316,7 +316,7 @@ describe('createLLMSummaryProvider', () => {
     expect(mockedCreateStreamingClientFromSettings).toHaveBeenCalledTimes(1)
     const [, systemPrompt, modelId] = mockedCreateStreamingClientFromSettings.mock.calls[0]
     expect(systemPrompt).toContain('会话压缩助手')
-    expect(systemPrompt).toContain('用户输入摘录')
+    expect(systemPrompt).toContain('用户输入分类整理')
     expect(modelId).toBe('m1')
 
     expect(askStream).toHaveBeenCalledTimes(1)

@@ -119,18 +119,19 @@ function pickOldAndRecentGroups(groups: ConversationGroup[], keepRecentRounds: n
 function pickPreservedUserMessages(groups: ConversationGroup[], maxCount: number): DocConversationMessage[] {
   if (maxCount <= 0 || !groups.length) return []
 
+  // 收集所有旧轮次中的全部 user 消息，而非仅每组第一条
   const picked = groups
-    .map((group) => group.userMessages[0])
+    .flatMap((group) => group.userMessages)
     .filter((message): message is DocConversationMessage => Boolean(message))
 
-  if (picked.length <= maxCount) return picked
+  if (!Number.isFinite(maxCount) || picked.length <= maxCount) return picked
   return picked.slice(-maxCount)
 }
 
 function toPreservedUserInputSnippet(message: DocConversationMessage): string {
   const normalized = message.content.replace(/\s+/g, ' ').trim()
-  if (normalized.length <= 240) return normalized
-  return `${normalized.slice(0, 240)}...`
+  if (normalized.length <= 500) return normalized
+  return `${normalized.slice(0, 500)}...`
 }
 
 function buildPreservedUserInputs(messages: DocConversationMessage[]): string[] {
@@ -276,13 +277,12 @@ export function createConversationCompressor(summaryProvider: SummaryProvider): 
 
 /** 默认压缩配置：保留最近 8 轮对话，适配中等长度上下文模型 */
 export const defaultCompressionConfig: CompressionConfig = {
-  minMessagesToCompress: 80,
+  minMessagesToCompress: 0,
   keepRecentRounds: 8,
-  maxPreservedUserMessages: 12,
+  maxPreservedUserMessages: Infinity,
   maxMessagesAfterCompress: 200,
   maxMessagesPerSummaryBatch: 200,
   maxSummaryCharsPerLevel: (level: SummaryLevel) => {
-    // Level 越高，允许的摘要长度可以稍微放宽一点
     if (level >= 2) return 12000
     return 8000
   },
@@ -339,7 +339,7 @@ export function createSimpleSummaryProvider(): SummaryProvider {
         })
 
       if (userSnippets.length) {
-        lines.push('### 用户输入摘录')
+        lines.push('### 用户输入分类整理')
         lines.push('')
         lines.push(...userSnippets)
         lines.push('')
@@ -368,15 +368,20 @@ function buildSummarySystemPrompt(level: SummaryLevel): string {
   lines.push('- 摘要内容应包括：')
   lines.push('  - 主要目标与问题背景')
   lines.push('  - 关键结论与设计/实现决策')
-  lines.push('  - 用户输入摘录（保留用户的关键问题、需求、约束、限制条件）')
+  lines.push('  - **用户输入分类整理**（这是最重要的部分，见下方详细要求）')
   lines.push('  - 重要约定（参数、配置、接口约定等）')
   lines.push('  - 已完成的工作与落地方案')
   lines.push('  - 后续 TODO 或风险点')
-  lines.push('- 必须输出“用户输入摘录”这一节，并尽量保留用户原始措辞中的关键词。')
-  lines.push('- 不能只总结 assistant 的回答，必须体现用户到底问了什么、要求了什么、限制了什么。')
+  lines.push('')
+  lines.push('### 用户输入分类整理要求（核心）')
+  lines.push('- 必须输出“用户输入分类整理”这一节，将用户的所有核心输入按主题分类归纳。')
+  lines.push('- 分类维度示例：需求/功能要求、技术约束/限制、方案选择与确认、Bug 反馈、偏好与风格要求。')
+  lines.push('- 每个分类下列出用户的关键原话或核心意图，尽量保留用户原始措辞中的关键词。')
+  lines.push('- 不能只总结 assistant 的回答，必须完整体现用户到底问了什么、要求了什么、限制了什么、确认了什么。')
+  lines.push('- 不得遗漏任何实质性的用户需求或决策。')
   lines.push('')
   if (level >= 2) {
-    lines.push('当前是更高层次的二级摘要，请聚焦更宏观的主题和结论，可以省略底层实现细节。')
+    lines.push('当前是更高层次的二级摘要，请聚焦更宏观的主题和结论，可以省略底层实现细节，但用户输入分类整理仍需完整保留。')
   } else {
     lines.push('当前是一阶摘要，请尽量保留关键信息，但避免逐段复述原文。')
   }

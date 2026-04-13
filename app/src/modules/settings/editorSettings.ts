@@ -113,7 +113,7 @@ export type EditorSettings = {
 }
 
 const defaultCompression: AiCompressionSettings = {
-  minMessagesToCompress: 80,
+  minMessagesToCompress: 0,
   keepRecentRounds: 8,
   maxMessagesAfterCompress: 200,
   maxMessagesPerSummaryBatch: 200,
