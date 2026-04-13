@@ -203,24 +203,44 @@ export function createConversationCompressor(summaryProvider: SummaryProvider): 
         return record
       }
 
-      const groups = buildConversationGroups(messages)
+      // #2/#6: 分离已有摘要与普通消息
+      const existingSummaries = messages.filter((m) => (m.meta?.summaryLevel ?? 0) >= 1)
+      const normalMessages = messages.filter((m) => (m.meta?.summaryLevel ?? 0) === 0)
+
+      const groups = buildConversationGroups(normalMessages)
       if (!groups.length) return record
 
       const { oldGroups, recentGroups } = pickOldAndRecentGroups(groups, config.keepRecentRounds)
       if (!oldGroups.length) {
-        // 没有足够旧的对话需要压缩
         return record
       }
 
       const oldMessagesAll = flattenGroupMessages(oldGroups)
       if (!oldMessagesAll.length) return record
 
+      // #6 增量压缩：排除已被摘要覆盖的消息
+      const coveredIds = new Set(existingSummaries.flatMap((s) => s.meta?.coversMessageIds ?? []))
+      const uncoveredOldMessages = oldMessagesAll.filter((m) => !coveredIds.has(m.id))
+
+      const recentMessages = flattenGroupMessages(recentGroups)
+
+      if (!uncoveredOldMessages.length) {
+        // 所有旧消息都已被摘要覆盖，无需再次压缩，仅清理结构
+        return {
+          ...record,
+          lastActiveAt: Date.now(),
+          messages: [...existingSummaries, ...recentMessages].sort((a, b) => a.timestamp - b.timestamp),
+        }
+      }
+
       // 控制参与摘要的旧消息数量：优先使用最近的旧消息
-      const sampledOldMessages = oldMessagesAll.slice(-config.maxMessagesPerSummaryBatch)
+      const sampledOldMessages = uncoveredOldMessages.slice(-config.maxMessagesPerSummaryBatch)
+
+      // #3: snippet 仅存入摘要 meta，不再作为完整消息放入结果
       const preservedUserMessages = pickPreservedUserMessages(oldGroups, config.maxPreservedUserMessages)
       const preservedUserInputs = buildPreservedUserInputs(preservedUserMessages)
 
-      // 先生成一级摘要
+      // 生成一级摘要
       const level1SummaryContent = await summaryProvider.summarizeBatch({
         docPath: record.docPath,
         level: 1,
@@ -234,16 +254,17 @@ export function createConversationCompressor(summaryProvider: SummaryProvider): 
         preservedUserInputs,
       })
 
-      // 检查是否需要多级摘要：如果现有摘要内容总体超过阈值，则对摘要再做一次总结，生成二级摘要
-      const existingSummaries = messages.filter((m) => (m.meta?.summaryLevel ?? 0) >= 1)
-      const allLevel1Summaries = [...existingSummaries.filter((m) => (m.meta?.summaryLevel ?? 0) === 1), level1Summary]
+      // #2 累积保留：将已有摘要与新摘要合并
+      const allLevel1Summaries = [
+        ...existingSummaries.filter((m) => (m.meta?.summaryLevel ?? 0) === 1),
+        level1Summary,
+      ]
       const totalLevel1Chars = allLevel1Summaries.reduce((sum, m) => sum + m.content.length, 0)
 
       let finalSummaries: DocConversationMessage[]
 
       if (totalLevel1Chars > config.maxSummaryCharsPerLevel(1)) {
         const level2PreservedUserInputs = collectPreservedUserInputsFromMessages(allLevel1Summaries)
-        // 生成二级摘要：对所有一级摘要再次总结
         const level2SummaryContent = await summaryProvider.summarizeBatch({
           docPath: record.docPath,
           level: 2,
@@ -258,16 +279,15 @@ export function createConversationCompressor(summaryProvider: SummaryProvider): 
         })
         finalSummaries = [level2Summary]
       } else {
-        // 仅保留最新的一份一级摘要
-        finalSummaries = [level1Summary]
+        // #2: 保留所有已有摘要 + 新摘要（而非仅保留最新一份）
+        finalSummaries = [...existingSummaries, level1Summary]
       }
 
-      const recentMessages = flattenGroupMessages(recentGroups)
-
+      // #3: 结果中不再包含 preservedUserMessages 完整消息
       const next: DocConversationRecord = {
         ...record,
         lastActiveAt: Date.now(),
-        messages: [...finalSummaries, ...preservedUserMessages, ...recentMessages].sort((a, b) => a.timestamp - b.timestamp),
+        messages: [...finalSummaries, ...recentMessages].sort((a, b) => a.timestamp - b.timestamp),
       }
 
       return next
@@ -396,10 +416,19 @@ function buildSummaryChatMessages(input: {
 }): ChatMessage[] {
   const { docPath, level, messages } = input
 
-  const MAX_PER_MESSAGE = 2000
+  // #4 智能截断：总量预算制，user 消息不截断，assistant/system 按比例分配
+  const TOTAL_BUDGET = 30000
+  let usedByUser = 0
+  for (const m of messages) {
+    if (m.role === 'user') usedByUser += m.content.length
+  }
+  const nonUserMessages = messages.filter((m) => m.role !== 'user')
+  const budgetForNonUser = Math.max(TOTAL_BUDGET - usedByUser, nonUserMessages.length * 200)
+  const perNonUser = Math.floor(budgetForNonUser / Math.max(nonUserMessages.length, 1))
+
   const normalized = messages.map((m) => ({
     ...m,
-    content: truncateContent(m.content, MAX_PER_MESSAGE),
+    content: m.role === 'user' ? m.content : truncateContent(m.content, Math.max(perNonUser, 500)),
   }))
 
   const headerLines: string[] = []
@@ -459,12 +488,15 @@ export function createLLMSummaryProvider(): SummaryProvider {
         const client = createStreamingClientFromSettings(provider as UiProvider, systemPrompt, modelId)
         const chatMessages = buildSummaryChatMessages({ docPath, level, messages })
 
+        // #1: 动态 maxTokens — L1 摘要需完整保留分类整理，L2 更简洁
+        const maxTokens = level >= 2 ? 2048 : 4096
+
         let fullContent = ''
         const result = await client.askStream(
           {
             messages: chatMessages,
-            temperature: 0,
-            maxTokens: 1024,
+            temperature: 0.1, // #5: 适度随机性，避免固化句式
+            maxTokens,
           },
           {
             onChunk: (chunk) => {

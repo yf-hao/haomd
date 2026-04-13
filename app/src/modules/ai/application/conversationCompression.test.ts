@@ -104,13 +104,12 @@ describe('createConversationCompressor', () => {
 
     const result = await compressor.compress(record, mockConfig)
 
-    expect(result.messages).toHaveLength(5)
+    // #3: preservedUserMessages 不再作为完整消息存入，仅通过 meta.preservedUserInputs 保留
+    expect(result.messages).toHaveLength(3) // 1 summary + 2 recent
     const summary = result.messages.find((message) => message.role === 'system')
     expect(summary?.content).toBe('Summary of old messages')
     expect(summary?.meta?.preservedUserInputs).toEqual(['u1', 'u2'])
     expect(result.messages.map((message) => message.id)).toEqual([
-      '1',
-      '3',
       summary!.id,
       '5',
       '6',
@@ -154,17 +153,91 @@ describe('createConversationCompressor', () => {
 
     const result = await compressor.compress(record, configWithSmallLevel1)
 
-    expect(result.messages).toHaveLength(5)
+    // #3: no preserved user messages as full objects, #2: L2 merges all L1s
+    expect(result.messages).toHaveLength(3) // 1 L2 summary + 2 recent
     const level2Summary = result.messages.find((message) => (message.meta?.summaryLevel ?? 0) === 2)
     expect(level2Summary?.content).toBe('FinalS2')
     expect(level2Summary?.meta?.preservedUserInputs).toEqual(['u1', 'u2'])
     expect(result.messages.map((message) => message.id)).toEqual([
-      '1',
-      '3',
       level2Summary!.id,
       '5',
       '6',
     ])
+  })
+
+  it('should perform incremental compression — skip already covered messages', async () => {
+    // Simulate: first compress already produced a L1 summary covering msg 1,2,3,4
+    const record = createRecord([
+      {
+        id: 'prev_summary',
+        docPath: 'test.md',
+        role: 'system',
+        content: 'Previous summary',
+        timestamp: 500,
+        meta: {
+          summaryLevel: 1,
+          coversMessageIds: ['1', '2', '3', '4'],
+          coveredTimeRange: { from: 100, to: 210 },
+          preservedUserInputs: ['u1', 'u2'],
+        },
+      },
+      createMsg('7', 'user', 'u4', 600),
+      createMsg('8', 'assistant', 'a4', 610),
+      createMsg('9', 'user', 'u5', 700),
+      createMsg('10', 'assistant', 'a5', 710),
+      createMsg('11', 'user', 'u6', 1100),
+      createMsg('12', 'assistant', 'a6', 1200),
+    ])
+
+    const provider = {
+      summarizeBatch: vi.fn().mockResolvedValue('Incremental summary'),
+    }
+    const compressor = createConversationCompressor(provider)
+
+    const result = await compressor.compress(record, mockConfig)
+
+    // Should call summarizeBatch only once (for uncovered old messages 7,8,9,10)
+    expect(provider.summarizeBatch).toHaveBeenCalledTimes(1)
+    const callMessages = provider.summarizeBatch.mock.calls[0][0].messages
+    expect(callMessages.map((m: DocConversationMessage) => m.id)).toEqual(['7', '8', '9', '10'])
+
+    // Result: prev_summary + new_summary + recent(11,12)
+    expect(result.messages).toHaveLength(4) // 2 summaries + 2 recent
+    const summaries = result.messages.filter((m) => (m.meta?.summaryLevel ?? 0) >= 1)
+    expect(summaries).toHaveLength(2)
+    expect(summaries[0].id).toBe('prev_summary')
+    expect(summaries[1].content).toBe('Incremental summary')
+  })
+
+  it('should skip compression when all old messages are already covered', async () => {
+    const record = createRecord([
+      {
+        id: 'prev_summary',
+        docPath: 'test.md',
+        role: 'system',
+        content: 'Previous summary',
+        timestamp: 500,
+        meta: {
+          summaryLevel: 1,
+          coversMessageIds: ['1', '2'],
+          coveredTimeRange: { from: 100, to: 200 },
+        },
+      },
+      createMsg('1', 'user', 'u1', 100),
+      createMsg('2', 'assistant', 'a1', 200),
+      createMsg('3', 'user', 'u2', 1100),
+      createMsg('4', 'assistant', 'a2', 1200),
+    ])
+
+    const provider = { summarizeBatch: vi.fn() }
+    const compressor = createConversationCompressor(provider)
+
+    const result = await compressor.compress(record, mockConfig)
+
+    // No LLM call needed
+    expect(provider.summarizeBatch).not.toHaveBeenCalled()
+    // Result: prev_summary + recent(3,4)
+    expect(result.messages).toHaveLength(3)
   })
 })
 
