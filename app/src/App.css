@@ -347,34 +347,32 @@ button:disabled {
   height: 7px;
 }
 
-/* 随笔图标：铅笔形状 */
+/* 随笔图标：书签形状 */
 .activity-icon-notes {
   position: relative;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 18px;
   display: block;
 }
 
 .activity-icon-notes::before {
   content: '';
   position: absolute;
-  left: 1px;
-  top: 2px;
-  width: 10px;
-  height: 12px;
+  inset: 0;
   border: 1.5px solid currentColor;
-  border-radius: 1px;
+  border-radius: 2px 2px 0 0;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 76%, 0 100%);
 }
 
 .activity-icon-notes::after {
   content: '';
   position: absolute;
-  left: 4px;
-  top: 5px;
-  width: 5px;
+  left: 3px;
+  right: 3px;
+  top: 4px;
   height: 1.5px;
   background: currentColor;
-  box-shadow: 0 3px 0 currentColor, 0 6px 0 currentColor;
+  box-shadow: 0 4px 0 currentColor;
 }
 
 /* 随笔 Panel */
