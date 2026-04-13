@@ -944,6 +944,9 @@ button:disabled {
   grid-template-rows: 1fr;
   /* 由内部 pane 自己滚动，工作区本身不再产生额外滚动条 */
   overflow: hidden;
+  /* overflow:clip 阻止浏览器焦点跟随自动滚动此容器（scrollIntoView 级联），
+     在不支持 clip 的旧 WebKit 上回退到 hidden（由 JS 守卫兜底） */
+  overflow: clip;
   /* 阻断滚动链，避免滚动事件冒泡到应用外层 */
   overscroll-behavior: contain;
 }

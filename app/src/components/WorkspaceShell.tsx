@@ -329,6 +329,17 @@ export function WorkspaceShell({
     }
   }, [workspaceRef])
 
+  // 防止浏览器焦点跟随自动滚动 .workspace（overflow:hidden 容器仍可被浏览器滚动），
+  // 否则 AI Chat 插入内容时 scrollIntoView 级联会把 TabBar 和 AI Chat header 推出视口。
+  const workspaceMainRef = useRef<HTMLElement | null>(null)
+  useEffect(() => {
+    const el = workspaceMainRef.current
+    if (!el) return
+    const resetScroll = () => { el.scrollTop = 0; el.scrollLeft = 0 }
+    el.addEventListener('scroll', resetScroll)
+    return () => el.removeEventListener('scroll', resetScroll)
+  }, [])
+
   // Sidebar resize hook
   const {
     sidebarWidth,
@@ -2819,7 +2830,7 @@ export function WorkspaceShell({
                   onRequestSaveAndClose={handleTabSaveAndClose}
                 />
               )}
-              <main className={`workspace ${dragging ? 'dragging' : ''}`} style={{ gridTemplateColumns: outerGridTemplateColumns }}>
+              <main className={`workspace ${dragging ? 'dragging' : ''}`} ref={workspaceMainRef} style={{ gridTemplateColumns: outerGridTemplateColumns }}>
                 {effectiveAiChatMode === 'docked' && aiChatOpen && aiChatState && (
                   <>
                     {aiChatDockSide === 'left' && (
