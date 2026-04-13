@@ -2,6 +2,60 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.8.0] - 2026-04-13
+
+### 中文
+
+本次更新带来了**AI 会话性能的重大突破**，重点引入了全新的**后台自动压缩引擎**与**聊天增量加载机制**，有效解决了超长对话带来的 Token 膨胀与界面渲染卡顿问题。同时对工作区的级联滚动冲突进行了深度的系统级修复。
+
+#### ✨ 新特性
+
+*   **智能 AI 上下文后台压缩系统**：
+    *   引入了底层“发后即忘 (fire-and-forget)”的异步状态压缩任务机制，并配有可重入锁 (re-entry guard) 以彻底杜绝并发读写冲突。
+    *   实现了 6 项系统的压缩策略优化：支持在任意时机触发压缩、自动分类整理上下文，并专门保护原始用户输入不被暴力截断。
+    *   **状态栏进度感知**：在底部状态栏新增了非侵入式的实时压缩状态指示（压缩中/已完成）。
+    *   **智能 Token 阻断**：将会话中保留的最大用户消息数精准备制为 50 条，避免在深度长对话中引发 Token 爆炸与服务商计费超限。
+*   **Web Lite App 支持**：新增并完善了轻量级 Web 版本的基础支撑框架，为后续的跨平台和浏览器原生访问提供支持。
+
+#### 💄 体验优化
+
+*   **聊天记录增量加载**：重构了 AI 聊天窗口的 DOM 渲染逻辑，引入增量分批加载机制，使得切换或滚动包含海量历史消息的对话时依然如丝般顺滑。
+*   **会话恢复与 UI 打磨**：提升了对话消息恢复阶段的内部容错逻辑，更新了随笔等特定分类的视觉图标，并对整个聊天面板的间距与排版进行了打磨。
+
+#### 🔧 系统改进 与修复
+
+*   **工作区防级联滚动修复**：解决了长期存在的交互顽疾——在编辑器中进行长篇文本输入大跨度换行时，意外触发祖先容器滚动，导致顶部 TabBar 及 AI 对话框 Header 被裁切遮挡的问题。
+*   **标签栏脏状态截断修复**：调整了文件未保存状态（小圆点）的 DOM 结构关系，修复了在长文件名状态下小圆点容易被 Flex 容器强制挤压或截断的视觉 Bug。
+*   **持久化健壮性**：修复并梳理了 AI 聊天状态在极端刷新或异常断开情况下的本地化持久存储逻辑。
+
+---
+
+### English
+
+This release delivers **major breakthroughs in AI session performance**, introducing a brand-new **Background Context Compression Engine** and **Incremental Chat Loading**. These upgrades solve token bloat and UI lagging in extremely long conversations. Alongside this, we’ve rolled out robust structural fixes for workspace scroll clipping issues.
+
+#### ✨ New Features
+
+*   **Intelligent Background AI Context Compression**:
+    *   Introduced a reliable "fire-and-forget" asynchronous compression pipeline, fully guarded against re-entry data races.
+    *   Implemented 6 comprehensive strategies including on-demand triggering, contextual categorization, and strict preservation of original user commands.
+    *   **Live Status Indicators**: The primary status bar now displays unobtrusive, real-time visual feedback indicating when LLM compression sweeps are actively running.
+    *   **Token Barrier Controls**: Hard-capped the maximum preserved raw user messages at 50, structurally preventing API token explosions and resource exhaustion in extremely lengthy chat histories.
+*   **Web Lite App Foundations**: Shipped core architectural scaffolding for a "lite" web-based target variant, expanding deployment possibilities.
+
+#### 💄 Improvements
+
+*   **Incremental Chat Rendering**: Radically overhauled the AI chat window's rendering lifecycle to utilize incremental loading, ensuring a buttery-smooth frame rate even when rapidly switching into sessions holding massive message logs.
+*   **Session Recovery & UI Polish**: Solidified the event recovery pipeline for chat restoration, updated category icons (e.g., essays), and systematically refined the paddings and alignments within the chat interface.
+
+#### 🔧 System Refinements & Fixes
+
+*   **Workspace Scroll-Cascade Guardrails**: Eradicated a deeply-rooted interaction bug where typing multi-line content or large cursor movements would inadvertently scroll the parent layout container—meaning the TabBar and AI chat headers are no longer frustratingly obscured or clipped.
+*   **Tab Overflow Bug Fixes**: Repositioned the "unsaved edits" indicator (the dirty dot) outside of flex-truncation containers, ensuring it never gets squashed or hidden on severely long filenames.
+*   **Robust State Persistence**: Addressed and smoothed out edge-case logic holes relating to how AI chat UI states sync into local storage during abrupt app interactions.
+
+---
+
 ## [v0.7.0] - 2026-04-09
 
 ### 中文
