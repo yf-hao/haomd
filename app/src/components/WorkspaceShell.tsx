@@ -115,6 +115,15 @@ const WysiwygPaneLazy = lazy(() =>
 export type EditMode = 'source' | 'wysiwyg'
 const STORAGE_EDIT_MODE = 'haomd:editMode'
 
+/** 阻止 overflow:hidden 容器被浏览器焦点跟随自动滚动 */
+const preventContainerScroll = (e: React.UIEvent<HTMLElement>) => {
+  const el = e.currentTarget
+  if (el.scrollTop !== 0 || el.scrollLeft !== 0) {
+    el.scrollTop = 0
+    el.scrollLeft = 0
+  }
+}
+
 export type LeftPanelId = 'files' | 'outline' | 'pdf' | 'sessions' | 'notes' | null
 export type InitialWorkspaceAction = 'new' | 'open' | 'open_folder' | 'open_recent' | null
 
@@ -328,17 +337,6 @@ export function WorkspaceShell({
       root.removeEventListener('wheel', handleWheel as EventListener)
     }
   }, [workspaceRef])
-
-  // 防止浏览器焦点跟随自动滚动 .workspace（overflow:hidden 容器仍可被浏览器滚动），
-  // 否则 AI Chat 插入内容时 scrollIntoView 级联会把 TabBar 和 AI Chat header 推出视口。
-  const workspaceMainRef = useRef<HTMLElement | null>(null)
-  useEffect(() => {
-    const el = workspaceMainRef.current
-    if (!el) return
-    const resetScroll = () => { el.scrollTop = 0; el.scrollLeft = 0 }
-    el.addEventListener('scroll', resetScroll)
-    return () => el.removeEventListener('scroll', resetScroll)
-  }, [])
 
   // Sidebar resize hook
   const {
@@ -882,11 +880,18 @@ export function WorkspaceShell({
 
         if (topGap < 0) {
           scroller.scrollTop += topGap - 16
-          return
+        } else if (bottomGap > 0) {
+          scroller.scrollTop += bottomGap + 16
         }
 
-        if (bottomGap > 0) {
-          scroller.scrollTop += bottomGap + 16
+        // 重置所有祖先 overflow:hidden 容器的意外滚动偏移
+        let el = scroller.parentElement
+        while (el) {
+          if (el.scrollTop !== 0 || el.scrollLeft !== 0) {
+            el.scrollTop = 0
+            el.scrollLeft = 0
+          }
+          el = el.parentElement
         }
       })
     }
@@ -2463,6 +2468,7 @@ export function WorkspaceShell({
         <div
           className={`workspace-region ${hasWorkspaceBackground ? 'has-workspace-background' : ''} ${workspaceBackgroundIncludesSidebar ? 'workspace-background-includes-sidebar' : ''} ${workspaceBackgroundFitClass}`.trim()}
           style={workspaceBackgroundIncludesSidebar ? workspaceBackgroundStyle : undefined}
+          onScroll={preventContainerScroll}
         >
           {hasWorkspaceBackground && workspaceBackgroundIncludesSidebar ? (
             <>
@@ -2830,7 +2836,7 @@ export function WorkspaceShell({
                   onRequestSaveAndClose={handleTabSaveAndClose}
                 />
               )}
-              <main className={`workspace ${dragging ? 'dragging' : ''}`} ref={workspaceMainRef} style={{ gridTemplateColumns: outerGridTemplateColumns }}>
+              <main className={`workspace ${dragging ? 'dragging' : ''}`} onScroll={preventContainerScroll} style={{ gridTemplateColumns: outerGridTemplateColumns }}>
                 {effectiveAiChatMode === 'docked' && aiChatOpen && aiChatState && (
                   <>
                     {aiChatDockSide === 'left' && (
