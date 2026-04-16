@@ -25,14 +25,14 @@ const EMPTY_MESSAGES = [] as const
 const AI_CHAT_AGENT_STORAGE_KEY = 'haomd_ai_chat_selected_agent_id'
 const EMPTY_AGENT_OPTION = { id: '', name: 'Agent' }
 
-function resolveAiChatDocPath(currentFilePath?: string | null, sessionKey?: AiChatSessionKey): string | undefined {
+function resolveAiChatDocPath(currentFilePath?: string | null): string | undefined {
   if (!currentFilePath) {
-    return sessionKey?.startsWith('session:') ? sessionKey : undefined
+    return undefined
   }
 
   const normalized = currentFilePath.replace(/\\/g, '/').trim()
   if (!normalized) {
-    return sessionKey?.startsWith('session:') ? sessionKey : undefined
+    return undefined
   }
 
   const lastSegment = normalized.split('/').pop() ?? ''
@@ -83,6 +83,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   const lockEnterRef = useRef(false)
   const historyCursorRef = useRef<number | null>(null)
   const [, setHistoryCursor] = useState<number | null>(null)
+  const docPathStabilizeTimerRef = useRef<number | null>(null)
 
   const autoResizeInput = () => {
     const el = inputRef.current
@@ -98,7 +99,42 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
     setHistoryCursor(null)
   }
 
-  const dirKey = resolveAiChatDocPath(currentFilePath, sessionKey)
+  const rawDocPath = resolveAiChatDocPath(currentFilePath)
+  const isPersistedSession = sessionKey.startsWith('session:')
+  const [stableDocPath, setStableDocPath] = useState<string | undefined>(() =>
+    isPersistedSession ? rawDocPath : undefined,
+  )
+  const [docPathReady, setDocPathReady] = useState<boolean>(() => isPersistedSession)
+
+  useEffect(() => {
+    if (docPathStabilizeTimerRef.current != null) {
+      window.clearTimeout(docPathStabilizeTimerRef.current)
+      docPathStabilizeTimerRef.current = null
+    }
+
+    if (isPersistedSession) {
+      setStableDocPath(rawDocPath)
+      setDocPathReady(true)
+      return
+    }
+
+    setDocPathReady(false)
+    docPathStabilizeTimerRef.current = window.setTimeout(() => {
+      setStableDocPath(rawDocPath)
+      setDocPathReady(true)
+      docPathStabilizeTimerRef.current = null
+    }, 0)
+
+    return () => {
+      if (docPathStabilizeTimerRef.current != null) {
+        window.clearTimeout(docPathStabilizeTimerRef.current)
+        docPathStabilizeTimerRef.current = null
+      }
+    }
+  }, [rawDocPath, isPersistedSession, sessionKey])
+
+  const effectiveDocPath = isPersistedSession ? undefined : stableDocPath
+  const historyDirectoryKey = stableDocPath ?? rawDocPath ?? sessionKey ?? '/'
 
   const {
     loading,
@@ -123,9 +159,9 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
     sessionKey,
     entryMode,
     initialContext,
-    open: true,
+    open: isPersistedSession || docPathReady,
     selectedAgentId: activeAgentId,
-    docPath: dirKey,
+    docPath: effectiveDocPath,
     legacyDocPath: currentFilePath ?? undefined,
   })
 
@@ -308,7 +344,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
 
   const doSend = async () => {
     const contentToSend = input
-    const directoryKey = dirKey ?? '/'
+    const directoryKey = historyDirectoryKey
 
     // 先处理本地历史回填命令：!n / ！n
     const ordinal = parseHistoryRecallCommand(contentToSend)
@@ -340,12 +376,12 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
 
     const handled = await tryHandleSlashCommand(contentToSend, {
       // slash 命令与文档会话保持一致：按目录共享会话
-      docPath: dirKey,
+      docPath: effectiveDocPath,
       runAppCommand: commandBridge?.runAppCommand,
       showModal: (message: string) => setSlashModalMessage(message),
       getRecentMessagesForDigest: getRecentMessagesForDigest,
       openHistoryDialog: ({ docPath }) => {
-        const key = docPath ?? dirKey ?? '/'
+        const key = docPath ?? historyDirectoryKey
         setHistoryDialogDirKey(key)
         setHistoryDialogOpen(true)
         setHistoryRecallEnabled(true)
@@ -395,7 +431,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
       if (!isHistoryMode && input.trim()) {
         // 非历史模式且当前输入非空：不进入历史浏览，交给默认光标逻辑
       } else {
-        const directoryKey = dirKey ?? '/'
+        const directoryKey = historyDirectoryKey
         const historyList = getAiInputHistory(directoryKey)
         if (historyList.length > 0) {
           const direction = e.key === 'ArrowUp' ? 'up' as const : 'down' as const

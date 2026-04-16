@@ -239,6 +239,7 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
 
   useEffect(() => {
     if (!open || !isPersistedSessionKey(sessionKey) || !state) return
+    if (state.viewMessages.some((message) => message.streaming)) return
 
     const timeout = window.setTimeout(() => {
       const now = Date.now()
@@ -281,7 +282,7 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
       })().catch((err) => {
         console.warn('[useAiChatSession] failed to persist session history', err)
       })
-    }, state.viewMessages.some((message) => message.streaming) ? 800 : 150)
+    }, 150)
 
     return () => {
       window.clearTimeout(timeout)
