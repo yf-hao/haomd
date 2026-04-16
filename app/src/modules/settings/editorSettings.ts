@@ -9,6 +9,7 @@ export type AiCompressionSettings = {
   keepRecentRounds: number
   maxMessagesAfterCompress: number
   maxMessagesPerSummaryBatch: number
+  maxInputCharsPerSummaryBatch: number
 }
 
 export type HugeDocSettings = {
@@ -117,6 +118,7 @@ const defaultCompression: AiCompressionSettings = {
   keepRecentRounds: 8,
   maxMessagesAfterCompress: 200,
   maxMessagesPerSummaryBatch: 200,
+  maxInputCharsPerSummaryBatch: 12000,
 }
 
 const defaultHugeDoc: Required<HugeDocSettings> = {
@@ -261,6 +263,7 @@ export async function getAiCompressionSettings(): Promise<AiCompressionSettings>
     keepRecentRounds: cfg.keepRecentRounds ?? defaultCompression.keepRecentRounds,
     maxMessagesAfterCompress: cfg.maxMessagesAfterCompress ?? defaultCompression.maxMessagesAfterCompress,
     maxMessagesPerSummaryBatch: cfg.maxMessagesPerSummaryBatch ?? defaultCompression.maxMessagesPerSummaryBatch,
+    maxInputCharsPerSummaryBatch: cfg.maxInputCharsPerSummaryBatch ?? defaultCompression.maxInputCharsPerSummaryBatch,
   }
 }
 

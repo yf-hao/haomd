@@ -22,6 +22,7 @@ describe('editorSettings', () => {
 
         const settings = await getAiCompressionSettings()
         expect(settings.minMessagesToCompress).toBe(0)
+        expect(settings.maxInputCharsPerSummaryBatch).toBe(12000)
         expect(mockInvoke).toHaveBeenCalledWith('load_editor_settings')
     })
 
@@ -38,6 +39,7 @@ describe('editorSettings', () => {
         const compSettings = await getAiCompressionSettings()
         expect(compSettings.minMessagesToCompress).toBe(50)
         expect(compSettings.keepRecentRounds).toBe(8) // from default
+        expect(compSettings.maxInputCharsPerSummaryBatch).toBe(12000) // from default
 
         const hugeSettings = await getHugeDocSettings()
         expect(hugeSettings.enabled).toBe(false)

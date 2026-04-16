@@ -19,6 +19,8 @@ export type CompressionConfig = {
   maxSummaryCharsPerLevel: (level: SummaryLevel) => number
   /** 单次参与摘要的最大旧消息数量 */
   maxMessagesPerSummaryBatch: number
+  /** 单次参与摘要的最大输入字符数，用于在模型上下文不足时更保守地切批 */
+  maxInputCharsPerSummaryBatch: number
 }
 
 /** 摘要提供方：封装具体模型/后端调用 */
@@ -116,18 +118,6 @@ function pickOldAndRecentGroups(groups: ConversationGroup[], keepRecentRounds: n
   }
 }
 
-function pickPreservedUserMessages(groups: ConversationGroup[], maxCount: number): DocConversationMessage[] {
-  if (maxCount <= 0 || !groups.length) return []
-
-  // 收集所有旧轮次中的全部 user 消息，而非仅每组第一条
-  const picked = groups
-    .flatMap((group) => group.userMessages)
-    .filter((message): message is DocConversationMessage => Boolean(message))
-
-  if (picked.length <= maxCount) return picked
-  return picked.slice(-maxCount)
-}
-
 function toPreservedUserInputSnippet(message: DocConversationMessage): string {
   const normalized = message.content.replace(/\s+/g, ' ').trim()
   if (normalized.length <= 500) return normalized
@@ -146,6 +136,43 @@ function buildPreservedUserInputs(messages: DocConversationMessage[]): string[] 
   }
 
   return snippets
+}
+
+function estimateSummaryMessageChars(message: DocConversationMessage): number {
+  return message.content.trim().length + 64
+}
+
+function buildSummaryBatches(
+  messages: DocConversationMessage[],
+  config: Pick<CompressionConfig, 'maxMessagesPerSummaryBatch' | 'maxInputCharsPerSummaryBatch'>,
+): DocConversationMessage[][] {
+  if (!messages.length) return []
+
+  const limitedMessages = messages.slice(-config.maxMessagesPerSummaryBatch)
+  const batches: DocConversationMessage[][] = []
+  let currentBatch: DocConversationMessage[] = []
+  let currentChars = 0
+
+  for (const message of limitedMessages) {
+    const nextChars = estimateSummaryMessageChars(message)
+    const exceedsBudget =
+      currentBatch.length > 0 && currentChars + nextChars > config.maxInputCharsPerSummaryBatch
+
+    if (exceedsBudget) {
+      batches.push(currentBatch)
+      currentBatch = []
+      currentChars = 0
+    }
+
+    currentBatch.push(message)
+    currentChars += nextChars
+  }
+
+  if (currentBatch.length > 0) {
+    batches.push(currentBatch)
+  }
+
+  return batches
 }
 
 function collectPreservedUserInputsFromMessages(messages: DocConversationMessage[]): string[] {
@@ -233,31 +260,40 @@ export function createConversationCompressor(summaryProvider: SummaryProvider): 
         }
       }
 
-      // 控制参与摘要的旧消息数量：优先使用最近的旧消息
-      const sampledOldMessages = uncoveredOldMessages.slice(-config.maxMessagesPerSummaryBatch)
+      const summaryBatches = buildSummaryBatches(uncoveredOldMessages, config)
+      if (!summaryBatches.length) {
+        return {
+          ...record,
+          lastActiveAt: Date.now(),
+          messages: [...existingSummaries, ...recentMessages].sort((a, b) => a.timestamp - b.timestamp),
+        }
+      }
 
-      // #3: snippet 仅存入摘要 meta，不再作为完整消息放入结果
-      const preservedUserMessages = pickPreservedUserMessages(oldGroups, config.maxPreservedUserMessages)
-      const preservedUserInputs = buildPreservedUserInputs(preservedUserMessages)
-
-      // 生成一级摘要
-      const level1SummaryContent = await summaryProvider.summarizeBatch({
-        docPath: record.docPath,
-        level: 1,
-        messages: sampledOldMessages,
-      })
-      const level1Summary = createSummaryMessage({
-        docPath: record.docPath,
-        level: 1,
-        content: level1SummaryContent,
-        sourceMessages: sampledOldMessages,
-        preservedUserInputs,
-      })
+      const level1Summaries: DocConversationMessage[] = []
+      for (const batch of summaryBatches) {
+        const preservedUserInputs = buildPreservedUserInputs(
+          batch.filter((message): message is DocConversationMessage => message.role === 'user'),
+        )
+        const level1SummaryContent = await summaryProvider.summarizeBatch({
+          docPath: record.docPath,
+          level: 1,
+          messages: batch,
+        })
+        level1Summaries.push(
+          createSummaryMessage({
+            docPath: record.docPath,
+            level: 1,
+            content: level1SummaryContent,
+            sourceMessages: batch,
+            preservedUserInputs,
+          }),
+        )
+      }
 
       // #2 累积保留：将已有摘要与新摘要合并
       const allLevel1Summaries = [
         ...existingSummaries.filter((m) => (m.meta?.summaryLevel ?? 0) === 1),
-        level1Summary,
+        ...level1Summaries,
       ]
       const totalLevel1Chars = allLevel1Summaries.reduce((sum, m) => sum + m.content.length, 0)
 
@@ -280,7 +316,7 @@ export function createConversationCompressor(summaryProvider: SummaryProvider): 
         finalSummaries = [level2Summary]
       } else {
         // #2: 保留所有已有摘要 + 新摘要（而非仅保留最新一份）
-        finalSummaries = [...existingSummaries, level1Summary]
+        finalSummaries = [...existingSummaries, ...level1Summaries]
       }
 
       // #3: 结果中不再包含 preservedUserMessages 完整消息
@@ -302,6 +338,7 @@ export const defaultCompressionConfig: CompressionConfig = {
   maxPreservedUserMessages: 50,
   maxMessagesAfterCompress: 200,
   maxMessagesPerSummaryBatch: 200,
+  maxInputCharsPerSummaryBatch: 12000,
   maxSummaryCharsPerLevel: (level: SummaryLevel) => {
     if (level >= 2) return 12000
     return 8000
@@ -318,6 +355,7 @@ export async function loadCompressionConfig(): Promise<CompressionConfig> {
       maxPreservedUserMessages: defaultCompressionConfig.maxPreservedUserMessages,
       maxMessagesAfterCompress: uiCfg.maxMessagesAfterCompress,
       maxMessagesPerSummaryBatch: uiCfg.maxMessagesPerSummaryBatch,
+      maxInputCharsPerSummaryBatch: uiCfg.maxInputCharsPerSummaryBatch,
       maxSummaryCharsPerLevel: defaultCompressionConfig.maxSummaryCharsPerLevel,
     }
   } catch (e) {

@@ -60,6 +60,7 @@ const mockConfig: CompressionConfig = {
   maxPreservedUserMessages: 2,
   maxMessagesAfterCompress: 10,
   maxMessagesPerSummaryBatch: 10,
+  maxInputCharsPerSummaryBatch: 1000,
   maxSummaryCharsPerLevel: () => 1000,
 }
 
@@ -239,6 +240,45 @@ describe('createConversationCompressor', () => {
     // Result: prev_summary + recent(3,4)
     expect(result.messages).toHaveLength(3)
   })
+
+  it('should split uncovered old messages into multiple batches when input chars exceed budget', async () => {
+    const record = createRecord([
+      createMsg('1', 'user', 'u'.repeat(700), 100),
+      createMsg('2', 'assistant', 'a'.repeat(700), 110),
+      createMsg('3', 'user', 'u'.repeat(700), 200),
+      createMsg('4', 'assistant', 'a'.repeat(700), 210),
+      createMsg('5', 'user', 'recent user', 1100),
+      createMsg('6', 'assistant', 'recent assistant', 1200),
+    ])
+
+    const provider = {
+      summarizeBatch: vi
+        .fn()
+        .mockResolvedValueOnce('Summary batch 1')
+        .mockResolvedValueOnce('Summary batch 2'),
+    }
+    const compressor = createConversationCompressor(provider)
+
+    const result = await compressor.compress(record, {
+      ...mockConfig,
+      maxMessagesPerSummaryBatch: 20,
+      maxInputCharsPerSummaryBatch: 1600,
+    })
+
+    expect(provider.summarizeBatch).toHaveBeenCalledTimes(2)
+    expect(provider.summarizeBatch.mock.calls[0]?.[0].messages.map((m: DocConversationMessage) => m.id)).toEqual([
+      '1',
+      '2',
+    ])
+    expect(provider.summarizeBatch.mock.calls[1]?.[0].messages.map((m: DocConversationMessage) => m.id)).toEqual([
+      '3',
+      '4',
+    ])
+
+    const summaries = result.messages.filter((message) => (message.meta?.summaryLevel ?? 0) === 1)
+    expect(summaries).toHaveLength(2)
+    expect(result.messages.slice(-2).map((message) => message.id)).toEqual(['5', '6'])
+  })
 })
 
 describe('loadCompressionConfig', () => {
@@ -248,6 +288,7 @@ describe('loadCompressionConfig', () => {
       keepRecentRounds: 3,
       maxMessagesAfterCompress: 100,
       maxMessagesPerSummaryBatch: 50,
+      maxInputCharsPerSummaryBatch: 9000,
     })
 
     const cfg = await loadCompressionConfig()
@@ -258,6 +299,7 @@ describe('loadCompressionConfig', () => {
       maxPreservedUserMessages: 50,
       maxMessagesAfterCompress: 100,
       maxMessagesPerSummaryBatch: 50,
+      maxInputCharsPerSummaryBatch: 9000,
     })
     expect(cfg.maxSummaryCharsPerLevel(1)).toBe(defaultCompressionConfig.maxSummaryCharsPerLevel(1))
     expect(cfg.maxSummaryCharsPerLevel(2)).toBe(defaultCompressionConfig.maxSummaryCharsPerLevel(2))
