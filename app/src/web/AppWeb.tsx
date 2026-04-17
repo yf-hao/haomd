@@ -79,7 +79,7 @@ export function AppWeb() {
   }
 
   const handleTestConnection = async (input: {
-    providerType: 'openai' | 'dify'
+    providerType: 'openai' | 'dify' | 'gemini'
     baseUrl: string
     apiKey: string
     modelId: string

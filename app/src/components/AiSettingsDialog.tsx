@@ -422,6 +422,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                 >
                   <option value="dify">{t('provider.dify')}</option>
                   <option value="openai">{t('provider.openaiCompatible')}</option>
+                  <option value="gemini">{t('provider.gemini')}</option>
                 </select>
               </FieldGroup>
 

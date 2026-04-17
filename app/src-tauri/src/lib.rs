@@ -15,6 +15,7 @@ mod file_io;
 mod font_catalog;
 mod fs_commands;
 mod fs_types;
+mod gemini_compat;
 mod image_generation;
 mod inkscape;
 mod locale;
@@ -43,6 +44,7 @@ use external_open::*;
 use file_io::*;
 use fs_commands::*;
 use fs_types::{ErrorCode, FilePayload, ResultPayload, ServiceError, WriteResult};
+use gemini_compat::*;
 use image_generation::*;
 use inkscape::*;
 use locale::*;
@@ -127,6 +129,7 @@ macro_rules! app_invoke_handler {
             delete_ai_session,
             load_ai_naming_conv,
             save_ai_naming_conv,
+            gemini_generate_content,
             start_openai_compat_chat_stream,
             cancel_openai_compat_chat_stream,
             // Platform integration and export utilities

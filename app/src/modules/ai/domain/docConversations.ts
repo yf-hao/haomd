@@ -6,7 +6,7 @@ export type SummaryLevel = 0 | 1 | 2
 export type DocConversationKind = 'markdown' | 'pdf'
 
 export type DocConversationMessageMeta = {
-  providerType?: 'dify' | 'openai' | 'local' | 'coze' | 'other'
+  providerType?: 'dify' | 'openai' | 'gemini' | 'local' | 'coze' | 'other'
   modelName?: string
   hasImage?: boolean
   tokensUsed?: number

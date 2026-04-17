@@ -1,6 +1,7 @@
 import type { UiProvider } from './settings'
 import type { IStreamingChatClient } from './domain/types'
 import { createDifyStreamingClient } from './dify/createDifyStreamingClient'
+import { createGeminiTauriClient } from './gemini/createGeminiTauriClient'
 import { createOpenAIStreamingClient } from './openai/createOpenAIStreamingClient'
 
 /**
@@ -25,6 +26,13 @@ export function createStreamingClientFromSettings(
   }
 
   switch (providerType) {
+    case 'gemini':
+      return createGeminiTauriClient({
+        apiKey,
+        baseUrl,
+        modelId,
+        systemPrompt,
+      })
     case 'openai':
       return createOpenAIStreamingClient({
         apiKey,

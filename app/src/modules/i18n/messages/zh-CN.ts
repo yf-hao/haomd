@@ -437,6 +437,7 @@ export const zhCNMessages: MessageDictionary = {
     gotIt: '知道了',
     dify: 'Dify',
     openaiCompatible: 'OpenAI 兼容',
+    gemini: 'Gemini',
   },
   workspace: {
     newVirtualFolder: '新建虚拟文件夹',

@@ -32,7 +32,11 @@ export function fromCfg(cfg: AiSettingsCfg | null | undefined): AiSettingsState 
   return {
     providers: (cfg.providers ?? []).map((p) => {
       let providerType: ProviderType | undefined
-      if (p.provider_type === 'dify' || p.provider_type === 'openai') {
+      if (
+        p.provider_type === 'dify'
+        || p.provider_type === 'openai'
+        || p.provider_type === 'gemini'
+      ) {
         providerType = p.provider_type
       }
 

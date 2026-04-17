@@ -14,6 +14,7 @@
 import { SimpleChat } from '../dify/SimpleChat'
 import { loadAiSettingsState } from '../config/aiSettingsRepo'
 import { loadNamingConv, saveNamingConv } from '../config/aiSessionsRepo'
+import { createGeminiTauriClient } from '../gemini/createGeminiTauriClient'
 import { createOpenAIStreamingClient } from '../openai/createOpenAIStreamingClient'
 import type { ChatSessionProviderContext } from './chatSessionService'
 
@@ -122,6 +123,38 @@ async function generateTitleViaOpenAI(
   }
 }
 
+async function generateTitleViaGemini(
+  userMessage: string,
+  baseUrl: string,
+  apiKey: string,
+  model: string,
+): Promise<string | null> {
+  try {
+    const client = createGeminiTauriClient({
+      apiKey,
+      baseUrl,
+      modelId: model,
+    })
+
+    const result = await client.askStream(
+      {
+        messages: [
+          {
+            role: 'user',
+            content: buildTitlePrompt(userMessage),
+          },
+        ],
+      },
+      {},
+    )
+
+    if (!result.completed && !result.content) return null
+    return cleanTitle(result.content)
+  } catch {
+    return null
+  }
+}
+
 // ─── Trim punctuation / whitespace from AI output ─────────────────────
 function cleanTitle(raw: string): string | null {
   const cleaned = raw.trim().replace(/^["'「」【】《》\s]+|["'「」【】《》\s]+$/g, '').slice(0, 50)
@@ -162,6 +195,15 @@ export async function generateSessionTitleWithProvider(
         )
       }
 
+      if (providerContext.providerType === 'gemini') {
+        return await generateTitleViaGemini(
+          userMessage,
+          providerContext.baseUrl,
+          providerContext.apiKey,
+          providerContext.modelId,
+        )
+      }
+
       return await generateTitleViaDify(
         userMessage,
         providerContext.providerId,
@@ -179,6 +221,15 @@ export async function generateSessionTitleWithProvider(
 
     if (providerType === 'openai') {
       return await generateTitleViaOpenAI(
+        userMessage,
+        provider.baseUrl,
+        provider.apiKey,
+        provider.defaultModelId,
+      )
+    }
+
+    if (providerType === 'gemini') {
+      return await generateTitleViaGemini(
         userMessage,
         provider.baseUrl,
         provider.apiKey,

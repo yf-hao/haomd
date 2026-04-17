@@ -439,6 +439,7 @@ export const enUSMessages: MessageDictionary = {
     gotIt: 'Got it',
     dify: 'Dify',
     openaiCompatible: 'OpenAI Compatible',
+    gemini: 'Gemini',
   },
   workspace: {
     newVirtualFolder: 'New virtual folder',

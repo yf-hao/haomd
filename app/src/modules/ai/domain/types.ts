@@ -9,8 +9,8 @@ export type UiProviderModel = {
   visionMode?: VisionMode
 }
 
-/** Provider 协议类型，目前支持 Dify 与 OpenAI 兼容接口 */
-export type ProviderType = 'dify' | 'openai'
+/** Provider 协议类型，目前支持 Dify、OpenAI 兼容接口与 Gemini */
+export type ProviderType = 'dify' | 'openai' | 'gemini'
 
 export type VisionMode =
   | 'disabled'         // 不支持图像（默认）
