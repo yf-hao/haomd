@@ -345,9 +345,12 @@ fn build_request_body(
     let mut body = json!({
         "model": request.model_id,
         "messages": build_request_messages(request),
-        "temperature": request.temperature.unwrap_or(0.0),
         "stream": matches!(transport_mode, CompletionTransportMode::Stream)
     });
+
+    if let Some(temperature) = request.temperature {
+        body["temperature"] = json!(temperature);
+    }
 
     if let Some(max_tokens) = request.max_tokens {
         match token_param_mode {
@@ -396,6 +399,103 @@ fn extract_message_content(message: &Value) -> String {
     String::new()
 }
 
+fn extract_choice_content(choice: &Value) -> String {
+    if let Some(message) = choice.get("message") {
+        let content = extract_message_content(message);
+        if !content.is_empty() {
+            return content;
+        }
+    }
+
+    if let Some(delta) = choice.get("delta") {
+        let content = extract_message_content(delta);
+        if !content.is_empty() {
+            return content;
+        }
+    }
+
+    if let Some(text) = choice.get("text").and_then(|value| value.as_str()) {
+        return text.to_string();
+    }
+
+    String::new()
+}
+
+fn extract_choice_tool_calls(choice: &Value) -> Option<Vec<OpenAICompatToolCallOutput>> {
+    extract_tool_calls(choice.get("message").unwrap_or(choice))
+        .or_else(|| choice.get("delta").and_then(extract_tool_calls))
+}
+
+fn extract_response_content(json: &Value) -> String {
+    if let Some(choice) = json
+        .get("choices")
+        .and_then(|choices| choices.as_array())
+        .and_then(|choices| choices.first())
+    {
+        let content = extract_choice_content(choice);
+        if !content.is_empty() {
+            return content;
+        }
+    }
+
+    for key in ["message", "content", "text", "output_text", "reply"] {
+        if let Some(value) = json.get(key) {
+            if let Some(text) = value.as_str() {
+                if !text.is_empty() {
+                    return text.to_string();
+                }
+            }
+            let content = extract_message_content(value);
+            if !content.is_empty() {
+                return content;
+            }
+        }
+    }
+
+    if let Some(output) = json.get("output") {
+        if let Some(choice) = output
+            .get("choices")
+            .and_then(|choices| choices.as_array())
+            .and_then(|choices| choices.first())
+        {
+            let content = extract_choice_content(choice);
+            if !content.is_empty() {
+                return content;
+            }
+        }
+
+        for key in ["text", "content", "message"] {
+            if let Some(value) = output.get(key) {
+                if let Some(text) = value.as_str() {
+                    if !text.is_empty() {
+                        return text.to_string();
+                    }
+                }
+                let content = extract_message_content(value);
+                if !content.is_empty() {
+                    return content;
+                }
+            }
+        }
+    }
+
+    String::new()
+}
+
+fn extract_response_tool_calls(json: &Value) -> Option<Vec<OpenAICompatToolCallOutput>> {
+    json.get("choices")
+        .and_then(|choices| choices.as_array())
+        .and_then(|choices| choices.first())
+        .and_then(extract_choice_tool_calls)
+        .or_else(|| {
+            json.get("output")
+                .and_then(|output| output.get("choices"))
+                .and_then(|choices| choices.as_array())
+                .and_then(|choices| choices.first())
+                .and_then(extract_choice_tool_calls)
+        })
+}
+
 fn extract_tool_calls(message: &Value) -> Option<Vec<OpenAICompatToolCallOutput>> {
     let raw_tool_calls = message.get("tool_calls")?.as_array()?;
     let tool_calls = raw_tool_calls
@@ -436,10 +536,65 @@ fn looks_like_max_tokens_issue(message: &str) -> bool {
         || lowered.contains("max_completion_tokens")
 }
 
+fn is_non_retryable_error(error: &OpenAICompatRequestError) -> bool {
+    if matches!(error.status, Some(401 | 403 | 404 | 429)) {
+        return true;
+    }
+
+    let response_text = format!(
+        "{} {}",
+        error.response_text.as_deref().unwrap_or_default(),
+        error.message
+    )
+    .to_lowercase();
+
+    response_text.contains("insufficient_balance")
+        || response_text.contains("insufficient balance")
+        || response_text.contains("quota")
+        || response_text.contains("余额不足")
+}
+
+fn extract_server_error_message(error: &OpenAICompatRequestError) -> String {
+    let response_text = error.response_text.as_deref().unwrap_or_default();
+    let parsed = serde_json::from_str::<Value>(response_text).ok();
+
+    let remote_message = parsed
+        .as_ref()
+        .and_then(|json| json.get("error"))
+        .and_then(|value| value.get("message"))
+        .and_then(|value| value.as_str())
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty());
+
+    let remote_type = parsed
+        .as_ref()
+        .and_then(|json| json.get("error"))
+        .and_then(|value| value.get("type"))
+        .and_then(|value| value.as_str())
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty());
+
+    if let Some(message) = remote_message {
+        if let Some(status) = error.status {
+            if let Some(error_type) = remote_type {
+                return format!("连接失败：{message} ({error_type}, HTTP {status})");
+            }
+            return format!("连接失败：{message} (HTTP {status})");
+        }
+        return format!("连接失败：{message}");
+    }
+
+    if let Some(status) = error.status {
+        return format!("连接失败：{} (HTTP {status})", error.message);
+    }
+
+    format!("连接失败：{}", error.message)
+}
+
 fn build_retry_plan(
     error: &OpenAICompatRequestError,
 ) -> Vec<(CompletionTransportMode, MaxTokenParamMode)> {
-    if matches!(error.status, Some(401 | 403 | 404)) {
+    if is_non_retryable_error(error) {
         return vec![];
     }
 
@@ -475,6 +630,20 @@ fn build_retry_plan(
             vec![(CompletionTransportMode::NonStream, error.token_param_mode)]
         }
         CompletionTransportMode::NonStream => vec![],
+    }
+}
+
+fn transport_mode_label(mode: CompletionTransportMode) -> &'static str {
+    match mode {
+        CompletionTransportMode::Stream => "stream",
+        CompletionTransportMode::NonStream => "non-stream",
+    }
+}
+
+fn token_param_mode_label(mode: MaxTokenParamMode) -> &'static str {
+    match mode {
+        MaxTokenParamMode::MaxTokens => "max_tokens",
+        MaxTokenParamMode::MaxCompletionTokens => "max_completion_tokens",
     }
 }
 
@@ -567,6 +736,13 @@ async fn send_non_stream_request(
             )
         })?;
 
+    eprintln!(
+        "[openai_compat] non-stream response status model={} status={} token_param_mode={}",
+        request.model_id,
+        response.status(),
+        token_param_mode_label(token_param_mode),
+    );
+
     if !response.status().is_success() {
         let status = response.status().as_u16();
         let text = response.text().await.unwrap_or_default();
@@ -588,24 +764,28 @@ async fn send_non_stream_request(
             None,
         )
     })?;
-    let message = json
-        .get("choices")
-        .and_then(|choices| choices.as_array())
-        .and_then(|choices| choices.first())
-        .and_then(|choice| choice.get("message"))
-        .ok_or_else(|| {
-            OpenAICompatRequestError::new(
-                "响应中缺少 message",
-                CompletionTransportMode::NonStream,
-                token_param_mode,
-                None,
-                None,
-            )
-        })?;
+    eprintln!(
+        "[openai_compat] non-stream response body model={} token_param_mode={} body={}",
+        request.model_id,
+        token_param_mode_label(token_param_mode),
+        json.to_string(),
+    );
+    let content = extract_response_content(&json);
+    let tool_calls = extract_response_tool_calls(&json);
+
+    if content.is_empty() && tool_calls.is_none() {
+        return Err(OpenAICompatRequestError::new(
+            "响应中缺少可解析的内容",
+            CompletionTransportMode::NonStream,
+            token_param_mode,
+            None,
+            Some(json.to_string()),
+        ));
+    }
 
     Ok(OpenAICompatChatResponse {
-        content: extract_message_content(message),
-        tool_calls: extract_tool_calls(message),
+        content,
+        tool_calls,
     })
 }
 
@@ -638,6 +818,13 @@ async fn send_stream_request(
             )
         })?;
 
+    eprintln!(
+        "[openai_compat] stream response status model={} status={} token_param_mode={}",
+        request.model_id,
+        response.status(),
+        token_param_mode_label(token_param_mode),
+    );
+
     if !response.status().is_success() {
         let status = response.status().as_u16();
         let text = response.text().await.unwrap_or_default();
@@ -654,6 +841,7 @@ async fn send_stream_request(
     let mut buffer = String::new();
     let mut full_content = String::new();
     let mut tool_calls_map = HashMap::<usize, OpenAICompatToolCallOutput>::new();
+    let mut first_payload_logged = false;
 
     while let Some(next_chunk) = stream.next().await {
         if is_cancelled(&cancel_flag) {
@@ -695,6 +883,16 @@ async fn send_stream_request(
             let payload = trimmed.trim_start_matches("data:").trim();
             if payload == "[DONE]" {
                 continue;
+            }
+
+            if !first_payload_logged {
+                first_payload_logged = true;
+                eprintln!(
+                    "[openai_compat] stream first payload model={} token_param_mode={} payload={}",
+                    request.model_id,
+                    token_param_mode_label(token_param_mode),
+                    payload,
+                );
             }
 
             let json: Value = match serde_json::from_str(payload) {
@@ -810,12 +1008,21 @@ async fn run_openai_compat_stream(
     }
     let mut tried = Vec::<(CompletionTransportMode, MaxTokenParamMode)>::new();
     let mut last_error_message = String::from("未知错误");
+    let mut first_meaningful_error: Option<String> = None;
 
     while let Some((transport_mode, token_param_mode)) = attempts.pop() {
         if tried.contains(&(transport_mode, token_param_mode)) {
             continue;
         }
         tried.push((transport_mode, token_param_mode));
+
+        eprintln!(
+            "[openai_compat] attempt request_id={} model={} transport_mode={} token_param_mode={}",
+            request_id,
+            request.model_id,
+            transport_mode_label(transport_mode),
+            token_param_mode_label(token_param_mode),
+        );
 
         let result = match transport_mode {
             CompletionTransportMode::Stream => {
@@ -856,12 +1063,28 @@ async fn run_openai_compat_stream(
                 return;
             }
             Err(error) => {
+                let user_facing_error = extract_server_error_message(&error);
+                eprintln!(
+                    "[openai_compat] attempt failed request_id={} model={} transport_mode={} token_param_mode={} status={:?} message={} response_text={}",
+                    request_id,
+                    request.model_id,
+                    transport_mode_label(error.transport_mode),
+                    token_param_mode_label(error.token_param_mode),
+                    error.status,
+                    error.message,
+                    error.response_text.as_deref().unwrap_or_default(),
+                );
                 if is_cancelled(&cancel_flag) {
                     take_cancel_flag(&request_id);
                     take_stream_task(&request_id);
                     return;
                 }
-                last_error_message = error.message.clone();
+                if first_meaningful_error.is_none()
+                    && (error.status.is_some() || error.response_text.is_some())
+                {
+                    first_meaningful_error = Some(user_facing_error.clone());
+                }
+                last_error_message = user_facing_error;
                 for retry in build_retry_plan(&error).into_iter().rev() {
                     if !tried.contains(&retry) {
                         attempts.push(retry);
@@ -871,7 +1094,11 @@ async fn run_openai_compat_stream(
         }
     }
 
-    emit_error(&app, &request_id, last_error_message);
+    emit_error(
+        &app,
+        &request_id,
+        first_meaningful_error.unwrap_or(last_error_message),
+    );
     take_cancel_flag(&request_id);
     take_stream_task(&request_id);
 }

@@ -55,7 +55,8 @@ export const BadgeSelect: FC<BadgeSelectProps> = ({ options, value, onChange, gr
     return () => document.removeEventListener('mousedown', handleClick)
   }, [open])
 
-  const flatOptions = hasGroups ? (groups ?? []).flatMap((group) => group.options) : options
+  const groupedOptions = (groups ?? []).flatMap((group) => group.options)
+  const flatOptions = hasGroups ? [...options, ...groupedOptions] : options
   const selectedLabel = flatOptions.find((o) => o.value === value)?.label ?? ''
   // Fallback: use the group containing the currently selected model (not the first group)
   const selectedGroup = groups?.find((group) => group.options.some((opt) => opt.value === value))
@@ -77,41 +78,59 @@ export const BadgeSelect: FC<BadgeSelectProps> = ({ options, value, onChange, gr
       {open && (
         <div className="badge-select-dropdown">
           {hasGroups ? (
-            <div className="badge-select-group-menu">
-              <div className="badge-select-group-list">
-                {(groups ?? []).map((group) => {
-                  const groupHasSelected = group.options.some((opt) => opt.value === value)
-                  const isActive = activeGroup?.id === group.id
-                  return (
-                    <div
-                      key={group.id}
-                      className={`badge-select-group${isActive ? ' active' : ''}${groupHasSelected ? ' selected' : ''}`}
-                      onClick={(e) => { e.stopPropagation(); setActiveGroupId(group.id) }}
-                    >
-                      <span className="badge-select-group-label">{group.label}</span>
-                      <span className="badge-select-group-chevron" aria-hidden="true">›</span>
-                    </div>
-                  )
-                })}
-              </div>
-              {activeGroup && (
-                <div className="badge-select-submenu">
-                  {activeGroup.options.map((opt) => (
-                    <div
-                      key={opt.value}
-                      className={`badge-select-option${opt.value === value ? ' active' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onChange(opt.value)
-                        setOpen(false)
-                      }}
-                    >
-                      {opt.label}
-                    </div>
-                  ))}
+            <>
+              {options.map((opt) => (
+                <div
+                  key={opt.value}
+                  className={`badge-select-option${opt.value === value ? ' active' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onChange(opt.value)
+                    setOpen(false)
+                  }}
+                >
+                  {opt.label}
                 </div>
-              )}
-            </div>
+              ))}
+              {options.length > 0 && groups?.length ? (
+                <div className="badge-select-divider" aria-hidden="true" />
+              ) : null}
+              <div className="badge-select-group-menu">
+                <div className="badge-select-group-list">
+                  {(groups ?? []).map((group) => {
+                    const groupHasSelected = group.options.some((opt) => opt.value === value)
+                    const isActive = activeGroup?.id === group.id
+                    return (
+                      <div
+                        key={group.id}
+                        className={`badge-select-group${isActive ? ' active' : ''}${groupHasSelected ? ' selected' : ''}`}
+                        onClick={(e) => { e.stopPropagation(); setActiveGroupId(group.id) }}
+                      >
+                        <span className="badge-select-group-label">{group.label}</span>
+                        <span className="badge-select-group-chevron" aria-hidden="true">›</span>
+                      </div>
+                    )
+                  })}
+                </div>
+                {activeGroup && (
+                  <div className="badge-select-submenu">
+                    {activeGroup.options.map((opt) => (
+                      <div
+                        key={opt.value}
+                        className={`badge-select-option${opt.value === value ? ' active' : ''}`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onChange(opt.value)
+                          setOpen(false)
+                        }}
+                      >
+                        {opt.label}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
           ) : (
             options.map((opt) => (
               <div

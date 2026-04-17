@@ -15,6 +15,7 @@ mod file_io;
 mod font_catalog;
 mod fs_commands;
 mod fs_types;
+mod image_generation;
 mod inkscape;
 mod locale;
 mod mcp_config;
@@ -42,6 +43,7 @@ use external_open::*;
 use file_io::*;
 use fs_commands::*;
 use fs_types::{ErrorCode, FilePayload, ResultPayload, ServiceError, WriteResult};
+use image_generation::*;
 use inkscape::*;
 use locale::*;
 use mcp_config::*;
@@ -109,6 +111,7 @@ macro_rules! app_invoke_handler {
             save_prompt_settings,
             load_agent_settings,
             save_agent_settings,
+            run_modelscope_image_generation,
             load_backup_settings,
             save_backup_settings,
             load_notes_config,
@@ -134,6 +137,7 @@ macro_rules! app_invoke_handler {
             get_word_template_config,
             open_webview_browser,
             pick_editor_background_image,
+            save_remote_image_with_dialog,
             export_word_docx,
             fill_docx_template,
             get_system_language,

@@ -43,14 +43,19 @@ export const emptySettings: AiSettingsState = {
   defaultProviderId: undefined,
 }
 
-export type AgentPlatform = 'dify' | 'coze' | 'other'
+export type AgentPlatform = 'dify' | 'coze' | 'modelscope_image' | 'other'
+
+export type AgentKind = 'chat' | 'image_generation'
 
 export type AgentProvider = {
   id: string
   name: string
   baseUrl: string
   apiKey: string
+  kind: AgentKind
   platform: AgentPlatform
+  modelId?: string
+  defaultAspectRatio?: string
 }
 
 export type AgentSettingsState = {

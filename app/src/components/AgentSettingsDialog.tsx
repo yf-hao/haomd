@@ -1,9 +1,14 @@
 import type { ChangeEvent, FC, FormEvent, KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { onNativePaste, onNativePasteError } from '../modules/platform/clipboardEvents'
 import './AgentSettingsDialog.css'
 import { useAgentSettingsPersistence } from '../hooks/useAgentSettingsPersistence'
-import { type AgentPlatform, type AgentProvider, emptyAgentSettings } from '../modules/ai/domain/types'
+import {
+  type AgentKind,
+  type AgentPlatform,
+  type AgentProvider,
+  emptyAgentSettings,
+} from '../modules/ai/domain/types'
 import { FieldGroup } from './FieldGroup'
 import { Button } from './Button'
 import { useI18n } from '../modules/i18n/I18nContext'
@@ -11,39 +16,94 @@ import { useI18n } from '../modules/i18n/I18nContext'
 export type AgentSettingsDialogProps = {
   open: boolean
   onClose: () => void
+  onOpenImageGeneration?: (agentId?: string | null) => void
 }
+
+type AgentTab = AgentKind
 
 type AgentDraft = {
   name: string
   baseUrl: string
   apiKey: string
+  kind: AgentKind
   platform: AgentPlatform
+  modelId: string
+  defaultAspectRatio: string
 }
 
-const emptyDraft: AgentDraft = {
+type AspectRatioOption = {
+  value: string
+  label: string
+  disabled?: boolean
+}
+
+const emptyChatDraft: AgentDraft = {
   name: '',
   baseUrl: '',
   apiKey: '',
+  kind: 'chat',
   platform: 'dify',
+  modelId: '',
+  defaultAspectRatio: '',
 }
 
-export const AgentSettingsDialog: FC<AgentSettingsDialogProps> = ({ open, onClose }) => {
+const emptyImageGenerationDraft: AgentDraft = {
+  name: '',
+  baseUrl: '',
+  apiKey: '',
+  kind: 'image_generation',
+  platform: 'modelscope_image',
+  modelId: '',
+  defaultAspectRatio: '',
+}
+
+function createEmptyDraft(kind: AgentKind): AgentDraft {
+  return kind === 'image_generation'
+    ? { ...emptyImageGenerationDraft }
+    : { ...emptyChatDraft }
+}
+
+export const AgentSettingsDialog: FC<AgentSettingsDialogProps> = ({ open, onClose, onOpenImageGeneration }) => {
   const { t } = useI18n()
   const { load, save } = useAgentSettingsPersistence()
   const [settings, setSettings] = useState(emptyAgentSettings)
-  const [draft, setDraft] = useState<AgentDraft>(emptyDraft)
+  const [draft, setDraft] = useState<AgentDraft>(createEmptyDraft('chat'))
+  const [activeTab, setActiveTab] = useState<AgentTab>('chat')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [initialSnapshot, setInitialSnapshot] = useState(emptyAgentSettings)
   const [platformOpen, setPlatformOpen] = useState(false)
 
-  const platformOptions: { value: AgentPlatform; label: string }[] = [
-    { value: 'dify', label: t('agent.platformDify') },
-    { value: 'coze', label: t('agent.platformCoze') },
-    { value: 'other', label: t('agent.platformOther') },
+  const platformOptionsByKind: Record<AgentKind, { value: AgentPlatform; label: string }[]> = {
+    chat: [
+      { value: 'dify', label: t('agent.platformDify') },
+      { value: 'coze', label: t('agent.platformCoze') },
+      { value: 'other', label: t('agent.platformOther') },
+    ],
+    image_generation: [
+      { value: 'modelscope_image', label: t('agent.platformModelscopeImage') },
+      { value: 'other', label: t('agent.platformOther') },
+    ],
+  }
+
+  const platformOptions = platformOptionsByKind[draft.kind]
+  const imageAspectRatioOptions: AspectRatioOption[] = [
+    { value: '', label: t('agent.aspectRatioDisabled') },
+    { value: '1:1', label: '1:1' },
+    { value: '4:3', label: '4:3' },
+    { value: '3:4', label: '3:4' },
+    { value: '16:9', label: '16:9' },
+    { value: '9:16', label: '9:16' },
   ]
   const selectedPlatformLabel =
-    platformOptions.find((option) => option.value === draft.platform)?.label ?? t('agent.platformDify')
+    platformOptions.find((option) => option.value === draft.platform)?.label
+    ?? platformOptions[0]?.label
+    ?? draft.platform
+
+  const visibleProviders = useMemo(
+    () => settings.providers.filter((provider) => provider.kind === activeTab),
+    [activeTab, settings.providers],
+  )
 
   useEffect(() => {
     if (!open) return
@@ -54,7 +114,8 @@ export const AgentSettingsDialog: FC<AgentSettingsDialogProps> = ({ open, onClos
       if (disposed) return
       setSettings(state)
       setInitialSnapshot(state)
-      setDraft(emptyDraft)
+      setActiveTab('chat')
+      setDraft(createEmptyDraft('chat'))
       setEditingId(null)
       setError(null)
       setPlatformOpen(false)
@@ -91,7 +152,7 @@ export const AgentSettingsDialog: FC<AgentSettingsDialogProps> = ({ open, onClos
   useEffect(() => {
     if (!open) return
     setPlatformOpen(false)
-  }, [open, editingId, draft.platform])
+  }, [open, editingId, draft.platform, draft.kind, activeTab])
 
   const handleSelectPlatform = (value: AgentPlatform) => {
     setDraft((prev) => ({ ...prev, platform: value }))
@@ -121,7 +182,9 @@ export const AgentSettingsDialog: FC<AgentSettingsDialogProps> = ({ open, onClos
   }
 
   const getPlatformLabel = (value: AgentPlatform) => {
-    return platformOptions.find((option) => option.value === value)?.label ?? value
+    return platformOptionsByKind.chat
+      .concat(platformOptionsByKind.image_generation)
+      .find((option) => option.value === value)?.label ?? value
   }
 
   const renderPlatformOption = (value: AgentPlatform) => (
@@ -160,8 +223,17 @@ export const AgentSettingsDialog: FC<AgentSettingsDialogProps> = ({ open, onClos
     </div>
   )
 
+  const handleTabChange = (nextTab: AgentTab) => {
+    setActiveTab(nextTab)
+    setEditingId(null)
+    setPlatformOpen(false)
+    setError(null)
+    setDraft(createEmptyDraft(nextTab))
+  }
+
   const handleResetDraft = () => {
-    resetDraft()
+    setDraft(createEmptyDraft(activeTab))
+    setEditingId(null)
     setPlatformOpen(false)
   }
 
@@ -179,7 +251,7 @@ export const AgentSettingsDialog: FC<AgentSettingsDialogProps> = ({ open, onClos
         const field = (active.getAttribute('data-agent-field') as keyof AgentDraft | null) ?? null
         if (!field) return prev
 
-        const current = prev[field] ?? ''
+        const current = String(prev[field] ?? '')
         const start = active.selectionStart ?? current.length
         const end = active.selectionEnd ?? current.length
         const nextValue = current.slice(0, start) + text + current.slice(end)
@@ -214,17 +286,17 @@ export const AgentSettingsDialog: FC<AgentSettingsDialogProps> = ({ open, onClos
     }))
   }
 
-  const resetDraft = () => {
-    setDraft(emptyDraft)
-    setEditingId(null)
-  }
-
   const applyDraftToProvider = (): AgentProvider | null => {
     const name = draft.name.trim()
     const baseUrl = draft.baseUrl.trim()
     const apiKey = draft.apiKey.trim()
+    const modelId = draft.modelId.trim()
     if (!name || !baseUrl || !apiKey) {
       setError(t('agent.fillRequired'))
+      return null
+    }
+    if (draft.kind === 'image_generation' && !modelId) {
+      setError(t('agent.fillModelId'))
       return null
     }
 
@@ -233,7 +305,13 @@ export const AgentSettingsDialog: FC<AgentSettingsDialogProps> = ({ open, onClos
       name,
       baseUrl,
       apiKey,
+      kind: draft.kind,
       platform: draft.platform,
+      modelId: modelId || undefined,
+      defaultAspectRatio:
+        draft.kind === 'image_generation'
+          ? (draft.defaultAspectRatio.trim() || undefined)
+          : undefined,
     }
   }
 
@@ -259,16 +337,20 @@ export const AgentSettingsDialog: FC<AgentSettingsDialogProps> = ({ open, onClos
       }
     })
 
-    resetDraft()
+    handleResetDraft()
   }
 
   const handleEdit = (provider: AgentProvider) => {
     setEditingId(provider.id)
+    setActiveTab(provider.kind)
     setDraft({
       name: provider.name,
       baseUrl: provider.baseUrl,
       apiKey: provider.apiKey,
-      platform: provider.platform ?? 'dify',
+      kind: provider.kind,
+      platform: provider.platform,
+      modelId: provider.modelId ?? '',
+      defaultAspectRatio: provider.defaultAspectRatio ?? '',
     })
     setPlatformOpen(false)
   }
@@ -284,7 +366,7 @@ export const AgentSettingsDialog: FC<AgentSettingsDialogProps> = ({ open, onClos
     })
 
     if (editingId === id) {
-      resetDraft()
+      handleResetDraft()
     }
   }
 
@@ -297,7 +379,8 @@ export const AgentSettingsDialog: FC<AgentSettingsDialogProps> = ({ open, onClos
 
   const handleCancel = () => {
     setSettings(initialSnapshot)
-    resetDraft()
+    setDraft(createEmptyDraft(activeTab))
+    setEditingId(null)
     setError(null)
     onClose()
   }
@@ -318,10 +401,15 @@ export const AgentSettingsDialog: FC<AgentSettingsDialogProps> = ({ open, onClos
     return () => {
       document.removeEventListener('keydown', handleEsc)
     }
-  }, [open, handleCancelWithReset])
+  }, [open, activeTab, initialSnapshot])
 
   const handleSave = async () => {
-    const hasDraft = draft.name.trim() || draft.baseUrl.trim() || draft.apiKey.trim()
+    const hasDraft =
+      draft.name.trim()
+      || draft.baseUrl.trim()
+      || draft.apiKey.trim()
+      || draft.modelId.trim()
+      || draft.defaultAspectRatio.trim()
 
     if (hasDraft) {
       const provider = applyDraftToProvider()
@@ -348,7 +436,7 @@ export const AgentSettingsDialog: FC<AgentSettingsDialogProps> = ({ open, onClos
 
       setSettings(nextSettings)
       setInitialSnapshot(nextSettings)
-      resetDraft()
+      handleResetDraft()
       setError(null)
       onClose()
       return
@@ -371,6 +459,14 @@ export const AgentSettingsDialog: FC<AgentSettingsDialogProps> = ({ open, onClos
   }
 
   const defaultProvider = settings.providers.find((p) => p.id === settings.defaultProviderId)
+  const currentTabDefaultProvider = defaultProvider?.kind === activeTab ? defaultProvider : null
+  const preferredImageGenerationProvider =
+    activeTab === 'image_generation'
+      ? settings.providers.find((provider) => provider.id === editingId && provider.kind === 'image_generation')
+        ?? currentTabDefaultProvider
+        ?? visibleProviders[0]
+        ?? null
+      : null
 
   if (!open) return null
 
@@ -378,6 +474,22 @@ export const AgentSettingsDialog: FC<AgentSettingsDialogProps> = ({ open, onClos
     <div className="modal-backdrop">
       <div className="modal modal-agent-settings">
         <div className="modal-title">{t('agent.title')}</div>
+        <div className="agent-settings-tabs" role="tablist" aria-label={t('agent.title')}>
+          <button
+            type="button"
+            className={`agent-settings-tab${activeTab === 'chat' ? ' is-active' : ''}`}
+            onClick={() => handleTabChange('chat')}
+          >
+            {t('agent.chatTab')}
+          </button>
+          <button
+            type="button"
+            className={`agent-settings-tab${activeTab === 'image_generation' ? ' is-active' : ''}`}
+            onClick={() => handleTabChange('image_generation')}
+          >
+            {t('agent.imageGenerationTab')}
+          </button>
+        </div>
         <div className="modal-content agent-settings-body">
           <div className="agent-settings-column-left">
             <form onSubmit={handleAddOrUpdate} className="agent-settings-form">
@@ -408,10 +520,37 @@ export const AgentSettingsDialog: FC<AgentSettingsDialogProps> = ({ open, onClos
                   onChange={handleDraftChange('apiKey')}
                 />
               </FieldGroup>
-
               <FieldGroup label={t('agent.platform')}>
                 <div data-agent-field="platform">{renderPlatformSelect()}</div>
               </FieldGroup>
+              {draft.kind === 'image_generation' && (
+                <>
+                  <FieldGroup label={t('agent.modelId')}>
+                    <input
+                      className="field-input"
+                      type="text"
+                      data-agent-field="modelId"
+                      value={draft.modelId}
+                      onChange={handleDraftChange('modelId')}
+                    />
+                  </FieldGroup>
+                  <FieldGroup label={t('agent.defaultAspectRatio')}>
+                    <select
+                      className="field-select"
+                      value={draft.defaultAspectRatio}
+                      onChange={(event) => {
+                        setDraft((prev) => ({ ...prev, defaultAspectRatio: event.target.value }))
+                      }}
+                    >
+                      {imageAspectRatioOptions.map((option) => (
+                        <option key={option.value} value={option.value} disabled={option.disabled}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </FieldGroup>
+                </>
+              )}
 
               <div className="agent-settings-actions">
                 <Button variant="tertiary" type="button" onClick={handleResetDraft}>
@@ -424,10 +563,10 @@ export const AgentSettingsDialog: FC<AgentSettingsDialogProps> = ({ open, onClos
 
           <div className="agent-settings-column-right">
             <div className="agent-provider-list">
-              {settings.providers.length === 0 && (
+              {visibleProviders.length === 0 && (
                 <div className="agent-meta">{t('agent.noProvider')}</div>
               )}
-              {settings.providers.map((provider) => {
+              {visibleProviders.map((provider) => {
                 const isDefault = provider.id === settings.defaultProviderId
                 const isEditing = provider.id === editingId
                 return (
@@ -442,6 +581,12 @@ export const AgentSettingsDialog: FC<AgentSettingsDialogProps> = ({ open, onClos
                     <div className="agent-provider-meta">
                       <div>{t('agent.baseUrlLabel', { url: provider.baseUrl })}</div>
                       <div>{t('agent.platformLabel', { platform: getPlatformLabel(provider.platform) })}</div>
+                      {provider.kind === 'image_generation' && provider.modelId && (
+                        <div>{t('agent.modelIdLabel', { model: provider.modelId })}</div>
+                      )}
+                      {provider.kind === 'image_generation' && provider.defaultAspectRatio && (
+                        <div>{t('agent.defaultAspectRatioLabel', { ratio: provider.defaultAspectRatio })}</div>
+                      )}
                     </div>
                     <div className="agent-provider-actions">
                       <Button variant="tertiary" onClick={() => handleEdit(provider)}>
@@ -458,9 +603,21 @@ export const AgentSettingsDialog: FC<AgentSettingsDialogProps> = ({ open, onClos
                 )
               })}
             </div>
-            {defaultProvider && (
+            {currentTabDefaultProvider && (
               <div className="agent-subtle">
-                {t('agent.defaultProvider', { name: defaultProvider.name })}
+                {t('agent.defaultProvider', { name: currentTabDefaultProvider.name })}
+              </div>
+            )}
+            {activeTab === 'image_generation' && (
+              <div className="agent-settings-actions">
+                <Button
+                  variant="tertiary"
+                  type="button"
+                  disabled={!preferredImageGenerationProvider}
+                  onClick={() => onOpenImageGeneration?.(preferredImageGenerationProvider?.id ?? null)}
+                >
+                  {t('agent.openImageGeneration')}
+                </Button>
               </div>
             )}
           </div>

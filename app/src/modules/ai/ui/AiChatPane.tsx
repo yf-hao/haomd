@@ -20,6 +20,16 @@ import { loadAgentSettingsState } from '../config/agentSettingsRepo'
 import type { AgentProvider } from '../domain/types'
 import { getNotesConfig } from '../../settings/editorSettings'
 import { createNote } from '../../notes/notesFileService'
+import type { EphemeralAiChatMessage, EphemeralImageGenerationResultMessage } from './imageGenerationEphemeral'
+import { createEphemeralId } from './imageGenerationEphemeral'
+import { runImageGenerationWithAgent } from '../agents/imageGeneration/imageGenerationAgentService'
+import { appendImageGenerationHistory } from '../agents/imageGeneration/imageGenerationHistoryRepo'
+import {
+  buildImageMarkdown,
+  insertGeneratedImageIntoEditor,
+  saveRemoteImageWithDialog,
+} from '../agents/imageGeneration/imageGenerationResultService'
+import { saveImageGenerationToNotes } from '../agents/imageGeneration/imageGenerationNotesBridge'
 
 const EMPTY_MESSAGES = [] as const
 const AI_CHAT_AGENT_STORAGE_KEY = 'haomd_ai_chat_selected_agent_id'
@@ -68,6 +78,8 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   const [historyDialogDirKey, setHistoryDialogDirKey] = useState<string | null>(null)
   const [agents, setAgents] = useState<AgentProvider[]>([])
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null)
+  const [ephemeralMessages, setEphemeralMessages] = useState<EphemeralAiChatMessage[]>([])
+  const [imageGenerationRunning, setImageGenerationRunning] = useState(false)
   // 仅在通过 /list 打开输入历史弹窗时，才允许使用 `!n` 本地历史回填命令
   const [historyRecallEnabled, setHistoryRecallEnabled] = useState(false)
   const commandBridge = useContext(AiChatCommandBridgeContext)
@@ -135,6 +147,8 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
 
   const effectiveDocPath = isPersistedSession ? undefined : stableDocPath
   const historyDirectoryKey = stableDocPath ?? rawDocPath ?? sessionKey ?? '/'
+  const selectedAgent = agents.find((agent) => agent.id === activeAgentId) ?? null
+  const activeAgentMode = selectedAgent?.kind === 'image_generation' ? 'image_generation' : 'chat'
 
   const {
     loading,
@@ -160,7 +174,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
     entryMode,
     initialContext,
     open: isPersistedSession || docPathReady,
-    selectedAgentId: activeAgentId,
+    selectedAgentId: activeAgentMode === 'chat' ? activeAgentId : null,
     docPath: effectiveDocPath,
     legacyDocPath: currentFilePath ?? undefined,
   })
@@ -345,6 +359,74 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   const doSend = async () => {
     const contentToSend = input
     const directoryKey = historyDirectoryKey
+
+    if (activeAgentMode === 'image_generation') {
+      const prompt = contentToSend.trim()
+      if (!prompt || imageGenerationRunning) return
+
+      const imageAgent =
+        agents.find((agent) => agent.id === activeAgentId && agent.kind === 'image_generation') ?? null
+      if (!imageAgent) return
+
+      clearHistoryBrowse()
+      setInput('')
+
+      const promptMessageId = createEphemeralId('image_prompt')
+      const resultMessageId = createEphemeralId('image_result')
+
+      setEphemeralMessages((prev) => [
+        ...prev,
+        { id: promptMessageId, type: 'image_generation_prompt', content: prompt },
+        {
+          id: resultMessageId,
+          type: 'image_generation_result',
+          prompt,
+          agentId: imageAgent.id,
+          agentName: imageAgent.name,
+          status: 'running',
+        },
+      ])
+      shouldAutoScrollRef.current = true
+      setImageGenerationRunning(true)
+
+      try {
+        const result = await runImageGenerationWithAgent(imageAgent, { prompt })
+        appendImageGenerationHistory({
+          agentId: imageAgent.id,
+          agentName: imageAgent.name,
+          prompt,
+          result,
+        })
+        setEphemeralMessages((prev) =>
+          prev.map((message) =>
+            message.id === resultMessageId && message.type === 'image_generation_result'
+              ? {
+                  ...message,
+                  status: 'succeeded',
+                  imageUrl: result.imageUrl,
+                  taskId: result.taskId,
+                }
+              : message,
+          ),
+        )
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : '图片生成失败'
+        setEphemeralMessages((prev) =>
+          prev.map((message) =>
+            message.id === resultMessageId && message.type === 'image_generation_result'
+              ? {
+                  ...message,
+                  status: 'failed',
+                  errorMessage,
+                }
+              : message,
+          ),
+        )
+      } finally {
+        setImageGenerationRunning(false)
+      }
+      return
+    }
 
     // 先处理本地历史回填命令：!n / ！n
     const ordinal = parseHistoryRecallCommand(contentToSend)
@@ -543,6 +625,41 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
     await changeModel(modelId)
   }
 
+  const handleCopyImageUrl = async (message: EphemeralImageGenerationResultMessage) => {
+    if (!message.imageUrl) return
+    await copyTextToClipboard(message.imageUrl)
+  }
+
+  const handleCopyImageMarkdown = async (message: EphemeralImageGenerationResultMessage) => {
+    if (!message.imageUrl) return
+    await copyTextToClipboard(buildImageMarkdown({ imageUrl: message.imageUrl, prompt: message.prompt }))
+  }
+
+  const handleSaveGeneratedImage = async (message: EphemeralImageGenerationResultMessage) => {
+    if (!message.imageUrl) return
+    await saveRemoteImageWithDialog({ imageUrl: message.imageUrl, prompt: message.prompt })
+  }
+
+  const handleInsertGeneratedImage = async (message: EphemeralImageGenerationResultMessage) => {
+    if (!message.imageUrl) return
+    await insertGeneratedImageIntoEditor({ imageUrl: message.imageUrl, prompt: message.prompt })
+  }
+
+  const handleSaveGeneratedImageToNotes = async (message: EphemeralImageGenerationResultMessage) => {
+    if (!message.imageUrl) return
+    const agent =
+      agents.find((candidate) => candidate.id === message.agentId && candidate.kind === 'image_generation') ?? null
+    if (!agent) return
+    await saveImageGenerationToNotes({
+      agent,
+      prompt: message.prompt,
+      result: {
+        imageUrl: message.imageUrl,
+        taskId: message.taskId ?? '',
+      },
+    })
+  }
+
   const messageSource = state?.viewMessages ?? EMPTY_MESSAGES
   const allMessages = messageSource.filter((m) => !m.hidden)
   const messages = allMessages
@@ -723,9 +840,27 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
     ),
   )
   const isProcessing = loading || isStreamingUI
+  const agentGroups = [
+    {
+      id: 'chat',
+      label: 'Chat Agent',
+      options: agents
+        .filter((agent) => agent.kind === 'chat')
+        .map((agent) => ({ value: agent.id, label: agent.name })),
+    },
+    {
+      id: 'image_generation',
+      label: 'Image Generation Agent',
+      options: agents
+        .filter((agent) => agent.kind === 'image_generation')
+        .map((agent) => ({ value: agent.id, label: agent.name })),
+    },
+  ].filter((group) => group.options.length > 0)
 
   const inputPlaceholder =
-    contextPlaceholderMode === 'selection'
+    activeAgentMode === 'image_generation'
+      ? '输入图片生成提示词'
+      : contextPlaceholderMode === 'selection'
       ? 'Selected content will be used as context for the answer.'
       : contextPlaceholderMode === 'file'
         ? 'Current file content will be used as context for the answer.'
@@ -951,6 +1086,8 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
       <div className="ai-chat-pane-body">
         <AiChatBody
           messages={messages}
+          ephemeralMessages={ephemeralMessages}
+          agentMode={activeAgentMode}
           activeDisplayAssistantId={isDifyProvider ? activeTypewriterId : latestStreamingAssistantId}
           historyIdentity={`${sessionKey}:${fullPage ? 'full' : 'dock'}`}
           loading={isProcessing}
@@ -981,7 +1118,8 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
           models={availableModels}
           activeModelId={activeModelId}
           onChangeModel={handleModelChange}
-          agents={[EMPTY_AGENT_OPTION, ...agents.map((agent) => ({ id: agent.id, name: agent.name }))]}
+          agents={[EMPTY_AGENT_OPTION]}
+          agentGroups={agentGroups}
           activeAgentId={activeAgentId ?? ''}
           onChangeAgent={(value) => setActiveAgentId(value || null)}
           attachedImageDataUrl={attachedImageDataUrl}
@@ -999,6 +1137,12 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
             return canUpload ? uploadFiles : undefined;
           })()}
           inputPlaceholder={inputPlaceholder}
+          imageGenerationRunning={imageGenerationRunning}
+          onCopyImageUrl={handleCopyImageUrl}
+          onCopyImageMarkdown={handleCopyImageMarkdown}
+          onSaveGeneratedImage={handleSaveGeneratedImage}
+          onInsertGeneratedImage={handleInsertGeneratedImage}
+          onSaveGeneratedImageToNotes={handleSaveGeneratedImageToNotes}
           isResizing={false}
           fullPage={fullPage}
         />

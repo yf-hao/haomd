@@ -17,6 +17,7 @@ export function createStreamingClientFromSettings(
   const baseUrl = provider.baseUrl.trim()
   const apiKey = provider.apiKey.trim()
   const modelId = overrideModelId || provider.defaultModelId || provider.models[0]?.id || ''
+  const modelMaxTokens = provider.models.find((model) => model.id === modelId)?.maxTokens
   const providerType = provider.providerType ?? 'dify'
 
   if (!baseUrl || !apiKey || !modelId) {
@@ -30,8 +31,7 @@ export function createStreamingClientFromSettings(
         baseUrl,
         modelId,
         systemPrompt,
-        temperature: 0,
-        maxTokens: 256,
+        maxTokens: modelMaxTokens,
       })
     case 'dify':
     default:
@@ -41,7 +41,7 @@ export function createStreamingClientFromSettings(
         modelId,
         systemPrompt,
         temperature: 0,
-        maxTokens: 256,
+        maxTokens: modelMaxTokens,
         omitModelInput: provider.omitDifyModelInput,
         initialConversationId,
       })

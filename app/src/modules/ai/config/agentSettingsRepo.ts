@@ -1,13 +1,16 @@
 import { invoke } from '@tauri-apps/api/core'
 import type { BackendResult } from '../../platform/backendTypes'
-import { emptyAgentSettings, type AgentPlatform, type AgentSettingsState } from '../domain/types'
+import { emptyAgentSettings, type AgentKind, type AgentPlatform, type AgentSettingsState } from '../domain/types'
 
 export type AgentProviderCfg = {
   id: string
   name: string
   base_url: string
   api_key: string
+  kind?: string | null
   platform?: string | null
+  model_id?: string | null
+  default_aspect_ratio?: string | null
 }
 
 export type AgentSettingsCfg = {
@@ -18,8 +21,15 @@ export type AgentSettingsCfg = {
 export function fromCfg(cfg: AgentSettingsCfg | null | undefined): AgentSettingsState {
   if (!cfg) return emptyAgentSettings
 
+  const toKind = (value?: string | null): AgentKind => {
+    if (value === 'image_generation' || value === 'chat') {
+      return value
+    }
+    return 'chat'
+  }
+
   const toPlatform = (value?: string | null): AgentPlatform => {
-    if (value === 'coze' || value === 'other' || value === 'dify') {
+    if (value === 'coze' || value === 'other' || value === 'dify' || value === 'modelscope_image') {
       return value
     }
     return 'dify'
@@ -31,7 +41,10 @@ export function fromCfg(cfg: AgentSettingsCfg | null | undefined): AgentSettings
       name: p.name,
       baseUrl: p.base_url,
       apiKey: p.api_key,
+      kind: toKind(p.kind),
       platform: toPlatform(p.platform),
+      modelId: p.model_id ?? undefined,
+      defaultAspectRatio: p.default_aspect_ratio ?? undefined,
     })),
     defaultProviderId: cfg.default_provider_id ?? undefined,
   }
@@ -44,7 +57,10 @@ export function toCfg(state: AgentSettingsState): AgentSettingsCfg {
       name: p.name,
       base_url: p.baseUrl,
       api_key: p.apiKey,
+      kind: p.kind,
       platform: p.platform,
+      model_id: p.modelId ?? null,
+      default_aspect_ratio: p.defaultAspectRatio ?? null,
     })),
     default_provider_id: state.defaultProviderId ?? null,
   }

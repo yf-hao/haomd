@@ -2,6 +2,7 @@
 // 通过通用流式聊天接口保持可扩展，底层实现由工厂根据 providerType 决定
 
 import type { IStreamingChatClient } from './domain/types'
+import type { StreamingChatRequest } from './domain/types'
 import type { UiProvider } from './settings'
 import { createStreamingClientFromSettings } from './streamingClientFactory'
 
@@ -56,12 +57,19 @@ export async function testProviderConnection(
   let buffer = ''
 
   try {
+    const request: StreamingChatRequest =
+      (input.providerType ?? 'dify') === 'openai'
+        ? {
+            messages: [{ role: 'user' as const, content: testMessage }],
+          }
+        : {
+            messages: [{ role: 'user' as const, content: testMessage }],
+            temperature: 0,
+            maxTokens: 256,
+          }
+
     const result = await chatClient.askStream(
-      {
-        messages: [{ role: 'user', content: testMessage }],
-        temperature: 0,
-        maxTokens: 256,
-      },
+      request,
       {
         onChunk: (chunk) => {
           if (chunk.content) {

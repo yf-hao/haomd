@@ -12,6 +12,11 @@ import { MarkdownViewer } from '../../../components/MarkdownViewer'
 import type { ChatMessageView } from '../domain/chatSession'
 import type { AssistantToolExecutionView } from '../domain/chatSession'
 import type { VisionMode, UploadedFileRef } from '../domain/types'
+import type {
+  AiChatAgentMode,
+  EphemeralAiChatMessage,
+  EphemeralImageGenerationResultMessage,
+} from './imageGenerationEphemeral'
 import { useAiSlashCommandHints } from './hooks/useAiSlashCommandHints'
 import { AiSlashCommandHintPanel } from './AiSlashCommandHintPanel'
 import { BadgeSelect, type BadgeSelectGroup } from './BadgeSelect'
@@ -30,6 +35,8 @@ type MessageViewMode = 'rendered' | 'source'
 
 export interface AiChatBodyProps {
   messages: ChatMessageView[]
+  ephemeralMessages?: EphemeralAiChatMessage[]
+  agentMode?: AiChatAgentMode
   activeDisplayAssistantId?: string | null
   historyIdentity?: string
   loading: boolean
@@ -58,6 +65,7 @@ export interface AiChatBodyProps {
   activeModelId?: string | null
   onChangeModel?: (modelId: string) => void
   agents?: { id: string; name: string }[]
+  agentGroups?: BadgeSelectGroup[]
   activeAgentId?: string | null
   onChangeAgent?: (agentId: string) => void
   /** 当前输入区已附加的图片（data URL），用于控制发送按钮状态与提示 */
@@ -76,6 +84,12 @@ export interface AiChatBodyProps {
   onUploadFiles?: (files: File[]) => void
   /** Optional placeholder text for the input textarea */
   inputPlaceholder?: string
+  imageGenerationRunning?: boolean
+  onCopyImageUrl?: (message: EphemeralImageGenerationResultMessage) => void | Promise<void>
+  onCopyImageMarkdown?: (message: EphemeralImageGenerationResultMessage) => void | Promise<void>
+  onSaveGeneratedImage?: (message: EphemeralImageGenerationResultMessage) => void | Promise<void>
+  onInsertGeneratedImage?: (message: EphemeralImageGenerationResultMessage) => void | Promise<void>
+  onSaveGeneratedImageToNotes?: (message: EphemeralImageGenerationResultMessage) => void | Promise<void>
   isResizing?: boolean
   /** Full-page mode: centered input when empty, messages above input when not */
   fullPage?: boolean
@@ -266,6 +280,8 @@ const AiChatMessageItem = memo(({
 
 export const AiChatBody: FC<AiChatBodyProps> = ({
   messages,
+  ephemeralMessages = [],
+  agentMode = 'chat',
   activeDisplayAssistantId,
   historyIdentity,
   loading,
@@ -294,6 +310,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
   activeModelId,
   onChangeModel,
   agents,
+  agentGroups,
   activeAgentId,
   onChangeAgent,
   attachedImageDataUrl,
@@ -304,6 +321,12 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
   isUploading,
   onUploadFiles,
   inputPlaceholder,
+  imageGenerationRunning = false,
+  onCopyImageUrl,
+  onCopyImageMarkdown,
+  onSaveGeneratedImage,
+  onInsertGeneratedImage,
+  onSaveGeneratedImageToNotes,
   isResizing = false,
   fullPage = false,
 }) => {
@@ -347,7 +370,6 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
     () => renderedMessages.find((msg) => msg.id === latestDynamicAssistantId) ?? null,
     [renderedMessages, latestDynamicAssistantId],
   )
-
   useEffect(() => {
     setRenderCount(INITIAL_HISTORY_RENDER_COUNT)
     pendingPrependDeltaRef.current = null
@@ -541,7 +563,8 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
   }
 
   const hasMessages = visibleMessages.length > 0 || loading
-  const fullPageClass = fullPage ? (hasMessages ? 'ai-chat-body-fullpage has-messages' : 'ai-chat-body-fullpage') : ''
+  const hasEphemeralMessages = ephemeralMessages.length > 0
+  const fullPageClass = fullPage ? ((hasMessages || hasEphemeralMessages) ? 'ai-chat-body-fullpage has-messages' : 'ai-chat-body-fullpage') : ''
 
   return (
     <div className={`modal-content ai-chat-body ${fullPageClass}`.trim()}>
@@ -640,6 +663,104 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
                 />
               )
             })()}
+            {ephemeralMessages.map((message) => {
+              if (message.type === 'image_generation_prompt') {
+                return (
+                  <div key={message.id} className="ai-chat-message ai-chat-message-user ai-chat-message-ephemeral">
+                    <div className="ai-chat-message-badge ai-chat-message-badge-image-generation">
+                      {t('ai.imageGenerationTemporary')}
+                    </div>
+                    <div className="ai-chat-message-content">{message.content}</div>
+                  </div>
+                )
+              }
+
+              const imageMessage = message
+              return (
+                <div
+                  key={imageMessage.id}
+                  className="ai-chat-message ai-chat-message-assistant ai-chat-message-image-generation"
+                >
+                  <div className="ai-chat-message-badge ai-chat-message-badge-image-generation">
+                    {t('ai.imageGenerationTemporary')}
+                  </div>
+                  <div className="ai-chat-image-card">
+                    <div className="ai-chat-image-card-title">
+                      {imageMessage.agentName}
+                    </div>
+                    {imageMessage.status === 'running' && (
+                      <div className="ai-chat-image-card-status">{t('imageGeneration.running')}</div>
+                    )}
+                    {imageMessage.status === 'failed' && (
+                      <div className="ai-chat-image-card-status ai-chat-image-card-status-error">
+                        {imageMessage.errorMessage || t('ai.imageGenerationFailed')}
+                      </div>
+                    )}
+                    {imageMessage.status === 'succeeded' && imageMessage.imageUrl && (
+                      <>
+                        <img
+                          className="ai-chat-image-card-preview"
+                          src={imageMessage.imageUrl}
+                          alt={t('imageGeneration.resultAlt')}
+                        />
+                        <div className="ai-chat-image-card-meta">
+                          {imageMessage.taskId
+                            ? t('imageGeneration.taskIdLabel', { taskId: imageMessage.taskId })
+                            : null}
+                        </div>
+                        <div className="ai-chat-message-actions">
+                          <button
+                            type="button"
+                            className="icon-button ai-chat-icon-button"
+                            title={t('imageGeneration.copyUrl')}
+                            aria-label={t('imageGeneration.copyUrl')}
+                            onClick={() => void onCopyImageUrl?.(imageMessage)}
+                          >
+                            <span className="ai-chat-icon ai-chat-icon-copy" aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-button ai-chat-icon-button"
+                            title={t('imageGeneration.copyMarkdown')}
+                            aria-label={t('imageGeneration.copyMarkdown')}
+                            onClick={() => void onCopyImageMarkdown?.(imageMessage)}
+                          >
+                            <span className="ai-chat-icon ai-chat-icon-source" aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-button ai-chat-icon-button"
+                            title={t('imageGeneration.saveLocal')}
+                            aria-label={t('imageGeneration.saveLocal')}
+                            onClick={() => void onSaveGeneratedImage?.(imageMessage)}
+                          >
+                            <span className="ai-chat-icon ai-chat-icon-save" aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-button ai-chat-icon-button"
+                            title={t('imageGeneration.insertEditor')}
+                            aria-label={t('imageGeneration.insertEditor')}
+                            onClick={() => void onInsertGeneratedImage?.(imageMessage)}
+                          >
+                            <span className="ai-chat-icon ai-chat-icon-insert" aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-button ai-chat-icon-button"
+                            title={t('imageGeneration.saveToNotes')}
+                            aria-label={t('imageGeneration.saveToNotes')}
+                            onClick={() => void onSaveGeneratedImageToNotes?.(imageMessage)}
+                          >
+                            <span className="ai-chat-icon ai-chat-icon-note" aria-hidden="true" />
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       </div>
@@ -745,10 +866,13 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
                 className="ai-chat-tool-btn"
                 title={t('ai.uploadImage')}
                 onClick={handleToolClick}
+                disabled={agentMode === 'image_generation'}
               >
                 <span className="ai-chat-icon-plus" aria-hidden="true" />
               </button>
-              <BadgeSelect
+              {agentMode === 'chat' && (
+                <>
+                  <BadgeSelect
                 options={(models ?? []).map((m) => ({
                   value: m.id,
                   label: `${getModelDisplayName(m.id)} (${m.providerName})${m.visionMode === 'enabled' ? '  👁' : ''}`,
@@ -767,12 +891,15 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
                 value={activeRoleId ?? ''}
                 onChange={(v) => onChangeRole?.(v)}
               />
+                </>
+              )}
               {!!agents?.length && (
                 <BadgeSelect
                   options={agents.map((agent) => ({
                     value: agent.id,
                     label: agent.name,
                   }))}
+                  groups={agentGroups}
                   value={activeAgentId ?? ''}
                   onChange={(v) => onChangeAgent?.(v)}
                 />
@@ -789,7 +916,15 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
                   }
                 }}
                 title={loading ? t('ai.stopGenerating') : t('ai.send')}
-                disabled={!loading && !input.trim() && !attachedImageDataUrl && (pendingAttachments?.length ?? 0) === 0}
+                disabled={
+                  imageGenerationRunning
+                    || (!loading
+                      && (
+                        agentMode === 'image_generation'
+                          ? !input.trim()
+                          : (!input.trim() && !attachedImageDataUrl && (pendingAttachments?.length ?? 0) === 0)
+                      ))
+                }
               >
                 {loading ? (
                   <span className="ai-chat-icon-stop" aria-hidden="true" />

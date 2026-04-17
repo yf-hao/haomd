@@ -145,6 +145,9 @@ function pickDefaultProvider(state: Awaited<ReturnType<typeof loadAiSettingsStat
 }
 
 function agentToUiProvider(agent: AgentProvider): UiProvider {
+  if (agent.kind !== 'chat') {
+    throw new Error(`当前 ${agent.kind} Agent 不支持接入 AI Chat`)
+  }
   if (agent.platform !== 'dify') {
     throw new Error(`当前暂不支持 ${agent.platform} Agent 接入 AI Chat`)
   }
@@ -198,7 +201,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
   let currentModelId = provider.defaultModelId ?? provider.models[0]?.id
   let providerType: ProviderType = provider.providerType ?? 'dify'
   console.warn('[ChatSession] createChatSession', { providerName: provider.name, providerType, currentModelId })
-  let defaultMaxTokens = provider.models.find((m) => m.id === currentModelId)?.maxTokens ?? 2048
+  let defaultMaxTokens = provider.models.find((m) => m.id === currentModelId)?.maxTokens
 
   let systemPromptInfo: SystemPromptInfo = systemInfo
   const difyProviderConversations: Record<string, string> = options.initialDifyProviderConversations ?? {}
@@ -674,7 +677,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       provider = nextProvider
       currentModelId = modelId
       providerType = provider.providerType ?? 'dify'
-      defaultMaxTokens = provider.models.find((m) => m.id === modelId)?.maxTokens ?? 2048
+      defaultMaxTokens = provider.models.find((m) => m.id === modelId)?.maxTokens
 
       if (providerType === 'dify') {
         difyConversationId = resolveDifyConversationId({

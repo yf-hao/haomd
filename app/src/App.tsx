@@ -4,6 +4,7 @@ import './App.css'
 import WorkspaceShell, { type LeftPanelId, type InitialWorkspaceAction } from './components/WorkspaceShell'
 import { AiSettingsDialog } from './components/AiSettingsDialog'
 import { AgentSettingsDialog } from './components/AgentSettingsDialog'
+import { ImageGenerationDialog } from './components/ImageGenerationDialog'
 import { PromptSettingsDialog } from './components/PromptSettingsDialog'
 import { SettingsDialog } from './components/SettingsDialog'
 import { McpSettingsDialog } from './components/McpSettingsDialog'
@@ -46,6 +47,8 @@ function App() {
   const [isPromptSettingsOpen, setPromptSettingsOpen] = useState(false)
   const [isSettingsOpen, setSettingsOpen] = useState(false)
   const [isMcpSettingsOpen, setMcpSettingsOpen] = useState(false)
+  const [isImageGenerationDialogOpen, setImageGenerationDialogOpen] = useState(false)
+  const [initialImageGenerationAgentId, setInitialImageGenerationAgentId] = useState<string | null>(null)
   const [isStatusBarVisible, setStatusBarVisible] = useState(true)
   const [docCharCount, setDocCharCount] = useState<number | null>(null)
   const [statusMessage, setStatusMessage] = useState('')
@@ -241,6 +244,8 @@ function App() {
           isPromptSettingsOpen={isPromptSettingsOpen}
           isSettingsOpen={isSettingsOpen}
           isMcpSettingsOpen={isMcpSettingsOpen}
+          isImageGenerationDialogOpen={isImageGenerationDialogOpen}
+          initialImageGenerationAgentId={initialImageGenerationAgentId}
           isStatusBarVisible={isStatusBarVisible}
           docCharCount={docCharCount}
           statusMessage={statusMessage}
@@ -262,6 +267,8 @@ function App() {
           setPromptSettingsOpen={setPromptSettingsOpen}
           setSettingsOpen={setSettingsOpen}
           setMcpSettingsOpen={setMcpSettingsOpen}
+          setImageGenerationDialogOpen={setImageGenerationDialogOpen}
+          setInitialImageGenerationAgentId={setInitialImageGenerationAgentId}
         />
       </ThemeModeProvider>
     </I18nProvider>
@@ -278,6 +285,8 @@ type AppShellContentProps = {
   isPromptSettingsOpen: boolean
   isSettingsOpen: boolean
   isMcpSettingsOpen: boolean
+  isImageGenerationDialogOpen: boolean
+  initialImageGenerationAgentId: string | null
   isStatusBarVisible: boolean
   docCharCount: number | null
   statusMessage: string
@@ -293,6 +302,8 @@ type AppShellContentProps = {
   setPromptSettingsOpen: Dispatch<SetStateAction<boolean>>
   setSettingsOpen: Dispatch<SetStateAction<boolean>>
   setMcpSettingsOpen: Dispatch<SetStateAction<boolean>>
+  setImageGenerationDialogOpen: Dispatch<SetStateAction<boolean>>
+  setInitialImageGenerationAgentId: Dispatch<SetStateAction<string | null>>
 }
 
 function AppShellContent({
@@ -305,6 +316,8 @@ function AppShellContent({
   isPromptSettingsOpen,
   isSettingsOpen,
   isMcpSettingsOpen,
+  isImageGenerationDialogOpen,
+  initialImageGenerationAgentId,
   isStatusBarVisible,
   docCharCount,
   statusMessage,
@@ -320,6 +333,8 @@ function AppShellContent({
   setPromptSettingsOpen,
   setSettingsOpen,
   setMcpSettingsOpen,
+  setImageGenerationDialogOpen,
+  setInitialImageGenerationAgentId,
 }: AppShellContentProps) {
   const { t } = useI18n()
   const [toastMessage, setToastMessage] = useState('')
@@ -431,7 +446,19 @@ function AppShellContent({
       )}
 
       <AiSettingsDialog open={isAiSettingsOpen} onClose={() => setAiSettingsOpen(false)} />
-      <AgentSettingsDialog open={isAgentSettingsOpen} onClose={() => setAgentSettingsOpen(false)} />
+      <AgentSettingsDialog
+        open={isAgentSettingsOpen}
+        onClose={() => setAgentSettingsOpen(false)}
+        onOpenImageGeneration={(agentId) => {
+          setInitialImageGenerationAgentId(agentId ?? null)
+          setImageGenerationDialogOpen(true)
+        }}
+      />
+      <ImageGenerationDialog
+        open={isImageGenerationDialogOpen}
+        initialAgentId={initialImageGenerationAgentId}
+        onClose={() => setImageGenerationDialogOpen(false)}
+      />
       <PromptSettingsDialog open={isPromptSettingsOpen} onClose={() => setPromptSettingsOpen(false)} />
       <McpSettingsDialog open={isMcpSettingsOpen} onClose={() => setMcpSettingsOpen(false)} />
       <SettingsDialog

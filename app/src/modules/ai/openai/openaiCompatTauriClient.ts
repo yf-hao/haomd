@@ -208,7 +208,7 @@ export function createOpenAICompatTauriClient(
             baseUrl: config.baseUrl,
             modelId: config.modelId,
             systemPrompt: config.systemPrompt,
-            temperature: request.temperature ?? config.temperature ?? 0,
+            temperature: request.temperature ?? config.temperature,
             maxTokens: request.maxTokens ?? config.maxTokens,
             messages: mapMessages(request),
             tools: request.tools,

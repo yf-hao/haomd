@@ -93,6 +93,28 @@
   min-height: 0;
 }
 
+.agent-settings-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+
+.agent-settings-tab {
+  border: 1px solid var(--theme-border-subtle);
+  background: var(--theme-surface-editor);
+  color: var(--theme-text-default);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: calc(var(--ui-font-settings) - 1px);
+  cursor: pointer;
+}
+
+.agent-settings-tab.is-active {
+  border-color: var(--theme-border-input-strong);
+  background: var(--theme-surface-card);
+  box-shadow: inset 0 0 0 1px var(--theme-border-input-strong);
+}
+
 .agent-settings-form {
   display: flex;
   flex-direction: column;

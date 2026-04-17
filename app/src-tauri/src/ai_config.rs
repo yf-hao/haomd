@@ -64,7 +64,13 @@ pub struct AgentProviderCfg {
     pub base_url: String,
     pub api_key: String,
     #[serde(default)]
+    pub kind: Option<String>,
+    #[serde(default)]
     pub platform: Option<String>,
+    #[serde(default)]
+    pub model_id: Option<String>,
+    #[serde(default)]
+    pub default_aspect_ratio: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
