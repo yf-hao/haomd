@@ -17,9 +17,23 @@ type OpenAICompatToolCall = {
   function: OpenAICompatToolFunction
 }
 
+type OpenAICompatImageUrlPart = {
+  type: 'image_url'
+  image_url: {
+    url: string
+  }
+}
+
+type OpenAICompatTextPart = {
+  type: 'text'
+  text: string
+}
+
+type OpenAICompatMessageContent = string | Array<OpenAICompatImageUrlPart | OpenAICompatTextPart>
+
 type OpenAICompatMessageInput = {
   role: 'user' | 'assistant' | 'tool'
-  content: string
+  content: OpenAICompatMessageContent
   toolCalls?: ToolCallRequest[]
   toolCallId?: string
 }

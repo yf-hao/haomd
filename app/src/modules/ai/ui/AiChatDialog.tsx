@@ -17,6 +17,7 @@ import { ConfirmDialog } from '../../../components/ConfirmDialog'
 import { AiChatHistoryDialog } from './AiChatHistoryDialog'
 import { loadAgentSettingsState } from '../config/agentSettingsRepo'
 import type { AgentProvider } from '../domain/types'
+import { useThemeContext } from '../../theme/ThemeContext'
 
 const EMPTY_MESSAGES: ChatMessageView[] = []
 const AI_CHAT_AGENT_STORAGE_KEY = 'haomd_ai_chat_selected_agent_id'
@@ -35,6 +36,7 @@ export type AiChatDialogProps = {
 }
 
 export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialContext, onClose, currentFilePath, tabId }) => {
+  const { themeSettings } = useThemeContext()
   const [input, setInput] = useState('')
   const [contextPrefix, setContextPrefix] = useState<string | null>(null)
   const [contextPrefixUsed, setContextPrefixUsed] = useState(false)
@@ -805,6 +807,8 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
       : contextPlaceholderMode === 'file'
         ? 'Current file content will be used as context for the answer.'
         : 'Ask anything to AI'
+  const hasLocalBackground = Boolean(themeSettings.aiChatBackground?.enabled && themeSettings.aiChatBackground?.path)
+  const hasWorkspaceBackground = Boolean(themeSettings.workspaceBackground?.enabled && themeSettings.workspaceBackground?.path)
 
   if (!open) return null
 
@@ -812,7 +816,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     <>
     <div className="modal-backdrop modal-backdrop-plain">
       <div
-        className="modal modal-ai-chat"
+        className={`modal modal-ai-chat ${hasLocalBackground ? 'has-ai-chat-local-background' : ''} ${hasWorkspaceBackground ? 'has-workspace-background' : ''}`.trim()}
         onClick={handleDialogClick}
         style={{ transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)` }}
       >

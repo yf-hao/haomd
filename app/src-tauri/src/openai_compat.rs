@@ -38,11 +38,34 @@ pub struct OpenAICompatToolCallRequest {
     pub function: OpenAICompatToolFunction,
 }
 
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct OpenAICompatImageUrlInput {
+    pub url: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OpenAICompatContentPartInput {
+    Text {
+        text: String,
+    },
+    ImageUrl {
+        image_url: OpenAICompatImageUrlInput,
+    },
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(untagged)]
+pub enum OpenAICompatMessageContentInput {
+    Text(String),
+    Parts(Vec<OpenAICompatContentPartInput>),
+}
+
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenAICompatMessageInput {
     pub role: String,
-    pub content: String,
+    pub content: OpenAICompatMessageContentInput,
     #[serde(default)]
     pub tool_calls: Option<Vec<OpenAICompatToolCallRequest>>,
     #[serde(default)]
@@ -173,7 +196,11 @@ fn build_completions_url(base_url: &str) -> String {
 }
 
 fn openai_compat_hint_key(base_url: &str, model_id: &str) -> String {
-    format!("{}::{}", base_url.trim_end_matches('/').trim(), model_id.trim())
+    format!(
+        "{}::{}",
+        base_url.trim_end_matches('/').trim(),
+        model_id.trim()
+    )
 }
 
 fn openai_compat_state_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -194,8 +221,9 @@ fn openai_compat_param_hints_path(app: &AppHandle) -> Result<PathBuf, String> {
 async fn load_openai_compat_param_hints(app: &AppHandle) -> Result<OpenAICompatParamHints, String> {
     let path = openai_compat_param_hints_path(app)?;
     match fs::read(&path).await {
-        Ok(bytes) => serde_json::from_slice(&bytes)
-            .map_err(|err| format!("解析参数偏好缓存失败: {err}")),
+        Ok(bytes) => {
+            serde_json::from_slice(&bytes).map_err(|err| format!("解析参数偏好缓存失败: {err}"))
+        }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(HashMap::new()),
         Err(err) => Err(format!("读取参数偏好缓存失败: {err}")),
     }
@@ -206,8 +234,8 @@ async fn save_openai_compat_param_hints(
     hints: &OpenAICompatParamHints,
 ) -> Result<(), String> {
     let path = openai_compat_param_hints_path(app)?;
-    let bytes = serde_json::to_vec_pretty(hints)
-        .map_err(|err| format!("序列化参数偏好缓存失败: {err}"))?;
+    let bytes =
+        serde_json::to_vec_pretty(hints).map_err(|err| format!("序列化参数偏好缓存失败: {err}"))?;
     fs::write(path, bytes)
         .await
         .map_err(|err| format!("写入参数偏好缓存失败: {err}"))
@@ -245,6 +273,13 @@ async fn save_openai_compat_param_hint(
     save_openai_compat_param_hints(app, &hints).await
 }
 
+fn message_content_to_value(content: &OpenAICompatMessageContentInput) -> Value {
+    match content {
+        OpenAICompatMessageContentInput::Text(text) => Value::String(text.clone()),
+        OpenAICompatMessageContentInput::Parts(parts) => json!(parts),
+    }
+}
+
 fn build_request_messages(request: &OpenAICompatChatRequest) -> Vec<Value> {
     let mut messages = Vec::new();
     if let Some(system_prompt) = request
@@ -260,7 +295,7 @@ fn build_request_messages(request: &OpenAICompatChatRequest) -> Vec<Value> {
         if message.role == "tool" {
             messages.push(json!({
                 "role": "tool",
-                "content": message.content,
+                "content": message_content_to_value(&message.content),
                 "tool_call_id": message.tool_call_id
             }));
             continue;
@@ -283,7 +318,10 @@ fn build_request_messages(request: &OpenAICompatChatRequest) -> Vec<Value> {
                     .collect::<Vec<_>>();
                 messages.push(json!({
                     "role": "assistant",
-                    "content": if message.content.is_empty() { Value::Null } else { Value::String(message.content.clone()) },
+                    "content": match &message.content {
+                        OpenAICompatMessageContentInput::Text(text) if text.is_empty() => Value::Null,
+                        _ => message_content_to_value(&message.content),
+                    },
                     "tool_calls": mapped
                 }));
                 continue;
@@ -292,7 +330,7 @@ fn build_request_messages(request: &OpenAICompatChatRequest) -> Vec<Value> {
 
         messages.push(json!({
             "role": message.role,
-            "content": message.content
+            "content": message_content_to_value(&message.content)
         }));
     }
 
@@ -322,21 +360,19 @@ fn build_request_body(
 
     if let Some(tools) = &request.tools {
         if !tools.is_empty() {
-            body["tools"] = json!(
-                tools
-                    .iter()
-                    .map(|tool| {
-                        json!({
-                            "type": tool.tool_type,
-                            "function": {
-                                "name": tool.function.name,
-                                "description": tool.function.description,
-                                "parameters": tool.function.parameters
-                            }
-                        })
+            body["tools"] = json!(tools
+                .iter()
+                .map(|tool| {
+                    json!({
+                        "type": tool.tool_type,
+                        "function": {
+                            "name": tool.function.name,
+                            "description": tool.function.description,
+                            "parameters": tool.function.parameters
+                        }
                     })
-                    .collect::<Vec<_>>()
-            );
+                })
+                .collect::<Vec<_>>());
             body["tool_choice"] = json!("auto");
         }
     }
@@ -435,7 +471,9 @@ fn build_retry_plan(
     }
 
     match error.transport_mode {
-        CompletionTransportMode::Stream => vec![(CompletionTransportMode::NonStream, error.token_param_mode)],
+        CompletionTransportMode::Stream => {
+            vec![(CompletionTransportMode::NonStream, error.token_param_mode)]
+        }
         CompletionTransportMode::NonStream => vec![],
     }
 }
@@ -450,11 +488,7 @@ fn emit_chunk(app: &AppHandle, request_id: &str, content: String) {
     );
 }
 
-fn emit_done(
-    app: &AppHandle,
-    request_id: &str,
-    response: OpenAICompatChatResponse,
-) {
+fn emit_done(app: &AppHandle, request_id: &str, response: OpenAICompatChatResponse) {
     let _ = app.emit(
         OPENAI_COMPAT_DONE_EVENT,
         OpenAICompatDoneEventPayload {
@@ -695,15 +729,16 @@ async fn send_stream_request(
                         .get("index")
                         .and_then(|value| value.as_u64())
                         .unwrap_or(0) as usize;
-                    let entry = tool_calls_map.entry(index).or_insert_with(|| {
-                        OpenAICompatToolCallOutput {
-                            id: String::new(),
-                            function: OpenAICompatToolFunction {
-                                name: String::new(),
-                                arguments: String::new(),
-                            },
-                        }
-                    });
+                    let entry =
+                        tool_calls_map
+                            .entry(index)
+                            .or_insert_with(|| OpenAICompatToolCallOutput {
+                                id: String::new(),
+                                function: OpenAICompatToolFunction {
+                                    name: String::new(),
+                                    arguments: String::new(),
+                                },
+                            });
                     if let Some(id) = tool_call.get("id").and_then(|value| value.as_str()) {
                         entry.id = id.to_string();
                     }
@@ -761,13 +796,17 @@ async fn run_openai_compat_stream(
         }
     };
 
-    let preferred_token_mode = load_openai_compat_param_hint(&app, &request.base_url, &request.model_id)
-        .await
-        .unwrap_or(None);
+    let preferred_token_mode =
+        load_openai_compat_param_hint(&app, &request.base_url, &request.model_id)
+            .await
+            .unwrap_or(None);
     let initial_token_mode = preferred_token_mode.unwrap_or(MaxTokenParamMode::MaxTokens);
     let mut attempts = vec![(CompletionTransportMode::Stream, initial_token_mode)];
     if initial_token_mode != MaxTokenParamMode::MaxTokens {
-        attempts.push((CompletionTransportMode::Stream, MaxTokenParamMode::MaxTokens));
+        attempts.push((
+            CompletionTransportMode::Stream,
+            MaxTokenParamMode::MaxTokens,
+        ));
     }
     let mut tried = Vec::<(CompletionTransportMode, MaxTokenParamMode)>::new();
     let mut last_error_message = String::from("未知错误");
@@ -791,12 +830,14 @@ async fn run_openai_compat_stream(
                 .await
             }
             CompletionTransportMode::NonStream => {
-                send_non_stream_request(&client, &request, token_param_mode).await.map(|response| {
-                    if !response.content.is_empty() {
-                        emit_chunk(&app, &request_id, response.content.clone());
-                    }
-                    response
-                })
+                send_non_stream_request(&client, &request, token_param_mode)
+                    .await
+                    .map(|response| {
+                        if !response.content.is_empty() {
+                            emit_chunk(&app, &request_id, response.content.clone());
+                        }
+                        response
+                    })
             }
         };
 

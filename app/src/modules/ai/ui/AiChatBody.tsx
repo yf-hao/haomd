@@ -16,7 +16,10 @@ import { useAiSlashCommandHints } from './hooks/useAiSlashCommandHints'
 import { AiSlashCommandHintPanel } from './AiSlashCommandHintPanel'
 import { BadgeSelect, type BadgeSelectGroup } from './BadgeSelect'
 import { useThemeContext } from '../../theme/ThemeContext'
-import { resolveManagedBackgroundImageUrl } from '../../theme/backgroundImageRuntime'
+import {
+  resolveAiChatEffectiveBackground,
+  resolveManagedBackgroundImageUrl,
+} from '../../theme/backgroundImageRuntime'
 import { useI18n } from '../../i18n/I18nContext'
 import { inferAttachmentKind, isPreviewableImage } from '../application/attachmentKind'
 
@@ -311,7 +314,10 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
   const [cursorIndex, setCursorIndex] = useState(input.length)
   const [renderCount, setRenderCount] = useState(INITIAL_HISTORY_RENDER_COUNT)
   const pendingPrependDeltaRef = useRef<number | null>(null)
-  const aiChatBackground = themeSettings.aiChatBackground
+  const aiChatBackground = useMemo(
+    () => resolveAiChatEffectiveBackground(themeSettings),
+    [themeSettings],
+  )
   const visibleMessages = useMemo(
     () =>
       messages.filter((msg) => {
@@ -422,7 +428,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
   const modelSelectDisabled = !!activeAgentId
 
   // 默认视觉提示词（用于图片-only场景）
-  const DEFAULT_VISION_PROMPT = '解析图片并根据上下文回复图片中内容的含义'
+  const DEFAULT_VISION_PROMPT = '请详细识别并描述这张图片中的内容。如果图片中包含文字、公式、表格、题目或文档，请先完整提取关键信息，再直接回答。若图片信息不足，请明确说明。'
 
   // 获取用户消息的显示内容（过滤掉默认提示词 & selection/file 上下文）
   const getUserDisplayContent = (content: string) => {

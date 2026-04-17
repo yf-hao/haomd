@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import type { ThemeBackgroundSettings } from '../settings/editorSettings'
+import type { ThemeBackgroundSettings, ThemeSettings } from '../settings/editorSettings'
 import { getBuiltinBackgroundPresetUrl } from './backgroundPresets'
 
 const backgroundImageUrlCache = new Map<string, string>()
@@ -45,4 +45,20 @@ export function buildBackgroundImageVars(
     '--background-image-position-x': `${Math.min(Math.max(background.positionX, 0), 100)}%`,
     '--background-image-position-y': `${Math.min(Math.max(background.positionY, 0), 100)}%`,
   } as CSSProperties
+}
+
+export function resolveAiChatEffectiveBackground(
+  themeSettings: ThemeSettings | null | undefined,
+): ThemeBackgroundSettings | undefined {
+  const aiChatBackground = themeSettings?.aiChatBackground
+  if (aiChatBackground?.enabled && aiChatBackground.path) {
+    return aiChatBackground
+  }
+
+  const workspaceBackground = themeSettings?.workspaceBackground
+  if (workspaceBackground?.enabled && workspaceBackground.path) {
+    return workspaceBackground
+  }
+
+  return undefined
 }

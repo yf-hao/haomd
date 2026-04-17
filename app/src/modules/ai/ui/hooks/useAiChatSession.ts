@@ -406,7 +406,7 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
     [session],
   )
 
-  const DEFAULT_VISION_PROMPT = '解析图片并根据上下文回复图片中内容的含义'
+  const DEFAULT_VISION_PROMPT = '请详细识别并描述这张图片中的内容。如果图片中包含文字、公式、表格、题目或文档，请先完整提取关键信息，再直接回答。若图片信息不足，请明确说明。'
 
   const sendMessage = useCallback<UseAiChatResult['sendMessage']>(
     async (input, options) => {
