@@ -90,4 +90,73 @@ describe('createOpenAIStreamingClient', () => {
         expect(result.error?.message).toContain('401')
         expect(onError).toHaveBeenCalled()
     })
+
+    it('should fallback to non-stream mode when stream body is unavailable', async () => {
+        const client = createOpenAIStreamingClient(config)
+
+        vi.mocked(fetch)
+            .mockResolvedValueOnce({
+                ok: true,
+                body: null,
+            } as any)
+            .mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    choices: [{ message: { content: 'Success from non-stream' } }],
+                }),
+            } as any)
+
+        const onChunk = vi.fn()
+        const onComplete = vi.fn()
+        const result = await client.askStream(
+            { messages: [{ role: 'user', content: 'hi' }] },
+            { onChunk, onComplete }
+        )
+
+        expect(fetch).toHaveBeenCalledTimes(2)
+        const secondCall = vi.mocked(fetch).mock.calls[1]
+        expect(JSON.parse(secondCall?.[1]?.body as string).stream).toBe(false)
+        expect(result.content).toBe('Success from non-stream')
+        expect(onChunk).toHaveBeenCalledWith({ content: 'Success from non-stream' })
+        expect(onComplete).toHaveBeenCalledWith('Success from non-stream', 23)
+    })
+
+    it('should fallback to max_completion_tokens when max_tokens is rejected', async () => {
+        const client = createOpenAIStreamingClient(config)
+
+        vi.mocked(fetch)
+            .mockResolvedValueOnce({
+                ok: false,
+                status: 400,
+                text: async () => 'unsupported parameter: max_tokens',
+            } as any)
+            .mockResolvedValueOnce({
+                ok: true,
+                body: {
+                    getReader: () => ({
+                        read: vi.fn()
+                            .mockResolvedValueOnce({
+                                done: false,
+                                value: new TextEncoder().encode('data: {"choices":[{"delta":{"content":"OK"}}]}\n\n'),
+                            })
+                            .mockResolvedValueOnce({ done: true }),
+                    }),
+                },
+            } as any)
+
+        const result = await client.askStream(
+            { messages: [{ role: 'user', content: 'hi' }], maxTokens: 256 },
+            {}
+        )
+
+        expect(fetch).toHaveBeenCalledTimes(2)
+        const firstBody = JSON.parse(vi.mocked(fetch).mock.calls[0]?.[1]?.body as string)
+        const secondBody = JSON.parse(vi.mocked(fetch).mock.calls[1]?.[1]?.body as string)
+
+        expect(firstBody.max_tokens).toBeDefined()
+        expect(firstBody.max_completion_tokens).toBeUndefined()
+        expect(secondBody.max_tokens).toBeUndefined()
+        expect(secondBody.max_completion_tokens).toBeDefined()
+        expect(result.content).toBe('OK')
+    })
 })

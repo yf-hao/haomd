@@ -417,6 +417,12 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   const handleInputKeyDown = async (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (isComposingRef.current) return
 
+    if (e.key === 'Escape' && isProcessing) {
+      e.preventDefault()
+      handleStop()
+      return
+    }
+
     const currentHistoryCursor = historyCursorRef.current
     const isHistoryMode = currentHistoryCursor != null
 
@@ -743,6 +749,31 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
       stop()
     }
   }
+
+  useEffect(() => {
+    if (!isProcessing) return
+
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      const root = paneRootRef.current
+      if (!root) return
+      const target = event.target instanceof Node ? event.target : null
+      const active = typeof document !== 'undefined' ? document.activeElement : null
+      const withinPane =
+        (!!target && root.contains(target)) ||
+        (!!active && root.contains(active))
+      if (!withinPane) return
+
+      event.preventDefault()
+      event.stopPropagation()
+      handleStop()
+    }
+
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown, true)
+    }
+  }, [isProcessing, handleStop])
 
   const roles = systemPromptInfo?.roles ?? []
   const activeRoleId = systemPromptInfo?.activeRoleId

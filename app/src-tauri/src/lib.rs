@@ -21,6 +21,7 @@ mod mcp_config;
 mod mcp_manager;
 mod menu;
 mod notes_config;
+mod openai_compat;
 mod platform;
 mod protocol;
 mod state_store;
@@ -47,6 +48,7 @@ use mcp_config::*;
 use mcp_manager::*;
 use menu::*;
 use notes_config::*;
+use openai_compat::*;
 use platform::*;
 use protocol::*;
 use serde::{Deserialize, Serialize};
@@ -122,6 +124,8 @@ macro_rules! app_invoke_handler {
             delete_ai_session,
             load_ai_naming_conv,
             save_ai_naming_conv,
+            start_openai_compat_chat_stream,
+            cancel_openai_compat_chat_stream,
             // Platform integration and export utilities
             open_terminal,
             open_in_file_explorer,
