@@ -50,6 +50,11 @@ vi.mock('../config/agentSettingsRepo', () => ({
     loadAgentSettingsState: vi.fn(),
 }))
 
+vi.mock('../../skills/storage/skillsRepo', () => ({
+    listSkills: vi.fn().mockResolvedValue([]),
+    readSkill: vi.fn().mockResolvedValue(null),
+}))
+
 vi.mock('./attachmentUploadService', () => ({
     createAttachmentUploadService: vi.fn(() => ({
         uploadAttachment: vi.fn()

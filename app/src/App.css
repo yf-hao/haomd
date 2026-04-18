@@ -742,21 +742,41 @@ button:disabled {
   max-width: 520px;
 }
 
-.modal.skills-editor-modal {
-  width: min(1120px, calc(100vw - 48px));
+.modal.modal-skills-settings {
   max-width: 1120px;
+  width: min(1120px, calc(100vw - 48px));
+  min-width: 760px;
+  padding: 20px 24px 18px;
+  font-size: var(--ui-font-settings);
+  display: flex;
+  flex-direction: column;
+  max-height: 72vh;
+  overflow: hidden;
+}
+
+.modal.modal-skills-settings .field-label,
+.modal.modal-skills-settings .field-helper {
+  font-size: calc(var(--ui-font-settings) - 1px);
+}
+
+.modal.modal-skills-settings .field-input,
+.modal.modal-skills-settings .field-textarea,
+.modal.modal-skills-settings .field-select {
+  font-size: var(--ui-font-settings);
+}
+
+.modal.modal-skills-settings .modal-content.skills-editor-modal-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-bottom: 0;
+  overflow: hidden;
+  padding: 0;
 }
 
 .skills-create-modal-content {
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-
-.skills-editor-modal-content {
-  max-height: min(78vh, 920px);
-  overflow: auto;
-  padding: 0;
 }
 
 .skills-create-description {

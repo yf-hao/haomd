@@ -44,7 +44,8 @@ describe('createStreamingClientFromSettings', () => {
       modelId: 'override-model',
       systemPrompt: 'sys-prompt',
       temperature: 0,
-      maxTokens: 256,
+      maxTokens: undefined,
+      omitModelInput: undefined,
       initialConversationId: 'conv-123',
     })
   })
@@ -90,8 +91,7 @@ describe('createStreamingClientFromSettings', () => {
       baseUrl: 'https://api.test',
       modelId: 'openai-model',
       systemPrompt: 'sys-openai',
-      temperature: 0,
-      maxTokens: 256,
+      maxTokens: undefined,
     })
     expect(mockedDify).not.toHaveBeenCalled()
   })

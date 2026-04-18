@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useState } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { SidebarBackgroundShell } from './SidebarBackgroundShell'
 import { useI18n } from '../modules/i18n/I18nContext'
@@ -207,6 +208,15 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
     [draft, runArgsByScriptId, t],
   )
 
+  const handleEditorKeyDownCapture = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const isMeta = event.metaKey || event.ctrlKey
+    if (!isMeta) return
+    const key = event.key.toLowerCase()
+    if (key === 'c' || key === 'v' || key === 'x') {
+      event.stopPropagation()
+    }
+  }, [])
+
   return (
     <>
       <SidebarBackgroundShell className="skills-panel" style={style}>
@@ -250,9 +260,12 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
 
       {editorOpen && draft && typeof document !== 'undefined' && createPortal(
         <div className="modal-backdrop">
-          <div className="modal skills-editor-modal">
+          <div
+            className="modal modal-prompt-settings modal-skills-settings skills-editor-modal"
+            onKeyDownCapture={handleEditorKeyDownCapture}
+          >
             <div className="modal-title">{draft.name || t('skills.title')}</div>
-            <div className="modal-content skills-editor-modal-content">
+            <div className="modal-content prompt-settings-body skills-editor-modal-content">
               <div className="skills-editor">
                 <div className="skills-editor-topbar">
                   <div className="skills-editor-id">{draft.id}</div>

@@ -768,7 +768,7 @@ async fn send_non_stream_request(
         "[openai_compat] non-stream response body model={} token_param_mode={} body={}",
         request.model_id,
         token_param_mode_label(token_param_mode),
-        json.to_string(),
+        json,
     );
     let content = extract_response_content(&json);
     let tool_calls = extract_response_tool_calls(&json);
@@ -1039,11 +1039,10 @@ async fn run_openai_compat_stream(
             CompletionTransportMode::NonStream => {
                 send_non_stream_request(&client, &request, token_param_mode)
                     .await
-                    .map(|response| {
+                    .inspect(|response| {
                         if !response.content.is_empty() {
                             emit_chunk(&app, &request_id, response.content.clone());
                         }
-                        response
                     })
             }
         };
