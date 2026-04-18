@@ -32,6 +32,7 @@ export function createStreamingClientFromSettings(
         baseUrl,
         modelId,
         systemPrompt,
+        geminiThinkingLevel: provider.geminiThinkingLevel,
       })
     case 'openai':
       return createOpenAIStreamingClient({

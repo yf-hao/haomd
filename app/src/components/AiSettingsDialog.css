@@ -2860,6 +2860,13 @@ button.ghost.ghost-subtle,
   color: var(--theme-text-muted);
 }
 
+.provider-detail-row-with-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .providers-header,
 .ai-global-memory-tab:not(.active):hover,
 .ai-global-memory-tab.active,

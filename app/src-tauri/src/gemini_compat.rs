@@ -1,6 +1,7 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::time::Duration;
 
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -17,6 +18,8 @@ pub struct GeminiGenerateContentRequest {
     pub model_id: String,
     #[serde(default)]
     pub system_prompt: Option<String>,
+    #[serde(default)]
+    pub gemini_thinking_level: Option<String>,
     pub messages: Vec<GeminiCompatMessageInput>,
 }
 
@@ -129,6 +132,8 @@ pub async fn gemini_generate_content(
 ) -> Result<GeminiGenerateContentResponse, String> {
     let client = Client::builder()
         .use_rustls_tls()
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(20))
         .build()
         .map_err(|err| format!("创建 Gemini HTTP 客户端失败: {err}"))?;
 
@@ -137,9 +142,26 @@ pub async fn gemini_generate_content(
         .post(url)
         .header("x-goog-api-key", request.api_key.trim())
         .header("Content-Type", "application/json")
-        .json(&json!({
-            "contents": build_contents(&request)
-        }))
+        .json(&{
+            let mut body = json!({
+                "contents": build_contents(&request)
+            });
+
+            if let Some(thinking_level) = request
+                .gemini_thinking_level
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty() && *value != "disabled")
+            {
+                body["generationConfig"] = json!({
+                    "thinkingConfig": {
+                        "thinkingLevel": thinking_level
+                    }
+                });
+            }
+
+            body
+        })
         .send()
         .await
         .map_err(|err| format!("Gemini 请求失败: {err}"))?;

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import type { AiSettingsState, UiProvider, ProviderType } from '../modules/ai/settings'
+import type { AiSettingsState, GeminiThinkingLevel, UiProvider, ProviderType } from '../modules/ai/settings'
 
 export type ProviderDraft = {
   name: string
@@ -10,6 +10,8 @@ export type ProviderDraft = {
   providerType: ProviderType | ''
   /** Vision 模式选择：仅在 UI 草稿中使用，保存时按 'disabled' | 'enabled' 映射 */
   visionMode: 'disabled' | 'enabled'
+  /** Gemini 专属：disabled 表示不注入 thinkingConfig */
+  geminiThinkingLevel: GeminiThinkingLevel
 }
 
 const emptyDraft: ProviderDraft = {
@@ -20,6 +22,7 @@ const emptyDraft: ProviderDraft = {
   description: '',
   providerType: '',
   visionMode: 'disabled',
+  geminiThinkingLevel: 'disabled',
 }
 
 function normalizeProviderName(name: string): string {
@@ -48,6 +51,8 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   // 当前正在编辑（左侧表单绑定）的 Provider，如果为 null 表示在创建新 Provider
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null)
+  // 当前正在为哪个 Provider 追加模型；仅影响左侧表单语义，不改变底层存储结构
+  const [addingModelToProviderId, setAddingModelToProviderId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [initialSnapshot, setInitialSnapshot] = useState<AiSettingsState | null>(initial)
 
@@ -63,6 +68,7 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
   const resetDraft = useCallback(() => {
     setDraft(emptyDraft)
     setEditingProviderId(null)
+    setAddingModelToProviderId(null)
     setError(null)
   }, [])
 
@@ -135,6 +141,7 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
 
       setExpandedId(existing.id)
       setDraft(emptyDraft)
+      setAddingModelToProviderId(null)
       setError(null)
       return true
     }
@@ -149,6 +156,10 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
       defaultModelId: models[0],
       providerType: (draft.providerType || 'dify') as ProviderType,
       visionMode: draft.visionMode || 'disabled',
+      geminiThinkingLevel:
+        (draft.providerType || 'dify') === 'gemini'
+          ? draft.geminiThinkingLevel || 'disabled'
+          : 'disabled',
     }
 
     setSettings((prev) => {
@@ -161,6 +172,7 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
 
     setExpandedId(id)
     setDraft(emptyDraft)
+    setAddingModelToProviderId(null)
     setError(null)
     return true
   }, [draft, settings])
@@ -221,6 +233,10 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
           apiKey: draft.apiKey.trim(),
           providerType: (draft.providerType || 'dify') as ProviderType,
           visionMode: draft.visionMode || 'disabled',
+          geminiThinkingLevel:
+            (draft.providerType || 'dify') === 'gemini'
+              ? draft.geminiThinkingLevel || 'disabled'
+              : 'disabled',
           models: nextModels,
           defaultModelId: nextDefaultModelId,
         }
@@ -229,6 +245,7 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
     })
 
     setError(null)
+    setAddingModelToProviderId(null)
     return true
   }, [draft, settings])
 
@@ -248,9 +265,12 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
       if (editingProviderId === id) {
         setEditingProviderId(null)
       }
+      if (addingModelToProviderId === id) {
+        setAddingModelToProviderId(null)
+      }
       return { providers, defaultProviderId }
     })
-  }, [expandedId, editingProviderId])
+  }, [expandedId, editingProviderId, addingModelToProviderId])
 
   const removeModel = useCallback((providerId: string, modelId: string) => {
     setSettings((prev) => {
@@ -326,9 +346,28 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
       description: provider.description ?? '',
       providerType: provider.providerType ?? 'dify',
       visionMode: provider.visionMode === 'enabled' ? 'enabled' : 'disabled',
+      geminiThinkingLevel: provider.geminiThinkingLevel ?? 'disabled',
     })
     setExpandedId(provider.id)
     setEditingProviderId(provider.id)
+    setAddingModelToProviderId(null)
+  }, [])
+
+  const addModelIntoDraft = useCallback((provider: UiProvider) => {
+    setDraft({
+      name: provider.name,
+      baseUrl: provider.baseUrl,
+      apiKey: provider.apiKey,
+      modelsInput: '',
+      description: provider.description ?? '',
+      providerType: provider.providerType ?? 'dify',
+      visionMode: provider.visionMode === 'enabled' ? 'enabled' : 'disabled',
+      geminiThinkingLevel: provider.geminiThinkingLevel ?? 'disabled',
+    })
+    setExpandedId(provider.id)
+    setEditingProviderId(null)
+    setAddingModelToProviderId(provider.id)
+    setError(null)
   }, [])
 
   const applyInitialSnapshot = useCallback(() => {
@@ -350,6 +389,7 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
     setExpandedId,
     editingProviderId,
     setEditingProviderId,
+    addingModelToProviderId,
     error,
     setError,
     initialSnapshot,
@@ -364,6 +404,7 @@ export function useAiSettingsState(initial: AiSettingsState | null) {
     setDefaultModel,
     setDefaultProvider,
     editProviderIntoDraft,
+    addModelIntoDraft,
     applyInitialSnapshot,
     updateInitialSnapshot,
     updateModelMaxTokens,

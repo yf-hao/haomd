@@ -15,6 +15,7 @@ export type GeminiTauriClientConfig = {
   baseUrl: string
   modelId: string
   systemPrompt?: string
+  geminiThinkingLevel?: 'disabled' | 'low' | 'medium' | 'high'
 }
 
 type GeminiCompatMessageInput = {
@@ -56,6 +57,7 @@ export function createGeminiTauriClient(
               baseUrl: config.baseUrl,
               modelId: config.modelId,
               systemPrompt: config.systemPrompt,
+              geminiThinkingLevel: config.geminiThinkingLevel,
               messages: mapMessages(request.messages),
             },
           },

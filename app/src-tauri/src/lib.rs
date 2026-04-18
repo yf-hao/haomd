@@ -26,6 +26,8 @@ mod notes_config;
 mod openai_compat;
 mod platform;
 mod protocol;
+mod skill_scripts;
+mod skills;
 mod state_store;
 mod support;
 mod word;
@@ -56,6 +58,8 @@ use openai_compat::*;
 use platform::*;
 use protocol::*;
 use serde::{Deserialize, Serialize};
+use skill_scripts::*;
+use skills::*;
 use state_store::*;
 pub(crate) use support::*;
 use word::*;
@@ -113,6 +117,11 @@ macro_rules! app_invoke_handler {
             save_prompt_settings,
             load_agent_settings,
             save_agent_settings,
+            list_skills,
+            read_skill,
+            save_skill,
+            delete_skill,
+            run_skill_script,
             run_modelscope_image_generation,
             load_backup_settings,
             save_backup_settings,

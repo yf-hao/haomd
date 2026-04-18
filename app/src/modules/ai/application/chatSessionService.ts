@@ -53,6 +53,18 @@ import {
   writeToWorkspaceToolSchema,
   executeWriteToWorkspace,
 } from '../../workspace/workspaceBuiltinTool'
+import {
+  SKILLS_SEARCH_TOOL_NAME,
+  SKILLS_READ_TOOL_NAME,
+  SKILLS_RUN_TOOL_NAME,
+  buildDynamicSkillScriptTools,
+  skillsSearchToolSchema,
+  skillsReadToolSchema,
+  executeSkillsSearch,
+  executeSkillsRead,
+  executeSkillsRun,
+} from '../../skills/skillsBuiltinTool'
+import { buildSkillsToolCatalogPrompt } from './skillsToolCatalog'
 
 export type StartChatOptions = {
   entryMode: ChatEntryMode
@@ -434,12 +446,24 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
     // schemaTools: only tools whose full schemas are sent to the model
     // allTools: full list for execution routing (includes tools not in schemas)
     const routingTools = allTools ?? schemaTools
-    // Merge MCP tool schemas + built-in tool schemas
-    const openaiTools = [...toOpenAITools(schemaTools), ...builtinToolSchemas]
+    const readSkillIds = new Set<string>()
     const conversationMessages = engineHistoryToChatMessages(state.engineHistory)
 
     try {
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+        const dynamicSkillTools = await buildDynamicSkillScriptTools(readSkillIds)
+        const dynamicSkillToolMap = new Map(
+          dynamicSkillTools.map((item) => [
+            item.toolName,
+            { skillId: item.skillId, scriptId: item.scriptId },
+          ]),
+        )
+        const openaiTools = [
+          ...toOpenAITools(schemaTools),
+          ...builtinToolSchemas,
+          ...dynamicSkillTools.map((item) => item.tool),
+        ]
+
         const result = await runStream(assistantId, {
           clientOverride,
           messageOverride: conversationMessages,
@@ -485,6 +509,28 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
             let toolResult: unknown
             if (tc.function.name === WRITE_TO_NOTES_TOOL_NAME) {
               toolResult = await executeWriteToNotes(parsedArgs as { content?: string })
+            } else if (tc.function.name === SKILLS_SEARCH_TOOL_NAME) {
+              toolResult = await executeSkillsSearch(parsedArgs as { query?: string })
+            } else if (tc.function.name === SKILLS_READ_TOOL_NAME) {
+              toolResult = await executeSkillsRead(
+                parsedArgs as { skillId?: string },
+                readSkillIds,
+              )
+            } else if (tc.function.name === SKILLS_RUN_TOOL_NAME) {
+              toolResult = await executeSkillsRun(
+                parsedArgs as { skillId?: string; scriptId?: string; args?: unknown },
+                readSkillIds,
+              )
+            } else if (dynamicSkillToolMap.has(tc.function.name)) {
+              const dynamicTool = dynamicSkillToolMap.get(tc.function.name)!
+              toolResult = await executeSkillsRun(
+                {
+                  skillId: dynamicTool.skillId,
+                  scriptId: dynamicTool.scriptId,
+                  args: parsedArgs,
+                },
+                readSkillIds,
+              )
             } else if (tc.function.name === RESOLVE_WORKSPACE_DIRECTORY_TOOL_NAME) {
               toolResult = await executeResolveWorkspaceDirectory(
                 parsedArgs as { targetDirectory?: string },
@@ -752,6 +798,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
           systemPromptForRequest += buildToolCatalog(allMcpTools)
         }
         if (providerType === 'openai') {
+          systemPromptForRequest += await buildSkillsToolCatalogPrompt()
           systemPromptForRequest += buildWorkspaceMountedRootsPrompt()
         }
         const initialConversationIdForClient =
@@ -781,6 +828,8 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       const builtinTools: OpenAIToolDef[] = isOpenAIProvider
         ? [
           writeToNotesToolSchema,
+          skillsSearchToolSchema,
+          skillsReadToolSchema,
           resolveWorkspaceDirectoryToolSchema,
           createWorkspaceDirectoryToolSchema,
           writeToWorkspaceToolSchema,

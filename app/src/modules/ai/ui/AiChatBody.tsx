@@ -873,24 +873,21 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
               {agentMode === 'chat' && (
                 <>
                   <BadgeSelect
-                options={(models ?? []).map((m) => ({
-                  value: m.id,
-                  label: `${getModelDisplayName(m.id)} (${m.providerName})${m.visionMode === 'enabled' ? '  👁' : ''}`,
-                }))}
-                groups={modelGroups}
-                value={activeModelId ?? ''}
-                disabled={modelSelectDisabled}
-                title={modelSelectDisabled ? '已选择 Agent，当前请求不使用模型多轮链路' : undefined}
-                onChange={(v) => onChangeModel?.(v)}
-              />
-              <BadgeSelect
-                options={(roles ?? []).map((role) => ({
-                  value: role.id,
-                  label: role.name,
-                }))}
-                value={activeRoleId ?? ''}
-                onChange={(v) => onChangeRole?.(v)}
-              />
+                    options={[]}
+                    groups={modelGroups}
+                    value={activeModelId ?? ''}
+                    disabled={modelSelectDisabled}
+                    title={modelSelectDisabled ? '已选择 Agent，当前请求不使用模型多轮链路' : undefined}
+                    onChange={(v) => onChangeModel?.(v)}
+                  />
+                  <BadgeSelect
+                    options={(roles ?? []).map((role) => ({
+                      value: role.id,
+                      label: role.name,
+                    }))}
+                    value={activeRoleId ?? ''}
+                    onChange={(v) => onChangeRole?.(v)}
+                  />
                 </>
               )}
               {!!agents?.length && (

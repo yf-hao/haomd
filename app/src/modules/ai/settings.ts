@@ -5,6 +5,7 @@ export type {
   UiProvider,
   AiSettingsState,
   DefaultChatConfig,
+  GeminiThinkingLevel,
   ProviderType,
 } from './domain/types'
 export { emptySettings } from './domain/types'

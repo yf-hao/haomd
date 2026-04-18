@@ -11,6 +11,7 @@ export type ProviderTestInput = {
   apiKey: string
   modelId: string
   providerType?: UiProvider['providerType']
+  geminiThinkingLevel?: UiProvider['geminiThinkingLevel']
 }
 
 export type ProviderTestResult = {
@@ -20,6 +21,7 @@ export type ProviderTestResult = {
 }
 
 const SYSTEM_PROMPT = '严格根据用户的要求回答问题，不要自己发挥'
+const PROVIDER_TEST_TIMEOUT_MS = 25_000
 
 export async function testProviderConnection(
   input: ProviderTestInput,
@@ -48,6 +50,7 @@ export async function testProviderConnection(
         defaultModelId: modelId,
         description: undefined,
         providerType: input.providerType ?? 'dify',
+        geminiThinkingLevel: input.geminiThinkingLevel ?? 'disabled',
       },
       SYSTEM_PROMPT,
     )
@@ -58,7 +61,7 @@ export async function testProviderConnection(
 
   try {
     const request: StreamingChatRequest =
-      (input.providerType ?? 'dify') === 'openai'
+      (input.providerType ?? 'dify') === 'openai' || (input.providerType ?? 'dify') === 'gemini'
         ? {
             messages: [{ role: 'user' as const, content: testMessage }],
           }
@@ -68,22 +71,29 @@ export async function testProviderConnection(
             maxTokens: 256,
           }
 
-    const result = await chatClient.askStream(
-      request,
-      {
-        onChunk: (chunk) => {
-          if (chunk.content) {
-            buffer += chunk.content
-          }
+    const result = await Promise.race([
+      chatClient.askStream(
+        request,
+        {
+          onChunk: (chunk) => {
+            if (chunk.content) {
+              buffer += chunk.content
+            }
+          },
+          onComplete: () => {
+            // no-op，结果由 buffer 决定
+          },
+          onError: () => {
+            // 错误会通过 askStream 的返回/异常统一处理
+          },
         },
-        onComplete: () => {
-          // no-op，结果由 buffer 决定
-        },
-        onError: () => {
-          // 错误会通过 askStream 的返回/异常统一处理
-        },
-      },
-    )
+      ),
+      new Promise<never>((_, reject) => {
+        window.setTimeout(() => {
+          reject(new Error('连接测试超时，请检查 Base URL / 网络 / 代理配置'))
+        }, PROVIDER_TEST_TIMEOUT_MS)
+      }),
+    ])
 
     // 打印原始结果和累积文本，方便分析真实返回行为
     // 注意：这里只用于开发调试，不会影响 UI 行为
@@ -111,7 +121,7 @@ export async function testProviderConnection(
     if (result.completed) {
       return {
         ok: false,
-        message: '连接失败：已建立连接，但未收到任何回复，请检查 Dify 应用配置',
+        message: '连接失败：已建立连接，但未收到任何回复，请检查模型服务配置',
       }
     }
 

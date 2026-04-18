@@ -1,6 +1,13 @@
 import { invoke } from '@tauri-apps/api/core'
 import type { BackendResult } from '../../platform/backendTypes'
-import { emptySettings, type AiSettingsState, type DefaultChatConfig, type ProviderType, type VisionMode } from '../domain/types'
+import {
+  emptySettings,
+  type AiSettingsState,
+  type DefaultChatConfig,
+  type GeminiThinkingLevel,
+  type ProviderType,
+  type VisionMode,
+} from '../domain/types'
 
 // 后端配置类型（与 Rust 侧 AiSettingsCfg 对应）
 export type AiProviderModelCfg = {
@@ -19,6 +26,7 @@ export type AiProviderCfg = {
   description?: string | null
   provider_type?: string | null
   vision_mode?: string | null
+  gemini_thinking_level?: string | null
 }
 
 export type AiSettingsCfg = {
@@ -46,6 +54,15 @@ export function fromCfg(cfg: AiSettingsCfg | null | undefined): AiSettingsState 
         visionMode = 'enabled'
       }
 
+      let geminiThinkingLevel: GeminiThinkingLevel = 'disabled'
+      if (
+        p.gemini_thinking_level === 'low'
+        || p.gemini_thinking_level === 'medium'
+        || p.gemini_thinking_level === 'high'
+      ) {
+        geminiThinkingLevel = p.gemini_thinking_level
+      }
+
       return {
         id: p.id,
         name: p.name,
@@ -67,6 +84,7 @@ export function fromCfg(cfg: AiSettingsCfg | null | undefined): AiSettingsState 
         description: p.description ?? undefined,
         providerType,
         visionMode,
+        geminiThinkingLevel,
       }
     }),
     defaultProviderId: cfg.default_provider_id ?? undefined,
@@ -89,6 +107,10 @@ export function toCfg(state: AiSettingsState): AiSettingsCfg {
       description: p.description ?? null,
       provider_type: p.providerType ?? null,
       vision_mode: p.visionMode === 'enabled' ? 'enabled' : 'disabled',
+      gemini_thinking_level:
+        p.providerType === 'gemini' && p.geminiThinkingLevel && p.geminiThinkingLevel !== 'disabled'
+          ? p.geminiThinkingLevel
+          : null,
     })),
     default_provider_id: state.defaultProviderId ?? null,
   }

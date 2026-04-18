@@ -28,6 +28,8 @@ pub struct AiProviderCfg {
     pub provider_type: Option<String>,
     #[serde(default)]
     pub vision_mode: Option<String>,
+    #[serde(default)]
+    pub gemini_thinking_level: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

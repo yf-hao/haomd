@@ -30,6 +30,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
     setExpandedId,
     editingProviderId,
     setEditingProviderId,
+    addingModelToProviderId,
     error,
     setError,
     setInitialSnapshot,
@@ -43,6 +44,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
     setDefaultModel,
     setDefaultProvider,
     editProviderIntoDraft,
+    addModelIntoDraft,
     applyInitialSnapshot,
     updateInitialSnapshot,
     updateModelMaxTokens,
@@ -129,6 +131,10 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
     editingProviderId != null
       ? settings.providers.find((provider) => provider.id === editingProviderId) ?? null
       : null
+  const addModelTargetProvider =
+    addingModelToProviderId != null
+      ? settings.providers.find((provider) => provider.id === addingModelToProviderId) ?? null
+      : null
   const isEditingProvider = !!editingProvider
 
   const handleDraftChange = (field: keyof ProviderDraft) => (
@@ -172,6 +178,8 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
           apiKey,
           modelId,
           providerType,
+          geminiThinkingLevel:
+            providerType === 'gemini' ? draft.geminiThinkingLevel || 'disabled' : 'disabled',
         })
 
         if (!result.ok) {
@@ -316,6 +324,10 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
         defaultModelId: models[0],
         providerType: (draft.providerType || 'dify') as ProviderType,
         visionMode: draft.visionMode || undefined,
+        geminiThinkingLevel:
+          (draft.providerType || 'dify') === 'gemini'
+            ? draft.geminiThinkingLevel || 'disabled'
+            : 'disabled',
       }
 
       stateToSave = {
@@ -354,6 +366,10 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                   apiKey: draft.apiKey.trim(),
                   providerType: (draft.providerType || 'dify') as ProviderType,
                   visionMode: draft.visionMode || 'disabled',
+                  geminiThinkingLevel:
+                    (draft.providerType || 'dify') === 'gemini'
+                      ? draft.geminiThinkingLevel || 'disabled'
+                      : 'disabled',
                   models: nextModels,
                   defaultModelId:
                     p.defaultModelId && nextModels.some((m) => m.id === p.defaultModelId)
@@ -388,7 +404,9 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
               <div className="providers-header">
                 {isEditingProvider
                   ? t('provider.editingProvider', { name: editingProvider?.name ?? '' })
-                  : t('provider.newProviderDraft')}
+                  : addModelTargetProvider
+                    ? t('provider.addingModelToProvider', { name: addModelTargetProvider.name })
+                    : t('provider.newProviderDraft')}
               </div>
               {AI_FORM_FIELDS.map((field) => (
                 <FieldGroup key={field.key} label={field.label}>
@@ -438,6 +456,22 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                 </select>
               </FieldGroup>
 
+              {(draft.providerType || 'openai') === 'gemini' && (
+                <FieldGroup label={t('provider.geminiThinkingLevel')}>
+                  <select
+                    className="field-select"
+                    value={draft.geminiThinkingLevel || 'disabled'}
+                    onChange={(e) => updateDraftField('geminiThinkingLevel', e.target.value)}
+                    onFocus={() => setActiveField('geminiThinkingLevel')}
+                  >
+                    <option value="disabled">{t('provider.disabled')}</option>
+                    <option value="low">{t('provider.thinkingLow')}</option>
+                    <option value="medium">{t('provider.thinkingMedium')}</option>
+                    <option value="high">{t('provider.thinkingHigh')}</option>
+                  </select>
+                </FieldGroup>
+              )}
+
               {error && <div className="form-error">{error}</div>}
               {testResult && !error && <div className="form-success">{testResult}</div>}
 
@@ -449,7 +483,11 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                   {t('provider.test')}
                 </Button>
                 <Button type="submit" variant="primary">
-                  {isEditingProvider ? t('provider.update') : t('provider.add')}
+                  {isEditingProvider
+                    ? t('provider.update')
+                    : addModelTargetProvider
+                      ? t('provider.addModel')
+                      : t('provider.add')}
                 </Button>
               </div>
             </form>
@@ -488,6 +526,18 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
                           <div className="provider-sub">
                             {t('provider.baseUrlLabel', { url: p.baseUrl })}
                           </div>
+                          {p.providerType === 'gemini' && p.geminiThinkingLevel && p.geminiThinkingLevel !== 'disabled' && (
+                            <div className="provider-sub">
+                              {t('provider.geminiThinkingLabel', {
+                                level:
+                                  p.geminiThinkingLevel === 'low'
+                                    ? t('provider.thinkingLow')
+                                    : p.geminiThinkingLevel === 'medium'
+                                      ? t('provider.thinkingMedium')
+                                      : t('provider.thinkingHigh'),
+                              })}
+                            </div>
+                          )}
                         </div>
                         <button
                           type="button"
@@ -500,7 +550,16 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
 
                       {isExpanded && (
                         <div className="provider-details">
-                          <div className="provider-detail-row">{t('provider.modelsTitle')}</div>
+                          <div className="provider-detail-row provider-detail-row-with-action">
+                            <span>{t('provider.modelsTitle')}</span>
+                            <button
+                              type="button"
+                              className="ghost tiny primary"
+                              onClick={() => addModelIntoDraft(p)}
+                            >
+                              {t('provider.addModel')}
+                            </button>
+                          </div>
                           <ul className="provider-models">
                             {p.models.map((m) => (
                               <li key={m.id} className="provider-model-row">

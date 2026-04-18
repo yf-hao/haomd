@@ -17,6 +17,12 @@ export type VisionMode =
   | 'enabled'          // OpenAI / ModelScope 这类 image_url 模式
 // 后续可扩展: 'upload_then_id' 等
 
+export type GeminiThinkingLevel =
+  | 'disabled'
+  | 'low'
+  | 'medium'
+  | 'high'
+
 export type UiProvider = {
   id: string
   name: string
@@ -29,6 +35,8 @@ export type UiProvider = {
   providerType?: ProviderType
   /** Vision 能力模式；缺省或 'auto' 表示自动检测 */
   visionMode?: VisionMode
+  /** Gemini 专属：控制 thinkingConfig.thinkingLevel；disabled 表示不注入该参数 */
+  geminiThinkingLevel?: GeminiThinkingLevel
   /** 运行时标记：Dify 请求体中是否省略 model 输入。 */
   omitDifyModelInput?: boolean
 }

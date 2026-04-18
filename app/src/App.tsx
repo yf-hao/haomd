@@ -417,6 +417,16 @@ function AppShellContent({
           >
             <span className="activity-icon-notes" aria-hidden="true" />
           </button>
+
+          <button
+            type="button"
+            className={`activity-item ${activeLeftPanel === 'skills' ? 'active' : ''}`}
+            onClick={() => handleLeftPanelToggle('skills')}
+            aria-pressed={activeLeftPanel === 'skills'}
+            title={t('app.skills')}
+          >
+            <span className="activity-icon-skills" aria-hidden="true" />
+          </button>
         </div>
 
         <WorkspaceShell
