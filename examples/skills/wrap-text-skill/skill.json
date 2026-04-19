@@ -1,0 +1,18 @@
+{
+  "id": "wrap-text-skill",
+  "name": "Wrap Text",
+  "description": "文本包裹测试 skill",
+  "enabled": true,
+  "trusted": true,
+  "load_policy": "on_demand",
+  "scripts": [
+    {
+      "id": "run",
+      "label": "Run",
+      "runtime": "builtin-js",
+      "entry": "scripts/run.js",
+      "approval_policy": "always_allow",
+      "args_schema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"text\": {\n      \"type\": \"string\",\n      \"description\": \"要处理的正文\"\n    },\n    \"prefix\": {\n      \"type\": \"string\",\n      \"description\": \"正文前面要加的前缀\"\n    },\n    \"suffix\": {\n      \"type\": \"string\",\n      \"description\": \"正文后面要加的后缀\"\n    }\n  },\n  \"required\": [\"text\", \"prefix\", \"suffix\"]\n}"
+    }
+  ]
+}

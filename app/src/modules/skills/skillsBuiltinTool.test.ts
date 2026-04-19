@@ -5,22 +5,9 @@ import {
   executeSkillsRun,
   executeSkillsSearch,
 } from './skillsBuiltinTool'
-import { listSkills, readSkill } from './storage/skillsRepo'
-import { runSkillScript } from './application/skillsRuntimeService'
+import * as skillsRepo from './storage/skillsRepo'
+import * as skillsRuntimeService from './application/skillsRuntimeService'
 import type { SkillDocument } from './domain/types'
-
-vi.mock('./storage/skillsRepo', () => ({
-  listSkills: vi.fn(),
-  readSkill: vi.fn(),
-}))
-
-vi.mock('./application/skillsRuntimeService', () => ({
-  runSkillScript: vi.fn(),
-}))
-
-const mockedListSkills = vi.mocked(listSkills)
-const mockedReadSkill = vi.mocked(readSkill)
-const mockedRunSkillScript = vi.mocked(runSkillScript)
 
 function createSkill(overrides: Partial<SkillDocument> = {}): SkillDocument {
   return {
@@ -54,11 +41,11 @@ function createSkill(overrides: Partial<SkillDocument> = {}): SkillDocument {
 
 describe('skillsBuiltinTool', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.restoreAllMocks()
   })
 
   it('executeSkillsSearch should return enabled skills only', async () => {
-    mockedListSkills.mockResolvedValue([
+    vi.spyOn(skillsRepo, 'listSkills').mockResolvedValue([
       {
         id: 'hello-skill',
         name: 'Hello Skill',
@@ -89,7 +76,7 @@ describe('skillsBuiltinTool', () => {
   })
 
   it('executeSkillsRead should record read skill id and expose script toolName', async () => {
-    mockedReadSkill.mockResolvedValue(createSkill())
+    vi.spyOn(skillsRepo, 'readSkill').mockResolvedValue(createSkill())
     const readSkillIds = new Set<string>()
 
     const result = JSON.parse(await executeSkillsRead({ skillId: 'hello-skill' }, readSkillIds))
@@ -105,18 +92,19 @@ describe('skillsBuiltinTool', () => {
   })
 
   it('executeSkillsRun should reject execution before skills_read', async () => {
+    const runSkillScriptSpy = vi.spyOn(skillsRuntimeService, 'runSkillScript')
     const result = await executeSkillsRun(
       { skillId: 'hello-skill', scriptId: 'run', args: { name: '张三' } },
       new Set(),
     )
 
     expect(result).toContain('必须先调用 skills_read')
-    expect(mockedRunSkillScript).not.toHaveBeenCalled()
+    expect(runSkillScriptSpy).not.toHaveBeenCalled()
   })
 
   it('executeSkillsRun should flatten top-level args for script execution', async () => {
-    mockedReadSkill.mockResolvedValue(createSkill())
-    mockedRunSkillScript.mockResolvedValue({
+    vi.spyOn(skillsRepo, 'readSkill').mockResolvedValue(createSkill())
+    const runSkillScriptSpy = vi.spyOn(skillsRuntimeService, 'runSkillScript').mockResolvedValue({
       ok: true,
       stdout: 'Hello, 张三!',
       stderr: '',
@@ -130,7 +118,7 @@ describe('skillsBuiltinTool', () => {
       ),
     )
 
-    expect(mockedRunSkillScript).toHaveBeenCalledWith('hello-skill', 'run', { name: '张三' })
+    expect(runSkillScriptSpy).toHaveBeenCalledWith('hello-skill', 'run', { name: '张三' })
     expect(result).toEqual({
       ok: true,
       stdout: 'Hello, 张三!',
@@ -140,7 +128,7 @@ describe('skillsBuiltinTool', () => {
   })
 
   it('buildDynamicSkillScriptTools should derive concrete tools from read trusted skills', async () => {
-    mockedReadSkill.mockResolvedValue(
+    vi.spyOn(skillsRepo, 'readSkill').mockResolvedValue(
       createSkill({
         scripts: [
           {
@@ -189,7 +177,7 @@ describe('skillsBuiltinTool', () => {
   })
 
   it('buildDynamicSkillScriptTools should truncate overly long tool names', async () => {
-    mockedReadSkill.mockResolvedValue(
+    vi.spyOn(skillsRepo, 'readSkill').mockResolvedValue(
       createSkill({
         id: 'very-long-skill-id-that-keeps-growing-beyond-the-tool-name-limit',
         scripts: [

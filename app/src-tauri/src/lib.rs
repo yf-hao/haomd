@@ -32,6 +32,7 @@ mod state_store;
 mod support;
 mod word;
 mod word_commands;
+mod workflows;
 mod workspace_io;
 
 use ai_config::*;
@@ -64,6 +65,7 @@ use state_store::*;
 pub(crate) use support::*;
 use word::*;
 use word_commands::*;
+use workflows::*;
 use workspace_io::*;
 
 use tauri::{AppHandle, Emitter, Manager};
@@ -121,6 +123,10 @@ macro_rules! app_invoke_handler {
             read_skill,
             save_skill,
             delete_skill,
+            list_workflows,
+            read_workflow,
+            save_workflow,
+            delete_workflow,
             run_skill_script,
             run_modelscope_image_generation,
             load_backup_settings,

@@ -6,11 +6,18 @@ import { useI18n } from '../modules/i18n/I18nContext'
 import type { SkillDocument } from '../modules/skills/domain/types'
 import { createDefaultScript, createDefaultSkill, normalizeSkillBeforeSave } from '../modules/skills/application/skillsService'
 import { deleteSkill, listSkills, readSkill, saveSkill } from '../modules/skills/storage/skillsRepo'
-import { runSkillScript } from '../modules/skills/application/skillsRuntimeService'
+import { onNativePaste, onNativePasteError } from '../modules/platform/clipboardEvents'
 
 export type SkillsPanelProps = {
   panelWidth?: number
 }
+
+type ActiveSkillField =
+  | { kind: 'id' }
+  | { kind: 'name' }
+  | { kind: 'description' }
+  | { kind: 'markdown' }
+  | { kind: 'script'; scriptId: string; field: 'id' | 'label' | 'runtime' | 'entry' | 'argsSchema' | 'content' }
 
 export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanelProps) {
   const { t } = useI18n()
@@ -21,9 +28,7 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [runArgsByScriptId, setRunArgsByScriptId] = useState<Record<string, string>>({})
-  const [runResultByScriptId, setRunResultByScriptId] = useState<Record<string, string>>({})
-  const [runningScriptId, setRunningScriptId] = useState<string | null>(null)
+  const [activeField, setActiveField] = useState<ActiveSkillField | null>(null)
 
   const style = panelWidth ? { width: panelWidth } : undefined
 
@@ -60,6 +65,7 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
   useEffect(() => {
     if (!selectedSkillId) {
       setDraft(null)
+      setActiveField(null)
       return
     }
     let disposed = false
@@ -69,8 +75,6 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
         if (!disposed) {
           setDraft(skill)
           setEditorOpen(!!skill)
-          setRunArgsByScriptId({})
-          setRunResultByScriptId({})
         }
       } catch (e) {
         if (!disposed) {
@@ -83,6 +87,80 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
       disposed = true
     }
   }, [selectedSkillId])
+
+  useEffect(() => {
+    if (!editorOpen) {
+      setActiveField(null)
+    }
+  }, [editorOpen])
+
+  useEffect(() => {
+    if (!editorOpen) return
+
+    const unPaste = onNativePaste((text) => {
+      if (!text || !activeField) return
+
+      if (typeof document !== 'undefined') {
+        const active = document.activeElement as HTMLInputElement | HTMLTextAreaElement | null
+        const isEditableInput =
+          !!active &&
+          (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')
+
+        if (isEditableInput && typeof active.setRangeText === 'function') {
+          const start = active.selectionStart ?? active.value.length
+          const end = active.selectionEnd ?? start
+          active.focus()
+          active.setRangeText(text, start, end, 'end')
+          active.dispatchEvent(new Event('input', { bubbles: true }))
+          return
+        }
+      }
+
+      if (activeField.kind === 'name') {
+        setDraft((prev) => (prev ? { ...prev, name: `${prev.name ?? ''}${text}` } : prev))
+        return
+      }
+
+      if (activeField.kind === 'id') {
+        setDraft((prev) => (prev ? { ...prev, id: `${prev.id ?? ''}${text}` } : prev))
+        return
+      }
+
+      if (activeField.kind === 'description') {
+        setDraft((prev) => (prev ? { ...prev, description: `${prev.description ?? ''}${text}` } : prev))
+        return
+      }
+
+      if (activeField.kind === 'markdown') {
+        setDraft((prev) => (prev ? { ...prev, markdown: `${prev.markdown ?? ''}${text}` } : prev))
+        return
+      }
+
+      if (activeField.kind === 'script') {
+        setDraft((prev) => {
+          if (!prev) return prev
+          return {
+            ...prev,
+            scripts: prev.scripts.map((script) =>
+              script.id !== activeField.scriptId
+                ? script
+                : { ...script, [activeField.field]: `${String(script[activeField.field] ?? '')}${text}` },
+            ),
+          }
+        })
+        return
+      }
+    })
+
+    const unError = onNativePasteError((message) => {
+      console.warn('[SkillsPanel] native paste error:', message)
+    })
+
+    return () => {
+      unPaste()
+      unError()
+    }
+  }, [activeField, editorOpen])
 
   const updateDraft = useCallback((patch: Partial<SkillDocument>) => {
     setDraft((prev) => (prev ? { ...prev, ...patch } : prev))
@@ -110,8 +188,12 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
     setSaving(true)
     setError('')
     try {
+      const previousSkillId = selectedSkillId
       const normalized = normalizeSkillBeforeSave(draft)
       await saveSkill(normalized)
+      if (previousSkillId && previousSkillId !== normalized.id) {
+        await deleteSkill(previousSkillId)
+      }
       await refreshSkills(normalized.id, true)
       setDraft(normalized)
     } catch (e) {
@@ -119,20 +201,20 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
     } finally {
       setSaving(false)
     }
-  }, [draft, refreshSkills])
+  }, [draft, refreshSkills, selectedSkillId])
 
   const handleDelete = useCallback(async () => {
     if (!draft) return
-    const ok = window.confirm(t('skills.deleteConfirm', { name: draft.name }))
-    if (!ok) return
     try {
       await deleteSkill(draft.id)
       setDraft(null)
+      setEditorOpen(false)
+      setSelectedSkillId(null)
       await refreshSkills(null, false)
     } catch (e) {
       setError(String(e))
     }
-  }, [draft, refreshSkills, t])
+  }, [draft, refreshSkills])
 
   const handleAddScript = useCallback(() => {
     setDraft((prev) => {
@@ -169,50 +251,11 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
     [],
   )
 
-  const handleRunArgsChange = useCallback((scriptId: string, value: string) => {
-    setRunArgsByScriptId((prev) => ({ ...prev, [scriptId]: value }))
-  }, [])
-
-  const handleRunScript = useCallback(
-    async (scriptId: string) => {
-      if (!draft) return
-      const raw = (runArgsByScriptId[scriptId] ?? '').trim()
-      let parsedArgs: unknown = {}
-      if (raw) {
-        try {
-          parsedArgs = JSON.parse(raw)
-        } catch {
-          setRunResultByScriptId((prev) => ({
-            ...prev,
-            [scriptId]: t('skills.invalidTestArgs'),
-          }))
-          return
-        }
-      }
-      setRunningScriptId(scriptId)
-      try {
-        const result = await runSkillScript(draft.id, scriptId, parsedArgs)
-        setRunResultByScriptId((prev) => ({
-          ...prev,
-          [scriptId]: JSON.stringify(result, null, 2),
-        }))
-      } catch (e) {
-        setRunResultByScriptId((prev) => ({
-          ...prev,
-          [scriptId]: String(e),
-        }))
-      } finally {
-        setRunningScriptId((prev) => (prev === scriptId ? null : prev))
-      }
-    },
-    [draft, runArgsByScriptId, t],
-  )
-
   const handleEditorKeyDownCapture = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
     const isMeta = event.metaKey || event.ctrlKey
     if (!isMeta) return
     const key = event.key.toLowerCase()
-    if (key === 'c' || key === 'v' || key === 'x') {
+    if (key === 'c' || key === 'v' || key === 'x' || key === 'z' || key === 'y') {
       event.stopPropagation()
     }
   }, [])
@@ -265,143 +308,133 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
             onKeyDownCapture={handleEditorKeyDownCapture}
           >
             <div className="modal-title">{draft.name || t('skills.title')}</div>
-            <div className="modal-content prompt-settings-body skills-editor-modal-content">
+            <div className="modal-content skills-editor-modal-content">
               <div className="skills-editor">
-                <div className="skills-editor-topbar">
-                  <div className="skills-editor-id">{draft.id}</div>
-                  <div className="skills-editor-actions">
-                    <button
-                      type="button"
-                      className="ghost tiny primary"
-                      onClick={handleSave}
-                      disabled={saving}
-                    >
-                      {saving ? t('common.saving') : t('common.save')}
-                    </button>
-                    <button type="button" className="ghost tiny danger" onClick={handleDelete}>
-                      {t('skills.deleteSkill')}
-                    </button>
+                <div className="skills-editor-layout">
+                  <div className="skills-editor-main">
+                    <label className="field-label">{t('skills.skillId')}</label>
+                    <input
+                      className="field-input"
+                      value={draft.id}
+                      onChange={(e) => updateDraft({ id: e.target.value })}
+                      onFocus={() => setActiveField({ kind: 'id' })}
+                    />
+
+                    <label className="field-label">{t('skills.name')}</label>
+                    <input
+                      className="field-input"
+                      value={draft.name}
+                      onChange={(e) => updateDraft({ name: e.target.value })}
+                      onFocus={() => setActiveField({ kind: 'name' })}
+                    />
+
+                    <label className="field-label">{t('skills.description')}</label>
+                    <input
+                      className="field-input"
+                      value={draft.description ?? ''}
+                      onChange={(e) => updateDraft({ description: e.target.value })}
+                      onFocus={() => setActiveField({ kind: 'description' })}
+                    />
+
+                    <div className="skills-row-grid">
+                      <label className="skills-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={draft.enabled}
+                          onChange={(e) => updateDraft({ enabled: e.target.checked })}
+                        />
+                        <span>{t('skills.enable')}</span>
+                      </label>
+                      <label className="skills-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={draft.trusted}
+                          onChange={(e) => updateDraft({ trusted: e.target.checked })}
+                        />
+                        <span>{t('skills.trusted')}</span>
+                      </label>
+                    </div>
+
+                    <label className="field-label">{t('skills.markdown')}</label>
+                    <textarea
+                      className="field-textarea skills-markdown-input"
+                      value={draft.markdown}
+                      onChange={(e) => updateDraft({ markdown: e.target.value })}
+                      onFocus={() => setActiveField({ kind: 'markdown' })}
+                    />
                   </div>
-                </div>
 
-                <label className="field-label">{t('skills.name')}</label>
-                <input
-                  className="field-input"
-                  value={draft.name}
-                  onChange={(e) => updateDraft({ name: e.target.value })}
-                />
+                  <div className="skills-editor-side">
+                    <div className="skills-section-header">
+                      <span>{t('skills.scripts')}</span>
+                      <button type="button" className="ghost tiny primary" onClick={handleAddScript}>
+                        {t('skills.addScript')}
+                      </button>
+                    </div>
 
-                <label className="field-label">{t('skills.description')}</label>
-                <input
-                  className="field-input"
-                  value={draft.description ?? ''}
-                  onChange={(e) => updateDraft({ description: e.target.value })}
-                />
-
-                <div className="skills-row-grid">
-                  <label className="skills-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={draft.enabled}
-                      onChange={(e) => updateDraft({ enabled: e.target.checked })}
-                    />
-                    <span>{t('skills.enable')}</span>
-                  </label>
-                  <label className="skills-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={draft.trusted}
-                      onChange={(e) => updateDraft({ trusted: e.target.checked })}
-                    />
-                    <span>{t('skills.trusted')}</span>
-                  </label>
-                </div>
-
-                <label className="field-label">{t('skills.markdown')}</label>
-                <textarea
-                  className="field-textarea skills-markdown-input"
-                  value={draft.markdown}
-                  onChange={(e) => updateDraft({ markdown: e.target.value })}
-                />
-
-                <div className="skills-section-header">
-                  <span>{t('skills.scripts')}</span>
-                  <button type="button" className="ghost tiny primary" onClick={handleAddScript}>
-                    {t('skills.addScript')}
-                  </button>
-                </div>
-
-                {draft.scripts.length === 0 ? (
-                  <div className="skills-empty-inline">{t('skills.noScripts')}</div>
-                ) : (
-                  <div className="skills-scripts">
-                    {draft.scripts.map((script) => (
-                      <div key={script.id} className="skills-script-card">
-                        <div className="skills-script-header">
-                          <strong>{script.label || script.id}</strong>
-                          <button
-                            type="button"
-                            className="ghost tiny ghost-subtle"
-                            onClick={() => handleRemoveScript(script.id)}
-                          >
-                            {t('skills.removeScript')}
-                          </button>
-                        </div>
-                        <div className="skills-script-grid">
-                          <input className="field-input" value={script.id} onChange={(e) => handleScriptChange(script.id, 'id', e.target.value)} placeholder={t('skills.scriptId')} />
-                          <input className="field-input" value={script.label} onChange={(e) => handleScriptChange(script.id, 'label', e.target.value)} placeholder={t('skills.scriptLabel')} />
-                          <input className="field-input" value={script.runtime} onChange={(e) => handleScriptChange(script.id, 'runtime', e.target.value)} placeholder={t('skills.runtime')} />
-                          <input className="field-input" value={script.entry} onChange={(e) => handleScriptChange(script.id, 'entry', e.target.value)} placeholder={t('skills.entry')} />
-                          <select className="field-select" value={script.approvalPolicy} onChange={(e) => handleScriptChange(script.id, 'approvalPolicy', e.target.value)}>
-                            <option value="ask">{t('skills.approvalAsk')}</option>
-                            <option value="always_allow">{t('skills.approvalAlwaysAllow')}</option>
-                            <option value="manual_only">{t('skills.approvalManualOnly')}</option>
-                          </select>
-                        </div>
-                        <label className="field-label">{t('skills.argsSchema')}</label>
-                        <textarea
-                          className="field-textarea skills-script-schema"
-                          value={script.argsSchema ?? ''}
-                          onChange={(e) => handleScriptChange(script.id, 'argsSchema', e.target.value)}
-                        />
-                        <label className="field-label">{t('skills.scriptContent')}</label>
-                        <textarea
-                          className="field-textarea skills-script-content"
-                          value={script.content}
-                          onChange={(e) => handleScriptChange(script.id, 'content', e.target.value)}
-                        />
-                        <div className="skills-section-header">
-                          <span>{t('skills.testRun')}</span>
-                          <button
-                            type="button"
-                            className="ghost tiny primary"
-                            onClick={() => void handleRunScript(script.id)}
-                            disabled={runningScriptId === script.id}
-                          >
-                            {runningScriptId === script.id ? t('skills.running') : t('skills.runScript')}
-                          </button>
-                        </div>
-                        <textarea
-                          className="field-textarea skills-script-schema"
-                          value={runArgsByScriptId[script.id] ?? ''}
-                          onChange={(e) => handleRunArgsChange(script.id, e.target.value)}
-                          placeholder={t('skills.testArgsPlaceholder')}
-                        />
-                        <textarea
-                          className="field-textarea skills-script-schema"
-                          value={runResultByScriptId[script.id] ?? ''}
-                          readOnly
-                          placeholder={t('skills.runResultPlaceholder')}
-                        />
+                    {draft.scripts.length === 0 ? (
+                      <div className="skills-empty-inline">{t('skills.noScripts')}</div>
+                    ) : (
+                      <div className="skills-scripts">
+                        {draft.scripts.map((script) => (
+                          <div key={script.id} className="skills-script-card">
+                            <div className="skills-script-header">
+                              <strong>{script.label || script.id}</strong>
+                              <button
+                                type="button"
+                                className="ghost tiny ghost-subtle"
+                                onClick={() => handleRemoveScript(script.id)}
+                              >
+                                {t('skills.removeScript')}
+                              </button>
+                            </div>
+                            <div className="skills-script-grid">
+                              <input className="field-input" value={script.id} onChange={(e) => handleScriptChange(script.id, 'id', e.target.value)} onFocus={() => setActiveField({ kind: 'script', scriptId: script.id, field: 'id' })} placeholder={t('skills.scriptId')} />
+                              <input className="field-input" value={script.label} onChange={(e) => handleScriptChange(script.id, 'label', e.target.value)} onFocus={() => setActiveField({ kind: 'script', scriptId: script.id, field: 'label' })} placeholder={t('skills.scriptLabel')} />
+                              <input className="field-input" value={script.runtime} onChange={(e) => handleScriptChange(script.id, 'runtime', e.target.value)} onFocus={() => setActiveField({ kind: 'script', scriptId: script.id, field: 'runtime' })} placeholder={t('skills.runtime')} />
+                              <input className="field-input" value={script.entry} onChange={(e) => handleScriptChange(script.id, 'entry', e.target.value)} onFocus={() => setActiveField({ kind: 'script', scriptId: script.id, field: 'entry' })} placeholder={t('skills.entry')} />
+                              <select className="field-select" value={script.approvalPolicy} onChange={(e) => handleScriptChange(script.id, 'approvalPolicy', e.target.value)}>
+                                <option value="ask">{t('skills.approvalAsk')}</option>
+                                <option value="always_allow">{t('skills.approvalAlwaysAllow')}</option>
+                                <option value="manual_only">{t('skills.approvalManualOnly')}</option>
+                              </select>
+                            </div>
+                            <label className="field-label">{t('skills.argsSchema')}</label>
+                            <textarea
+                              className="field-textarea skills-script-schema"
+                              value={script.argsSchema ?? ''}
+                              onChange={(e) => handleScriptChange(script.id, 'argsSchema', e.target.value)}
+                              onFocus={() => setActiveField({ kind: 'script', scriptId: script.id, field: 'argsSchema' })}
+                            />
+                            <label className="field-label">{t('skills.scriptContent')}</label>
+                            <textarea
+                              className="field-textarea skills-script-content"
+                              value={script.content}
+                              onChange={(e) => handleScriptChange(script.id, 'content', e.target.value)}
+                              onFocus={() => setActiveField({ kind: 'script', scriptId: script.id, field: 'content' })}
+                            />
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
-                )}
+                </div>
 
                 {error && <div className="form-error">{error}</div>}
               </div>
             </div>
             <div className="modal-actions">
+              <button type="button" className="ghost danger" onClick={handleDelete}>
+                {t('skills.deleteSkill')}
+              </button>
+              <button
+                type="button"
+                className="ghost primary"
+                onClick={handleSave}
+                disabled={saving}
+              >
+                {saving ? t('common.saving') : t('common.save')}
+              </button>
               <button type="button" className="ghost" onClick={() => setEditorOpen(false)}>
                 {t('skills.closeEditor')}
               </button>

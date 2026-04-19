@@ -1,0 +1,18 @@
+{
+  "id": "extract-contact-skill",
+  "name": "Extract Contact",
+  "description": "联系人信息提取测试 skill",
+  "enabled": true,
+  "trusted": true,
+  "load_policy": "on_demand",
+  "scripts": [
+    {
+      "id": "run",
+      "label": "Run",
+      "runtime": "builtin-js",
+      "entry": "scripts/run.js",
+      "approval_policy": "always_allow",
+      "args_schema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"text\": {\n      \"type\": \"string\",\n      \"description\": \"需要提取联系人信息的正文文本\"\n    }\n  },\n  \"required\": [\"text\"]\n}"
+    }
+  ]
+}

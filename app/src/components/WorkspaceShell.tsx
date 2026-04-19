@@ -17,6 +17,7 @@ import { OutlinePanel } from './OutlinePanel'
 import { SessionsPanel } from './SessionsPanel'
 import { NotesPanel } from './NotesPanel'
 import { SkillsPanel } from './SkillsPanel'
+import { WorkflowsPanel } from './WorkflowsPanel'
 import { SidebarBackgroundShell } from './SidebarBackgroundShell'
 import { Welcome } from './Welcome'
 import { SearchBar } from './Editor/SearchBar'
@@ -125,7 +126,7 @@ const preventContainerScroll = (e: React.UIEvent<HTMLElement>) => {
   }
 }
 
-export type LeftPanelId = 'files' | 'outline' | 'pdf' | 'sessions' | 'notes' | 'skills' | null
+export type LeftPanelId = 'files' | 'outline' | 'pdf' | 'sessions' | 'notes' | 'skills' | 'workflows' | null
 export type InitialWorkspaceAction = 'new' | 'open' | 'open_folder' | 'open_recent' | null
 
 export interface WorkspaceShellProps {
@@ -2792,7 +2793,8 @@ export function WorkspaceShell({
           />
         )}
         {activeLeftPanel === 'skills' && <SkillsPanel panelWidth={sidebarWidth} />}
-        {(activeLeftPanel === 'files' || activeLeftPanel === 'outline' || activeLeftPanel === 'pdf' || activeLeftPanel === 'sessions' || activeLeftPanel === 'notes' || activeLeftPanel === 'skills') && (
+        {activeLeftPanel === 'workflows' && <WorkflowsPanel panelWidth={sidebarWidth} />}
+        {(activeLeftPanel === 'files' || activeLeftPanel === 'outline' || activeLeftPanel === 'pdf' || activeLeftPanel === 'sessions' || activeLeftPanel === 'notes' || activeLeftPanel === 'skills' || activeLeftPanel === 'workflows') && (
           <div className={`sidebar-resizer ${isSidebarResizing ? 'active' : ''}`} onMouseDown={handleSidebarResizeStart} />
         )}
 

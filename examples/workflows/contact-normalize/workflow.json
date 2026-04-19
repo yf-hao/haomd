@@ -1,0 +1,26 @@
+{
+  "id": "contact-normalize",
+  "name": "Contact Normalize",
+  "description": "提取并格式化联系人信息的 workflow",
+  "enabled": true,
+  "approval_policy": "ask",
+  "failure_policy": "fail_fast",
+  "input_schema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"text\": {\n      \"type\": \"string\",\n      \"description\": \"待处理的联系人原始文本\"\n    }\n  },\n  \"required\": [\"text\"]\n}",
+  "output_from": "steps.wrap.stdout",
+  "steps": [
+    {
+      "id": "extract",
+      "type": "skill",
+      "skill_id": "extract-contact-skill",
+      "script_id": "run",
+      "input_template": "{\n  \"text\": \"{{input.text}}\"\n}"
+    },
+    {
+      "id": "wrap",
+      "type": "skill",
+      "skill_id": "wrap-text-skill",
+      "script_id": "run",
+      "input_template": "{\n  \"text\": \"{{steps.extract.json.name}}\",\n  \"prefix\": \"联系人：\",\n  \"suffix\": \"\"\n}"
+    }
+  ]
+}

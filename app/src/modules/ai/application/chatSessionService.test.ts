@@ -55,6 +55,11 @@ vi.mock('../../skills/storage/skillsRepo', () => ({
     readSkill: vi.fn().mockResolvedValue(null),
 }))
 
+vi.mock('../../workflows/storage/workflowsRepo', () => ({
+    listWorkflows: vi.fn().mockResolvedValue([]),
+    readWorkflow: vi.fn().mockResolvedValue(null),
+}))
+
 vi.mock('./attachmentUploadService', () => ({
     createAttachmentUploadService: vi.fn(() => ({
         uploadAttachment: vi.fn()

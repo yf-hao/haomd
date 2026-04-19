@@ -65,6 +65,18 @@ import {
   executeSkillsRun,
 } from '../../skills/skillsBuiltinTool'
 import { buildSkillsToolCatalogPrompt } from './skillsToolCatalog'
+import {
+  WORKFLOW_SEARCH_TOOL_NAME,
+  WORKFLOW_READ_TOOL_NAME,
+  WORKFLOW_RUN_TOOL_NAME,
+  workflowSearchToolSchema,
+  workflowReadToolSchema,
+  workflowRunToolSchema,
+  executeWorkflowSearch,
+  executeWorkflowRead,
+  executeWorkflowRun,
+} from '../../workflows/workflowBuiltinTool'
+import { buildWorkflowToolCatalogPrompt } from './workflowToolCatalog'
 
 export type StartChatOptions = {
   entryMode: ChatEntryMode
@@ -447,6 +459,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
     // allTools: full list for execution routing (includes tools not in schemas)
     const routingTools = allTools ?? schemaTools
     const readSkillIds = new Set<string>()
+    const readWorkflowIds = new Set<string>()
     const conversationMessages = engineHistoryToChatMessages(state.engineHistory)
 
     try {
@@ -509,6 +522,18 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
             let toolResult: unknown
             if (tc.function.name === WRITE_TO_NOTES_TOOL_NAME) {
               toolResult = await executeWriteToNotes(parsedArgs as { content?: string })
+            } else if (tc.function.name === WORKFLOW_SEARCH_TOOL_NAME) {
+              toolResult = await executeWorkflowSearch(parsedArgs as { query?: string })
+            } else if (tc.function.name === WORKFLOW_READ_TOOL_NAME) {
+              toolResult = await executeWorkflowRead(
+                parsedArgs as { workflowId?: string },
+                readWorkflowIds,
+              )
+            } else if (tc.function.name === WORKFLOW_RUN_TOOL_NAME) {
+              toolResult = await executeWorkflowRun(
+                parsedArgs as { workflowId?: string; input?: unknown },
+                readWorkflowIds,
+              )
             } else if (tc.function.name === SKILLS_SEARCH_TOOL_NAME) {
               toolResult = await executeSkillsSearch(parsedArgs as { query?: string })
             } else if (tc.function.name === SKILLS_READ_TOOL_NAME) {
@@ -798,6 +823,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
           systemPromptForRequest += buildToolCatalog(allMcpTools)
         }
         if (providerType === 'openai') {
+          systemPromptForRequest += await buildWorkflowToolCatalogPrompt()
           systemPromptForRequest += await buildSkillsToolCatalogPrompt()
           systemPromptForRequest += buildWorkspaceMountedRootsPrompt()
         }
@@ -828,6 +854,9 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       const builtinTools: OpenAIToolDef[] = isOpenAIProvider
         ? [
           writeToNotesToolSchema,
+          workflowSearchToolSchema,
+          workflowReadToolSchema,
+          workflowRunToolSchema,
           skillsSearchToolSchema,
           skillsReadToolSchema,
           resolveWorkspaceDirectoryToolSchema,
