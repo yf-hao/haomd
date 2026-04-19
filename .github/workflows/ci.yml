@@ -61,6 +61,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: 1.93.0
           components: clippy, rustfmt
           
       - name: Install system dependencies (Linux)
