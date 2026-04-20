@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { SidebarBackgroundShell } from './SidebarBackgroundShell'
+import { SkillGenerateDialog } from './SkillGenerateDialog'
 import { useI18n } from '../modules/i18n/I18nContext'
 import type { SkillDocument } from '../modules/skills/domain/types'
 import { createDefaultScript, createDefaultSkill, normalizeSkillBeforeSave } from '../modules/skills/application/skillsService'
@@ -29,6 +30,7 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [activeField, setActiveField] = useState<ActiveSkillField | null>(null)
+  const [authoringMode, setAuthoringMode] = useState<'create' | 'revise' | null>(null)
 
   const style = panelWidth ? { width: panelWidth } : undefined
 
@@ -174,6 +176,17 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
     setError('')
   }, [])
 
+  const handleOpenGenerate = useCallback(() => {
+    setAuthoringMode('create')
+    setError('')
+  }, [])
+
+  const handleOpenRevise = useCallback(() => {
+    if (!draft?.id) return
+    setAuthoringMode('revise')
+    setError('')
+  }, [draft?.id])
+
   const handleSelectSkill = useCallback((skillId: string) => {
     setError('')
     if (selectedSkillId === skillId) {
@@ -265,9 +278,14 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
       <SidebarBackgroundShell className="skills-panel" style={style}>
         <div className="skills-panel-header">
           <span>{t('skills.title')}</span>
-          <button type="button" className="notes-action-btn" onClick={handleNewSkill} title={t('skills.newSkill')}>
-            +
-          </button>
+          <div className="skills-header-actions">
+            <button type="button" className="notes-action-btn" onClick={handleOpenGenerate} title={t('skillsAuthoring.generateSkill')}>
+              AI
+            </button>
+            <button type="button" className="notes-action-btn" onClick={handleNewSkill} title={t('skills.newSkill')}>
+              +
+            </button>
+          </div>
         </div>
 
         <div className="skills-panel-body">
@@ -424,6 +442,9 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
               </div>
             </div>
             <div className="modal-actions">
+              <button type="button" className="ghost" onClick={handleOpenRevise} disabled={!draft?.id}>
+                {t('skillsAuthoring.reviseSkill')}
+              </button>
               <button type="button" className="ghost danger" onClick={handleDelete}>
                 {t('skills.deleteSkill')}
               </button>
@@ -443,6 +464,17 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
         </div>,
         document.body,
       )}
+
+      <SkillGenerateDialog
+        open={authoringMode !== null}
+        mode={authoringMode ?? 'create'}
+        skillId={authoringMode === 'revise' ? draft?.id ?? selectedSkillId ?? undefined : undefined}
+        onClose={() => setAuthoringMode(null)}
+        onAccepted={(nextSkillId) => {
+          setAuthoringMode(null)
+          void refreshSkills(nextSkillId, true)
+        }}
+      />
     </>
   )
 })
