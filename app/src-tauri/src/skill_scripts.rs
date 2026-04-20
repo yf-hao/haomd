@@ -1,6 +1,6 @@
 use crate::skills::{read_skill_document_from_dir, sanitize_skill_id, skills_root_dir};
 use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
-use quick_js::Context;
+use rquickjs::{Context, Runtime};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::AppHandle;
@@ -29,10 +29,12 @@ fn execute_builtin_js(script_source: &str, args: &Value) -> Result<SkillRunResul
         serde_json::to_string(&args_json).map_err(|e| format!("构造脚本参数字面量失败: {e}"))?;
     let program = format!("{script_source}\nJSON.stringify(run(JSON.parse({args_json_literal})));");
 
-    let context = Context::new().map_err(|e| format!("创建 JS 运行时失败: {e}"))?;
-    let result_text: String = context
-        .eval_as(program.as_str())
-        .map_err(|e| format!("执行 JS Skill 失败: {e}"))?;
+    let rt = Runtime::new().map_err(|e| format!("创建 JS 运行时失败: {e}"))?;
+    let context = Context::full(&rt).map_err(|e| format!("创建 JS 上下文失败: {e}"))?;
+    
+    let result_text: String = context.with(|ctx| {
+        ctx.eval(program).map_err(|e| format!("执行 JS Skill 失败: {e}"))
+    })?;
 
     serde_json::from_str::<SkillRunResultCfg>(&result_text)
         .map_err(|e| format!("解析 JS Skill 返回值失败: {e}"))

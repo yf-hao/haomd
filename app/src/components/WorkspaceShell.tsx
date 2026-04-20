@@ -9,6 +9,7 @@ import PreviewErrorBoundary from './PreviewErrorBoundary'
 import { InsertTableDialog } from './InsertTableDialog'
 import { MathSymbolDialog } from './MathSymbolDialog'
 import { AboutDialog } from './AboutDialog'
+import { ReleaseNotesDialog } from './ReleaseNotesDialog'
 import { TextColorDialog } from './TextColorDialog'
 import { TabBar } from './TabBar'
 import { FileContextMenu } from './FileContextMenu'
@@ -174,6 +175,7 @@ export function WorkspaceShell({
   const preserveTextColorTargetOnNextChangeRef = useRef(false)
 
   const [aboutOpen, setAboutOpen] = useState(false)
+  const [releaseNotesOpen, setReleaseNotesOpen] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [aiChatSessionKey, setAiChatSessionKey] = useState<AiChatSessionKey>('global')
 
@@ -440,6 +442,14 @@ export function WorkspaceShell({
 
   const closeAboutDialog = useCallback(() => {
     setAboutOpen(false)
+  }, [])
+
+  const openReleaseNotesDialog = useCallback(() => {
+    setReleaseNotesOpen(true)
+  }, [])
+
+  const closeReleaseNotesDialog = useCallback(() => {
+    setReleaseNotesOpen(false)
   }, [])
 
   const getCurrentMarkdown = useCallback(() => markdown, [markdown])
@@ -2251,6 +2261,7 @@ export function WorkspaceShell({
     closeAiChatDialog,
     openGlobalMemoryDialog,
     openAboutDialog,
+    openReleaseNotesDialog,
     getCurrentMarkdown, getCurrentFileName, getCurrentSelectionText, getCurrentFilePath,
     onRequestCloseCurrentTab: () => closeCurrentTabRef.current?.(),
     onRequestQuit: handleQuit, isTauriEnv,
@@ -3103,6 +3114,7 @@ export function WorkspaceShell({
         )}
 
         <AboutDialog open={aboutOpen} onClose={closeAboutDialog} />
+        <ReleaseNotesDialog open={releaseNotesOpen} onClose={closeReleaseNotesDialog} />
       </>
     </AiChatCommandBridgeContext.Provider>
   )

@@ -86,6 +86,8 @@ export type HelpCommandContext = StatusContext & {
   setFilePath: (path: string) => void
   /** 打开关于对话框的回调，由 WorkspaceShell 提供 */
   openAboutDialog?: () => void
+  /** 打开版本说明对话框的回调，由 WorkspaceShell 提供 */
+  openReleaseNotesDialog?: () => void
 }
 
 /**
@@ -490,7 +492,12 @@ function createHelpCommands(ctx: HelpCommandContext): CommandRegistry {
       ctx.setStatusMessage(tr(ctx, 'commands.usageOpened', '已打开使用说明'))
     },
     help_release: () => {
-      ctx.setStatusMessage(tr(ctx, 'commands.helpPlaceholder', 'HaoMD · 菜单占位/帮助'))
+      if (ctx.openReleaseNotesDialog) {
+        ctx.openReleaseNotesDialog()
+        ctx.setStatusMessage(tr(ctx, 'commands.changelogOpened', '已打开更新日志'))
+        return
+      }
+      ctx.setStatusMessage(tr(ctx, 'commands.changelogDialogUnavailable', '版本说明对话框未注册'))
     },
     help_issue: () => {
       ctx.setStatusMessage(tr(ctx, 'commands.helpPlaceholder', 'HaoMD · 菜单占位/帮助'))

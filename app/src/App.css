@@ -279,6 +279,35 @@ button:disabled {
   overflow: visible;
 }
 
+.modal.modal-release-notes {
+  width: min(980px, calc(100vw - 48px));
+  max-width: 980px;
+  min-width: 720px;
+  max-height: 78vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal.modal-release-notes .modal-content.release-notes-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.release-notes-markdown {
+  font-size: var(--ui-font-settings);
+  line-height: 1.65;
+}
+
+.release-notes-markdown > :first-child {
+  margin-top: 0;
+}
+
+.release-notes-markdown > :last-child {
+  margin-bottom: 0;
+}
+
 /* 随笔 Panel */
 .notes-panel {
   --sidebar-panel-surface: color-mix(in srgb, var(--theme-surface-sidebar) 72%, var(--theme-surface-preview) 28%);
