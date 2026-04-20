@@ -31,9 +31,10 @@ fn execute_builtin_js(script_source: &str, args: &Value) -> Result<SkillRunResul
 
     let rt = Runtime::new().map_err(|e| format!("创建 JS 运行时失败: {e}"))?;
     let context = Context::full(&rt).map_err(|e| format!("创建 JS 上下文失败: {e}"))?;
-    
+
     let result_text: String = context.with(|ctx| {
-        ctx.eval(program).map_err(|e| format!("执行 JS Skill 失败: {e}"))
+        ctx.eval(program)
+            .map_err(|e| format!("执行 JS Skill 失败: {e}"))
     })?;
 
     serde_json::from_str::<SkillRunResultCfg>(&result_text)
