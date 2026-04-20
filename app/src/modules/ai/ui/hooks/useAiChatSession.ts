@@ -18,6 +18,7 @@ import { ensureSessionAutoTitle } from '../../application/sessionAutoTitleServic
 import type { DocConversationRecord } from '../../domain/docConversations'
 import { appendAiInputHistory } from '../../application/localStorageAiChatInputHistory'
 import { loadSession, saveSession, type AiChatSessionCfg, type AiChatMessageCfg } from '../../config/aiSessionsRepo'
+import { mergePendingAttachments } from './attachmentDrafts'
 
 export type UseAiChatSessionOptions = {
   sessionKey: AiChatSessionKey
@@ -317,12 +318,21 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
       if (!session) return
       setError(null)
       setLoading(true)
+      const attachmentsToSend = pendingAttachments
+      if (attachmentsToSend.length > 0) {
+        setPendingAttachments([])
+      }
       try {
         await session.sendUserMessage(content, {
           hideInView: options?.hideUserInView,
-          attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined,
+          attachments: attachmentsToSend.length > 0 ? attachmentsToSend : undefined,
         })
-        setPendingAttachments([])
+      } catch (error) {
+        const err = error as Error
+        if (err.name !== 'AbortError' && attachmentsToSend.length > 0) {
+          setPendingAttachments((current) => mergePendingAttachments(attachmentsToSend, current))
+        }
+        throw error
       } finally {
         setLoading(false)
         setState(session.getState())
@@ -416,7 +426,9 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
       const raw = input
       const trimmed = raw.trim()
       const isDify = providerType === 'dify'
-      const hasAttachments = isDify ? pendingAttachments.length > 0 : !!options?.attachedImageDataUrl
+      const attachmentsToSend = isDify ? pendingAttachments : []
+      const attachedImageToSend = !isDify ? options?.attachedImageDataUrl ?? null : null
+      const hasAttachments = isDify ? attachmentsToSend.length > 0 : !!attachedImageToSend
 
       if (!trimmed && !options?.contextPrefix && !hasAttachments) return
 
@@ -439,27 +451,37 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
       }
 
       setLoading(true)
+      if (attachmentsToSend.length > 0) {
+        setPendingAttachments([])
+      }
+      if (attachedImageToSend) {
+        options?.onClearAttachedImage?.()
+      }
       try {
-        if (options?.attachedImageDataUrl && !isDify) {
+        if (attachedImageToSend && !isDify) {
           const visionTask: VisionTask = {
             prompt: finalContent,
-            images: [{ kind: 'data_url', dataUrl: options.attachedImageDataUrl }],
+            images: [{ kind: 'data_url', dataUrl: attachedImageToSend }],
           }
           await session.sendVisionTask(visionTask, { hideInView: hideUserInView })
-          options.onClearAttachedImage?.()
         } else {
           await session.sendUserMessage(finalContent, {
             hideInView: hideUserInView,
-            attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined,
+            attachments: attachmentsToSend.length > 0 ? attachmentsToSend : undefined,
             // 只在 UI 中展示用户真实输入的问题部分，
             // selection/file 上下文只进入 engineHistory，不出现在气泡里。
             viewContent: basePrompt,
           })
-          setPendingAttachments([])
         }
       } catch (e) {
         const err = e as Error
         if (err.name !== 'AbortError') {
+          if (attachmentsToSend.length > 0) {
+            setPendingAttachments((current) => mergePendingAttachments(attachmentsToSend, current))
+          }
+          if (attachedImageToSend) {
+            options?.onRestoreAttachedImage?.(attachedImageToSend)
+          }
           console.error('[useAiChatSession] sendMessage error:', e)
           setError(err)
         }

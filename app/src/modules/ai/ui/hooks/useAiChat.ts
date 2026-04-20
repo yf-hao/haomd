@@ -5,6 +5,7 @@ import type { ProviderType, VisionTask, UploadedFileRef } from '../../domain/typ
 import type { ChatSession, StartChatOptions } from '../../application/chatSessionService'
 import { createChatSession } from '../../application/chatSessionService'
 import { aiChatSessionManager } from '../../application/localStorageAiChatSessionManager'
+import { mergePendingAttachments } from './attachmentDrafts'
 
 export type UseAiChatOptions = {
   entryMode: ChatEntryMode
@@ -35,6 +36,7 @@ export type UseAiChatResult = {
       onContextUsed?: () => void
       attachedImageDataUrl?: string | null
       onClearAttachedImage?: () => void
+      onRestoreAttachedImage?: (dataUrl: string) => void
     },
   ) => Promise<void>
   sendVisionTask: (task: VisionTask, options?: { hideUserInView?: boolean }) => Promise<void>
@@ -215,12 +217,21 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
       if (!session) return
       setError(null)
       setLoading(true)
+      const attachmentsToSend = pendingAttachments
+      if (attachmentsToSend.length > 0) {
+        setPendingAttachments([])
+      }
       try {
         await session.sendUserMessage(content, {
           hideInView: options?.hideUserInView,
-          attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined
+          attachments: attachmentsToSend.length > 0 ? attachmentsToSend : undefined,
         })
-        setPendingAttachments([]) // Clear after sending
+      } catch (error) {
+        const err = error as Error
+        if (err.name !== 'AbortError' && attachmentsToSend.length > 0) {
+          setPendingAttachments((current) => mergePendingAttachments(attachmentsToSend, current))
+        }
+        throw error
       } finally {
         setLoading(false)
         setState(session.getState())
@@ -315,6 +326,7 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
         onContextUsed?: () => void;
         attachedImageDataUrl?: string | null;
         onClearAttachedImage?: () => void;
+        onRestoreAttachedImage?: (dataUrl: string) => void;
       }
     ) => {
       if (!session) return
@@ -323,7 +335,9 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
       const raw = input
       const trimmed = raw.trim()
       const isDify = providerType === 'dify'
-      const hasAttachments = isDify ? pendingAttachments.length > 0 : !!options?.attachedImageDataUrl
+      const attachmentsToSend = isDify ? pendingAttachments : []
+      const attachedImageToSend = !isDify ? options?.attachedImageDataUrl ?? null : null
+      const hasAttachments = isDify ? attachmentsToSend.length > 0 : !!attachedImageToSend
 
       // 没有文字、没有上下文、也没有图片时不发送
       if (!trimmed && !options?.contextPrefix && !hasAttachments) return
@@ -342,27 +356,37 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
       }
 
       setLoading(true)
+      if (attachmentsToSend.length > 0) {
+        setPendingAttachments([])
+      }
+      if (attachedImageToSend) {
+        options?.onClearAttachedImage?.()
+      }
       try {
-        if (options?.attachedImageDataUrl && !isDify) {
+        if (attachedImageToSend && !isDify) {
           const visionTask: VisionTask = {
             prompt: finalContent,
-            images: [{ kind: 'data_url', dataUrl: options.attachedImageDataUrl }],
+            images: [{ kind: 'data_url', dataUrl: attachedImageToSend }],
           }
           await session.sendVisionTask(visionTask, { hideInView: hideUserInView })
-          options.onClearAttachedImage?.()
         } else {
           await session.sendUserMessage(finalContent, {
             hideInView: hideUserInView,
-            attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined,
+            attachments: attachmentsToSend.length > 0 ? attachmentsToSend : undefined,
             // 只在 UI 中展示用户真实输入的问题部分，
             // selection/file 上下文只进入 engineHistory，不出现在气泡里。
             viewContent: basePrompt,
           })
-          setPendingAttachments([])
         }
       } catch (e) {
         const error = e as Error
         if (error.name !== 'AbortError') {
+          if (attachmentsToSend.length > 0) {
+            setPendingAttachments((current) => mergePendingAttachments(attachmentsToSend, current))
+          }
+          if (attachedImageToSend) {
+            options?.onRestoreAttachedImage?.(attachedImageToSend)
+          }
           console.error('[useAiChat] sendMessage error:', e)
           setError(error)
         }

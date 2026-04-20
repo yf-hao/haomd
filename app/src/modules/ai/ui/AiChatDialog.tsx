@@ -426,6 +426,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
       },
       attachedImageDataUrl,
       onClearAttachedImage: () => setAttachedImageDataUrl(null),
+      onRestoreAttachedImage: (dataUrl) => setAttachedImageDataUrl(dataUrl),
     })
   }
 

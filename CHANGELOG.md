@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.9.0-alpha.1] - 2026-04-20
+
+### 中文
+
+本次 Alpha.1 版本是一个关键的热修复更新，旨在解决跨平台构建瓶颈，并提升帮助系统的可用性。
+
+#### 🔧 修复与改进
+
+*   **跨平台编译修复 (Critical)**：为了解决 Windows (MSVC) 环境下无法编译 C 语言底层依赖的问题，我们将 JS 脚本引擎库从 `quick-js` 迁移到了原生支持 MSVC 的 `rquickjs`。这确保了应用可以在所有主流操作系统（Windows/macOS/Linux）上稳定构建。
+*   **帮助菜单升级**：在 `Help` 菜单中新增了“版本说明 (Release Notes)”指令，点击后将自动导入并以只读 Markdown 标签页形式展示 `CHANGELOG.md`，方便用户在应用内直接查看更新详情。
+
+---
+
+### English
+
+This Alpha.1 release is a critical hotfix addressing cross-platform build bottlenecks and improving the accessibility of the help system.
+
+#### 🔧 Fixes & Refinements
+
+*   **Cross-platform Compilation Fix (Critical)**: Replaced the `quick-js` dependency with `rquickjs` to resolve structural compilation errors on Windows (MSVC) caused by incompatible C extensions. This ensures deterministic builds across Windows, macOS, and Linux.
+*   **Release Notes Integration**: Added a "Release Notes" action under the `Help` menu. It automatically imports and renders `CHANGELOG.md` as a native read-only editor tab for instant access to update details.
+
+---
+
 ## [v0.9.0-alpha] - 2026-04-20
 
 ### 中文

@@ -486,6 +486,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
       },
       attachedImageDataUrl,
       onClearAttachedImage: () => setAttachedImageDataUrl(null),
+      onRestoreAttachedImage: (dataUrl) => setAttachedImageDataUrl(dataUrl),
     })
   }
 
