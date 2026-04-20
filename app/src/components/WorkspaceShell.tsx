@@ -9,6 +9,7 @@ import PreviewErrorBoundary from './PreviewErrorBoundary'
 import { InsertTableDialog } from './InsertTableDialog'
 import { MathSymbolDialog } from './MathSymbolDialog'
 import { AboutDialog } from './AboutDialog'
+import { IssueReportDialog } from './IssueReportDialog'
 import { ReleaseNotesDialog } from './ReleaseNotesDialog'
 import { TextColorDialog } from './TextColorDialog'
 import { TabBar } from './TabBar'
@@ -176,6 +177,7 @@ export function WorkspaceShell({
 
   const [aboutOpen, setAboutOpen] = useState(false)
   const [releaseNotesOpen, setReleaseNotesOpen] = useState(false)
+  const [issueReportOpen, setIssueReportOpen] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [aiChatSessionKey, setAiChatSessionKey] = useState<AiChatSessionKey>('global')
 
@@ -450,6 +452,14 @@ export function WorkspaceShell({
 
   const closeReleaseNotesDialog = useCallback(() => {
     setReleaseNotesOpen(false)
+  }, [])
+
+  const openIssueReportDialog = useCallback(() => {
+    setIssueReportOpen(true)
+  }, [])
+
+  const closeIssueReportDialog = useCallback(() => {
+    setIssueReportOpen(false)
   }, [])
 
   const getCurrentMarkdown = useCallback(() => markdown, [markdown])
@@ -2262,6 +2272,7 @@ export function WorkspaceShell({
     openGlobalMemoryDialog,
     openAboutDialog,
     openReleaseNotesDialog,
+    openIssueReportDialog,
     getCurrentMarkdown, getCurrentFileName, getCurrentSelectionText, getCurrentFilePath,
     onRequestCloseCurrentTab: () => closeCurrentTabRef.current?.(),
     onRequestQuit: handleQuit, isTauriEnv,
@@ -3115,6 +3126,7 @@ export function WorkspaceShell({
 
         <AboutDialog open={aboutOpen} onClose={closeAboutDialog} />
         <ReleaseNotesDialog open={releaseNotesOpen} onClose={closeReleaseNotesDialog} />
+        <IssueReportDialog open={issueReportOpen} onClose={closeIssueReportDialog} />
       </>
     </AiChatCommandBridgeContext.Provider>
   )

@@ -77,6 +77,15 @@ export const zhCNMessages: MessageDictionary = {
     importSuccess: '备份已恢复。建议关闭并重新打开相关设置窗口，必要时重启应用。',
     importFailed: '恢复失败：{message}',
   },
+  issueReport: {
+    title: '报告问题',
+    intro: '选择一种你方便的反馈方式即可。普通问题可通过邮箱联系，开发相关问题可直接提交 GitHub Issues。',
+    email: '邮箱',
+    githubIssues: 'GitHub Issues',
+    copyEmail: '复制邮箱',
+    copiedEmail: '已复制',
+    openGitHub: '打开 GitHub',
+  },
   typography: {
     title: '字体',
     description: '调整 HaoMD 界面、工作区面板和 AI Chat 的字号。',

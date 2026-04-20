@@ -308,6 +308,85 @@ button:disabled {
   margin-bottom: 0;
 }
 
+.modal.modal-issue-report {
+  width: min(620px, calc(100vw - 48px));
+  max-width: 620px;
+  min-width: 480px;
+}
+
+.issue-report-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.issue-report-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.issue-report-intro {
+  font-size: calc(var(--ui-font-settings) - 1px);
+  line-height: 1.7;
+  color: var(--theme-text-secondary);
+}
+
+.issue-report-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.issue-report-card {
+  padding: 12px 14px;
+  border: 1px solid var(--theme-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--theme-surface-hover) 42%, transparent);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--theme-shadow) 10%, transparent);
+}
+
+.issue-report-label {
+  font-size: calc(var(--ui-font-settings) + 1px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--theme-text-default);
+}
+
+.issue-report-value {
+  font-size: var(--ui-font-settings);
+  line-height: 1.6;
+  color: var(--theme-text-secondary);
+  word-break: break-all;
+}
+
+.issue-report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.issue-report-btn {
+  min-width: 108px;
+}
+
+.issue-report-btn-secondary {
+  border-color: var(--theme-border);
+  background: color-mix(in srgb, var(--theme-surface-secondary) 68%, transparent);
+}
+
+.issue-report-btn-primary,
+.issue-report-btn-link {
+  background: color-mix(in srgb, var(--accent-solid) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent-solid) 28%, var(--theme-border));
+}
+
+@media (max-width: 720px) {
+  .issue-report-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* 随笔 Panel */
 .notes-panel {
   --sidebar-panel-surface: color-mix(in srgb, var(--theme-surface-sidebar) 72%, var(--theme-surface-preview) 28%);

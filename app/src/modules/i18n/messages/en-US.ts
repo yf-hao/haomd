@@ -77,6 +77,15 @@ export const enUSMessages: MessageDictionary = {
     importSuccess: 'Backup restored. Reopen related settings dialogs, and restart the app if needed.',
     importFailed: 'Restore failed: {message}',
   },
+  issueReport: {
+    title: 'Report an Issue',
+    intro: 'Choose whichever feedback channel is more convenient. General issues can be sent by email, while development-related issues can go to GitHub Issues.',
+    email: 'Email',
+    githubIssues: 'GitHub Issues',
+    copyEmail: 'Copy Email',
+    copiedEmail: 'Copied',
+    openGitHub: 'Open GitHub',
+  },
   typography: {
     title: 'Typography',
     description: 'Adjust font sizes for the HaoMD interface, workspace panels, and AI chat.',

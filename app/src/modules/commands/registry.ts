@@ -88,6 +88,8 @@ export type HelpCommandContext = StatusContext & {
   openAboutDialog?: () => void
   /** 打开版本说明对话框的回调，由 WorkspaceShell 提供 */
   openReleaseNotesDialog?: () => void
+  /** 打开问题报告对话框的回调，由 WorkspaceShell 提供 */
+  openIssueReportDialog?: () => void
 }
 
 /**
@@ -500,7 +502,12 @@ function createHelpCommands(ctx: HelpCommandContext): CommandRegistry {
       ctx.setStatusMessage(tr(ctx, 'commands.changelogDialogUnavailable', '版本说明对话框未注册'))
     },
     help_issue: () => {
-      ctx.setStatusMessage(tr(ctx, 'commands.helpPlaceholder', 'HaoMD · 菜单占位/帮助'))
+      if (ctx.openIssueReportDialog) {
+        ctx.openIssueReportDialog()
+        ctx.setStatusMessage(tr(ctx, 'commands.issueDialogOpened', '已打开问题反馈'))
+        return
+      }
+      ctx.setStatusMessage(tr(ctx, 'commands.issueDialogUnavailable', '问题反馈对话框未注册'))
     },
     help_about: () => {
       ctx.setStatusMessage(tr(ctx, 'commands.helpPlaceholder', 'HaoMD · 菜单占位/帮助'))
