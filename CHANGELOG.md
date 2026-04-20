@@ -2,27 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
-## [v0.9.0-alpha.1] - 2026-04-20
+## [v0.9.1] - 2026-04-20
 
 ### 中文
 
-本次 Alpha.1 版本是一个关键的热修复更新，旨在解决跨平台构建瓶颈，并提升帮助系统的可用性。
+本次版本（v0.9.1）是一个针对 v0.9.0 系列的关键补丁更新，重点解决了 Windows 平台的构建兼容性问题，并优化了版本分发规范。
 
-#### 🔧 修复与改进
-
-*   **跨平台编译修复 (Critical)**：为了解决 Windows (MSVC) 环境下无法编译 C 语言底层依赖的问题，我们将 JS 脚本引擎库从 `quick-js` 迁移到了原生支持 MSVC 的 `rquickjs`。这确保了应用可以在所有主流操作系统（Windows/macOS/Linux）上稳定构建。
-*   **帮助菜单升级**：在 `Help` 菜单中新增了“版本说明 (Release Notes)”指令，点击后将自动导入并以只读 Markdown 标签页形式展示 `CHANGELOG.md`，方便用户在应用内直接查看更新详情。
+#### 🔧 系统修复与构建优化
+*   **跨平台编译修复 (Critical)**：移除了在 Windows 下导致编译失败的 `quick-js` 依赖，迁移至原生支持 MSVC 编译的 `rquickjs`，确保 Windows/macOS/Linux 构建一致性。
+*   **版本规范优化**：调整版本号为纯数字后缀以适配 Windows MSI (WiX) 安装包的严苛安全校验。
+*   **内置说明书升级**：在 `Help` 菜单中新增了“版本说明 (Release Notes)”指令，支持在编辑器内直接以 Markdown 标签页形式查看最新更新动态。
 
 ---
 
 ### English
 
-This Alpha.1 release is a critical hotfix addressing cross-platform build bottlenecks and improving the accessibility of the help system.
+Version v0.9.1 is a critical patch update for the v0.9.0 series, focusing on resolving Windows build compatibility issues and standardizing distribution requirements.
 
-#### 🔧 Fixes & Refinements
-
-*   **Cross-platform Compilation Fix (Critical)**: Replaced the `quick-js` dependency with `rquickjs` to resolve structural compilation errors on Windows (MSVC) caused by incompatible C extensions. This ensures deterministic builds across Windows, macOS, and Linux.
-*   **Release Notes Integration**: Added a "Release Notes" action under the `Help` menu. It automatically imports and renders `CHANGELOG.md` as a native read-only editor tab for instant access to update details.
+#### 🔧 System Fixes & Build Optimizations
+*   **Cross-platform Compilation (Critical)**: Replaced `quick-js` with `rquickjs` to resolve structural build failures on Windows (MSVC). This ensures a deterministic build process across Windows, macOS, and Linux.
+*   **Installer Compatibility**: Standardized versioning to a numeric-friendly format to satisfy strict Windows MSI (WiX) bundling requirements.
+*   **In-app Release Notes**: Added a "Release Notes" action under the `Help` menu, allowing you to view the latest changelog directly as a read-only editor tab inside the workspace.
 
 ---
 
