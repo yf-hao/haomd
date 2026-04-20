@@ -470,9 +470,11 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
         mode={authoringMode ?? 'create'}
         skillId={authoringMode === 'revise' ? draft?.id ?? selectedSkillId ?? undefined : undefined}
         onClose={() => setAuthoringMode(null)}
-        onAccepted={(nextSkillId) => {
+        onAccepted={() => {
           setAuthoringMode(null)
-          void refreshSkills(nextSkillId, true)
+          setEditorOpen(false)
+          setDraft(null)
+          void refreshSkills(null, false)
         }}
       />
     </>
