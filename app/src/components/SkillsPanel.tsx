@@ -325,7 +325,17 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
             className="modal modal-prompt-settings modal-skills-settings skills-editor-modal"
             onKeyDownCapture={handleEditorKeyDownCapture}
           >
-            <div className="modal-title">{draft.name || t('skills.title')}</div>
+            <div className="skills-editor-modal-header">
+              <div className="modal-title">{draft.name || t('skills.title')}</div>
+              <button
+                type="button"
+                className="skills-editor-close-btn"
+                onClick={() => setEditorOpen(false)}
+                aria-label={t('common.close')}
+              >
+                ×
+              </button>
+            </div>
             <div className="modal-content skills-editor-modal-content">
               <div className="skills-editor">
                 <div className="skills-editor-layout">
@@ -373,13 +383,15 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
                       </label>
                     </div>
 
-                    <label className="field-label">{t('skills.markdown')}</label>
-                    <textarea
-                      className="field-textarea skills-markdown-input"
-                      value={draft.markdown}
-                      onChange={(e) => updateDraft({ markdown: e.target.value })}
-                      onFocus={() => setActiveField({ kind: 'markdown' })}
-                    />
+                    <div className="skills-markdown-section">
+                      <label className="field-label">{t('skills.markdown')}</label>
+                      <textarea
+                        className="field-textarea skills-markdown-input"
+                        value={draft.markdown}
+                        onChange={(e) => updateDraft({ markdown: e.target.value })}
+                        onFocus={() => setActiveField({ kind: 'markdown' })}
+                      />
+                    </div>
                   </div>
 
                   <div className="skills-editor-side">
@@ -455,9 +467,6 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
                 disabled={saving}
               >
                 {saving ? t('common.saving') : t('common.save')}
-              </button>
-              <button type="button" className="ghost" onClick={() => setEditorOpen(false)}>
-                {t('skills.closeEditor')}
               </button>
             </div>
           </div>

@@ -375,7 +375,25 @@ function AppShellContent({
             aria-pressed={activeLeftPanel === 'files'}
             title={t('app.files')}
           >
-            <span className="activity-icon-file" aria-hidden="true" />
+            <svg
+              className="activity-icon-file"
+              viewBox="0 0 20 20"
+              aria-hidden="true"
+              fill="none"
+            >
+              <path
+                d="M4 1.8H11.8L16.5 6.4V18.2H4V1.8Z"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M11.8 1.8V6.4H16.5"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinejoin="round"
+              />
+            </svg>
           </button>
 
           <button
@@ -385,7 +403,17 @@ function AppShellContent({
             aria-pressed={activeLeftPanel === 'outline'}
             title={t('app.outline')}
           >
-            <span className="activity-icon-outline" aria-hidden="true" />
+            <svg
+              className="activity-icon-outline"
+              viewBox="0 0 20 20"
+              aria-hidden="true"
+              fill="none"
+            >
+              <path d="M4 3.5V16.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              <path d="M4 5H15.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              <path d="M4 10H13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              <path d="M4 15H10.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
           </button>
 
           <button
@@ -395,7 +423,26 @@ function AppShellContent({
             aria-pressed={activeLeftPanel === 'pdf'}
             title={t('app.pdf')}
           >
-            <span className="activity-icon-pdf" aria-hidden="true" />
+            <svg
+              className="activity-icon-pdf"
+              viewBox="0 0 20 20"
+              aria-hidden="true"
+              fill="none"
+            >
+              <path
+                d="M4 1.8H16V18.2H4V1.8Z"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M7 13.8V7H10.2C11.6 7 12.6 8 12.6 9.3C12.6 10.7 11.6 11.6 10.2 11.6H7"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </button>
 
           <button
@@ -405,7 +452,25 @@ function AppShellContent({
             aria-pressed={activeLeftPanel === 'sessions'}
             title={t('app.sessions')}
           >
-            <span className="activity-icon-sessions" aria-hidden="true" />
+            <svg
+              className="activity-icon-sessions"
+              viewBox="0 0 20 20"
+              aria-hidden="true"
+              fill="none"
+            >
+              <path
+                d="M3 8.5H10.8C12.1 8.5 13.2 9.6 13.2 10.9V13.6C13.2 14.9 12.1 16 10.8 16H7.9L5 18V16H3C1.7 16 0.6 14.9 0.6 13.6V10.9C0.6 9.6 1.7 8.5 3 8.5Z"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M11.8 2.5H16.8C17.9 2.5 18.8 3.4 18.8 4.5V6.2C18.8 7.3 17.9 8.2 16.8 8.2H15.3L13.2 9.7V8.2H11.8C10.7 8.2 9.8 7.3 9.8 6.2V4.5C9.8 3.4 10.7 2.5 11.8 2.5Z"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinejoin="round"
+              />
+            </svg>
           </button>
 
           <button
@@ -415,7 +480,31 @@ function AppShellContent({
             aria-pressed={activeLeftPanel === 'notes'}
             title={t('app.notes')}
           >
-            <span className="activity-icon-notes" aria-hidden="true" />
+            <svg
+              className="activity-icon-notes"
+              viewBox="0 0 20 20"
+              aria-hidden="true"
+              fill="none"
+            >
+              <g transform="rotate(-28 10 10)">
+                <path
+                  d="M7.6 0.2H12.4V5.4"
+                  stroke="currentColor"
+                  strokeWidth="1.2"
+                  strokeLinejoin="round"
+                />
+                <path d="M8.8 0.2V5.4" stroke="currentColor" strokeWidth="1" />
+                <path d="M11.2 0.2V5.4" stroke="currentColor" strokeWidth="1" />
+                <path
+                  d="M10 2.2L15.2 7.4L13.4 14.4L10 17.8L6.6 14.4L4.8 7.4L10 2.2Z"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinejoin="round"
+                />
+                <circle cx="10" cy="8.1" r="1.6" fill="currentColor" />
+                <path d="M10 9.8V15.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </g>
+            </svg>
           </button>
 
           <button
@@ -425,7 +514,16 @@ function AppShellContent({
             aria-pressed={activeLeftPanel === 'skills'}
             title={t('app.skills')}
           >
-            <span className="activity-icon-skills" aria-hidden="true" />
+            <svg
+              className="activity-icon-skills"
+              viewBox="0 0 20 20"
+              aria-hidden="true"
+              fill="none"
+            >
+              <rect x="2.5" y="2.5" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.6" />
+              <rect x="12" y="2.5" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.6" />
+              <rect x="5" y="11.5" width="10" height="5.5" stroke="currentColor" strokeWidth="1.6" />
+            </svg>
           </button>
 
           <button
@@ -435,7 +533,39 @@ function AppShellContent({
             aria-pressed={activeLeftPanel === 'workflows'}
             title={t('app.workflows')}
           >
-            <span className="activity-icon-workflows" aria-hidden="true" />
+            <svg
+              className="activity-icon-workflows"
+              viewBox="0 0 20 20"
+              aria-hidden="true"
+              fill="none"
+            >
+              <circle cx="5" cy="5" r="2.25" fill="currentColor" />
+              <circle cx="14.5" cy="7.75" r="2.25" fill="currentColor" opacity="0.9" />
+              <circle cx="15" cy="15" r="2.25" fill="currentColor" />
+              <path
+                d="M7.4 5H9.8C11.2 5 12.4 5.7 13.1 6.9"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeDasharray="2.2 2"
+              />
+              <path
+                d="M14.5 9.75V11.8C14.5 13.1 14.7 13.9 15 15"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeDasharray="2.2 2"
+              />
+              <path
+                d="M13.4 13.9L15 15.5L16.6 13.9"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </button>
         </div>
 

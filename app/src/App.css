@@ -231,218 +231,52 @@ button:disabled {
 }
 
 .activity-icon-file {
-  position: relative;
-  width: 16px;
-  height: 20px;
-  border-radius: 3px;
-  border: 1.5px solid currentColor;
-}
-
-.activity-icon-file::before {
-  content: '';
-  position: absolute;
-  top: -1px;
-  right: -1px;
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  background: var(--activity-surface);
-  border-left: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: translate(-1px, 1px) rotate(0deg);
+  width: 18px;
+  height: 18px;
+  display: block;
+  overflow: visible;
 }
 
 .activity-icon-outline {
-  position: relative;
-  width: 16px;
-  height: 16px;
-  box-sizing: border-box;
-  border-radius: 3px;
-  border: 1.5px solid currentColor;
-}
-
-.activity-icon-outline::before,
-.activity-icon-outline::after {
-  content: '';
-  position: absolute;
-  left: 3px;
-  right: 3px;
-  height: 1.5px;
-  border-radius: 999px;
-  background: currentColor;
-}
-
-.activity-icon-outline::before {
-  top: 4px;
-}
-
-.activity-icon-outline::after {
-  top: 9px;
-}
-
-/* PDF 图标：文档形状 + 右下角折角 + 中间横线 */
-.activity-icon-pdf {
-  position: relative;
-  width: 16px;
-  height: 20px;
-  border-radius: 3px;
-  border: 1.5px solid currentColor;
-}
-
-.activity-icon-pdf::before {
-  content: '';
-  position: absolute;
-  top: -1px;
-  right: -1px;
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  background: var(--activity-surface);
-  border-left: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: translate(-1px, 1px) rotate(0deg);
-}
-
-/* PDF 标识：文档中间的横线 */
-.activity-icon-pdf::after {
-  content: '';
-  position: absolute;
-  top: 8px;
-  left: 3px;
-  right: 3px;
-  height: 1.5px;
-  border-radius: 999px;
-  background: rgba(239, 68, 68, 0.9);
-}
-
-/* 会话管理图标：两个叠加的对话气泡 */
-.activity-icon-sessions {
-  position: relative;
   width: 18px;
-  height: 16px;
-}
-
-.activity-icon-sessions::before,
-.activity-icon-sessions::after {
-  content: '';
-  position: absolute;
-  border-radius: 5px;
-  border: 1.5px solid currentColor;
-  background: transparent;
-}
-
-/* 前景气泡 */
-.activity-icon-sessions::before {
-  left: 1px;
-  bottom: 0;
-  width: 11px;
-  height: 9px;
-}
-
-/* 小尾巴 */
-.activity-icon-sessions::after {
-  right: 0;
-  top: 0;
-  width: 9px;
-  height: 7px;
-}
-
-/* 随笔图标：矩形卡片 + 圆点 */
-.activity-icon-notes {
-  position: relative;
-  width: 16px;
   height: 18px;
   display: block;
+  overflow: visible;
 }
 
-.activity-icon-notes::before {
-  content: '';
-  position: absolute;
-  left: 1px;
-  right: 1px;
-  top: 0;
-  bottom: 0;
-  border: 1.5px solid currentColor;
-  border-radius: 3px;
+.activity-icon-pdf {
+  width: 18px;
+  height: 18px;
+  display: block;
+  overflow: visible;
 }
 
-.activity-icon-notes::after {
-  content: '';
-  position: absolute;
-  right: 3px;
-  bottom: 3px;
-  width: 4px;
-  height: 4px;
-  border-radius: 999px;
-  background: currentColor;
+.activity-icon-sessions {
+  width: 18px;
+  height: 18px;
+  display: block;
+  overflow: visible;
+}
+
+.activity-icon-notes {
+  width: 18px;
+  height: 18px;
+  display: block;
+  overflow: visible;
 }
 
 .activity-icon-skills {
-  position: relative;
-  width: 16px;
+  width: 18px;
   height: 18px;
   display: block;
-}
-
-.activity-icon-skills::before,
-.activity-icon-skills::after {
-  content: '';
-  position: absolute;
-  border: 1.5px solid currentColor;
-  border-radius: 3px;
-}
-
-.activity-icon-skills::before {
-  left: 1px;
-  right: 1px;
-  top: 0;
-  bottom: 0;
-}
-
-.activity-icon-skills::after {
-  width: 6px;
-  height: 6px;
-  right: 2px;
-  bottom: 2px;
-  background: transparent;
-  box-shadow:
-    -5px 0 0 -1px currentColor,
-    0 -5px 0 -1px currentColor;
+  overflow: visible;
 }
 
 .activity-icon-workflows {
-  position: relative;
-  width: 16px;
+  width: 18px;
   height: 18px;
   display: block;
-}
-
-.activity-icon-workflows::before,
-.activity-icon-workflows::after {
-  content: '';
-  position: absolute;
-  box-sizing: border-box;
-}
-
-.activity-icon-workflows::before {
-  left: 1px;
-  right: 1px;
-  top: 1px;
-  bottom: 1px;
-  border: 1.5px solid currentColor;
-  border-radius: 3px;
-}
-
-.activity-icon-workflows::after {
-  left: 4px;
-  right: 4px;
-  top: 8px;
-  height: 1.5px;
-  background: currentColor;
-  box-shadow:
-    0 -4px 0 currentColor,
-    0 4px 0 currentColor;
-  border-radius: 999px;
+  overflow: visible;
 }
 
 /* 随笔 Panel */
@@ -723,6 +557,30 @@ button:disabled {
   padding: 12px 14px 18px;
 }
 
+.skills-editor-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.skills-editor-close-btn {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--theme-text-muted);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 8px;
+}
+
+.skills-editor-close-btn:hover {
+  color: var(--theme-text-default);
+  background: var(--theme-component-hover-bg, color-mix(in srgb, var(--theme-surface-panel) 84%, transparent));
+}
+
 .skills-editor-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 420px;
@@ -739,6 +597,7 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-height: 0;
 }
 
 .skills-editor-side {
@@ -774,11 +633,23 @@ button:disabled {
   flex-wrap: wrap;
 }
 
+.skills-markdown-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+
 .skills-markdown-input,
 .skills-script-schema,
 .skills-script-content {
   min-height: 120px;
   resize: vertical;
+}
+
+.skills-markdown-input {
+  min-height: 480px;
+  height: 480px;
 }
 
 .skills-script-content {
