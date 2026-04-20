@@ -2,6 +2,56 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.9.0-alpha] - 2026-04-20
+
+### 中文
+
+本次 Alpha 测试版本标志着 HaoMD **由单一文档编辑器向“智能体增强知识工作站”的跃升**。我们重构了底层模型兼容规范，并引入了全新的技能工作流体系与图文多模态生成能力。鉴于此次核心架构改动较深，特发布为 Alpha 版本以便收集体验反馈并持续优化稳定性。
+
+#### ✨ 新特性 (Alpha)
+
+*   **工作流与技能自动化引擎 (Workflows & Skills)**：
+    *   新增专属的 `SkillsPanel` 技能侧边栏面板，并在 UI 层面增加了对应的触发图标和配置模态框。
+    *   引入了应用级 Web Workflows 运行时架构（并内置多个运行示例）。
+    *   支持“让 AI 帮你写技能 (Skill AI authoring flow)”，允许通过自然语言对话驱动创建定制化工作流，并无缝支持会话状态的跨页面恢复。
+*   **多模态生图接入 (Image Generation)**：
+    *   深度接入 ModelScope（魔搭）模型生态，为编辑器首次引入了文生图等视觉创造能力。
+*   **多模型极客兼容网络 (Universal Model Integration)**：
+    *   核心重构：实现了涵盖底层消息结构、流式传输（Streaming）及复杂背景调度机制的全新 OpenAI API 兼容层。
+    *   新增原生的 Gemini 模型体系适配，确保其在内容生成管线与前端 UI 发送接收逻辑上的完美协同。
+
+#### 🔧 系统改进 与修复
+
+*   **会话路由隔离修复**：修复了在 AI 界面与编辑器跳转期间，AI 聊天持久化路径寻址可能出现的脱离绑定或错位路由问题。
+*   **Rust 工具链稳固**：对后端 Cargo 编译链路显式进行了 `rust-toolchain` 版本锁定，从根源上防止因构建环境不一致导致的跨平台打包报错。
+*   **精简配置负重**：清理并废弃了项目中的冗余 Workspace 旧格式配置项，进一步从基础上缩减了内部调用链路。
+
+---
+
+### English
+
+This Alpha release signifies a major leap for HaoMD—from a standard markdown editor into an **Agent-Enhanced Knowledge Workspace**. We have entirely refactored the model compatibility layer and introduced robust programmatic skills workflows alongside structural multi-modal generation. Given the enormous architectural shifts, this holds an Alpha designation to help refine stability.
+
+#### ✨ New Features (Alpha)
+
+*   **Workflows & Skills Engine**:
+    *   Introduced a dedicated `SkillsPanel` management drawer, complete with activity icons and an interactive skill editor modal.
+    *   Implemented a foundational Workflows runtime natively running tailored automated logic.
+    *   Added a novel "Skill AI Authoring Flow" that enables you to collaborate directly with AI to build custom skills, featuring robust context restoration.
+*   **Image Generation Integrations**:
+    *   Integrated ModelScope into the generation pipeline, bringing text-to-image AI capabilities right inside the editor workflow.
+*   **Universal Model Refactoring**:
+    *   Overhauled the OpenAI compatibility layer with full streaming capability, handling deeper, updated message structures and robust background execution logic.
+    *   Shipped native, verified Gemini integration natively linked to both prompt mechanisms and the UI presentation layers.
+
+#### 🔧 System Refinements & Fixes
+
+*   **Session Persistence Resilience**: Fixed critical routing bugs where AI chat history states could inadvertently break their local persistence bounds during intricate screen transitions.
+*   **Cross-platform Reproducibility**: Explicitly pinned the Rust toolchain version for the Tauri backend to guarantee deterministic, conflict-free compilation runs.
+*   **Configuration Cleanup**: Eliminated legacy workspace configuration artifacts to clean up the project hierarchy and drop runtime ambiguity.
+
+---
+
 ## [v0.8.0] - 2026-04-13
 
 ### 中文
