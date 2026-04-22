@@ -239,7 +239,7 @@ export const zhCNMessages: MessageDictionary = {
   },
   welcome: {
     subtitle:
-      '由 AI 驱动，这个 Markdown 编辑器能够智能优化文本、提供写作建议，并帮助你快速生成结构清晰、格式规范的文档。',
+      '支持 AI 文本创作的 Markdown 编辑器，让内容生成、优化与组织更高效，并支持通过 AI 创建技能与工作流，进一步提升文档生成与内容组织能力。',
     newFile: '新建文件',
     openFile: '打开文件',
     openAiChat: '打开 AI Chat',

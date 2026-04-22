@@ -272,6 +272,7 @@ type DiagramBlockProps = {
 
 // 提取稳定的媒体组件，避免受 foldRegions 变动影响导致视频重刷
 const MarkdownMedia = memo(({ node, filePath, encodeMediaPath, ...props }: any) => {
+  const [loadFailed, setLoadFailed] = useState(false)
   const altText = props.alt || ''
   const widthMatch = /\(([\d.]+(?:px|%|rem|vw))\)$/.exec(altText)
   const maxWidth = widthMatch ? widthMatch[1] : '100%'
@@ -302,6 +303,10 @@ const MarkdownMedia = memo(({ node, filePath, encodeMediaPath, ...props }: any) 
     finalSrc = isWindows ? `https://haomd.localhost${encoded}` : `haomd://localhost${encoded}`
   }
 
+  useEffect(() => {
+    setLoadFailed(false)
+  }, [finalSrc])
+
   const lowerAlt = cleanAlt.toLowerCase()
   const isAudio = lowerAlt === 'audio' || lowerAlt === '音频' || /\.(mp3|wav|m4a|ogg|flac)$/i.test(src)
 
@@ -321,7 +326,33 @@ const MarkdownMedia = memo(({ node, filePath, encodeMediaPath, ...props }: any) 
     return <video controls preload="metadata" poster={posterUrl || undefined} src={finalSrc} style={{ width: maxWidth, maxWidth: '100%', height: 'auto', display: 'block', margin: '0 auto' }}>您的浏览器不支持 video 标签。</video>
   }
 
-  return <img {...props} src={finalSrc} loading="lazy" alt={cleanAlt} style={{ maxWidth, height: 'auto', display: 'block', margin: '0 auto' }} onError={(e) => { const el = e.currentTarget; el.style.opacity = '0.4'; el.style.padding = '12px'; el.style.border = '1px dashed rgba(255,255,255,0.2)'; el.style.borderRadius = '4px'; if (!el.alt) el.alt = '图片加载失败' }} />
+  if (loadFailed) {
+    return (
+      <span
+        style={{
+          maxWidth,
+          minHeight: 56,
+          display: 'block',
+          margin: '0 auto',
+          padding: '12px 14px',
+          borderRadius: 6,
+          border: '1px dashed rgba(255,255,255,0.2)',
+          color: 'var(--theme-text-muted, #8b949e)',
+          background: 'color-mix(in srgb, var(--theme-bg-secondary, #161b22) 76%, transparent)',
+          fontSize: 13,
+          lineHeight: 1.5,
+          boxSizing: 'border-box',
+        }}
+      >
+        <strong style={{ display: 'block', color: 'var(--theme-text-default, #c9d1d9)', marginBottom: 4 }}>
+          图片未找到
+        </strong>
+        <span>{cleanAlt || src || '未提供图片路径'}</span>
+      </span>
+    )
+  }
+
+  return <img {...props} src={finalSrc} loading="lazy" alt={cleanAlt} style={{ maxWidth, height: 'auto', display: 'block', margin: '0 auto' }} onError={() => { setLoadFailed(true) }} />
 })
 
 const DiagramBlock = memo(

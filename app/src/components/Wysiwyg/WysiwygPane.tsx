@@ -400,6 +400,7 @@ function WysiwygEditor({
 
   const editorRef = useRef<Editor | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const initRunIdRef = useRef(0)
   const { themeSettings, resolvedMode } = useThemeContext()
   const isDark = resolvedMode === 'dark'
@@ -448,6 +449,7 @@ function WysiwygEditor({
   onOutlineNavigatorReadyRef.current = onOutlineNavigatorReady
   const onOutlineItemsChangeRef = useRef(onOutlineItemsChange)
   onOutlineItemsChangeRef.current = onOutlineItemsChange
+  const lastOutlineItemsRef = useRef<OutlineHeading[]>([])
 
   const isInternalUpdate = useRef(false)
   const textColorTargetRef = useRef<TextColorTarget | null>(null)
@@ -487,6 +489,30 @@ function WysiwygEditor({
         doc: view.state.doc,
         headingType,
       })
+      const previousItems = lastOutlineItemsRef.current
+      if (previousItems.length === items.length) {
+        let isSame = true
+        for (let index = 0; index < previousItems.length; index += 1) {
+          const previous = previousItems[index]
+          const next = items[index]
+          if (
+            previous.id !== next.id ||
+            previous.text !== next.text ||
+            previous.level !== next.level ||
+            previous.source !== next.source ||
+            previous.line !== next.line ||
+            previous.searchText !== next.searchText ||
+            previous.headingIndex !== next.headingIndex
+          ) {
+            isSame = false
+            break
+          }
+        }
+        if (isSame) {
+          return
+        }
+      }
+      lastOutlineItemsRef.current = items
       onOutlineItemsChangeRef.current?.(items)
     })
   }, [])
@@ -626,6 +652,7 @@ function WysiwygEditor({
     if (!editor || target.headingIndex < 0) return false
 
     const container = containerRef.current
+    const scrollContainer = scrollContainerRef.current
     const headingElements = container?.querySelectorAll<HTMLElement>(
       '.milkdown h1, .milkdown h2, .milkdown h3, .milkdown h4, .milkdown h5, .milkdown h6',
     )
@@ -640,29 +667,31 @@ function WysiwygEditor({
       }) ??
       null
 
-    if (targetHeadingElement && container) {
-      const targetScrollTop = Math.max(
-        0,
-        targetHeadingElement.offsetTop - Math.max(24, Math.round(container.clientHeight * 0.18)),
-      )
-      container.scrollTo({ top: targetScrollTop, behavior: 'auto' })
-
+    if (targetHeadingElement && container && scrollContainer) {
       let didNavigate = false
       editor.action((ctx) => {
         const view = ctx.get(editorViewCtx)
         try {
           const targetPos = view.posAtDOM(targetHeadingElement, 0)
-          const tr = view.state.tr
-            .setSelection(TextSelection.create(view.state.doc, Math.max(1, targetPos + 1)))
-            .scrollIntoView()
+          const tr = view.state.tr.setSelection(
+            TextSelection.create(view.state.doc, Math.max(1, targetPos + 1)),
+          )
           view.dispatch(tr)
           view.focus()
           didNavigate = true
         } catch {
-          targetHeadingElement.scrollIntoView({ block: 'center', behavior: 'auto' })
-          targetHeadingElement.focus?.()
           didNavigate = true
         }
+      })
+
+      const scrollContainerRect = scrollContainer.getBoundingClientRect()
+      const targetRect = targetHeadingElement.getBoundingClientRect()
+      const targetScrollTop =
+        scrollContainer.scrollTop + (targetRect.top - scrollContainerRect.top)
+      const topOffset = Math.max(24, Math.round(scrollContainer.clientHeight * 0.18))
+      scrollContainer.scrollTo({
+        top: Math.max(0, targetScrollTop - topOffset),
+        behavior: 'auto',
       })
       return didNavigate
     }
@@ -749,6 +778,9 @@ function WysiwygEditor({
         const serializer = ctx.get(serializerCtx)
 
         ctx.get(listenerCtx).updated((_ctx, doc, prevDoc) => {
+          if (prevDoc?.eq(doc)) {
+            return
+          }
           if (!hasUserInteractedRef.current) return
 
           if (preserveTextColorTargetOnNextDocChangeRef.current) {
@@ -1016,6 +1048,7 @@ function WysiwygEditor({
         cancelAnimationFrame(outlineEmitFrameRef.current)
         outlineEmitFrameRef.current = null
       }
+      lastOutlineItemsRef.current = []
       onOutlineItemsChangeRef.current?.([])
       onSelectionGetterReadyRef.current?.(null)
       onMarkdownGetterReadyRef.current?.(null)
@@ -1202,7 +1235,7 @@ function WysiwygEditor({
           <div className="wysiwyg-background-overlay" aria-hidden="true" />
         </>
       ) : null}
-      <div className="wysiwyg-scroll">
+      <div ref={scrollContainerRef} className="wysiwyg-scroll">
         {frontMatterBlock ? (
           <section className="wysiwyg-frontmatter-panel">
             <button

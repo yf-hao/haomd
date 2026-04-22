@@ -511,6 +511,34 @@ export function WorkspaceShell({
     wysiwygHeadings: wysiwygOutlineHeadings,
   })
 
+  const handleWysiwygOutlineItemsChange = useCallback((items: OutlineHeading[]) => {
+    setWysiwygOutlineHeadings((prev) => {
+      if (prev.length === items.length) {
+        let isSame = true
+        for (let index = 0; index < prev.length; index += 1) {
+          const current = prev[index]
+          const next = items[index]
+          if (
+            current.id !== next.id ||
+            current.text !== next.text ||
+            current.level !== next.level ||
+            current.source !== next.source ||
+            current.line !== next.line ||
+            current.searchText !== next.searchText ||
+            current.headingIndex !== next.headingIndex
+          ) {
+            isSame = false
+            break
+          }
+        }
+        if (isSame) {
+          return prev
+        }
+      }
+      return items
+    })
+  }, [])
+
   useEffect(() => {
     if (editMode !== 'wysiwyg') {
       setWysiwygOutlineHeadings([])
@@ -2917,9 +2945,7 @@ export function WorkspaceShell({
                           onOutlineNavigatorReady={(navigator) => {
                             wysiwygOutlineNavigatorRef.current = navigator
                           }}
-                          onOutlineItemsChange={(items) => {
-                            setWysiwygOutlineHeadings(items)
-                          }}
+                          onOutlineItemsChange={handleWysiwygOutlineItemsChange}
                           onFormatActionsReady={(actions) => {
                             wysiwygFormatActionsRef.current = actions
                           }}

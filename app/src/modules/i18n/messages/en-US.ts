@@ -239,7 +239,7 @@ export const enUSMessages: MessageDictionary = {
   },
   welcome: {
     subtitle:
-      'Powered by AI, this Markdown editor intelligently optimizes your text, offers smart writing suggestions, and helps you quickly produce well-structured, perfectly formatted documents.',
+      'An AI-assisted Markdown editor that makes content generation, refinement, and organization more efficient, and supports creating Skills and Workflows with AI to further enhance document creation and content organization.',
     newFile: 'New File',
     openFile: 'Open File',
     openAiChat: 'Open AI Chat',

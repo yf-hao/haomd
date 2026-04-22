@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HaoMD - AI 驱动的高性能 Markdown 工作台</title>
+    <meta
+      name="description"
+      content="HaoMD 是基于 Tauri 2、React 与 TypeScript 构建的跨平台 Markdown 编辑器，集成 AI 对话、实时预览、图表渲染、多标签编辑与离线优先体验。"
+    />
+    <meta
+      name="keywords"
+      content="HaoMD, Markdown 编辑器, Tauri, React, AI 写作, Mermaid, KaTeX"
+    />
+    <link rel="icon" type="image/png" href="./assets/logo.png" />
+    <link rel="stylesheet" href="./css/style.css" />
+  </head>
+  <body>
+    <nav class="navbar" id="navbar">
+        <div class="nav-container">
+          <a class="brand" href="#hero" aria-label="HaoMD 首页">
+            <img src="./assets/logo.png" alt="HaoMD 标志" class="brand-logo" />
+            <span class="brand-text">HaoMD</span>
+          </a>
+
+        <div class="nav-menu" id="navMenu">
+          <a href="#features" class="nav-link">核心能力</a>
+          <a href="#preview" class="nav-link">界面预览</a>
+          <a href="#workflow" class="nav-link">工作流</a>
+          <a href="#architecture" class="nav-link">技术架构</a>
+          <a href="#start" class="nav-link">免费下载</a>
+        </div>
+
+        <button class="nav-toggle" id="navToggle" type="button" aria-label="切换菜单">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+      </div>
+    </nav>
+
+    <main>
+      <section class="hero" id="hero">
+        <div class="section-container hero-grid">
+          <div class="hero-copy reveal">
+            <div class="eyebrow">Tauri 2 + React + TypeScript</div>
+            <h1>
+              把编辑、预览、AI 与导出
+              <span>收进同一个 Markdown 工作台</span>
+            </h1>
+            <p class="hero-description">
+              HaoMD 面向需要长期写作、整理知识与交付文档的开发者，提供流畅的大文件编辑、实时预览、AI
+              会话、Mermaid/KaTeX/思维导图渲染，以及桌面端离线优先体验。
+            </p>
+
+            <ul class="hero-highlights">
+              <li>桌面端离线优先体验</li>
+              <li>文档、选区与图片 AI 对话</li>
+              <li>Mermaid / KaTeX / 思维导图一体化</li>
+            </ul>
+
+            <div class="hero-actions">
+              <a class="btn btn-primary" href="#start">免费下载</a>
+              <a
+                class="btn btn-secondary"
+                href="https://github.com/yf-hao/haomd"
+                target="_blank"
+                rel="noreferrer"
+              >
+                查看源码
+              </a>
+            </div>
+          </div>
+
+          <div class="hero-visual reveal">
+            <div class="hero-window">
+              <div class="window-bar">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+              <div class="window-body">
+                <div class="window-sidebar">
+                  <div class="sidebar-pill active">多标签编辑</div>
+                  <div class="sidebar-pill">AI 会话</div>
+                  <div class="sidebar-pill">实时预览</div>
+                  <div class="sidebar-pill">图表渲染</div>
+                </div>
+                <div class="window-panel">
+                  <div class="code-block">
+                    <span># Release Notes</span>
+                    <span>- 实时预览</span>
+                    <span>- Mermaid / KaTeX</span>
+                    <span>- 全局记忆与选区对话</span>
+                    <span>- PDF / HTML 导出</span>
+                  </div>
+                  <div class="preview-card">
+                    <img src="./assets/custom-background.png" alt="HaoMD 自定义背景预览" />
+                  </div>
+                  <div class="window-footer">
+                    <div class="window-metric">
+                      <strong>实时预览</strong>
+                      <span>编辑与结果同步呈现</span>
+                    </div>
+                    <div class="window-metric">
+                      <strong>AI 助手</strong>
+                      <span>基于当前文档直接提问</span>
+                    </div>
+                    <div class="window-metric">
+                      <strong>导出交付</strong>
+                      <span>HTML / PDF / Word 输出，支持模板引擎</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <a class="hero-scroll-cue" href="#features" aria-label="向下浏览更多内容">
+          <span class="hero-scroll-mouse">
+            <span class="hero-scroll-wheel"></span>
+          </span>
+          <span class="hero-scroll-text">向下浏览</span>
+        </a>
+      </section>
+
+      <section class="features" id="features">
+        <div class="section-container">
+          <div class="section-heading reveal">
+            <div class="eyebrow">核心能力</div>
+            <h2>围绕“写、看、问、导出”设计的完整体验</h2>
+            <p>
+              不是单一编辑器，也不是单独的 AI 面板，而是把 Markdown 生产链路整合成一个长期可用的桌面工作台。
+            </p>
+          </div>
+
+          <div class="feature-grid">
+            <article class="feature-card feature-card-wide reveal">
+              <div class="feature-icon">01</div>
+              <div>
+                <h3>高性能编辑器内核</h3>
+                <p>
+                  基于 CodeMirror 6，支持多标签、自动保存、冲突检测与大文档场景，适合长期写作和技术文档维护。
+                </p>
+                <ul>
+                  <li>大文件流畅编辑</li>
+                  <li>分屏实时预览</li>
+                  <li>大纲导航与最近文件</li>
+                </ul>
+              </div>
+            </article>
+
+            <article class="feature-card reveal">
+              <div class="feature-icon">02</div>
+              <h3>AI 深度集成</h3>
+              <p>支持文档对话、选区对话、图片理解、全局记忆和对话压缩，适配多种模型提供商。</p>
+            </article>
+
+            <article class="feature-card reveal">
+              <div class="feature-icon">03</div>
+              <h3>可视化表达</h3>
+              <p>内置 Mermaid、KaTeX、思维导图与多媒体支持，适合技术方案、课程内容和结构化知识梳理。</p>
+            </article>
+
+            <article class="feature-card reveal">
+              <div class="feature-icon">04</div>
+              <h3>跨平台桌面体验</h3>
+              <p>以 Tauri 2 + Rust 为桌面基础，兼顾原生交付体积、系统集成和离线优先体验。</p>
+            </article>
+
+            <article class="feature-card reveal">
+              <div class="feature-icon">05</div>
+              <h3>主题与沉浸感</h3>
+              <p>支持深色模式、主题系统和自定义背景，让编辑器与 AI 面板拥有一致的视觉氛围。</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="preview" id="preview">
+        <div class="section-container">
+          <div class="section-heading reveal">
+            <div class="eyebrow">界面预览</div>
+            <h2>从基础写作到结构化表达，一页看清主工作面</h2>
+          </div>
+
+          <div class="preview-shell reveal">
+            <div class="preview-tabs" role="tablist" aria-label="HaoMD 预览标签">
+              <button class="preview-tab active" data-panel="background" type="button">沉浸背景</button>
+              <button class="preview-tab" data-panel="katex" type="button">数学公式</button>
+              <button class="preview-tab" data-panel="mermaid" type="button">Mermaid</button>
+              <button class="preview-tab" data-panel="mind" type="button">思维导图</button>
+            </div>
+
+            <div class="preview-panels">
+              <article class="preview-panel active" id="panel-background">
+                <img src="./assets/custom-background.png" alt="自定义背景界面" />
+                <div class="preview-copy">
+                  <h3>沉浸式写作环境</h3>
+                  <p>为编辑器和 AI 会话设置统一背景，让长时间创作保持稳定的视觉节奏。</p>
+                </div>
+              </article>
+
+              <article class="preview-panel" id="panel-katex">
+                <img src="./assets/katex.png" alt="KaTeX 数学公式预览" />
+                <div class="preview-copy">
+                  <h3>公式与技术文档并重</h3>
+                  <p>用 Markdown 管理数学表达、教学材料和结构化说明，不必切换到额外工具。</p>
+                </div>
+              </article>
+
+              <article class="preview-panel" id="panel-mermaid">
+                <img src="./assets/mermaid-class.png" alt="Mermaid 图表预览" />
+                <div class="preview-copy">
+                  <h3>图表成为文档的一部分</h3>
+                  <p>流程图、类图和关系图直接和正文共存，适合方案设计、系统说明和团队沟通。</p>
+                </div>
+              </article>
+
+              <article class="preview-panel" id="panel-mind">
+                <img src="./assets/mind-map.png" alt="思维导图预览" />
+                <div class="preview-copy">
+                  <h3>从提纲到知识地图</h3>
+                  <p>快速切换到思维导图视角，帮助梳理复杂主题、课程内容和长篇文档结构。</p>
+                </div>
+              </article>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="workflow" id="workflow">
+        <div class="section-container">
+          <div class="section-heading reveal">
+            <div class="eyebrow">工作流</div>
+            <h2>适合日常开发、知识管理与内容交付的四步流程</h2>
+          </div>
+
+          <div class="timeline">
+            <article class="timeline-item reveal">
+              <span class="timeline-step">1</span>
+              <div>
+                <h3>打开文档与工作区</h3>
+                <p>支持文件、目录与最近项目切换，快速进入当前上下文。</p>
+              </div>
+            </article>
+            <article class="timeline-item reveal">
+              <span class="timeline-step">2</span>
+              <div>
+                <h3>编辑、预览与大纲联动</h3>
+                <p>分屏预览、快捷键与自动保存保持创作过程连续，不打断思路。</p>
+              </div>
+            </article>
+            <article class="timeline-item reveal">
+              <span class="timeline-step">3</span>
+              <div>
+                <h3>让 AI 参与具体上下文</h3>
+                <p>围绕文档、选区和图片发起对话，而不是把内容复制到外部页面。</p>
+              </div>
+            </article>
+            <article class="timeline-item reveal">
+              <span class="timeline-step">4</span>
+              <div>
+                <h3>导出与分享</h3>
+                <p>支持 HTML / PDF 等输出路径，让文档从草稿直接进入交付阶段。</p>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="architecture" id="architecture">
+        <div class="section-container">
+          <div class="section-heading reveal">
+            <div class="eyebrow">技术架构</div>
+            <h2>面向桌面端生产力场景的技术选型</h2>
+          </div>
+
+          <div class="architecture-grid">
+            <article class="stack-card reveal">
+              <h3>前端界面</h3>
+              <p>React 19 + TypeScript + Vite</p>
+              <span>负责编辑器外壳、预览、AI 面板和复杂交互。</span>
+            </article>
+            <article class="stack-card reveal">
+              <h3>桌面底座</h3>
+              <p>Tauri 2 + Rust</p>
+              <span>提供系统能力、文件读写、设置持久化与跨平台分发基础。</span>
+            </article>
+            <article class="stack-card reveal">
+              <h3>文档渲染</h3>
+              <p>CodeMirror 6 / ReactMarkdown / remark / rehype</p>
+              <span>覆盖 Markdown 编辑、实时渲染与扩展语法处理。</span>
+            </article>
+            <article class="stack-card reveal">
+              <h3>增强能力</h3>
+              <p>KaTeX / Mermaid / Mind Elixir / OpenAI SDK</p>
+              <span>把公式、图表、脑图和 AI 能力纳入同一工作流。</span>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="start" id="start">
+        <div class="section-container">
+          <div class="start-card reveal">
+            <div>
+              <div class="eyebrow">立即开始使用</div>
+              <h2>免费下载 HaoMD，按你的系统直接安装</h2>
+              <p>
+                提供 Windows、macOS Intel、macOS Apple Silicon 与 Linux 安装包，下载后即可开始体验
+                AI 驱动的 Markdown 工作流。
+              </p>
+              <div class="download-note">当前版本：v0.9.1 · 多平台安装包已同步发布</div>
+            </div>
+
+            <div class="download-panel">
+              <div class="download-grid">
+                <a
+                  class="download-btn download-btn-primary"
+                  href="https://gitcode.com/yf-hao/haomd/releases/download/v0.9.1/HaoMD_0.9.1_x64-setup.exe"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <span class="download-label">适用于</span>
+                  <span class="download-os">Windows</span>
+                  <span class="download-meta">x64 安装包</span>
+                </a>
+                <a
+                  class="download-btn"
+                  href="https://gitcode.com/yf-hao/haomd/releases/download/v0.9.1/HaoMD_0.9.1_x64.dmg"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <span class="download-label">适用于</span>
+                  <span class="download-os">macOS</span>
+                  <span class="download-meta">Intel x64 .dmg</span>
+                </a>
+                <a
+                  class="download-btn"
+                  href="https://gitcode.com/yf-hao/haomd/releases/download/v0.9.1/HaoMD_0.9.1_aarch64.dmg"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <span class="download-label">适用于</span>
+                  <span class="download-os">macOS</span>
+                  <span class="download-meta">Apple Silicon .dmg</span>
+                </a>
+                <a
+                  class="download-btn"
+                  href="https://gitcode.com/yf-hao/haomd/releases/download/v0.9.1/HaoMD_0.9.1_amd64.deb"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <span class="download-label">适用于</span>
+                  <span class="download-os">Linux</span>
+                  <span class="download-meta">amd64 .deb</span>
+                </a>
+              </div>
+
+              <div class="download-links">
+                <a
+                  href="https://github.com/yf-hao/haomd/releases"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  查看全部版本
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="section-container footer-inner">
+        <div class="footer-brand">
+          <img src="./assets/logo.png" alt="HaoMD 标志" class="footer-logo" />
+          <div class="footer-brand-copy">
+            <strong>HaoMD</strong>
+            <p>AI 驱动的高性能 Markdown 工作台</p>
+          </div>
+        </div>
+        <div class="footer-links">
+          <a href="#features">能力</a>
+          <a href="#preview">预览</a>
+          <a href="#architecture">架构</a>
+          <a href="#start">免费下载</a>
+        </div>
+      </div>
+      <div class="section-container footer-meta">
+        <p>©2026 HaoMD. All rights reserved.</p>
+      </div>
+    </footer>
+
+    <script src="./js/main.js"></script>
+  </body>
+</html>

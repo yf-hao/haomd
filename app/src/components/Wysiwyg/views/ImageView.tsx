@@ -2,7 +2,7 @@
  * Custom image node view for Milkdown WYSIWYG editor.
  * Resolves local file paths to haomd:// protocol URLs.
  */
-import { memo, useMemo } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import { useNodeViewContext } from '@prosemirror-adapter/react'
 
 /**
@@ -56,6 +56,11 @@ export const ImageView = memo(function ImageView({ filePath }: ImageViewProps) {
   const cleanAlt = alt.replace(/\(([\d.]+(?:px|%|rem|vw))\)$/, '').trim()
 
   const resolvedSrc = useMemo(() => resolveImageSrc(src, filePath), [src, filePath])
+  const [loadFailed, setLoadFailed] = useState(false)
+
+  useEffect(() => {
+    setLoadFailed(false)
+  }, [resolvedSrc])
 
   // Detect audio/video by alt or extension
   const lowerAlt = cleanAlt.toLowerCase()
@@ -82,6 +87,34 @@ export const ImageView = memo(function ImageView({ filePath }: ImageViewProps) {
     )
   }
 
+  if (loadFailed) {
+    return (
+      <span className={`wysiwyg-image ${selected ? 'selected' : ''}`} contentEditable={false}>
+        <span
+          style={{
+            maxWidth: maxWidth || '100%',
+            minHeight: 56,
+            display: 'block',
+            margin: '0 auto',
+            padding: '12px 14px',
+            borderRadius: 6,
+            border: '1px dashed rgba(255,255,255,0.2)',
+            color: 'var(--theme-text-muted, #8b949e)',
+            background: 'color-mix(in srgb, var(--theme-bg-secondary, #161b22) 76%, transparent)',
+            fontSize: 13,
+            lineHeight: 1.5,
+            boxSizing: 'border-box',
+          }}
+        >
+          <strong style={{ display: 'block', color: 'var(--theme-text-default, #c9d1d9)', marginBottom: 4 }}>
+            图片未找到
+          </strong>
+          <span>{cleanAlt || src || '未提供图片路径'}</span>
+        </span>
+      </span>
+    )
+  }
+
   return (
     <span className={`wysiwyg-image ${selected ? 'selected' : ''}`} contentEditable={false}>
       <img
@@ -96,13 +129,8 @@ export const ImageView = memo(function ImageView({ filePath }: ImageViewProps) {
           margin: '0 auto',
           borderRadius: 4,
         }}
-        onError={(e) => {
-          const el = e.currentTarget
-          el.style.opacity = '0.4'
-          el.style.padding = '12px'
-          el.style.border = '1px dashed rgba(255,255,255,0.2)'
-          el.style.borderRadius = '4px'
-          if (!el.alt) el.alt = '图片加载失败'
+        onError={() => {
+          setLoadFailed(true)
         }}
       />
     </span>
