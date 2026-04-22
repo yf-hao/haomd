@@ -4,6 +4,8 @@ export type OutlineItem = {
   text: string
   line: number
   searchText: string // 用于精确定位的搜索文本
+  source?: 'markdown' | 'wysiwyg'
+  headingIndex?: number
   children?: OutlineItem[] // 子节点
 }
 

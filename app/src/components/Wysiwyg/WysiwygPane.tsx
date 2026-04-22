@@ -39,6 +39,8 @@ import { normalizeCodeBlockLanguage } from './codeLanguage'
 import { BlockCacheManager } from './blockCache'
 import { composeMarkdownWithFrontMatter } from '../../modules/markdown/frontMatter'
 import { onNativePaste } from '../../modules/platform/clipboardEvents'
+import { buildHeadingsFromWysiwygDoc } from '../../modules/outline/wysiwygOutline'
+import type { OutlineHeading } from '../../modules/outline/outlineSource'
 import './WysiwygPane.css'
 
 export interface WysiwygPaneProps {
@@ -53,6 +55,7 @@ export interface WysiwygPaneProps {
   onFormatActionsReady?: (actions: WysiwygFormatActions | null) => void
   onMarkdownGetterReady?: (getter: (() => string) | null) => void
   onOutlineNavigatorReady?: (navigator: ((target: { headingIndex: number; text: string; level: 1 | 2 | 3 | 4 | 5 | 6 }) => boolean) | null) => void
+  onOutlineItemsChange?: (items: OutlineHeading[]) => void
   onRequestTextColorDialog?: (() => void) | null
   /** Called with a flush function when the editor mounts, null on unmount.
    *  Calling flush() synchronously serializes the current ProseMirror doc
@@ -223,6 +226,7 @@ function PlainTextWysiwyg({
   onFormatActionsReady,
   onMarkdownGetterReady,
   onOutlineNavigatorReady,
+  onOutlineItemsChange,
   onRequestTextColorDialog,
 }: WysiwygPaneProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -275,6 +279,11 @@ function PlainTextWysiwyg({
     onOutlineNavigatorReady?.(null)
     return () => onOutlineNavigatorReady?.(null)
   }, [onOutlineNavigatorReady])
+
+  useEffect(() => {
+    onOutlineItemsChange?.([])
+    return () => onOutlineItemsChange?.([])
+  }, [onOutlineItemsChange])
 
   useEffect(() => {
     const getter = () => composeMarkdownWithFrontMatter(frontMatterBlock, textareaRef.current?.value ?? value)
@@ -362,6 +371,7 @@ function WysiwygEditor({
   onFormatActionsReady,
   onMarkdownGetterReady,
   onOutlineNavigatorReady,
+  onOutlineItemsChange,
   onRequestTextColorDialog,
   onFlushReady,
   onDirty,
@@ -382,6 +392,7 @@ function WysiwygEditor({
         onSelectionGetterReady={onSelectionGetterReady}
         onMarkdownGetterReady={onMarkdownGetterReady}
         onOutlineNavigatorReady={onOutlineNavigatorReady}
+        onOutlineItemsChange={onOutlineItemsChange}
         onRequestTextColorDialog={onRequestTextColorDialog}
       />
     )
@@ -435,6 +446,8 @@ function WysiwygEditor({
   onFormatActionsReadyRef.current = onFormatActionsReady
   const onOutlineNavigatorReadyRef = useRef(onOutlineNavigatorReady)
   onOutlineNavigatorReadyRef.current = onOutlineNavigatorReady
+  const onOutlineItemsChangeRef = useRef(onOutlineItemsChange)
+  onOutlineItemsChangeRef.current = onOutlineItemsChange
 
   const isInternalUpdate = useRef(false)
   const textColorTargetRef = useRef<TextColorTarget | null>(null)
@@ -444,6 +457,7 @@ function WysiwygEditor({
   const hasUserInteractedRef = useRef(false)
   const idleCallbackRef = useRef<IdleHandle | null>(null)
   const delayedSyncTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null)
+  const outlineEmitFrameRef = useRef<number | null>(null)
 
   // Block-level incremental serialization cache
   const blockCacheRef = useRef(new BlockCacheManager())
@@ -461,6 +475,31 @@ function WysiwygEditor({
   const getCurrentMarkdown = useCallback(() => {
     return composeMarkdownWithFrontMatter(frontMatterBlockRef.current, getCurrentMarkdownBody())
   }, [getCurrentMarkdownBody])
+
+  const emitOutlineItems = useCallback(() => {
+    const editor = editorRef.current
+    if (!editor) return
+
+    editor.action((ctx) => {
+      const view = ctx.get(editorViewCtx)
+      const headingType = headingSchema.type(ctx)
+      const items = buildHeadingsFromWysiwygDoc({
+        doc: view.state.doc,
+        headingType,
+      })
+      onOutlineItemsChangeRef.current?.(items)
+    })
+  }, [])
+
+  const scheduleOutlineEmit = useCallback(() => {
+    if (outlineEmitFrameRef.current !== null) {
+      cancelAnimationFrame(outlineEmitFrameRef.current)
+    }
+    outlineEmitFrameRef.current = requestAnimationFrame(() => {
+      outlineEmitFrameRef.current = null
+      emitOutlineItems()
+    })
+  }, [emitOutlineItems])
 
   const getEffectiveTextColorTarget = useCallback((from: number, to: number): TextColorTarget | null => {
     if (!docKey) return null
@@ -728,6 +767,7 @@ function WysiwygEditor({
             // Use incremental serialization: only re-serialize changed blocks
             incrementalSerializeAndPush(doc, prevDoc, serializer)
           }, 2000)
+          scheduleOutlineEmit()
         })
       })
       .use(commonmark)
@@ -762,6 +802,7 @@ function WysiwygEditor({
       const ser = ctx.get(serializerCtx)
       blockCacheRef.current.buildFull(view.state.doc, ser)
     })
+    emitOutlineItems()
   }, [scheduleDelayedSync, serializeAndPush, incrementalSerializeAndPush])
 
   useEffect(() => {
@@ -971,6 +1012,11 @@ function WysiwygEditor({
         flushPending()
       }
       hasUserInteractedRef.current = false
+      if (outlineEmitFrameRef.current !== null) {
+        cancelAnimationFrame(outlineEmitFrameRef.current)
+        outlineEmitFrameRef.current = null
+      }
+      onOutlineItemsChangeRef.current?.([])
       onSelectionGetterReadyRef.current?.(null)
       onMarkdownGetterReadyRef.current?.(null)
       onFormatActionsReadyRef.current?.(null)

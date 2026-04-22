@@ -23,8 +23,10 @@ import { WorkflowsPanel } from './WorkflowsPanel'
 import { SidebarBackgroundShell } from './SidebarBackgroundShell'
 import { Welcome } from './Welcome'
 import { SearchBar } from './Editor/SearchBar'
-import { useOutline } from '../hooks/useOutline'
+import { useOutlineModel } from '../hooks/useOutlineModel'
 import type { OutlineItem } from '../modules/outline/parser'
+import type { OutlineHeading } from '../modules/outline/outlineSource'
+import { getMarkdownOutlineFallbackTarget, getWysiwygOutlineNavigationTarget } from '../modules/outline/outlineNavigation'
 import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout'
 import { AiChatCommandBridgeContext } from '../modules/ai/ui/AiChatCommandBridgeContext'
 import type { AiChatSessionKey } from '../modules/ai/application/aiChatSessionService'
@@ -210,6 +212,7 @@ export function WorkspaceShell({
     }
   }, [editorZoom])
   const [activeOutlineId, setActiveOutlineId] = useState<string | null>(null)
+  const [wysiwygOutlineHeadings, setWysiwygOutlineHeadings] = useState<OutlineHeading[]>([])
   const [isCreatingTab, setIsCreatingTab] = useState(false)
   const [foldRegions, setFoldRegions] = useState<{ fromLine: number; toLine: number }[]>([])
   const [inlineNewFileDir, setInlineNewFileDir] = useState<string | null>(null)
@@ -502,18 +505,21 @@ export function WorkspaceShell({
     return view.state.doc.sliceString(view.state.selection.main.from, view.state.selection.main.to)
   }, [editMode, isPdfActive, previewSelectionText])
 
-  const outlineItems = useOutline(markdown)
-  const flatOutlineItems = useMemo(() => {
-    const flattened: OutlineItem[] = []
-    const visit = (items: OutlineItem[]) => {
-      for (const item of items) {
-        flattened.push(item)
-        if (item.children?.length) visit(item.children)
-      }
+  const outlineItems = useOutlineModel({
+    mode: editMode,
+    markdown,
+    wysiwygHeadings: wysiwygOutlineHeadings,
+  })
+
+  useEffect(() => {
+    if (editMode !== 'wysiwyg') {
+      setWysiwygOutlineHeadings([])
     }
-    visit(outlineItems)
-    return flattened
-  }, [outlineItems])
+  }, [editMode])
+
+  useEffect(() => {
+    setWysiwygOutlineHeadings([])
+  }, [activeId])
 
   const [confirmDialog, setConfirmDialog] = useState<any>(null)
   const [searchPrefillText, setSearchPrefillText] = useState('')
@@ -2430,19 +2436,16 @@ export function WorkspaceShell({
   const handleOutlineSelect = useCallback((item: OutlineItem) => {
     setActiveOutlineId(item.id)
     if (effectiveLayout === 'preview-only') setLayout('preview-left')
-    if (editModeRef.current === 'wysiwyg') {
-      const headingIndex = flatOutlineItems.findIndex((outlineItem) => outlineItem.id === item.id)
-      const didNavigate = headingIndex >= 0
-        ? wysiwygOutlineNavigatorRef.current?.({
-            headingIndex,
-            text: item.text,
-            level: item.level,
-          })
-        : false
+    const wysiwygTarget = getWysiwygOutlineNavigationTarget(item)
+    if (editModeRef.current === 'wysiwyg' && wysiwygTarget) {
+      const didNavigate = wysiwygOutlineNavigatorRef.current?.(wysiwygTarget)
       if (didNavigate) return
     }
-    focusEditorOnGlobalLine(item.line, item.searchText)
-  }, [effectiveLayout, flatOutlineItems, setLayout, focusEditorOnGlobalLine])
+    const markdownTarget = getMarkdownOutlineFallbackTarget(item)
+    if (markdownTarget) {
+      focusEditorOnGlobalLine(markdownTarget.line, markdownTarget.searchText)
+    }
+  }, [effectiveLayout, setLayout, focusEditorOnGlobalLine])
 
   const handleTabSaveAndClose = useCallback(async (id: string) => {
     const isActive = id === activeId
@@ -2913,6 +2916,9 @@ export function WorkspaceShell({
                           }}
                           onOutlineNavigatorReady={(navigator) => {
                             wysiwygOutlineNavigatorRef.current = navigator
+                          }}
+                          onOutlineItemsChange={(items) => {
+                            setWysiwygOutlineHeadings(items)
                           }}
                           onFormatActionsReady={(actions) => {
                             wysiwygFormatActionsRef.current = actions
