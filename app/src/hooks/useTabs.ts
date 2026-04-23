@@ -1,11 +1,12 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { UNTITLED_FILE_PATH } from '../modules/files/filePathState'
 import type { EditorTab } from '../types/tabs'
 
 export type UseTabsOptions = {
   onRequestCloseCurrentTab?: () => void
 }
 
-const DEFAULT_UNTITLED = 'untitled'
+const DEFAULT_UNTITLED = UNTITLED_FILE_PATH
 
 function deriveTitleFromPath(path: string): string {
   if (!path) return DEFAULT_UNTITLED

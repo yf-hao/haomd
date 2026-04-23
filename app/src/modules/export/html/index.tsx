@@ -104,18 +104,28 @@ export async function exportToHtml(ctx: any) {
       return false
     }
 
-    // 2. 准备内容
+    return exportToHtmlAtPath(ctx, savePath)
+  } catch (error) {
+    console.error('[Export] 导出失败:', error)
+    ctx.setStatusMessage(tr('export.htmlFailed', '导出失败: ' + (error as Error).message, { message: (error as Error).message }))
+    return false
+  }
+}
+
+export async function exportToHtmlAtPath(ctx: any, outputPath: string) {
+  const tr = (key: string, fallback: string, params?: Record<string, string | number>) =>
+    ctx.t?.(key, params) ?? fallback
+  try {
     const { fullHtml } = await prepareExportHtmlContents(ctx)
 
-    // 3. 写入文件
     ctx.setStatusMessage(tr('export.htmlSaving', '正在保存到磁盘...'))
-    const writeResult = await writeFileNoRecent({ path: savePath, content: fullHtml })
+    const writeResult = await writeFileNoRecent({ path: outputPath, content: fullHtml })
     if (!writeResult.ok) {
       throw new Error(writeResult.error?.message || '文件写入失败')
     }
 
-    console.log('[Export] 导出完成:', savePath)
-    ctx.setStatusMessage(tr('export.htmlSuccess', `导出成功: ${savePath}`, { path: savePath }))
+    console.log('[Export] 导出完成:', outputPath)
+    ctx.setStatusMessage(tr('export.htmlSuccess', `导出成功: ${outputPath}`, { path: outputPath }))
     return true
   } catch (error) {
     console.error('[Export] 导出失败:', error)

@@ -1,7 +1,7 @@
 import type { FC, FormEvent, KeyboardEvent } from 'react'
 import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ChatEntryMode, EntryContext } from '../domain/chatSession'
-import { getDirKeyFromDocPath } from '../domain/docPathUtils'
+import { getDirKeyFromDocPath, normalizePersistableDocPath } from '../domain/docPathUtils'
 import type { AiChatSessionKey } from '../application/aiChatSessionService'
 import { useAiChatSession } from './hooks/useAiChatSession'
 import { getAiInputHistory, appendAiInputHistory } from '../application/localStorageAiChatInputHistory'
@@ -34,13 +34,10 @@ import { saveImageGenerationToNotes } from '../agents/imageGeneration/imageGener
 const EMPTY_MESSAGES = [] as const
 const AI_CHAT_AGENT_STORAGE_KEY = 'haomd_ai_chat_selected_agent_id'
 const EMPTY_AGENT_OPTION = { id: '', name: 'Agent' }
+const DOC_PATH_SWITCH_DELAY_MS = 800
 
-function resolveAiChatDocPath(currentFilePath?: string | null): string | undefined {
-  if (!currentFilePath) {
-    return undefined
-  }
-
-  const normalized = currentFilePath.replace(/\\/g, '/').trim()
+function resolveAiChatDocPath(currentPath?: string | null): string | undefined {
+  const normalized = normalizePersistableDocPath(currentPath)
   if (!normalized) {
     return undefined
   }
@@ -60,13 +57,35 @@ export interface AiChatPaneProps {
   initialContext?: EntryContext
   onClose: () => void
   currentFilePath?: string | null
+  currentFolderPath?: string | null
+  getCurrentMarkdown?: () => string
+  getCurrentFileName?: () => string | null
+  getCurrentFilePath?: () => string | null
+  onDocumentSaved?: (path: string) => void
+  setStatusMessage?: (message: string) => void
+  t?: (key: string, params?: Record<string, string | number>) => string
   /** 触发 AI 操作的编辑器标签 ID，用于避免内容串到其他标签 */
   sourceTabId?: string | null
   /** Full-page mode: centered input when empty, messages above input when not */
   fullPage?: boolean
 }
 
-export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initialContext, onClose, currentFilePath, sourceTabId, fullPage = false }) => {
+export const AiChatPane: FC<AiChatPaneProps> = ({
+  sessionKey,
+  entryMode,
+  initialContext,
+  onClose,
+  currentFilePath,
+  currentFolderPath,
+  getCurrentMarkdown,
+  getCurrentFileName,
+  getCurrentFilePath,
+  onDocumentSaved,
+  setStatusMessage,
+  t,
+  sourceTabId,
+  fullPage = false,
+}) => {
   const { themeSettings } = useThemeContext()
   const [input, setInput] = useState('')
   const [contextPrefix, setContextPrefix] = useState<string | null>(null)
@@ -96,6 +115,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
   const historyCursorRef = useRef<number | null>(null)
   const [, setHistoryCursor] = useState<number | null>(null)
   const docPathStabilizeTimerRef = useRef<number | null>(null)
+  const previousBusyRef = useRef(false)
 
   const autoResizeInput = () => {
     const el = inputRef.current
@@ -111,39 +131,14 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
     setHistoryCursor(null)
   }
 
-  const rawDocPath = resolveAiChatDocPath(currentFilePath)
+  const rawDocPath = resolveAiChatDocPath(currentFolderPath ?? currentFilePath)
   const isPersistedSession = sessionKey.startsWith('session:')
   const [stableDocPath, setStableDocPath] = useState<string | undefined>(() =>
     isPersistedSession ? rawDocPath : undefined,
   )
   const [docPathReady, setDocPathReady] = useState<boolean>(() => isPersistedSession)
-
-  useEffect(() => {
-    if (docPathStabilizeTimerRef.current != null) {
-      window.clearTimeout(docPathStabilizeTimerRef.current)
-      docPathStabilizeTimerRef.current = null
-    }
-
-    if (isPersistedSession) {
-      setStableDocPath(rawDocPath)
-      setDocPathReady(true)
-      return
-    }
-
-    setDocPathReady(false)
-    docPathStabilizeTimerRef.current = window.setTimeout(() => {
-      setStableDocPath(rawDocPath)
-      setDocPathReady(true)
-      docPathStabilizeTimerRef.current = null
-    }, 0)
-
-    return () => {
-      if (docPathStabilizeTimerRef.current != null) {
-        window.clearTimeout(docPathStabilizeTimerRef.current)
-        docPathStabilizeTimerRef.current = null
-      }
-    }
-  }, [rawDocPath, isPersistedSession, sessionKey])
+  const [docPathFreezeUntil, setDocPathFreezeUntil] = useState<number>(0)
+  const [docConversationReloadToken, setDocConversationReloadToken] = useState(0)
 
   const effectiveDocPath = isPersistedSession ? undefined : stableDocPath
   const historyDirectoryKey = stableDocPath ?? rawDocPath ?? sessionKey ?? '/'
@@ -176,8 +171,68 @@ export const AiChatPane: FC<AiChatPaneProps> = ({ sessionKey, entryMode, initial
     open: isPersistedSession || docPathReady,
     selectedAgentId: activeAgentMode === 'chat' ? activeAgentId : null,
     docPath: effectiveDocPath,
-    legacyDocPath: currentFilePath ?? undefined,
+    legacyDocPath: normalizePersistableDocPath(currentFilePath),
+    getCurrentMarkdown,
+    getCurrentFileName,
+    getCurrentFilePath,
+    onDocumentSaved,
+    setStatusMessage,
+    t,
+    restartToken: docConversationReloadToken,
   })
+
+  const isBusy = loading || !!state?.viewMessages.some((message) => message.streaming)
+
+  useEffect(() => {
+    if (isPersistedSession) return
+    if (previousBusyRef.current && !isBusy) {
+      setDocPathFreezeUntil(Date.now() + DOC_PATH_SWITCH_DELAY_MS)
+    }
+    previousBusyRef.current = isBusy
+  }, [isBusy, isPersistedSession])
+
+  useEffect(() => {
+    if (docPathStabilizeTimerRef.current != null) {
+      window.clearTimeout(docPathStabilizeTimerRef.current)
+      docPathStabilizeTimerRef.current = null
+    }
+
+    if (isPersistedSession) {
+      setStableDocPath(rawDocPath)
+      setDocPathReady(true)
+      return
+    }
+
+    const now = Date.now()
+    const remainingFreeze = Math.max(0, docPathFreezeUntil - now)
+    if (isBusy || remainingFreeze > 0) {
+      setDocPathReady(false)
+      if (!isBusy && remainingFreeze > 0) {
+        docPathStabilizeTimerRef.current = window.setTimeout(() => {
+          setStableDocPath(rawDocPath)
+          setDocPathReady(true)
+          setDocConversationReloadToken((prev) => prev + 1)
+          docPathStabilizeTimerRef.current = null
+        }, remainingFreeze)
+      }
+      return
+    }
+
+    setDocPathReady(false)
+    docPathStabilizeTimerRef.current = window.setTimeout(() => {
+      setStableDocPath(rawDocPath)
+      setDocPathReady(true)
+      setDocConversationReloadToken((prev) => prev + 1)
+      docPathStabilizeTimerRef.current = null
+    }, 0)
+
+    return () => {
+      if (docPathStabilizeTimerRef.current != null) {
+        window.clearTimeout(docPathStabilizeTimerRef.current)
+        docPathStabilizeTimerRef.current = null
+      }
+    }
+  }, [rawDocPath, isPersistedSession, sessionKey, isBusy, docPathFreezeUntil])
 
   useEffect(() => {
     const el = inputRef.current

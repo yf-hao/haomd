@@ -1,7 +1,11 @@
-export function getDirKeyFromDocPath(docPath?: string | null): string | undefined {
-  if (!docPath) return undefined
+import { normalizePersistableFilePath } from '../../files/filePathState'
 
-  const normalized = docPath.replace(/\\/g, '/').trim()
+export function normalizePersistableDocPath(docPath?: string | null): string | undefined {
+  return normalizePersistableFilePath(docPath) ?? undefined
+}
+
+export function getDirKeyFromDocPath(docPath?: string | null): string | undefined {
+  const normalized = normalizePersistableDocPath(docPath)
   if (!normalized) return undefined
 
   const idx = normalized.lastIndexOf('/')

@@ -2,7 +2,7 @@ import type { FC, FormEvent, KeyboardEvent, MouseEventHandler, MouseEvent as Rea
 import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { getAiChatUiSettings } from '../../settings/editorSettings'
 import type { ChatEntryMode, ChatMessageView, EntryContext } from '../domain/chatSession'
-import { getDirKeyFromDocPath } from '../domain/docPathUtils'
+import { getDirKeyFromDocPath, normalizePersistableDocPath } from '../domain/docPathUtils'
 import { AiChatBody } from './AiChatBody'
 import { useAiChatSession } from './hooks/useAiChatSession'
 import { getAiInputHistory, appendAiInputHistory } from '../application/localStorageAiChatInputHistory'
@@ -32,6 +32,7 @@ import { saveImageGenerationToNotes } from '../agents/imageGeneration/imageGener
 const EMPTY_MESSAGES: ChatMessageView[] = []
 const AI_CHAT_AGENT_STORAGE_KEY = 'haomd_ai_chat_selected_agent_id'
 const EMPTY_AGENT_OPTION = { id: '', name: 'Agent' }
+const DOC_PATH_SWITCH_DELAY_MS = 800
 
 export type AiChatDialogProps = {
   open: boolean
@@ -39,13 +40,34 @@ export type AiChatDialogProps = {
   initialContext?: EntryContext
   onClose: () => void
   currentFilePath?: string | null
+  currentFolderPath?: string | null
+  getCurrentMarkdown?: () => string
+  getCurrentFileName?: () => string | null
+  getCurrentFilePath?: () => string | null
+  onDocumentSaved?: (path: string) => void
+  setStatusMessage?: (message: string) => void
+  t?: (key: string, params?: Record<string, string | number>) => string
   /**
    * 用于在本地持久化与恢复会话的 key，一般为 tabId。
    */
   tabId: string
 }
 
-export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialContext, onClose, currentFilePath, tabId }) => {
+export const AiChatDialog: FC<AiChatDialogProps> = ({
+  open,
+  entryMode,
+  initialContext,
+  onClose,
+  currentFilePath,
+  currentFolderPath,
+  getCurrentMarkdown,
+  getCurrentFileName,
+  getCurrentFilePath,
+  onDocumentSaved,
+  setStatusMessage,
+  t,
+  tabId,
+}) => {
   const { themeSettings } = useThemeContext()
   const [input, setInput] = useState('')
   const [contextPrefix, setContextPrefix] = useState<string | null>(null)
@@ -68,6 +90,8 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
   const [, setHistoryCursor] = useState<number | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const messagesContainerRef = useRef<HTMLDivElement | null>(null)
+  const docPathStabilizeTimerRef = useRef<number | null>(null)
+  const previousBusyRef = useRef(false)
   const selectedAgent = agents.find((agent) => agent.id === activeAgentId) ?? null
   const activeAgentMode = selectedAgent?.kind === 'image_generation' ? 'image_generation' : 'chat'
 
@@ -85,7 +109,13 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     setHistoryCursor(null)
   }
 
-  const dirKey = currentFilePath ? getDirKeyFromDocPath(currentFilePath) : undefined
+  const persistableFilePath = normalizePersistableDocPath(currentFilePath)
+  const rawDocPath = normalizePersistableDocPath(currentFolderPath) ?? (persistableFilePath ? getDirKeyFromDocPath(persistableFilePath) : undefined)
+  const [stableDocPath, setStableDocPath] = useState<string | undefined>(rawDocPath)
+  const [docPathReady, setDocPathReady] = useState<boolean>(open)
+  const [docPathFreezeUntil, setDocPathFreezeUntil] = useState<number>(0)
+  const [docConversationReloadToken, setDocConversationReloadToken] = useState(0)
+  const activeDirectoryKey = stableDocPath ?? rawDocPath
 
   const {
     loading,
@@ -110,11 +140,69 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
     sessionKey: tabId,
     entryMode,
     initialContext,
-    open,
+    open: open && docPathReady,
     selectedAgentId: activeAgentMode === 'chat' ? activeAgentId : null,
-    docPath: dirKey,
-    legacyDocPath: currentFilePath ?? undefined,
+    docPath: stableDocPath,
+    legacyDocPath: persistableFilePath,
+    getCurrentMarkdown,
+    getCurrentFileName,
+    getCurrentFilePath,
+    onDocumentSaved,
+    setStatusMessage,
+    t,
+    restartToken: docConversationReloadToken,
   })
+
+  const isBusy = loading || !!state?.viewMessages.some((message) => message.streaming)
+
+  useEffect(() => {
+    if (previousBusyRef.current && !isBusy) {
+      setDocPathFreezeUntil(Date.now() + DOC_PATH_SWITCH_DELAY_MS)
+    }
+    previousBusyRef.current = isBusy
+  }, [isBusy])
+
+  useEffect(() => {
+    if (docPathStabilizeTimerRef.current != null) {
+      window.clearTimeout(docPathStabilizeTimerRef.current)
+      docPathStabilizeTimerRef.current = null
+    }
+
+    if (!open) {
+      setDocPathReady(false)
+      return
+    }
+
+    const now = Date.now()
+    const remainingFreeze = Math.max(0, docPathFreezeUntil - now)
+    if (isBusy || remainingFreeze > 0) {
+      setDocPathReady(false)
+      if (!isBusy && remainingFreeze > 0) {
+        docPathStabilizeTimerRef.current = window.setTimeout(() => {
+          setStableDocPath(rawDocPath)
+          setDocPathReady(true)
+          setDocConversationReloadToken((prev) => prev + 1)
+          docPathStabilizeTimerRef.current = null
+        }, remainingFreeze)
+      }
+      return
+    }
+
+    setDocPathReady(false)
+    docPathStabilizeTimerRef.current = window.setTimeout(() => {
+      setStableDocPath(rawDocPath)
+      setDocPathReady(true)
+      setDocConversationReloadToken((prev) => prev + 1)
+      docPathStabilizeTimerRef.current = null
+    }, 0)
+
+    return () => {
+      if (docPathStabilizeTimerRef.current != null) {
+        window.clearTimeout(docPathStabilizeTimerRef.current)
+        docPathStabilizeTimerRef.current = null
+      }
+    }
+  }, [open, rawDocPath, isBusy, docPathFreezeUntil])
 
   useEffect(() => {
     if (!open) {
@@ -301,7 +389,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
 
   const doSend = async () => {
     const contentToSend = input
-    const directoryKey = dirKey ?? '/'
+    const directoryKey = activeDirectoryKey ?? '/'
 
     if (activeAgentMode === 'image_generation') {
       const prompt = contentToSend.trim()
@@ -398,12 +486,12 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
 
     const handled = await tryHandleSlashCommand(contentToSend, {
       // slash 命令与文档会话保持一致：按目录共享会话
-      docPath: dirKey,
+      docPath: activeDirectoryKey,
       runAppCommand: commandBridge?.runAppCommand,
       showModal: (message: string) => setSlashModalMessage(message),
       getRecentMessagesForDigest: getRecentMessagesForDigest,
       openHistoryDialog: ({ docPath }) => {
-        const key = docPath ?? dirKey ?? '/'
+        const key = docPath ?? activeDirectoryKey ?? '/'
         setHistoryDialogDirKey(key)
         setHistoryDialogOpen(true)
         setHistoryRecallEnabled(true)
@@ -462,7 +550,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({ open, entryMode, initialCo
       if (!isHistoryMode && input.trim().length > 0) {
         // 非历史模式且当前输入非空：不进入历史浏览，交给默认光标逻辑
       } else {
-        const directoryKey = dirKey ?? '/'
+        const directoryKey = activeDirectoryKey ?? '/'
         const historyList = getAiInputHistory(directoryKey)
         if (historyList.length === 0) return
 

@@ -78,6 +78,8 @@ import { extractFrontMatter } from '../modules/markdown/frontMatter'
 import { MAX_RECENT_TEXT_COLORS, RECENT_TEXT_COLORS_STORAGE_KEY } from '../modules/editor/textColorPalette'
 import { createTextColorTarget, isTextColorTargetActive, type TextColorTarget } from '../modules/editor/textColorTarget'
 import { setWorkspaceMountedRoots } from '../modules/workspace/workspaceMountedRoots'
+import { setActiveWorkspaceDirectory } from '../modules/workspace/workspaceActiveDirectory'
+import { isTransientFilePath } from '../modules/files/filePathState'
 import type { WysiwygFormatActions } from './Wysiwyg/WysiwygPane'
 // 改为从内部动态加载，优化编辑性能
 // import { exportToHtml } from '../modules/export/html'
@@ -172,6 +174,7 @@ export function WorkspaceShell({
   // 预览专用的行号：对 activeLine 做轻量节流后再驱动 Preview，降低重渲染频率
   const [previewActiveLine, setPreviewActiveLine] = useState(1)
   const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null)
+  const [activeWorkspaceDirectoryPath, setActiveWorkspaceDirectoryPath] = useState<string | null>(null)
   const markdownRef = useRef(markdown)
   const lastActiveIdForPreviewRef = useRef<string | null>(null)
   const textColorTargetRef = useRef<TextColorTarget | null>(null)
@@ -639,6 +642,13 @@ export function WorkspaceShell({
     setWorkspaceMountedRoots(sidebar.folderRoots)
   }, [sidebar.folderRoots])
 
+  useEffect(() => {
+    setActiveWorkspaceDirectory(activeWorkspaceDirectoryPath)
+    return () => {
+      setActiveWorkspaceDirectory(null)
+    }
+  }, [activeWorkspaceDirectoryPath])
+
   // 如果当前激活标签对应的文件曾经是“从文件分组收编”的高亮文件，则视为已访问，移除高亮
   useEffect(() => {
     const path = activeTab?.path
@@ -796,7 +806,6 @@ export function WorkspaceShell({
   // - Markdown 标签：使用当前文本文件的路径（filePath）
   // - PDF 标签：使用当前激活的 PDF 文件路径（activePdfPath）
   const aiChatFilePath = isPdfActive ? activePdfPath : filePath
-  const aiChatContextPath = selectedFolderPath ?? aiChatFilePath
 
   // 统一决定编辑器里展示的内容：
   // - Markdown 标签：走原来的 hugeDoc/markdown 逻辑
@@ -1323,14 +1332,31 @@ export function WorkspaceShell({
   }, [createTab, isCreatingTab, setActiveTab, handleMarkdownChange, tabs])
 
   const getCurrentFilePath = useCallback(() => {
-    if (selectedFolderPath) {
-      return selectedFolderPath
-    }
     if (isPdfActive) {
       return activePdfPath ?? null
     }
     return filePath ?? null
-  }, [selectedFolderPath, isPdfActive, activePdfPath, filePath])
+  }, [isPdfActive, activePdfPath, filePath])
+
+  const handleAiDocumentSaved = useCallback((savedPath: string) => {
+    if (/\.md$/i.test(savedPath)) {
+      setFilePath(savedPath)
+      updateActiveMeta(savedPath, false)
+    }
+
+    const normalizedSavedPath = savedPath.replace(/\\/g, '/')
+    const matchedRoot = sidebar.folderRoots.find((root) => {
+      const normalizedRoot = root.replace(/\\/g, '/').replace(/[\\/]+$/, '')
+      return (
+        normalizedSavedPath === normalizedRoot ||
+        normalizedSavedPath.startsWith(`${normalizedRoot}/`)
+      )
+    })
+
+    if (matchedRoot) {
+      void sidebar.refreshFolderTree(matchedRoot)
+    }
+  }, [setFilePath, updateActiveMeta, sidebar.folderRoots, sidebar.refreshFolderTree])
 
   useEffect(() => {
     if (activeTab && !isPdfActive) setFilePath(activeTab.path)
@@ -1683,6 +1709,7 @@ export function WorkspaceShell({
 
   const handleDirClick = useCallback((path: string) => {
     setSelectedFolderPath(path)
+    setActiveWorkspaceDirectoryPath(path)
   }, [])
 
   const handleToolbarNewFileInCurrentFolder = useCallback(() => {
@@ -1783,6 +1810,7 @@ export function WorkspaceShell({
 
       // 选中新建的文件夹
       setSelectedFolderPath(folderPath)
+      setActiveWorkspaceDirectoryPath(folderPath)
 
       // 刷新父文件夹树
       const normalized = folderPath.replace(/\\/g, '/')
@@ -1913,6 +1941,7 @@ export function WorkspaceShell({
       // 更新选中目录
       if (isDirTarget) {
         setSelectedFolderPath(newPath)
+        setActiveWorkspaceDirectoryPath(newPath)
       }
 
       const normalizedNew = newPath.replace(/\\/g, '/')
@@ -2031,6 +2060,7 @@ export function WorkspaceShell({
       // 对目录：同步更新选中的目录路径，便于后续逻辑判断目录重命名
       if (kind === 'tree-dir') {
         setSelectedFolderPath(path)
+        setActiveWorkspaceDirectoryPath(path)
       }
 
       setInlineRenamePath(path)
@@ -2351,7 +2381,7 @@ export function WorkspaceShell({
         }
       }
 
-      if (!filePath || filePath === 'untitled') {
+      if (isTransientFilePath(filePath)) {
         console.warn('[WorkspaceShell] onNativePasteImage: no filePath, cannot determine images dir')
         setConfirmDialogRef.current({
           title: t('workspace.cannotInsertImageTitle'),
@@ -2869,7 +2899,14 @@ export function WorkspaceShell({
                 sessionKey={aiChatSessionKey}
                 entryMode="chat"
                 onClose={() => setAiChatSessionKey('global')}
-                currentFilePath={aiChatContextPath}
+                currentFilePath={aiChatFilePath}
+                currentFolderPath={selectedFolderPath}
+                getCurrentMarkdown={getCurrentMarkdown}
+                getCurrentFileName={getCurrentFileName}
+                getCurrentFilePath={getCurrentFilePath}
+                onDocumentSaved={handleAiDocumentSaved}
+                setStatusMessage={setStatusMessage}
+                t={t}
                 sourceTabId={null}
                 fullPage
               />
@@ -2903,7 +2940,14 @@ export function WorkspaceShell({
                           entryMode={aiChatState.entryMode}
                           initialContext={aiChatState.initialContext}
                           onClose={closeAiChatDialog}
-                          currentFilePath={aiChatContextPath}
+                          currentFilePath={aiChatFilePath}
+                          currentFolderPath={selectedFolderPath}
+                          getCurrentMarkdown={getCurrentMarkdown}
+                          getCurrentFileName={getCurrentFileName}
+                          getCurrentFilePath={getCurrentFilePath}
+                          onDocumentSaved={handleAiDocumentSaved}
+                          setStatusMessage={setStatusMessage}
+                          t={t}
                           sourceTabId={activeTab?.id ?? null}
                         />
                       </Suspense>
@@ -3060,14 +3104,21 @@ export function WorkspaceShell({
                 </section>
                 {effectiveAiChatMode === 'docked' && aiChatOpen && aiChatState && aiChatDockSide === 'right' && (
                   <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13, height: '100%' }}>{t('workspace.loadingAiPane')}</div>}>
-                    <AiChatPaneLazy
-                      sessionKey={aiChatSessionKey}
-                      entryMode={aiChatState.entryMode}
-                      initialContext={aiChatState.initialContext}
-                      onClose={closeAiChatDialog}
-                      currentFilePath={aiChatContextPath}
-                      sourceTabId={activeTab?.id ?? null}
-                    />
+                      <AiChatPaneLazy
+                        sessionKey={aiChatSessionKey}
+                        entryMode={aiChatState.entryMode}
+                        initialContext={aiChatState.initialContext}
+                        onClose={closeAiChatDialog}
+                        currentFilePath={aiChatFilePath}
+                        currentFolderPath={selectedFolderPath}
+                        getCurrentMarkdown={getCurrentMarkdown}
+                        getCurrentFileName={getCurrentFileName}
+                        getCurrentFilePath={getCurrentFilePath}
+                        onDocumentSaved={handleAiDocumentSaved}
+                        setStatusMessage={setStatusMessage}
+                        t={t}
+                        sourceTabId={activeTab?.id ?? null}
+                      />
                   </Suspense>
                 )}
               </main>
@@ -3117,7 +3168,14 @@ export function WorkspaceShell({
               entryMode={aiChatState.entryMode}
               initialContext={aiChatState.initialContext}
               onClose={closeAiChatDialog}
-              currentFilePath={aiChatContextPath}
+              currentFilePath={aiChatFilePath}
+              currentFolderPath={selectedFolderPath}
+              getCurrentMarkdown={getCurrentMarkdown}
+              getCurrentFileName={getCurrentFileName}
+              getCurrentFilePath={getCurrentFilePath}
+              onDocumentSaved={handleAiDocumentSaved}
+              setStatusMessage={setStatusMessage}
+              t={t}
               tabId={aiChatState.tabId}
             />
           </Suspense>

@@ -3,6 +3,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAiChatSession } from './useAiChatSession'
+import { docConversationService } from '../../application/docConversationService'
 
 const mocks = vi.hoisted(() => ({
   createChatSession: vi.fn(),
@@ -74,6 +75,7 @@ function createMockSession(providerType: 'dify' | 'openai' = 'dify') {
     getActiveModelId: vi.fn(() => 'model-1'),
     setActiveRole: vi.fn().mockResolvedValue(undefined),
     setActiveModel: vi.fn().mockResolvedValue(undefined),
+    setDocPath: vi.fn(),
     stopRunningStream: vi.fn(),
     stopAndTruncate: vi.fn(),
     dispose: vi.fn(),
@@ -84,6 +86,7 @@ function createMockSession(providerType: 'dify' | 'openai' = 'dify') {
 describe('useAiChatSession', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.useRealTimers()
     mocks.loadAiSettingsState.mockResolvedValue({ providers: [] })
   })
 
@@ -180,5 +183,122 @@ describe('useAiChatSession', () => {
 
     expect(restoreAttachedImage).toHaveBeenCalledWith(dataUrl)
     expect(result.current.error?.message).toBe('vision send failed')
+  })
+
+  it('does not recreate session when document context getter references change', async () => {
+    const session = createMockSession('openai')
+    mocks.createChatSession.mockResolvedValue(session)
+
+    const propsA = {
+      sessionKey: 'temp-session',
+      entryMode: 'chat' as const,
+      open: true,
+      getCurrentMarkdown: () => '# A',
+      getCurrentFileName: () => 'a.md',
+      getCurrentFilePath: () => null,
+      setStatusMessage: vi.fn(),
+      t: (key: string) => key,
+    }
+
+    const { result, rerender } = renderHook((props) => useAiChatSession(props), {
+      initialProps: propsA,
+    })
+
+    await waitFor(() => {
+      expect(result.current.providerType).toBe('openai')
+    })
+
+    expect(mocks.createChatSession).toHaveBeenCalledTimes(1)
+
+    const propsB = {
+      ...propsA,
+      getCurrentMarkdown: () => '# B',
+      getCurrentFileName: () => 'b.md',
+      getCurrentFilePath: () => null,
+      setStatusMessage: vi.fn(),
+      t: (key: string) => `translated:${key}`,
+    }
+
+    rerender(propsB)
+
+    await waitFor(() => {
+      expect(result.current.providerType).toBe('openai')
+    })
+
+    expect(mocks.createChatSession).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not use doc conversation persistence for transient untitled documents', async () => {
+    const session = createMockSession('openai')
+    mocks.createChatSession.mockResolvedValue(session)
+
+    const { result } = renderHook(() =>
+      useAiChatSession({
+        sessionKey: 'temp-session',
+        entryMode: 'chat',
+        open: true,
+        docPath: '/',
+        legacyDocPath: 'untitled',
+      }),
+    )
+
+    await waitFor(() => {
+      expect(result.current.providerType).toBe('openai')
+    })
+
+    expect(docConversationService.getByDocPath).not.toHaveBeenCalled()
+    expect(mocks.createChatSession).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        docPath: expect.anything(),
+      }),
+    )
+  })
+
+  it('does not recreate session when docPath changes after initial start, and migrates binding in-place', async () => {
+    const session = createMockSession('openai')
+    mocks.createChatSession.mockResolvedValue(session)
+    type SessionDocPathProps = {
+      docPath: string | undefined
+      legacyDocPath: string | undefined
+    }
+
+    const { result, rerender } = renderHook(
+      (props: SessionDocPathProps) =>
+        useAiChatSession({
+          sessionKey: 'temp-session',
+          entryMode: 'chat',
+          open: true,
+          ...props,
+        }),
+      {
+        initialProps: {
+          docPath: undefined,
+          legacyDocPath: 'untitled',
+        } as SessionDocPathProps,
+      },
+    )
+
+    await waitFor(() => {
+      expect(result.current.providerType).toBe('openai')
+    })
+
+    expect(mocks.createChatSession).toHaveBeenCalledTimes(1)
+    expect(session.setDocPath).not.toHaveBeenCalled()
+
+    act(() => {
+      rerender({
+        docPath: '/Users/test/notes/demo.md',
+        legacyDocPath: '/Users/test/notes/demo.md',
+      } satisfies SessionDocPathProps)
+    })
+
+    expect(session.setDocPath).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 850))
+    })
+
+    expect(session.setDocPath).toHaveBeenCalledWith('/Users/test/notes/demo.md')
+    expect(mocks.createChatSession).toHaveBeenCalledTimes(1)
   })
 })

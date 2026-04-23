@@ -77,6 +77,12 @@ import {
   executeWorkflowRun,
 } from '../../workflows/workflowBuiltinTool'
 import { buildWorkflowToolCatalogPrompt } from './workflowToolCatalog'
+import { buildDocumentToolCatalogPrompt } from './documentToolCatalog'
+import {
+  SAVE_OR_EXPORT_CURRENT_DOCUMENT_TOOL_NAME,
+  saveOrExportCurrentDocumentToolSchema,
+  executeSaveOrExportCurrentDocument,
+} from '../../document/documentBuiltinTool'
 
 export type StartChatOptions = {
   entryMode: ChatEntryMode
@@ -102,6 +108,12 @@ export type StartChatOptions = {
    * 可选：按 ProviderId 隔离的 Dify 会话 ID 映射。
    */
   initialDifyProviderConversations?: Record<string, string>
+  getCurrentMarkdown?: () => string
+  getCurrentFileName?: () => string | null
+  getCurrentFilePath?: () => string | null
+  onDocumentSaved?: (path: string) => void
+  setStatusMessage?: (message: string) => void
+  t?: (key: string, params?: Record<string, string | number>) => string
 }
 
 export type ChatSession = {
@@ -128,6 +140,7 @@ export type ChatSession = {
   sendVisionTask(task: VisionTask, options?: { hideInView?: boolean }): Promise<void>
   stopRunningStream(): void
   stopAndTruncate(messageId: string, length: number): void
+  setDocPath(nextDocPath?: string): void
   dispose(): void
 }
 
@@ -214,7 +227,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
     loadSystemPromptInfo(),
   ])
   const attachmentUploadService = createAttachmentUploadService()
-  const docPath = options.docPath
+  let boundDocPath = options.docPath
   const entryMode = options.entryMode
   const selectedAgent = options.selectedAgentId
     ? agentState.providers.find((item) => item.id === options.selectedAgentId) ?? null
@@ -309,10 +322,10 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
   }
 
   const persistDocConversationSnapshot = () => {
-    if (disposed || !docPath || !shouldPersistDocConversation || !provider) return
+    if (disposed || !boundDocPath || !shouldPersistDocConversation || !provider) return
     void docConversationService
       .upsertFromState({
-        docPath,
+        docPath: boundDocPath,
         state,
         providerType,
         modelName: currentModelId,
@@ -411,9 +424,9 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
         state = completeAssistantMessage(state, assistantId)
         notifyStateChange()
 
-        if ((options.persistConversation ?? true) && docPath && shouldPersistDocConversation) {
+        if ((options.persistConversation ?? true) && boundDocPath && shouldPersistDocConversation) {
           console.warn('[ChatSession] Persisting doc conversation', {
-            docPath,
+            docPath: boundDocPath,
             providerType,
             modelName: currentModelId,
             difyConversationId: difyConversationId || '(none)',
@@ -421,7 +434,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
 
           void docConversationService
             .upsertFromState({
-              docPath,
+              docPath: boundDocPath,
               state,
               providerType,
               modelName: currentModelId,
@@ -568,6 +581,27 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
               toolResult = await executeWriteToWorkspace(
                 parsedArgs as { targetDirectory?: string; fileName?: string; content?: string },
               )
+            } else if (tc.function.name === SAVE_OR_EXPORT_CURRENT_DOCUMENT_TOOL_NAME) {
+              if (!options.getCurrentMarkdown || !options.getCurrentFileName) {
+                toolResult = '⚠️ 当前会话未挂载文档上下文，无法保存或导出当前文档。'
+              } else {
+                toolResult = await executeSaveOrExportCurrentDocument(
+                  parsedArgs as {
+                    format?: 'md' | 'word' | 'html'
+                    target?: 'current_file_dir' | 'workspace_directory'
+                    targetDirectory?: string
+                    fileName?: string
+                  },
+                  {
+                    getCurrentMarkdown: options.getCurrentMarkdown,
+                    getCurrentFileName: options.getCurrentFileName,
+                    getCurrentFilePath: options.getCurrentFilePath,
+                    onDocumentSaved: options.onDocumentSaved,
+                    setStatusMessage: options.setStatusMessage,
+                    t: options.t,
+                  },
+                )
+              }
             } else {
               toolResult = await executeTool(tc.function.name, parsedArgs, routingTools)
             }
@@ -660,10 +694,10 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
         state = completeAssistantMessage(state, assistantId)
         notifyStateChange()
 
-        if (docPath && shouldPersistDocConversation) {
+        if (boundDocPath && shouldPersistDocConversation) {
           void docConversationService
             .upsertFromState({
-              docPath,
+              docPath: boundDocPath,
               state,
               providerType,
               modelName: currentModelId,
@@ -811,7 +845,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
           source: 'chat-pane',
           entryMode,
           userInput: content,
-          docPath,
+          docPath: boundDocPath,
         }
         systemPromptForRequest = buildGlobalMemorySystemPrompt(
           systemPromptInfo.systemPrompt,
@@ -826,6 +860,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
           systemPromptForRequest += await buildWorkflowToolCatalogPrompt()
           systemPromptForRequest += await buildSkillsToolCatalogPrompt()
           systemPromptForRequest += buildWorkspaceMountedRootsPrompt()
+          systemPromptForRequest += buildDocumentToolCatalogPrompt()
         }
         const initialConversationIdForClient =
           providerType === 'dify' ? difyConversationId : undefined
@@ -862,6 +897,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
           resolveWorkspaceDirectoryToolSchema,
           createWorkspaceDirectoryToolSchema,
           writeToWorkspaceToolSchema,
+          saveOrExportCurrentDocumentToolSchema,
         ]
         : []
 
@@ -963,7 +999,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
           source: 'chat-pane',
           entryMode,
           userInput: content,
-          docPath,
+          docPath: boundDocPath,
         }
         const systemPromptForRequest = buildGlobalMemorySystemPrompt(
           systemPromptInfo.systemPrompt,
@@ -1020,6 +1056,11 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       // 直接按 ID 截断，无论是否在 streaming 状态
       state = truncateAssistantMessage(state, messageId, length)
       notifyStateChange()
+    },
+    setDocPath(nextDocPath) {
+      if (disposed) return
+      boundDocPath = nextDocPath
+      persistDocConversationSnapshot()
     },
     dispose() {
       disposed = true

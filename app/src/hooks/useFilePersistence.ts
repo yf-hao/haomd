@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 import { clearRecentRemote, deleteRecentRemote, logRecentFile, readFile, writeFile } from '../modules/files/service'
+import { UNTITLED_FILE_PATH, isTransientFilePath } from '../modules/files/filePathState'
 import { logPdfRecent } from '../modules/pdf/pdfRecentService'
 import { createAutoSaver, type AutoSaveHandle } from '../modules/files/autoSave'
 import type { RecentFile, Result, ServiceError, WriteResult } from '../modules/files/types'
 import { isTauriEnv } from '../modules/platform/runtime'
 
-const DEFAULT_PATH = 'untitled'
+const DEFAULT_PATH = UNTITLED_FILE_PATH
 
 const isTauri = isTauriEnv
 
@@ -157,7 +158,7 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
   const openInFlightRef = useRef(false)
   const suppressDirtyOnceRef = useRef(false)
 
-  const hasRealPathNow = useCallback(() => pathRef.current !== DEFAULT_PATH, [])
+  const hasRealPathNow = useCallback(() => !isTransientFilePath(pathRef.current), [])
 
   const saveAs = useCallback(async (contentOverride?: string) => {
     // 防止重复触发导致系统对话框弹多次
@@ -175,7 +176,7 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
 
       setSaveStatus('saving')
       setStatusMessage('选择存储位置...')
-      const suggested = pathRef.current && pathRef.current !== DEFAULT_PATH ? pathRef.current : '文稿.md'
+      const suggested = pathRef.current && !isTransientFilePath(pathRef.current) ? pathRef.current : '文稿.md'
       const chosen = await saveDialog({
         defaultPath: suggested,
         filters: [
@@ -278,7 +279,7 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
     saverRef.current = createAutoSaver({
       save: () => handleSave(),
       isDirty: () => dirty,
-      enabled: filePath !== DEFAULT_PATH,
+      enabled: !isTransientFilePath(filePath),
       debounceMs: 120000,
       idleMs: 120000,
       forceIntervalMs: 120000,
@@ -449,7 +450,7 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
   // 仅当文档「实际有内容」且存在未保存修改时，才认为需要用户确认
   const hasUnsavedChanges = useCallback(() => {
     // 完全未命名、内容为空的初始文档，不拦截 Open Folder 等操作
-    if (pathRef.current === DEFAULT_PATH && (!markdown || markdown.length === 0)) {
+    if (isTransientFilePath(pathRef.current) && (!markdown || markdown.length === 0)) {
       return false
     }
     return dirty

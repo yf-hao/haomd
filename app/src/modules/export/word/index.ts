@@ -20,6 +20,29 @@ export async function exportToWord(ctx: {
   }) => Promise<boolean>
   t?: (key: string, params?: Record<string, string | number>) => string
 }) {
+  const rawTitle = ctx.getCurrentFileName() || 'Document'
+  const title = buildWordExportBaseName(rawTitle)
+  const outputPath = await save({
+    defaultPath: `${title}.docx`,
+    filters: [{ name: 'Word 文件', extensions: ['docx'] }],
+  })
+  if (!outputPath) return false
+  return exportToWordAtPath(ctx, outputPath)
+}
+
+export async function exportToWordAtPath(ctx: {
+  setStatusMessage: (msg: string) => void
+  getCurrentMarkdown: () => string
+  getCurrentFileName: () => string | null
+  getFilePath?: () => string | null
+  confirmContinue?: (options: {
+    title: string
+    message: string
+    confirmText?: string
+    cancelText?: string
+  }) => Promise<boolean>
+  t?: (key: string, params?: Record<string, string | number>) => string
+}, outputPath: string) {
   const tr = (key: string, fallback: string, params?: Record<string, string | number>) =>
     ctx.t?.(key, params) ?? fallback
   try {
@@ -66,12 +89,6 @@ export async function exportToWord(ctx: {
         }
       }
     }
-
-    const outputPath = await save({
-      defaultPath: `${title}.docx`,
-      filters: [{ name: 'Word 文件', extensions: ['docx'] }],
-    })
-    if (!outputPath) return false
 
     if (selectedTemplateId && !isPlainText) {
       ctx.setStatusMessage(tr('export.wordParsing', '正在解析 Markdown 结构...'))

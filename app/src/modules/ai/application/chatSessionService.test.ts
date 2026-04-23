@@ -6,6 +6,7 @@ import { createInitialConversationState } from '../domain/chatSession'
 import { createStreamingClientFromSettings } from '../streamingClientFactory'
 import { appendAssistantChunk } from '../domain/chatSession'
 import { loadAgentSettingsState } from '../config/agentSettingsRepo'
+import { executeSaveOrExportCurrentDocument } from '../../document/documentBuiltinTool'
 
 // Mock dependencies
 vi.mock('../settings', () => ({
@@ -36,6 +37,7 @@ vi.mock('../domain/chatSession', () => ({
         ...state,
         engineHistory: state.engineHistory.map((m: any) => m.id === id ? { ...m, streaming: false } : m)
     })),
+    upsertAssistantToolExecution: vi.fn((state) => state),
     appendAssistantChunk: vi.fn((state) => state),
     truncateAssistantMessage: vi.fn((state) => state)
 }))
@@ -78,6 +80,15 @@ vi.mock('../vision/visionClientFactory', () => ({
 
 vi.mock('../globalMemory/context', () => ({
     buildGlobalMemorySystemPrompt: vi.fn((prompt) => prompt)
+}))
+
+vi.mock('../../document/documentBuiltinTool', () => ({
+    SAVE_OR_EXPORT_CURRENT_DOCUMENT_TOOL_NAME: 'save_or_export_current_document',
+    saveOrExportCurrentDocumentToolSchema: {
+        type: 'function',
+        function: { name: 'save_or_export_current_document', parameters: { type: 'object', properties: {}, required: [] } }
+    },
+    executeSaveOrExportCurrentDocument: vi.fn(),
 }))
 
 describe('ChatSessionService', () => {
@@ -229,5 +240,48 @@ describe('ChatSessionService', () => {
 
         const { truncateAssistantMessage } = await import('../domain/chatSession')
         expect(truncateAssistantMessage).toHaveBeenCalledWith(expect.anything(), 'm1', 5)
+    })
+
+    it('should execute save_or_export_current_document built-in tool with document context', async () => {
+        const askStream = vi.fn()
+            .mockResolvedValueOnce({
+                toolCalls: [
+                    {
+                        id: 'tool-1',
+                        type: 'function',
+                        function: {
+                            name: 'save_or_export_current_document',
+                            arguments: JSON.stringify({
+                                format: 'word',
+                                target: 'current_file_dir',
+                            }),
+                        },
+                    },
+                ],
+            })
+            .mockResolvedValueOnce({ content: 'done', completed: true })
+
+        vi.mocked(createStreamingClientFromSettings).mockReturnValue({
+            askStream,
+        } as any)
+        vi.mocked(executeSaveOrExportCurrentDocument).mockResolvedValue('✅ 已保存：/root/doc.docx')
+
+        const session = await createChatSession({
+            entryMode: 'chat',
+            getCurrentMarkdown: () => '# Doc',
+            getCurrentFileName: () => 'doc.md',
+            getCurrentFilePath: () => '/root/doc.md',
+        })
+
+        await session.sendUserMessage('保存为word')
+
+        expect(executeSaveOrExportCurrentDocument).toHaveBeenCalledWith(
+            { format: 'word', target: 'current_file_dir' },
+            expect.objectContaining({
+                getCurrentMarkdown: expect.any(Function),
+                getCurrentFileName: expect.any(Function),
+                getCurrentFilePath: expect.any(Function),
+            }),
+        )
     })
 })

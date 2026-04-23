@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   ChatEntryMode,
   ConversationState,
@@ -16,6 +16,7 @@ import { createChatSession } from '../../application/chatSessionService'
 import { docConversationService, subscribeDocConversationEvents, type DocConversationEvent } from '../../application/docConversationService'
 import { ensureSessionAutoTitle } from '../../application/sessionAutoTitleService'
 import type { DocConversationRecord } from '../../domain/docConversations'
+import { normalizePersistableDocPath } from '../../domain/docPathUtils'
 import { appendAiInputHistory } from '../../application/localStorageAiChatInputHistory'
 import { loadSession, saveSession, type AiChatSessionCfg, type AiChatMessageCfg } from '../../config/aiSessionsRepo'
 import { mergePendingAttachments } from './attachmentDrafts'
@@ -30,7 +31,16 @@ export type UseAiChatSessionOptions = {
   docPath?: string
   /** 旧版文档级会话使用的原始 docPath（文件路径），用于懒迁移 */
   legacyDocPath?: string
+  getCurrentMarkdown?: () => string
+  getCurrentFileName?: () => string | null
+  getCurrentFilePath?: () => string | null
+  onDocumentSaved?: (path: string) => void
+  setStatusMessage?: (message: string) => void
+  t?: (key: string, params?: Record<string, string | number>) => string
+  restartToken?: number
 }
+
+const DOC_PATH_MIGRATION_DELAY_MS = 800
 
 function buildRestoredViewMessages(record: DocConversationRecord): ChatMessageView[] {
   const originalMessages: ChatMessageView[] = []
@@ -112,11 +122,32 @@ function buildStateFromAiSessionRecord(record: AiChatSessionCfg, entryMode: Chat
 }
 
 export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatResult {
-  const { sessionKey, entryMode, initialContext, open, selectedAgentId, docPath, legacyDocPath } = options
+  const {
+    sessionKey,
+    entryMode,
+    initialContext,
+    open,
+    selectedAgentId,
+    docPath,
+    legacyDocPath,
+    getCurrentMarkdown,
+    getCurrentFileName,
+    getCurrentFilePath,
+    onDocumentSaved,
+    setStatusMessage,
+    t,
+    restartToken = 0,
+  } = options
+  const sanitizedLegacyDocPath = normalizePersistableDocPath(legacyDocPath)
+  const sanitizedDocPath =
+    legacyDocPath && !sanitizedLegacyDocPath
+      ? undefined
+      : normalizePersistableDocPath(docPath)
   const shouldUseDocPersistence = !selectedAgentId
 
   const [session, setSession] = useState<ChatSession | null>(null)
   const [loading, setLoading] = useState(false)
+  const [starting, setStarting] = useState(false)
   const [state, setState] = useState<ConversationState | null>(null)
   const [systemPromptInfo, setSystemPromptInfo] = useState<SystemPromptInfo | null>(null)
   const [providerType, setProviderType] = useState<ProviderType | null>(null)
@@ -126,12 +157,45 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
   const [pendingAttachments, setPendingAttachments] = useState<UploadedFileRef[]>([])
   const [uploadingCount, setUploadingCount] = useState(0)
   const [reloadToken, setReloadToken] = useState(0)
+  const getCurrentMarkdownRef = useRef(getCurrentMarkdown)
+  const getCurrentFileNameRef = useRef(getCurrentFileName)
+  const getCurrentFilePathRef = useRef(getCurrentFilePath)
+  const onDocumentSavedRef = useRef(onDocumentSaved)
+  const setStatusMessageRef = useRef(setStatusMessage)
+  const tRef = useRef(t)
+  const pendingDocPathRef = useRef<string | undefined>(undefined)
+  const lastBoundDocPathRef = useRef<string | undefined>(undefined)
+  const migrationTimerRef = useRef<number | null>(null)
 
   useEffect(() => {
-    if (!docPath) return
+    getCurrentMarkdownRef.current = getCurrentMarkdown
+  }, [getCurrentMarkdown])
+
+  useEffect(() => {
+    getCurrentFileNameRef.current = getCurrentFileName
+  }, [getCurrentFileName])
+
+  useEffect(() => {
+    getCurrentFilePathRef.current = getCurrentFilePath
+  }, [getCurrentFilePath])
+
+  useEffect(() => {
+    onDocumentSavedRef.current = onDocumentSaved
+  }, [onDocumentSaved])
+
+  useEffect(() => {
+    setStatusMessageRef.current = setStatusMessage
+  }, [setStatusMessage])
+
+  useEffect(() => {
+    tRef.current = t
+  }, [t])
+
+  useEffect(() => {
+    if (!sanitizedDocPath) return
 
     const unsubscribe = subscribeDocConversationEvents((event: DocConversationEvent) => {
-      if (event.docPath !== docPath) return
+      if (event.docPath !== sanitizedDocPath) return
 
       if (event.type === 'cleared') {
         // 清空当前 UI 并触发一次会话重建
@@ -151,13 +215,13 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
     return () => {
       unsubscribe()
     }
-  }, [docPath])
+  }, [sanitizedDocPath])
 
   useEffect(() => {
     if (!open) return
 
     let cancelled = false
-    setLoading(true)
+    setStarting(true)
     setError(null)
 
     const startSession = async () => {
@@ -171,13 +235,13 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
           if (savedSession) {
             initialState = buildStateFromAiSessionRecord(savedSession, entryMode)
           }
-        } else if (docPath && shouldUseDocPersistence) {
-          let saved: DocConversationRecord | null = await docConversationService.getByDocPath(docPath)
+        } else if (sanitizedDocPath && shouldUseDocPersistence) {
+          let saved: DocConversationRecord | null = await docConversationService.getByDocPath(sanitizedDocPath)
 
           // 懒迁移：如果目录级 docPath 下没有记录，且提供了旧版文件级 docPath，则尝试回退加载
-          if (!saved && legacyDocPath && legacyDocPath !== docPath) {
+          if (!saved && sanitizedLegacyDocPath && sanitizedLegacyDocPath !== sanitizedDocPath) {
             try {
-              saved = await docConversationService.getByDocPath(legacyDocPath)
+              saved = await docConversationService.getByDocPath(sanitizedLegacyDocPath)
             } catch (e) {
               console.warn('[useAiChatSession] failed to load legacy doc conversation', e)
             }
@@ -195,9 +259,40 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
           initialContext,
           selectedAgentId,
           ...(initialState ? { initialState } : {}),
-          ...(docPath && shouldUseDocPersistence ? { docPath } : {}),
+          ...(sanitizedDocPath && shouldUseDocPersistence ? { docPath: sanitizedDocPath } : {}),
           ...(initialDifyConversationId ? { initialDifyConversationId } : {}),
           ...(initialDifyMapping ? { initialDifyProviderConversations: initialDifyMapping } : {}),
+          ...(getCurrentMarkdownRef.current
+            ? {
+                getCurrentMarkdown: () => getCurrentMarkdownRef.current?.() ?? '',
+              }
+            : {}),
+          ...(getCurrentFileNameRef.current
+            ? {
+                getCurrentFileName: () => getCurrentFileNameRef.current?.() ?? null,
+              }
+            : {}),
+          ...(getCurrentFilePathRef.current
+            ? {
+                getCurrentFilePath: () => getCurrentFilePathRef.current?.() ?? null,
+              }
+            : {}),
+          ...(onDocumentSavedRef.current
+            ? {
+                onDocumentSaved: (path: string) => onDocumentSavedRef.current?.(path),
+              }
+            : {}),
+          ...(setStatusMessageRef.current
+            ? {
+                setStatusMessage: (message: string) => setStatusMessageRef.current?.(message),
+              }
+            : {}),
+          ...(tRef.current
+            ? {
+                t: (key: string, params?: Record<string, string | number>) =>
+                  tRef.current?.(key, params) ?? key,
+              }
+            : {}),
           onStateChange: (nextState) => {
             if (cancelled) return
             setState(nextState)
@@ -210,6 +305,8 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
           return
         }
 
+        pendingDocPathRef.current = undefined
+        lastBoundDocPathRef.current = sanitizedDocPath
         setSession(created)
         setState(created.getState())
         setSystemPromptInfo(created.getSystemPromptInfo())
@@ -220,7 +317,7 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
         setError(e as Error)
       } finally {
         if (!cancelled) {
-          setLoading(false)
+          setStarting(false)
         }
       }
     }
@@ -229,6 +326,12 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
 
     return () => {
       cancelled = true
+      pendingDocPathRef.current = undefined
+      lastBoundDocPathRef.current = undefined
+      if (migrationTimerRef.current != null) {
+        window.clearTimeout(migrationTimerRef.current)
+        migrationTimerRef.current = null
+      }
       setSession((prev) => {
         if (prev) {
           prev.dispose()
@@ -236,7 +339,60 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
         return null
       })
     }
-  }, [open, sessionKey, entryMode, initialContext, selectedAgentId, docPath, legacyDocPath, reloadToken, shouldUseDocPersistence])
+  }, [
+    open,
+    sessionKey,
+    entryMode,
+    initialContext,
+    selectedAgentId,
+    reloadToken,
+    restartToken,
+    shouldUseDocPersistence,
+  ])
+
+  useEffect(() => {
+    if (!session || !open || !shouldUseDocPersistence) return
+    if (!sanitizedDocPath) return
+    if (sanitizedDocPath === lastBoundDocPathRef.current) return
+    pendingDocPathRef.current = sanitizedDocPath
+  }, [session, open, sanitizedDocPath, shouldUseDocPersistence])
+
+  useEffect(() => {
+    if (!session || !open || !shouldUseDocPersistence) return
+    const pendingDocPath = pendingDocPathRef.current
+    if (!pendingDocPath) return
+    if (pendingDocPath === lastBoundDocPathRef.current) {
+      pendingDocPathRef.current = undefined
+      return
+    }
+    if (loading || starting || state?.viewMessages.some((message) => message.streaming)) {
+      if (migrationTimerRef.current != null) {
+        window.clearTimeout(migrationTimerRef.current)
+        migrationTimerRef.current = null
+      }
+      return
+    }
+
+    if (migrationTimerRef.current != null) {
+      window.clearTimeout(migrationTimerRef.current)
+      migrationTimerRef.current = null
+    }
+
+    migrationTimerRef.current = window.setTimeout(() => {
+      migrationTimerRef.current = null
+      if (pendingDocPathRef.current !== pendingDocPath) return
+      session.setDocPath(pendingDocPath)
+      lastBoundDocPathRef.current = pendingDocPath
+      pendingDocPathRef.current = undefined
+    }, DOC_PATH_MIGRATION_DELAY_MS)
+
+    return () => {
+      if (migrationTimerRef.current != null) {
+        window.clearTimeout(migrationTimerRef.current)
+        migrationTimerRef.current = null
+      }
+    }
+  }, [session, open, shouldUseDocPersistence, loading, starting, state, sanitizedDocPath])
 
   useEffect(() => {
     if (!open || !isPersistedSessionKey(sessionKey) || !state) return
