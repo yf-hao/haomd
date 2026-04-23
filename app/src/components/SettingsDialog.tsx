@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 import './SettingsDialog.css'
 import { Button } from './Button'
+import { WordTemplateGenerateDialog } from './WordTemplateGenerateDialog'
 import { FontSelectField } from './settings/FontSelectField'
 import { useI18n } from '../modules/i18n/I18nContext'
 import { onNativePaste } from '../modules/platform/clipboardEvents'
@@ -55,6 +56,7 @@ type WordTemplateOption = {
   dir: string
   docxPath: string
   jsonPath: string
+  markdownPath: string
 }
 type WebDavField = 'url' | 'username' | 'password'
 type BackgroundTarget =
@@ -89,6 +91,9 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const [activeThemeTab, setActiveThemeTab] = useState<ThemePanelTabId>('theme-preset')
   const [activeWordExportTab, setActiveWordExportTab] = useState<WordExportTabId>('document')
   const [wordTemplates, setWordTemplates] = useState<WordTemplateOption[]>([])
+  const [wordTemplateAuthoringOpen, setWordTemplateAuthoringOpen] = useState(false)
+  const [wordTemplateAuthoringMode, setWordTemplateAuthoringMode] = useState<'create' | 'revise'>('create')
+  const [selectedWordTemplateId, setSelectedWordTemplateId] = useState('')
   const [currentBackgroundTarget, setCurrentBackgroundTarget] = useState<BackgroundTarget>('workspaceBackground')
   const [isSaving, setIsSaving] = useState(false)
   const [backupBusy, setBackupBusy] = useState<
@@ -406,14 +411,14 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     try {
       setBackupStatus(null)
       setBackupBusy('webdav-export')
-      const resp = await invoke<BackendResult<null>>('export_settings_backup_to_webdav', {
+      const resp = await invoke<BackendResult<null>>('start_export_settings_backup_to_webdav', {
         url: webdavBackup.url,
         username: webdavBackup.username,
         password: webdavBackup.password,
         remotePath: DEFAULT_WEBDAV_REMOTE_PATH,
       })
       expectBackendOk(resp)
-      setBackupStatus({ tone: 'success', message: t('backup.webdavExportSuccess') })
+      setBackupStatus({ tone: 'success', message: t('backup.webdavExportStarted') })
     } catch (err) {
       setBackupStatus({ tone: 'error', message: t('backup.webdavExportFailed', { message: (err as Error).message }) })
     } finally {
@@ -738,6 +743,18 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     } catch (err) {
       setError((err as Error).message || 'Failed to open word_templates directory')
     }
+  }
+
+  const handleOpenWordTemplateAuthoring = (mode: 'create' | 'revise') => {
+    setWordTemplateAuthoringMode(mode)
+    setWordTemplateAuthoringOpen(true)
+  }
+
+  const handleWordTemplateAccepted = async (templateId: string) => {
+    const items = await invoke<WordTemplateOption[]>('list_word_templates')
+    setWordTemplates(items)
+    setSelectedWordTemplateId(templateId)
+    setWordTemplateAuthoringOpen(false)
   }
 
   const currentBackground = getBackgroundSettings(currentBackgroundTarget)
@@ -1553,13 +1570,51 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                             <span className="settings-inline-help">{t('wordExport.wordTemplatesFolderHint')}</span>
                           </div>
                         </div>
-                        {wordTemplates.length > 0 ? (
-                          <div style={fieldGridStyle}>
-                            <div className="settings-field-label">{t('wordExport.availableTemplates')}</div>
-                            <div className="settings-inline-help">
-                              {wordTemplates.map((template) => template.name).join(' / ')}
-                            </div>
+                        <div style={fieldGridStyle}>
+                          <div className="settings-field-label">{t('wordExport.aiTemplateAuthoring')}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                            <Button
+                              variant="tertiary"
+                              type="button"
+                              onClick={() => handleOpenWordTemplateAuthoring('create')}
+                            >
+                              {t('wordExport.generateTemplateWithAi')}
+                            </Button>
+                            <Button
+                              variant="tertiary"
+                              type="button"
+                              disabled={!selectedWordTemplateId}
+                              onClick={() => handleOpenWordTemplateAuthoring('revise')}
+                            >
+                              {t('wordExport.reviseTemplateWithAi')}
+                            </Button>
+                            <span className="settings-inline-help">{t('wordExport.aiTemplateAuthoringHint')}</span>
                           </div>
+                        </div>
+                        {wordTemplates.length > 0 ? (
+                          <>
+                            <div style={fieldGridStyle}>
+                              <div className="settings-field-label">{t('wordExport.availableTemplates')}</div>
+                              <div className="settings-inline-help">
+                                {wordTemplates.map((template) => template.name).join(' / ')}
+                              </div>
+                            </div>
+                            <div style={fieldGridStyle}>
+                              <div className="settings-field-label">{t('wordExport.selectedTemplate')}</div>
+                              <select
+                                className="field-select"
+                                value={selectedWordTemplateId}
+                                onChange={(event) => setSelectedWordTemplateId(event.target.value)}
+                              >
+                                <option value="">{t('wordExport.selectTemplatePlaceholder')}</option>
+                                {wordTemplates.map((template) => (
+                                  <option key={template.id} value={template.id}>
+                                    {template.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </>
                         ) : (
                           <div style={fieldGridStyle}>
                             <div className="settings-field-label">{t('wordExport.availableTemplates')}</div>
@@ -1744,6 +1799,15 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
           </Button>
         </div>
       </div>
+      <WordTemplateGenerateDialog
+        open={wordTemplateAuthoringOpen}
+        mode={wordTemplateAuthoringMode}
+        templateId={wordTemplateAuthoringMode === 'revise' ? selectedWordTemplateId : undefined}
+        onClose={() => setWordTemplateAuthoringOpen(false)}
+        onAccepted={(templateId) => {
+          void handleWordTemplateAccepted(templateId)
+        }}
+      />
     </div>
   )
 }

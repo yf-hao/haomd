@@ -834,7 +834,7 @@ button:disabled {
   padding: 20px 24px 18px;
   display: flex;
   flex-direction: column;
-  max-height: 78vh;
+  height: 78vh;
   overflow: hidden;
 }
 
@@ -860,10 +860,13 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-height: 0;
 }
 
 .skill-authoring-request-input {
+  flex: 1 1 auto;
   min-height: 180px;
+  height: 100%;
   resize: vertical;
 }
 
@@ -891,6 +894,19 @@ button:disabled {
   min-height: 0;
 }
 
+.skill-authoring-preview-sections {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+}
+
+.word-template-preview-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+
 .skill-authoring-code,
 .skill-authoring-codearea {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -908,7 +924,9 @@ button:disabled {
 }
 
 .skill-authoring-codearea {
-  min-height: 180px;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
   resize: vertical;
 }
 

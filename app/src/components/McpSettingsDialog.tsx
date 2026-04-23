@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FC } from 'reac
 import { useI18n } from '../modules/i18n/I18nContext'
 import { Button } from './Button'
 import { FieldGroup } from './FieldGroup'
-import { onNativePaste, onNativePasteError } from '../modules/platform/clipboardEvents'
+import { useDesktopTextEditingBridge } from '../hooks/useDesktopTextEditingBridge'
 import {
   loadMcpSettings,
   saveMcpSettings,
@@ -167,7 +167,7 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
   const [testResult, setTestResult] = useState('')
   const [groupDraft, setGroupDraft] = useState('')
   const [showGroupInput, setShowGroupInput] = useState(false)
-  const [activeField, setActiveField] = useState<keyof McpServerDraftForm | null>(null)
+  const [, setActiveField] = useState<keyof McpServerDraftForm | null>(null)
   const loadedRef = useRef(false)
 
   // Load settings when opened
@@ -195,46 +195,12 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
     return () => document.removeEventListener('keydown', handler)
   }, [open, onClose])
 
-  useEffect(() => {
-    if (!open) return
-
-    const unPaste = onNativePaste((text) => {
-      if (!text || !activeField) return
-
-      setDraftForm((prev) => {
-        const key = activeField
-        const current = prev[key]
-        if (typeof current !== 'string') return prev
-
-        let start = current.length
-        let end = current.length
-
-        if (typeof document !== 'undefined') {
-          const el = document.activeElement as HTMLInputElement | HTMLTextAreaElement | null
-          if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
-            if (typeof el.selectionStart === 'number') start = el.selectionStart
-            if (typeof el.selectionEnd === 'number') end = el.selectionEnd ?? start
-          }
-        }
-
-        const before = current.slice(0, start)
-        const after = current.slice(end)
-        return {
-          ...prev,
-          [key]: before + text + after,
-        }
-      })
-    })
-
-    const unError = onNativePasteError((message) => {
+  const { handleKeyDownCapture } = useDesktopTextEditingBridge({
+    enabled: open,
+    onPasteError: (message) => {
       console.warn('[McpSettingsDialog] native paste error:', message)
-    })
-
-    return () => {
-      unPaste()
-      unError()
-    }
-  }, [open, activeField])
+    },
+  })
 
   const isServerRunning = useCallback(
     (id: string) => runningServers.some((s) => s.id === id),
@@ -407,7 +373,7 @@ export const McpSettingsDialog: FC<McpSettingsDialogProps> = ({ open, onClose })
 
   return (
     <div className="modal-backdrop">
-      <div className="modal modal-mcp-settings">
+      <div className="modal modal-mcp-settings" onKeyDownCapture={handleKeyDownCapture}>
         <div className="modal-title">{t('mcp.title')}</div>
 
         <div className="modal-content mcp-settings-body">

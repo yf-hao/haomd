@@ -7,10 +7,8 @@ pub(crate) fn resolve_word_template_paths(
     app: &AppHandle,
     template_id: &str,
 ) -> Result<(PathBuf, PathBuf), String> {
-    let templates_dir = crate::platform::resolve_word_templates_dir(app)?;
-    let stem = format!("template_{template_id}");
-    let docx_path = templates_dir.join(format!("{stem}.docx"));
-    let json_path = templates_dir.join(format!("{stem}.json"));
+    let template_dir = crate::platform::resolve_word_template_dir(app, template_id)?;
+    let (json_path, _, docx_path) = crate::platform::build_word_template_asset_paths(&template_dir);
     if !docx_path.exists() {
         return Err(format!("未找到模板文件: {}", docx_path.display()));
     }

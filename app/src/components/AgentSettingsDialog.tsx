@@ -1,6 +1,5 @@
 import type { ChangeEvent, FC, FormEvent, KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useEffect, useMemo, useState } from 'react'
-import { onNativePaste, onNativePasteError } from '../modules/platform/clipboardEvents'
 import './AgentSettingsDialog.css'
 import { useAgentSettingsPersistence } from '../hooks/useAgentSettingsPersistence'
 import {
@@ -12,6 +11,7 @@ import {
 import { FieldGroup } from './FieldGroup'
 import { Button } from './Button'
 import { useI18n } from '../modules/i18n/I18nContext'
+import { useDesktopTextEditingBridge } from '../hooks/useDesktopTextEditingBridge'
 
 export type AgentSettingsDialogProps = {
   open: boolean
@@ -237,45 +237,12 @@ export const AgentSettingsDialog: FC<AgentSettingsDialogProps> = ({ open, onClos
     setPlatformOpen(false)
   }
 
-  useEffect(() => {
-    if (!open) return
-
-    const unPaste = onNativePaste((text) => {
-      if (!text) return
-
-      setDraft((prev) => {
-        if (typeof document === 'undefined') return prev
-        const active = document.activeElement as HTMLInputElement | HTMLTextAreaElement | null
-        if (!active || (active.tagName !== 'INPUT' && active.tagName !== 'TEXTAREA')) return prev
-
-        const field = (active.getAttribute('data-agent-field') as keyof AgentDraft | null) ?? null
-        if (!field) return prev
-
-        const current = String(prev[field] ?? '')
-        const start = active.selectionStart ?? current.length
-        const end = active.selectionEnd ?? current.length
-        const nextValue = current.slice(0, start) + text + current.slice(end)
-
-        active.value = nextValue
-        const pos = start + text.length
-        active.setSelectionRange(pos, pos)
-
-        return {
-          ...prev,
-          [field]: nextValue,
-        }
-      })
-    })
-
-    const unError = onNativePasteError((message) => {
+  const { handleKeyDownCapture } = useDesktopTextEditingBridge({
+    enabled: open,
+    onPasteError: (message) => {
       console.warn('[AgentSettingsDialog] native paste error:', message)
-    })
-
-    return () => {
-      unPaste()
-      unError()
-    }
-  }, [open])
+    },
+  })
 
   const handleDraftChange = (field: keyof AgentDraft) => (
     e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
@@ -472,7 +439,7 @@ export const AgentSettingsDialog: FC<AgentSettingsDialogProps> = ({ open, onClos
 
   return (
     <div className="modal-backdrop">
-      <div className="modal modal-agent-settings">
+      <div className="modal modal-agent-settings" onKeyDownCapture={handleKeyDownCapture}>
         <div className="modal-title">{t('agent.title')}</div>
         <div className="agent-settings-tabs" role="tablist" aria-label={t('agent.title')}>
           <button

@@ -7,6 +7,18 @@ export type WebDavImportFinishedPayload = {
   message?: string | null
 }
 
+export type WebDavExportFinishedPayload = {
+  success: boolean
+  message?: string | null
+  summary?: {
+    totalFiles: number
+    uploadedFiles: number
+    skippedFiles: number
+    deletedFiles: number
+    incremental: boolean
+  } | null
+}
+
 export function onWebDavImportStarted(handler: () => void): Unlisten {
   let unlisten: Unlisten | undefined
   let disposed = false
@@ -91,6 +103,95 @@ export function onWebDavImportFinished(
         unlisten()
       } catch (err) {
         console.warn('[backupEvents] manual unlisten backup://webdav_import_finished failed', err)
+      }
+    }
+  }
+}
+
+export function onWebDavExportStarted(handler: () => void): Unlisten {
+  let unlisten: Unlisten | undefined
+  let disposed = false
+  let unlistenCalled = false
+
+  const setup = async () => {
+    try {
+      const un = await listen('backup://webdav_export_started', () => {
+        handler()
+      })
+      if (disposed) {
+        if (!unlistenCalled) {
+          unlistenCalled = true
+          try {
+            un()
+          } catch (err) {
+            console.warn('[backupEvents] unlisten backup://webdav_export_started failed', err)
+          }
+        }
+      } else {
+        unlisten = un
+      }
+    } catch (err) {
+      console.error('[backupEvents] listen backup://webdav_export_started failed', err)
+    }
+  }
+
+  void setup()
+
+  return () => {
+    disposed = true
+    if (unlisten && !unlistenCalled) {
+      unlistenCalled = true
+      try {
+        unlisten()
+      } catch (err) {
+        console.warn('[backupEvents] manual unlisten backup://webdav_export_started failed', err)
+      }
+    }
+  }
+}
+
+export function onWebDavExportFinished(
+  handler: (payload: WebDavExportFinishedPayload) => void,
+): Unlisten {
+  let unlisten: Unlisten | undefined
+  let disposed = false
+  let unlistenCalled = false
+
+  const setup = async () => {
+    try {
+      const un = await listen<WebDavExportFinishedPayload>(
+        'backup://webdav_export_finished',
+        (event) => {
+          handler(event.payload)
+        },
+      )
+      if (disposed) {
+        if (!unlistenCalled) {
+          unlistenCalled = true
+          try {
+            un()
+          } catch (err) {
+            console.warn('[backupEvents] unlisten backup://webdav_export_finished failed', err)
+          }
+        }
+      } else {
+        unlisten = un
+      }
+    } catch (err) {
+      console.error('[backupEvents] listen backup://webdav_export_finished failed', err)
+    }
+  }
+
+  void setup()
+
+  return () => {
+    disposed = true
+    if (unlisten && !unlistenCalled) {
+      unlistenCalled = true
+      try {
+        unlisten()
+      } catch (err) {
+        console.warn('[backupEvents] manual unlisten backup://webdav_export_finished failed', err)
       }
     }
   }

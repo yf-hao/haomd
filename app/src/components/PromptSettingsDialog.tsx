@@ -4,10 +4,10 @@ import './PromptSettingsDialog.css'
 import { emptyPromptSettings, type PromptRole } from '../modules/ai/promptSettings'
 import { usePromptSettingsPersistence } from '../hooks/usePromptSettingsPersistence'
 import { usePromptSettingsState, type PromptRoleDraft } from '../hooks/usePromptSettingsState'
-import { onNativePaste } from '../modules/platform/clipboardEvents'
 import { FieldGroup } from './FieldGroup'
 import { Button } from './Button'
 import { useI18n } from '../modules/i18n/I18nContext'
+import { useDesktopTextEditingBridge } from '../hooks/useDesktopTextEditingBridge'
 
 export type PromptSettingsDialogProps = {
   open: boolean
@@ -67,51 +67,9 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
     }
   }, [open, load, setSettings, setInitialSnapshot])
 
-  // 支持在 Prompt Settings 窗口输入框中使用 Cmd/Ctrl+V 粘贴
-  useEffect(() => {
-    if (!open) return
-
-    const unPaste = onNativePaste((text) => {
-      if (!text) return
-      if (typeof document === 'undefined') return
-
-      const active = document.activeElement as HTMLElement | null
-      if (!active) return
-
-      let el: HTMLInputElement | HTMLTextAreaElement | null = null
-      let field: keyof PromptRoleDraft | null = null
-
-      if (active === nameInputRef.current) {
-        el = active as HTMLInputElement
-        field = 'name'
-      } else if (active === descInputRef.current) {
-        el = active as HTMLInputElement
-        field = 'description'
-      } else if (active === promptTextareaRef.current) {
-        el = active as HTMLTextAreaElement
-        field = 'prompt'
-      } else {
-        return
-      }
-
-      const start = el.selectionStart ?? el.value.length
-      const end = el.selectionEnd ?? el.value.length
-      const value = el.value
-      const next = value.slice(0, start) + text + value.slice(end)
-
-      el.value = next
-      if (field) {
-        updateDraftField(field, next)
-      }
-
-      const pos = start + text.length
-      el.setSelectionRange(pos, pos)
-    })
-
-    return () => {
-      unPaste()
-    }
-  }, [open, updateDraftField])
+  const { handleKeyDownCapture } = useDesktopTextEditingBridge({
+    enabled: open,
+  })
 
   const handleRoleMouseDown = (roleId: string) => (e: ReactMouseEvent<HTMLDivElement>) => {
     e.preventDefault()
@@ -288,7 +246,7 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
 
   return (
     <div className="modal-backdrop">
-      <div className="modal modal-prompt-settings">
+      <div className="modal modal-prompt-settings" onKeyDownCapture={handleKeyDownCapture}>
         <div className="modal-title">{t('prompt.title')}</div>
         <div className="modal-content prompt-settings-body">
           <div className="prompt-settings-column-left">

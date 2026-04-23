@@ -1,6 +1,20 @@
 use super::*;
 use std::process::Command;
 
+pub(crate) const WORD_TEMPLATE_JSON_FILE: &str = "template.json";
+pub(crate) const WORD_TEMPLATE_MARKDOWN_FILE: &str = "usage.md";
+pub(crate) const WORD_TEMPLATE_DOCX_FILE: &str = "template.docx";
+pub(crate) const WORD_TEMPLATE_AUTHORING_FILE: &str = "authoring.json";
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WordTemplateAuthoringMetadata {
+    #[serde(default)]
+    pub template_request: String,
+    #[serde(default)]
+    pub sample_markdown: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WordTemplateEntry {
@@ -9,6 +23,7 @@ pub(crate) struct WordTemplateEntry {
     pub(crate) dir: String,
     pub(crate) docx_path: String,
     pub(crate) json_path: String,
+    pub(crate) markdown_path: String,
 }
 
 pub(crate) fn open_path_in_file_explorer(target_path: &str) -> Result<(), String> {
@@ -56,14 +71,43 @@ pub(crate) async fn open_in_file_explorer(target_path: String) -> Result<(), Str
 }
 
 pub(crate) fn resolve_word_templates_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    let app_data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("无法获取应用数据目录: {e}"))?;
-    let templates_dir = app_data_dir.join("word_templates");
-    std::fs::create_dir_all(&templates_dir)
-        .map_err(|e| format!("无法创建 word_templates 目录: {e}"))?;
-    Ok(templates_dir)
+    if let Ok(mut dir) = app.path().config_dir() {
+        dir.push("haomd");
+        dir.push("word_templates");
+        std::fs::create_dir_all(&dir).map_err(|e| format!("无法创建 word_templates 目录: {e}"))?;
+        return Ok(dir);
+    }
+
+    let dir = std::env::current_dir()
+        .map_err(|e| format!("无法获取当前目录: {e}"))?
+        .join("word_templates");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("无法创建 word_templates 目录: {e}"))?;
+    Ok(dir)
+}
+
+pub(crate) fn resolve_word_template_dir(
+    app: &AppHandle,
+    template_id: &str,
+) -> Result<PathBuf, String> {
+    let normalized_id = template_id.trim();
+    if normalized_id.is_empty() {
+        return Err("template_id is empty".to_string());
+    }
+    Ok(resolve_word_templates_dir(app)?.join(normalized_id))
+}
+
+pub(crate) fn build_word_template_asset_paths(
+    template_dir: &std::path::Path,
+) -> (PathBuf, PathBuf, PathBuf) {
+    (
+        template_dir.join(WORD_TEMPLATE_JSON_FILE),
+        template_dir.join(WORD_TEMPLATE_MARKDOWN_FILE),
+        template_dir.join(WORD_TEMPLATE_DOCX_FILE),
+    )
+}
+
+pub(crate) fn build_word_template_authoring_path(template_dir: &std::path::Path) -> PathBuf {
+    template_dir.join(WORD_TEMPLATE_AUTHORING_FILE)
 }
 
 #[tauri::command]
@@ -87,30 +131,20 @@ pub(crate) async fn list_word_templates(app: AppHandle) -> Result<Vec<WordTempla
             Ok(v) => v,
             Err(_) => continue,
         };
-        let path = entry.path();
-        if !path.is_file() {
+        let template_dir = entry.path();
+        if !template_dir.is_dir() {
             continue;
         }
-        if path.extension().and_then(|s| s.to_str()) != Some("docx") {
-            continue;
-        }
-        let stem = path
-            .file_stem()
+        let id = template_dir
+            .file_name()
             .and_then(|s| s.to_str())
-            .unwrap_or_default();
-        if !stem.starts_with("template_") {
-            continue;
-        }
-        let json_path = templates_dir.join(format!("{stem}.json"));
-        if !json_path.exists() {
-            continue;
-        }
-
-        let id = stem
-            .strip_prefix("template_")
-            .map(|s| s.to_string())
-            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
             .unwrap_or_else(|| "unknown-template".to_string());
+        let (json_path, markdown_path, docx_path) = build_word_template_asset_paths(&template_dir);
+        if !json_path.is_file() {
+            continue;
+        }
 
         let name = std::fs::read_to_string(&json_path)
             .ok()
@@ -126,9 +160,18 @@ pub(crate) async fn list_word_templates(app: AppHandle) -> Result<Vec<WordTempla
         items.push(WordTemplateEntry {
             id,
             name,
-            dir: templates_dir.to_string_lossy().into_owned(),
-            docx_path: path.to_string_lossy().into_owned(),
+            dir: template_dir.to_string_lossy().into_owned(),
+            docx_path: if docx_path.exists() {
+                docx_path.to_string_lossy().into_owned()
+            } else {
+                String::new()
+            },
             json_path: json_path.to_string_lossy().into_owned(),
+            markdown_path: if markdown_path.exists() {
+                markdown_path.to_string_lossy().into_owned()
+            } else {
+                String::new()
+            },
         });
     }
 
@@ -141,8 +184,108 @@ pub(crate) async fn get_word_template_config(
     app: AppHandle,
     template_id: String,
 ) -> Result<String, String> {
-    let (_, json_path) = resolve_word_template_paths(&app, &template_id)?;
+    let (json_path, _, _) =
+        build_word_template_asset_paths(&resolve_word_template_dir(&app, &template_id)?);
+    if !json_path.exists() {
+        return Err(format!("未找到模板配置文件: {}", json_path.display()));
+    }
     std::fs::read_to_string(&json_path).map_err(|e| format!("读取模板配置失败: {e}"))
+}
+
+#[tauri::command]
+pub(crate) async fn get_word_template_notes(
+    app: AppHandle,
+    template_id: String,
+) -> Result<String, String> {
+    let (_, markdown_path, _) =
+        build_word_template_asset_paths(&resolve_word_template_dir(&app, &template_id)?);
+    if !markdown_path.exists() {
+        return Ok(String::new());
+    }
+    std::fs::read_to_string(&markdown_path).map_err(|e| format!("读取模板说明失败: {e}"))
+}
+
+#[tauri::command]
+pub(crate) async fn get_word_template_authoring_metadata(
+    app: AppHandle,
+    template_id: String,
+) -> Result<String, String> {
+    let template_dir = resolve_word_template_dir(&app, &template_id)?;
+    let authoring_path = build_word_template_authoring_path(&template_dir);
+    if !authoring_path.exists() {
+        return Ok("{}".to_string());
+    }
+    let raw = std::fs::read_to_string(&authoring_path)
+        .map_err(|e| format!("读取模板作者信息失败: {e}"))?;
+    let normalized = serde_json::to_string_pretty(
+        &serde_json::from_str::<WordTemplateAuthoringMetadata>(&raw)
+            .map_err(|e| format!("解析模板作者信息失败: {e}"))?,
+    )
+    .map_err(|e| format!("格式化模板作者信息失败: {e}"))?;
+    Ok(normalized)
+}
+
+#[tauri::command]
+pub(crate) async fn save_word_template_artifacts(
+    app: AppHandle,
+    template_id: String,
+    template_json: String,
+    usage_markdown: String,
+    template_request: String,
+    sample_markdown: String,
+) -> Result<(), String> {
+    let normalized_id = template_id.trim();
+    if normalized_id.is_empty() {
+        return Err("template_id is empty".to_string());
+    }
+
+    let template_dir = resolve_word_template_dir(&app, normalized_id)?;
+    std::fs::create_dir_all(&template_dir).map_err(|e| format!("无法创建模板目录失败: {e}"))?;
+    let (json_path, markdown_path, _) = build_word_template_asset_paths(&template_dir);
+    let authoring_path = build_word_template_authoring_path(&template_dir);
+
+    let normalized_json = serde_json::to_string_pretty(
+        &serde_json::from_str::<serde_json::Value>(&template_json)
+            .map_err(|e| format!("模板 JSON 非法: {e}"))?,
+    )
+    .map_err(|e| format!("模板 JSON 格式化失败: {e}"))?;
+
+    std::fs::write(&json_path, normalized_json).map_err(|e| format!("写入模板配置失败: {e}"))?;
+    std::fs::write(&markdown_path, usage_markdown).map_err(|e| format!("写入模板说明失败: {e}"))?;
+    let authoring_json = serde_json::to_string_pretty(&WordTemplateAuthoringMetadata {
+        template_request,
+        sample_markdown,
+    })
+    .map_err(|e| format!("格式化模板作者信息失败: {e}"))?;
+    std::fs::write(&authoring_path, authoring_json)
+        .map_err(|e| format!("写入模板作者信息失败: {e}"))?;
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn should_build_word_template_asset_paths_from_template_dir() {
+        let template_dir = Path::new("/tmp/word_templates/meeting-notes");
+        let (json_path, markdown_path, docx_path) = build_word_template_asset_paths(template_dir);
+
+        assert_eq!(
+            json_path,
+            Path::new("/tmp/word_templates/meeting-notes/template.json")
+        );
+        assert_eq!(
+            markdown_path,
+            Path::new("/tmp/word_templates/meeting-notes/usage.md")
+        );
+        assert_eq!(
+            docx_path,
+            Path::new("/tmp/word_templates/meeting-notes/template.docx")
+        );
+    }
 }
 
 pub(crate) fn open_markdown_handbook(app: &AppHandle) {

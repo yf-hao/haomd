@@ -1,7 +1,6 @@
 import type { FC, ChangeEvent, FormEvent } from 'react'
 import { useEffect, useState } from 'react'
 import './AiSettingsDialog.css'
-import { onNativePaste, onNativePasteError } from '../modules/platform/clipboardEvents'
 import { emptySettings, type UiProvider, type ProviderType } from '../modules/ai/settings'
 import { useAiSettingsPersistence } from '../hooks/useAiSettingsPersistence'
 import { useAiSettingsState, type ProviderDraft, parseModelsInput } from '../hooks/useAiSettingsState'
@@ -9,6 +8,7 @@ import { testProviderConnection } from '../modules/ai/testConnection'
 import { useI18n } from '../modules/i18n/I18nContext'
 import { FieldGroup } from './FieldGroup'
 import { Button } from './Button'
+import { useDesktopTextEditingBridge } from '../hooks/useDesktopTextEditingBridge'
 
 export type AiSettingsDialogProps = {
   open: boolean
@@ -17,7 +17,7 @@ export type AiSettingsDialogProps = {
 
 export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) => {
   const { t } = useI18n()
-  const [activeField, setActiveField] = useState<keyof ProviderDraft | null>(null)
+  const [, setActiveField] = useState<keyof ProviderDraft | null>(null)
   const [testResult, setTestResult] = useState<string | null>(null)
   const [showKeyOnlyModal, setShowKeyOnlyModal] = useState(false)
   const { load, save } = useAiSettingsPersistence()
@@ -25,7 +25,6 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
     settings,
     setSettings,
     draft,
-    setDraft,
     expandedId,
     setExpandedId,
     editingProviderId,
@@ -84,48 +83,12 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
     }
   }, [open, load, setSettings, setInitialSnapshot])
 
-  // 监听原生粘贴事件，将内容插入当前激活的输入字段
-  useEffect(() => {
-    if (!open) return
-
-    const unPaste = onNativePaste((text) => {
-      if (!text || !activeField) return
-
-      setDraft((prev) => {
-        const key = activeField
-        const current = prev[key] ?? ''
-
-        let start = current.length
-        let end = current.length
-
-        if (typeof document !== 'undefined') {
-          const el = document.activeElement as HTMLInputElement | HTMLTextAreaElement | null
-          if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
-            if (typeof el.selectionStart === 'number') start = el.selectionStart
-            if (typeof el.selectionEnd === 'number') end = el.selectionEnd ?? start
-          }
-        }
-
-        const before = current.slice(0, start)
-        const after = current.slice(end)
-
-        return {
-          ...prev,
-          [key]: before + text + after,
-        }
-      })
-    })
-
-    const unError = onNativePasteError((message) => {
-      // 先仅记录日志，如有需要可接入表单错误区域
+  const { handleKeyDownCapture } = useDesktopTextEditingBridge({
+    enabled: open,
+    onPasteError: (message) => {
       console.warn('[AiSettingsDialog] native paste error:', message)
-    })
-
-    return () => {
-      unPaste()
-      unError()
-    }
-  }, [open, activeField, setDraft])
+    },
+  })
 
   const editingProvider =
     editingProviderId != null
@@ -396,7 +359,7 @@ export const AiSettingsDialog: FC<AiSettingsDialogProps> = ({ open, onClose }) =
 
   return (
     <div className="modal-backdrop">
-      <div className="modal modal-ai-settings">
+      <div className="modal modal-ai-settings" onKeyDownCapture={handleKeyDownCapture}>
         <div className="modal-title">{t('provider.title')}</div>
         <div className="modal-content ai-settings-body">
           <div className="ai-settings-column-left">

@@ -13,7 +13,12 @@ import { I18nProvider, useI18n } from './modules/i18n/I18nContext'
 import { getSystemResolvedLanguage, normalizeLanguageTag, resolveLanguageMode } from './modules/i18n/languageResolver'
 import type { LanguageMode, ResolvedLanguage } from './modules/i18n/schema'
 import { onMenuAction } from './modules/platform/menuEvents'
-import { onWebDavImportFinished, onWebDavImportStarted } from './modules/platform/backupEvents'
+import {
+  onWebDavExportFinished,
+  onWebDavExportStarted,
+  onWebDavImportFinished,
+  onWebDavImportStarted,
+} from './modules/platform/backupEvents'
 import { isTauriEnv } from './modules/platform/runtime'
 import {
   getDefaultLanguageSetting,
@@ -346,8 +351,11 @@ function AppShellContent({
     const unlistenStarted = onWebDavImportStarted(() => {
       setBackgroundStatusMessage(t('backup.webdavImportRunningStatus'))
     })
+    const unlistenExportStarted = onWebDavExportStarted(() => {
+      setBackgroundStatusMessage(t('backup.webdavExportRunningStatus'))
+    })
 
-    const unlisten = onWebDavImportFinished((payload) => {
+    const unlistenImport = onWebDavImportFinished((payload) => {
       setBackgroundStatusMessage('')
       if (payload.success) {
         setToastMessage(t('backup.webdavImportSuccess'))
@@ -355,10 +363,33 @@ function AppShellContent({
         setToastMessage(t('backup.webdavImportFailed', { message: payload.message ?? 'Unknown error' }))
       }
     })
+    const unlistenExport = onWebDavExportFinished((payload) => {
+      setBackgroundStatusMessage('')
+      if (payload.success) {
+        const summary = payload.summary
+        setToastMessage(
+          summary?.incremental
+            ? t('backup.webdavExportSuccessIncremental', {
+                total: summary?.totalFiles ?? 0,
+                uploaded: summary?.uploadedFiles ?? 0,
+                skipped: summary?.skippedFiles ?? 0,
+                deleted: summary?.deletedFiles ?? 0,
+              })
+            : t('backup.webdavExportSuccessFull', {
+                total: summary?.totalFiles ?? 0,
+                uploaded: summary?.uploadedFiles ?? 0,
+              }),
+        )
+      } else {
+        setToastMessage(t('backup.webdavExportFailed', { message: payload.message ?? 'Unknown error' }))
+      }
+    })
 
     return () => {
       unlistenStarted()
-      unlisten()
+      unlistenExportStarted()
+      unlistenImport()
+      unlistenExport()
     }
   }, [t])
 

@@ -1,5 +1,4 @@
 import { memo, useCallback, useEffect, useState } from 'react'
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { SidebarBackgroundShell } from './SidebarBackgroundShell'
 import { useI18n } from '../modules/i18n/I18nContext'
@@ -7,21 +6,11 @@ import type { WorkflowDocument, WorkflowRunResult } from '../modules/workflows/d
 import { createDefaultWorkflow, createDefaultWorkflowStep, createWorkflowRunInputTemplate, normalizeWorkflowBeforeSave } from '../modules/workflows/application/workflowsService'
 import { deleteWorkflow, listWorkflows, readWorkflow, saveWorkflow } from '../modules/workflows/storage/workflowsRepo'
 import { runWorkflow } from '../modules/workflows/application/workflowRuntimeService'
-import { onNativePaste, onNativePasteError } from '../modules/platform/clipboardEvents'
+import { useDesktopTextEditingBridge } from '../hooks/useDesktopTextEditingBridge'
 
 export type WorkflowsPanelProps = {
   panelWidth?: number
 }
-
-type ActiveWorkflowField =
-  | { kind: 'id' }
-  | { kind: 'name' }
-  | { kind: 'description' }
-  | { kind: 'inputSchema' }
-  | { kind: 'outputFrom' }
-  | { kind: 'markdown' }
-  | { kind: 'runInput' }
-  | { kind: 'step'; stepId: string; field: 'id' | 'skillId' | 'scriptId' | 'inputTemplate' }
 
 export const WorkflowsPanel = memo(function WorkflowsPanel({ panelWidth }: WorkflowsPanelProps) {
   const { t } = useI18n()
@@ -33,7 +22,6 @@ export const WorkflowsPanel = memo(function WorkflowsPanel({ panelWidth }: Workf
   const [saving, setSaving] = useState(false)
   const [running, setRunning] = useState(false)
   const [error, setError] = useState('')
-  const [activeField, setActiveField] = useState<ActiveWorkflowField | null>(null)
   const [runInput, setRunInput] = useState('{}')
   const [runResult, setRunResult] = useState<WorkflowRunResult | null>(null)
 
@@ -68,7 +56,6 @@ export const WorkflowsPanel = memo(function WorkflowsPanel({ panelWidth }: Workf
   useEffect(() => {
     if (!selectedWorkflowId) {
       setDraft(null)
-      setActiveField(null)
       setRunResult(null)
       return
     }
@@ -94,59 +81,14 @@ export const WorkflowsPanel = memo(function WorkflowsPanel({ panelWidth }: Workf
     }
   }, [selectedWorkflowId])
 
-  useEffect(() => {
-    if (!editorOpen) setActiveField(null)
-  }, [editorOpen])
-
-  useEffect(() => {
-    if (!editorOpen) return
-    const unPaste = onNativePaste((text) => {
-      if (!text || !activeField) return
-
-      if (typeof document !== 'undefined') {
-        const active = document.activeElement as HTMLInputElement | HTMLTextAreaElement | null
-        const isEditableInput = !!active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')
-        if (isEditableInput && typeof active.setRangeText === 'function') {
-          const start = active.selectionStart ?? active.value.length
-          const end = active.selectionEnd ?? start
-          active.focus()
-          active.setRangeText(text, start, end, 'end')
-          active.dispatchEvent(new Event('input', { bubbles: true }))
-          return
-        }
-      }
-
-      if (activeField.kind === 'runInput') {
-        setRunInput((prevInput) => `${prevInput}${text}`)
-        return
-      }
-
-      setDraft((prev) => {
-        if (!prev) return prev
-        if (activeField.kind === 'id') return { ...prev, id: `${prev.id ?? ''}${text}` }
-        if (activeField.kind === 'name') return { ...prev, name: `${prev.name ?? ''}${text}` }
-        if (activeField.kind === 'description') return { ...prev, description: `${prev.description ?? ''}${text}` }
-        if (activeField.kind === 'inputSchema') return { ...prev, inputSchema: `${prev.inputSchema ?? ''}${text}` }
-        if (activeField.kind === 'outputFrom') return { ...prev, outputFrom: `${prev.outputFrom ?? ''}${text}` }
-        if (activeField.kind === 'markdown') return { ...prev, markdown: `${prev.markdown ?? ''}${text}` }
-        return {
-          ...prev,
-          steps: prev.steps.map((step) =>
-            step.id !== activeField.stepId
-              ? step
-              : { ...step, [activeField.field]: `${String(step[activeField.field] ?? '')}${text}` },
-          ),
-        }
-      })
-    })
-    const unError = onNativePasteError((message) => {
+  const handlePasteError = useCallback((message: string) => {
       console.warn('[WorkflowsPanel] native paste error:', message)
-    })
-    return () => {
-      unPaste()
-      unError()
-    }
-  }, [activeField, editorOpen])
+    }, [])
+
+  const { handleKeyDownCapture } = useDesktopTextEditingBridge({
+    enabled: editorOpen,
+    onPasteError: handlePasteError,
+  })
 
   const updateDraft = useCallback((patch: Partial<WorkflowDocument>) => {
     setDraft((prev) => (prev ? { ...prev, ...patch } : prev))
@@ -236,15 +178,6 @@ export const WorkflowsPanel = memo(function WorkflowsPanel({ panelWidth }: Workf
     })
   }, [])
 
-  const handleEditorKeyDownCapture = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
-    const isMeta = event.metaKey || event.ctrlKey
-    if (!isMeta) return
-    const key = event.key.toLowerCase()
-    if (key === 'c' || key === 'v' || key === 'x' || key === 'z' || key === 'y') {
-      event.stopPropagation()
-    }
-  }, [])
-
   const handleRunWorkflow = useCallback(async () => {
     if (!draft) return
     setRunning(true)
@@ -302,20 +235,20 @@ export const WorkflowsPanel = memo(function WorkflowsPanel({ panelWidth }: Workf
 
       {editorOpen && draft && typeof document !== 'undefined' && createPortal(
         <div className="modal-backdrop">
-          <div className="modal modal-prompt-settings modal-skills-settings workflows-editor-modal" onKeyDownCapture={handleEditorKeyDownCapture}>
+          <div className="modal modal-prompt-settings modal-skills-settings workflows-editor-modal" onKeyDownCapture={handleKeyDownCapture}>
             <div className="modal-title">{draft.name || t('workflows.title')}</div>
             <div className="modal-content skills-editor-modal-content">
               <div className="skills-editor">
                 <div className="skills-editor-layout">
                   <div className="skills-editor-main">
                     <label className="field-label">{t('workflows.workflowId')}</label>
-                    <input className="field-input" value={draft.id} onChange={(e) => updateDraft({ id: e.target.value })} onFocus={() => setActiveField({ kind: 'id' })} />
+                    <input className="field-input" value={draft.id} onChange={(e) => updateDraft({ id: e.target.value })} />
 
                     <label className="field-label">{t('workflows.name')}</label>
-                    <input className="field-input" value={draft.name} onChange={(e) => updateDraft({ name: e.target.value })} onFocus={() => setActiveField({ kind: 'name' })} />
+                    <input className="field-input" value={draft.name} onChange={(e) => updateDraft({ name: e.target.value })} />
 
                     <label className="field-label">{t('workflows.description')}</label>
-                    <input className="field-input" value={draft.description ?? ''} onChange={(e) => updateDraft({ description: e.target.value })} onFocus={() => setActiveField({ kind: 'description' })} />
+                    <input className="field-input" value={draft.description ?? ''} onChange={(e) => updateDraft({ description: e.target.value })} />
 
                     <div className="skills-row-grid">
                       <label className="skills-checkbox">
@@ -338,13 +271,13 @@ export const WorkflowsPanel = memo(function WorkflowsPanel({ panelWidth }: Workf
                     </select>
 
                     <label className="field-label">{t('workflows.inputSchema')}</label>
-                    <textarea className="field-textarea skills-script-schema" value={draft.inputSchema} onChange={(e) => updateDraft({ inputSchema: e.target.value })} onFocus={() => setActiveField({ kind: 'inputSchema' })} />
+                    <textarea className="field-textarea skills-script-schema" value={draft.inputSchema} onChange={(e) => updateDraft({ inputSchema: e.target.value })} />
 
                     <label className="field-label">{t('workflows.outputFrom')}</label>
-                    <input className="field-input" value={draft.outputFrom} onChange={(e) => updateDraft({ outputFrom: e.target.value })} onFocus={() => setActiveField({ kind: 'outputFrom' })} />
+                    <input className="field-input" value={draft.outputFrom} onChange={(e) => updateDraft({ outputFrom: e.target.value })} />
 
                     <label className="field-label">{t('workflows.markdown')}</label>
-                    <textarea className="field-textarea skills-markdown-input" value={draft.markdown} onChange={(e) => updateDraft({ markdown: e.target.value })} onFocus={() => setActiveField({ kind: 'markdown' })} />
+                    <textarea className="field-textarea skills-markdown-input" value={draft.markdown} onChange={(e) => updateDraft({ markdown: e.target.value })} />
                   </div>
 
                   <div className="skills-editor-side">
@@ -368,13 +301,13 @@ export const WorkflowsPanel = memo(function WorkflowsPanel({ panelWidth }: Workf
                               </button>
                             </div>
                             <div className="skills-script-grid">
-                              <input className="field-input" value={step.id} onChange={(e) => handleStepChange(step.id, 'id', e.target.value)} onFocus={() => setActiveField({ kind: 'step', stepId: step.id, field: 'id' })} placeholder={t('workflows.stepId')} />
+                              <input className="field-input" value={step.id} onChange={(e) => handleStepChange(step.id, 'id', e.target.value)} placeholder={t('workflows.stepId')} />
                               <input className="field-input" value={step.type} readOnly />
-                              <input className="field-input" value={step.skillId} onChange={(e) => handleStepChange(step.id, 'skillId', e.target.value)} onFocus={() => setActiveField({ kind: 'step', stepId: step.id, field: 'skillId' })} placeholder={t('workflows.skillId')} />
-                              <input className="field-input" value={step.scriptId} onChange={(e) => handleStepChange(step.id, 'scriptId', e.target.value)} onFocus={() => setActiveField({ kind: 'step', stepId: step.id, field: 'scriptId' })} placeholder={t('workflows.scriptId')} />
+                              <input className="field-input" value={step.skillId} onChange={(e) => handleStepChange(step.id, 'skillId', e.target.value)} placeholder={t('workflows.skillId')} />
+                              <input className="field-input" value={step.scriptId} onChange={(e) => handleStepChange(step.id, 'scriptId', e.target.value)} placeholder={t('workflows.scriptId')} />
                             </div>
                             <label className="field-label">{t('workflows.inputTemplate')}</label>
-                            <textarea className="field-textarea skills-script-schema" value={step.inputTemplate} onChange={(e) => handleStepChange(step.id, 'inputTemplate', e.target.value)} onFocus={() => setActiveField({ kind: 'step', stepId: step.id, field: 'inputTemplate' })} />
+                            <textarea className="field-textarea skills-script-schema" value={step.inputTemplate} onChange={(e) => handleStepChange(step.id, 'inputTemplate', e.target.value)} />
                           </div>
                         ))}
                       </div>
@@ -388,7 +321,6 @@ export const WorkflowsPanel = memo(function WorkflowsPanel({ panelWidth }: Workf
                       className="field-textarea skills-script-schema"
                       value={runInput}
                       onChange={(e) => setRunInput(e.target.value)}
-                      onFocus={() => setActiveField({ kind: 'runInput' })}
                     />
                     <button type="button" className="ghost primary" onClick={handleRunWorkflow} disabled={running}>
                       {running ? t('workflows.running') : t('workflows.runWorkflow')}

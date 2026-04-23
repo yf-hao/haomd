@@ -1,5 +1,4 @@
 import { memo, useCallback, useEffect, useState } from 'react'
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { SidebarBackgroundShell } from './SidebarBackgroundShell'
 import { SkillGenerateDialog } from './SkillGenerateDialog'
@@ -7,18 +6,11 @@ import { useI18n } from '../modules/i18n/I18nContext'
 import type { SkillDocument } from '../modules/skills/domain/types'
 import { createDefaultScript, createDefaultSkill, normalizeSkillBeforeSave } from '../modules/skills/application/skillsService'
 import { deleteSkill, listSkills, readSkill, saveSkill } from '../modules/skills/storage/skillsRepo'
-import { onNativePaste, onNativePasteError } from '../modules/platform/clipboardEvents'
+import { useDesktopTextEditingBridge } from '../hooks/useDesktopTextEditingBridge'
 
 export type SkillsPanelProps = {
   panelWidth?: number
 }
-
-type ActiveSkillField =
-  | { kind: 'id' }
-  | { kind: 'name' }
-  | { kind: 'description' }
-  | { kind: 'markdown' }
-  | { kind: 'script'; scriptId: string; field: 'id' | 'label' | 'runtime' | 'entry' | 'argsSchema' | 'content' }
 
 export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanelProps) {
   const { t } = useI18n()
@@ -29,7 +21,6 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [activeField, setActiveField] = useState<ActiveSkillField | null>(null)
   const [authoringMode, setAuthoringMode] = useState<'create' | 'revise' | null>(null)
 
   const style = panelWidth ? { width: panelWidth } : undefined
@@ -67,7 +58,6 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
   useEffect(() => {
     if (!selectedSkillId) {
       setDraft(null)
-      setActiveField(null)
       return
     }
     let disposed = false
@@ -90,79 +80,14 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
     }
   }, [selectedSkillId])
 
-  useEffect(() => {
-    if (!editorOpen) {
-      setActiveField(null)
-    }
-  }, [editorOpen])
-
-  useEffect(() => {
-    if (!editorOpen) return
-
-    const unPaste = onNativePaste((text) => {
-      if (!text || !activeField) return
-
-      if (typeof document !== 'undefined') {
-        const active = document.activeElement as HTMLInputElement | HTMLTextAreaElement | null
-        const isEditableInput =
-          !!active &&
-          (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')
-
-        if (isEditableInput && typeof active.setRangeText === 'function') {
-          const start = active.selectionStart ?? active.value.length
-          const end = active.selectionEnd ?? start
-          active.focus()
-          active.setRangeText(text, start, end, 'end')
-          active.dispatchEvent(new Event('input', { bubbles: true }))
-          return
-        }
-      }
-
-      if (activeField.kind === 'name') {
-        setDraft((prev) => (prev ? { ...prev, name: `${prev.name ?? ''}${text}` } : prev))
-        return
-      }
-
-      if (activeField.kind === 'id') {
-        setDraft((prev) => (prev ? { ...prev, id: `${prev.id ?? ''}${text}` } : prev))
-        return
-      }
-
-      if (activeField.kind === 'description') {
-        setDraft((prev) => (prev ? { ...prev, description: `${prev.description ?? ''}${text}` } : prev))
-        return
-      }
-
-      if (activeField.kind === 'markdown') {
-        setDraft((prev) => (prev ? { ...prev, markdown: `${prev.markdown ?? ''}${text}` } : prev))
-        return
-      }
-
-      if (activeField.kind === 'script') {
-        setDraft((prev) => {
-          if (!prev) return prev
-          return {
-            ...prev,
-            scripts: prev.scripts.map((script) =>
-              script.id !== activeField.scriptId
-                ? script
-                : { ...script, [activeField.field]: `${String(script[activeField.field] ?? '')}${text}` },
-            ),
-          }
-        })
-        return
-      }
-    })
-
-    const unError = onNativePasteError((message) => {
+  const handlePasteError = useCallback((message: string) => {
       console.warn('[SkillsPanel] native paste error:', message)
-    })
+    }, [])
 
-    return () => {
-      unPaste()
-      unError()
-    }
-  }, [activeField, editorOpen])
+  const { handleKeyDownCapture } = useDesktopTextEditingBridge({
+    enabled: editorOpen,
+    onPasteError: handlePasteError,
+  })
 
   const updateDraft = useCallback((patch: Partial<SkillDocument>) => {
     setDraft((prev) => (prev ? { ...prev, ...patch } : prev))
@@ -264,15 +189,6 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
     [],
   )
 
-  const handleEditorKeyDownCapture = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
-    const isMeta = event.metaKey || event.ctrlKey
-    if (!isMeta) return
-    const key = event.key.toLowerCase()
-    if (key === 'c' || key === 'v' || key === 'x' || key === 'z' || key === 'y') {
-      event.stopPropagation()
-    }
-  }, [])
-
   return (
     <>
       <SidebarBackgroundShell className="skills-panel" style={style}>
@@ -323,7 +239,7 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
         <div className="modal-backdrop">
           <div
             className="modal modal-prompt-settings modal-skills-settings skills-editor-modal"
-            onKeyDownCapture={handleEditorKeyDownCapture}
+            onKeyDownCapture={handleKeyDownCapture}
           >
             <div className="skills-editor-modal-header">
               <div className="modal-title">{draft.name || t('skills.title')}</div>
@@ -345,7 +261,6 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
                       className="field-input"
                       value={draft.id}
                       onChange={(e) => updateDraft({ id: e.target.value })}
-                      onFocus={() => setActiveField({ kind: 'id' })}
                     />
 
                     <label className="field-label">{t('skills.name')}</label>
@@ -353,7 +268,6 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
                       className="field-input"
                       value={draft.name}
                       onChange={(e) => updateDraft({ name: e.target.value })}
-                      onFocus={() => setActiveField({ kind: 'name' })}
                     />
 
                     <label className="field-label">{t('skills.description')}</label>
@@ -361,7 +275,6 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
                       className="field-input"
                       value={draft.description ?? ''}
                       onChange={(e) => updateDraft({ description: e.target.value })}
-                      onFocus={() => setActiveField({ kind: 'description' })}
                     />
 
                     <div className="skills-row-grid">
@@ -389,7 +302,6 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
                         className="field-textarea skills-markdown-input"
                         value={draft.markdown}
                         onChange={(e) => updateDraft({ markdown: e.target.value })}
-                        onFocus={() => setActiveField({ kind: 'markdown' })}
                       />
                     </div>
                   </div>
@@ -419,10 +331,10 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
                               </button>
                             </div>
                             <div className="skills-script-grid">
-                              <input className="field-input" value={script.id} onChange={(e) => handleScriptChange(script.id, 'id', e.target.value)} onFocus={() => setActiveField({ kind: 'script', scriptId: script.id, field: 'id' })} placeholder={t('skills.scriptId')} />
-                              <input className="field-input" value={script.label} onChange={(e) => handleScriptChange(script.id, 'label', e.target.value)} onFocus={() => setActiveField({ kind: 'script', scriptId: script.id, field: 'label' })} placeholder={t('skills.scriptLabel')} />
-                              <input className="field-input" value={script.runtime} onChange={(e) => handleScriptChange(script.id, 'runtime', e.target.value)} onFocus={() => setActiveField({ kind: 'script', scriptId: script.id, field: 'runtime' })} placeholder={t('skills.runtime')} />
-                              <input className="field-input" value={script.entry} onChange={(e) => handleScriptChange(script.id, 'entry', e.target.value)} onFocus={() => setActiveField({ kind: 'script', scriptId: script.id, field: 'entry' })} placeholder={t('skills.entry')} />
+                              <input className="field-input" value={script.id} onChange={(e) => handleScriptChange(script.id, 'id', e.target.value)} placeholder={t('skills.scriptId')} />
+                              <input className="field-input" value={script.label} onChange={(e) => handleScriptChange(script.id, 'label', e.target.value)} placeholder={t('skills.scriptLabel')} />
+                              <input className="field-input" value={script.runtime} onChange={(e) => handleScriptChange(script.id, 'runtime', e.target.value)} placeholder={t('skills.runtime')} />
+                              <input className="field-input" value={script.entry} onChange={(e) => handleScriptChange(script.id, 'entry', e.target.value)} placeholder={t('skills.entry')} />
                               <select className="field-select" value={script.approvalPolicy} onChange={(e) => handleScriptChange(script.id, 'approvalPolicy', e.target.value)}>
                                 <option value="ask">{t('skills.approvalAsk')}</option>
                                 <option value="always_allow">{t('skills.approvalAlwaysAllow')}</option>
@@ -434,14 +346,12 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
                               className="field-textarea skills-script-schema"
                               value={script.argsSchema ?? ''}
                               onChange={(e) => handleScriptChange(script.id, 'argsSchema', e.target.value)}
-                              onFocus={() => setActiveField({ kind: 'script', scriptId: script.id, field: 'argsSchema' })}
                             />
                             <label className="field-label">{t('skills.scriptContent')}</label>
                             <textarea
                               className="field-textarea skills-script-content"
                               value={script.content}
                               onChange={(e) => handleScriptChange(script.id, 'content', e.target.value)}
-                              onFocus={() => setActiveField({ kind: 'script', scriptId: script.id, field: 'content' })}
                             />
                           </div>
                         ))}
