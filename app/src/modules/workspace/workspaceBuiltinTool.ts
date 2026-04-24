@@ -9,6 +9,7 @@ export const CREATE_WORKSPACE_DIRECTORY_TOOL_NAME = 'create_workspace_directory'
 
 type WorkspaceToolContext = {
   onDocumentSaved?: (path: string) => void
+  setStatusMessage?: (message: string) => void
 }
 
 type WriteWorkspaceResult =
@@ -208,9 +209,6 @@ export async function executeWriteToWorkspace(args: {
   if (!fileName) {
     return '⚠️ 未提供文件名。'
   }
-  if (!content.trim()) {
-    return '⚠️ 内容为空，未保存。'
-  }
 
   try {
     const resp = await invoke<BackendResult<WriteWorkspaceResult>>('write_workspace_file', {
@@ -227,7 +225,9 @@ export async function executeWriteToWorkspace(args: {
     const result = resp.Ok.data
     if (result.ok) {
       ctx?.onDocumentSaved?.(result.savedFilePath)
-      return `✅ 已保存：${result.savedFilePath}`
+      const message = `✅ 已保存：${result.savedFilePath}`
+      ctx?.setStatusMessage?.(message)
+      return message
     }
 
     if (result.reason === 'ambiguous') {

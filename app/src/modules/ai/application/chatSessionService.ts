@@ -642,6 +642,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
                 parsedArgs as { targetDirectory?: string; fileName?: string; content?: string },
                 {
                   onDocumentSaved: options.onDocumentSaved,
+                  setStatusMessage: options.setStatusMessage,
                 },
               )
             } else if (tc.function.name === SAVE_OR_EXPORT_CURRENT_DOCUMENT_TOOL_NAME) {

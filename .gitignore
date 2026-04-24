@@ -22,3 +22,6 @@
 
 # Local session data files (Tauri dev working directory)
 app/src-tauri/session:*/
+node_modules/
+dist/
+build/

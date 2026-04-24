@@ -82,6 +82,59 @@ describe('workspaceBuiltinTool', () => {
     expect(onDocumentSaved).toHaveBeenCalledWith('/tmp/离散数学/测试/test.md')
   })
 
+  it('should notify status bar after workspace file is written', async () => {
+    setWorkspaceMountedRoots(['/tmp/离散数学'])
+    mockInvoke.mockResolvedValueOnce({
+      Ok: {
+        data: {
+          ok: true,
+          savedFilePath: '/tmp/离散数学/测试/t2.md',
+        },
+        trace_id: 'trace-5',
+      },
+    })
+
+    const setStatusMessage = vi.fn()
+    const result = await executeWriteToWorkspace(
+      {
+        targetDirectory: '测试',
+        fileName: 't2.md',
+        content: '你好',
+      },
+      { setStatusMessage },
+    )
+
+    expect(result).toContain('/tmp/离散数学/测试/t2.md')
+    expect(setStatusMessage).toHaveBeenCalledWith('✅ 已保存：/tmp/离散数学/测试/t2.md')
+  })
+
+  it('should allow creating an empty file in workspace', async () => {
+    setWorkspaceMountedRoots(['/tmp/离散数学'])
+    mockInvoke.mockResolvedValueOnce({
+      Ok: {
+        data: {
+          ok: true,
+          savedFilePath: '/tmp/离散数学/测试/t1.md',
+        },
+        trace_id: 'trace-4',
+      },
+    })
+
+    const result = await executeWriteToWorkspace({
+      targetDirectory: '测试',
+      fileName: 't1.md',
+      content: '',
+    })
+
+    expect(result).toContain('/tmp/离散数学/测试/t1.md')
+    expect(mockInvoke).toHaveBeenCalledWith('write_workspace_file', {
+      mountedRoots: ['/tmp/离散数学'],
+      targetDirectory: '测试',
+      fileName: 't1.md',
+      content: '',
+    })
+  })
+
   it('should format resolved directory result', async () => {
     setWorkspaceMountedRoots(['/tmp/离散数学'])
     mockInvoke.mockResolvedValueOnce({

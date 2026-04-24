@@ -1,6 +1,6 @@
 import type { FC, FormEvent, KeyboardEvent } from 'react'
 import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { ChatEntryMode, EntryContext } from '../domain/chatSession'
+import type { ChatEntryMode, ChatMessageView, EntryContext } from '../domain/chatSession'
 import { getDirKeyFromDocPath, normalizePersistableDocPath } from '../domain/docPathUtils'
 import type { AiChatSessionKey } from '../application/aiChatSessionService'
 import { useAiChatSession } from './hooks/useAiChatSession'
@@ -146,6 +146,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
     | { path: string; target: 'workspace-entry'; targetKind?: WorkspaceEntryKind }
     | null
   >(null)
+  const [localFeedbackMessages, setLocalFeedbackMessages] = useState<ChatMessageView[]>([])
   const [imageGenerationRunning, setImageGenerationRunning] = useState(false)
   // 仅在通过 /list 打开输入历史弹窗时，才允许使用 `!n` 本地历史回填命令
   const [historyRecallEnabled, setHistoryRecallEnabled] = useState(false)
@@ -177,6 +178,19 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
   const clearHistoryBrowse = () => {
     historyCursorRef.current = null
     setHistoryCursor(null)
+  }
+
+  const pushLocalFeedback = (content: string) => {
+    const trimmed = content.trim()
+    if (!trimmed) return
+    setLocalFeedbackMessages((prev) => [
+      ...prev.slice(-4),
+      {
+        id: `local-feedback:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
+        role: 'assistant',
+        content: trimmed,
+      },
+    ])
   }
 
   const rawDocPath = resolveAiChatDocPath(currentFolderPath ?? currentFilePath)
@@ -581,15 +595,18 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
                 : { ok: false, message: '当前删除能力不可用。' }
         setPendingDeleteRequest(null)
         setStatusMessage?.(result.message)
+        pushLocalFeedback(result.message)
         return
       }
       if (DELETE_CANCEL_TOKENS.has(trimmedInput) || DELETE_CANCEL_TOKENS.has(normalizedInput)) {
         setInput('')
         setPendingDeleteRequest(null)
         setStatusMessage?.('已取消删除。')
+        pushLocalFeedback('已取消删除。')
         return
       }
       setStatusMessage?.('请回复“确认删除”或“取消”。')
+      pushLocalFeedback('请回复“确认删除”或“取消”。')
       return
     }
 
@@ -602,7 +619,10 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
       clearHistoryBrowse()
       setInput('')
       setPendingDeleteRequest({ path: currentPath, target: 'document' })
-      setStatusMessage?.(buildDeleteConfirmationPrompt('当前文档'))
+      const prompt = buildDeleteConfirmationPrompt('当前文档')
+      setStatusMessage?.(prompt)
+      setSlashModalMessage(prompt)
+      pushLocalFeedback(prompt)
       return
     }
 
@@ -610,12 +630,16 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
       const currentFolder = (currentFolderPath ?? getCurrentFolderPath?.() ?? '').trim()
       if (!currentFolder) {
         setStatusMessage?.('当前未选中文件夹，无法删除文件夹。')
+        pushLocalFeedback('当前未选中文件夹，无法删除文件夹。')
         return
       }
       clearHistoryBrowse()
       setInput('')
       setPendingDeleteRequest({ path: currentFolder, target: 'folder' })
-      setStatusMessage?.(buildDeleteConfirmationPrompt('当前文件夹'))
+      const prompt = buildDeleteConfirmationPrompt('当前文件夹')
+      setStatusMessage?.(prompt)
+      setSlashModalMessage(prompt)
+      pushLocalFeedback(prompt)
       return
     }
 
@@ -628,13 +652,14 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
         target: 'workspace-entry',
         targetKind: deleteWorkspaceEntryRequest.targetKind,
       })
-      setStatusMessage?.(
-        buildDeleteConfirmationPrompt(
-          deleteWorkspaceEntryRequest.targetKind === 'dir'
-            ? `目标文件夹「${deleteWorkspaceEntryRequest.targetPath}」`
-            : `目标「${deleteWorkspaceEntryRequest.targetPath}」`,
-        ),
+      const prompt = buildDeleteConfirmationPrompt(
+        deleteWorkspaceEntryRequest.targetKind === 'dir'
+          ? `目标文件夹「${deleteWorkspaceEntryRequest.targetPath}」`
+          : `目标「${deleteWorkspaceEntryRequest.targetPath}」`,
       )
+      setStatusMessage?.(prompt)
+      setSlashModalMessage(prompt)
+      pushLocalFeedback(prompt)
       return
     }
 
@@ -646,6 +671,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
         ? await onRenameCurrentDocument(renameRequest.fileName)
         : { ok: false, message: '当前重命名能力不可用。' }
       setStatusMessage?.(result.message)
+      pushLocalFeedback(result.message)
       return
     }
 
@@ -661,6 +687,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
         )
         : { ok: false, message: '当前工作区重命名能力不可用。' }
       setStatusMessage?.(result.message)
+      pushLocalFeedback(result.message)
       return
     }
 
@@ -672,6 +699,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
         ? await onCreateDirectoryUnderSelection(createDirectoryRequest.directoryName)
         : { ok: false, message: '当前创建目录能力不可用。' }
       setStatusMessage?.(result.message)
+      pushLocalFeedback(result.message)
       return
     }
 
@@ -686,6 +714,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
         )
         : { ok: false, message: '当前工作区创建目录能力不可用。' }
       setStatusMessage?.(result.message)
+      pushLocalFeedback(result.message)
       return
     }
 
@@ -1348,6 +1377,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
       <div className="ai-chat-pane-body">
         <AiChatBody
           messages={messages}
+          localFeedbackMessages={localFeedbackMessages}
           ephemeralMessages={ephemeralMessages}
           agentMode={activeAgentMode}
           activeDisplayAssistantId={isDifyProvider ? activeTypewriterId : latestStreamingAssistantId}
