@@ -248,7 +248,7 @@ export const enUSMessages: MessageDictionary = {
   },
   welcome: {
     subtitle:
-      'An AI-assisted Markdown editor that makes content generation, refinement, and organization more efficient, and supports creating Skills and Workflows with AI to further enhance document creation and content organization.',
+      'An AI workspace for text professionals, making content creation, refinement, and organization more efficient while supporting AI-powered Skills and Workflows.',
     newFile: 'New File',
     openFile: 'Open File',
     openAiChat: 'Open AI Chat',

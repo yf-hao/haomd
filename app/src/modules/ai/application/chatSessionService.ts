@@ -85,7 +85,26 @@ import {
   DELETE_CURRENT_DOCUMENT_TOOL_NAME,
   deleteCurrentDocumentToolSchema,
   executeDeleteCurrentDocument,
+  DELETE_CURRENT_FOLDER_TOOL_NAME,
+  deleteCurrentFolderToolSchema,
+  executeDeleteCurrentFolder,
+  RENAME_CURRENT_DOCUMENT_TOOL_NAME,
+  renameCurrentDocumentToolSchema,
+  executeRenameCurrentDocument,
+  CREATE_DIRECTORY_UNDER_SELECTION_TOOL_NAME,
+  createDirectoryUnderSelectionToolSchema,
+  executeCreateDirectoryUnderSelection,
+  DELETE_WORKSPACE_ENTRY_TOOL_NAME,
+  deleteWorkspaceEntryToolSchema,
+  executeDeleteWorkspaceEntry,
+  RENAME_WORKSPACE_ENTRY_TOOL_NAME,
+  renameWorkspaceEntryToolSchema,
+  executeRenameWorkspaceEntry,
+  CREATE_DIRECTORY_IN_WORKSPACE_TOOL_NAME,
+  createDirectoryInWorkspaceToolSchema,
+  executeCreateDirectoryInWorkspace,
 } from '../../document/documentBuiltinTool'
+import type { WorkspaceEntryKind } from '../../workspace/workspaceEntryResolver'
 
 export type StartChatOptions = {
   entryMode: ChatEntryMode
@@ -114,8 +133,26 @@ export type StartChatOptions = {
   getCurrentMarkdown?: () => string
   getCurrentFileName?: () => string | null
   getCurrentFilePath?: () => string | null
+  getCurrentFolderPath?: () => string | null
+  getCurrentWorkspaceRoot?: () => string | null
   onDocumentSaved?: (path: string) => void
   onRequestDeleteCurrentDocument?: (path: string) => Promise<{ ok: boolean; message: string }>
+  onRequestDeleteCurrentFolder?: (path: string) => Promise<{ ok: boolean; message: string }>
+  onRequestDeleteWorkspaceEntry?: (
+    targetPath: string,
+    targetKind?: WorkspaceEntryKind,
+  ) => Promise<{ ok: boolean; message: string }>
+  onRenameCurrentDocument?: (fileName: string) => Promise<{ ok: boolean; message: string }>
+  onRenameWorkspaceEntry?: (
+    targetPath: string,
+    newName: string,
+    targetKind?: WorkspaceEntryKind,
+  ) => Promise<{ ok: boolean; message: string }>
+  onCreateDirectoryUnderSelection?: (directoryName: string) => Promise<{ ok: boolean; message: string }>
+  onCreateDirectoryInWorkspace?: (
+    parentPath: string,
+    directoryName: string,
+  ) => Promise<{ ok: boolean; message: string }>
   setStatusMessage?: (message: string) => void
   t?: (key: string, params?: Record<string, string | number>) => string
 }
@@ -603,6 +640,9 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
             } else if (tc.function.name === WRITE_TO_WORKSPACE_TOOL_NAME) {
               toolResult = await executeWriteToWorkspace(
                 parsedArgs as { targetDirectory?: string; fileName?: string; content?: string },
+                {
+                  onDocumentSaved: options.onDocumentSaved,
+                },
               )
             } else if (tc.function.name === SAVE_OR_EXPORT_CURRENT_DOCUMENT_TOOL_NAME) {
               if (!options.getCurrentMarkdown || !options.getCurrentFileName) {
@@ -633,6 +673,53 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
                 {
                   getCurrentFilePath: options.getCurrentFilePath,
                   onRequestDeleteCurrentDocument: options.onRequestDeleteCurrentDocument,
+                },
+              )
+            } else if (tc.function.name === DELETE_CURRENT_FOLDER_TOOL_NAME) {
+              toolResult = await executeDeleteCurrentFolder(
+                parsedArgs as Record<string, never>,
+                {
+                  getCurrentFolderPath: options.getCurrentFolderPath,
+                  onRequestDeleteCurrentFolder: options.onRequestDeleteCurrentFolder,
+                },
+              )
+            } else if (tc.function.name === DELETE_WORKSPACE_ENTRY_TOOL_NAME) {
+              toolResult = await executeDeleteWorkspaceEntry(
+                parsedArgs as { targetPath?: string; targetKind?: WorkspaceEntryKind },
+                {
+                  getWorkspaceRoot: options.getCurrentWorkspaceRoot,
+                  onRequestDeleteWorkspaceEntry: options.onRequestDeleteWorkspaceEntry,
+                },
+              )
+            } else if (tc.function.name === RENAME_CURRENT_DOCUMENT_TOOL_NAME) {
+              toolResult = await executeRenameCurrentDocument(
+                parsedArgs as { fileName?: string },
+                {
+                  getCurrentFilePath: options.getCurrentFilePath,
+                  onRenameCurrentDocument: options.onRenameCurrentDocument,
+                },
+              )
+            } else if (tc.function.name === RENAME_WORKSPACE_ENTRY_TOOL_NAME) {
+              toolResult = await executeRenameWorkspaceEntry(
+                parsedArgs as { targetPath?: string; newName?: string; targetKind?: WorkspaceEntryKind },
+                {
+                  getWorkspaceRoot: options.getCurrentWorkspaceRoot,
+                  onRenameWorkspaceEntry: options.onRenameWorkspaceEntry,
+                },
+              )
+            } else if (tc.function.name === CREATE_DIRECTORY_UNDER_SELECTION_TOOL_NAME) {
+              toolResult = await executeCreateDirectoryUnderSelection(
+                parsedArgs as { directoryName?: string },
+                {
+                  onCreateDirectoryUnderSelection: options.onCreateDirectoryUnderSelection,
+                },
+              )
+            } else if (tc.function.name === CREATE_DIRECTORY_IN_WORKSPACE_TOOL_NAME) {
+              toolResult = await executeCreateDirectoryInWorkspace(
+                parsedArgs as { parentPath?: string; directoryName?: string },
+                {
+                  getWorkspaceRoot: options.getCurrentWorkspaceRoot,
+                  onCreateDirectoryInWorkspace: options.onCreateDirectoryInWorkspace,
                 },
               )
             } else {
@@ -948,6 +1035,12 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
           writeToWorkspaceToolSchema,
           saveOrExportCurrentDocumentToolSchema,
           deleteCurrentDocumentToolSchema,
+          deleteCurrentFolderToolSchema,
+          deleteWorkspaceEntryToolSchema,
+          renameCurrentDocumentToolSchema,
+          renameWorkspaceEntryToolSchema,
+          createDirectoryUnderSelectionToolSchema,
+          createDirectoryInWorkspaceToolSchema,
         ]
         : []
 

@@ -79,7 +79,13 @@ import { MAX_RECENT_TEXT_COLORS, RECENT_TEXT_COLORS_STORAGE_KEY } from '../modul
 import { createTextColorTarget, isTextColorTargetActive, type TextColorTarget } from '../modules/editor/textColorTarget'
 import { setWorkspaceMountedRoots } from '../modules/workspace/workspaceMountedRoots'
 import { setActiveWorkspaceDirectory } from '../modules/workspace/workspaceActiveDirectory'
+import { computeDirFromPath, resolveSelectionBaseDirectory } from '../modules/workspace/selectionBaseDirectory'
+import { resolveCurrentWorkspaceRoot, resolveWorkspaceEntryByName, type WorkspaceEntryKind } from '../modules/workspace/workspaceEntryResolver'
 import { isTransientFilePath } from '../modules/files/filePathState'
+import { renameCurrentDocument } from '../modules/document/application/documentRenameService'
+import { createDirectoryFromSelection } from '../modules/document/application/createDirectoryFromSelectionService'
+import { createDirectoryInWorkspace } from '../modules/document/application/createDirectoryInWorkspaceService'
+import { renameWorkspaceEntry } from '../modules/document/application/renameWorkspaceEntryService'
 import type { WysiwygFormatActions } from './Wysiwyg/WysiwygPane'
 // 改为从内部动态加载，优化编辑性能
 // import { exportToHtml } from '../modules/export/html'
@@ -1338,6 +1344,14 @@ export function WorkspaceShell({
     return filePath ?? null
   }, [isPdfActive, activePdfPath, filePath])
 
+  const getCurrentWorkspaceRoot = useCallback((): string | null => {
+    return resolveCurrentWorkspaceRoot({
+      selectedFolderPath,
+      currentFilePath: activeTab?.path ?? null,
+      folderRoots: sidebar.folderRoots,
+    })
+  }, [selectedFolderPath, activeTab?.path, sidebar.folderRoots])
+
   const handleAiDocumentSaved = useCallback((savedPath: string) => {
     if (/\.md$/i.test(savedPath)) {
       setFilePath(savedPath)
@@ -1357,6 +1371,169 @@ export function WorkspaceShell({
       void sidebar.refreshFolderTree(matchedRoot)
     }
   }, [setFilePath, updateActiveMeta, sidebar.folderRoots, sidebar.refreshFolderTree])
+
+  const handleAiRenameCurrentDocument = useCallback(async (targetFileName: string) => {
+    const result = await renameCurrentDocument(
+      { fileName: targetFileName },
+      {
+        getCurrentFilePath,
+      },
+    )
+
+    if (!result.ok) {
+      return { ok: false, message: result.message }
+    }
+
+    const { oldFilePath, renamedPath } = result
+    const normalizedNew = renamedPath.replace(/\\/g, '/')
+    const parentRoot = sidebar.folderRoots.find((rootPath) => {
+      const rootNorm = rootPath.replace(/\\/g, '/')
+      return normalizedNew === rootNorm || normalizedNew.startsWith(rootNorm + '/')
+    }) ?? null
+
+    if (parentRoot) {
+      await sidebar.refreshFolderTree(parentRoot)
+    } else {
+      sidebar.removeStandaloneFile(oldFilePath)
+      sidebar.addStandaloneFile(renamedPath)
+    }
+
+    updateTabsPathByPath(oldFilePath, renamedPath)
+    if (activeTab?.path === oldFilePath) {
+      setFilePath(renamedPath)
+      updateActiveMeta(renamedPath, false)
+    }
+
+    return { ok: true, message: result.message }
+  }, [
+    getCurrentFilePath,
+    sidebar.folderRoots,
+    sidebar.refreshFolderTree,
+    sidebar.removeStandaloneFile,
+    sidebar.addStandaloneFile,
+    updateTabsPathByPath,
+    activeTab?.path,
+    setFilePath,
+    updateActiveMeta,
+  ])
+
+  const handleAiCreateDirectoryUnderSelection = useCallback(async (directoryName: string) => {
+    const result = await createDirectoryFromSelection(
+      { directoryName },
+      {
+        getBaseDirectory: () =>
+          resolveSelectionBaseDirectory({
+            selectedFolderPath,
+            currentFilePath: activeTab?.path ?? null,
+            fallbackRoot: sidebar.folderRoots[0] ?? null,
+          }),
+      },
+    )
+
+    if (!result.ok) {
+      return { ok: false, message: result.message }
+    }
+
+    const normalizedCreatedPath = result.createdDirectoryPath.replace(/\\/g, '/')
+    const matchedRoot = sidebar.folderRoots.find((rootPath) => {
+      const rootNorm = rootPath.replace(/\\/g, '/').replace(/[\\/]+$/, '')
+      return normalizedCreatedPath === rootNorm || normalizedCreatedPath.startsWith(`${rootNorm}/`)
+    }) ?? null
+
+    if (matchedRoot) {
+      await sidebar.refreshFolderTree(matchedRoot)
+    }
+
+    setSelectedFolderPath(result.createdDirectoryPath)
+    setActiveWorkspaceDirectoryPath(result.createdDirectoryPath)
+
+    return { ok: true, message: result.message }
+  }, [
+    selectedFolderPath,
+    activeTab?.path,
+    sidebar.folderRoots,
+    sidebar.refreshFolderTree,
+    setSelectedFolderPath,
+  ])
+
+  const handleAiCreateDirectoryInWorkspace = useCallback(async (parentPath: string, directoryName: string) => {
+    const result = await createDirectoryInWorkspace(
+      { parentPath, directoryName },
+      {
+        getWorkspaceRoot: getCurrentWorkspaceRoot,
+      },
+    )
+
+    if (!result.ok) {
+      return { ok: false, message: result.message }
+    }
+
+    const normalizedCreatedPath = result.createdDirectoryPath.replace(/\\/g, '/')
+    const matchedRoot = sidebar.folderRoots.find((rootPath) => {
+      const rootNorm = rootPath.replace(/\\/g, '/').replace(/[\\/]+$/, '')
+      return normalizedCreatedPath === rootNorm || normalizedCreatedPath.startsWith(`${rootNorm}/`)
+    }) ?? null
+
+    if (matchedRoot) {
+      await sidebar.refreshFolderTree(matchedRoot)
+    }
+
+    setSelectedFolderPath(result.createdDirectoryPath)
+    setActiveWorkspaceDirectoryPath(result.createdDirectoryPath)
+    return { ok: true, message: result.message }
+  }, [getCurrentWorkspaceRoot, sidebar.folderRoots, sidebar.refreshFolderTree])
+
+  const handleAiRenameWorkspaceEntry = useCallback(async (
+    targetPath: string,
+    newName: string,
+    targetKind?: WorkspaceEntryKind,
+  ) => {
+    const result = await renameWorkspaceEntry(
+      { targetPath, newName, targetKind },
+      { getWorkspaceRoot: getCurrentWorkspaceRoot },
+    )
+
+    if (!result.ok) {
+      return { ok: false, message: result.message }
+    }
+
+    const normalizedNew = result.renamedPath.replace(/\\/g, '/')
+    const parentRoot = sidebar.folderRoots.find((rootPath) => {
+      const rootNorm = rootPath.replace(/\\/g, '/')
+      return normalizedNew === rootNorm || normalizedNew.startsWith(rootNorm + '/')
+    }) ?? null
+
+    if (parentRoot) {
+      await sidebar.refreshFolderTree(parentRoot)
+    }
+
+    updateTabsPathByPath(result.oldPath, result.renamedPath)
+    if (activeTab?.path === result.oldPath) {
+      setFilePath(result.renamedPath)
+      updateActiveMeta(result.renamedPath, false)
+    }
+
+    if (result.targetKind === 'dir') {
+      if (selectedFolderPath === result.oldPath) {
+        setSelectedFolderPath(result.renamedPath)
+      }
+      if (activeWorkspaceDirectoryPath === result.oldPath) {
+        setActiveWorkspaceDirectoryPath(result.renamedPath)
+      }
+    }
+
+    return { ok: true, message: result.message }
+  }, [
+    getCurrentWorkspaceRoot,
+    sidebar.folderRoots,
+    sidebar.refreshFolderTree,
+    updateTabsPathByPath,
+    activeTab?.path,
+    setFilePath,
+    updateActiveMeta,
+    selectedFolderPath,
+    activeWorkspaceDirectoryPath,
+  ])
 
   useEffect(() => {
     if (activeTab && !isPdfActive) setFilePath(activeTab.path)
@@ -1643,6 +1820,46 @@ export function WorkspaceShell({
     })
   }, [resolveDeleteKindForPath, performDeletePath])
 
+  const handleAiDeleteCurrentFolder = useCallback((path: string) => {
+    const kind = resolveDeleteKindForPath(path)
+    return performDeletePath(path, kind).then((result) => {
+      if (!result.ok) {
+        return { ok: false, message: result.message }
+      }
+      return { ok: true, message: `已删除：${path}` }
+    })
+  }, [resolveDeleteKindForPath, performDeletePath])
+
+  const handleAiDeleteWorkspaceEntry = useCallback(async (
+    targetPath: string,
+    targetKind?: WorkspaceEntryKind,
+  ) => {
+    const resolved = await resolveWorkspaceEntryByName({
+      workspaceRoot: getCurrentWorkspaceRoot(),
+      targetPath,
+      expectedKind: targetKind,
+    })
+
+    if (!resolved.ok) {
+      return { ok: false, message: resolved.message }
+    }
+
+    const kind =
+      resolved.kind === 'dir'
+        ? (
+            sidebar.folderRoots.some((root) => root.replace(/\\/g, '/') === resolved.resolvedPath)
+              ? 'folder-root'
+              : 'tree-dir'
+          )
+        : resolveDeleteKindForPath(resolved.resolvedPath)
+
+    const result = await performDeletePath(resolved.resolvedPath, kind)
+    if (!result.ok) {
+      return { ok: false, message: result.message }
+    }
+    return { ok: true, message: `已删除：${resolved.resolvedPath}` }
+  }, [getCurrentWorkspaceRoot, sidebar.folderRoots, resolveDeleteKindForPath, performDeletePath])
+
   const normalizeDirPath = (dir: string): string => {
     if (!dir) return dir
     return dir.replace(/\\/g, '/').replace(/[\\/]+$/, '')
@@ -1727,54 +1944,27 @@ export function WorkspaceShell({
     return fullPath
   }
 
-  const computeDirFromPath = (targetPath: string): string => {
-    if (!targetPath) return targetPath
-
-    const hasBackslash = targetPath.includes('\\')
-    const normalized = targetPath.replace(/[\\/]/g, '/')
-    const lastSlash = normalized.lastIndexOf('/')
-
-    if (lastSlash <= 0) {
-      return targetPath
-    }
-
-    let dir = normalized.slice(0, lastSlash)
-    if (hasBackslash) {
-      dir = dir.replace(/\//g, '\\')
-    }
-
-    return dir
-  }
+  const getCurrentSelectionBaseDirectory = useCallback((): string | null => {
+    return resolveSelectionBaseDirectory({
+      selectedFolderPath,
+      currentFilePath: activeTab?.path ?? null,
+      fallbackRoot: sidebar.folderRoots[0] ?? null,
+    })
+  }, [selectedFolderPath, activeTab?.path, sidebar.folderRoots])
 
   const getCurrentFolderForNewFile = (): string | null => {
-    // 优先使用选中的文件夹
-    if (selectedFolderPath) {
-      return selectedFolderPath
-    }
-    // 否则使用当前文件的父目录
-    if (activeTab?.path) {
-      return computeDirFromPath(activeTab.path)
-    }
-    // 最后使用第一个根文件夹
-    if (sidebar.folderRoots.length > 0) {
-      return sidebar.folderRoots[0]
+    const baseDirectory = getCurrentSelectionBaseDirectory()
+    if (baseDirectory) {
+      return baseDirectory
     }
     setStatusMessage(t('workspace.openFileOrFolderFirst'))
     return null
   }
 
   const getTargetFolderForNewFolder = (): string | null => {
-    // 选中文件夹 → 在其内部创建子文件夹
-    if (selectedFolderPath) {
-      return selectedFolderPath
-    }
-    // 选中文件 → 在同级目录创建文件夹
-    if (activeTab?.path) {
-      return computeDirFromPath(activeTab.path)
-    }
-    // 默认使用第一个根文件夹
-    if (sidebar.folderRoots.length > 0) {
-      return sidebar.folderRoots[0]
+    const baseDirectory = getCurrentSelectionBaseDirectory()
+    if (baseDirectory) {
+      return baseDirectory
     }
     setStatusMessage(t('workspace.openFileOrFolderFirst'))
     return null
@@ -2986,8 +3176,16 @@ export function WorkspaceShell({
                 getCurrentMarkdown={getCurrentMarkdown}
                 getCurrentFileName={getCurrentFileName}
                 getCurrentFilePath={getCurrentFilePath}
+                getCurrentFolderPath={() => selectedFolderPath}
+                getCurrentWorkspaceRoot={getCurrentWorkspaceRoot}
                 onDocumentSaved={handleAiDocumentSaved}
                 onConfirmDeleteCurrentDocument={handleAiDeleteCurrentDocument}
+                onConfirmDeleteCurrentFolder={handleAiDeleteCurrentFolder}
+                onConfirmDeleteWorkspaceEntry={handleAiDeleteWorkspaceEntry}
+                onRenameCurrentDocument={handleAiRenameCurrentDocument}
+                onRenameWorkspaceEntry={handleAiRenameWorkspaceEntry}
+                onCreateDirectoryUnderSelection={handleAiCreateDirectoryUnderSelection}
+                onCreateDirectoryInWorkspace={handleAiCreateDirectoryInWorkspace}
                 setStatusMessage={setStatusMessage}
                 t={t}
                 sourceTabId={null}
@@ -3028,8 +3226,16 @@ export function WorkspaceShell({
                           getCurrentMarkdown={getCurrentMarkdown}
                           getCurrentFileName={getCurrentFileName}
                           getCurrentFilePath={getCurrentFilePath}
+                          getCurrentFolderPath={() => selectedFolderPath}
+                          getCurrentWorkspaceRoot={getCurrentWorkspaceRoot}
                           onDocumentSaved={handleAiDocumentSaved}
                           onConfirmDeleteCurrentDocument={handleAiDeleteCurrentDocument}
+                          onConfirmDeleteCurrentFolder={handleAiDeleteCurrentFolder}
+                          onConfirmDeleteWorkspaceEntry={handleAiDeleteWorkspaceEntry}
+                          onRenameCurrentDocument={handleAiRenameCurrentDocument}
+                          onRenameWorkspaceEntry={handleAiRenameWorkspaceEntry}
+                          onCreateDirectoryUnderSelection={handleAiCreateDirectoryUnderSelection}
+                          onCreateDirectoryInWorkspace={handleAiCreateDirectoryInWorkspace}
                           setStatusMessage={setStatusMessage}
                           t={t}
                           sourceTabId={activeTab?.id ?? null}
@@ -3198,8 +3404,16 @@ export function WorkspaceShell({
                         getCurrentMarkdown={getCurrentMarkdown}
                         getCurrentFileName={getCurrentFileName}
                         getCurrentFilePath={getCurrentFilePath}
+                        getCurrentFolderPath={() => selectedFolderPath}
+                        getCurrentWorkspaceRoot={getCurrentWorkspaceRoot}
                         onDocumentSaved={handleAiDocumentSaved}
                         onConfirmDeleteCurrentDocument={handleAiDeleteCurrentDocument}
+                        onConfirmDeleteCurrentFolder={handleAiDeleteCurrentFolder}
+                        onConfirmDeleteWorkspaceEntry={handleAiDeleteWorkspaceEntry}
+                        onRenameCurrentDocument={handleAiRenameCurrentDocument}
+                        onRenameWorkspaceEntry={handleAiRenameWorkspaceEntry}
+                        onCreateDirectoryUnderSelection={handleAiCreateDirectoryUnderSelection}
+                        onCreateDirectoryInWorkspace={handleAiCreateDirectoryInWorkspace}
                         setStatusMessage={setStatusMessage}
                         t={t}
                         sourceTabId={activeTab?.id ?? null}
@@ -3258,8 +3472,16 @@ export function WorkspaceShell({
               getCurrentMarkdown={getCurrentMarkdown}
               getCurrentFileName={getCurrentFileName}
               getCurrentFilePath={getCurrentFilePath}
+              getCurrentFolderPath={() => selectedFolderPath}
+              getCurrentWorkspaceRoot={getCurrentWorkspaceRoot}
               onDocumentSaved={handleAiDocumentSaved}
               onConfirmDeleteCurrentDocument={handleAiDeleteCurrentDocument}
+              onConfirmDeleteCurrentFolder={handleAiDeleteCurrentFolder}
+              onConfirmDeleteWorkspaceEntry={handleAiDeleteWorkspaceEntry}
+              onRenameCurrentDocument={handleAiRenameCurrentDocument}
+              onRenameWorkspaceEntry={handleAiRenameWorkspaceEntry}
+              onCreateDirectoryUnderSelection={handleAiCreateDirectoryUnderSelection}
+              onCreateDirectoryInWorkspace={handleAiCreateDirectoryInWorkspace}
               setStatusMessage={setStatusMessage}
               t={t}
               tabId={aiChatState.tabId}

@@ -248,7 +248,7 @@ export const zhCNMessages: MessageDictionary = {
   },
   welcome: {
     subtitle:
-      '支持 AI 文本创作的 Markdown 编辑器，让内容生成、优化与组织更高效，并支持通过 AI 创建技能与工作流，进一步提升文档生成与内容组织能力。',
+      '面向文字工作者的 AI 工作台，让内容创作、优化与组织更高效，并支持通过 AI 创建技能与工作流。',
     newFile: '新建文件',
     openFile: '打开文件',
     openAiChat: '打开 AI Chat',

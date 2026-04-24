@@ -7,6 +7,10 @@ export const WRITE_TO_WORKSPACE_TOOL_NAME = 'write_to_workspace'
 export const RESOLVE_WORKSPACE_DIRECTORY_TOOL_NAME = 'resolve_workspace_directory'
 export const CREATE_WORKSPACE_DIRECTORY_TOOL_NAME = 'create_workspace_directory'
 
+type WorkspaceToolContext = {
+  onDocumentSaved?: (path: string) => void
+}
+
 type WriteWorkspaceResult =
   | {
     ok: true
@@ -189,7 +193,7 @@ export async function executeWriteToWorkspace(args: {
   targetDirectory?: string
   fileName?: string
   content?: string
-}): Promise<string> {
+}, ctx?: WorkspaceToolContext): Promise<string> {
   const targetDirectory = args.targetDirectory?.trim() ?? ''
   const fileName = args.fileName?.trim() ?? ''
   const content = args.content ?? ''
@@ -222,6 +226,7 @@ export async function executeWriteToWorkspace(args: {
 
     const result = resp.Ok.data
     if (result.ok) {
+      ctx?.onDocumentSaved?.(result.savedFilePath)
       return `✅ 已保存：${result.savedFilePath}`
     }
 

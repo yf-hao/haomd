@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mockInvoke } from '../../../vitest.setup'
 import {
   buildWorkspaceMountedRootsPrompt,
@@ -54,6 +54,32 @@ describe('workspaceBuiltinTool', () => {
 
     expect(result).toContain('目录名存在歧义')
     expect(result).toContain('/tmp/离散数学/教案')
+  })
+
+  it('should notify onDocumentSaved after workspace file is written', async () => {
+    setWorkspaceMountedRoots(['/tmp/离散数学'])
+    mockInvoke.mockResolvedValueOnce({
+      Ok: {
+        data: {
+          ok: true,
+          savedFilePath: '/tmp/离散数学/测试/test.md',
+        },
+        trace_id: 'trace-3',
+      },
+    })
+
+    const onDocumentSaved = vi.fn()
+    const result = await executeWriteToWorkspace(
+      {
+        targetDirectory: '测试',
+        fileName: 'test.md',
+        content: '你好',
+      },
+      { onDocumentSaved },
+    )
+
+    expect(result).toContain('/tmp/离散数学/测试/test.md')
+    expect(onDocumentSaved).toHaveBeenCalledWith('/tmp/离散数学/测试/test.md')
   })
 
   it('should format resolved directory result', async () => {

@@ -9,6 +9,8 @@ describe('documentToolCatalog', () => {
     expect(prompt).toContain('target=workspace_directory')
     expect(prompt).toContain('离散数学/教案')
     expect(prompt).toContain('fileName')
+    expect(prompt).toContain('create_directory_under_selection')
+    expect(prompt).toContain('创建 demo 目录')
   })
 
   it('does not advertise pdf as a supported AI export format', () => {

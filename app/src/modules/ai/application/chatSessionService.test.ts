@@ -6,7 +6,13 @@ import { createInitialConversationState } from '../domain/chatSession'
 import { createStreamingClientFromSettings } from '../streamingClientFactory'
 import { appendAssistantChunk } from '../domain/chatSession'
 import { loadAgentSettingsState } from '../config/agentSettingsRepo'
-import { executeDeleteCurrentDocument, executeSaveOrExportCurrentDocument } from '../../document/documentBuiltinTool'
+import {
+    executeCreateDirectoryUnderSelection,
+    executeDeleteCurrentDocument,
+    executeDeleteCurrentFolder,
+    executeRenameCurrentDocument,
+    executeSaveOrExportCurrentDocument,
+} from '../../document/documentBuiltinTool'
 
 // Mock dependencies
 vi.mock('../settings', () => ({
@@ -85,6 +91,12 @@ vi.mock('../globalMemory/context', () => ({
 vi.mock('../../document/documentBuiltinTool', () => ({
     SAVE_OR_EXPORT_CURRENT_DOCUMENT_TOOL_NAME: 'save_or_export_current_document',
     DELETE_CURRENT_DOCUMENT_TOOL_NAME: 'delete_current_document',
+    DELETE_CURRENT_FOLDER_TOOL_NAME: 'delete_current_folder',
+    DELETE_WORKSPACE_ENTRY_TOOL_NAME: 'delete_workspace_entry',
+    RENAME_CURRENT_DOCUMENT_TOOL_NAME: 'rename_current_document',
+    RENAME_WORKSPACE_ENTRY_TOOL_NAME: 'rename_workspace_entry',
+    CREATE_DIRECTORY_UNDER_SELECTION_TOOL_NAME: 'create_directory_under_selection',
+    CREATE_DIRECTORY_IN_WORKSPACE_TOOL_NAME: 'create_directory_in_workspace',
     saveOrExportCurrentDocumentToolSchema: {
         type: 'function',
         function: { name: 'save_or_export_current_document', parameters: { type: 'object', properties: {}, required: [] } }
@@ -93,8 +105,38 @@ vi.mock('../../document/documentBuiltinTool', () => ({
         type: 'function',
         function: { name: 'delete_current_document', parameters: { type: 'object', properties: {}, required: [] } }
     },
+    deleteCurrentFolderToolSchema: {
+        type: 'function',
+        function: { name: 'delete_current_folder', parameters: { type: 'object', properties: {}, required: [] } }
+    },
+    deleteWorkspaceEntryToolSchema: {
+        type: 'function',
+        function: { name: 'delete_workspace_entry', parameters: { type: 'object', properties: {}, required: [] } }
+    },
+    renameCurrentDocumentToolSchema: {
+        type: 'function',
+        function: { name: 'rename_current_document', parameters: { type: 'object', properties: {}, required: [] } }
+    },
+    renameWorkspaceEntryToolSchema: {
+        type: 'function',
+        function: { name: 'rename_workspace_entry', parameters: { type: 'object', properties: {}, required: [] } }
+    },
+    createDirectoryUnderSelectionToolSchema: {
+        type: 'function',
+        function: { name: 'create_directory_under_selection', parameters: { type: 'object', properties: {}, required: [] } }
+    },
+    createDirectoryInWorkspaceToolSchema: {
+        type: 'function',
+        function: { name: 'create_directory_in_workspace', parameters: { type: 'object', properties: {}, required: [] } }
+    },
     executeSaveOrExportCurrentDocument: vi.fn(),
     executeDeleteCurrentDocument: vi.fn(),
+    executeDeleteCurrentFolder: vi.fn(),
+    executeDeleteWorkspaceEntry: vi.fn(),
+    executeRenameCurrentDocument: vi.fn(),
+    executeRenameWorkspaceEntry: vi.fn(),
+    executeCreateDirectoryUnderSelection: vi.fn(),
+    executeCreateDirectoryInWorkspace: vi.fn(),
 }))
 
 describe('ChatSessionService', () => {
@@ -383,6 +425,133 @@ describe('ChatSessionService', () => {
             expect.objectContaining({
                 getCurrentFilePath: expect.any(Function),
                 onRequestDeleteCurrentDocument,
+            }),
+        )
+    })
+
+    it('should execute rename_current_document built-in tool with file context', async () => {
+        const askStream = vi.fn()
+            .mockResolvedValueOnce({
+                toolCalls: [
+                    {
+                        id: 'tool-1',
+                        type: 'function',
+                        function: {
+                            name: 'rename_current_document',
+                            arguments: JSON.stringify({ fileName: 'demo' }),
+                        },
+                    },
+                ],
+            })
+            .mockResolvedValueOnce({ content: 'done', completed: true })
+
+        vi.mocked(createStreamingClientFromSettings).mockReturnValue({
+            askStream,
+        } as any)
+        vi.mocked(executeRenameCurrentDocument).mockResolvedValue('✅ 已将当前文档重命名为 demo.md')
+
+        const onRenameCurrentDocument = vi.fn().mockResolvedValue({
+            ok: true,
+            message: '已将当前文档重命名为 demo.md',
+        })
+
+        const session = await createChatSession({
+            entryMode: 'chat',
+            getCurrentFilePath: () => '/root/doc.md',
+            onRenameCurrentDocument,
+        })
+
+        await session.sendUserMessage('重命名为 demo')
+
+        expect(executeRenameCurrentDocument).toHaveBeenCalledWith(
+            { fileName: 'demo' },
+            expect.objectContaining({
+                getCurrentFilePath: expect.any(Function),
+                onRenameCurrentDocument,
+            }),
+        )
+    })
+
+    it('should execute delete_current_folder built-in tool with folder context', async () => {
+        const askStream = vi.fn()
+            .mockResolvedValueOnce({
+                toolCalls: [
+                    {
+                        id: 'tool-1',
+                        type: 'function',
+                        function: {
+                            name: 'delete_current_folder',
+                            arguments: JSON.stringify({}),
+                        },
+                    },
+                ],
+            })
+            .mockResolvedValueOnce({ content: 'done', completed: true })
+
+        vi.mocked(createStreamingClientFromSettings).mockReturnValue({
+            askStream,
+        } as any)
+        vi.mocked(executeDeleteCurrentFolder).mockResolvedValue('✅ 已删除：/root/notes')
+
+        const onRequestDeleteCurrentFolder = vi.fn().mockResolvedValue({
+            ok: true,
+            message: '已删除：/root/notes',
+        })
+
+        const session = await createChatSession({
+            entryMode: 'chat',
+            getCurrentFolderPath: () => '/root/notes',
+            onRequestDeleteCurrentFolder,
+        })
+
+        await session.sendUserMessage('删除文件夹')
+
+        expect(executeDeleteCurrentFolder).toHaveBeenCalledWith(
+            {},
+            expect.objectContaining({
+                getCurrentFolderPath: expect.any(Function),
+                onRequestDeleteCurrentFolder,
+            }),
+        )
+    })
+
+    it('should execute create_directory_under_selection built-in tool with selection callback', async () => {
+        const askStream = vi.fn()
+            .mockResolvedValueOnce({
+                toolCalls: [
+                    {
+                        id: 'tool-1',
+                        type: 'function',
+                        function: {
+                            name: 'create_directory_under_selection',
+                            arguments: JSON.stringify({ directoryName: 'demo' }),
+                        },
+                    },
+                ],
+            })
+            .mockResolvedValueOnce({ content: 'done', completed: true })
+
+        vi.mocked(createStreamingClientFromSettings).mockReturnValue({
+            askStream,
+        } as any)
+        vi.mocked(executeCreateDirectoryUnderSelection).mockResolvedValue('✅ 已创建目录：demo')
+
+        const onCreateDirectoryUnderSelection = vi.fn().mockResolvedValue({
+            ok: true,
+            message: '已创建目录：demo',
+        })
+
+        const session = await createChatSession({
+            entryMode: 'chat',
+            onCreateDirectoryUnderSelection,
+        })
+
+        await session.sendUserMessage('创建 demo 目录')
+
+        expect(executeCreateDirectoryUnderSelection).toHaveBeenCalledWith(
+            { directoryName: 'demo' },
+            expect.objectContaining({
+                onCreateDirectoryUnderSelection,
             }),
         )
     })

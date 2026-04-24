@@ -20,6 +20,7 @@ import { normalizePersistableDocPath } from '../../domain/docPathUtils'
 import { appendAiInputHistory } from '../../application/localStorageAiChatInputHistory'
 import { loadSession, saveSession, type AiChatSessionCfg, type AiChatMessageCfg } from '../../config/aiSessionsRepo'
 import { mergePendingAttachments } from './attachmentDrafts'
+import type { WorkspaceEntryKind } from '../../../workspace/workspaceEntryResolver'
 
 export type UseAiChatSessionOptions = {
   sessionKey: AiChatSessionKey
@@ -34,8 +35,26 @@ export type UseAiChatSessionOptions = {
   getCurrentMarkdown?: () => string
   getCurrentFileName?: () => string | null
   getCurrentFilePath?: () => string | null
+  getCurrentFolderPath?: () => string | null
+  getCurrentWorkspaceRoot?: () => string | null
   onDocumentSaved?: (path: string) => void
   onRequestDeleteCurrentDocument?: (path: string) => Promise<{ ok: boolean; message: string }>
+  onRequestDeleteCurrentFolder?: (path: string) => Promise<{ ok: boolean; message: string }>
+  onRequestDeleteWorkspaceEntry?: (
+    targetPath: string,
+    targetKind?: WorkspaceEntryKind,
+  ) => Promise<{ ok: boolean; message: string }>
+  onRenameCurrentDocument?: (fileName: string) => Promise<{ ok: boolean; message: string }>
+  onRenameWorkspaceEntry?: (
+    targetPath: string,
+    newName: string,
+    targetKind?: WorkspaceEntryKind,
+  ) => Promise<{ ok: boolean; message: string }>
+  onCreateDirectoryUnderSelection?: (directoryName: string) => Promise<{ ok: boolean; message: string }>
+  onCreateDirectoryInWorkspace?: (
+    parentPath: string,
+    directoryName: string,
+  ) => Promise<{ ok: boolean; message: string }>
   setStatusMessage?: (message: string) => void
   t?: (key: string, params?: Record<string, string | number>) => string
   restartToken?: number
@@ -134,8 +153,16 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
     getCurrentMarkdown,
     getCurrentFileName,
     getCurrentFilePath,
+    getCurrentFolderPath,
+    getCurrentWorkspaceRoot,
     onDocumentSaved,
     onRequestDeleteCurrentDocument,
+    onRequestDeleteCurrentFolder,
+    onRequestDeleteWorkspaceEntry,
+    onRenameCurrentDocument,
+    onRenameWorkspaceEntry,
+    onCreateDirectoryUnderSelection,
+    onCreateDirectoryInWorkspace,
     setStatusMessage,
     t,
     restartToken = 0,
@@ -162,8 +189,16 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
   const getCurrentMarkdownRef = useRef(getCurrentMarkdown)
   const getCurrentFileNameRef = useRef(getCurrentFileName)
   const getCurrentFilePathRef = useRef(getCurrentFilePath)
+  const getCurrentFolderPathRef = useRef(getCurrentFolderPath)
+  const getCurrentWorkspaceRootRef = useRef(getCurrentWorkspaceRoot)
   const onDocumentSavedRef = useRef(onDocumentSaved)
   const onRequestDeleteCurrentDocumentRef = useRef(onRequestDeleteCurrentDocument)
+  const onRequestDeleteCurrentFolderRef = useRef(onRequestDeleteCurrentFolder)
+  const onRequestDeleteWorkspaceEntryRef = useRef(onRequestDeleteWorkspaceEntry)
+  const onRenameCurrentDocumentRef = useRef(onRenameCurrentDocument)
+  const onRenameWorkspaceEntryRef = useRef(onRenameWorkspaceEntry)
+  const onCreateDirectoryUnderSelectionRef = useRef(onCreateDirectoryUnderSelection)
+  const onCreateDirectoryInWorkspaceRef = useRef(onCreateDirectoryInWorkspace)
   const setStatusMessageRef = useRef(setStatusMessage)
   const tRef = useRef(t)
   const pendingDocPathRef = useRef<string | undefined>(undefined)
@@ -183,12 +218,44 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
   }, [getCurrentFilePath])
 
   useEffect(() => {
+    getCurrentFolderPathRef.current = getCurrentFolderPath
+  }, [getCurrentFolderPath])
+
+  useEffect(() => {
+    getCurrentWorkspaceRootRef.current = getCurrentWorkspaceRoot
+  }, [getCurrentWorkspaceRoot])
+
+  useEffect(() => {
     onDocumentSavedRef.current = onDocumentSaved
   }, [onDocumentSaved])
 
   useEffect(() => {
     onRequestDeleteCurrentDocumentRef.current = onRequestDeleteCurrentDocument
   }, [onRequestDeleteCurrentDocument])
+
+  useEffect(() => {
+    onRequestDeleteCurrentFolderRef.current = onRequestDeleteCurrentFolder
+  }, [onRequestDeleteCurrentFolder])
+
+  useEffect(() => {
+    onRequestDeleteWorkspaceEntryRef.current = onRequestDeleteWorkspaceEntry
+  }, [onRequestDeleteWorkspaceEntry])
+
+  useEffect(() => {
+    onRenameCurrentDocumentRef.current = onRenameCurrentDocument
+  }, [onRenameCurrentDocument])
+
+  useEffect(() => {
+    onRenameWorkspaceEntryRef.current = onRenameWorkspaceEntry
+  }, [onRenameWorkspaceEntry])
+
+  useEffect(() => {
+    onCreateDirectoryUnderSelectionRef.current = onCreateDirectoryUnderSelection
+  }, [onCreateDirectoryUnderSelection])
+
+  useEffect(() => {
+    onCreateDirectoryInWorkspaceRef.current = onCreateDirectoryInWorkspace
+  }, [onCreateDirectoryInWorkspace])
 
   useEffect(() => {
     setStatusMessageRef.current = setStatusMessage
@@ -284,6 +351,16 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
                 getCurrentFilePath: () => getCurrentFilePathRef.current?.() ?? null,
               }
             : {}),
+          ...(getCurrentFolderPathRef.current
+            ? {
+                getCurrentFolderPath: () => getCurrentFolderPathRef.current?.() ?? null,
+              }
+            : {}),
+          ...(getCurrentWorkspaceRootRef.current
+            ? {
+                getCurrentWorkspaceRoot: () => getCurrentWorkspaceRootRef.current?.() ?? null,
+              }
+            : {}),
           ...(onDocumentSavedRef.current
             ? {
                 onDocumentSaved: (path: string) => onDocumentSavedRef.current?.(path),
@@ -294,6 +371,58 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
                 onRequestDeleteCurrentDocument: (path: string) =>
                   onRequestDeleteCurrentDocumentRef.current?.(path) ??
                   Promise.resolve({ ok: false, message: '删除确认能力不可用。' }),
+              }
+            : {}),
+          ...(onRequestDeleteCurrentFolderRef.current
+            ? {
+                onRequestDeleteCurrentFolder: (path: string) =>
+                  onRequestDeleteCurrentFolderRef.current?.(path) ??
+                  Promise.resolve({ ok: false, message: '文件夹删除能力不可用。' }),
+              }
+            : {}),
+          ...(onRequestDeleteWorkspaceEntryRef.current
+            ? {
+                onRequestDeleteWorkspaceEntry: (
+                  targetPath: string,
+                  targetKind?: WorkspaceEntryKind,
+                ) =>
+                  onRequestDeleteWorkspaceEntryRef.current?.(targetPath, targetKind) ??
+                  Promise.resolve({ ok: false, message: '工作区目标删除能力不可用。' }),
+              }
+            : {}),
+          ...(onRenameCurrentDocumentRef.current
+            ? {
+                onRenameCurrentDocument: (fileName: string) =>
+                  onRenameCurrentDocumentRef.current?.(fileName) ??
+                  Promise.resolve({ ok: false, message: '当前重命名能力不可用。' }),
+              }
+            : {}),
+          ...(onRenameWorkspaceEntryRef.current
+            ? {
+                onRenameWorkspaceEntry: (
+                  targetPath: string,
+                  newName: string,
+                  targetKind?: WorkspaceEntryKind,
+                ) =>
+                  onRenameWorkspaceEntryRef.current?.(targetPath, newName, targetKind) ??
+                  Promise.resolve({ ok: false, message: '工作区重命名能力不可用。' }),
+              }
+            : {}),
+          ...(onCreateDirectoryUnderSelectionRef.current
+            ? {
+                onCreateDirectoryUnderSelection: (directoryName: string) =>
+                  onCreateDirectoryUnderSelectionRef.current?.(directoryName) ??
+                  Promise.resolve({ ok: false, message: '当前创建目录能力不可用。' }),
+              }
+            : {}),
+          ...(onCreateDirectoryInWorkspaceRef.current
+            ? {
+                onCreateDirectoryInWorkspace: (
+                  parentPath: string,
+                  directoryName: string,
+                ) =>
+                  onCreateDirectoryInWorkspaceRef.current?.(parentPath, directoryName) ??
+                  Promise.resolve({ ok: false, message: '工作区创建目录能力不可用。' }),
               }
             : {}),
           ...(setStatusMessageRef.current

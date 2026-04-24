@@ -15,7 +15,19 @@ import { tryHandleSlashCommand, parseHistoryRecallCommand } from './aiSlashComma
 import { AiChatCommandBridgeContext } from './AiChatCommandBridgeContext'
 import { ConfirmDialog } from '../../../components/ConfirmDialog'
 import { AiChatHistoryDialog } from './AiChatHistoryDialog'
-import { buildDeleteConfirmationPrompt, shouldTriggerDeleteCurrentDocument } from './deleteIntentMatcher'
+import {
+  buildDeleteConfirmationPrompt,
+  shouldTriggerDeleteCurrentDocument,
+  shouldTriggerDeleteCurrentFolder,
+} from './deleteIntentMatcher'
+import { matchRenameCurrentDocument } from './renameIntentMatcher'
+import { matchCreateDirectoryUnderSelection } from './createDirectoryIntentMatcher'
+import {
+  matchCreateDirectoryInWorkspace,
+  matchDeleteWorkspaceEntry,
+  matchRenameWorkspaceEntry,
+} from './workspaceEntryIntentMatcher'
+import type { WorkspaceEntryKind } from '../../workspace/workspaceEntryResolver'
 import { loadAgentSettingsState } from '../config/agentSettingsRepo'
 import type { AgentProvider } from '../domain/types'
 import { useThemeContext } from '../../theme/ThemeContext'
@@ -47,8 +59,26 @@ export type AiChatDialogProps = {
   getCurrentMarkdown?: () => string
   getCurrentFileName?: () => string | null
   getCurrentFilePath?: () => string | null
+  getCurrentFolderPath?: () => string | null
+  getCurrentWorkspaceRoot?: () => string | null
   onDocumentSaved?: (path: string) => void
   onConfirmDeleteCurrentDocument?: (path: string) => Promise<{ ok: boolean; message: string }>
+  onConfirmDeleteCurrentFolder?: (path: string) => Promise<{ ok: boolean; message: string }>
+  onConfirmDeleteWorkspaceEntry?: (
+    targetPath: string,
+    targetKind?: WorkspaceEntryKind,
+  ) => Promise<{ ok: boolean; message: string }>
+  onRenameCurrentDocument?: (fileName: string) => Promise<{ ok: boolean; message: string }>
+  onRenameWorkspaceEntry?: (
+    targetPath: string,
+    newName: string,
+    targetKind?: WorkspaceEntryKind,
+  ) => Promise<{ ok: boolean; message: string }>
+  onCreateDirectoryUnderSelection?: (directoryName: string) => Promise<{ ok: boolean; message: string }>
+  onCreateDirectoryInWorkspace?: (
+    parentPath: string,
+    directoryName: string,
+  ) => Promise<{ ok: boolean; message: string }>
   setStatusMessage?: (message: string) => void
   t?: (key: string, params?: Record<string, string | number>) => string
   /**
@@ -67,8 +97,16 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
   getCurrentMarkdown,
   getCurrentFileName,
   getCurrentFilePath,
+  getCurrentFolderPath,
+  getCurrentWorkspaceRoot,
   onDocumentSaved,
   onConfirmDeleteCurrentDocument,
+  onConfirmDeleteCurrentFolder,
+  onConfirmDeleteWorkspaceEntry,
+  onRenameCurrentDocument,
+  onRenameWorkspaceEntry,
+  onCreateDirectoryUnderSelection,
+  onCreateDirectoryInWorkspace,
   setStatusMessage,
   t,
   tabId,
@@ -85,7 +123,11 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
   const [agents, setAgents] = useState<AgentProvider[]>([])
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null)
   const [ephemeralMessages, setEphemeralMessages] = useState<EphemeralAiChatMessage[]>([])
-  const [pendingDeleteRequest, setPendingDeleteRequest] = useState<{ path: string } | null>(null)
+  const [pendingDeleteRequest, setPendingDeleteRequest] = useState<
+    | { path: string; target: 'document' | 'folder' }
+    | { path: string; target: 'workspace-entry'; targetKind?: WorkspaceEntryKind }
+    | null
+  >(null)
   const [imageGenerationRunning, setImageGenerationRunning] = useState(false)
   // 仅在通过 /list 打开输入历史弹窗时，才允许使用 `!n` 本地历史回填命令
   const [historyRecallEnabled, setHistoryRecallEnabled] = useState(false)
@@ -153,14 +195,36 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
     getCurrentMarkdown,
     getCurrentFileName,
     getCurrentFilePath,
+    getCurrentFolderPath: () => currentFolderPath ?? getCurrentFolderPath?.() ?? null,
+    getCurrentWorkspaceRoot,
     onDocumentSaved,
     onRequestDeleteCurrentDocument: async (path: string) => {
-      setPendingDeleteRequest({ path })
+      setPendingDeleteRequest({ path, target: 'document' })
       return {
         ok: true,
-        message: buildDeleteConfirmationPrompt(),
+        message: buildDeleteConfirmationPrompt('当前文档'),
       }
     },
+    onRequestDeleteCurrentFolder: async (path: string) => {
+      setPendingDeleteRequest({ path, target: 'folder' })
+      return {
+        ok: true,
+        message: buildDeleteConfirmationPrompt('当前文件夹'),
+      }
+    },
+    onRenameCurrentDocument,
+    onRequestDeleteWorkspaceEntry: async (targetPath: string, targetKind?: WorkspaceEntryKind) => {
+      setPendingDeleteRequest({ path: targetPath, target: 'workspace-entry', targetKind })
+      return {
+        ok: true,
+        message: buildDeleteConfirmationPrompt(
+          targetKind === 'dir' ? `目标文件夹「${targetPath}」` : `目标「${targetPath}」`,
+        ),
+      }
+    },
+    onRenameWorkspaceEntry,
+    onCreateDirectoryUnderSelection,
+    onCreateDirectoryInWorkspace,
     setStatusMessage,
     t,
     restartToken: docConversationReloadToken,
@@ -474,9 +538,21 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
       clearHistoryBrowse()
       if (DELETE_CONFIRM_TOKENS.has(trimmedInput) || DELETE_CONFIRM_TOKENS.has(normalizedInput)) {
         setInput('')
-        const result = onConfirmDeleteCurrentDocument
-          ? await onConfirmDeleteCurrentDocument(pendingDeleteRequest.path)
-          : { ok: false, message: '当前删除能力不可用。' }
+        const result =
+          pendingDeleteRequest.target === 'folder'
+            ? onConfirmDeleteCurrentFolder
+              ? await onConfirmDeleteCurrentFolder(pendingDeleteRequest.path)
+              : { ok: false, message: '当前文件夹删除能力不可用。' }
+            : pendingDeleteRequest.target === 'workspace-entry'
+              ? onConfirmDeleteWorkspaceEntry
+                ? await onConfirmDeleteWorkspaceEntry(
+                  pendingDeleteRequest.path,
+                  pendingDeleteRequest.targetKind,
+                )
+                : { ok: false, message: '当前工作区删除能力不可用。' }
+              : onConfirmDeleteCurrentDocument
+                ? await onConfirmDeleteCurrentDocument(pendingDeleteRequest.path)
+                : { ok: false, message: '当前删除能力不可用。' }
         setPendingDeleteRequest(null)
         setStatusMessage?.(result.message)
         return
@@ -499,8 +575,91 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
       }
       clearHistoryBrowse()
       setInput('')
-      setPendingDeleteRequest({ path: currentPath })
-      setStatusMessage?.(buildDeleteConfirmationPrompt())
+      setPendingDeleteRequest({ path: currentPath, target: 'document' })
+      setStatusMessage?.(buildDeleteConfirmationPrompt('当前文档'))
+      return
+    }
+
+    if (shouldTriggerDeleteCurrentFolder(trimmedInput)) {
+      const currentFolder = (currentFolderPath ?? getCurrentFolderPath?.() ?? '').trim()
+      if (!currentFolder) {
+        setStatusMessage?.('当前未选中文件夹，无法删除文件夹。')
+        return
+      }
+      clearHistoryBrowse()
+      setInput('')
+      setPendingDeleteRequest({ path: currentFolder, target: 'folder' })
+      setStatusMessage?.(buildDeleteConfirmationPrompt('当前文件夹'))
+      return
+    }
+
+    const deleteWorkspaceEntryRequest = matchDeleteWorkspaceEntry(trimmedInput)
+    if (deleteWorkspaceEntryRequest) {
+      clearHistoryBrowse()
+      setInput('')
+      setPendingDeleteRequest({
+        path: deleteWorkspaceEntryRequest.targetPath,
+        target: 'workspace-entry',
+        targetKind: deleteWorkspaceEntryRequest.targetKind,
+      })
+      setStatusMessage?.(
+        buildDeleteConfirmationPrompt(
+          deleteWorkspaceEntryRequest.targetKind === 'dir'
+            ? `目标文件夹「${deleteWorkspaceEntryRequest.targetPath}」`
+            : `目标「${deleteWorkspaceEntryRequest.targetPath}」`,
+        ),
+      )
+      return
+    }
+
+    const renameRequest = matchRenameCurrentDocument(trimmedInput)
+    if (renameRequest) {
+      clearHistoryBrowse()
+      setInput('')
+      const result = onRenameCurrentDocument
+        ? await onRenameCurrentDocument(renameRequest.fileName)
+        : { ok: false, message: '当前重命名能力不可用。' }
+      setStatusMessage?.(result.message)
+      return
+    }
+
+    const renameWorkspaceRequest = matchRenameWorkspaceEntry(trimmedInput)
+    if (renameWorkspaceRequest) {
+      clearHistoryBrowse()
+      setInput('')
+      const result = onRenameWorkspaceEntry
+        ? await onRenameWorkspaceEntry(
+          renameWorkspaceRequest.targetPath,
+          renameWorkspaceRequest.newName,
+          renameWorkspaceRequest.targetKind,
+        )
+        : { ok: false, message: '当前工作区重命名能力不可用。' }
+      setStatusMessage?.(result.message)
+      return
+    }
+
+    const createDirectoryRequest = matchCreateDirectoryUnderSelection(trimmedInput)
+    if (createDirectoryRequest) {
+      clearHistoryBrowse()
+      setInput('')
+      const result = onCreateDirectoryUnderSelection
+        ? await onCreateDirectoryUnderSelection(createDirectoryRequest.directoryName)
+        : { ok: false, message: '当前创建目录能力不可用。' }
+      setStatusMessage?.(result.message)
+      return
+    }
+
+    const createWorkspaceDirectoryRequest = matchCreateDirectoryInWorkspace(trimmedInput)
+    if (createWorkspaceDirectoryRequest) {
+      clearHistoryBrowse()
+      setInput('')
+      const result = onCreateDirectoryInWorkspace
+        ? await onCreateDirectoryInWorkspace(
+          createWorkspaceDirectoryRequest.parentPath,
+          createWorkspaceDirectoryRequest.directoryName,
+        )
+        : { ok: false, message: '当前工作区创建目录能力不可用。' }
+      setStatusMessage?.(result.message)
       return
     }
 
