@@ -33,6 +33,8 @@ const EMPTY_MESSAGES: ChatMessageView[] = []
 const AI_CHAT_AGENT_STORAGE_KEY = 'haomd_ai_chat_selected_agent_id'
 const EMPTY_AGENT_OPTION = { id: '', name: 'Agent' }
 const DOC_PATH_SWITCH_DELAY_MS = 800
+const DELETE_CONFIRM_TOKENS = new Set(['确认', '确认删除', '是', '确定', 'ok', 'okay', 'yes', 'y', 'confirm'])
+const DELETE_CANCEL_TOKENS = new Set(['取消', '算了', '否', '不用了', 'cancel', 'no', 'n'])
 
 export type AiChatDialogProps = {
   open: boolean
@@ -45,7 +47,7 @@ export type AiChatDialogProps = {
   getCurrentFileName?: () => string | null
   getCurrentFilePath?: () => string | null
   onDocumentSaved?: (path: string) => void
-  onRequestDeleteCurrentDocument?: (path: string) => Promise<{ ok: boolean; message: string }>
+  onConfirmDeleteCurrentDocument?: (path: string) => Promise<{ ok: boolean; message: string }>
   setStatusMessage?: (message: string) => void
   t?: (key: string, params?: Record<string, string | number>) => string
   /**
@@ -65,7 +67,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
   getCurrentFileName,
   getCurrentFilePath,
   onDocumentSaved,
-  onRequestDeleteCurrentDocument,
+  onConfirmDeleteCurrentDocument,
   setStatusMessage,
   t,
   tabId,
@@ -82,6 +84,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
   const [agents, setAgents] = useState<AgentProvider[]>([])
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null)
   const [ephemeralMessages, setEphemeralMessages] = useState<EphemeralAiChatMessage[]>([])
+  const [pendingDeleteRequest, setPendingDeleteRequest] = useState<{ path: string } | null>(null)
   const [imageGenerationRunning, setImageGenerationRunning] = useState(false)
   // 仅在通过 /list 打开输入历史弹窗时，才允许使用 `!n` 本地历史回填命令
   const [historyRecallEnabled, setHistoryRecallEnabled] = useState(false)
@@ -150,7 +153,13 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
     getCurrentFileName,
     getCurrentFilePath,
     onDocumentSaved,
-    onRequestDeleteCurrentDocument,
+    onRequestDeleteCurrentDocument: async (path: string) => {
+      setPendingDeleteRequest({ path })
+      return {
+        ok: true,
+        message: '请确认是否删除当前文档。\n\n确认删除请回复：确认删除\n若取消请回复：取消',
+      }
+    },
     setStatusMessage,
     t,
     restartToken: docConversationReloadToken,
@@ -455,6 +464,29 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
       } finally {
         setImageGenerationRunning(false)
       }
+      return
+    }
+
+    const trimmedInput = contentToSend.trim()
+    const normalizedInput = trimmedInput.toLowerCase()
+    if (pendingDeleteRequest) {
+      clearHistoryBrowse()
+      if (DELETE_CONFIRM_TOKENS.has(trimmedInput) || DELETE_CONFIRM_TOKENS.has(normalizedInput)) {
+        setInput('')
+        const result = onConfirmDeleteCurrentDocument
+          ? await onConfirmDeleteCurrentDocument(pendingDeleteRequest.path)
+          : { ok: false, message: '当前删除能力不可用。' }
+        setPendingDeleteRequest(null)
+        setStatusMessage?.(result.message)
+        return
+      }
+      if (DELETE_CANCEL_TOKENS.has(trimmedInput) || DELETE_CANCEL_TOKENS.has(normalizedInput)) {
+        setInput('')
+        setPendingDeleteRequest(null)
+        setStatusMessage?.('已取消删除。')
+        return
+      }
+      setStatusMessage?.('请回复“确认删除”或“取消”。')
       return
     }
 

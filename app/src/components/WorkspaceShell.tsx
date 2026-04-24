@@ -1635,8 +1635,13 @@ export function WorkspaceShell({
 
   const handleAiDeleteCurrentDocument = useCallback((path: string) => {
     const kind = resolveDeleteKindForPath(path)
-    return requestDeletePathWithConfirm(path, kind)
-  }, [resolveDeleteKindForPath, requestDeletePathWithConfirm])
+    return performDeletePath(path, kind).then((result) => {
+      if (!result.ok) {
+        return { ok: false, message: result.message }
+      }
+      return { ok: true, message: `已删除：${path}` }
+    })
+  }, [resolveDeleteKindForPath, performDeletePath])
 
   const normalizeDirPath = (dir: string): string => {
     if (!dir) return dir
@@ -1925,6 +1930,31 @@ export function WorkspaceShell({
     setInlineRenamePath(targetPath)
   }, [inlineNewFileDir, inlineNewFolderDir, selectedFolderPath, activeTab?.path, sidebar.folderRoots, setStatusMessage])
 
+  const requestDeleteSelectedFsEntry = useCallback(() => {
+    if (inlineNewFileDir || inlineNewFolderDir || inlineRenamePath) {
+      return
+    }
+
+    const targetPath = selectedFolderPath ?? activeTab?.path ?? null
+    if (!targetPath) {
+      setStatusMessage(t('workspace.selectFileOrFolderInBrowserFirst'))
+      return
+    }
+
+    const kind = resolveDeleteKindForPath(targetPath)
+    void requestDeletePathWithConfirm(targetPath, kind)
+  }, [
+    inlineNewFileDir,
+    inlineNewFolderDir,
+    inlineRenamePath,
+    selectedFolderPath,
+    activeTab?.path,
+    setStatusMessage,
+    t,
+    resolveDeleteKindForPath,
+    requestDeletePathWithConfirm,
+  ])
+
   const handleInlineRenameCancel = useCallback(() => {
     setInlineRenamePath(null)
   }, [])
@@ -2126,9 +2156,14 @@ export function WorkspaceShell({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Enter') return
-      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return
       if (activeLeftPanel !== 'files') return
+
+      const isRenameShortcut =
+        e.key === 'Enter' && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey
+      const isDeleteShortcut =
+        (e.key === 'Delete' || e.key === 'Backspace') && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey
+
+      if (!isRenameShortcut && !isDeleteShortcut) return
 
       if (typeof document !== 'undefined') {
         const active = document.activeElement as HTMLElement | null
@@ -2136,23 +2171,33 @@ export function WorkspaceShell({
         if (!active || !sidebarEl || !sidebarEl.contains(active)) {
           return
         }
-      }
 
-      // 行内新建/重命名过程中不再触发新的重命名
-      if (inlineNewFileDir || inlineNewFolderDir || inlineRenamePath) {
-        return
+        const tagName = active.tagName
+        if (
+          tagName === 'INPUT'
+          || tagName === 'TEXTAREA'
+          || active.isContentEditable
+        ) {
+          return
+        }
       }
 
       e.preventDefault()
       e.stopPropagation()
-      startFsEntryInlineRename()
+
+      if (isRenameShortcut) {
+        startFsEntryInlineRename()
+        return
+      }
+
+      requestDeleteSelectedFsEntry()
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [activeLeftPanel, inlineNewFileDir, inlineNewFolderDir, inlineRenamePath, startFsEntryInlineRename])
+  }, [activeLeftPanel, requestDeleteSelectedFsEntry, startFsEntryInlineRename])
 
   const isExportingHtmlRef = useRef(false)
   const isExportingPdfRef = useRef(false)
@@ -2942,7 +2987,7 @@ export function WorkspaceShell({
                 getCurrentFileName={getCurrentFileName}
                 getCurrentFilePath={getCurrentFilePath}
                 onDocumentSaved={handleAiDocumentSaved}
-                onRequestDeleteCurrentDocument={handleAiDeleteCurrentDocument}
+                onConfirmDeleteCurrentDocument={handleAiDeleteCurrentDocument}
                 setStatusMessage={setStatusMessage}
                 t={t}
                 sourceTabId={null}
@@ -2984,7 +3029,7 @@ export function WorkspaceShell({
                           getCurrentFileName={getCurrentFileName}
                           getCurrentFilePath={getCurrentFilePath}
                           onDocumentSaved={handleAiDocumentSaved}
-                          onRequestDeleteCurrentDocument={handleAiDeleteCurrentDocument}
+                          onConfirmDeleteCurrentDocument={handleAiDeleteCurrentDocument}
                           setStatusMessage={setStatusMessage}
                           t={t}
                           sourceTabId={activeTab?.id ?? null}
@@ -3154,7 +3199,7 @@ export function WorkspaceShell({
                         getCurrentFileName={getCurrentFileName}
                         getCurrentFilePath={getCurrentFilePath}
                         onDocumentSaved={handleAiDocumentSaved}
-                        onRequestDeleteCurrentDocument={handleAiDeleteCurrentDocument}
+                        onConfirmDeleteCurrentDocument={handleAiDeleteCurrentDocument}
                         setStatusMessage={setStatusMessage}
                         t={t}
                         sourceTabId={activeTab?.id ?? null}
@@ -3214,7 +3259,7 @@ export function WorkspaceShell({
               getCurrentFileName={getCurrentFileName}
               getCurrentFilePath={getCurrentFilePath}
               onDocumentSaved={handleAiDocumentSaved}
-              onRequestDeleteCurrentDocument={handleAiDeleteCurrentDocument}
+              onConfirmDeleteCurrentDocument={handleAiDeleteCurrentDocument}
               setStatusMessage={setStatusMessage}
               t={t}
               tabId={aiChatState.tabId}
