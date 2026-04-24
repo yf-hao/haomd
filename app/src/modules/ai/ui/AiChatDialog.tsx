@@ -15,6 +15,7 @@ import { tryHandleSlashCommand, parseHistoryRecallCommand } from './aiSlashComma
 import { AiChatCommandBridgeContext } from './AiChatCommandBridgeContext'
 import { ConfirmDialog } from '../../../components/ConfirmDialog'
 import { AiChatHistoryDialog } from './AiChatHistoryDialog'
+import { buildDeleteConfirmationPrompt, shouldTriggerDeleteCurrentDocument } from './deleteIntentMatcher'
 import { loadAgentSettingsState } from '../config/agentSettingsRepo'
 import type { AgentProvider } from '../domain/types'
 import { useThemeContext } from '../../theme/ThemeContext'
@@ -157,7 +158,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
       setPendingDeleteRequest({ path })
       return {
         ok: true,
-        message: '请确认是否删除当前文档。\n\n确认删除请回复：确认删除\n若取消请回复：取消',
+        message: buildDeleteConfirmationPrompt(),
       }
     },
     setStatusMessage,
@@ -487,6 +488,19 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
         return
       }
       setStatusMessage?.('请回复“确认删除”或“取消”。')
+      return
+    }
+
+    if (shouldTriggerDeleteCurrentDocument(trimmedInput)) {
+      const currentPath = normalizePersistableDocPath(getCurrentFilePath?.())
+      if (!currentPath) {
+        setStatusMessage?.('当前文档尚未保存，无法删除文件。')
+        return
+      }
+      clearHistoryBrowse()
+      setInput('')
+      setPendingDeleteRequest({ path: currentPath })
+      setStatusMessage?.(buildDeleteConfirmationPrompt())
       return
     }
 
