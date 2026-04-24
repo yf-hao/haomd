@@ -14,7 +14,7 @@ import { ReleaseNotesDialog } from './ReleaseNotesDialog'
 import { TextColorDialog } from './TextColorDialog'
 import { TabBar } from './TabBar'
 import { FileContextMenu } from './FileContextMenu'
-import { Sidebar, type SidebarContextActionPayload } from './Sidebar'
+import { Sidebar, type SidebarContextActionPayload, type SidebarContextTargetKind } from './Sidebar'
 import { OutlinePanel } from './OutlinePanel'
 import { SessionsPanel } from './SessionsPanel'
 import { NotesPanel } from './NotesPanel'
@@ -1570,6 +1570,74 @@ export function WorkspaceShell({
     tabs.forEach(t => { if (t.path === path) closeTabWithAiSession(t.id) })
   }, [tabs, closeTabWithAiSession])
 
+  const performDeletePath = useCallback(async (path: string, kind: SidebarContextTargetKind) => {
+    const resp = await deleteFsEntry(path)
+    if (!resp.ok) {
+      return { ok: false as const, message: resp.error.message ?? `删除失败：${path}` }
+    }
+
+    if (kind === 'standalone-file') {
+      sidebar.removeStandaloneFile(path)
+    } else if (kind === 'tree-file' || kind === 'tree-dir') {
+      const normalizedPath = path.replace(/\\/g, '/')
+      const parentRoot = sidebar.folderRoots.find((root) => {
+        const rootNorm = root.replace(/\\/g, '/')
+        return normalizedPath.startsWith(rootNorm + '/')
+      })
+      if (parentRoot) {
+        await sidebar.refreshFolderTree(parentRoot)
+      }
+    } else if (kind === 'folder-root') {
+      sidebar.removeFolderRoot(path)
+    }
+
+    closeTabsByPath(path)
+    return { ok: true as const }
+  }, [sidebar, closeTabsByPath])
+
+  const resolveDeleteKindForPath = useCallback((path: string): SidebarContextTargetKind => {
+    const normalizedPath = path.replace(/\\/g, '/')
+    const isStandalone = sidebar.standaloneFiles.some((file) => file.path.replace(/\\/g, '/') === normalizedPath)
+    if (isStandalone) {
+      return 'standalone-file'
+    }
+
+    const isFolderRoot = sidebar.folderRoots.some((root) => root.replace(/\\/g, '/') === normalizedPath)
+    if (isFolderRoot) {
+      return 'folder-root'
+    }
+
+    return 'tree-file'
+  }, [sidebar.folderRoots, sidebar.standaloneFiles])
+
+  const requestDeletePathWithConfirm = useCallback((path: string, kind: SidebarContextTargetKind) => {
+    return new Promise<{ ok: boolean; message: string }>((resolve) => {
+      setConfirmDialog({
+        title: t('workspace.confirmDeleteTitle'),
+        message: t('workspace.confirmDeleteMessage', { path }),
+        confirmText: t('workspace.delete'),
+        onConfirm: async () => {
+          setConfirmDialog(null)
+          const result = await performDeletePath(path, kind)
+          if (!result.ok) {
+            resolve({ ok: false, message: result.message })
+            return
+          }
+          resolve({ ok: true, message: `已删除：${path}` })
+        },
+        onCancel: () => {
+          setConfirmDialog(null)
+          resolve({ ok: false, message: t('common.cancel') })
+        },
+      })
+    })
+  }, [performDeletePath, t])
+
+  const handleAiDeleteCurrentDocument = useCallback((path: string) => {
+    const kind = resolveDeleteKindForPath(path)
+    return requestDeletePathWithConfirm(path, kind)
+  }, [resolveDeleteKindForPath, requestDeletePathWithConfirm])
+
   const normalizeDirPath = (dir: string): string => {
     if (!dir) return dir
     return dir.replace(/\\/g, '/').replace(/[\\/]+$/, '')
@@ -1994,38 +2062,7 @@ export function WorkspaceShell({
       if (kind === 'standalone-file') sidebar.removeStandaloneFile(path)
       else sidebar.removeFolderRoot(path)
     } else if (action === 'delete') {
-      setConfirmDialog({
-        title: t('workspace.confirmDeleteTitle'),
-        message: t('workspace.confirmDeleteMessage', { path }),
-        confirmText: t('workspace.delete'),
-        onConfirm: async () => {
-          setConfirmDialog(null)
-          const resp = await deleteFsEntry(path)
-          if (resp.ok) {
-            // 根据文件类型执行不同的刷新逻辑
-            if (kind === 'standalone-file') {
-              // 独立文件：从列表中移除
-              sidebar.removeStandaloneFile(path)
-            } else if (kind === 'tree-file' || kind === 'tree-dir') {
-              // 文件夹中的文件/文件夹：找到所属根目录并刷新
-              const normalizedPath = path.replace(/\\/g, '/')
-              const parentRoot = sidebar.folderRoots.find((root) => {
-                const rootNorm = root.replace(/\\/g, '/')
-                return normalizedPath.startsWith(rootNorm + '/')
-              })
-              if (parentRoot) {
-                await sidebar.refreshFolderTree(parentRoot)
-              }
-            } else if (kind === 'folder-root') {
-              // 根文件夹：从 folderRoots 中移除
-              sidebar.removeFolderRoot(path)
-            }
-
-            // 关闭相关标签页
-            closeTabsByPath(path)
-          }
-        }
-      })
+      void requestDeletePathWithConfirm(path, kind)
     } else if (action === 'open-terminal') {
       // 对文件：取所在目录；对文件夹：直接使用其自身路径
       const cwd = kind === 'standalone-file' || kind === 'tree-file'
@@ -2068,7 +2105,7 @@ export function WorkspaceShell({
   }, [
     openFileFromSidebar,
     sidebar,
-    closeTabsByPath,
+    requestDeletePathWithConfirm,
     setStatusMessage,
     inlineNewFileDir,
     inlineNewFolderDir,
@@ -2905,6 +2942,7 @@ export function WorkspaceShell({
                 getCurrentFileName={getCurrentFileName}
                 getCurrentFilePath={getCurrentFilePath}
                 onDocumentSaved={handleAiDocumentSaved}
+                onRequestDeleteCurrentDocument={handleAiDeleteCurrentDocument}
                 setStatusMessage={setStatusMessage}
                 t={t}
                 sourceTabId={null}
@@ -2946,6 +2984,7 @@ export function WorkspaceShell({
                           getCurrentFileName={getCurrentFileName}
                           getCurrentFilePath={getCurrentFilePath}
                           onDocumentSaved={handleAiDocumentSaved}
+                          onRequestDeleteCurrentDocument={handleAiDeleteCurrentDocument}
                           setStatusMessage={setStatusMessage}
                           t={t}
                           sourceTabId={activeTab?.id ?? null}
@@ -3115,6 +3154,7 @@ export function WorkspaceShell({
                         getCurrentFileName={getCurrentFileName}
                         getCurrentFilePath={getCurrentFilePath}
                         onDocumentSaved={handleAiDocumentSaved}
+                        onRequestDeleteCurrentDocument={handleAiDeleteCurrentDocument}
                         setStatusMessage={setStatusMessage}
                         t={t}
                         sourceTabId={activeTab?.id ?? null}
@@ -3174,6 +3214,7 @@ export function WorkspaceShell({
               getCurrentFileName={getCurrentFileName}
               getCurrentFilePath={getCurrentFilePath}
               onDocumentSaved={handleAiDocumentSaved}
+              onRequestDeleteCurrentDocument={handleAiDeleteCurrentDocument}
               setStatusMessage={setStatusMessage}
               t={t}
               tabId={aiChatState.tabId}

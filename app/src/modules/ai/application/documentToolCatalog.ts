@@ -2,6 +2,7 @@ export function buildDocumentToolCatalogPrompt(): string {
   return (
     '\n\n当前可用文档保存/导出工具。\n' +
     '当用户明确要求保存当前文档、导出当前文档、保存为 md、保存为 word/docx、保存为 html 时，应优先考虑 save_or_export_current_document，而不是只给文字说明。\n' +
+    '当用户明确要求“删除”“删除当前文档”“把当前文档删掉”时，应使用 delete_current_document。删除必须先确认，不能直接删除。\n' +
     '参数规则：format 当前支持 md、word、html。\n' +
     'target=current_file_dir 表示保存到当前文件所在目录。\n' +
     'target=workspace_directory 表示保存到文件浏览器挂载目录树中的某个目录，此时必须提供 targetDirectory，例如“网络笔记”或“离散数学/教案”。\n' +
@@ -13,6 +14,7 @@ export function buildDocumentToolCatalogPrompt(): string {
     '- “保存为word” -> format=word, target=current_file_dir\n' +
     '- “保存为 demo.md” -> format=md, target=current_file_dir, fileName=demo.md\n' +
     '- “保存word到离散数学” -> format=word, target=workspace_directory, targetDirectory=离散数学\n' +
-    '- “保存html到离散数学/教案” -> format=html, target=workspace_directory, targetDirectory=离散数学/教案'
+    '- “保存html到离散数学/教案” -> format=html, target=workspace_directory, targetDirectory=离散数学/教案\n' +
+    '- “删除当前文档” -> delete_current_document'
   )
 }

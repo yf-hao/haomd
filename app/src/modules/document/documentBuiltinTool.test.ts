@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { executeSaveOrExportCurrentDocument } from './documentBuiltinTool'
+import { executeDeleteCurrentDocument, executeSaveOrExportCurrentDocument } from './documentBuiltinTool'
 import { saveOrExportCurrentDocument } from './application/documentSaveExportService'
 
 vi.mock('./application/documentSaveExportService', () => ({
@@ -105,5 +105,34 @@ describe('documentBuiltinTool', () => {
     )
 
     expect(onDocumentSaved).toHaveBeenCalledWith('/root/demo.md')
+  })
+
+  it('returns error when deleting transient current document', async () => {
+    const result = await executeDeleteCurrentDocument(
+      {},
+      {
+        getCurrentFilePath: () => 'untitled',
+      },
+    )
+
+    expect(result).toContain('尚未保存')
+  })
+
+  it('requests deletion confirmation for persisted current document', async () => {
+    const onRequestDeleteCurrentDocument = vi.fn().mockResolvedValue({
+      ok: true,
+      message: '已删除：/root/demo.md',
+    })
+
+    const result = await executeDeleteCurrentDocument(
+      {},
+      {
+        getCurrentFilePath: () => '/root/demo.md',
+        onRequestDeleteCurrentDocument,
+      },
+    )
+
+    expect(onRequestDeleteCurrentDocument).toHaveBeenCalledWith('/root/demo.md')
+    expect(result).toBe('✅ 已删除：/root/demo.md')
   })
 })

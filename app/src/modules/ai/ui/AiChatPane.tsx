@@ -62,6 +62,7 @@ export interface AiChatPaneProps {
   getCurrentFileName?: () => string | null
   getCurrentFilePath?: () => string | null
   onDocumentSaved?: (path: string) => void
+  onRequestDeleteCurrentDocument?: (path: string) => Promise<{ ok: boolean; message: string }>
   setStatusMessage?: (message: string) => void
   t?: (key: string, params?: Record<string, string | number>) => string
   /** 触发 AI 操作的编辑器标签 ID，用于避免内容串到其他标签 */
@@ -81,6 +82,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
   getCurrentFileName,
   getCurrentFilePath,
   onDocumentSaved,
+  onRequestDeleteCurrentDocument,
   setStatusMessage,
   t,
   sourceTabId,
@@ -176,6 +178,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
     getCurrentFileName,
     getCurrentFilePath,
     onDocumentSaved,
+    onRequestDeleteCurrentDocument,
     setStatusMessage,
     t,
     restartToken: docConversationReloadToken,

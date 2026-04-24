@@ -82,6 +82,9 @@ import {
   SAVE_OR_EXPORT_CURRENT_DOCUMENT_TOOL_NAME,
   saveOrExportCurrentDocumentToolSchema,
   executeSaveOrExportCurrentDocument,
+  DELETE_CURRENT_DOCUMENT_TOOL_NAME,
+  deleteCurrentDocumentToolSchema,
+  executeDeleteCurrentDocument,
 } from '../../document/documentBuiltinTool'
 
 export type StartChatOptions = {
@@ -112,6 +115,7 @@ export type StartChatOptions = {
   getCurrentFileName?: () => string | null
   getCurrentFilePath?: () => string | null
   onDocumentSaved?: (path: string) => void
+  onRequestDeleteCurrentDocument?: (path: string) => Promise<{ ok: boolean; message: string }>
   setStatusMessage?: (message: string) => void
   t?: (key: string, params?: Record<string, string | number>) => string
 }
@@ -623,6 +627,14 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
                   },
                 )
               }
+            } else if (tc.function.name === DELETE_CURRENT_DOCUMENT_TOOL_NAME) {
+              toolResult = await executeDeleteCurrentDocument(
+                parsedArgs as Record<string, never>,
+                {
+                  getCurrentFilePath: options.getCurrentFilePath,
+                  onRequestDeleteCurrentDocument: options.onRequestDeleteCurrentDocument,
+                },
+              )
             } else {
               toolResult = await executeTool(tc.function.name, parsedArgs, routingTools)
             }
@@ -935,6 +947,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
           createWorkspaceDirectoryToolSchema,
           writeToWorkspaceToolSchema,
           saveOrExportCurrentDocumentToolSchema,
+          deleteCurrentDocumentToolSchema,
         ]
         : []
 

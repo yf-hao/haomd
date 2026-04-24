@@ -1,7 +1,16 @@
 import type { OpenAIToolDef } from '../ai/domain/types'
 import { saveOrExportCurrentDocument, type DocumentSaveExportContext } from './application/documentSaveExportService'
+import { normalizePersistableFilePath } from '../files/filePathState'
 
 export const SAVE_OR_EXPORT_CURRENT_DOCUMENT_TOOL_NAME = 'save_or_export_current_document'
+export const DELETE_CURRENT_DOCUMENT_TOOL_NAME = 'delete_current_document'
+
+export type DeleteCurrentDocumentContext = {
+  getCurrentFilePath?: () => string | null
+  onRequestDeleteCurrentDocument?: (
+    path: string,
+  ) => Promise<{ ok: boolean; message: string }>
+}
 
 export const saveOrExportCurrentDocumentToolSchema: OpenAIToolDef = {
   type: 'function',
@@ -36,6 +45,20 @@ export const saveOrExportCurrentDocumentToolSchema: OpenAIToolDef = {
         },
       },
       required: ['format', 'target'],
+    },
+  },
+}
+
+export const deleteCurrentDocumentToolSchema: OpenAIToolDef = {
+  type: 'function',
+  function: {
+    name: DELETE_CURRENT_DOCUMENT_TOOL_NAME,
+    description:
+      '删除当前文档文件。仅用于删除当前活动文档，且删除前必须弹出确认，不能直接删除任意路径。',
+    parameters: {
+      type: 'object',
+      properties: {},
+      required: [],
     },
   },
 }
@@ -75,4 +98,29 @@ export async function executeSaveOrExportCurrentDocument(
 
   ctx.onDocumentSaved?.(result.savedFilePath)
   return `✅ 已保存：${result.savedFilePath}`
+}
+
+export async function executeDeleteCurrentDocument(
+  _args: Record<string, never>,
+  ctx: DeleteCurrentDocumentContext,
+): Promise<string> {
+  if (!ctx.getCurrentFilePath) {
+    return '⚠️ 当前会话未挂载文档上下文，无法删除当前文档。'
+  }
+
+  const currentFilePath = normalizePersistableFilePath(ctx.getCurrentFilePath())
+  if (!currentFilePath) {
+    return '⚠️ 当前文档尚未保存，无法删除文件。'
+  }
+
+  if (!ctx.onRequestDeleteCurrentDocument) {
+    return '⚠️ 当前会话未接入删除确认能力，无法删除当前文档。'
+  }
+
+  const result = await ctx.onRequestDeleteCurrentDocument(currentFilePath)
+  if (!result.ok) {
+    return `⚠️ ${result.message}`
+  }
+
+  return `✅ ${result.message}`
 }

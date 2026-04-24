@@ -45,6 +45,7 @@ export type AiChatDialogProps = {
   getCurrentFileName?: () => string | null
   getCurrentFilePath?: () => string | null
   onDocumentSaved?: (path: string) => void
+  onRequestDeleteCurrentDocument?: (path: string) => Promise<{ ok: boolean; message: string }>
   setStatusMessage?: (message: string) => void
   t?: (key: string, params?: Record<string, string | number>) => string
   /**
@@ -64,6 +65,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
   getCurrentFileName,
   getCurrentFilePath,
   onDocumentSaved,
+  onRequestDeleteCurrentDocument,
   setStatusMessage,
   t,
   tabId,
@@ -148,6 +150,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
     getCurrentFileName,
     getCurrentFilePath,
     onDocumentSaved,
+    onRequestDeleteCurrentDocument,
     setStatusMessage,
     t,
     restartToken: docConversationReloadToken,

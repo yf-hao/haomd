@@ -6,7 +6,7 @@ import { createInitialConversationState } from '../domain/chatSession'
 import { createStreamingClientFromSettings } from '../streamingClientFactory'
 import { appendAssistantChunk } from '../domain/chatSession'
 import { loadAgentSettingsState } from '../config/agentSettingsRepo'
-import { executeSaveOrExportCurrentDocument } from '../../document/documentBuiltinTool'
+import { executeDeleteCurrentDocument, executeSaveOrExportCurrentDocument } from '../../document/documentBuiltinTool'
 
 // Mock dependencies
 vi.mock('../settings', () => ({
@@ -84,11 +84,17 @@ vi.mock('../globalMemory/context', () => ({
 
 vi.mock('../../document/documentBuiltinTool', () => ({
     SAVE_OR_EXPORT_CURRENT_DOCUMENT_TOOL_NAME: 'save_or_export_current_document',
+    DELETE_CURRENT_DOCUMENT_TOOL_NAME: 'delete_current_document',
     saveOrExportCurrentDocumentToolSchema: {
         type: 'function',
         function: { name: 'save_or_export_current_document', parameters: { type: 'object', properties: {}, required: [] } }
     },
+    deleteCurrentDocumentToolSchema: {
+        type: 'function',
+        function: { name: 'delete_current_document', parameters: { type: 'object', properties: {}, required: [] } }
+    },
     executeSaveOrExportCurrentDocument: vi.fn(),
+    executeDeleteCurrentDocument: vi.fn(),
 }))
 
 describe('ChatSessionService', () => {
@@ -336,5 +342,48 @@ describe('ChatSessionService', () => {
 
         expect(executeSaveOrExportCurrentDocument).toHaveBeenCalledTimes(1)
         expect(askStream).toHaveBeenCalledTimes(1)
+    })
+
+    it('should execute delete_current_document built-in tool with file context', async () => {
+        const askStream = vi.fn()
+            .mockResolvedValueOnce({
+                toolCalls: [
+                    {
+                        id: 'tool-1',
+                        type: 'function',
+                        function: {
+                            name: 'delete_current_document',
+                            arguments: JSON.stringify({}),
+                        },
+                    },
+                ],
+            })
+            .mockResolvedValueOnce({ content: 'done', completed: true })
+
+        vi.mocked(createStreamingClientFromSettings).mockReturnValue({
+            askStream,
+        } as any)
+        vi.mocked(executeDeleteCurrentDocument).mockResolvedValue('✅ 已删除：/root/doc.md')
+
+        const onRequestDeleteCurrentDocument = vi.fn().mockResolvedValue({
+            ok: true,
+            message: '已删除：/root/doc.md',
+        })
+
+        const session = await createChatSession({
+            entryMode: 'chat',
+            getCurrentFilePath: () => '/root/doc.md',
+            onRequestDeleteCurrentDocument,
+        })
+
+        await session.sendUserMessage('删除当前文档')
+
+        expect(executeDeleteCurrentDocument).toHaveBeenCalledWith(
+            {},
+            expect.objectContaining({
+                getCurrentFilePath: expect.any(Function),
+                onRequestDeleteCurrentDocument,
+            }),
+        )
     })
 })

@@ -35,6 +35,7 @@ export type UseAiChatSessionOptions = {
   getCurrentFileName?: () => string | null
   getCurrentFilePath?: () => string | null
   onDocumentSaved?: (path: string) => void
+  onRequestDeleteCurrentDocument?: (path: string) => Promise<{ ok: boolean; message: string }>
   setStatusMessage?: (message: string) => void
   t?: (key: string, params?: Record<string, string | number>) => string
   restartToken?: number
@@ -134,6 +135,7 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
     getCurrentFileName,
     getCurrentFilePath,
     onDocumentSaved,
+    onRequestDeleteCurrentDocument,
     setStatusMessage,
     t,
     restartToken = 0,
@@ -161,6 +163,7 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
   const getCurrentFileNameRef = useRef(getCurrentFileName)
   const getCurrentFilePathRef = useRef(getCurrentFilePath)
   const onDocumentSavedRef = useRef(onDocumentSaved)
+  const onRequestDeleteCurrentDocumentRef = useRef(onRequestDeleteCurrentDocument)
   const setStatusMessageRef = useRef(setStatusMessage)
   const tRef = useRef(t)
   const pendingDocPathRef = useRef<string | undefined>(undefined)
@@ -182,6 +185,10 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
   useEffect(() => {
     onDocumentSavedRef.current = onDocumentSaved
   }, [onDocumentSaved])
+
+  useEffect(() => {
+    onRequestDeleteCurrentDocumentRef.current = onRequestDeleteCurrentDocument
+  }, [onRequestDeleteCurrentDocument])
 
   useEffect(() => {
     setStatusMessageRef.current = setStatusMessage
@@ -280,6 +287,13 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
           ...(onDocumentSavedRef.current
             ? {
                 onDocumentSaved: (path: string) => onDocumentSavedRef.current?.(path),
+              }
+            : {}),
+          ...(onRequestDeleteCurrentDocumentRef.current
+            ? {
+                onRequestDeleteCurrentDocument: (path: string) =>
+                  onRequestDeleteCurrentDocumentRef.current?.(path) ??
+                  Promise.resolve({ ok: false, message: '删除确认能力不可用。' }),
               }
             : {}),
           ...(setStatusMessageRef.current
