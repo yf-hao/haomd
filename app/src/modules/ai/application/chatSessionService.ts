@@ -291,6 +291,12 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
   )
   let disposed = false
   let currentAbortController: AbortController | null = null
+  let currentToolAbortController: AbortController | null = null
+  let stopRequested = false
+
+  function shouldStopRequested(): boolean {
+    return stopRequested
+  }
 
   async function uploadLocalAttachments(local: LocalAttachment[]): Promise<ChatAttachment[]> {
     if (!local.length) return []
@@ -477,6 +483,10 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
 
     try {
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+        if (shouldStopRequested()) {
+          break
+        }
+
         const dynamicSkillTools = await buildDynamicSkillScriptTools(readSkillIds)
         const dynamicSkillToolMap = new Map(
           dynamicSkillTools.map((item) => [
@@ -503,6 +513,10 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
           break
         }
 
+        if (shouldStopRequested()) {
+          break
+        }
+
         // Model wants to call tools: complete current message, then execute tools
         state = completeAssistantMessage(state, assistantId)
         notifyStateChange()
@@ -517,6 +531,10 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
 
         // Show tool execution status in the chat
         for (const tc of result.toolCalls) {
+          if (shouldStopRequested()) {
+            break
+          }
+
           const toolLabel = tc.function.name.replace(/^mcp__/, '').replace(/__/g, '/')
           state = upsertAssistantToolExecution(state, assistantId, {
             id: tc.id,
@@ -530,6 +548,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
             try {
               parsedArgs = JSON.parse(tc.function.arguments)
             } catch { /* empty args */ }
+            currentToolAbortController = new AbortController()
 
             // Built-in tools are handled locally; MCP tools are routed to servers
             let toolResult: unknown
@@ -599,6 +618,8 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
                     onDocumentSaved: options.onDocumentSaved,
                     setStatusMessage: options.setStatusMessage,
                     t: options.t,
+                    signal: currentToolAbortController.signal,
+                    isStopRequested: () => shouldStopRequested(),
                   },
                 )
               }
@@ -622,7 +643,13 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
               detail: resultStr,
             })
             notifyStateChange()
+            if (shouldStopRequested()) {
+              break
+            }
           } catch (err) {
+            if ((err as Error)?.name === 'AbortError' || shouldStopRequested()) {
+              break
+            }
             const errMsg = String(err)
             conversationMessages.push({
               role: 'tool',
@@ -636,7 +663,16 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
               detail: errMsg,
             })
             notifyStateChange()
+            if (shouldStopRequested()) {
+              break
+            }
+          } finally {
+            currentToolAbortController = null
           }
+        }
+
+        if (shouldStopRequested()) {
+          break
         }
 
         // Prepare for next round — new assistant placeholder
@@ -811,6 +847,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       options?: { hideInView?: boolean; attachments?: UploadedFileRef[]; viewContent?: string },
     ): Promise<void> {
       if (disposed) return
+      stopRequested = false
       const userId = genId()
       const assistantId = genId()
 
@@ -983,6 +1020,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       options?: { hideInView?: boolean; viewContent?: string },
     ): Promise<void> {
       if (disposed) return
+      stopRequested = false
       const userId = genId()
       const assistantId = genId()
 
@@ -1034,6 +1072,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
     },
     async sendVisionTask(task: VisionTask, options?: { hideInView?: boolean; viewContent?: string }): Promise<void> {
       if (disposed) return
+      stopRequested = false
       const userId = genId()
       const assistantId = genId()
 
@@ -1045,13 +1084,21 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       await runVisionStream(assistantId, task)
     },
     stopRunningStream() {
+      stopRequested = true
       if (currentAbortController) {
         currentAbortController.abort()
       }
+      if (currentToolAbortController) {
+        currentToolAbortController.abort()
+      }
     },
     stopAndTruncate(messageId: string, length: number) {
+      stopRequested = true
       if (currentAbortController) {
         currentAbortController.abort()
+      }
+      if (currentToolAbortController) {
+        currentToolAbortController.abort()
       }
       // 直接按 ID 截断，无论是否在 streaming 状态
       state = truncateAssistantMessage(state, messageId, length)
@@ -1064,8 +1111,12 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
     },
     dispose() {
       disposed = true
+      stopRequested = true
       if (currentAbortController) {
         currentAbortController.abort()
+      }
+      if (currentToolAbortController) {
+        currentToolAbortController.abort()
       }
       client = null
     },

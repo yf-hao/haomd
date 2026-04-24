@@ -206,7 +206,6 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
     const now = Date.now()
     const remainingFreeze = Math.max(0, docPathFreezeUntil - now)
     if (isBusy || remainingFreeze > 0) {
-      setDocPathReady(false)
       if (!isBusy && remainingFreeze > 0) {
         docPathStabilizeTimerRef.current = window.setTimeout(() => {
           setStableDocPath(rawDocPath)
@@ -218,7 +217,6 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
       return
     }
 
-    setDocPathReady(false)
     docPathStabilizeTimerRef.current = window.setTimeout(() => {
       setStableDocPath(rawDocPath)
       setDocPathReady(true)

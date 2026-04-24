@@ -97,6 +97,7 @@ export function createOpenAICompatTauriClient(
       let resolved = false
       let cleanupDone = false
       let currentToolCalls: ToolCallRequest[] | undefined
+      let abortResolve: ((result: StreamingChatResult) => void) | null = null
 
       const cleanupTasks: Array<() => void | Promise<void>> = []
       const cleanup = async () => {
@@ -135,6 +136,16 @@ export function createOpenAICompatTauriClient(
         }
         const listener = () => {
           void abortHandler()
+          if (abortResolve) {
+            void finish({
+              content: fullContent,
+              tokenCount: fullContent.length,
+              completed: false,
+              toolCalls: currentToolCalls,
+            }).then((result) => {
+              abortResolve?.(result)
+            })
+          }
         }
         request.signal.addEventListener('abort', listener, { once: true })
         cleanupTasks.push(() => request.signal?.removeEventListener('abort', listener))
@@ -200,6 +211,10 @@ export function createOpenAICompatTauriClient(
         })
       })
 
+      const abortPromise = new Promise<StreamingChatResult>((resolve) => {
+        abortResolve = resolve
+      })
+
       try {
         await invoke('start_openai_compat_chat_stream', {
           requestId,
@@ -225,7 +240,7 @@ export function createOpenAICompatTauriClient(
         })
       }
 
-      return Promise.race([chunkDonePromise, errorPromise])
+      return Promise.race([chunkDonePromise, errorPromise, abortPromise])
     },
   }
 }

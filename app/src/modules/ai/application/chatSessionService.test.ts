@@ -284,4 +284,57 @@ describe('ChatSessionService', () => {
             }),
         )
     })
+
+    it('should stop openai tool loop before starting the next round', async () => {
+        const askStream = vi.fn()
+            .mockResolvedValueOnce({
+                toolCalls: [
+                    {
+                        id: 'tool-1',
+                        type: 'function',
+                        function: {
+                            name: 'save_or_export_current_document',
+                            arguments: JSON.stringify({
+                                format: 'word',
+                                target: 'current_file_dir',
+                            }),
+                        },
+                    },
+                ],
+            })
+            .mockResolvedValueOnce({ content: 'should-not-run', completed: true })
+
+        vi.mocked(createStreamingClientFromSettings).mockReturnValue({
+            askStream,
+        } as any)
+        let finishToolExecution: (() => void) | null = null
+        vi.mocked(executeSaveOrExportCurrentDocument).mockImplementation(
+            () =>
+                new Promise((resolve) => {
+                    finishToolExecution = () => resolve('✅ 已保存：/root/doc.docx')
+                }),
+        )
+
+        const session = await createChatSession({
+            entryMode: 'chat',
+            getCurrentMarkdown: () => '# Doc',
+            getCurrentFileName: () => 'doc.md',
+            getCurrentFilePath: () => '/root/doc.md',
+        })
+
+        const sendPromise = session.sendUserMessage('保存为word')
+        await vi.waitFor(() => {
+            expect(executeSaveOrExportCurrentDocument).toHaveBeenCalledTimes(1)
+        })
+        const completeTool = finishToolExecution as (() => void) | null
+        if (typeof completeTool !== 'function') {
+            throw new Error('tool execution did not start')
+        }
+        session.stopRunningStream()
+        completeTool()
+        await sendPromise
+
+        expect(executeSaveOrExportCurrentDocument).toHaveBeenCalledTimes(1)
+        expect(askStream).toHaveBeenCalledTimes(1)
+    })
 })

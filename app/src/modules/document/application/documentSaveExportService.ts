@@ -25,6 +25,8 @@ export type DocumentSaveExportContext = {
   onDocumentSaved?: (path: string) => void
   setStatusMessage?: (message: string) => void
   t?: (key: string, params?: Record<string, string | number>) => string
+  signal?: AbortSignal
+  isStopRequested?: () => boolean
 }
 
 type ResolveWorkspaceDirectoryResult =
@@ -54,6 +56,12 @@ type CreateWorkspaceDirectoryResult =
 type SaveOrExportCurrentDocumentResult =
   | { ok: true; savedFilePath: string }
   | { ok: false; message: string }
+
+function throwIfStopped(ctx: DocumentSaveExportContext) {
+  if (ctx.signal?.aborted || ctx.isStopRequested?.()) {
+    throw new DOMException('Document save/export aborted', 'AbortError')
+  }
+}
 
 function normalizePath(path: string): string {
   return path.replace(/\\/g, '/').replace(/[\\/]+$/, '')
@@ -283,11 +291,13 @@ export async function saveOrExportCurrentDocument(
   args: SaveOrExportCurrentDocumentArgs,
   ctx: DocumentSaveExportContext,
 ): Promise<SaveOrExportCurrentDocumentResult> {
+  throwIfStopped(ctx)
   const markdown = ctx.getCurrentMarkdown().trim()
   if (!markdown) {
     return { ok: false, message: '当前文档内容为空，无法保存或导出。' }
   }
 
+  throwIfStopped(ctx)
   const currentFilePath = ctx.getCurrentFilePath ? ctx.getCurrentFilePath() : null
   const persistableCurrentFilePath = normalizePersistableFilePath(currentFilePath)
   const currentFileName = ctx.getCurrentFileName()
@@ -300,8 +310,10 @@ export async function saveOrExportCurrentDocument(
   let targetDirectoryPath: string
   if (args.target === 'current_file_dir') {
     if (persistableCurrentFilePath) {
+      throwIfStopped(ctx)
       targetDirectoryPath = normalizePath(await dirname(persistableCurrentFilePath))
     } else {
+      throwIfStopped(ctx)
       const fallbackDirectory = await getDefaultDirectoryForUnsavedDocument()
       if (!fallbackDirectory) {
         return { ok: false, message: '当前文档尚未保存，且没有可用的激活目录或系统文档目录。' }
@@ -309,6 +321,7 @@ export async function saveOrExportCurrentDocument(
       targetDirectoryPath = fallbackDirectory
     }
   } else {
+    throwIfStopped(ctx)
     const resolved = await ensureWorkspaceDirectoryExists(
       args.targetDirectory?.trim() ?? '',
       persistableCurrentFilePath,
@@ -318,12 +331,15 @@ export async function saveOrExportCurrentDocument(
   }
 
   const outputPath = joinPath(targetDirectoryPath, fileName)
+  throwIfStopped(ctx)
 
   if (args.format === 'md') {
+    throwIfStopped(ctx)
     const result = await writeFileNoRecent({
       path: outputPath,
       content: ctx.getCurrentMarkdown(),
     })
+    throwIfStopped(ctx)
     if (!result.ok) {
       return { ok: false, message: mapWriteFailureMessage(result.error.message, outputPath) }
     }
@@ -331,6 +347,7 @@ export async function saveOrExportCurrentDocument(
   }
 
   if (args.format === 'word') {
+    throwIfStopped(ctx)
     const ok = await exportToWordAtPath(
       {
         getCurrentMarkdown: ctx.getCurrentMarkdown,
@@ -341,12 +358,14 @@ export async function saveOrExportCurrentDocument(
       },
       outputPath,
     )
+    throwIfStopped(ctx)
     if (!ok) {
       return { ok: false, message: '导出 Word 失败。' }
     }
     return { ok: true, savedFilePath: outputPath }
   }
 
+  throwIfStopped(ctx)
   const ok = await exportToHtmlAtPath(
     {
       getCurrentMarkdown: ctx.getCurrentMarkdown,
@@ -357,6 +376,7 @@ export async function saveOrExportCurrentDocument(
     },
     outputPath,
   )
+  throwIfStopped(ctx)
   if (!ok) {
     return { ok: false, message: '导出 HTML 失败。' }
   }

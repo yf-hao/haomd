@@ -380,4 +380,27 @@ describe('documentSaveExportService', () => {
       message: '目标目录不可写，无法保存到：/documents/dde.md',
     })
   })
+
+  it('aborts before writing when stop was requested', async () => {
+    const controller = new AbortController()
+    controller.abort()
+
+    await expect(
+      saveOrExportCurrentDocument(
+        {
+          format: 'md',
+          target: 'current_file_dir',
+          fileName: 'demo',
+        },
+        {
+          getCurrentMarkdown: () => '# Demo',
+          getCurrentFileName: () => 'doc.md',
+          getCurrentFilePath: () => '/root/doc.md',
+          signal: controller.signal,
+        },
+      ),
+    ).rejects.toMatchObject({ name: 'AbortError' })
+
+    expect(writeFileNoRecent).not.toHaveBeenCalled()
+  })
 })
