@@ -105,12 +105,18 @@
                   </div>
                   <!-- AI Panel -->
                   <div class="hero-panel" id="hero-panel-ai">
-                    <div class="code-block">
-                      <span>> @Agent 帮我重新组织 sites 目录</span>
-                      <span>[Agent] 正在扫描文件结构...</span>
-                      <span>[Agent] 建议将 assets 移动至根目录</span>
-                      <span>[Agent] 执行重命名：style.css -> main.css</span>
-                      <span>[Agent] 任务完成，已同步本地文件系统。</span>
+                    <div class="ai-mock-container">
+                      <div class="ai-user-bubble">在 temp 下创建名为测试的文件</div>
+                      <div class="ai-tool-box">
+                        <div class="tool-header">查看工具执行详情</div>
+                        <div class="tool-item">
+                          <span class="tool-dot"></span> write_to_workspace
+                        </div>
+                        <div class="tool-result">
+                          ✅ 已保存：/Users/yfhao/Documents/temp/测试.md
+                        </div>
+                      </div>
+                      <div class="ai-response-bubble">已在 <span class="ui-pill">temp</span> 下创建文件 <span class="ui-pill">测试.md</span>。</div>
                     </div>
                   </div>
                   <!-- Preview Panel -->
@@ -332,9 +338,9 @@
               <span>涵盖 Markdown 解析、实时语法高亮与多格式转换链路。</span>
             </article>
             <article class="stack-card reveal">
-              <h3>AI 与可视化</h3>
-              <p>OpenAI SDK / KaTeX / Mermaid</p>
-              <span>将前沿的智能生成与结构化表达能力深度植入编辑器血脉。</span>
+              <h3>大模型协同与多模态呈现</h3>
+              <p>OpenAI / Gemini / Dify 反代</p>
+              <span>多模型协议兼容，支持主流模型与私有化部署的平滑接入。</span>
             </article>
           </div>
         </div>
