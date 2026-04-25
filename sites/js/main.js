@@ -18,7 +18,14 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   window.addEventListener("scroll", () => {
-    navbar?.classList.toggle("scrolled", window.scrollY > 12);
+    const scrolled = window.scrollY > 12;
+    navbar?.classList.toggle("scrolled", scrolled);
+    
+    const scrollCue = document.querySelector(".hero-scroll-cue");
+    if (scrollCue) {
+      scrollCue.style.opacity = window.scrollY > 50 ? "0" : "0.82";
+      scrollCue.style.pointerEvents = window.scrollY > 50 ? "none" : "auto";
+    }
   });
 
   previewTabs.forEach((tab) => {

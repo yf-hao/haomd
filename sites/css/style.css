@@ -178,44 +178,41 @@ button {
 
 .hero-scroll-cue {
   position: absolute;
-  bottom: 40px;
   left: 50%;
+  bottom: 80px;
   transform: translateX(-50%);
-  display: flex;
+  display: inline-flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  text-decoration: none;
-  z-index: 10;
-  color: #ffffff;
-  opacity: 0.8;
-  transition: opacity 0.3s ease;
+  gap: 10px;
+  color: var(--text-muted);
+  opacity: 0.82;
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
 .hero-scroll-cue:hover {
   opacity: 1;
+  transform: translateX(-50%) translateY(-2px);
 }
 
 .hero-scroll-mouse {
-  width: 26px;
-  height: 42px;
-  border: 2px solid rgba(255, 255, 255, 0.4);
-  border-radius: 14px;
   position: relative;
-  box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+  width: 24px;
+  height: 38px;
+  border: 1px solid rgba(17, 17, 17, 0.18);
+  border-radius: 999px;
 }
 
 .hero-scroll-wheel {
-  width: 4px;
-  height: 8px;
-  background: var(--accent);
-  border-radius: 2px;
   position: absolute;
   top: 8px;
   left: 50%;
-  transform: translateX(-50%);
-  animation: scrollWheel 2s infinite;
-  box-shadow: 0 0 8px var(--accent);
+  width: 4px;
+  height: 8px;
+  margin-left: -2px;
+  border-radius: 999px;
+  background: rgba(17, 17, 17, 0.5);
+  animation: heroScrollWheel 1.8s ease-in-out infinite;
 }
 
 .hero-scroll-text {
