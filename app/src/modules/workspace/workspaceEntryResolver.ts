@@ -42,8 +42,49 @@ function joinPath(base: string, child: string): string {
   return `${normalizePath(base)}/${child.replace(/^\/+/, '')}`
 }
 
-function buildCandidateDisplay(relativePath: string): string {
-  return relativePath || '.'
+function getRelativePathFromWorkspaceRoot(workspaceRoot: string, targetPath: string): string {
+  const normalizedWorkspaceRoot = normalizePath(workspaceRoot)
+  const normalizedTargetPath = normalizePath(targetPath)
+  if (normalizedTargetPath === normalizedWorkspaceRoot) {
+    return getPathBaseName(normalizedWorkspaceRoot)
+  }
+  const prefix = `${normalizedWorkspaceRoot}/`
+  if (!normalizedTargetPath.startsWith(prefix)) {
+    return getPathBaseName(normalizedTargetPath)
+  }
+  return normalizedTargetPath.slice(prefix.length)
+}
+
+function buildCandidateDisplay(relativePath: string, workspaceRootName?: string): string {
+  const normalizedRelativePath = relativePath || '.'
+  const normalizedWorkspaceRootName = workspaceRootName?.trim() ?? ''
+  if (!normalizedWorkspaceRootName) {
+    return normalizedRelativePath
+  }
+  if (
+    normalizedRelativePath === normalizedWorkspaceRootName ||
+    normalizedRelativePath.startsWith(`${normalizedWorkspaceRootName}/`)
+  ) {
+    return normalizedRelativePath
+  }
+  return `${normalizedWorkspaceRootName}/${normalizedRelativePath}`
+}
+
+function buildWorkspaceScopedCandidateDisplay(args: {
+  relativePath: string
+  workspaceRoot: string
+  duplicatedRelativePath: boolean
+  duplicatedWorkspaceRootName: boolean
+}): string {
+  if (!args.duplicatedRelativePath) {
+    return buildCandidateDisplay(args.relativePath)
+  }
+
+  if (args.duplicatedWorkspaceRootName) {
+    return buildCandidateDisplay(args.relativePath, normalizePath(args.workspaceRoot))
+  }
+
+  return buildCandidateDisplay(args.relativePath, getPathBaseName(args.workspaceRoot))
 }
 
 function getPathBaseName(path: string): string {
@@ -52,13 +93,17 @@ function getPathBaseName(path: string): string {
   return segments[segments.length - 1] ?? normalized
 }
 
+function debugWorkspaceEntryResolver(label: string, payload: Record<string, unknown>): void {
+  console.debug(`[workspaceEntryResolver] ${label}`, payload)
+}
+
 function resolveWorkspaceRoots(workspaceRoot?: string | null): WorkspaceRootsResolution {
   const normalizedWorkspaceRoot = workspaceRoot ? normalizePath(workspaceRoot) : ''
   if (normalizedWorkspaceRoot) {
     return { ok: true, workspaceRoots: [normalizedWorkspaceRoot] }
   }
 
-  const mountedRoots = getWorkspaceMountedRoots().map(normalizePath)
+  const mountedRoots = Array.from(new Set(getWorkspaceMountedRoots().map(normalizePath)))
   if (!mountedRoots.length) {
     return {
       ok: false,
@@ -72,38 +117,20 @@ function resolveWorkspaceRoots(workspaceRoot?: string | null): WorkspaceRootsRes
 
 async function collectWorkspaceEntries(
   workspaceRoot: string,
-  currentDirectory: string,
-  relativeDirectory: string,
   output: IndexedWorkspaceEntry[],
 ): Promise<{ ok: true } | { ok: false; message: string }> {
-  const listed = await listFolder(currentDirectory)
+  const listed = await listFolder(workspaceRoot)
   if (!listed.ok) {
-    return { ok: false, message: listed.error.message || `读取目录失败：${currentDirectory}` }
+    return { ok: false, message: listed.error.message || `读取目录失败：${workspaceRoot}` }
   }
 
   for (const entry of listed.data) {
-    const childRelativePath = relativeDirectory
-      ? `${relativeDirectory}/${entry.name}`
-      : entry.name
-
     output.push({
       path: entry.path,
-      relativePath: childRelativePath,
+      relativePath: getRelativePathFromWorkspaceRoot(workspaceRoot, entry.path),
       name: entry.name,
       kind: entry.kind,
     })
-
-    if (entry.kind === 'dir') {
-      const nested = await collectWorkspaceEntries(
-        workspaceRoot,
-        entry.path,
-        childRelativePath,
-        output,
-      )
-      if (!nested.ok) {
-        return nested
-      }
-    }
   }
 
   return { ok: true }
@@ -177,6 +204,13 @@ export async function resolveWorkspaceEntryByName(args: {
     return rootsResult
   }
 
+  debugWorkspaceEntryResolver('resolve:start', {
+    requestedWorkspaceRoot: args.workspaceRoot ?? null,
+    normalizedTarget,
+    expectedKind: expectedKind ?? null,
+    workspaceRoots: rootsResult.workspaceRoots,
+  })
+
   const matches: Array<IndexedWorkspaceEntry & { workspaceRoot: string }> = []
   for (const workspaceRoot of rootsResult.workspaceRoots) {
     const entries: IndexedWorkspaceEntry[] = []
@@ -189,7 +223,7 @@ export async function resolveWorkspaceEntryByName(args: {
         kind: 'dir',
       })
     }
-    const collected = await collectWorkspaceEntries(workspaceRoot, workspaceRoot, '', entries)
+    const collected = await collectWorkspaceEntries(workspaceRoot, entries)
     if (!collected.ok) {
       return {
         ok: false,
@@ -215,10 +249,49 @@ export async function resolveWorkspaceEntryByName(args: {
         ...entry,
         workspaceRoot,
       }))
+    debugWorkspaceEntryResolver('resolve:rootMatches', {
+      workspaceRoot,
+      normalizedTarget,
+      directMatches: directMatches.map((entry) => ({
+        path: normalizePath(entry.path),
+        relativePath: normalizePath(entry.relativePath),
+        kind: entry.kind,
+      })),
+      rootPrefixedMatches: rootPrefixedMatches.map((entry) => ({
+        path: normalizePath(entry.path),
+        relativePath: normalizePath(entry.relativePath),
+        kind: entry.kind,
+      })),
+      rootMatches: rootMatches.map((entry) => ({
+        path: normalizePath(entry.path),
+        relativePath: normalizePath(entry.relativePath),
+        kind: entry.kind,
+      })),
+    })
     matches.push(...rootMatches)
   }
 
-  if (!matches.length) {
+  const uniqueMatches = matches.filter((entry, index, array) =>
+    array.findIndex((candidate) => normalizePath(candidate.path) === normalizePath(entry.path)) === index,
+  )
+
+  debugWorkspaceEntryResolver('resolve:deduped', {
+    normalizedTarget,
+    matches: matches.map((entry) => ({
+      workspaceRoot: entry.workspaceRoot,
+      path: normalizePath(entry.path),
+      relativePath: normalizePath(entry.relativePath),
+      kind: entry.kind,
+    })),
+    uniqueMatches: uniqueMatches.map((entry) => ({
+      workspaceRoot: entry.workspaceRoot,
+      path: normalizePath(entry.path),
+      relativePath: normalizePath(entry.relativePath),
+      kind: entry.kind,
+    })),
+  })
+
+  if (!uniqueMatches.length) {
     return {
       ok: false,
       reason: 'not_found',
@@ -226,16 +299,45 @@ export async function resolveWorkspaceEntryByName(args: {
     }
   }
 
-  if (matches.length > 1) {
+  if (uniqueMatches.length > 1) {
+    const relativePathCounts = new Map<string, number>()
+    const workspaceRootNameCounts = new Map<string, number>()
+    uniqueMatches.forEach((entry) => {
+      const currentCount = relativePathCounts.get(entry.relativePath) ?? 0
+      relativePathCounts.set(entry.relativePath, currentCount + 1)
+      const workspaceRootName = getPathBaseName(entry.workspaceRoot)
+      const currentRootNameCount = workspaceRootNameCounts.get(workspaceRootName) ?? 0
+      workspaceRootNameCounts.set(workspaceRootName, currentRootNameCount + 1)
+    })
+
+    const candidates = uniqueMatches.map((entry) => {
+      const workspaceRootName = getPathBaseName(entry.workspaceRoot)
+      return buildWorkspaceScopedCandidateDisplay({
+        relativePath: entry.relativePath,
+        workspaceRoot: entry.workspaceRoot,
+        duplicatedRelativePath: (relativePathCounts.get(entry.relativePath) ?? 0) > 1,
+        duplicatedWorkspaceRootName: (workspaceRootNameCounts.get(workspaceRootName) ?? 0) > 1,
+      })
+    })
+    debugWorkspaceEntryResolver('resolve:ambiguous', {
+      normalizedTarget,
+      candidates,
+      uniqueMatches: uniqueMatches.map((entry) => ({
+        workspaceRoot: entry.workspaceRoot,
+        path: normalizePath(entry.path),
+        relativePath: normalizePath(entry.relativePath),
+        kind: entry.kind,
+      })),
+    })
     return {
       ok: false,
       reason: 'ambiguous',
-      message: `目标存在歧义，请指定更完整的路径：${matches.map((entry) => buildCandidateDisplay(entry.relativePath)).join('、')}`,
-      candidates: matches.map((entry) => buildCandidateDisplay(entry.relativePath)),
+      message: `目标存在歧义，请指定更完整的路径：${candidates.join('、')}`,
+      candidates,
     }
   }
 
-  const match = matches[0]!
+  const match = uniqueMatches[0]!
   return {
     ok: true,
     workspaceRoot: match.workspaceRoot,

@@ -1834,6 +1834,32 @@ export function WorkspaceShell({
     targetPath: string,
     targetKind?: WorkspaceEntryKind,
   ) => {
+    const normalizedTargetPath = targetPath.replace(/\\/g, '/')
+    const matchedRoot = sidebar.folderRoots.find((root) => {
+      const normalizedRoot = root.replace(/\\/g, '/')
+      return (
+        normalizedTargetPath === normalizedRoot ||
+        normalizedTargetPath.startsWith(`${normalizedRoot}/`)
+      )
+    })
+
+    if (matchedRoot) {
+      const kind =
+        targetKind === 'dir'
+          ? (
+              sidebar.folderRoots.some((root) => root.replace(/\\/g, '/') === normalizedTargetPath)
+                ? 'folder-root'
+                : 'tree-dir'
+            )
+          : resolveDeleteKindForPath(normalizedTargetPath)
+
+      const result = await performDeletePath(normalizedTargetPath, kind)
+      if (!result.ok) {
+        return { ok: false, message: result.message }
+      }
+      return { ok: true, message: `已删除：${normalizedTargetPath}` }
+    }
+
     const resolved = await resolveWorkspaceEntryByName({
       workspaceRoot: getCurrentWorkspaceRoot(),
       targetPath,

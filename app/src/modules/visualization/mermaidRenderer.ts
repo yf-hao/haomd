@@ -97,24 +97,58 @@ function buildExportMermaidThemeVariables(fontSizePx: number) {
 
 function buildMermaidThemeVariables(themeMode: ResolvedThemeMode) {
   if (themeMode === 'dark') {
+    const surfacePanel = getCssThemeColor('--theme-surface-panel', '#05070c')
+    const surfaceCard = getCssThemeColor('--theme-surface-card', '#1e293b')
+    const surfaceCardActive = getCssThemeColor('--theme-surface-card-active', '#334155')
+    const surfacePreview = getCssThemeColor('--theme-surface-preview', '#0c0d16')
+    const textColor = getCssThemeColor('--theme-text-default', '#e8ecf5')
+    const strongBorder = getCssThemeColor('--theme-border-strong', '#94a3b8')
+    const accentBorder = getCssThemeColor('--theme-accent-primary-alt-soft', '#62c3ff')
+
     return {
+      darkMode: true,
       background: 'transparent',
-      primaryColor: getCssThemeColor('--theme-surface-card', '#1e293b'),
-      primaryTextColor: getCssThemeColor('--theme-text-default', '#e8ecf5'),
-      primaryBorderColor: getCssThemeColor('--theme-accent-primary-alt-soft', '#62c3ff'),
-      lineColor: getCssThemeColor('--theme-border-strong', '#94a3b8'),
-      textColor: getCssThemeColor('--theme-text-default', '#e8ecf5'),
-      secondaryColor: getCssThemeColor('--theme-surface-card-active', '#334155'),
-      tertiaryColor: getCssThemeColor('--theme-surface-card', 'rgba(255, 255, 255, 0.02)'),
-      clusterBkg: getCssThemeColor('--theme-surface-panel', '#05070c'),
-      clusterBorder: getCssThemeColor('--theme-border-subtle', 'rgba(255, 255, 255, 0.06)'),
-      nodeBorder: getCssThemeColor('--theme-accent-primary-alt-soft', '#62c3ff'),
-      edgeLabelBackground: getCssThemeColor('--theme-surface-preview', '#0c0d16'),
-      mainBkg: getCssThemeColor('--theme-surface-card', '#1e293b'),
+      primaryColor: surfaceCardActive,
+      primaryTextColor: textColor,
+      primaryBorderColor: accentBorder,
+      secondaryColor: surfaceCard,
+      secondaryTextColor: textColor,
+      secondaryBorderColor: strongBorder,
+      tertiaryColor: surfacePanel,
+      tertiaryTextColor: textColor,
+      tertiaryBorderColor: strongBorder,
+      lineColor: strongBorder,
+      textColor,
+      nodeTextColor: textColor,
+      clusterBkg: surfacePanel,
+      clusterBorder: strongBorder,
+      nodeBorder: accentBorder,
+      edgeLabelBackground: surfacePreview,
+      mainBkg: surfaceCardActive,
+      actorBkg: surfaceCardActive,
+      actorBorder: accentBorder,
+      actorTextColor: textColor,
+      labelBoxBkgColor: surfacePreview,
+      labelBoxBorderColor: strongBorder,
+      labelTextColor: textColor,
+      noteBkgColor: surfacePreview,
+      noteBorderColor: strongBorder,
+      noteTextColor: textColor,
+      sequenceNumberColor: textColor,
+      sectionBkgColor: surfaceCard,
+      sectionBkgColor2: surfacePanel,
+      sectionBorderColor: strongBorder,
+      altSectionBkgColor: surfacePreview,
+      classText: textColor,
+      fillType0: surfaceCardActive,
+      fillType1: surfaceCard,
+      fillType2: surfacePanel,
+      fillType3: surfacePreview,
     }
   }
 
   return {
+    darkMode: false,
     background: 'transparent',
     primaryColor: getCssThemeColor('--theme-surface-card', '#f8fafc'),
     primaryTextColor: getCssThemeColor('--theme-text-default', '#0f172a'),
@@ -205,13 +239,14 @@ export async function renderMermaidToSvg(
   lib.initialize(buildMermaidConfig(profile, themeMode, exportFontSizePx))
   const renderId = id ?? `mermaid-${Math.random().toString(36).slice(2)}`
   const rendered = await lib.render(renderId, code)
-  return normalizeMermaidSvg(rendered.svg, profile, exportFontSizePx)
+  return normalizeMermaidSvg(rendered.svg, profile, exportFontSizePx, themeMode)
 }
 
 function normalizeMermaidSvg(
   svgMarkup: string,
   profile: MermaidRenderProfile = 'preview',
   exportFontSizePx = 15,
+  themeMode: ResolvedThemeMode = 'dark',
 ): string {
   if (typeof DOMParser !== 'undefined' && typeof XMLSerializer !== 'undefined') {
     try {
@@ -241,6 +276,92 @@ function normalizeMermaidSvg(
         styleNode.textContent = text
           .replace(/background-color:\s*[^;}\n]+;?/gi, '')
           .replace(/background:\s*[^;}\n]+;?/gi, '')
+      }
+
+      if (profile === 'preview' && themeMode === 'dark' && svg.querySelector('.entityBox, .relationshipLabelBox')) {
+        const surfaceCard = getCssThemeColor('--theme-surface-card-active', '#334155')
+        const surfacePreview = getCssThemeColor('--theme-surface-preview', '#0c0d16')
+        const textColor = getCssThemeColor('--theme-text-default', '#e8ecf5')
+        const borderColor = getCssThemeColor('--theme-accent-primary-alt-soft', '#62c3ff')
+        const lineColor = getCssThemeColor('--theme-border-strong', '#94a3b8')
+
+        const darkErStyle = doc.createElement('style')
+        darkErStyle.textContent = `
+          .entityBox,
+          .relationshipLabelBox,
+          .labelBkg,
+          .node rect,
+          .node circle,
+          .node ellipse,
+          .node polygon {
+            fill: ${surfaceCard} !important;
+            stroke: ${borderColor} !important;
+          }
+
+          .relationshipLabelBox,
+          .labelBkg,
+          .edgeLabel rect {
+            fill: ${surfacePreview} !important;
+            opacity: 1 !important;
+          }
+
+          .relationshipLine,
+          .marker {
+            stroke: ${lineColor} !important;
+          }
+
+          .label,
+          .label text,
+          .label tspan,
+          .edgeLabel,
+          .edgeLabel .label,
+          .nodeLabel,
+          .nodeLabel text,
+          .nodeLabel tspan,
+          text,
+          tspan {
+            fill: ${textColor} !important;
+            color: ${textColor} !important;
+          }
+
+          foreignObject div,
+          foreignObject span {
+            color: ${textColor} !important;
+            background: transparent !important;
+          }
+
+          svg {
+            background: transparent !important;
+          }
+        `
+        svg.appendChild(darkErStyle)
+
+        const allShapeNodes = Array.from(svg.querySelectorAll('.entityBox, .relationshipLabelBox, .node rect, .node circle, .node ellipse, .node polygon'))
+        for (const node of allShapeNodes) {
+          node.setAttribute('fill', node.matches('.relationshipLabelBox') ? surfacePreview : surfaceCard)
+          node.setAttribute('stroke', borderColor)
+        }
+
+        const allTextNodes = Array.from(svg.querySelectorAll('text, tspan'))
+        for (const node of allTextNodes) {
+          node.setAttribute('fill', textColor)
+        }
+
+        const allLineNodes = Array.from(svg.querySelectorAll('.relationshipLine, .marker'))
+        for (const node of allLineNodes) {
+          node.setAttribute('stroke', lineColor)
+        }
+
+        const foreignNodes = Array.from(svg.querySelectorAll('foreignObject div, foreignObject span'))
+        for (const node of foreignNodes) {
+          node.setAttribute('style', `color: ${textColor}; background: transparent;`)
+        }
+
+        const labelBackgrounds = Array.from(svg.querySelectorAll('.labelBkg, .edgeLabel rect'))
+        for (const node of labelBackgrounds) {
+          node.setAttribute('fill', surfacePreview)
+          node.setAttribute('opacity', '1')
+        }
       }
 
       if (profile === 'export') {

@@ -11,6 +11,9 @@ describe('documentToolCatalog', () => {
     expect(prompt).toContain('fileName')
     expect(prompt).toContain('create_directory_under_selection')
     expect(prompt).toContain('创建 demo 目录')
+    expect(prompt).toContain('删除 demo 文件夹')
+    expect(prompt).toContain('delete_workspace_entry')
+    expect(prompt).toContain('不能先回复文字确认')
   })
 
   it('does not advertise pdf as a supported AI export format', () => {

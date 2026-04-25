@@ -178,13 +178,15 @@ export const deleteWorkspaceEntryToolSchema: OpenAIToolDef = {
     name: DELETE_WORKSPACE_ENTRY_TOOL_NAME,
     description:
       '在当前工作区内按名称解析并删除文件或文件夹。' +
-      '例如“删除 temp 下的 demo 文件夹”“删除 temp 下的 hello.md”。删除前必须先确认，不能删除工作区外路径。',
+      '例如“删除 temp 下的 demo 文件夹”“删除 temp 下的 hello.md”“删除 demo 文件夹”“删除 hello.md”。' +
+      '当用户没有给出父路径，或者当前选择的不是该目标文件夹时，也必须先用这个工具按名称解析目标，不能先回复文字确认。' +
+      '删除前必须先确认，不能删除工作区外路径。',
     parameters: {
       type: 'object',
       properties: {
         targetPath: {
           type: 'string',
-          description: '当前工作区内的目标名称或相对路径，例如“temp/demo”“temp/hello.md”“hello.md”。',
+          description: '当前工作区内的目标名称或相对路径，例如“temp/demo”“temp/hello.md”“demo”“hello.md”。',
         },
         targetKind: {
           type: 'string',

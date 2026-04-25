@@ -379,6 +379,13 @@
   padding-right: 4px;
   /* 侧边栏文件区域统一使用手型光标，避免点击后短暂退回箭头 */
   cursor: pointer;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sidebar-body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .sidebar-section+.sidebar-section {

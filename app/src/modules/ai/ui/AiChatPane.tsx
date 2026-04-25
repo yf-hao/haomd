@@ -17,6 +17,7 @@ import { ConfirmDialog } from '../../../components/ConfirmDialog'
 import { AiChatHistoryDialog } from './AiChatHistoryDialog'
 import {
   buildDeleteConfirmationPrompt,
+  parseDeleteConfirmationPrompt,
   shouldTriggerDeleteCurrentDocument,
   shouldTriggerDeleteCurrentFolder,
 } from './deleteIntentMatcher'
@@ -42,7 +43,7 @@ import {
   saveRemoteImageWithDialog,
 } from '../agents/imageGeneration/imageGenerationResultService'
 import { saveImageGenerationToNotes } from '../agents/imageGeneration/imageGenerationNotesBridge'
-import type { WorkspaceEntryKind } from '../../workspace/workspaceEntryResolver'
+import { resolveWorkspaceEntryByName, type WorkspaceEntryKind } from '../../workspace/workspaceEntryResolver'
 
 const EMPTY_MESSAGES = [] as const
 const AI_CHAT_AGENT_STORAGE_KEY = 'haomd_ai_chat_selected_agent_id'
@@ -180,6 +181,32 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
     setHistoryCursor(null)
   }
 
+  const findImplicitPendingDeleteRequest = () => {
+    const candidates = [...localFeedbackMessages, ...(state?.viewMessages ?? [])]
+    for (let index = candidates.length - 1; index >= 0; index -= 1) {
+      const message = candidates[index]
+      if (message.role !== 'assistant') continue
+      const parsed = parseDeleteConfirmationPrompt(message.content)
+      if (!parsed) continue
+      if (parsed.target === 'document') {
+        const path = normalizePersistableDocPath(getCurrentFilePath?.())
+        if (!path) return null
+        return { path, target: 'document' as const }
+      }
+      if (parsed.target === 'folder') {
+        const path = (currentFolderPath ?? getCurrentFolderPath?.() ?? '').trim()
+        if (!path) return null
+        return { path, target: 'folder' as const }
+      }
+      return {
+        path: parsed.path,
+        target: 'workspace-entry' as const,
+        targetKind: parsed.targetKind,
+      }
+    }
+    return null
+  }
+
   const pushLocalFeedback = (content: string) => {
     const trimmed = content.trim()
     if (!trimmed) return
@@ -256,11 +283,25 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
     },
     onRenameCurrentDocument,
     onRequestDeleteWorkspaceEntry: async (targetPath: string, targetKind?: WorkspaceEntryKind) => {
-      setPendingDeleteRequest({ path: targetPath, target: 'workspace-entry', targetKind })
+      const resolved = await resolveWorkspaceEntryByName({
+        workspaceRoot: getCurrentWorkspaceRoot?.(),
+        targetPath,
+        expectedKind: targetKind,
+      })
+      if (!resolved.ok) {
+        return { ok: false, message: resolved.message }
+      }
+      setPendingDeleteRequest({
+        path: resolved.resolvedPath,
+        target: 'workspace-entry',
+        targetKind: resolved.kind,
+      })
       return {
         ok: true,
         message: buildDeleteConfirmationPrompt(
-          targetKind === 'dir' ? `目标文件夹「${targetPath}」` : `目标「${targetPath}」`,
+          resolved.kind === 'dir'
+            ? `目标文件夹「${resolved.relativePath}」`
+            : `目标「${resolved.relativePath}」`,
         ),
       }
     },
@@ -294,6 +335,12 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
       return
     }
 
+    const shouldReloadConversation = rawDocPath !== stableDocPath
+    const shouldOpenSession = !docPathReady
+    if (!shouldReloadConversation && !shouldOpenSession) {
+      return
+    }
+
     const now = Date.now()
     const remainingFreeze = Math.max(0, docPathFreezeUntil - now)
     if (isBusy || remainingFreeze > 0) {
@@ -301,7 +348,9 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
         docPathStabilizeTimerRef.current = window.setTimeout(() => {
           setStableDocPath(rawDocPath)
           setDocPathReady(true)
-          setDocConversationReloadToken((prev) => prev + 1)
+          if (shouldReloadConversation) {
+            setDocConversationReloadToken((prev) => prev + 1)
+          }
           docPathStabilizeTimerRef.current = null
         }, remainingFreeze)
       }
@@ -311,7 +360,9 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
     docPathStabilizeTimerRef.current = window.setTimeout(() => {
       setStableDocPath(rawDocPath)
       setDocPathReady(true)
-      setDocConversationReloadToken((prev) => prev + 1)
+      if (shouldReloadConversation) {
+        setDocConversationReloadToken((prev) => prev + 1)
+      }
       docPathStabilizeTimerRef.current = null
     }, 0)
 
@@ -321,7 +372,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
         docPathStabilizeTimerRef.current = null
       }
     }
-  }, [rawDocPath, isPersistedSession, sessionKey, isBusy, docPathFreezeUntil])
+  }, [rawDocPath, stableDocPath, docPathReady, isPersistedSession, sessionKey, isBusy, docPathFreezeUntil])
 
   useEffect(() => {
     const el = inputRef.current
@@ -574,24 +625,31 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
 
     const trimmedInput = contentToSend.trim()
     const normalizedInput = trimmedInput.toLowerCase()
-    if (pendingDeleteRequest) {
+    const effectivePendingDeleteRequest =
+      pendingDeleteRequest
+      ?? (
+        (DELETE_CONFIRM_TOKENS.has(trimmedInput) || DELETE_CONFIRM_TOKENS.has(normalizedInput))
+          ? findImplicitPendingDeleteRequest()
+          : null
+      )
+    if (effectivePendingDeleteRequest) {
       clearHistoryBrowse()
       if (DELETE_CONFIRM_TOKENS.has(trimmedInput) || DELETE_CONFIRM_TOKENS.has(normalizedInput)) {
         setInput('')
         const result =
-          pendingDeleteRequest.target === 'folder'
+          effectivePendingDeleteRequest.target === 'folder'
             ? onConfirmDeleteCurrentFolder
-              ? await onConfirmDeleteCurrentFolder(pendingDeleteRequest.path)
+              ? await onConfirmDeleteCurrentFolder(effectivePendingDeleteRequest.path)
               : { ok: false, message: '当前文件夹删除能力不可用。' }
-            : pendingDeleteRequest.target === 'workspace-entry'
+            : effectivePendingDeleteRequest.target === 'workspace-entry'
               ? onConfirmDeleteWorkspaceEntry
                 ? await onConfirmDeleteWorkspaceEntry(
-                  pendingDeleteRequest.path,
-                  pendingDeleteRequest.targetKind,
+                  effectivePendingDeleteRequest.path,
+                  effectivePendingDeleteRequest.targetKind,
                 )
                 : { ok: false, message: '当前工作区删除能力不可用。' }
               : onConfirmDeleteCurrentDocument
-                ? await onConfirmDeleteCurrentDocument(pendingDeleteRequest.path)
+                ? await onConfirmDeleteCurrentDocument(effectivePendingDeleteRequest.path)
                 : { ok: false, message: '当前删除能力不可用。' }
         setPendingDeleteRequest(null)
         setStatusMessage?.(result.message)

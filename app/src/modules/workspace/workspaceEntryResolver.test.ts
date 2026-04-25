@@ -28,24 +28,14 @@ describe('workspaceEntryResolver', () => {
   })
 
   it('resolves single-segment target by basename', async () => {
-    vi.mocked(listFolder)
-      .mockResolvedValueOnce({
-        ok: true,
-        data: [
-          { path: '/root/temp', name: 'temp', kind: 'dir' },
-          { path: '/root/hello.md', name: 'hello.md', kind: 'file' },
-        ],
-      } as any)
-      .mockResolvedValueOnce({
-        ok: true,
-        data: [
-          { path: '/root/temp/demo', name: 'demo', kind: 'dir' },
-        ],
-      } as any)
-      .mockResolvedValueOnce({
-        ok: true,
-        data: [],
-      } as any)
+    vi.mocked(listFolder).mockResolvedValueOnce({
+      ok: true,
+      data: [
+        { path: '/root/temp', name: 'temp', kind: 'dir' },
+        { path: '/root/hello.md', name: 'hello.md', kind: 'file' },
+        { path: '/root/temp/demo', name: 'demo', kind: 'dir' },
+      ],
+    } as any)
 
     const result = await resolveWorkspaceEntryByName({
       workspaceRoot: '/root',
@@ -61,19 +51,13 @@ describe('workspaceEntryResolver', () => {
   })
 
   it('resolves slash target by relative-path suffix', async () => {
-    vi.mocked(listFolder)
-      .mockResolvedValueOnce({
-        ok: true,
-        data: [
-          { path: '/root/temp', name: 'temp', kind: 'dir' },
-        ],
-      } as any)
-      .mockResolvedValueOnce({
-        ok: true,
-        data: [
-          { path: '/root/temp/hello.md', name: 'hello.md', kind: 'file' },
-        ],
-      } as any)
+    vi.mocked(listFolder).mockResolvedValueOnce({
+      ok: true,
+      data: [
+        { path: '/root/temp', name: 'temp', kind: 'dir' },
+        { path: '/root/temp/hello.md', name: 'hello.md', kind: 'file' },
+      ],
+    } as any)
 
     const result = await resolveWorkspaceEntryByName({
       workspaceRoot: '/root',
@@ -88,30 +72,15 @@ describe('workspaceEntryResolver', () => {
   })
 
   it('returns ambiguous when basename has multiple matches', async () => {
-    vi.mocked(listFolder)
-      .mockResolvedValueOnce({
-        ok: true,
-        data: [
-          { path: '/root/a', name: 'a', kind: 'dir' },
-          { path: '/root/b', name: 'b', kind: 'dir' },
-        ],
-      } as any)
-      .mockResolvedValueOnce({
-        ok: true,
-        data: [{ path: '/root/a/demo', name: 'demo', kind: 'dir' }],
-      } as any)
-      .mockResolvedValueOnce({
-        ok: true,
-        data: [],
-      } as any)
-      .mockResolvedValueOnce({
-        ok: true,
-        data: [{ path: '/root/b/demo', name: 'demo', kind: 'dir' }],
-      } as any)
-      .mockResolvedValueOnce({
-        ok: true,
-        data: [],
-      } as any)
+    vi.mocked(listFolder).mockResolvedValueOnce({
+      ok: true,
+      data: [
+        { path: '/root/a', name: 'a', kind: 'dir' },
+        { path: '/root/b', name: 'b', kind: 'dir' },
+        { path: '/root/a/demo', name: 'demo', kind: 'dir' },
+        { path: '/root/b/demo', name: 'demo', kind: 'dir' },
+      ],
+    } as any)
 
     const result = await resolveWorkspaceEntryByName({
       workspaceRoot: '/root',
@@ -135,15 +104,7 @@ describe('workspaceEntryResolver', () => {
       } as any)
       .mockResolvedValueOnce({
         ok: true,
-        data: [],
-      } as any)
-      .mockResolvedValueOnce({
-        ok: true,
         data: [{ path: '/root-b/other', name: 'other', kind: 'dir' }],
-      } as any)
-      .mockResolvedValueOnce({
-        ok: true,
-        data: [],
       } as any)
 
     const result = await resolveWorkspaceEntryByName({
@@ -173,6 +134,127 @@ describe('workspaceEntryResolver', () => {
     if (result.ok) {
       expect(result.workspaceRoot).toBe('/root/temp')
       expect(result.resolvedPath).toBe('/root/temp')
+    }
+  })
+
+  it('disambiguates duplicate relative paths by prefixing mounted root names', async () => {
+    vi.mocked(getWorkspaceMountedRoots).mockReturnValue([
+      '/workspace-a',
+      '/workspace-b',
+    ])
+    vi.mocked(listFolder)
+      .mockResolvedValueOnce({
+        ok: true,
+        data: [
+          { path: '/workspace-a/第1章', name: '第1章', kind: 'dir' },
+          { path: '/workspace-a/第1章/demo', name: 'demo', kind: 'dir' },
+        ],
+      } as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        data: [
+          { path: '/workspace-b/第1章', name: '第1章', kind: 'dir' },
+          { path: '/workspace-b/第1章/demo', name: 'demo', kind: 'dir' },
+        ],
+      } as any)
+
+    const result = await resolveWorkspaceEntryByName({
+      workspaceRoot: null,
+      targetPath: 'demo',
+      expectedKind: 'dir',
+    })
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.reason).toBe('ambiguous')
+      expect(result.candidates).toEqual(['workspace-a/第1章/demo', 'workspace-b/第1章/demo'])
+    }
+  })
+
+  it('falls back to full mounted root path when mounted root names are also duplicated', async () => {
+    vi.mocked(getWorkspaceMountedRoots).mockReturnValue([
+      '/Volumes/A/离散数学',
+      '/Volumes/B/离散数学',
+    ])
+    vi.mocked(listFolder)
+      .mockResolvedValueOnce({
+        ok: true,
+        data: [
+          { path: '/Volumes/A/离散数学/第1章', name: '第1章', kind: 'dir' },
+          { path: '/Volumes/A/离散数学/第1章/demo', name: 'demo', kind: 'dir' },
+        ],
+      } as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        data: [
+          { path: '/Volumes/B/离散数学/第1章', name: '第1章', kind: 'dir' },
+          { path: '/Volumes/B/离散数学/第1章/demo', name: 'demo', kind: 'dir' },
+        ],
+      } as any)
+
+    const result = await resolveWorkspaceEntryByName({
+      workspaceRoot: null,
+      targetPath: 'demo',
+      expectedKind: 'dir',
+    })
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.reason).toBe('ambiguous')
+      expect(result.candidates).toEqual([
+        '/Volumes/A/离散数学/第1章/demo',
+        '/Volumes/B/离散数学/第1章/demo',
+      ])
+    }
+  })
+
+  it('deduplicates identical mounted roots before resolving names', async () => {
+    vi.mocked(getWorkspaceMountedRoots).mockReturnValue([
+      '/Volumes/Hao/Users/hao/hao_data/资料/西亚斯/2026/2025-2026-2/离散数学',
+      '/Volumes/Hao/Users/hao/hao_data/资料/西亚斯/2026/2025-2026-2/离散数学',
+    ])
+    vi.mocked(listFolder)
+      .mockResolvedValueOnce({
+        ok: true,
+        data: [
+          { path: '/Volumes/Hao/Users/hao/hao_data/资料/西亚斯/2026/2025-2026-2/离散数学/第1章', name: '第1章', kind: 'dir' },
+          { path: '/Volumes/Hao/Users/hao/hao_data/资料/西亚斯/2026/2025-2026-2/离散数学/第1章/demo', name: 'demo', kind: 'dir' },
+        ],
+      } as any)
+
+    const result = await resolveWorkspaceEntryByName({
+      workspaceRoot: null,
+      targetPath: 'demo',
+      expectedKind: 'dir',
+    })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.resolvedPath).toBe('/Volumes/Hao/Users/hao/hao_data/资料/西亚斯/2026/2025-2026-2/离散数学/第1章/demo')
+    }
+  })
+
+  it('deduplicates final matches by resolved path before reporting ambiguity', async () => {
+    vi.mocked(getWorkspaceMountedRoots).mockReturnValue(['/root'])
+    vi.mocked(listFolder)
+      .mockResolvedValueOnce({
+        ok: true,
+        data: [
+          { path: '/root/demo', name: 'demo', kind: 'dir' },
+          { path: '/root/root', name: 'root', kind: 'dir' },
+          { path: '/root/demo', name: 'demo', kind: 'dir' },
+        ],
+      } as any)
+
+    const result = await resolveWorkspaceEntryByName({
+      workspaceRoot: null,
+      targetPath: 'demo',
+      expectedKind: 'dir',
+    })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.resolvedPath).toBe('/root/demo')
     }
   })
 })
