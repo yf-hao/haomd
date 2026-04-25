@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.10.0] - 2026-04-25
+
+### 中文
+
+本次版本（v0.10.0）引入了 AI 助理对本地文件系统的直接操作支持。现在，用户可以通过 AI 助理管理工作区，包括创建、重命名或删除文件与目录。
+
+#### 💡 主要更新
+*   **物理文件管理**：支持通过 AI 助理执行重命名、删除当前文档或目录的操作。
+*   **目录结构自动化**：AI 可根据指令自动创建文件夹，辅助优化笔记的组织结构。
+*   **工作区感知增强**：优化了 AI 对工作区根目录的识别逻辑，提升了跨目录操作的准确度。
+*   **技能与工作流深度集成**：自定义 Skills 和 Workflows 现已接入 Tool Calling 链路，支持在对话中直接调用执行。
+*   **上下文感知优化**：改进了 AI 对当前文件路径和名称的识别逻辑，提高了多文档任务处理的精确度。
+
+---
+
+### English
+
+Version v0.10.0 introduces direct file system management capabilities for the AI assistant. Users can now utilize the AI to manage their workspace, including creating, renaming, or deleting files and directories.
+
+#### 💡 Key Updates
+*   **Physical File Management**: Added support for renaming and deleting documents or folders via the AI assistant.
+*   **Automated Directory Structure**: AI can now automatically create folders to optimize note organization.
+*   **Enhanced Workspace Awareness**: Improved AI's recognition of the workspace root, increasing the accuracy of cross-directory operations.
+*   **Deep Skill & Workflow Integration**: Custom Skills and Workflows are now integrated into the Tool Calling pipeline for direct execution via chat.
+*   **Contextual Perception Optimization**: Refined AI's awareness of current file paths and names, improving accuracy in multi-document tasks.
+
+---
+
 ## [v0.9.1] - 2026-04-20
 
 ### 中文
