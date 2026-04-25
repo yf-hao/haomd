@@ -248,7 +248,7 @@ export const enUSMessages: MessageDictionary = {
   },
   welcome: {
     subtitle:
-      'An AI workspace for text professionals, making content creation, refinement, and organization more efficient while supporting AI-powered Skills and Workflows.',
+      'An AI workspace for deep creation: fluent writing, orderly knowledge management, and AI-powered custom workflows.',
     newFile: 'New File',
     openFile: 'Open File',
     openAiChat: 'Open AI Chat',

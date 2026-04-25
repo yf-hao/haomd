@@ -248,7 +248,7 @@ export const zhCNMessages: MessageDictionary = {
   },
   welcome: {
     subtitle:
-      '面向文字工作者的 AI 工作台，让内容创作、优化与组织更高效，并支持通过 AI 创建技能与工作流。',
+      '专为深度创作打造的 AI 工作台：让写作更流畅，知识管理更有序，支持通过 AI 构建你的专属技能与工作流。',
     newFile: '新建文件',
     openFile: '打开文件',
     openAiChat: '打开 AI Chat',
