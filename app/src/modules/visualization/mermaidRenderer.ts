@@ -117,7 +117,7 @@ function buildMermaidThemeVariables(themeMode: ResolvedThemeMode) {
       tertiaryColor: surfacePanel,
       tertiaryTextColor: textColor,
       tertiaryBorderColor: strongBorder,
-      lineColor: strongBorder,
+      lineColor: accentBorder,
       textColor,
       nodeTextColor: textColor,
       clusterBkg: surfacePanel,
@@ -283,7 +283,7 @@ function normalizeMermaidSvg(
         const surfacePreview = getCssThemeColor('--theme-surface-preview', '#0c0d16')
         const textColor = getCssThemeColor('--theme-text-default', '#e8ecf5')
         const borderColor = getCssThemeColor('--theme-accent-primary-alt-soft', '#62c3ff')
-        const lineColor = getCssThemeColor('--theme-border-strong', '#94a3b8')
+        const lineColor = borderColor
 
         const darkErStyle = doc.createElement('style')
         darkErStyle.textContent = `
@@ -293,20 +293,28 @@ function normalizeMermaidSvg(
           .node rect,
           .node circle,
           .node ellipse,
-          .node polygon {
+          .node polygon,
+          .node path,
+          .entityBox path,
+          .relationshipLabelBox path,
+          .er.entityBox path,
+          .er.attributeBoxEven path,
+          .er.attributeBoxOdd path {
             fill: ${surfaceCard} !important;
             stroke: ${borderColor} !important;
           }
 
           .relationshipLabelBox,
           .labelBkg,
-          .edgeLabel rect {
+          .edgeLabel rect,
+          .edgeLabel path {
             fill: ${surfacePreview} !important;
             opacity: 1 !important;
           }
 
           .relationshipLine,
-          .marker {
+          .marker,
+          .divider {
             stroke: ${lineColor} !important;
           }
 
@@ -336,10 +344,13 @@ function normalizeMermaidSvg(
         `
         svg.appendChild(darkErStyle)
 
-        const allShapeNodes = Array.from(svg.querySelectorAll('.entityBox, .relationshipLabelBox, .node rect, .node circle, .node ellipse, .node polygon'))
+        const allShapeNodes = Array.from(svg.querySelectorAll('.entityBox, .relationshipLabelBox, .node rect, .node circle, .node ellipse, .node polygon, .node path, .entityBox path, .relationshipLabelBox path, .er.entityBox path, .er.attributeBoxEven path, .er.attributeBoxOdd path'))
         for (const node of allShapeNodes) {
-          node.setAttribute('fill', node.matches('.relationshipLabelBox') ? surfacePreview : surfaceCard)
-          node.setAttribute('stroke', borderColor)
+          const isEdgeLabelShape = node.matches('.relationshipLabelBox, .relationshipLabelBox path, .edgeLabel rect, .edgeLabel path')
+          node.setAttribute('fill', isEdgeLabelShape ? surfacePreview : surfaceCard)
+          if (!node.matches('.relationshipLine, .marker, .divider')) {
+            node.setAttribute('stroke', borderColor)
+          }
         }
 
         const allTextNodes = Array.from(svg.querySelectorAll('text, tspan'))
@@ -347,7 +358,7 @@ function normalizeMermaidSvg(
           node.setAttribute('fill', textColor)
         }
 
-        const allLineNodes = Array.from(svg.querySelectorAll('.relationshipLine, .marker'))
+        const allLineNodes = Array.from(svg.querySelectorAll('.relationshipLine, .marker, .divider'))
         for (const node of allLineNodes) {
           node.setAttribute('stroke', lineColor)
         }
@@ -361,6 +372,75 @@ function normalizeMermaidSvg(
         for (const node of labelBackgrounds) {
           node.setAttribute('fill', surfacePreview)
           node.setAttribute('opacity', '1')
+        }
+      }
+
+      if (profile === 'preview' && themeMode === 'dark') {
+        const surfaceCard = getCssThemeColor('--theme-surface-card-active', '#334155')
+        const surfacePreview = getCssThemeColor('--theme-surface-preview', '#0c0d16')
+        const textColor = getCssThemeColor('--theme-text-default', '#e8ecf5')
+        const borderColor = getCssThemeColor('--theme-accent-primary-alt-soft', '#62c3ff')
+        const lineColor = borderColor
+
+        const inlineNodeShapes = Array.from(svg.querySelectorAll('.node .basic.label-container, .node .label-container, .node rect.basic, .node rect.label-container, .node polygon.label-container, .node ellipse.label-container, .node circle.label-container'))
+        for (const node of inlineNodeShapes) {
+          node.setAttribute(
+            'style',
+            `fill:${surfaceCard} !important;stroke:${borderColor} !important;stroke-width:2px !important;`,
+          )
+          node.setAttribute('fill', surfaceCard)
+          node.setAttribute('stroke', borderColor)
+        }
+
+        const inlineEdgeLabels = Array.from(svg.querySelectorAll('.edgeLabel rect, .edgeLabel .label-container'))
+        for (const node of inlineEdgeLabels) {
+          node.setAttribute(
+            'style',
+            `fill:${surfacePreview} !important;stroke:${borderColor} !important;`,
+          )
+          node.setAttribute('fill', surfacePreview)
+          node.setAttribute('stroke', borderColor)
+        }
+
+        const inlineTextNodes = Array.from(svg.querySelectorAll('.nodeLabel, .label foreignObject div, .label foreignObject span, foreignObject div, foreignObject span'))
+        for (const node of inlineTextNodes) {
+          const prevStyle = node.getAttribute('style') ?? ''
+          const cleanedStyle = prevStyle
+            .replace(/color\s*:\s*[^;]+;?/gi, '')
+            .replace(/background(?:-color)?\s*:\s*[^;]+;?/gi, '')
+            .trim()
+          node.setAttribute(
+            'style',
+            `${cleanedStyle}${cleanedStyle ? ';' : ''}color:${textColor} !important;background:transparent !important;`,
+          )
+        }
+
+        const svgTextNodes = Array.from(svg.querySelectorAll('.nodeLabel, text, tspan'))
+        for (const node of svgTextNodes) {
+          const prevStyle = node.getAttribute('style') ?? ''
+          const cleanedStyle = prevStyle
+            .replace(/fill\s*:\s*[^;]+;?/gi, '')
+            .replace(/color\s*:\s*[^;]+;?/gi, '')
+            .trim()
+          node.setAttribute(
+            'style',
+            `${cleanedStyle}${cleanedStyle ? ';' : ''}fill:${textColor} !important;color:${textColor} !important;`,
+          )
+          node.setAttribute('fill', textColor)
+        }
+
+        const lineNodes = Array.from(svg.querySelectorAll('.flowchart-link, .edgePath path, .marker path'))
+        for (const node of lineNodes) {
+          const prevStyle = node.getAttribute('style') ?? ''
+          const cleanedStyle = prevStyle
+            .replace(/stroke\s*:\s*[^;]+;?/gi, '')
+            .replace(/fill\s*:\s*[^;]+;?/gi, '')
+            .trim()
+          node.setAttribute(
+            'style',
+            `${cleanedStyle}${cleanedStyle ? ';' : ''}stroke:${lineColor} !important;fill:none !important;`,
+          )
+          node.setAttribute('stroke', lineColor)
         }
       }
 
