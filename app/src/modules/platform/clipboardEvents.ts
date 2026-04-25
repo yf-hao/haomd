@@ -1,20 +1,25 @@
 import { listen } from '@tauri-apps/api/event'
+import { isTauriEnv } from './runtime'
 
 export type Unlisten = () => void
 
-/**
- * 监听原生粘贴事件（native://paste），内部处理 StrictMode 下重复监听问题。
- */
-export function onNativePaste(handler: (text: string) => void): Unlisten {
+function createNativeClipboardListener<T>(
+  eventName: string,
+  onEvent: (payload: T) => void,
+  onListenErrorLabel: string,
+): Unlisten {
+  if (!isTauriEnv()) {
+    return () => {}
+  }
+
   let unlisten: Unlisten | undefined
   let disposed = false
   let unlistenCalled = false
 
   const setup = async () => {
     try {
-      const un = await listen<string>('native://paste', (event) => {
-        console.log('[clipboardEvents] native://paste event received, len=', event.payload?.length)
-        handler(event.payload)
+      const un = await listen<T>(eventName, (event) => {
+        onEvent(event.payload)
       })
       if (disposed) {
         if (!unlistenCalled) {
@@ -22,14 +27,14 @@ export function onNativePaste(handler: (text: string) => void): Unlisten {
           try {
             un()
           } catch (err) {
-            console.warn('[clipboardEvents] unlisten native://paste failed', err)
+            console.warn(`[clipboardEvents] unlisten ${eventName} failed`, err)
           }
         }
       } else {
         unlisten = un
       }
     } catch (err) {
-      console.error('[clipboardEvents] listen native://paste failed', err)
+      console.error(onListenErrorLabel, err)
     }
   }
 
@@ -42,52 +47,38 @@ export function onNativePaste(handler: (text: string) => void): Unlisten {
       try {
         unlisten()
       } catch (err) {
-        console.warn('[clipboardEvents] manual unlisten native://paste failed', err)
+        console.warn(`[clipboardEvents] manual unlisten ${eventName} failed`, err)
       }
     }
   }
 }
 
 /**
+ * 监听原生粘贴事件（native://paste），内部处理 StrictMode 下重复监听问题。
+ */
+export function onNativePaste(handler: (text: string) => void): Unlisten {
+  return createNativeClipboardListener<string>(
+    'native://paste',
+    (payload) => {
+      console.log('[clipboardEvents] native://paste event received, len=', payload?.length)
+      handler(payload)
+    },
+    '[clipboardEvents] listen native://paste failed',
+  )
+}
+
+/**
  * 监听原生粘贴错误事件（native://paste_error）。
  */
 export function onNativePasteError(handler: (message: string) => void): Unlisten {
-  let unlisten: Unlisten | undefined
-  let disposed = false
-  let unlistenCalled = false
-
-  const setup = async () => {
-    const un = await listen<string>('native://paste_error', (event) => {
-      console.error('[clipboardEvents] native://paste_error:', event.payload)
-      handler(event.payload)
-    })
-    if (disposed) {
-      if (!unlistenCalled) {
-        unlistenCalled = true
-        try {
-          un()
-        } catch (err) {
-          console.warn('[clipboardEvents] unlisten native://paste_error failed', err)
-        }
-      }
-    } else {
-      unlisten = un
-    }
-  }
-
-  void setup()
-
-  return () => {
-    disposed = true
-    if (unlisten && !unlistenCalled) {
-      unlistenCalled = true
-      try {
-        unlisten()
-      } catch (err) {
-        console.warn('[clipboardEvents] manual unlisten native://paste_error failed', err)
-      }
-    }
-  }
+  return createNativeClipboardListener<string>(
+    'native://paste_error',
+    (payload) => {
+      console.error('[clipboardEvents] native://paste_error:', payload)
+      handler(payload)
+    },
+    '[clipboardEvents] listen native://paste_error failed',
+  )
 }
 
 /**
@@ -95,44 +86,12 @@ export function onNativePasteError(handler: (message: string) => void): Unlisten
  * 后端只负责检测剪贴板中是否有图片并发出事件，真正的保存路径由前端决定。
  */
 export function onNativePasteImage(handler: () => void): Unlisten {
-  let unlisten: Unlisten | undefined
-  let disposed = false
-  let unlistenCalled = false
-
-  const setup = async () => {
-    try {
-      const un = await listen<unknown>('native://paste_image', () => {
+  return createNativeClipboardListener<unknown>(
+    'native://paste_image',
+    () => {
         console.log('[clipboardEvents] native://paste_image event received')
         handler()
-      })
-      if (disposed) {
-        if (!unlistenCalled) {
-          unlistenCalled = true
-          try {
-            un()
-          } catch (err) {
-            console.warn('[clipboardEvents] unlisten native://paste_image failed', err)
-          }
-        }
-      } else {
-        unlisten = un
-      }
-    } catch (err) {
-      console.error('[clipboardEvents] listen native://paste_image failed', err)
-    }
-  }
-
-  void setup()
-
-  return () => {
-    disposed = true
-    if (unlisten && !unlistenCalled) {
-      unlistenCalled = true
-      try {
-        unlisten()
-      } catch (err) {
-        console.warn('[clipboardEvents] manual unlisten native://paste_image failed', err)
-      }
-    }
-  }
+    },
+    '[clipboardEvents] listen native://paste_image failed',
+  )
 }

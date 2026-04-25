@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { onNativePaste, onNativePasteError, onNativePasteImage } from './clipboardEvents'
 import { listen } from '@tauri-apps/api/event'
 
@@ -9,6 +9,11 @@ vi.mock('@tauri-apps/api/event', () => ({
 describe('clipboardEvents', () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        window.__TAURI__ = {}
+    })
+
+    afterEach(() => {
+        delete window.__TAURI__
     })
 
     it('should register onNativePaste and handle events', async () => {
@@ -76,5 +81,15 @@ describe('clipboardEvents', () => {
         await new Promise(r => setTimeout(r, 0))
 
         expect(unlistenMock).toHaveBeenCalled()
+    })
+
+    it('should noop when tauri runtime is unavailable', async () => {
+        delete window.__TAURI__
+
+        const unlisten = onNativePaste(vi.fn())
+        await new Promise(r => setTimeout(r, 0))
+
+        expect(listen).not.toHaveBeenCalled()
+        expect(unlisten).toBeTypeOf('function')
     })
 })
