@@ -239,19 +239,28 @@ button {
 .section-heading h2,
 .start-card h2 {
   margin: 0;
-  font-family: var(--font-heading);
-  line-height: 1.08;
-  letter-spacing: -0.03em;
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-weight: 800;
 }
 
 .hero h1 {
-  max-width: 11ch;
-  font-size: clamp(2.35rem, 5.2vw, 4.4rem);
+  max-width: 14ch;
+  font-size: clamp(2.6rem, 6vw, 4.8rem);
+  background: linear-gradient(135deg, var(--text-main) 30%, #4a4a4a 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .hero h1 span {
   display: block;
-  color: var(--text-main);
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent-strong) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 2px 4px rgba(184, 150, 85, 0.1));
 }
 
 .hero-description,
