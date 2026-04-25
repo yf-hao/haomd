@@ -54,9 +54,9 @@
             </p>
 
             <ul class="hero-highlights">
-              <li>桌面端离线优先体验</li>
-              <li>文档、选区与图片 AI 对话</li>
-              <li>Mermaid / KaTeX / 思维导图一体化</li>
+              <li>离线优先的极速桌面体验</li>
+              <li>深度集成的多模态 AI 助理</li>
+              <li>专业级图表与公式全场景渲染</li>
             </ul>
 
             <div class="hero-actions">
@@ -81,22 +81,60 @@
               </div>
               <div class="window-body">
                 <div class="window-sidebar">
-                  <div class="sidebar-pill active">多标签编辑</div>
-                  <div class="sidebar-pill">AI 会话</div>
-                  <div class="sidebar-pill">实时预览</div>
-                  <div class="sidebar-pill">图表渲染</div>
+                  <button class="sidebar-pill active" data-hero-tab="edit" type="button">多标签编辑</button>
+                  <button class="sidebar-pill" data-hero-tab="ai" type="button">AI 会话</button>
+                  <button class="sidebar-pill" data-hero-tab="preview" type="button">实时预览</button>
+                  <button class="sidebar-pill" data-hero-tab="chart" type="button">图表渲染</button>
                 </div>
                 <div class="window-panel">
-                  <div class="code-block">
-                    <span># Release Notes</span>
-                    <span>- 实时预览</span>
-                    <span>- Mermaid / KaTeX</span>
-                    <span>- 全局记忆与选区对话</span>
-                    <span>- PDF / HTML 导出</span>
+                  <!-- Edit Panel -->
+                  <div class="hero-panel active" id="hero-panel-edit">
+                    <div class="window-tabs-mock">
+                      <span class="tab-mock active">Release_Notes.md</span>
+                      <span class="tab-mock">Setup_Guide.md</span>
+                      <span class="tab-mock">Draft_v2.md</span>
+                    </div>
+                    <div class="code-block">
+                      <span># HaoMD v0.10.0 Milestone</span>
+                      <span>- 智能文件管理 (Agent FS) 🚀</span>
+                      <span>- 深度 AI 选区对话与图片理解</span>
+                      <span>- 毫秒级 Mermaid / KaTeX 渲染</span>
+                      <span>- 优化：移除冗余图层，专注纯粹创作</span>
+                      <span>- 性能：千万级大文件流畅编辑</span>
+                    </div>
                   </div>
-                  <div class="preview-card">
-                    <img src="./assets/custom-background.png" alt="HaoMD 自定义背景预览" />
+                  <!-- AI Panel -->
+                  <div class="hero-panel" id="hero-panel-ai">
+                    <div class="code-block">
+                      <span>> @Agent 帮我重新组织 sites 目录</span>
+                      <span>[Agent] 正在扫描文件结构...</span>
+                      <span>[Agent] 建议将 assets 移动至根目录</span>
+                      <span>[Agent] 执行重命名：style.css -> main.css</span>
+                      <span>[Agent] 任务完成，已同步本地文件系统。</span>
+                    </div>
                   </div>
+                  <!-- Preview Panel -->
+                  <div class="hero-panel" id="hero-panel-preview">
+                    <div class="code-block">
+                      <span>## 核心优势</span>
+                      <span>1. **离线优先**：数据本地存储</span>
+                      <span>2. **极致性能**：毫秒级文档加载</span>
+                    </div>
+                    <div class="preview-card">
+                      <img src="./assets/custom-background.png" alt="预览界面" />
+                    </div>
+                  </div>
+                  <!-- Chart Panel -->
+                  <div class="hero-panel" id="hero-panel-chart">
+                    <div class="code-block">
+                      <span>graph TD</span>
+                      <span>  A[思考] --> B(记录)</span>
+                    </div>
+                    <div class="preview-card">
+                      <img src="./assets/mermaid-class.png" alt="图表渲染预览" />
+                    </div>
+                  </div>
+
                   <div class="window-footer">
                     <div class="window-metric">
                       <strong>实时预览</strong>

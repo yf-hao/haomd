@@ -386,24 +386,81 @@ button {
   background: rgba(255, 255, 255, 0.7);
   border: 1px solid var(--line);
   color: var(--text-muted);
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sidebar-pill:hover {
+  background: #fff;
+  border-color: rgba(184, 150, 85, 0.1);
+  color: var(--text-main);
 }
 
 .sidebar-pill.active {
   background: var(--accent-soft);
   color: var(--text-main);
   border-color: rgba(184, 150, 85, 0.12);
+  font-weight: 600;
+}
+
+.hero-panel {
+  display: none;
+  grid-template-rows: auto 1fr;
+  gap: 18px;
+}
+
+.hero-panel.active {
+  display: grid;
+  animation: heroPanelIn 0.4s ease-out;
+}
+
+@keyframes heroPanelIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .window-panel {
-  display: grid;
-  gap: 18px;
+  display: block;
+}
+
+.window-tabs-mock {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+  padding: 0 4px;
+}
+
+.tab-mock {
+  font-size: 0.72rem;
+  padding: 6px 12px;
+  border-radius: 8px 8px 0 0;
+  background: rgba(17, 17, 17, 0.04);
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.tab-mock.active {
+  background: var(--surface-strong);
+  color: var(--text-main);
+  opacity: 1;
+  font-weight: 600;
+  border-bottom: 2px solid var(--accent);
 }
 
 .code-block {
   display: grid;
   gap: 10px;
   padding: 18px;
-  border-radius: var(--radius-md);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
   background: #151515;
   color: rgba(255, 255, 255, 0.8);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;

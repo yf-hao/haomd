@@ -33,6 +33,21 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
+  const heroTabs = document.querySelectorAll(".sidebar-pill");
+  const heroPanels = document.querySelectorAll(".hero-panel");
+
+  heroTabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const target = tab.getAttribute("data-hero-tab");
+
+      heroTabs.forEach((item) => item.classList.remove("active"));
+      heroPanels.forEach((panel) => panel.classList.remove("active"));
+
+      tab.classList.add("active");
+      document.getElementById(`hero-panel-${target}`)?.classList.add("active");
+    });
+  });
+
   const animateValue = (element) => {
     const target = Number(element.getAttribute("data-count") ?? 0);
     const duration = 1200;
