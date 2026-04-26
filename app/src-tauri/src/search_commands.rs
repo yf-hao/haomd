@@ -1,4 +1,7 @@
-use crate::{err_payload, new_trace_id, normalize_path, ok, ErrorCode, ResultPayload};
+use crate::{
+    editor_settings::load_search_settings_cfg, err_payload, new_trace_id, normalize_path, ok,
+    ErrorCode, ResultPayload,
+};
 use regex::RegexBuilder;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -11,6 +14,10 @@ const SEARCHABLE_EXTENSIONS: &[&str] = &[
 ];
 const MAX_SEARCHABLE_FILE_BYTES: u64 = 2 * 1024 * 1024;
 const IGNORED_DIRECTORY_NAMES: &[&str] = &[".haomd"];
+const PARALLEL_SCAN_MIN_FILES: usize = 64;
+const PARALLEL_SCAN_MIN_TOTAL_BYTES: u64 = 8 * 1024 * 1024;
+const PARALLEL_SCAN_AUTO_MAX_WORKERS: usize = 4;
+const PARALLEL_SCAN_MANUAL_MAX_WORKERS: usize = 8;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -57,7 +64,21 @@ pub struct SearchResponse {
     pub total_matches: usize,
     pub total_files_scanned: usize,
     pub truncated: bool,
+    pub execution: Option<SearchExecutionInfo>,
     pub request_id: Option<String>,
+}
+
+#[derive(Debug)]
+struct SearchScanOutcome {
+    file_result: Option<SearchFileResult>,
+    file_truncated: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchExecutionInfo {
+    pub strategy: String,
+    pub workers: usize,
 }
 
 fn normalize_display_path(path: &Path) -> String {
@@ -234,9 +255,186 @@ fn trim_preview(line: &str) -> String {
     }
 }
 
+fn default_parallel_scan_workers() -> usize {
+    match std::thread::available_parallelism()
+        .map(|value| value.get())
+        .unwrap_or(1)
+    {
+        0..=2 => 1,
+        3..=4 => 2,
+        _ => PARALLEL_SCAN_AUTO_MAX_WORKERS,
+    }
+}
+
+fn should_use_parallel_scan(files: &[PathBuf], parallel_scan_enabled: bool) -> bool {
+    if !parallel_scan_enabled {
+        return false;
+    }
+    if files.len() >= PARALLEL_SCAN_MIN_FILES {
+        return true;
+    }
+
+    let mut total_bytes = 0u64;
+    for path in files {
+        let Ok(meta) = std::fs::metadata(path) else {
+            continue;
+        };
+        total_bytes = total_bytes.saturating_add(meta.len());
+        if total_bytes >= PARALLEL_SCAN_MIN_TOTAL_BYTES {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn scan_single_file(
+    path: &Path,
+    query: &str,
+    case_sensitive: bool,
+    whole_word: bool,
+    regex: Option<&regex::Regex>,
+    max_hits_per_file: usize,
+) -> SearchScanOutcome {
+    let Ok(meta) = std::fs::metadata(path) else {
+        return SearchScanOutcome {
+            file_result: None,
+            file_truncated: false,
+        };
+    };
+    if meta.len() > MAX_SEARCHABLE_FILE_BYTES {
+        return SearchScanOutcome {
+            file_result: None,
+            file_truncated: false,
+        };
+    }
+
+    let Ok(bytes) = std::fs::read(path) else {
+        return SearchScanOutcome {
+            file_result: None,
+            file_truncated: false,
+        };
+    };
+    let Ok(content) = String::from_utf8(bytes) else {
+        return SearchScanOutcome {
+            file_result: None,
+            file_truncated: false,
+        };
+    };
+
+    let mut hits = Vec::new();
+    let mut file_truncated = false;
+
+    for (line_index, line) in content.lines().enumerate() {
+        let remaining_for_file = max_hits_per_file.saturating_sub(hits.len());
+        if remaining_for_file == 0 {
+            file_truncated = true;
+            break;
+        }
+
+        let line_matches: Vec<(usize, usize)> = if let Some(regex) = regex {
+            regex
+                .find_iter(line)
+                .take(remaining_for_file)
+                .map(|m| (m.start(), m.end()))
+                .collect()
+        } else {
+            plain_matches_for_line(line, query, case_sensitive, whole_word, remaining_for_file)
+        };
+
+        if line_matches.is_empty() {
+            continue;
+        }
+
+        for (start, end) in line_matches {
+            hits.push(SearchHit {
+                line: line_index + 1,
+                column_start: start + 1,
+                column_end: end + 1,
+                preview: trim_preview(line),
+            });
+
+            if hits.len() >= max_hits_per_file {
+                file_truncated = true;
+                break;
+            }
+        }
+
+        if hits.len() >= max_hits_per_file {
+            break;
+        }
+    }
+
+    SearchScanOutcome {
+        file_result: (!hits.is_empty()).then(|| SearchFileResult {
+            path: normalize_display_path(path),
+            match_count: hits.len(),
+            hits,
+        }),
+        file_truncated,
+    }
+}
+
+fn scan_files_in_parallel(
+    files: &[PathBuf],
+    query: &str,
+    case_sensitive: bool,
+    whole_word: bool,
+    regex: Option<&regex::Regex>,
+    max_hits_per_file: usize,
+    workers: usize,
+) -> Vec<SearchScanOutcome> {
+    if workers <= 1 || files.is_empty() {
+        return files
+            .iter()
+            .map(|path| {
+                scan_single_file(
+                    path,
+                    query,
+                    case_sensitive,
+                    whole_word,
+                    regex,
+                    max_hits_per_file,
+                )
+            })
+            .collect();
+    }
+
+    let chunk_size = files.len().div_ceil(workers).max(1);
+
+    std::thread::scope(|scope| {
+        let mut handles = Vec::new();
+        for chunk in files.chunks(chunk_size) {
+            let regex = regex.cloned();
+            handles.push(scope.spawn(move || {
+                chunk.iter()
+                    .map(|path| {
+                        scan_single_file(
+                            path,
+                            query,
+                            case_sensitive,
+                            whole_word,
+                            regex.as_ref(),
+                            max_hits_per_file,
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            }));
+        }
+
+        let mut outcomes = Vec::with_capacity(files.len());
+        for handle in handles {
+            if let Ok(chunk_outcomes) = handle.join() {
+                outcomes.extend(chunk_outcomes);
+            }
+        }
+        outcomes
+    })
+}
+
 #[tauri::command]
 pub async fn search_workspace_contents(
-    _app: AppHandle,
+    app: AppHandle,
     request: SearchRequest,
 ) -> ResultPayload<SearchResponse> {
     let trace = new_trace_id();
@@ -257,6 +455,7 @@ pub async fn search_workspace_contents(
                 total_matches: 0,
                 total_files_scanned: 0,
                 truncated: false,
+                execution: None,
                 request_id: Some(request.request_id.clone()),
             },
             trace,
@@ -279,93 +478,79 @@ pub async fn search_workspace_contents(
     let whole_word = request.whole_word.unwrap_or(false);
     let max_results = request.max_results.unwrap_or(200).max(1);
     let max_hits_per_file = request.max_hits_per_file.unwrap_or(20).max(1);
+    let search_settings = load_search_settings_cfg(&app).await;
+    let parallel_scan_enabled = search_settings.parallel_scan_enabled.unwrap_or(true);
+    let configured_workers = search_settings.parallel_scan_workers.map(|value| value.max(1) as usize);
+    let auto_workers = default_parallel_scan_workers();
+    let workers = configured_workers
+        .unwrap_or(auto_workers)
+        .clamp(1, PARALLEL_SCAN_MANUAL_MAX_WORKERS);
+    let use_parallel = should_use_parallel_scan(&files, parallel_scan_enabled) && workers > 1;
+    let execution = SearchExecutionInfo {
+        strategy: if use_parallel {
+            "parallel".to_string()
+        } else {
+            "single-thread".to_string()
+        },
+        workers: if use_parallel { workers } else { 1 },
+    };
+    let outcomes = if use_parallel {
+        scan_files_in_parallel(
+            &files,
+            query,
+            case_sensitive,
+            whole_word,
+            regex.as_ref(),
+            max_hits_per_file,
+            workers,
+        )
+    } else {
+        scan_files_in_parallel(
+            &files,
+            query,
+            case_sensitive,
+            whole_word,
+            regex.as_ref(),
+            max_hits_per_file,
+            1,
+        )
+    };
 
-    let mut file_results = Vec::new();
+    let mut file_results = outcomes
+        .iter()
+        .filter_map(|outcome| outcome.file_result.clone())
+        .collect::<Vec<_>>();
+    file_results.sort_by(|left, right| left.path.cmp(&right.path));
+
     let mut total_matches = 0usize;
-    let mut total_files_scanned = 0usize;
-    let mut truncated = false;
+    let total_files_scanned = files.len();
+    let mut truncated = outcomes.iter().any(|outcome| outcome.file_truncated);
+    let mut limited_results = Vec::new();
 
-    'file_loop: for path in files {
-        total_files_scanned += 1;
-
-        let Ok(meta) = std::fs::metadata(&path) else {
-            continue;
-        };
-        if meta.len() > MAX_SEARCHABLE_FILE_BYTES {
-            continue;
-        }
-
-        let Ok(bytes) = std::fs::read(&path) else {
-            continue;
-        };
-        let Ok(content) = String::from_utf8(bytes) else {
-            continue;
-        };
-
-        let mut hits = Vec::new();
-
-        for (line_index, line) in content.lines().enumerate() {
-            let remaining_for_file = max_hits_per_file.saturating_sub(hits.len());
-            let remaining_global = max_results.saturating_sub(total_matches);
-            let remaining = remaining_for_file.min(remaining_global);
-            if remaining == 0 {
-                truncated = true;
-                break;
-            }
-
-            let line_matches: Vec<(usize, usize)> = if let Some(regex) = &regex {
-                regex
-                    .find_iter(line)
-                    .take(remaining)
-                    .map(|m| (m.start(), m.end()))
-                    .collect()
-            } else {
-                plain_matches_for_line(line, query, case_sensitive, whole_word, remaining)
-            };
-
-            if line_matches.is_empty() {
-                continue;
-            }
-
-            for (start, end) in line_matches {
-                hits.push(SearchHit {
-                    line: line_index + 1,
-                    column_start: start + 1,
-                    column_end: end + 1,
-                    preview: trim_preview(line),
-                });
-                total_matches += 1;
-
-                if hits.len() >= max_hits_per_file || total_matches >= max_results {
-                    truncated = true;
-                    break;
-                }
-            }
-
-            if hits.len() >= max_hits_per_file || total_matches >= max_results {
-                break;
-            }
-        }
-
-        if !hits.is_empty() {
-            file_results.push(SearchFileResult {
-                path: normalize_display_path(&path),
-                match_count: hits.len(),
-                hits,
-            });
-        }
-
+    for mut file in file_results {
         if total_matches >= max_results {
-            break 'file_loop;
+            truncated = true;
+            break;
         }
+
+        let remaining_global = max_results.saturating_sub(total_matches);
+        if file.hits.len() > remaining_global {
+            file.hits.truncate(remaining_global);
+            file.match_count = file.hits.len();
+            truncated = true;
+        }
+
+        total_matches += file.hits.len();
+        limited_results.push(file);
     }
 
     ok(
         SearchResponse {
-            files: file_results,
+            files: limited_results,
             total_matches,
             total_files_scanned,
             truncated,
+            execution: Some(execution),
             request_id: Some(request.request_id),
         },
         trace,
@@ -431,5 +616,20 @@ mod tests {
 
         assert!(regex.is_match("Demo value"));
         assert!(!regex.is_match("demobox"));
+    }
+
+    #[test]
+    fn should_choose_conservative_default_parallel_workers() {
+        let decide = |available: usize| match available {
+            0..=2 => 1,
+            3..=4 => 2,
+            _ => PARALLEL_SCAN_AUTO_MAX_WORKERS,
+        };
+
+        assert_eq!(decide(1), 1);
+        assert_eq!(decide(2), 1);
+        assert_eq!(decide(3), 2);
+        assert_eq!(decide(4), 2);
+        assert_eq!(decide(8), 4);
     }
 }

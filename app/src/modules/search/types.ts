@@ -30,10 +30,16 @@ export type SearchFileResult = {
   hits: SearchHit[]
 }
 
+export type SearchExecutionInfo = {
+  strategy: 'single-thread' | 'parallel'
+  workers: number
+}
+
 export type SearchResponse = {
   files: SearchFileResult[]
   totalMatches: number
   totalFilesScanned: number
   truncated: boolean
+  execution?: SearchExecutionInfo
   requestId?: string
 }

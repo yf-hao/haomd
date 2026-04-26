@@ -96,6 +96,11 @@ export type BackupSettings = {
   webdav?: Partial<WebDavBackupSettings>
 }
 
+export type SearchSettings = {
+  parallelScanEnabled: boolean
+  parallelScanWorkers: number | null
+}
+
 export type NotesConfig = {
   /** 随笔文件保存目录的绝对路径，null 表示尚未配置 */
   notesDirectory: string | null
@@ -110,6 +115,7 @@ export type EditorSettings = {
   uiTypography?: Partial<UiTypographySettings>
   wordExport?: Partial<WordExportStyleSettings>
   backup?: Partial<BackupSettings>
+  search?: Partial<SearchSettings>
   notes?: Partial<NotesConfig>
 }
 
@@ -232,6 +238,11 @@ const defaultWebDavBackup: WebDavBackupSettings = {
   username: '',
   password: '',
   remotePath: DEFAULT_WEBDAV_REMOTE_PATH,
+}
+
+const defaultSearchSettings: SearchSettings = {
+  parallelScanEnabled: true,
+  parallelScanWorkers: null,
 }
 
 let cachedSettings: EditorSettings | null = null
@@ -402,6 +413,15 @@ export async function getWordExportStyleSettings(): Promise<WordExportStyleSetti
   }
 }
 
+export async function getSearchSettings(): Promise<SearchSettings> {
+  const settings = await loadEditorSettings()
+  const cfg = settings.search ?? {}
+  return {
+    parallelScanEnabled: cfg.parallelScanEnabled ?? defaultSearchSettings.parallelScanEnabled,
+    parallelScanWorkers: cfg.parallelScanWorkers ?? defaultSearchSettings.parallelScanWorkers,
+  }
+}
+
 export async function saveEditorSettings(settings: EditorSettings): Promise<void> {
   const resp = await invoke<BackendResult<null>>('save_editor_settings', { cfg: settings })
   if ('Err' in resp) {
@@ -416,6 +436,10 @@ export function getDefaultWordExportStyleSettings(): WordExportStyleSettings {
 
 export function getDefaultWebDavBackupSettings(): WebDavBackupSettings {
   return { ...defaultWebDavBackup }
+}
+
+export function getDefaultSearchSettings(): SearchSettings {
+  return { ...defaultSearchSettings }
 }
 
 export function getDefaultThemeSettings(): ThemeSettings {

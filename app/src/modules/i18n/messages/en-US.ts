@@ -22,6 +22,7 @@ export const enUSMessages: MessageDictionary = {
     theme: 'Theme',
     typography: 'Typography',
     wordExport: 'Word',
+    search: 'Search',
     backup: 'Backup',
     language: 'Language',
     languageDescription: 'Choose the HaoMD interface language. `System` follows the OS language.',
@@ -30,6 +31,17 @@ export const enUSMessages: MessageDictionary = {
     english: 'English',
     themeSections: 'Theme settings sections',
     appearanceDescription: 'Choose how HaoMD should appear. `System` follows the OS appearance.',
+  },
+  searchSettings: {
+    title: 'Search',
+    description: 'Configure execution strategy for workspace content search. Advanced options affect CPU and disk usage during scanning.',
+    parallelScanEnabled: 'Enable parallel scan',
+    parallelScanEnabledHint: 'Allow scanning multiple files at the same time for large workspaces.',
+    parallelScanWorkers: 'Parallel scan workers',
+    parallelScanWorkersHint: 'Keep this on Auto by default. Higher values may search faster, but can make the machine feel slower.',
+    workerOptions: {
+      auto: 'Auto',
+    },
   },
   backup: {
     title: 'Backup & Restore',
@@ -276,7 +288,8 @@ export const enUSMessages: MessageDictionary = {
     noResults: 'No results found.',
     summary: '{matches} matches in {files} files, scanned {scanned} files',
     truncated: 'Results truncated',
-    statusSummary: 'Search finished: {matches} matches in {files} files.',
+    statusSummarySingle: 'Search finished: single-thread · {files} files · {matches} matches.',
+    statusSummaryParallel: 'Search finished: parallel {workers} workers · {files} files · {matches} matches.',
     openResultFailed: 'Failed to open search result.',
   },
   ai: {

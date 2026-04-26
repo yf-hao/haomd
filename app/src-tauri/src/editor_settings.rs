@@ -136,6 +136,15 @@ pub struct BackupSettingsCfg {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct SearchSettingsCfg {
+    #[serde(default)]
+    pub parallel_scan_enabled: Option<bool>,
+    #[serde(default)]
+    pub parallel_scan_workers: Option<u32>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct EditorSettingsCfg {
     #[serde(default)]
     pub ai_compression: Option<AiCompressionCfg>,
@@ -153,6 +162,8 @@ pub struct EditorSettingsCfg {
     pub word_export: Option<WordExportStyleSettingsCfg>,
     #[serde(default)]
     pub backup: Option<BackupSettingsCfg>,
+    #[serde(default)]
+    pub search: Option<SearchSettingsCfg>,
     #[serde(flatten)]
     pub extra: HashMap<String, serde_json::Value>,
 }
@@ -187,6 +198,10 @@ pub fn default_editor_settings() -> EditorSettingsCfg {
                 password: Some(String::new()),
                 remote_path: Some(String::new()),
             }),
+        }),
+        search: Some(SearchSettingsCfg {
+            parallel_scan_enabled: Some(true),
+            parallel_scan_workers: None,
         }),
         extra: HashMap::new(),
     }
@@ -489,17 +504,10 @@ pub fn import_editor_background_image_sync(
 }
 
 #[tauri::command]
-pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<EditorSettingsCfg> {
-    let trace = new_trace_id();
+async fn load_editor_settings_cfg(app: &AppHandle) -> Result<EditorSettingsCfg, String> {
     let path: PathBuf = match editor_settings_path(&app) {
         Ok(p) => p,
-        Err(err) => {
-            return err_payload(
-                ErrorCode::IoError,
-                format!("获取 editor_settings 路径失败: {err}"),
-                trace,
-            );
-        }
+        Err(err) => return Err(format!("获取 editor_settings 路径失败: {err}")),
     };
 
     match fs::read(&path).await {
@@ -535,6 +543,10 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<EditorSetting
             }
             if cfg.word_export.is_none() {
                 cfg.word_export = default_cfg.word_export.clone();
+                changed = true;
+            }
+            if cfg.search.is_none() {
+                cfg.search = default_cfg.search.clone();
                 changed = true;
             }
 
@@ -936,24 +948,57 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<EditorSetting
                 }
             }
 
+            if let Some(ref mut search) = cfg.search {
+                if let Some(ref default_search) = default_cfg.search {
+                    if search.parallel_scan_enabled.is_none() {
+                        search.parallel_scan_enabled = default_search.parallel_scan_enabled;
+                        changed = true;
+                    }
+                    if search.parallel_scan_workers.is_none() {
+                        search.parallel_scan_workers = default_search.parallel_scan_workers;
+                        changed = true;
+                    }
+                }
+            }
+
             if changed {
                 if let Ok(bytes) = serde_json::to_vec_pretty(&cfg) {
                     let _ = fs::write(&path, bytes).await;
                 }
             }
 
-            ok(cfg, trace)
+            Ok(cfg)
         }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
             let cfg = default_editor_settings();
             if let Ok(bytes) = serde_json::to_vec_pretty(&cfg) {
                 let _ = fs::write(&path, bytes).await;
             }
-            ok(cfg, trace)
+            Ok(cfg)
         }
-        Err(err) => err_payload(
+        Err(err) => Err(format!("读取 editor_settings 失败: {err}")),
+    }
+}
+
+pub async fn load_search_settings_cfg(app: &AppHandle) -> SearchSettingsCfg {
+    let default_cfg = default_editor_settings().search.unwrap_or(SearchSettingsCfg {
+        parallel_scan_enabled: Some(true),
+        parallel_scan_workers: None,
+    });
+    match load_editor_settings_cfg(app).await {
+        Ok(cfg) => cfg.search.unwrap_or(default_cfg),
+        Err(_) => default_cfg,
+    }
+}
+
+#[tauri::command]
+pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<EditorSettingsCfg> {
+    let trace = new_trace_id();
+    match load_editor_settings_cfg(&app).await {
+        Ok(cfg) => ok(cfg, trace),
+        Err(message) => err_payload(
             ErrorCode::IoError,
-            format!("读取 editor_settings 失败: {err}"),
+            message,
             trace,
         ),
     }

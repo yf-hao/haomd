@@ -3,7 +3,7 @@ import { SidebarBackgroundShell } from './SidebarBackgroundShell'
 import { useI18n } from '../modules/i18n/I18nContext'
 import { buildSearchScope } from '../modules/search/searchScopeService'
 import { searchWorkspaceContents } from '../modules/search/searchService'
-import type { SearchFileResult } from '../modules/search/types'
+import type { SearchExecutionInfo, SearchFileResult } from '../modules/search/types'
 import './GlobalSearchPanel.css'
 
 export type GlobalSearchPanelProps = {
@@ -44,6 +44,26 @@ function summarizeResult(files: SearchFileResult[], totalMatches: number, totalF
     totalFilesScanned,
     truncated,
   }
+}
+
+function buildSearchStatusSummary(
+  t: ReturnType<typeof useI18n>['t'],
+  execution: SearchExecutionInfo | undefined,
+  files: number,
+  matches: number,
+) {
+  if (execution?.strategy === 'parallel') {
+    return t('searchPanel.statusSummaryParallel', {
+      workers: execution.workers,
+      files,
+      matches,
+    })
+  }
+
+  return t('searchPanel.statusSummarySingle', {
+    files,
+    matches,
+  })
 }
 
 type SearchToggleButtonProps = {
@@ -149,10 +169,12 @@ export const GlobalSearchPanel = memo(function GlobalSearchPanel({
       )
 
       onStatusMessage?.(
-        t('searchPanel.statusSummary', {
-          files: result.data.files.length,
-          matches: result.data.totalMatches,
-        }),
+        buildSearchStatusSummary(
+          t,
+          result.data.execution,
+          result.data.files.length,
+          result.data.totalMatches,
+        ),
       )
     }, SEARCH_DEBOUNCE_MS)
 

@@ -22,6 +22,7 @@ export const zhCNMessages: MessageDictionary = {
     theme: '主题',
     typography: '字体',
     wordExport: 'Word',
+    search: '搜索',
     backup: '备份',
     language: '语言',
     languageDescription: '选择 HaoMD 界面语言。`System` 会跟随系统语言。',
@@ -30,6 +31,17 @@ export const zhCNMessages: MessageDictionary = {
     english: 'English',
     themeSections: '主题设置分区',
     appearanceDescription: '选择 HaoMD 的界面主题。`System` 会跟随系统外观。',
+  },
+  searchSettings: {
+    title: '搜索',
+    description: '配置工作区内容搜索的执行策略。高级选项会影响扫描时的 CPU 与磁盘占用。',
+    parallelScanEnabled: '启用并行扫描',
+    parallelScanEnabledHint: '在大型工作区中同时扫描多个文件，加快搜索速度。',
+    parallelScanWorkers: '并行扫描线程数',
+    parallelScanWorkersHint: '建议保持“自动”。线程数越高，搜索通常越快，但也会占用更多系统资源。',
+    workerOptions: {
+      auto: '自动',
+    },
   },
   backup: {
     title: '备份与恢复',
@@ -276,7 +288,8 @@ export const zhCNMessages: MessageDictionary = {
     noResults: '没有匹配结果。',
     summary: '命中 {matches} 处，涉及 {files} 个文件，已扫描 {scanned} 个文件',
     truncated: '结果已截断',
-    statusSummary: '搜索完成：{matches} 处命中，涉及 {files} 个文件。',
+    statusSummarySingle: '搜索完成：单线程 · {files} 个文件 · {matches} 处命中。',
+    statusSummaryParallel: '搜索完成：并行 {workers} 线程 · {files} 个文件 · {matches} 处命中。',
     openResultFailed: '打开搜索结果失败。',
   },
   ai: {

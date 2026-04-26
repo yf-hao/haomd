@@ -18,16 +18,19 @@ import {
 import {
   DEFAULT_WEBDAV_REMOTE_PATH,
   getDefaultLanguageSetting,
+  getDefaultSearchSettings,
   getDefaultThemeSettings,
   getDefaultUiTypographySettings,
   getDefaultWordExportStyleSettings,
   getLanguageSetting,
+  getSearchSettings,
   getThemeSettings,
   getUiTypographySettings,
   getWordExportStyleSettings,
   loadEditorSettings,
   saveEditorSettings,
   type EditorSettings,
+  type SearchSettings,
   type ThemeBackgroundSettings,
   type ThemeBackgroundSize,
   type ThemeSettings,
@@ -47,7 +50,7 @@ export type SettingsDialogProps = {
   onUiTypographyChange?: (settings: UiTypographySettings) => void
 }
 
-type SettingsSectionId = 'theme' | 'typography' | 'word-export' | 'backup'
+type SettingsSectionId = 'theme' | 'typography' | 'word-export' | 'search' | 'backup'
 type ThemePanelTabId = 'theme-preset' | 'backgrounds'
 type WordExportTabId = 'document' | 'layout' | 'diagrams' | 'templates'
 type WordTemplateOption = {
@@ -86,6 +89,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const [languageMode, setLanguageMode] = useState<LanguageMode>(getDefaultLanguageSetting())
   const [wordExport, setWordExport] = useState<WordExportStyleSettings>(getDefaultWordExportStyleSettings())
   const [webdavBackup, setWebdavBackup] = useState<WebDavBackupSettings>(getDefaultWebDavBackupSettings())
+  const [searchSettings, setSearchSettings] = useState<SearchSettings>(getDefaultSearchSettings())
   const [uiTypography, setUiTypography] = useState<UiTypographySettings>(getDefaultUiTypographySettings())
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('theme')
   const [activeThemeTab, setActiveThemeTab] = useState<ThemePanelTabId>('theme-preset')
@@ -157,13 +161,14 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     let cancelled = false
     ;(async () => {
       try {
-        const [loadedSettings, loadedTheme, loadedLanguage, loadedTypography, loadedWordExport, loadedBackupSettings] = await Promise.all([
+        const [loadedSettings, loadedTheme, loadedLanguage, loadedTypography, loadedWordExport, loadedBackupSettings, loadedSearchSettings] = await Promise.all([
           loadEditorSettings(),
           getThemeSettings(),
           getLanguageSetting(),
           getUiTypographySettings(),
           getWordExportStyleSettings(),
           loadBackupSettings(),
+          getSearchSettings(),
         ])
         if (cancelled) return
         if (hasLocalPreviewEditsRef.current) return
@@ -177,6 +182,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
         themePreviewReadyRef.current = true
         setWordExport(loadedWordExport)
         setWebdavBackup(loadedBackupSettings)
+        setSearchSettings(loadedSearchSettings)
         setWorkspaceBackgroundOpacityInput(String(loadedTheme.workspaceBackground?.opacity ?? getDefaultThemeSettings().workspaceBackground?.opacity ?? 0.22))
         setWorkspaceBackgroundOverlayOpacityInput(String(loadedTheme.workspaceBackground?.overlayOpacity ?? getDefaultThemeSettings().workspaceBackground?.overlayOpacity ?? 0.12))
         setWorkspaceBackgroundBlurInput(String(loadedTheme.workspaceBackground?.blurPx ?? getDefaultThemeSettings().workspaceBackground?.blurPx ?? 0))
@@ -694,6 +700,10 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
       setUiTypography(getDefaultUiTypographySettings())
       return
     }
+    if (activeSection === 'search') {
+      setSearchSettings(getDefaultSearchSettings())
+      return
+    }
     setWordExport(getDefaultWordExportStyleSettings())
   }
 
@@ -708,6 +718,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
         theme,
         uiTypography,
         wordExport,
+        search: searchSettings,
       }
       await Promise.all([
         saveEditorSettings(nextSettings),
@@ -899,6 +910,13 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                 className={`settings-sidebar-item ${activeSection === 'word-export' ? 'active' : ''}`}
               >
                 {t('settings.wordExport')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveSection('search')}
+                className={`settings-sidebar-item ${activeSection === 'search' ? 'active' : ''}`}
+              >
+                {t('settings.search')}
               </button>
               <button
                 type="button"
@@ -1781,6 +1799,56 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                 <div className="form-error" style={{ marginTop: 14 }}>
                   {error}
                 </div>
+              )}
+
+              {activeSection === 'search' && (
+                <>
+                  <div className="settings-panel-header">
+                    <div className="settings-panel-title">{t('searchSettings.title')}</div>
+                    <div className="settings-panel-description">{t('searchSettings.description')}</div>
+                  </div>
+
+                  <div style={fieldGridStyle}>
+                    <div className="settings-field-label">{t('searchSettings.parallelScanEnabled')}</div>
+                    <label className="settings-checkbox-row">
+                      <input
+                        type="checkbox"
+                        checked={searchSettings.parallelScanEnabled}
+                        onChange={(event) =>
+                          setSearchSettings((prev) => ({
+                            ...prev,
+                            parallelScanEnabled: event.target.checked,
+                          }))
+                        }
+                      />
+                      <span>{t('searchSettings.parallelScanEnabledHint')}</span>
+                    </label>
+
+                    <div className="settings-field-label">{t('searchSettings.parallelScanWorkers')}</div>
+                    <select
+                      className="field-select"
+                      value={searchSettings.parallelScanWorkers == null ? 'auto' : String(searchSettings.parallelScanWorkers)}
+                      disabled={!searchSettings.parallelScanEnabled}
+                      onChange={(event) => {
+                        const value = event.target.value
+                        setSearchSettings((prev) => ({
+                          ...prev,
+                          parallelScanWorkers: value === 'auto' ? null : Number(value),
+                        }))
+                      }}
+                    >
+                      <option value="auto">{t('searchSettings.workerOptions.auto')}</option>
+                      <option value="1">1</option>
+                      <option value="2">2</option>
+                      <option value="4">4</option>
+                      <option value="8">8</option>
+                    </select>
+                  </div>
+
+                  <div className="settings-panel-description" style={{ marginTop: 12 }}>
+                    {t('searchSettings.parallelScanWorkersHint')}
+                  </div>
+                </>
               )}
             </div>
           </div>
