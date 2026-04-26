@@ -2,7 +2,7 @@
 import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { GlobalSearchPanel } from './GlobalSearchPanel'
+import { GlobalSearchPanel, resetGlobalSearchPanelCache } from './GlobalSearchPanel'
 import { I18nProvider } from '../modules/i18n/I18nContext'
 import { ThemeModeProvider } from '../modules/theme/ThemeContext'
 import { getDefaultThemeSettings } from '../modules/settings/editorSettings'
@@ -36,6 +36,7 @@ function renderWithProviders(node: ReactNode) {
 describe('GlobalSearchPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    resetGlobalSearchPanelCache()
   })
 
   it('issues a debounced search with inline toggle options', async () => {
@@ -133,7 +134,65 @@ describe('GlobalSearchPanel', () => {
     expect(onOpenResult).toHaveBeenCalledWith({
       path: '/root/doc.md',
       line: 12,
+      columnStart: 3,
       searchText: 'demo',
+      caseSensitive: false,
+      wholeWord: false,
+      regex: false,
     })
+  })
+
+  it('restores the previous query and results after remount', async () => {
+    searchWorkspaceContentsMock.mockResolvedValue({
+      ok: true,
+      data: {
+        files: [
+          {
+            path: '/root/notes.md',
+            matchCount: 1,
+            hits: [
+              {
+                line: 3,
+                columnStart: 1,
+                columnEnd: 5,
+                preview: 'demo line',
+              },
+            ],
+          },
+        ],
+        totalMatches: 1,
+        totalFilesScanned: 1,
+        truncated: false,
+      },
+    })
+
+    const first = renderWithProviders(
+      <GlobalSearchPanel
+        folderRoots={['/root']}
+        standaloneFiles={[]}
+        onOpenResult={vi.fn()}
+      />,
+    )
+
+    await act(async () => {
+      fireEvent.change(screen.getByPlaceholderText('搜索文件内容'), {
+        target: { value: 'demo' },
+      })
+      await new Promise((resolve) => window.setTimeout(resolve, 320))
+    })
+
+    await screen.findByText('demo line')
+    first.unmount()
+
+    renderWithProviders(
+      <GlobalSearchPanel
+        folderRoots={['/root']}
+        standaloneFiles={[]}
+        onOpenResult={vi.fn()}
+      />,
+    )
+
+    expect((screen.getByPlaceholderText('搜索文件内容') as HTMLInputElement).value).toBe('demo')
+    expect(screen.getByText('demo line')).toBeDefined()
   })
 })

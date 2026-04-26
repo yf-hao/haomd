@@ -1,6 +1,8 @@
 import { useEffect, useMemo, type CSSProperties, type RefObject } from 'react'
 import { EditorView } from '@codemirror/view'
+import { SearchQuery, setSearchQuery } from '@codemirror/search'
 import { CodeEditor } from './Editor/CodeEditor'
+import { setCustomSearchQuery } from './Editor/searchHighlight'
 import { useThemeContext } from '../modules/theme/ThemeContext'
 import { useI18n } from '../modules/i18n/I18nContext'
 import { buildBackgroundImageVars, resolveManagedBackgroundImageUrl } from '../modules/theme/backgroundImageRuntime'
@@ -8,7 +10,14 @@ import './EditorPane.css'
 
 export type EditorFocusRequest = {
   localLine: number
-  searchText?: string
+  columnStart?: number
+}
+
+export type EditorTransientSearchQuery = {
+  searchText: string
+  caseSensitive?: boolean
+  wholeWord?: boolean
+  regex?: boolean
 }
 
 export type EditorPaneProps = {
@@ -25,6 +34,7 @@ export type EditorPaneProps = {
   onProgrammaticScrollEnd?: () => void
   editorZoom: number
   onEditorReady?: () => void
+  transientSearchQuery?: EditorTransientSearchQuery | null
 }
 
 export function EditorPane(props: EditorPaneProps) {
@@ -40,6 +50,7 @@ export function EditorPane(props: EditorPaneProps) {
     onProgrammaticScrollEnd,
     editorZoom,
     onEditorReady,
+    transientSearchQuery,
   } = props
   const { themeSettings } = useThemeContext()
   const { t } = useI18n()
@@ -66,7 +77,7 @@ export function EditorPane(props: EditorPaneProps) {
     } as CSSProperties
   }, [currentEditorBackground, editorBackgroundUrl])
 
-  // 处理外部聚焦请求：滚动到指定行或包含特定文本
+  // 处理外部聚焦请求：滚动到指定行列
   useEffect(() => {
     if (!focusRequest) return
     const view = editorViewRef.current
@@ -79,23 +90,10 @@ export function EditorPane(props: EditorPaneProps) {
 
     onProgrammaticScrollStart?.()
 
-    const { localLine, searchText } = focusRequest
-    let pos = 0
-
-    if (searchText) {
-      for (let i = 1; i <= doc.lines; i++) {
-        const l = doc.line(i)
-        if (l.text.includes(searchText)) {
-          pos = l.from
-          break
-        }
-      }
-    }
-
-    if (!pos) {
-      const safeLine = localLine > 0 ? Math.min(localLine, doc.lines) : 1
-      pos = doc.line(safeLine).from
-    }
+    const safeLine = focusRequest.localLine > 0 ? Math.min(focusRequest.localLine, doc.lines) : 1
+    const targetLine = doc.line(safeLine)
+    const safeColumnOffset = Math.max(0, (focusRequest.columnStart ?? 1) - 1)
+    const pos = Math.min(targetLine.from + safeColumnOffset, targetLine.to)
 
     view.dispatch({
       selection: { anchor: pos },
@@ -106,6 +104,35 @@ export function EditorPane(props: EditorPaneProps) {
     onFocusHandled?.()
     onProgrammaticScrollEnd?.()
   }, [focusRequest, editorViewRef, onFocusHandled, onProgrammaticScrollStart, onProgrammaticScrollEnd, markdown])
+
+  useEffect(() => {
+    const view = editorViewRef.current
+    if (!view) return
+
+    if (!transientSearchQuery?.searchText.trim()) {
+      view.dispatch({
+        effects: [
+          setSearchQuery.of(new SearchQuery({ search: '' })),
+          setCustomSearchQuery.of(null),
+        ],
+      })
+      return
+    }
+
+    const query = new SearchQuery({
+      search: transientSearchQuery.searchText,
+      caseSensitive: transientSearchQuery.caseSensitive ?? false,
+      wholeWord: transientSearchQuery.wholeWord ?? false,
+      regexp: transientSearchQuery.regex ?? false,
+    })
+
+    view.dispatch({
+      effects: [
+        setSearchQuery.of(query),
+        setCustomSearchQuery.of(query),
+      ],
+    })
+  }, [editorViewRef, transientSearchQuery])
 
   return (
     <div

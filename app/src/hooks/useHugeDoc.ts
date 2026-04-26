@@ -43,12 +43,13 @@ export interface UseHugeDocReturn {
    */
   localToGlobal: (localLine: number) => number
   /**
-   * 跳转到全局行号。返回 { localLine, searchText } 供 EditorPane 的 focusRequest 使用，
+   * 跳转到全局行号。返回 { localLine, searchText, columnStart } 供 EditorPane 的 focusRequest 使用，
    * 或 null 表示大文档模式未启用（调用方应直接使用 globalLine 作为 localLine）。
    */
-  focusOnGlobalLine: (globalLine: number, searchText?: string) => {
+  focusOnGlobalLine: (globalLine: number, searchText?: string, columnStart?: number) => {
     localLine: number
     searchText?: string
+    columnStart?: number
   }
 }
 
@@ -160,22 +161,23 @@ export function useHugeDoc({
     return localLine
   }, [hugeDocEnabled, markdownRef])
 
-  const focusOnGlobalLine = useCallback((globalLine: number, searchText?: string): {
+  const focusOnGlobalLine = useCallback((globalLine: number, searchText?: string, columnStart?: number): {
     localLine: number
     searchText?: string
+    columnStart?: number
   } => {
     const safeGlobal = globalLine > 0 ? globalLine : 1
 
     // 普通文档：直接用全局行号作为本地行号
     if (!hugeDocEnabled) {
-      return { localLine: safeGlobal, searchText }
+      return { localLine: safeGlobal, searchText, columnStart }
     }
 
     const totalLines = countLines(markdown)
     if (totalLines < hugeDocLineThreshold) {
       // 当前文档虽开启了大文档功能，但行数尚未达到阈值，退化为普通跳转
       setHugeDocState(null)
-      return { localLine: safeGlobal, searchText }
+      return { localLine: safeGlobal, searchText, columnStart }
     }
 
     try {
@@ -195,12 +197,12 @@ export function useHugeDoc({
         threshold: hugeDocLineThreshold,
         currentChunk: chunk,
       })
-      return { localLine, searchText }
+      return { localLine, searchText, columnStart }
     } catch (e) {
       console.error('[HugeDoc] focusOnGlobalLine failed, fallback to normal scroll', e)
       // 兜底：回退到整篇文档模式
       setHugeDocState(null)
-      return { localLine: safeGlobal, searchText }
+      return { localLine: safeGlobal, searchText, columnStart }
     }
   }, [markdown, hugeDocEnabled, hugeDocLineThreshold, hugeDocChunkContextLines, hugeDocChunkMaxLines])
 

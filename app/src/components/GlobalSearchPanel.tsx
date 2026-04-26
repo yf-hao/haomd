@@ -10,11 +10,32 @@ export type GlobalSearchPanelProps = {
   panelWidth?: number
   folderRoots: string[]
   standaloneFiles: Array<{ path: string }>
-  onOpenResult: (params: { path: string; line: number; searchText: string }) => void
+  onOpenResult: (params: {
+    path: string
+    line: number
+    columnStart: number
+    searchText: string
+    caseSensitive: boolean
+    wholeWord: boolean
+    regex: boolean
+  }) => void
   onStatusMessage?: (message: string) => void
 }
 
 const SEARCH_DEBOUNCE_MS = 250
+const initialGlobalSearchPanelCache = () => ({
+  query: '',
+  caseSensitive: false,
+  wholeWord: false,
+  regex: false,
+  errorMessage: '',
+  results: summarizeResult([], 0, 0, false),
+})
+const globalSearchPanelCache = initialGlobalSearchPanelCache()
+
+export function resetGlobalSearchPanelCache() {
+  Object.assign(globalSearchPanelCache, initialGlobalSearchPanelCache())
+}
 
 function summarizeResult(files: SearchFileResult[], totalMatches: number, totalFilesScanned: number, truncated: boolean) {
   return {
@@ -55,19 +76,28 @@ export const GlobalSearchPanel = memo(function GlobalSearchPanel({
 }: GlobalSearchPanelProps) {
   const { t } = useI18n()
   const style = panelWidth ? { width: panelWidth } : undefined
-  const [query, setQuery] = useState('')
-  const [caseSensitive, setCaseSensitive] = useState(false)
-  const [wholeWord, setWholeWord] = useState(false)
-  const [regex, setRegex] = useState(false)
+  const [query, setQuery] = useState(() => globalSearchPanelCache.query)
+  const [caseSensitive, setCaseSensitive] = useState(() => globalSearchPanelCache.caseSensitive)
+  const [wholeWord, setWholeWord] = useState(() => globalSearchPanelCache.wholeWord)
+  const [regex, setRegex] = useState(() => globalSearchPanelCache.regex)
   const [loading, setLoading] = useState(false)
-  const [errorMessage, setErrorMessage] = useState('')
-  const [results, setResults] = useState(() => summarizeResult([], 0, 0, false))
+  const [errorMessage, setErrorMessage] = useState(() => globalSearchPanelCache.errorMessage)
+  const [results, setResults] = useState(() => globalSearchPanelCache.results)
   const requestSeqRef = useRef(0)
 
   const scope = useMemo(
     () => buildSearchScope({ folderRoots, standaloneFiles }),
     [folderRoots, standaloneFiles],
   )
+
+  useEffect(() => {
+    globalSearchPanelCache.query = query
+    globalSearchPanelCache.caseSensitive = caseSensitive
+    globalSearchPanelCache.wholeWord = wholeWord
+    globalSearchPanelCache.regex = regex
+    globalSearchPanelCache.errorMessage = errorMessage
+    globalSearchPanelCache.results = results
+  }, [query, caseSensitive, wholeWord, regex, errorMessage, results])
 
   useEffect(() => {
     const trimmed = query.trim()
@@ -198,7 +228,16 @@ export const GlobalSearchPanel = memo(function GlobalSearchPanel({
                         key={`${file.path}:${hit.line}:${hit.columnStart}:${index}`}
                         type="button"
                         className="global-search-hit"
-                        onClick={() => onOpenResult({ path: file.path, line: hit.line, searchText: query.trim() })}
+                        onClick={() =>
+                          onOpenResult({
+                          path: file.path,
+                          line: hit.line,
+                          columnStart: hit.columnStart,
+                          searchText: query.trim(),
+                          caseSensitive,
+                          wholeWord,
+                            regex,
+                          })}
                       >
                         <span className="global-search-hit-line">{hit.line}</span>
                         <span className="global-search-hit-preview">{hit.preview}</span>

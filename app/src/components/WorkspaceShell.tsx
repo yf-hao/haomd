@@ -24,6 +24,7 @@ import { WorkflowsPanel } from './WorkflowsPanel'
 import { SidebarBackgroundShell } from './SidebarBackgroundShell'
 import { Welcome } from './Welcome'
 import { SearchBar } from './Editor/SearchBar'
+import type { EditorTransientSearchQuery } from './EditorPane'
 import { useOutlineModel } from '../hooks/useOutlineModel'
 import type { OutlineItem } from '../modules/outline/parser'
 import type { OutlineHeading } from '../modules/outline/outlineSource'
@@ -200,6 +201,12 @@ export function WorkspaceShell({
     }
   }, [activeLeftPanel])
 
+  useEffect(() => {
+    if (activeLeftPanel !== 'search') {
+      setTransientSearchQuery(null)
+    }
+  }, [activeLeftPanel])
+
   // Other States
   const [editorZoom, setEditorZoom] = useState(() => {
     if (typeof localStorage === 'undefined') return 1.0
@@ -228,7 +235,8 @@ export function WorkspaceShell({
   const [inlineNewFileDir, setInlineNewFileDir] = useState<string | null>(null)
   const [inlineNewFolderDir, setInlineNewFolderDir] = useState<string | null>(null)
   const [inlineRenamePath, setInlineRenamePath] = useState<string | null>(null)
-  const [focusRequest, setFocusRequest] = useState<{ localLine: number; searchText?: string } | null>(null)
+  const [focusRequest, setFocusRequest] = useState<{ localLine: number; columnStart?: number } | null>(null)
+  const [transientSearchQuery, setTransientSearchQuery] = useState<EditorTransientSearchQuery | null>(null)
   const [previewSelectionText, setPreviewSelectionText] = useState<string | null>(null)
   const pdfSelectionGetterRef = useRef<(() => string | null) | null>(null)
   const wysiwygSelectionGetterRef = useRef<(() => string | null) | null>(null)
@@ -2762,9 +2770,9 @@ export function WorkspaceShell({
     saveCursorPositionRef.current?.(globalLine)
   }, [localToGlobal, setActiveLine])
 
-  const focusEditorOnGlobalLine = useCallback((globalLine: number, searchText?: string) => {
+  const focusEditorOnGlobalLine = useCallback((globalLine: number, searchText?: string, columnStart?: number) => {
     const safeGlobal = globalLine > 0 ? globalLine : 1
-    const result = focusOnGlobalLine(safeGlobal, searchText)
+    const result = focusOnGlobalLine(safeGlobal, searchText, columnStart)
     setActiveLine(safeGlobal)
     setFocusRequest(result)
   }, [focusOnGlobalLine])
@@ -2804,13 +2812,27 @@ export function WorkspaceShell({
     }
   }, [effectiveLayout, setLayout, focusEditorOnGlobalLine])
 
-  const handleSearchResultOpen = useCallback(async (params: { path: string; line: number; searchText: string }) => {
+  const handleSearchResultOpen = useCallback(async (params: {
+    path: string
+    line: number
+    columnStart: number
+    searchText: string
+    caseSensitive: boolean
+    wholeWord: boolean
+    regex: boolean
+  }) => {
     const resp = await openFileFromSidebar(params.path)
     if (!resp?.ok) {
       setStatusMessage(t('searchPanel.openResultFailed'))
       return
     }
-    focusEditorOnGlobalLine(params.line, params.searchText)
+    setTransientSearchQuery({
+      searchText: params.searchText,
+      caseSensitive: params.caseSensitive,
+      wholeWord: params.wholeWord,
+      regex: params.regex,
+    })
+    focusEditorOnGlobalLine(params.line, params.searchText, params.columnStart)
   }, [focusEditorOnGlobalLine, openFileFromSidebar, setStatusMessage, t])
 
   const handleTabSaveAndClose = useCallback(async (id: string) => {
@@ -3384,6 +3406,7 @@ export function WorkspaceShell({
                         onProgrammaticScrollEnd={() => { isProgrammaticScrollRef.current = false }}
                         editorZoom={editorZoom}
                         onEditorReady={handleEditorReady}
+                        transientSearchQuery={transientSearchQuery}
                       />
                     </Suspense>
                   </section>
