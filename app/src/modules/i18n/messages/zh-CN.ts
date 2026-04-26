@@ -255,6 +255,7 @@ export const zhCNMessages: MessageDictionary = {
   },
   app: {
     files: '文件',
+    search: '搜索',
     outline: '大纲',
     pdf: 'PDF',
     sessions: '会话',
@@ -263,6 +264,20 @@ export const zhCNMessages: MessageDictionary = {
     workflows: 'Workflows',
     statusBarTitle: 'HaoMD · AI Markdown',
     characters: '{count} 字',
+  },
+  searchPanel: {
+    title: '搜索',
+    placeholder: '搜索文件内容',
+    caseSensitive: '区分大小写',
+    wholeWord: '全词匹配',
+    regex: '正则',
+    empty: '输入关键字后开始搜索。',
+    searching: '搜索中...',
+    noResults: '没有匹配结果。',
+    summary: '命中 {matches} 处，涉及 {files} 个文件，已扫描 {scanned} 个文件',
+    truncated: '结果已截断',
+    statusSummary: '搜索完成：{matches} 处命中，涉及 {files} 个文件。',
+    openResultFailed: '打开搜索结果失败。',
   },
   ai: {
     copyMarkdown: '复制为 Markdown',

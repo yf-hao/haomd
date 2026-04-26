@@ -26,6 +26,7 @@ mod notes_config;
 mod openai_compat;
 mod platform;
 mod protocol;
+mod search_commands;
 mod skill_scripts;
 mod skills;
 mod state_store;
@@ -58,6 +59,7 @@ use notes_config::*;
 use openai_compat::*;
 use platform::*;
 use protocol::*;
+use search_commands::*;
 use serde::{Deserialize, Serialize};
 use skill_scripts::*;
 use skills::*;
@@ -111,6 +113,7 @@ macro_rules! app_invoke_handler {
             resolve_workspace_directory,
             create_workspace_directory,
             write_workspace_file,
+            search_workspace_contents,
             quit_app,
             // AI config and editor/document settings
             load_ai_settings,

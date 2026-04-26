@@ -16,6 +16,7 @@ import { TabBar } from './TabBar'
 import { FileContextMenu } from './FileContextMenu'
 import { Sidebar, type SidebarContextActionPayload, type SidebarContextTargetKind } from './Sidebar'
 import { OutlinePanel } from './OutlinePanel'
+import { GlobalSearchPanel } from './GlobalSearchPanel'
 import { SessionsPanel } from './SessionsPanel'
 import { NotesPanel } from './NotesPanel'
 import { SkillsPanel } from './SkillsPanel'
@@ -138,7 +139,7 @@ const preventContainerScroll = (e: React.UIEvent<HTMLElement>) => {
   }
 }
 
-export type LeftPanelId = 'files' | 'outline' | 'pdf' | 'sessions' | 'notes' | 'skills' | 'workflows' | null
+export type LeftPanelId = 'files' | 'search' | 'outline' | 'pdf' | 'sessions' | 'notes' | 'skills' | 'workflows' | null
 export type InitialWorkspaceAction = 'new' | 'open' | 'open_folder' | 'open_recent' | null
 
 export interface WorkspaceShellProps {
@@ -2803,6 +2804,15 @@ export function WorkspaceShell({
     }
   }, [effectiveLayout, setLayout, focusEditorOnGlobalLine])
 
+  const handleSearchResultOpen = useCallback(async (params: { path: string; line: number; searchText: string }) => {
+    const resp = await openFileFromSidebar(params.path)
+    if (!resp?.ok) {
+      setStatusMessage(t('searchPanel.openResultFailed'))
+      return
+    }
+    focusEditorOnGlobalLine(params.line, params.searchText)
+  }, [focusEditorOnGlobalLine, openFileFromSidebar, setStatusMessage, t])
+
   const handleTabSaveAndClose = useCallback(async (id: string) => {
     const isActive = id === activeId
     const tab = tabs.find(t => t.id === id)
@@ -2895,6 +2905,15 @@ export function WorkspaceShell({
               })
             }}
             onNotify={setStatusMessage}
+          />
+        )}
+        {activeLeftPanel === 'search' && (
+          <GlobalSearchPanel
+            panelWidth={sidebarWidth}
+            folderRoots={sidebar.folderRoots}
+            standaloneFiles={sidebar.standaloneFiles}
+            onOpenResult={handleSearchResultOpen}
+            onStatusMessage={setStatusMessage}
           />
         )}
         {activeLeftPanel === 'outline' && (
@@ -3175,7 +3194,7 @@ export function WorkspaceShell({
         )}
         {activeLeftPanel === 'skills' && <SkillsPanel panelWidth={sidebarWidth} />}
         {activeLeftPanel === 'workflows' && <WorkflowsPanel panelWidth={sidebarWidth} />}
-        {(activeLeftPanel === 'files' || activeLeftPanel === 'outline' || activeLeftPanel === 'pdf' || activeLeftPanel === 'sessions' || activeLeftPanel === 'notes' || activeLeftPanel === 'skills' || activeLeftPanel === 'workflows') && (
+        {(activeLeftPanel === 'files' || activeLeftPanel === 'search' || activeLeftPanel === 'outline' || activeLeftPanel === 'pdf' || activeLeftPanel === 'sessions' || activeLeftPanel === 'notes' || activeLeftPanel === 'skills' || activeLeftPanel === 'workflows') && (
           <div className={`sidebar-resizer ${isSidebarResizing ? 'active' : ''}`} onMouseDown={handleSidebarResizeStart} />
         )}
 

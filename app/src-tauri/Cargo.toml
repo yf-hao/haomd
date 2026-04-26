@@ -42,3 +42,4 @@ zip = { version = "2.2", default-features = false, features = ["deflate"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 futures-util = "0.3"
 rquickjs = "0.6"
+regex = "1"

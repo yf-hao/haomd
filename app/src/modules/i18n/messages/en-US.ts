@@ -255,6 +255,7 @@ export const enUSMessages: MessageDictionary = {
   },
   app: {
     files: 'Files',
+    search: 'Search',
     outline: 'Outline',
     pdf: 'PDF',
     sessions: 'Sessions',
@@ -263,6 +264,20 @@ export const enUSMessages: MessageDictionary = {
     workflows: 'Workflows',
     statusBarTitle: 'HaoMD · AI Markdown',
     characters: '{count} chars',
+  },
+  searchPanel: {
+    title: 'Search',
+    placeholder: 'Search file contents',
+    caseSensitive: 'Match Case',
+    wholeWord: 'Whole Word',
+    regex: 'Use Regex',
+    empty: 'Enter a query to start searching.',
+    searching: 'Searching...',
+    noResults: 'No results found.',
+    summary: '{matches} matches in {files} files, scanned {scanned} files',
+    truncated: 'Results truncated',
+    statusSummary: 'Search finished: {matches} matches in {files} files.',
+    openResultFailed: 'Failed to open search result.',
   },
   ai: {
     copyMarkdown: 'Copy as Markdown',

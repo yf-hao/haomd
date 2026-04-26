@@ -429,6 +429,24 @@ function AppShellContent({
 
           <button
             type="button"
+            className={`activity-item ${activeLeftPanel === 'search' ? 'active' : ''}`}
+            onClick={() => handleLeftPanelToggle('search')}
+            aria-pressed={activeLeftPanel === 'search'}
+            title={t('app.search')}
+          >
+            <svg
+              className="activity-icon-search"
+              viewBox="0 0 20 20"
+              aria-hidden="true"
+              fill="none"
+            >
+              <circle cx="8.5" cy="8.5" r="4.8" stroke="currentColor" strokeWidth="1.6" />
+              <path d="M12.2 12.2L16.4 16.4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+            </svg>
+          </button>
+
+          <button
+            type="button"
             className={`activity-item ${activeLeftPanel === 'outline' ? 'active' : ''}`}
             onClick={() => handleLeftPanelToggle('outline')}
             aria-pressed={activeLeftPanel === 'outline'}
