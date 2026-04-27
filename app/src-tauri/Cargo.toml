@@ -43,3 +43,4 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 futures-util = "0.3"
 rquickjs = "0.6"
 regex = "1"
+rusqlite = { version = "0.32", features = ["bundled", "modern_sqlite"] }

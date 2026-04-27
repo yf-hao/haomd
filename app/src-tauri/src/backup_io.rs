@@ -971,6 +971,15 @@ mod tests {
     }
 
     #[test]
+    fn should_include_search_index_in_backup_scope() {
+        assert!(should_include_backup_relative(Path::new("search_index.sqlite3")));
+        assert!(should_include_backup_relative(Path::new(
+            "nested/search_index.sqlite3"
+        )));
+        assert!(should_include_backup_relative(Path::new("editor_settings.json")));
+    }
+
+    #[test]
     fn should_upload_all_files_when_remote_index_missing() {
         let local = WebDavSyncIndex {
             version: 2,

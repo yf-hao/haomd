@@ -1,4 +1,4 @@
-use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
+use crate::{err_payload, new_trace_id, ok, search_db, ErrorCode, ResultPayload};
 use serde::{Deserialize, Serialize};
 use std::path::{Component, Path, PathBuf};
 use tauri::{AppHandle, Runtime};
@@ -344,7 +344,7 @@ pub async fn resolve_workspace_directory(
 
 #[tauri::command]
 pub async fn write_workspace_file(
-    _app: AppHandle<impl Runtime>,
+    app: AppHandle<impl Runtime>,
     mounted_roots: Vec<String>,
     target_directory: String,
     file_name: String,
@@ -362,16 +362,19 @@ pub async fn write_workspace_file(
     let normalized_target = normalize_display_path(&target_path);
 
     match fs::write(&target_path, content).await {
-        Ok(()) => ok(
-            WriteWorkspaceFileResult {
-                ok: true,
-                resolved_directory: Some(normalize_display_path(&resolved_dir)),
-                saved_file_path: Some(normalized_target),
-                reason: None,
-                candidates: None,
-            },
-            trace,
-        ),
+        Ok(()) => {
+            let _ = search_db::upsert_search_index_entry(&app, &target_path);
+            ok(
+                WriteWorkspaceFileResult {
+                    ok: true,
+                    resolved_directory: Some(normalize_display_path(&resolved_dir)),
+                    saved_file_path: Some(normalized_target),
+                    reason: None,
+                    candidates: None,
+                },
+                trace,
+            )
+        }
         Err(err) => err_payload(
             ErrorCode::IoError,
             format!("写入工作区文件失败: {err}"),

@@ -1,4 +1,4 @@
-export type SearchMode = 'scan'
+export type SearchMode = 'scan' | 'fts5'
 
 export type SearchScope = {
   folderRoots: string[]
@@ -33,6 +33,9 @@ export type SearchFileResult = {
 export type SearchExecutionInfo = {
   strategy: 'single-thread' | 'parallel'
   workers: number
+  engine?: SearchMode
+  indexedFiles?: number
+  candidateFiles?: number
 }
 
 export type SearchResponse = {

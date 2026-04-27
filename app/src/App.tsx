@@ -39,6 +39,7 @@ import {
 import { ThemeModeProvider } from './modules/theme/ThemeContext'
 import { resolveActiveTheme } from './modules/theme/themeResolver'
 import { loadThemePreference } from './modules/theme/themePreferenceStore'
+import type { SearchScope } from './modules/search/types'
 
 const appStartTime = performance.now()
 
@@ -57,6 +58,7 @@ function App() {
   const [isStatusBarVisible, setStatusBarVisible] = useState(true)
   const [docCharCount, setDocCharCount] = useState<number | null>(null)
   const [statusMessage, setStatusMessage] = useState('')
+  const [searchScope, setSearchScope] = useState<SearchScope | null>(null)
   const [themeSettings, setThemeSettings] = useState<ThemeSettings>(getDefaultThemeSettings())
   const [languageMode, setLanguageMode] = useState<LanguageMode>(getDefaultLanguageSetting())
   const [systemResolvedLanguage, setSystemResolvedLanguage] = useState<ResolvedLanguage>(() => getSystemResolvedLanguage())
@@ -267,6 +269,8 @@ function App() {
           }}
           setDocCharCount={setDocCharCount}
           setStatusMessage={setStatusMessage}
+          searchScope={searchScope}
+          setSearchScope={setSearchScope}
           setAiSettingsOpen={setAiSettingsOpen}
           setAgentSettingsOpen={setAgentSettingsOpen}
           setPromptSettingsOpen={setPromptSettingsOpen}
@@ -302,6 +306,8 @@ type AppShellContentProps = {
   onUiTypographyChange: (settings: UiTypographySettings) => void
   setDocCharCount: (count: number | null) => void
   setStatusMessage: (message: string) => void
+  searchScope: SearchScope | null
+  setSearchScope: Dispatch<SetStateAction<SearchScope | null>>
   setAiSettingsOpen: Dispatch<SetStateAction<boolean>>
   setAgentSettingsOpen: Dispatch<SetStateAction<boolean>>
   setPromptSettingsOpen: Dispatch<SetStateAction<boolean>>
@@ -333,6 +339,8 @@ function AppShellContent({
   onUiTypographyChange,
   setDocCharCount,
   setStatusMessage,
+  searchScope,
+  setSearchScope,
   setAiSettingsOpen,
   setAgentSettingsOpen,
   setPromptSettingsOpen,
@@ -627,6 +635,7 @@ function AppShellContent({
           onInitialActionHandled={handleInitialActionHandled}
           onDocumentStatsChange={(stats) => setDocCharCount(stats.charCount)}
           onStatusMessageChange={setStatusMessage}
+          onSearchScopeChange={setSearchScope}
         />
       </div>
 
@@ -663,6 +672,7 @@ function AppShellContent({
       <SettingsDialog
         open={isSettingsOpen}
         onClose={() => setSettingsOpen(false)}
+        searchScope={searchScope}
         onThemeSettingsChange={onThemeSettingsChange}
         onLanguageModeChange={onLanguageModeChange}
         onUiTypographyChange={onUiTypographyChange}

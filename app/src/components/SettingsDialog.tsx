@@ -6,6 +6,8 @@ import { Button } from './Button'
 import { WordTemplateGenerateDialog } from './WordTemplateGenerateDialog'
 import { FontSelectField } from './settings/FontSelectField'
 import { useI18n } from '../modules/i18n/I18nContext'
+import { rebuildSearchIndex } from '../modules/search/searchService'
+import type { SearchScope } from '../modules/search/types'
 import { onNativePaste } from '../modules/platform/clipboardEvents'
 import type { BackendResult } from '../modules/platform/backendTypes'
 import type { LanguageMode } from '../modules/i18n/schema'
@@ -45,6 +47,7 @@ import { builtinBackgroundPresets, getBuiltinBackgroundPresetLabel } from '../mo
 export type SettingsDialogProps = {
   open: boolean
   onClose: () => void
+  searchScope?: SearchScope | null
   onThemeSettingsChange?: (settings: ThemeSettings) => void
   onLanguageModeChange?: (mode: LanguageMode) => void
   onUiTypographyChange?: (settings: UiTypographySettings) => void
@@ -79,6 +82,7 @@ const fieldGridStyle: React.CSSProperties = {
 export const SettingsDialog: FC<SettingsDialogProps> = ({
   open,
   onClose,
+  searchScope,
   onThemeSettingsChange,
   onLanguageModeChange,
   onUiTypographyChange,
@@ -104,6 +108,8 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     'export' | 'import' | 'webdav-test' | 'webdav-export' | 'webdav-import' | null
   >(null)
   const [backupStatus, setBackupStatus] = useState<{ tone: 'success' | 'error'; message: string } | null>(null)
+  const [searchBusy, setSearchBusy] = useState<'rebuild-index' | null>(null)
+  const [searchStatus, setSearchStatus] = useState<{ tone: 'success' | 'error'; message: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [workspaceBackgroundOpacityInput, setWorkspaceBackgroundOpacityInput] = useState('')
   const [workspaceBackgroundOverlayOpacityInput, setWorkspaceBackgroundOverlayOpacityInput] = useState('')
@@ -157,6 +163,8 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     setDragOffset({ x: 0, y: 0 })
     setBackupBusy(null)
     setBackupStatus(null)
+    setSearchBusy(null)
+    setSearchStatus(null)
     hasLocalPreviewEditsRef.current = false
     let cancelled = false
     ;(async () => {
@@ -360,6 +368,35 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
       return resp.Ok.data
     }
     throw new Error(resp.Err.error.message)
+  }
+
+  const handleRebuildSearchIndex = async () => {
+    if (!searchScope) {
+      setSearchStatus({
+        tone: 'error',
+        message: t('searchSettings.rebuildIndexUnavailable'),
+      })
+      return
+    }
+
+    setSearchBusy('rebuild-index')
+    setSearchStatus(null)
+    try {
+      const result = await rebuildSearchIndex(searchScope)
+      if (!result.ok) {
+        setSearchStatus({
+          tone: 'error',
+          message: result.message,
+        })
+        return
+      }
+      setSearchStatus({
+        tone: 'success',
+        message: t('searchSettings.rebuildIndexSuccess', { count: result.indexed }),
+      })
+    } finally {
+      setSearchBusy(null)
+    }
   }
 
   const handleExportBackup = async () => {
@@ -1809,6 +1846,21 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                   </div>
 
                   <div style={fieldGridStyle}>
+                    <div className="settings-field-label">{t('searchSettings.fts5Enabled')}</div>
+                    <label className="settings-checkbox-row">
+                      <input
+                        type="checkbox"
+                        checked={searchSettings.fts5Enabled}
+                        onChange={(event) =>
+                          setSearchSettings((prev) => ({
+                            ...prev,
+                            fts5Enabled: event.target.checked,
+                          }))
+                        }
+                      />
+                      <span>{t('searchSettings.fts5EnabledHint')}</span>
+                    </label>
+
                     <div className="settings-field-label">{t('searchSettings.parallelScanEnabled')}</div>
                     <label className="settings-checkbox-row">
                       <input
@@ -1848,6 +1900,27 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                   <div className="settings-panel-description" style={{ marginTop: 12 }}>
                     {t('searchSettings.parallelScanWorkersHint')}
                   </div>
+
+                  <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <Button
+                      variant="secondary"
+                      type="button"
+                      onClick={handleRebuildSearchIndex}
+                      disabled={!searchSettings.fts5Enabled || searchBusy !== null}
+                      loading={searchBusy === 'rebuild-index'}
+                    >
+                      {t('searchSettings.rebuildIndex')}
+                    </Button>
+                    <span className="settings-panel-description">{t('searchSettings.rebuildIndexHint')}</span>
+                  </div>
+
+                  {searchStatus ? (
+                    <div style={{ marginTop: 12 }}>
+                      <div className={`settings-status-message settings-status-${searchStatus.tone}`}>
+                        {searchStatus.message}
+                      </div>
+                    </div>
+                  ) : null}
                 </>
               )}
             </div>

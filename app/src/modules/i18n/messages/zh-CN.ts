@@ -35,6 +35,12 @@ export const zhCNMessages: MessageDictionary = {
   searchSettings: {
     title: '搜索',
     description: '配置工作区内容搜索的执行策略。高级选项会影响扫描时的 CPU 与磁盘占用。',
+    fts5Enabled: '启用 FTS5 索引搜索',
+    fts5EnabledHint: '启用后会优先使用 FTS5 索引搜索，适合反复搜索较大的工作区。',
+    rebuildIndex: '重建 FTS5 索引',
+    rebuildIndexHint: '在当前工作区范围内重新建立全文索引。',
+    rebuildIndexUnavailable: '当前还没有可用于重建索引的工作区范围。',
+    rebuildIndexSuccess: 'FTS5 索引重建完成，共索引 {count} 个文件。',
     parallelScanEnabled: '启用并行扫描',
     parallelScanEnabledHint: '在大型工作区中同时扫描多个文件，加快搜索速度。',
     parallelScanWorkers: '并行扫描线程数',
@@ -280,6 +286,8 @@ export const zhCNMessages: MessageDictionary = {
   searchPanel: {
     title: '搜索',
     placeholder: '搜索文件内容',
+    modeScan: '扫描',
+    modeFts5: 'FTS5',
     caseSensitive: '区分大小写',
     wholeWord: '全词匹配',
     regex: '正则',
@@ -290,6 +298,8 @@ export const zhCNMessages: MessageDictionary = {
     truncated: '结果已截断',
     statusSummarySingle: '搜索完成：单线程 · {files} 个文件 · {matches} 处命中。',
     statusSummaryParallel: '搜索完成：并行 {workers} 线程 · {files} 个文件 · {matches} 处命中。',
+    statusSummaryFts5Single: '搜索完成：FTS5 候选 {candidates} 个文件 · 单线程 · {matches} 处命中。',
+    statusSummaryFts5Parallel: '搜索完成：FTS5 候选 {candidates} 个文件 · 并行 {workers} 线程 · {matches} 处命中。',
     openResultFailed: '打开搜索结果失败。',
   },
   ai: {

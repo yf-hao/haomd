@@ -6,7 +6,7 @@ use image::ImageFormat;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_dialog::DialogExt;
 use tokio::fs;
 
@@ -138,6 +138,8 @@ pub struct BackupSettingsCfg {
 #[serde(rename_all = "camelCase")]
 pub struct SearchSettingsCfg {
     #[serde(default)]
+    pub fts5_enabled: Option<bool>,
+    #[serde(default)]
     pub parallel_scan_enabled: Option<bool>,
     #[serde(default)]
     pub parallel_scan_workers: Option<u32>,
@@ -200,6 +202,7 @@ pub fn default_editor_settings() -> EditorSettingsCfg {
             }),
         }),
         search: Some(SearchSettingsCfg {
+            fts5_enabled: Some(false),
             parallel_scan_enabled: Some(true),
             parallel_scan_workers: None,
         }),
@@ -381,7 +384,7 @@ pub(crate) fn cm_to_twips(value: f32) -> u32 {
     ((value.clamp(1.0, 5.0) / 2.54) * 1440.0).round() as u32
 }
 
-pub fn editor_settings_path(app: &AppHandle) -> std::io::Result<PathBuf> {
+pub fn editor_settings_path<R: Runtime>(app: &AppHandle<R>) -> std::io::Result<PathBuf> {
     if let Ok(mut dir) = app.path().config_dir() {
         dir.push("haomd");
         std::fs::create_dir_all(&dir)?;
@@ -392,7 +395,7 @@ pub fn editor_settings_path(app: &AppHandle) -> std::io::Result<PathBuf> {
     Ok(dir.join("editor_settings.json"))
 }
 
-pub fn editor_backgrounds_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
+pub fn editor_backgrounds_dir<R: Runtime>(app: &AppHandle<R>) -> std::io::Result<PathBuf> {
     if let Ok(mut dir) = app.path().config_dir() {
         dir.push("haomd");
         dir.push("editor-backgrounds");
@@ -950,6 +953,10 @@ async fn load_editor_settings_cfg(app: &AppHandle) -> Result<EditorSettingsCfg, 
 
             if let Some(ref mut search) = cfg.search {
                 if let Some(ref default_search) = default_cfg.search {
+                    if search.fts5_enabled.is_none() {
+                        search.fts5_enabled = default_search.fts5_enabled;
+                        changed = true;
+                    }
                     if search.parallel_scan_enabled.is_none() {
                         search.parallel_scan_enabled = default_search.parallel_scan_enabled;
                         changed = true;
@@ -982,6 +989,7 @@ async fn load_editor_settings_cfg(app: &AppHandle) -> Result<EditorSettingsCfg, 
 
 pub async fn load_search_settings_cfg(app: &AppHandle) -> SearchSettingsCfg {
     let default_cfg = default_editor_settings().search.unwrap_or(SearchSettingsCfg {
+        fts5_enabled: Some(false),
         parallel_scan_enabled: Some(true),
         parallel_scan_workers: None,
     });

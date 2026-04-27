@@ -26,6 +26,7 @@ mod notes_config;
 mod openai_compat;
 mod platform;
 mod protocol;
+mod search_db;
 mod search_commands;
 mod skill_scripts;
 mod skills;
@@ -114,6 +115,7 @@ macro_rules! app_invoke_handler {
             create_workspace_directory,
             write_workspace_file,
             search_workspace_contents,
+            rebuild_search_index,
             quit_app,
             // AI config and editor/document settings
             load_ai_settings,

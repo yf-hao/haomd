@@ -1,7 +1,7 @@
 use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, Runtime};
 use tokio::fs;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -11,7 +11,7 @@ pub struct NotesConfigData {
 }
 
 /// 存放路径：~/Library/Application Support/com.yfhao.haomd/notes_config.json
-fn notes_config_path(app: &AppHandle) -> std::io::Result<PathBuf> {
+pub fn notes_config_path<R: Runtime>(app: &AppHandle<R>) -> std::io::Result<PathBuf> {
     if let Ok(mut dir) = app.path().config_dir() {
         dir.push(app.config().identifier.as_str());
         std::fs::create_dir_all(&dir)?;

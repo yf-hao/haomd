@@ -97,6 +97,7 @@ export type BackupSettings = {
 }
 
 export type SearchSettings = {
+  fts5Enabled: boolean
   parallelScanEnabled: boolean
   parallelScanWorkers: number | null
 }
@@ -241,6 +242,7 @@ const defaultWebDavBackup: WebDavBackupSettings = {
 }
 
 const defaultSearchSettings: SearchSettings = {
+  fts5Enabled: false,
   parallelScanEnabled: true,
   parallelScanWorkers: null,
 }
@@ -417,6 +419,7 @@ export async function getSearchSettings(): Promise<SearchSettings> {
   const settings = await loadEditorSettings()
   const cfg = settings.search ?? {}
   return {
+    fts5Enabled: cfg.fts5Enabled ?? defaultSearchSettings.fts5Enabled,
     parallelScanEnabled: cfg.parallelScanEnabled ?? defaultSearchSettings.parallelScanEnabled,
     parallelScanWorkers: cfg.parallelScanWorkers ?? defaultSearchSettings.parallelScanWorkers,
   }

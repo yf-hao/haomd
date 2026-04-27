@@ -1,4 +1,4 @@
-use crate::{err_payload, new_trace_id, normalize_path, ok, ErrorCode, ResultPayload};
+use crate::{err_payload, new_trace_id, normalize_path, ok, search_db, ErrorCode, ResultPayload};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use tauri::{AppHandle, Manager};
@@ -86,7 +86,7 @@ pub async fn list_folder(
 
 #[tauri::command]
 pub async fn delete_fs_entry(
-    _app: AppHandle,
+    app: AppHandle,
     path: String,
     trace_id: Option<String>,
 ) -> ResultPayload<()> {
@@ -107,7 +107,10 @@ pub async fn delete_fs_entry(
             };
 
             match res {
-                Ok(()) => ok((), trace),
+                Ok(()) => {
+                    let _ = search_db::delete_search_index_entry(&app, &normalized);
+                    ok((), trace)
+                }
                 Err(err) => err_payload(ErrorCode::IoError, format!("删除失败: {err}"), trace),
             }
         }
@@ -120,7 +123,7 @@ pub async fn delete_fs_entry(
 
 #[tauri::command]
 pub async fn rename_fs_entry(
-    _app: AppHandle,
+    app: AppHandle,
     old_path: String,
     new_path: String,
     trace_id: Option<String>,
@@ -141,7 +144,10 @@ pub async fn rename_fs_entry(
     }
 
     match fs::rename(&src, &dst).await {
-        Ok(()) => ok((), trace),
+        Ok(()) => {
+            let _ = search_db::rename_search_index_entry(&app, &src, &dst);
+            ok((), trace)
+        }
         Err(err) => {
             use std::io::ErrorKind;
             let code = match err.kind() {

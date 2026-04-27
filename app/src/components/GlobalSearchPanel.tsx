@@ -4,6 +4,7 @@ import { useI18n } from '../modules/i18n/I18nContext'
 import { buildSearchScope } from '../modules/search/searchScopeService'
 import { searchWorkspaceContents } from '../modules/search/searchService'
 import type { SearchExecutionInfo, SearchFileResult } from '../modules/search/types'
+import { getSearchSettings } from '../modules/settings/editorSettings'
 import './GlobalSearchPanel.css'
 
 export type GlobalSearchPanelProps = {
@@ -52,6 +53,22 @@ function buildSearchStatusSummary(
   files: number,
   matches: number,
 ) {
+  if (execution?.engine === 'fts5') {
+    const candidates = execution.candidateFiles ?? files
+    if (execution.strategy === 'parallel') {
+      return t('searchPanel.statusSummaryFts5Parallel', {
+        workers: execution.workers,
+        candidates,
+        matches,
+      })
+    }
+
+    return t('searchPanel.statusSummaryFts5Single', {
+      candidates,
+      matches,
+    })
+  }
+
   if (execution?.strategy === 'parallel') {
     return t('searchPanel.statusSummaryParallel', {
       workers: execution.workers,
@@ -100,6 +117,7 @@ export const GlobalSearchPanel = memo(function GlobalSearchPanel({
   const [caseSensitive, setCaseSensitive] = useState(() => globalSearchPanelCache.caseSensitive)
   const [wholeWord, setWholeWord] = useState(() => globalSearchPanelCache.wholeWord)
   const [regex, setRegex] = useState(() => globalSearchPanelCache.regex)
+  const [fts5Enabled, setFts5Enabled] = useState(false)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState(() => globalSearchPanelCache.errorMessage)
   const [results, setResults] = useState(() => globalSearchPanelCache.results)
@@ -120,6 +138,18 @@ export const GlobalSearchPanel = memo(function GlobalSearchPanel({
   }, [query, caseSensitive, wholeWord, regex, errorMessage, results])
 
   useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const settings = await getSearchSettings()
+      if (cancelled) return
+      setFts5Enabled(settings.fts5Enabled)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
     const trimmed = query.trim()
     const currentRequestId = String(++requestSeqRef.current)
 
@@ -136,7 +166,7 @@ export const GlobalSearchPanel = memo(function GlobalSearchPanel({
 
       const result = await searchWorkspaceContents({
         requestId: currentRequestId,
-        mode: 'scan',
+        mode: fts5Enabled && !regex ? 'fts5' : 'scan',
         query: trimmed,
         scope,
         caseSensitive,
@@ -181,7 +211,7 @@ export const GlobalSearchPanel = memo(function GlobalSearchPanel({
     return () => {
       window.clearTimeout(timer)
     }
-  }, [query, scope, caseSensitive, wholeWord, regex, onStatusMessage, t])
+  }, [query, scope, caseSensitive, wholeWord, regex, fts5Enabled, onStatusMessage, t])
 
   return (
     <SidebarBackgroundShell as="aside" className="global-search-panel" style={style}>
@@ -189,32 +219,34 @@ export const GlobalSearchPanel = memo(function GlobalSearchPanel({
 
       <div className="global-search-panel-controls">
         <div className="global-search-input-row">
-          <input
-            className="global-search-input"
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t('searchPanel.placeholder')}
-          />
-          <div className="global-search-inline-actions">
-            <SearchToggleButton
-              active={caseSensitive}
-              label={t('searchPanel.caseSensitive')}
-              icon="Aa"
-              onClick={() => setCaseSensitive((prev) => !prev)}
+          <div className="global-search-input-shell">
+            <input
+              className="global-search-input"
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t('searchPanel.placeholder')}
             />
-            <SearchToggleButton
-              active={wholeWord}
-              label={t('searchPanel.wholeWord')}
-              icon="[ab]"
-              onClick={() => setWholeWord((prev) => !prev)}
-            />
-            <SearchToggleButton
-              active={regex}
-              label={t('searchPanel.regex')}
-              icon=".*"
-              onClick={() => setRegex((prev) => !prev)}
-            />
+            <div className="global-search-inline-actions">
+              <SearchToggleButton
+                active={caseSensitive}
+                label={t('searchPanel.caseSensitive')}
+                icon="Aa"
+                onClick={() => setCaseSensitive((prev) => !prev)}
+              />
+              <SearchToggleButton
+                active={wholeWord}
+                label={t('searchPanel.wholeWord')}
+                icon="[ab]"
+                onClick={() => setWholeWord((prev) => !prev)}
+              />
+              <SearchToggleButton
+                active={regex}
+                label={t('searchPanel.regex')}
+                icon=".*"
+                onClick={() => setRegex((prev) => !prev)}
+              />
+            </div>
           </div>
         </div>
       </div>

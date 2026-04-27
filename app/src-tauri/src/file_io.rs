@@ -1,6 +1,6 @@
 use crate::{
-    err_payload, new_trace_id, ok, refresh_app_menu, service_error, update_recent, ErrorCode,
-    FilePayload, ResultPayload, ServiceError, WriteResult,
+    err_payload, new_trace_id, ok, refresh_app_menu, search_db, service_error, update_recent,
+    ErrorCode, FilePayload, ResultPayload, ServiceError, WriteResult,
 };
 use log::info;
 use once_cell::sync::Lazy;
@@ -262,6 +262,9 @@ pub async fn write_file(
             data.path,
             trace_id.clone().unwrap_or_default()
         );
+        if let Ok(normalized) = normalize_path(&data.path) {
+            let _ = search_db::upsert_search_index_entry(&app, &normalized);
+        }
         if let Err(err) = update_recent(&app, &data.path, false).await {
             info!(
                 "action=log_recent_from_write outcome=err path={} trace_id={} error={}",
@@ -279,7 +282,7 @@ pub async fn write_file(
 
 #[tauri::command]
 pub async fn write_file_no_recent(
-    _app: AppHandle,
+    app: AppHandle,
     path: String,
     content: String,
     expected_mtime: Option<u64>,
@@ -294,6 +297,9 @@ pub async fn write_file_no_recent(
             data.path,
             trace_id.clone().unwrap_or_default()
         );
+        if let Ok(normalized) = normalize_path(&data.path) {
+            let _ = search_db::upsert_search_index_entry(&app, &normalized);
+        }
     }
 
     result

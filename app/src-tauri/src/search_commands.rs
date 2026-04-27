@@ -1,6 +1,6 @@
 use crate::{
     editor_settings::load_search_settings_cfg, err_payload, new_trace_id, normalize_path, ok,
-    ErrorCode, ResultPayload,
+    search_db, ErrorCode, ResultPayload,
 };
 use regex::RegexBuilder;
 use serde::{Deserialize, Serialize};
@@ -79,9 +79,12 @@ struct SearchScanOutcome {
 pub struct SearchExecutionInfo {
     pub strategy: String,
     pub workers: usize,
+    pub engine: Option<String>,
+    pub indexed_files: Option<usize>,
+    pub candidate_files: Option<usize>,
 }
 
-fn normalize_display_path(path: &Path) -> String {
+pub(crate) fn normalize_display_path(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
 
@@ -129,7 +132,7 @@ fn collect_root_files(dir: &Path, seen: &mut HashSet<String>, files: &mut Vec<Pa
     }
 }
 
-fn gather_search_files(scope: &SearchScope) -> Vec<PathBuf> {
+pub(crate) fn gather_search_files(scope: &SearchScope) -> Vec<PathBuf> {
     let mut seen = HashSet::new();
     let mut files = Vec::new();
 
@@ -432,55 +435,21 @@ fn scan_files_in_parallel(
     })
 }
 
-#[tauri::command]
-pub async fn search_workspace_contents(
-    app: AppHandle,
-    request: SearchRequest,
-) -> ResultPayload<SearchResponse> {
-    let trace = new_trace_id();
-
-    if request.mode != "scan" {
-        return err_payload(
-            ErrorCode::UNSUPPORTED,
-            format!("暂不支持搜索模式：{}", request.mode),
-            trace,
-        );
-    }
-
-    let query = request.query.trim();
-    if query.is_empty() {
-        return ok(
-            SearchResponse {
-                files: Vec::new(),
-                total_matches: 0,
-                total_files_scanned: 0,
-                truncated: false,
-                execution: None,
-                request_id: Some(request.request_id.clone()),
-            },
-            trace,
-        );
-    }
-
-    let regex = match build_regex_pattern(&request) {
-        Ok(value) => value,
-        Err(err) => {
-            return err_payload(
-                ErrorCode::UNKNOWN,
-                format!("正则表达式无效: {err}"),
-                trace,
-            );
-        }
-    };
-
-    let files = gather_search_files(&request.scope);
+fn execute_scan_search(
+    request: &SearchRequest,
+    query: &str,
+    files: Vec<PathBuf>,
+    regex: Option<&regex::Regex>,
+    engine: &str,
+    indexed_files: Option<usize>,
+    candidate_files: Option<usize>,
+    parallel_scan_enabled: bool,
+    configured_workers: Option<usize>,
+) -> SearchResponse {
     let case_sensitive = request.case_sensitive.unwrap_or(false);
     let whole_word = request.whole_word.unwrap_or(false);
     let max_results = request.max_results.unwrap_or(200).max(1);
     let max_hits_per_file = request.max_hits_per_file.unwrap_or(20).max(1);
-    let search_settings = load_search_settings_cfg(&app).await;
-    let parallel_scan_enabled = search_settings.parallel_scan_enabled.unwrap_or(true);
-    let configured_workers = search_settings.parallel_scan_workers.map(|value| value.max(1) as usize);
     let auto_workers = default_parallel_scan_workers();
     let workers = configured_workers
         .unwrap_or(auto_workers)
@@ -493,28 +462,19 @@ pub async fn search_workspace_contents(
             "single-thread".to_string()
         },
         workers: if use_parallel { workers } else { 1 },
+        engine: Some(engine.to_string()),
+        indexed_files,
+        candidate_files,
     };
-    let outcomes = if use_parallel {
-        scan_files_in_parallel(
-            &files,
-            query,
-            case_sensitive,
-            whole_word,
-            regex.as_ref(),
-            max_hits_per_file,
-            workers,
-        )
-    } else {
-        scan_files_in_parallel(
-            &files,
-            query,
-            case_sensitive,
-            whole_word,
-            regex.as_ref(),
-            max_hits_per_file,
-            1,
-        )
-    };
+    let outcomes = scan_files_in_parallel(
+        &files,
+        query,
+        case_sensitive,
+        whole_word,
+        regex,
+        max_hits_per_file,
+        if use_parallel { workers } else { 1 },
+    );
 
     let mut file_results = outcomes
         .iter()
@@ -544,17 +504,144 @@ pub async fn search_workspace_contents(
         limited_results.push(file);
     }
 
-    ok(
-        SearchResponse {
-            files: limited_results,
-            total_matches,
-            total_files_scanned,
-            truncated,
-            execution: Some(execution),
-            request_id: Some(request.request_id),
-        },
-        trace,
-    )
+    SearchResponse {
+        files: limited_results,
+        total_matches,
+        total_files_scanned,
+        truncated,
+        execution: Some(execution),
+        request_id: Some(request.request_id.clone()),
+    }
+}
+
+#[tauri::command]
+pub async fn search_workspace_contents(
+    app: AppHandle,
+    request: SearchRequest,
+) -> ResultPayload<SearchResponse> {
+    let trace = new_trace_id();
+
+    let query = request.query.trim();
+    if query.is_empty() {
+        return ok(
+            SearchResponse {
+                files: Vec::new(),
+                total_matches: 0,
+                total_files_scanned: 0,
+                truncated: false,
+                execution: None,
+                request_id: Some(request.request_id.clone()),
+            },
+            trace,
+        );
+    }
+
+    let regex = match build_regex_pattern(&request) {
+        Ok(value) => value,
+        Err(err) => {
+            return err_payload(
+                ErrorCode::UNKNOWN,
+                format!("正则表达式无效: {err}"),
+                trace,
+            );
+        }
+    };
+
+    let search_settings = load_search_settings_cfg(&app).await;
+    let parallel_scan_enabled = search_settings.parallel_scan_enabled.unwrap_or(true);
+    let configured_workers = search_settings
+        .parallel_scan_workers
+        .map(|value| value.max(1) as usize);
+
+    let response = match request.mode.as_str() {
+        "scan" => execute_scan_search(
+            &request,
+            query,
+            gather_search_files(&request.scope),
+            regex.as_ref(),
+            "scan",
+            None,
+            None,
+            parallel_scan_enabled,
+            configured_workers,
+        ),
+        "fts5" => {
+            if request.regex.unwrap_or(false) {
+                execute_scan_search(
+                    &request,
+                    query,
+                    gather_search_files(&request.scope),
+                    regex.as_ref(),
+                    "scan",
+                    None,
+                    None,
+                    parallel_scan_enabled,
+                    configured_workers,
+                )
+            } else {
+                if !search_settings.fts5_enabled.unwrap_or(false) {
+                    return err_payload(
+                        ErrorCode::UNSUPPORTED,
+                        "FTS5 未启用，请先在设置中开启。".to_string(),
+                        trace,
+                    );
+                }
+
+                let indexed_files = match search_db::ensure_search_index_for_scope(&app, &request.scope) {
+                    Ok(value) => value,
+                    Err(message) => {
+                        return err_payload(ErrorCode::UNKNOWN, message, trace);
+                    }
+                };
+                let candidate_limit = request
+                    .max_results
+                    .unwrap_or(200)
+                    .max(1)
+                    .saturating_mul(8)
+                    .clamp(64, 2000);
+                let candidate_files =
+                    match search_db::search_indexed_candidates(&app, query, candidate_limit) {
+                        Ok(value) => value,
+                        Err(message) => {
+                            return err_payload(ErrorCode::UNKNOWN, message, trace);
+                        }
+                    };
+
+                execute_scan_search(
+                    &request,
+                    query,
+                    candidate_files.clone(),
+                    regex.as_ref(),
+                    "fts5",
+                    Some(indexed_files),
+                    Some(candidate_files.len()),
+                    parallel_scan_enabled,
+                    configured_workers,
+                )
+            }
+        }
+        _ => {
+            return err_payload(
+                ErrorCode::UNSUPPORTED,
+                format!("暂不支持搜索模式：{}", request.mode),
+                trace,
+            );
+        }
+    };
+
+    ok(response, trace)
+}
+
+#[tauri::command]
+pub async fn rebuild_search_index(
+    app: AppHandle,
+    scope: SearchScope,
+) -> ResultPayload<usize> {
+    let trace = new_trace_id();
+    match search_db::rebuild_search_index_for_scope(&app, &scope) {
+        Ok(indexed) => ok(indexed, trace),
+        Err(message) => err_payload(ErrorCode::UNKNOWN, message, trace),
+    }
 }
 
 #[cfg(test)]

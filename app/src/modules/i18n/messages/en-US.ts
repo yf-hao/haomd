@@ -35,6 +35,12 @@ export const enUSMessages: MessageDictionary = {
   searchSettings: {
     title: 'Search',
     description: 'Configure execution strategy for workspace content search. Advanced options affect CPU and disk usage during scanning.',
+    fts5Enabled: 'Enable FTS5 indexed search',
+    fts5EnabledHint: 'When enabled, searches prefer the FTS5 index, which is better for repeated searches in larger workspaces.',
+    rebuildIndex: 'Rebuild FTS5 index',
+    rebuildIndexHint: 'Rebuild the full-text index for the current workspace scope.',
+    rebuildIndexUnavailable: 'No current workspace scope is available for rebuilding the index.',
+    rebuildIndexSuccess: 'FTS5 index rebuilt. Indexed {count} files.',
     parallelScanEnabled: 'Enable parallel scan',
     parallelScanEnabledHint: 'Allow scanning multiple files at the same time for large workspaces.',
     parallelScanWorkers: 'Parallel scan workers',
@@ -280,6 +286,8 @@ export const enUSMessages: MessageDictionary = {
   searchPanel: {
     title: 'Search',
     placeholder: 'Search file contents',
+    modeScan: 'Scan',
+    modeFts5: 'FTS5',
     caseSensitive: 'Match Case',
     wholeWord: 'Whole Word',
     regex: 'Use Regex',
@@ -290,6 +298,8 @@ export const enUSMessages: MessageDictionary = {
     truncated: 'Results truncated',
     statusSummarySingle: 'Search finished: single-thread · {files} files · {matches} matches.',
     statusSummaryParallel: 'Search finished: parallel {workers} workers · {files} files · {matches} matches.',
+    statusSummaryFts5Single: 'Search finished: FTS5 candidates {candidates} files · single-thread · {matches} matches.',
+    statusSummaryFts5Parallel: 'Search finished: FTS5 candidates {candidates} files · parallel {workers} workers · {matches} matches.',
     openResultFailed: 'Failed to open search result.',
   },
   ai: {

@@ -25,6 +25,8 @@ import { SidebarBackgroundShell } from './SidebarBackgroundShell'
 import { Welcome } from './Welcome'
 import { SearchBar } from './Editor/SearchBar'
 import type { EditorTransientSearchQuery } from './EditorPane'
+import { buildSearchScope } from '../modules/search/searchScopeService'
+import type { SearchScope } from '../modules/search/types'
 import { useOutlineModel } from '../hooks/useOutlineModel'
 import type { OutlineItem } from '../modules/outline/parser'
 import type { OutlineHeading } from '../modules/outline/outlineSource'
@@ -153,6 +155,7 @@ export interface WorkspaceShellProps {
   onDocumentStatsChange?: (stats: { charCount: number | null }) => void
   /** 将 WorkspaceShell 内部的 statusMessage 透出给上层 App 用于状态栏展示 */
   onStatusMessageChange?: (msg: string) => void
+  onSearchScopeChange?: (scope: SearchScope) => void
 }
 
 const countDocumentChars = (text: string): number => {
@@ -173,6 +176,7 @@ export function WorkspaceShell({
   onInitialActionHandled,
   onDocumentStatsChange,
   onStatusMessageChange,
+  onSearchScopeChange,
 }: WorkspaceShellProps) {
   const { t } = useI18n()
   const { themeSettings } = useThemeContext()
@@ -733,6 +737,16 @@ export function WorkspaceShell({
       onStatusMessageChange(statusMessage)
     }
   }, [statusMessage, onStatusMessageChange])
+
+  useEffect(() => {
+    if (typeof onSearchScopeChange !== 'function') return
+    onSearchScopeChange(
+      buildSearchScope({
+        folderRoots: sidebar.folderRoots,
+        standaloneFiles: sidebar.standaloneFiles,
+      }),
+    )
+  }, [sidebar.folderRoots, sidebar.standaloneFiles, onSearchScopeChange])
 
   // PDF Panel hook
   const {
