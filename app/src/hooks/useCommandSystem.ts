@@ -46,6 +46,8 @@ export type CommandSystemParams = CommandContext & {
 }
 
 export function useCommandSystem(params: CommandSystemParams) {
+  const MENU_DUPLICATE_WINDOW_MS = 250
+  const menuDedupActions = new Set(['ai_chat', 'ai_ask_file', 'ai_ask_selection', 'find'])
   const {
     layout,
     setLayout,
@@ -105,6 +107,7 @@ export function useCommandSystem(params: CommandSystemParams) {
   } = params
 
   const aiChatOpeningRef = useRef(false)
+  const recentLocalDispatchRef = useRef(new Map<string, number>())
   const isAiChatOpen = useCallback(() => aiChatOpen, [aiChatOpen])
   const isAiChatOpening = useCallback(() => aiChatOpeningRef.current, [])
   const setAiChatOpening = useCallback((opening: boolean) => {
@@ -263,7 +266,18 @@ export function useCommandSystem(params: CommandSystemParams) {
   )
 
   const dispatchAction = useCallback(
-    async (action: string) => {
+    async (action: string, source: 'local' | 'menu' = 'local') => {
+      if (source === 'menu' && menuDedupActions.has(action)) {
+        const lastLocalTs = recentLocalDispatchRef.current.get(action)
+        if (typeof lastLocalTs === 'number' && Date.now() - lastLocalTs <= MENU_DUPLICATE_WINDOW_MS) {
+          return
+        }
+      }
+
+      if (source === 'local' && menuDedupActions.has(action)) {
+        recentLocalDispatchRef.current.set(action, Date.now())
+      }
+
       const handler = commands[action]
       if (!handler) {
         setStatusMessage(t?.('commands.menuNotImplemented') ?? '暂未实现的菜单')
@@ -271,7 +285,7 @@ export function useCommandSystem(params: CommandSystemParams) {
       }
       await Promise.resolve(handler())
     },
-    [commands, setStatusMessage],
+    [commands, setStatusMessage, t],
   )
 
   // 统一处理快捷键映射
@@ -295,7 +309,7 @@ export function useCommandSystem(params: CommandSystemParams) {
 
       // 避免在 Tauri Mac 中与系统菜单快捷键（会发 menu://action 事件）重复触发。
       // Windows/Linux 下原生菜单加速键响应不如 Mac 稳定，且 JS 处理与原生通常不冲突，因此仅在 Mac 下阻断。
-      const tauriBlocks = ['s', 'o', 'n', 'w', 'k', 'l', 'd', 'f'] as const
+      const tauriBlocks = ['s', 'o', 'n', 'w'] as const
       if (isTauri && isMac && tauriBlocks.includes(key as (typeof tauriBlocks)[number])) return
 
       if (key === 's') {
@@ -409,7 +423,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     const unlisten = onMenuAction((actionId) => {
       // 这些菜单在 App 层或其他地方单独处理，这里忽略
       if (actionId === 'haomd_settings' || actionId === 'ai_settings' || actionId === 'agent_settings' || actionId === 'ai_prompt_settings' || actionId === 'toggle_status_bar') return
-      void dispatchAction(actionId)
+      void dispatchAction(actionId, 'menu')
     })
 
     return () => {
