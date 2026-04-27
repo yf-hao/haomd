@@ -104,6 +104,45 @@ function SearchToggleButton({ active, label, icon, onClick }: SearchToggleButton
   )
 }
 
+function splitDisplayPath(path: string) {
+  const normalized = path.replace(/\\/g, '/')
+  const lastSlash = normalized.lastIndexOf('/')
+  if (lastSlash < 0) {
+    return { fileName: normalized, parentPath: '' }
+  }
+  return {
+    fileName: normalized.slice(lastSlash + 1),
+    parentPath: normalized.slice(0, lastSlash),
+  }
+}
+
+function escapeRegExp(input: string) {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function renderPreview(preview: string, query: string, caseSensitive: boolean, regex: boolean) {
+  const trimmed = query.trim()
+  if (!trimmed) return preview
+  if (regex) return preview
+
+  const safePattern = escapeRegExp(trimmed)
+  const flags = caseSensitive ? 'g' : 'gi'
+  const matcher = new RegExp(safePattern, flags)
+  const parts = preview.split(matcher)
+  const matches = preview.match(matcher)
+  if (!matches || parts.length === 1) return preview
+
+  return parts.flatMap((part, index) => {
+    if (index >= matches.length) return [part]
+    return [
+      part,
+      <mark key={`m-${index}`} className="global-search-hit-mark">
+        {matches[index]}
+      </mark>,
+    ]
+  })
+}
+
 export const GlobalSearchPanel = memo(function GlobalSearchPanel({
   panelWidth,
   folderRoots,
@@ -271,10 +310,18 @@ export const GlobalSearchPanel = memo(function GlobalSearchPanel({
               {results.truncated ? <span> · {t('searchPanel.truncated')}</span> : null}
             </div>
             <div className="global-search-results">
-              {results.files.map((file) => (
+              {results.files.map((file) => {
+                const display = splitDisplayPath(file.path)
+                return (
                 <div key={file.path} className="global-search-file-group">
-                  <div className="global-search-file-path" title={file.path}>
-                    {file.path}
+                  <div className="global-search-file-header" title={file.path}>
+                    <div className="global-search-file-meta">
+                      <div className="global-search-file-name">{display.fileName}</div>
+                      <div className="global-search-file-path">
+                        {display.parentPath || file.path}
+                      </div>
+                    </div>
+                    <div className="global-search-file-count">{file.matchCount}</div>
                   </div>
                   <div className="global-search-hit-list">
                     {file.hits.map((hit, index) => (
@@ -294,12 +341,14 @@ export const GlobalSearchPanel = memo(function GlobalSearchPanel({
                           })}
                       >
                         <span className="global-search-hit-line">{hit.line}</span>
-                        <span className="global-search-hit-preview">{hit.preview}</span>
+                        <span className="global-search-hit-preview">
+                          {renderPreview(hit.preview, query, caseSensitive, regex)}
+                        </span>
                       </button>
                     ))}
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           </>
         )}
