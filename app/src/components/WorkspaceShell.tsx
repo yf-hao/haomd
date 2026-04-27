@@ -185,6 +185,7 @@ export function WorkspaceShell({
   const [activeLine, setActiveLine] = useState(1)
   // 预览专用的行号：对 activeLine 做轻量节流后再驱动 Preview，降低重渲染频率
   const [previewActiveLine, setPreviewActiveLine] = useState(1)
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false)
   const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null)
   const [activeWorkspaceDirectoryPath, setActiveWorkspaceDirectoryPath] = useState<string | null>(null)
   const markdownRef = useRef(markdown)
@@ -335,6 +336,15 @@ export function WorkspaceShell({
 
   const isPreviewVisible = effectiveLayout !== 'editor-only'
   const prevIsPreviewVisibleRef = useRef(isPreviewVisible)
+  const previewSyncTimerRef = useRef<number | null>(null)
+  const skipNextPreviewThrottleRef = useRef(false)
+
+  const clearPreviewSyncTimer = useCallback(() => {
+    if (previewSyncTimerRef.current != null) {
+      window.clearTimeout(previewSyncTimerRef.current)
+      previewSyncTimerRef.current = null
+    }
+  }, [])
 
   // 在 editor/preview 区域统一处理滚轮：如果鼠标横坐标落在编辑器列内，就把滚动量转发给编辑器的 .cm-scroller
   useEffect(() => {
@@ -640,14 +650,28 @@ export function WorkspaceShell({
     // 这样避免了「输入 -> 更新 tabs -> tabs 触发 effect -> effect 用旧 tab.content 回滚输入」的循环
     if (isTabSwitch || tab.content !== markdownRef.current) {
       setMarkdown(tab.content)
-      setPreviewValue(tab.content)
+      if (isTabSwitch && isPreviewVisible) {
+        clearPreviewSyncTimer()
+        skipNextPreviewThrottleRef.current = true
+        setIsPreviewLoading(true)
+        requestAnimationFrame(() => {
+          previewSyncTimerRef.current = window.setTimeout(() => {
+            previewSyncTimerRef.current = null
+            setPreviewValue(tab.content)
+            setIsPreviewLoading(false)
+          }, 0)
+        })
+      } else {
+        setPreviewValue(tab.content)
+        setIsPreviewLoading(false)
+      }
 
       if (isTabSwitch) {
         lastActiveIdForPreviewRef.current = activeId
         restoreCursorRef.current?.(tab.path ?? null)
       }
     }
-  }, [activeId, tabs])
+  }, [activeId, tabs, isPreviewVisible, clearPreviewSyncTimer])
 
   // Window Title：不再显示文件名，保持标题栏空白
   useEffect(() => {
@@ -1636,18 +1660,34 @@ export function WorkspaceShell({
   // 预览内容只在预览可见时才节流同步，避免 editor-only 模式下做无意义渲染
   useEffect(() => {
     if (!isPreviewVisible) return
+    if (skipNextPreviewThrottleRef.current) {
+      skipNextPreviewThrottleRef.current = false
+      return
+    }
 
-    const timer = setTimeout(() => setPreviewValue(markdown), 150)
+    clearPreviewSyncTimer()
+    const timer = window.setTimeout(() => {
+      previewSyncTimerRef.current = null
+      setPreviewValue(markdown)
+    }, 150)
+    previewSyncTimerRef.current = timer
     return () => clearTimeout(timer)
-  }, [markdown, isPreviewVisible])
+  }, [markdown, isPreviewVisible, clearPreviewSyncTimer])
 
   // 当预览从不可见切换为可见时，立即用最新 markdown 做一次全量同步
   useEffect(() => {
     if (!prevIsPreviewVisibleRef.current && isPreviewVisible) {
       setPreviewValue(markdown)
+      setIsPreviewLoading(false)
     }
     prevIsPreviewVisibleRef.current = isPreviewVisible
   }, [isPreviewVisible, markdown])
+
+  useEffect(() => {
+    return () => {
+      clearPreviewSyncTimer()
+    }
+  }, [clearPreviewSyncTimer])
 
   // 轻量节流的字数统计：在用户停止输入一小段时间后上报当前文档的总字数
   useEffect(() => {
@@ -1676,12 +1716,26 @@ export function WorkspaceShell({
 
   const applyOpenedContent = useCallback((content: string) => {
     setMarkdown(content)
-    setPreviewValue(content)
+    if (isPreviewVisible) {
+      clearPreviewSyncTimer()
+      skipNextPreviewThrottleRef.current = true
+      setIsPreviewLoading(true)
+      requestAnimationFrame(() => {
+        previewSyncTimerRef.current = window.setTimeout(() => {
+          previewSyncTimerRef.current = null
+          setPreviewValue(content)
+          setIsPreviewLoading(false)
+        }, 0)
+      })
+    } else {
+      setPreviewValue(content)
+      setIsPreviewLoading(false)
+    }
     setActiveLine(1)
     // 注意：不再调用 updateActiveContent。调用方 (open_file 命令) 在此之前已通过
     // createTab({ path, content }) 创建了新标签并设置了内容。而 updateActiveContent
     // 闭包中的 activeId 仍指向旧标签，会误将旧标签内容覆写为新文件内容。
-  }, [])
+  }, [isPreviewVisible, clearPreviewSyncTimer])
 
   const saveWithPdfGuard = useCallback(async () => {
     if (isPdfActive) {
@@ -1730,13 +1784,12 @@ export function WorkspaceShell({
     if (resp.ok) {
       const tab = createTab({ path: resp.data.path, content: '' })
       updateTabContent(tab.id, resp.data.content, { markDirty: false })
-      setMarkdown(resp.data.content)
-      setPreviewValue(resp.data.content)
+      applyOpenedContent(resp.data.content)
       // 标记该标签页需要在编辑器就绪时恢复光标位置
       markPendingRestoreRef.current?.(tab.id)
     }
     return resp
-  }, [isCreatingTab, openFromPath, createTab, updateTabContent, setMarkdown, setPreviewValue, setActiveTab])
+  }, [isCreatingTab, openFromPath, createTab, updateTabContent, setActiveTab, applyOpenedContent])
 
   const openFileFromSidebar = useCallback(async (path: string) => {
     if (isCreatingTab) return { ok: false } as any
@@ -3457,6 +3510,8 @@ export function WorkspaceShell({
                         activeLine={previewActiveLine}
                         previewWidth={previewWidthForRender}
                         effectiveLayout={effectiveLayout}
+                        loading={isPreviewLoading}
+                        loadingLabel={t('workspace.loadingPreview')}
                         filePath={filePath}
                         foldRegions={foldRegions}
                         onPreviewLineClick={handlePreviewLineClick}

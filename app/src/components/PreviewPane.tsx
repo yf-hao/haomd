@@ -13,6 +13,8 @@ export type PreviewPaneProps = {
   activeLine: number
   previewWidth: number
   effectiveLayout: LayoutType
+  loading?: boolean
+  loadingLabel?: string
   filePath?: string | null
   foldRegions?: FoldRegion[]
   /** 点击预览中的块时回调对应的源行号 */
@@ -45,7 +47,7 @@ function HtmlPreview({ html }: HtmlPreviewProps) {
   return <iframe ref={iframeRef} className="html-preview-frame" />
 }
 
-export function PreviewPane({ value, activeLine, previewWidth, effectiveLayout, filePath, foldRegions, onPreviewLineClick, onSelectionChange }: PreviewPaneProps) {
+export function PreviewPane({ value, activeLine, previewWidth, effectiveLayout, loading = false, loadingLabel, filePath, foldRegions, onPreviewLineClick, onSelectionChange }: PreviewPaneProps) {
   const style: CSSProperties = {}
   const { themeSettings } = useThemeContext()
   const previewRootRef = useRef<HTMLElement | null>(null)
@@ -174,6 +176,11 @@ export function PreviewPane({ value, activeLine, previewWidth, effectiveLayout, 
             onSelectionChange={onSelectionChange}
           />
         )}
+        {loading ? (
+          <div className="preview-loading-overlay">
+            <span className="preview-loading-text">{loadingLabel ?? 'Loading preview...'}</span>
+          </div>
+        ) : null}
       </div>
     </section>
   )
