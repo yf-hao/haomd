@@ -1591,19 +1591,65 @@ button:disabled {
   overflow: auto;
   padding: 16px;
   box-sizing: border-box;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
 }
 
-/* PDF 文本层：叠加在 canvas 之上的真实 DOM 文本，用于选择/复制 */
-.pdf-text-layer {
+.pdf-page-slot {
+  width: max-content;
+  max-width: 100%;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+}
+
+.pdf-official-page-view,
+.pdf-official-page-view .page,
+.pdf-official-page-view .canvasWrapper,
+.pdf-official-page-view canvas {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+}
+
+.pdf-official-page-view .page {
+  margin: 0;
+  border: none;
+}
+
+.pdf-official-page-view .textLayer,
+.pdf-official-page-view .textLayer :is(span, br) {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  user-select: text;
+}
+
+.pdf-official-page-view {
+  position: relative;
+  width: max-content;
+}
+
+.pdf-official-page-host {
+  position: relative;
+  z-index: 0;
+}
+
+.pdf-official-page-view .textLayer ::selection {
+  background: transparent;
+}
+
+.pdf-selection-overlay {
   position: absolute;
   inset: 0;
-  pointer-events: auto;
-  color: transparent;
-  /* 默认不干扰视觉，只在选择时高亮 */
+  pointer-events: none;
+  z-index: 1;
 }
 
-.pdf-text-layer ::selection {
-  background: var(--theme-accent-soft-accent-bg);
+.pdf-selection-block {
+  position: absolute;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--theme-accent-primary) 22%, transparent);
 }
 
 .pdf-viewer-sidebar {

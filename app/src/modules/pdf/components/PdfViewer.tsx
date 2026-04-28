@@ -1,14 +1,14 @@
-import type { ReactElement } from 'react'
 import { useRef, useState, useEffect } from 'react'
 import type { PDFDocumentProxy } from '../hooks/usePdfDocument'
 import { usePdfDocument } from '../hooks/usePdfDocument'
-import { useVirtualPages } from '../hooks/useVirtualPages'
-import { PdfPage } from './PdfPage'
+import { PdfViewport, type PdfViewportHandle } from './PdfViewport'
 
 type PdfReadingState = {
   page: number
   scale: number
 }
+
+const PDF_CSS_UNITS = 96 / 72
 
 function getPdfStateKey(filePath: string) {
   return `pdf-reading-state:${filePath}`
@@ -43,12 +43,11 @@ function savePdfReadingState(filePath: string, state: PdfReadingState) {
 export interface PdfViewerProps {
   filePath: string
   onClose?: () => void
-  /** 向父组件注册一个用于获取当前 PDF 文本选区的 getter */
   onRegisterSelectionGetter?: (getter: (() => string | null) | null) => void
 }
 
 export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProps) {
-  const containerRef = useRef<HTMLDivElement | null>(null)
+  const viewportRef = useRef<PdfViewportHandle | null>(null)
   const [scale, setScale] = useState(1.25)
   const { pdfDocument, pageCount, loading, error } = usePdfDocument(filePath)
   const [currentPage, setCurrentPage] = useState(1)
@@ -62,12 +61,9 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
   const zoomPercent = Math.round(scale * 100)
 
   const scrollToPageWithScale = (page: number, scaleForScroll: number) => {
-    const el = containerRef.current
-    if (!el) return
-
     const baseHeight = basePageHeight ?? 800
     const estimatedPageHeight = Math.max(1, baseHeight * scaleForScroll)
-    el.scrollTop = (page - 1) * estimatedPageHeight
+    viewportRef.current?.scrollToPage(page, estimatedPageHeight)
   }
 
   const handleZoomIn = () => {
@@ -93,12 +89,11 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
   }
 
   const handleZoomFitWidth = () => {
-    const el = containerRef.current
-    if (!el || !basePageWidth) return
+    const containerWidth = viewportRef.current?.getContainerWidth()
+    if (!containerWidth || !basePageWidth) return
 
-    // 可用内容宽度：减去左右 padding（与 .pdf-scroll-container 的 16px 对应）
     const horizontalPadding = 32
-    const availableWidth = el.clientWidth - horizontalPadding
+    const availableWidth = containerWidth - horizontalPadding
     if (availableWidth <= 0) return
 
     const fitScale = availableWidth / basePageWidth
@@ -108,7 +103,6 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     scrollToPageWithScale(currentPage, clamped)
   }
 
-  // 当文档或总页数变化时，确保当前页在合法范围内
   useEffect(() => {
     if (!pageCount || pageCount <= 0) {
       setCurrentPage(1)
@@ -121,12 +115,10 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     }
   }, [pageCount, currentPage])
 
-  // 文档加载完成后：优先从 localStorage 恢复阅读状态；若无记录，则默认“适配宽度”
   useEffect(() => {
     if (!pdfDocument || !pageCount || pageCount <= 0) return
 
     const saved = loadPdfReadingState(filePath)
-    const el = containerRef.current
 
     if (saved) {
       const clampedPage = Math.min(Math.max(saved.page, 1), pageCount)
@@ -135,19 +127,15 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
       setScale(clampedScale)
       setCurrentPage(clampedPage)
       setPageInput(String(clampedPage))
-
-      if (el) {
-        const estimatedPageHeight = Math.max(1, (basePageHeight ?? 800) * clampedScale)
-        el.scrollTop = (clampedPage - 1) * estimatedPageHeight
-      }
+      scrollToPageWithScale(clampedPage, clampedScale)
       return
     }
 
-    // 没有历史记录时：自动计算“适配宽度”的缩放比例
-    if (!el || !basePageWidth) return
+    const containerWidth = viewportRef.current?.getContainerWidth()
+    if (!containerWidth || !basePageWidth) return
 
     const horizontalPadding = 32
-    const availableWidth = el.clientWidth - horizontalPadding
+    const availableWidth = containerWidth - horizontalPadding
     if (availableWidth <= 0) return
 
     const fitScale = availableWidth / basePageWidth
@@ -156,10 +144,9 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     setScale(clampedFit)
     setCurrentPage(1)
     setPageInput('1')
-    el.scrollTop = 0
+    scrollToPageWithScale(1, clampedFit)
   }, [pdfDocument, pageCount, filePath, basePageHeight, basePageWidth])
 
-  // 当页码或缩放发生变化时，将当前阅读状态持久化到 localStorage
   useEffect(() => {
     if (!pageCount || pageCount <= 0) return
 
@@ -175,7 +162,6 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     }
   }, [filePath, currentPage, scale, pageCount])
 
-  // 计算 PDF 原始尺寸（scale = 1 时的宽高），用于“适配宽度”缩放和多页高度估算
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -184,8 +170,8 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
         const page = await (pdfDocument as PDFDocumentProxy).getPage(1)
         if (cancelled) return
         const viewport = page.getViewport({ scale: 1 })
-        setBasePageWidth(viewport.width)
-        setBasePageHeight(viewport.height)
+        setBasePageWidth(viewport.width * PDF_CSS_UNITS)
+        setBasePageHeight(viewport.height * PDF_CSS_UNITS)
       } catch (e) {
         console.error('[PdfViewer] failed to compute base page size', e)
       }
@@ -195,20 +181,14 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     }
   }, [pdfDocument])
 
+  const pageHeightForVirtual = Math.max(1, (basePageHeight ?? 800) * scale)
+
   const goToPage = (page: number, estimatedPageHeight?: number) => {
     if (!pageCount || pageCount <= 0) return
     const clamped = Math.min(Math.max(page, 1), pageCount)
     setCurrentPage(clamped)
     setPageInput(String(clamped))
-
-    const el = containerRef.current
-    if (el && estimatedPageHeight && estimatedPageHeight > 0) {
-      // 多页模式下，根据估算高度滚动到对应页的大致位置
-      el.scrollTop = (clamped - 1) * estimatedPageHeight
-    } else if (el) {
-      // 兜底：单页模式或高度未知时，仍然滚动到顶部
-      el.scrollTop = 0
-    }
+    viewportRef.current?.scrollToPage(clamped, estimatedPageHeight)
   }
 
   const handlePrev = () => {
@@ -247,87 +227,6 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     }
   }
 
-  // 估算单页高度（基于首屏 viewport 高度和当前 scale），供多页虚拟滚动使用
-  const pageHeightForVirtual = Math.max(1, (basePageHeight ?? 800) * scale)
-
-  // 实时读取当前 PDF 文本选区（仅限 pdf-scroll-container 内部）
-  const getCurrentSelectionText = () => {
-    if (typeof window === 'undefined') return null
-    const sel = window.getSelection()
-    if (!sel || sel.isCollapsed) return null
-
-    const container = containerRef.current
-    if (!container) return null
-
-    const isInContainer = (node: Node | null) => !!node && container.contains(node)
-    const anchorNode = sel.anchorNode
-    const focusNode = sel.focusNode
-    if (!isInContainer(anchorNode) && !isInContainer(focusNode)) return null
-
-    const text = sel.toString().trim()
-    return text || null
-  }
-
-  // 将选区 getter 注册给父组件，在组件卸载时清理
-  useEffect(() => {
-    if (!onRegisterSelectionGetter) return
-
-    onRegisterSelectionGetter(() => getCurrentSelectionText())
-    return () => {
-      onRegisterSelectionGetter(null)
-    }
-  }, [onRegisterSelectionGetter, filePath, basePageHeight, scale])
-
-  const { nearbyRange, totalHeight, onScroll: handleVirtualScroll } = useVirtualPages({
-    pageCount,
-    pageHeight: pageHeightForVirtual,
-    containerRef,
-    bufferPages: 2,
-  })
-
-  const handleScroll: React.UIEventHandler<HTMLDivElement> = (e) => {
-    handleVirtualScroll()
-
-    const container = e.currentTarget
-    if (!pageCount || pageHeightForVirtual <= 0) return
-
-    const scrollTop = container.scrollTop
-    const approxIndex = Math.round(scrollTop / pageHeightForVirtual)
-    const nextPage = Math.min(pageCount, Math.max(1, approxIndex + 1))
-
-    if (nextPage !== currentPage) {
-      setCurrentPage(nextPage)
-      setPageInput(String(nextPage))
-    }
-  }
-
-  const pages: ReactElement[] = []
-  const startIndex = nearbyRange.start
-  const endIndex = nearbyRange.end
-
-  if (pdfDocument && pageCount > 0) {
-    for (let index = startIndex; index < endIndex; index += 1) {
-      const pageNumber = index + 1
-      if (pageNumber > pageCount) break
-
-      pages.push(
-        <div
-          key={pageNumber}
-          style={{
-            position: 'absolute',
-            top: index * pageHeightForVirtual,
-            left: 0,
-            right: 0,
-            display: 'flex',
-            justifyContent: 'center',
-          }}
-        >
-          <PdfPage pdfDocument={pdfDocument as PDFDocumentProxy} pageNumber={pageNumber} scale={scale} />
-        </div>,
-      )
-    }
-  }
-
   if (loading) {
     return <div className="pdf-viewer">正在加载 PDF…</div>
   }
@@ -343,20 +242,19 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
   return (
     <div className="pdf-viewer">
       <div className="pdf-viewer-main">
-        <div
-          ref={containerRef}
-          className="pdf-scroll-container"
-          onScroll={handleScroll}
-        >
-          <div
-            style={{
-              position: 'relative',
-              height: totalHeight || pageHeightForVirtual,
-            }}
-          >
-            {pages}
-          </div>
-        </div>
+        <PdfViewport
+          ref={viewportRef}
+          pdfDocument={pdfDocument as PDFDocumentProxy}
+          pageCount={pageCount}
+          scale={scale}
+          pageHeight={pageHeightForVirtual}
+          currentPage={currentPage}
+          onCurrentPageChange={(page) => {
+            setCurrentPage(page)
+            setPageInput(String(page))
+          }}
+          onRegisterSelectionGetter={onRegisterSelectionGetter}
+        />
       </div>
       <div className="pdf-viewer-sidebar">
         <div className="pdf-toolbar">
