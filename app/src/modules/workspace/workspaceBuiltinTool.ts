@@ -6,10 +6,12 @@ import { getWorkspaceMountedRoots } from './workspaceMountedRoots'
 export const WRITE_TO_WORKSPACE_TOOL_NAME = 'write_to_workspace'
 export const RESOLVE_WORKSPACE_DIRECTORY_TOOL_NAME = 'resolve_workspace_directory'
 export const CREATE_WORKSPACE_DIRECTORY_TOOL_NAME = 'create_workspace_directory'
+export const GET_CURRENT_DIRECTORY_TOOL_NAME = 'get_current_directory'
 
 type WorkspaceToolContext = {
   onDocumentSaved?: (path: string) => void
   setStatusMessage?: (message: string) => void
+  getCurrentDirectoryPath?: () => string | null
 }
 
 type WriteWorkspaceResult =
@@ -126,6 +128,22 @@ export const createWorkspaceDirectoryToolSchema: OpenAIToolDef = {
   },
 }
 
+export const getCurrentDirectoryToolSchema: OpenAIToolDef = {
+  type: 'function',
+  function: {
+    name: GET_CURRENT_DIRECTORY_TOOL_NAME,
+    description:
+      '获取当前工作区目录。' +
+      '如果当前点击的是目录，则返回该目录；如果当前打开的是文件，则返回该文件所在目录。' +
+      '当用户询问“当前目录是哪里”“我现在在哪个目录”“current directory”时调用。',
+    parameters: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
+}
+
 export function buildWorkspaceMountedRootsPrompt(): string {
   const mountedRoots = getWorkspaceMountedRoots()
   if (!mountedRoots.length) return ''
@@ -139,9 +157,21 @@ export function buildWorkspaceMountedRootsPrompt(): string {
     labels.map((label) => `- ${label}`).join('\n') +
     '\n仅当用户明确要求保存到这些目录树内的目录或子目录时，才可调用 write_to_workspace。' +
     '\n如果用户明确要求在这些目录树内创建子目录，可调用 create_workspace_directory。' +
+    '\n如果用户询问当前目录是哪里，应调用 get_current_directory。' +
     '\n如果用户没有指定工作区目录，默认使用 write_to_notes，将内容保存到随笔中。' +
     '\n当用户已指定工作区目录，但你不确定目录是否存在或是否唯一时，应先调用 resolve_workspace_directory，再决定是否写入。'
   )
+}
+
+export async function executeGetCurrentDirectory(
+  _args: Record<string, never>,
+  ctx?: WorkspaceToolContext,
+): Promise<string> {
+  const currentDirectoryPath = ctx?.getCurrentDirectoryPath?.()?.trim() ?? ''
+  if (!currentDirectoryPath) {
+    return '⚠️ 当前没有可确定的目录。'
+  }
+  return `✅ 当前目录是：${currentDirectoryPath}`
 }
 
 export async function executeResolveWorkspaceDirectory(args: {

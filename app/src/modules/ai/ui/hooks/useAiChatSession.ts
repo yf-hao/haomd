@@ -36,6 +36,7 @@ export type UseAiChatSessionOptions = {
   getCurrentFileName?: () => string | null
   getCurrentFilePath?: () => string | null
   getCurrentFolderPath?: () => string | null
+  getCurrentDirectoryPath?: () => string | null
   getCurrentWorkspaceRoot?: () => string | null
   onDocumentSaved?: (path: string) => void
   onRequestDeleteCurrentDocument?: (path: string) => Promise<{ ok: boolean; message: string }>
@@ -154,6 +155,7 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
     getCurrentFileName,
     getCurrentFilePath,
     getCurrentFolderPath,
+    getCurrentDirectoryPath,
     getCurrentWorkspaceRoot,
     onDocumentSaved,
     onRequestDeleteCurrentDocument,
@@ -190,6 +192,7 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
   const getCurrentFileNameRef = useRef(getCurrentFileName)
   const getCurrentFilePathRef = useRef(getCurrentFilePath)
   const getCurrentFolderPathRef = useRef(getCurrentFolderPath)
+  const getCurrentDirectoryPathRef = useRef(getCurrentDirectoryPath)
   const getCurrentWorkspaceRootRef = useRef(getCurrentWorkspaceRoot)
   const onDocumentSavedRef = useRef(onDocumentSaved)
   const onRequestDeleteCurrentDocumentRef = useRef(onRequestDeleteCurrentDocument)
@@ -220,6 +223,10 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
   useEffect(() => {
     getCurrentFolderPathRef.current = getCurrentFolderPath
   }, [getCurrentFolderPath])
+
+  useEffect(() => {
+    getCurrentDirectoryPathRef.current = getCurrentDirectoryPath
+  }, [getCurrentDirectoryPath])
 
   useEffect(() => {
     getCurrentWorkspaceRootRef.current = getCurrentWorkspaceRoot
@@ -354,6 +361,11 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
           ...(getCurrentFolderPathRef.current
             ? {
                 getCurrentFolderPath: () => getCurrentFolderPathRef.current?.() ?? null,
+              }
+            : {}),
+          ...(getCurrentDirectoryPathRef.current
+            ? {
+                getCurrentDirectoryPath: () => getCurrentDirectoryPathRef.current?.() ?? null,
               }
             : {}),
           ...(getCurrentWorkspaceRootRef.current

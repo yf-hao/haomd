@@ -2054,6 +2054,13 @@ export function WorkspaceShell({
     })
   }, [selectedFolderPath, activeTab?.path, sidebar.folderRoots])
 
+  const getCurrentAiDirectoryPath = useCallback((): string | null => {
+    return resolveSelectionBaseDirectory({
+      selectedFolderPath,
+      currentFilePath: activeTab?.path ?? null,
+    })
+  }, [selectedFolderPath, activeTab?.path])
+
   const getCurrentFolderForNewFile = (): string | null => {
     const baseDirectory = getCurrentSelectionBaseDirectory()
     if (baseDirectory) {
@@ -3307,10 +3314,12 @@ export function WorkspaceShell({
                 onClose={() => setAiChatSessionKey('global')}
                 currentFilePath={aiChatFilePath}
                 currentFolderPath={selectedFolderPath}
+                currentDirectoryPath={getCurrentAiDirectoryPath()}
                 getCurrentMarkdown={getCurrentMarkdown}
                 getCurrentFileName={getCurrentFileName}
                 getCurrentFilePath={getCurrentFilePath}
                 getCurrentFolderPath={() => selectedFolderPath}
+                getCurrentDirectoryPath={getCurrentAiDirectoryPath}
                 getCurrentWorkspaceRoot={getCurrentWorkspaceRoot}
                 onDocumentSaved={handleAiDocumentSaved}
                 onConfirmDeleteCurrentDocument={handleAiDeleteCurrentDocument}
@@ -3357,10 +3366,12 @@ export function WorkspaceShell({
                           onClose={closeAiChatDialog}
                           currentFilePath={aiChatFilePath}
                           currentFolderPath={selectedFolderPath}
+                          currentDirectoryPath={getCurrentAiDirectoryPath()}
                           getCurrentMarkdown={getCurrentMarkdown}
                           getCurrentFileName={getCurrentFileName}
                           getCurrentFilePath={getCurrentFilePath}
                           getCurrentFolderPath={() => selectedFolderPath}
+                          getCurrentDirectoryPath={getCurrentAiDirectoryPath}
                           getCurrentWorkspaceRoot={getCurrentWorkspaceRoot}
                           onDocumentSaved={handleAiDocumentSaved}
                           onConfirmDeleteCurrentDocument={handleAiDeleteCurrentDocument}
@@ -3538,10 +3549,12 @@ export function WorkspaceShell({
                         onClose={closeAiChatDialog}
                         currentFilePath={aiChatFilePath}
                         currentFolderPath={selectedFolderPath}
+                        currentDirectoryPath={getCurrentAiDirectoryPath()}
                         getCurrentMarkdown={getCurrentMarkdown}
                         getCurrentFileName={getCurrentFileName}
                         getCurrentFilePath={getCurrentFilePath}
                         getCurrentFolderPath={() => selectedFolderPath}
+                        getCurrentDirectoryPath={getCurrentAiDirectoryPath}
                         getCurrentWorkspaceRoot={getCurrentWorkspaceRoot}
                         onDocumentSaved={handleAiDocumentSaved}
                         onConfirmDeleteCurrentDocument={handleAiDeleteCurrentDocument}
@@ -3606,10 +3619,12 @@ export function WorkspaceShell({
               onClose={closeAiChatDialog}
               currentFilePath={aiChatFilePath}
               currentFolderPath={selectedFolderPath}
+              currentDirectoryPath={getCurrentAiDirectoryPath()}
               getCurrentMarkdown={getCurrentMarkdown}
               getCurrentFileName={getCurrentFileName}
               getCurrentFilePath={getCurrentFilePath}
               getCurrentFolderPath={() => selectedFolderPath}
+              getCurrentDirectoryPath={getCurrentAiDirectoryPath}
               getCurrentWorkspaceRoot={getCurrentWorkspaceRoot}
               onDocumentSaved={handleAiDocumentSaved}
               onConfirmDeleteCurrentDocument={handleAiDeleteCurrentDocument}

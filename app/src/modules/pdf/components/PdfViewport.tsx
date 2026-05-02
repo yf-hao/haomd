@@ -6,6 +6,8 @@ import {
   type UIEventHandler,
 } from 'react'
 import type { PDFDocumentProxy } from '../hooks/usePdfDocument'
+import type { PdfSelectionDraft } from '../annotationUtils'
+import type { Annotation } from '../types/annotation'
 import { useVirtualPages } from '../hooks/useVirtualPages'
 import { PdfOfficialPageView } from './PdfOfficialPageView'
 
@@ -22,6 +24,8 @@ export interface PdfViewportProps {
   currentPage: number
   onCurrentPageChange: (page: number) => void
   onRegisterSelectionGetter?: (getter: (() => string | null) | null) => void
+  annotations?: Annotation[]
+  onSelectionChange?: (selection: PdfSelectionDraft | null) => void
 }
 
 export const PdfViewport = forwardRef<PdfViewportHandle, PdfViewportProps>(function PdfViewport(
@@ -33,6 +37,8 @@ export const PdfViewport = forwardRef<PdfViewportHandle, PdfViewportProps>(funct
     currentPage,
     onCurrentPageChange,
     onRegisterSelectionGetter,
+    annotations = [],
+    onSelectionChange,
   },
   ref,
 ) {
@@ -119,6 +125,8 @@ export const PdfViewport = forwardRef<PdfViewportHandle, PdfViewportProps>(funct
           pdfDocument={pdfDocument}
           pageNumber={pageNumber}
           scale={scale}
+          annotations={annotations.filter((annotation) => annotation.page === pageNumber)}
+          onSelectionChange={onSelectionChange}
         />
       </div>,
     )

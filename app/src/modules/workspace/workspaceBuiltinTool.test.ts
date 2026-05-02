@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mockInvoke } from '../../../vitest.setup'
 import {
   buildWorkspaceMountedRootsPrompt,
+  executeGetCurrentDirectory,
   executeResolveWorkspaceDirectory,
   executeWriteToWorkspace,
 } from './workspaceBuiltinTool'
@@ -153,5 +154,20 @@ describe('workspaceBuiltinTool', () => {
 
     expect(result).toContain('已解析目标目录')
     expect(result).toContain('/tmp/离散数学/教案')
+  })
+
+  it('should return current directory when available', async () => {
+    const result = await executeGetCurrentDirectory(
+      {},
+      { getCurrentDirectoryPath: () => '/tmp/离散数学/第1章' },
+    )
+
+    expect(result).toBe('✅ 当前目录是：/tmp/离散数学/第1章')
+  })
+
+  it('should report missing current directory', async () => {
+    const result = await executeGetCurrentDirectory({}, { getCurrentDirectoryPath: () => null })
+
+    expect(result).toBe('⚠️ 当前没有可确定的目录。')
   })
 })

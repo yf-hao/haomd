@@ -1,7 +1,12 @@
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, useCallback } from 'react'
 import type { PDFDocumentProxy } from '../hooks/usePdfDocument'
 import { usePdfDocument } from '../hooks/usePdfDocument'
 import { PdfViewport, type PdfViewportHandle } from './PdfViewport'
+import { useI18n } from '../../i18n/I18nContext'
+import { isTauriEnv } from '../../platform/runtime'
+import { appendAnnotation, createHighlightAnnotation, getPdfFileName, normalizeDocumentAnnotations, type PdfSelectionDraft } from '../annotationUtils'
+import { computePdfHash, loadAnnotations, saveAnnotations } from '../store/annotationStore'
+import type { DocumentAnnotations } from '../types/annotation'
 
 type PdfReadingState = {
   page: number
@@ -9,6 +14,13 @@ type PdfReadingState = {
 }
 
 const PDF_CSS_UNITS = 96 / 72
+const HIGHLIGHT_COLOR_OPTIONS = [
+  { value: '#f5d90a', key: 'yellow' },
+  { value: '#7ccf00', key: 'green' },
+  { value: '#4da3ff', key: 'blue' },
+  { value: '#ff8a4c', key: 'orange' },
+  { value: '#f06292', key: 'pink' },
+] as const
 
 function getPdfStateKey(filePath: string) {
   return `pdf-reading-state:${filePath}`
@@ -47,6 +59,7 @@ export interface PdfViewerProps {
 }
 
 export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProps) {
+  const { t } = useI18n()
   const viewportRef = useRef<PdfViewportHandle | null>(null)
   const [scale, setScale] = useState(1.25)
   const { pdfDocument, pageCount, loading, error } = usePdfDocument(filePath)
@@ -54,17 +67,22 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
   const [pageInput, setPageInput] = useState('1')
   const [basePageWidth, setBasePageWidth] = useState<number | null>(null)
   const [basePageHeight, setBasePageHeight] = useState<number | null>(null)
+  const [annotationDocument, setAnnotationDocument] = useState<DocumentAnnotations | null>(null)
+  const [selectionDraft, setSelectionDraft] = useState<PdfSelectionDraft | null>(null)
+  const [annotationMessage, setAnnotationMessage] = useState<string | null>(null)
+  const [isAnnotationBusy, setAnnotationBusy] = useState(false)
+  const [selectedHighlightColor, setSelectedHighlightColor] = useState<string>(HIGHLIGHT_COLOR_OPTIONS[0].value)
 
   const ZOOM_MIN = 0.5
   const ZOOM_MAX = 3
   const ZOOM_STEP = 0.25
   const zoomPercent = Math.round(scale * 100)
 
-  const scrollToPageWithScale = (page: number, scaleForScroll: number) => {
+  const scrollToPageWithScale = useCallback((page: number, scaleForScroll: number) => {
     const baseHeight = basePageHeight ?? 800
     const estimatedPageHeight = Math.max(1, baseHeight * scaleForScroll)
     viewportRef.current?.scrollToPage(page, estimatedPageHeight)
-  }
+  }, [basePageHeight])
 
   const handleZoomIn = () => {
     setScale((prev) => {
@@ -145,7 +163,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     setCurrentPage(1)
     setPageInput('1')
     scrollToPageWithScale(1, clampedFit)
-  }, [pdfDocument, pageCount, filePath, basePageHeight, basePageWidth])
+  }, [pdfDocument, pageCount, filePath, basePageHeight, basePageWidth, scrollToPageWithScale])
 
   useEffect(() => {
     if (!pageCount || pageCount <= 0) return
@@ -180,6 +198,49 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
       cancelled = true
     }
   }, [pdfDocument])
+
+  useEffect(() => {
+    if (!pdfDocument || pageCount <= 0) {
+      setAnnotationDocument(null)
+      setSelectionDraft(null)
+      setAnnotationMessage(null)
+      setAnnotationBusy(false)
+      return
+    }
+
+    let cancelled = false
+
+    const loadDocumentAnnotations = async () => {
+      setAnnotationBusy(true)
+      setAnnotationMessage(t('pdf.loadingAnnotations'))
+
+      try {
+        const pdfHash = isTauriEnv() ? await computePdfHash(filePath) : `web:${filePath}`
+        if (cancelled) return
+        const stored = await loadAnnotations(pdfHash)
+        if (cancelled) return
+        setAnnotationDocument(
+          normalizeDocumentAnnotations(stored, pdfHash, getPdfFileName(filePath), pageCount),
+        )
+        setAnnotationMessage(null)
+      } catch (loadError) {
+        if (cancelled) return
+        const message = loadError instanceof Error ? loadError.message : String(loadError)
+        setAnnotationDocument(null)
+        setAnnotationMessage(t('pdf.annotationLoadFailed', { message }))
+      } finally {
+        if (!cancelled) {
+          setAnnotationBusy(false)
+        }
+      }
+    }
+
+    void loadDocumentAnnotations()
+
+    return () => {
+      cancelled = true
+    }
+  }, [filePath, pageCount, pdfDocument, t])
 
   const pageHeightForVirtual = Math.max(1, (basePageHeight ?? 800) * scale)
 
@@ -227,6 +288,33 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     }
   }
 
+  const handleAddHighlight = async () => {
+    if (!annotationDocument || !selectionDraft) return
+
+    setAnnotationBusy(true)
+    setAnnotationMessage(t('pdf.savingAnnotation'))
+
+    const nextDocument = appendAnnotation(
+      annotationDocument,
+      createHighlightAnnotation(selectionDraft, selectedHighlightColor),
+    )
+
+    try {
+      await saveAnnotations(nextDocument.pdfHash, nextDocument)
+      setAnnotationDocument(nextDocument)
+      setSelectionDraft(null)
+      setAnnotationMessage(null)
+      if (typeof window !== 'undefined') {
+        window.getSelection()?.removeAllRanges()
+      }
+    } catch (saveError) {
+      const message = saveError instanceof Error ? saveError.message : String(saveError)
+      setAnnotationMessage(t('pdf.annotationSaveFailed', { message }))
+    } finally {
+      setAnnotationBusy(false)
+    }
+  }
+
   if (loading) {
     return <div className="pdf-viewer">正在加载 PDF…</div>
   }
@@ -254,84 +342,120 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
             setPageInput(String(page))
           }}
           onRegisterSelectionGetter={onRegisterSelectionGetter}
+          annotations={annotationDocument?.annotations ?? []}
+          onSelectionChange={setSelectionDraft}
         />
       </div>
       <div className="pdf-viewer-sidebar">
         <div className="pdf-toolbar">
-          <div className="pdf-toolbar-section pdf-toolbar-pages">
-            <div className="pdf-page-current-wrapper">
-              <input
-                type="text"
-                className="pdf-page-input-pill"
-                value={pageInput}
-                onChange={handlePageInputChange}
-                onBlur={handlePageInputBlur}
-                onKeyDown={handlePageInputKeyDown}
-                inputMode="numeric"
-              />
+          <div className="pdf-toolbar-group pdf-toolbar-group-annotations">
+            <div className="pdf-toolbar-section pdf-toolbar-annotations">
+              <div className="pdf-highlight-color-row" aria-label={t('pdf.highlightColor')}>
+                {HIGHLIGHT_COLOR_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`pdf-highlight-color-swatch ${selectedHighlightColor === option.value ? 'active' : ''}`}
+                    style={{ '--pdf-highlight-color': option.value } as React.CSSProperties}
+                    onClick={() => {
+                      setSelectedHighlightColor(option.value)
+                    }}
+                    aria-label={t(`pdf.highlightColors.${option.key}`)}
+                    aria-pressed={selectedHighlightColor === option.value}
+                    title={t(`pdf.highlightColors.${option.key}`)}
+                  />
+                ))}
+              </div>
+              <button
+                type="button"
+                className="pdf-page-btn"
+                onClick={() => {
+                  void handleAddHighlight()
+                }}
+                disabled={!selectionDraft || !annotationDocument || isAnnotationBusy}
+                title={
+                  selectionDraft
+                    ? t('pdf.addHighlight')
+                    : t('pdf.addHighlightDisabled')
+                }
+              >
+                {t('pdf.addHighlight')}
+              </button>
+              {annotationMessage ? <div className="pdf-annotation-status">{annotationMessage}</div> : null}
             </div>
-            <div className="pdf-page-total-text">{pageCount}</div>
-            <button
-              type="button"
-              className="pdf-icon-btn"
-              onClick={handlePrev}
-              disabled={currentPage <= 1}
-              aria-label="上一页"
-            >
-              ▲
-            </button>
-            <button
-              type="button"
-              className="pdf-icon-btn"
-              onClick={handleNext}
-              disabled={currentPage >= pageCount}
-              aria-label="下一页"
-            >
-              ▼
-            </button>
           </div>
 
-          <div className="pdf-toolbar-separator" />
-
-          <div className="pdf-toolbar-section pdf-toolbar-zoom">
-            <button
-              type="button"
-              className="pdf-icon-btn pdf-icon-btn--zoom-reset"
-              onClick={handleZoomReset}
-              disabled={Math.abs(scale - 1) < 0.001}
-              aria-label="恢复实际大小"
-            >
-              <span className="pdf-icon-glyph" aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              className="pdf-icon-btn"
-              onClick={handleZoomFitWidth}
-              disabled={!basePageWidth}
-              aria-label="适配宽度"
-            >
-              ⤢
-            </button>
-            <div className="pdf-zoom-percent">{zoomPercent}%</div>
-            <div className="pdf-zoom-icon-row">
+          <div className="pdf-toolbar-group pdf-toolbar-group-controls">
+            <div className="pdf-toolbar-section pdf-toolbar-controls">
+              <div className="pdf-page-current-wrapper">
+                <input
+                  type="text"
+                  className="pdf-page-input-pill"
+                  value={pageInput}
+                  onChange={handlePageInputChange}
+                  onBlur={handlePageInputBlur}
+                  onKeyDown={handlePageInputKeyDown}
+                  inputMode="numeric"
+                />
+              </div>
+              <div className="pdf-page-total-text">{pageCount}</div>
               <button
                 type="button"
                 className="pdf-icon-btn"
-                onClick={handleZoomIn}
-                disabled={scale >= ZOOM_MAX}
-                aria-label="放大"
+                onClick={handlePrev}
+                disabled={currentPage <= 1}
+                aria-label="上一页"
               >
-                +
+                ▲
               </button>
               <button
                 type="button"
                 className="pdf-icon-btn"
-                onClick={handleZoomOut}
-                disabled={scale <= ZOOM_MIN}
-                aria-label="缩小"
+                onClick={handleNext}
+                disabled={currentPage >= pageCount}
+                aria-label="下一页"
               >
-                -
+                ▼
               </button>
+              <button
+                type="button"
+                className="pdf-icon-btn pdf-icon-btn--zoom-reset"
+                onClick={handleZoomReset}
+                disabled={Math.abs(scale - 1) < 0.001}
+                aria-label="恢复实际大小"
+              >
+                <span className="pdf-icon-glyph" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="pdf-icon-btn"
+                onClick={handleZoomFitWidth}
+                disabled={!basePageWidth}
+                aria-label="适配宽度"
+              >
+                ⤢
+              </button>
+              <div className="pdf-zoom-percent">{zoomPercent}%</div>
+              <div className="pdf-zoom-icon-row">
+                <button
+                  type="button"
+                  className="pdf-icon-btn"
+                  onClick={handleZoomIn}
+                  disabled={scale >= ZOOM_MAX}
+                  aria-label="放大"
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  className="pdf-icon-btn"
+                  onClick={handleZoomOut}
+                  disabled={scale <= ZOOM_MIN}
+                  aria-label="缩小"
+                >
+                  -
+                </button>
+              </div>
             </div>
           </div>
         </div>

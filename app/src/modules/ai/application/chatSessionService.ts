@@ -48,6 +48,9 @@ import {
   CREATE_WORKSPACE_DIRECTORY_TOOL_NAME,
   createWorkspaceDirectoryToolSchema,
   executeCreateWorkspaceDirectory,
+  GET_CURRENT_DIRECTORY_TOOL_NAME,
+  getCurrentDirectoryToolSchema,
+  executeGetCurrentDirectory,
   WRITE_TO_WORKSPACE_TOOL_NAME,
   buildWorkspaceMountedRootsPrompt,
   writeToWorkspaceToolSchema,
@@ -134,6 +137,7 @@ export type StartChatOptions = {
   getCurrentFileName?: () => string | null
   getCurrentFilePath?: () => string | null
   getCurrentFolderPath?: () => string | null
+  getCurrentDirectoryPath?: () => string | null
   getCurrentWorkspaceRoot?: () => string | null
   onDocumentSaved?: (path: string) => void
   onRequestDeleteCurrentDocument?: (path: string) => Promise<{ ok: boolean; message: string }>
@@ -645,6 +649,13 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
                   setStatusMessage: options.setStatusMessage,
                 },
               )
+            } else if (tc.function.name === GET_CURRENT_DIRECTORY_TOOL_NAME) {
+              toolResult = await executeGetCurrentDirectory(
+                parsedArgs as Record<string, never>,
+                {
+                  getCurrentDirectoryPath: options.getCurrentDirectoryPath,
+                },
+              )
             } else if (tc.function.name === SAVE_OR_EXPORT_CURRENT_DOCUMENT_TOOL_NAME) {
               if (!options.getCurrentMarkdown || !options.getCurrentFileName) {
                 toolResult = '⚠️ 当前会话未挂载文档上下文，无法保存或导出当前文档。'
@@ -1031,6 +1042,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
           workflowRunToolSchema,
           skillsSearchToolSchema,
           skillsReadToolSchema,
+          getCurrentDirectoryToolSchema,
           resolveWorkspaceDirectoryToolSchema,
           createWorkspaceDirectoryToolSchema,
           writeToWorkspaceToolSchema,

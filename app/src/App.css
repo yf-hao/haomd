@@ -1575,6 +1575,7 @@ button:disabled {
 /* PDF Viewer 内部布局：不影响全局 Workspace，只作用于 PdfViewer */
 .pdf-viewer {
   display: flex;
+  flex-direction: column-reverse;
   height: 100%;
   flex: 1;
   min-height: 0;
@@ -1583,6 +1584,7 @@ button:disabled {
 .pdf-viewer-main {
   flex: 1;
   min-width: 0;
+  min-height: 0;
 }
 
 .pdf-scroll-container {
@@ -1639,11 +1641,27 @@ button:disabled {
   background: transparent;
 }
 
-.pdf-selection-overlay {
+.pdf-official-page-view.is-pointer-selecting .textLayer ::selection {
+  background: color-mix(in srgb, var(--theme-accent-primary) 22%, transparent);
+}
+
+.pdf-annotation-overlay {
   position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 1;
+}
+
+.pdf-annotation-block {
+  position: absolute;
+  border-radius: 4px;
+}
+
+.pdf-selection-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
 }
 
 .pdf-selection-block {
@@ -1653,37 +1671,89 @@ button:disabled {
 }
 
 .pdf-viewer-sidebar {
-  width: 50px;
-  max-width: 70px;
-  border-left: 1px solid var(--theme-border-subtle);
+  width: 100%;
+  max-width: none;
+  border-bottom: 1px solid var(--theme-border-subtle);
   background: var(--theme-surface-toolbar);
-  padding: 16px 5px;
+  padding: 6px 12px;
   box-sizing: border-box;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
 }
 
-/* 右侧 PDF 导航栏：垂直工具条布局 */
+/* 顶部 PDF 工具栏：横向工具条布局 */
 .pdf-toolbar {
   display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.pdf-toolbar-group {
+  display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 16px;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--theme-border-subtle);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--theme-surface-toolbar) 78%, var(--theme-surface-panel) 22%);
+}
+
+.pdf-toolbar-group-annotations {
+  min-width: min(320px, 42vw);
+}
+
+.pdf-toolbar-group-controls {
+  margin-left: auto;
 }
 
 .pdf-toolbar-section {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
-.pdf-toolbar-separator {
-  width: 60%;
-  height: 1px;
-  background: var(--theme-border-input);
+.pdf-toolbar-annotations {
+  max-width: min(320px, 42vw);
+  flex-wrap: wrap;
+}
+
+.pdf-toolbar-controls {
+  flex-wrap: nowrap;
+}
+
+.pdf-highlight-color-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pdf-highlight-color-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--theme-border-toolbar) 70%, #000 30%);
+  background: var(--pdf-highlight-color);
+  cursor: pointer;
+  padding: 0;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.45);
+  transition: transform 0.08s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.pdf-highlight-color-swatch:hover {
+  transform: translateY(-0.5px);
+}
+
+.pdf-highlight-color-swatch.active {
+  border-color: var(--theme-accent-primary);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--theme-accent-primary) 18%, transparent),
+    inset 0 0 0 1px rgb(255 255 255 / 0.55);
 }
 
 /* 页码显示：当前页大号胶囊 + 总页数文本 */
@@ -1693,13 +1763,13 @@ button:disabled {
 }
 
 .pdf-page-input-pill {
-  width: 40px;
-  height: 40px;
+  width: 34px;
+  height: 34px;
   border-radius: 6px;
   border: 1px solid var(--theme-border-toolbar);
   background: var(--theme-surface-toolbar-button);
   color: var(--theme-text-toolbar);
-  font-size: 14px;
+  font-size: 13px;
   text-align: center;
   outline: none;
 }
@@ -1709,14 +1779,16 @@ button:disabled {
 }
 
 .pdf-page-total-text {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--theme-text-toolbar-muted);
+  min-width: 24px;
+  text-align: center;
 }
 
 /* 通用圆角图标按钮 */
 .pdf-icon-btn {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 6px;
   border: 1px solid var(--theme-border-toolbar);
   background: var(--theme-surface-toolbar-button);
@@ -1726,7 +1798,7 @@ button:disabled {
   justify-content: center;
   cursor: pointer;
   padding: 0;
-  font-size: 16px;
+  font-size: 14px;
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease, color 0.15s ease, opacity 0.15s ease;
 }
 
@@ -1755,14 +1827,14 @@ button:disabled {
 }
 
 .pdf-zoom-percent {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--theme-text-toolbar);
 }
 
 .pdf-zoom-icon-row {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  flex-direction: row;
+  gap: 6px;
   align-items: center;
 }
 
@@ -1796,6 +1868,13 @@ button:disabled {
 .pdf-page-btn:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+.pdf-annotation-status {
+  max-width: 220px;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--theme-text-toolbar-muted);
 }
 
 .pdf-page-jump {

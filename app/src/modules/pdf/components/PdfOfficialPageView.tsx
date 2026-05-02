@@ -2,54 +2,21 @@ import { useEffect, useRef, useState } from 'react'
 import type { PDFDocumentProxy } from '../hooks/usePdfDocument'
 import { EventBus, PDFLinkService, PDFPageView } from 'pdfjs-dist/web/pdf_viewer.mjs'
 import 'pdfjs-dist/web/pdf_viewer.css'
+import {
+  areSelectionBlocksEqual,
+  buildSelectionBlocks,
+  type RectLike,
+  type SelectionBlock,
+} from './pdfSelectionOverlay'
+import { selectionBlocksToAnnotationRects, type PdfSelectionDraft } from '../annotationUtils'
+import type { Annotation } from '../types/annotation'
 
 export interface PdfOfficialPageViewProps {
   pdfDocument: PDFDocumentProxy
   pageNumber: number
   scale: number
-}
-
-type SelectionBlock = {
-  left: number
-  top: number
-  width: number
-  height: number
-}
-
-function mergeSelectionRects(rects: SelectionBlock[]): SelectionBlock[] {
-  if (rects.length === 0) return []
-
-  const sorted = [...rects].sort((a, b) => {
-    if (Math.abs(a.top - b.top) > 2) return a.top - b.top
-    return a.left - b.left
-  })
-
-  const merged: SelectionBlock[] = []
-  const lineThreshold = 3
-  const horizontalGap = 8
-
-  for (const rect of sorted) {
-    const last = merged[merged.length - 1]
-    if (!last) {
-      merged.push(rect)
-      continue
-    }
-
-    const sameLine = Math.abs(last.top - rect.top) <= lineThreshold
-    const closeEnough = rect.left <= last.left + last.width + horizontalGap
-
-    if (sameLine && closeEnough) {
-      const right = Math.max(last.left + last.width, rect.left + rect.width)
-      last.top = Math.min(last.top, rect.top)
-      last.height = Math.max(last.height, rect.height)
-      last.width = right - last.left
-      continue
-    }
-
-    merged.push(rect)
-  }
-
-  return merged
+  annotations?: Annotation[]
+  onSelectionChange?: (selection: PdfSelectionDraft | null) => void
 }
 
 /**
@@ -66,10 +33,77 @@ export function PdfOfficialPageView({
   pdfDocument,
   pageNumber,
   scale,
+  annotations = [],
+  onSelectionChange,
 }: PdfOfficialPageViewProps) {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const pageHostRef = useRef<HTMLDivElement | null>(null)
+  const textRectsRef = useRef<RectLike[]>([])
+  const textRectsDirtyRef = useRef(true)
+  const isPointerSelectionActiveRef = useRef(false)
+  const hasActiveSelectionRef = useRef(false)
   const [selectionBlocks, setSelectionBlocks] = useState<SelectionBlock[]>([])
+
+  const clearSelectionBlocks = () => {
+    setSelectionBlocks((prev) => (prev.length === 0 ? prev : []))
+  }
+
+  const applySelectionBlocks = (nextBlocks: SelectionBlock[]) => {
+    setSelectionBlocks((prev) => (areSelectionBlocksEqual(prev, nextBlocks) ? prev : nextBlocks))
+  }
+
+  const setPointerSelectingState = (active: boolean) => {
+    isPointerSelectionActiveRef.current = active
+    rootRef.current?.classList.toggle('is-pointer-selecting', active)
+  }
+
+  const invalidateCachedTextRects = () => {
+    textRectsDirtyRef.current = true
+  }
+
+  const updateCachedTextRects = () => {
+    const root = rootRef.current
+    if (!root) return
+
+    const pageEl = root.querySelector('.page') as HTMLElement | null
+    if (!pageEl) {
+      textRectsRef.current = []
+      textRectsDirtyRef.current = false
+      return
+    }
+
+    const pageRect = pageEl.getBoundingClientRect()
+    textRectsRef.current = Array.from(root.querySelectorAll('.textLayer span'))
+      .map((element) => element.getBoundingClientRect())
+      .filter((rect) => rect.width > 0 && rect.height > 0)
+      .map((rect) => ({
+        left: rect.left - pageRect.left,
+        top: rect.top - pageRect.top,
+        right: rect.right - pageRect.left,
+        bottom: rect.bottom - pageRect.top,
+        width: rect.width,
+        height: rect.height,
+      }))
+    textRectsDirtyRef.current = false
+  }
+
+  const selectionBelongsToCurrentPage = (selection: Selection | null) => {
+    const root = rootRef.current
+    if (!root || !selection || selection.rangeCount === 0 || selection.isCollapsed) {
+      return false
+    }
+
+    const textLayer = root.querySelector('.textLayer')
+    if (!textLayer) return false
+
+    const belongsToTextLayer = (node: Node | null) => !!node && textLayer.contains(node)
+    if (belongsToTextLayer(selection.anchorNode) || belongsToTextLayer(selection.focusNode)) {
+      return true
+    }
+
+    const range = selection.getRangeAt(0)
+    return belongsToTextLayer(range.commonAncestorContainer)
+  }
 
   useEffect(() => {
     const container = pageHostRef.current
@@ -77,6 +111,21 @@ export function PdfOfficialPageView({
 
     let cancelled = false
     let pageView: PDFPageView | null = null
+    let textRectFrame = 0
+    let resizeObserver: ResizeObserver | null = null
+
+    const scheduleTextRectRefresh = () => {
+      invalidateCachedTextRects()
+      if (textRectFrame) {
+        window.cancelAnimationFrame(textRectFrame)
+      }
+      textRectFrame = window.requestAnimationFrame(() => {
+        textRectFrame = 0
+        if (!cancelled) {
+          updateCachedTextRects()
+        }
+      })
+    }
 
     const render = async () => {
       try {
@@ -105,6 +154,17 @@ export function PdfOfficialPageView({
 
         pageView.setPdfPage(page)
         await pageView.draw()
+        if (!cancelled) {
+          scheduleTextRectRefresh()
+          const pageEl = rootRef.current?.querySelector('.page')
+          if (pageEl) {
+            resizeObserver = new ResizeObserver(() => {
+              scheduleTextRectRefresh()
+            })
+            resizeObserver.observe(pageEl)
+            resizeObserver.observe(rootRef.current ?? pageEl)
+          }
+        }
       } catch (e) {
         if (!cancelled) {
           console.error('[PdfOfficialPageView] failed to render page view', e)
@@ -112,11 +172,19 @@ export function PdfOfficialPageView({
       }
     }
 
+    invalidateCachedTextRects()
+    textRectsRef.current = []
     container.replaceChildren()
     void render()
 
     return () => {
       cancelled = true
+      resizeObserver?.disconnect()
+      if (textRectFrame) {
+        window.cancelAnimationFrame(textRectFrame)
+      }
+      textRectsDirtyRef.current = true
+      textRectsRef.current = []
       pageView?.destroy()
       container.replaceChildren()
     }
@@ -128,47 +196,49 @@ export function PdfOfficialPageView({
 
     let frame = 0
 
+    const publishSelection = (selection: PdfSelectionDraft | null) => {
+      if (!onSelectionChange) return
+
+      if (selection) {
+        hasActiveSelectionRef.current = true
+        onSelectionChange(selection)
+        return
+      }
+
+      if (!hasActiveSelectionRef.current) return
+      hasActiveSelectionRef.current = false
+      onSelectionChange(null)
+    }
+
     const updateSelectionBlocks = () => {
       frame = 0
 
       const selection = window.getSelection()
-      if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
-        setSelectionBlocks([])
+      if (!selection || !selectionBelongsToCurrentPage(selection)) {
+        clearSelectionBlocks()
+        publishSelection(null)
         return
       }
 
       const pageEl = root.querySelector('.page') as HTMLElement | null
       if (!pageEl) {
-        setSelectionBlocks([])
-        return
-      }
-
-      const anchorNode = selection.anchorNode
-      const focusNode = selection.focusNode
-      if ((!anchorNode || !root.contains(anchorNode)) && (!focusNode || !root.contains(focusNode))) {
-        setSelectionBlocks([])
+        clearSelectionBlocks()
         return
       }
 
       const pageRect = pageEl.getBoundingClientRect()
       const rawRects = Array.from(selection.getRangeAt(0).getClientRects())
-      const blocks = rawRects
-        .filter((rect) => rect.width > 0 && rect.height > 0)
-        .map((rect) => {
-          const left = Math.max(rect.left, pageRect.left)
-          const top = Math.max(rect.top, pageRect.top)
-          const right = Math.min(rect.right, pageRect.right)
-          const bottom = Math.min(rect.bottom, pageRect.bottom)
-          return {
-            left: left - pageRect.left,
-            top: top - pageRect.top,
-            width: Math.max(0, right - left),
-            height: Math.max(0, bottom - top),
-          }
-        })
-        .filter((rect) => rect.width > 0 && rect.height > 0)
+      if (textRectsDirtyRef.current || textRectsRef.current.length === 0) {
+        updateCachedTextRects()
+      }
+      const textRects = textRectsRef.current
 
-      setSelectionBlocks(mergeSelectionRects(blocks))
+      const nextBlocks = buildSelectionBlocks(rawRects, pageRect, textRects)
+      applySelectionBlocks(nextBlocks)
+
+      const text = selection.toString().trim()
+      const rects = selectionBlocksToAnnotationRects(nextBlocks, pageRect.width, pageRect.height)
+      publishSelection(text && rects.length > 0 ? { page: pageNumber, text, rects } : null)
     }
 
     const scheduleUpdate = () => {
@@ -176,16 +246,53 @@ export function PdfOfficialPageView({
       frame = window.requestAnimationFrame(updateSelectionBlocks)
     }
 
-    document.addEventListener('selectionchange', scheduleUpdate)
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) return
+      const target = event.target
+      if (!(target instanceof Node) || !root.contains(target)) return
+      setPointerSelectingState(true)
+      clearSelectionBlocks()
+    }
+
+    const handlePointerFinish = () => {
+      if (!isPointerSelectionActiveRef.current) return
+      setPointerSelectingState(false)
+      scheduleUpdate()
+    }
+
+    const handleSelectionChange = () => {
+      if (isPointerSelectionActiveRef.current) {
+        clearSelectionBlocks()
+        publishSelection(null)
+        return
+      }
+      const selection = window.getSelection()
+      if (!selectionBelongsToCurrentPage(selection)) {
+        clearSelectionBlocks()
+        publishSelection(null)
+        return
+      }
+      scheduleUpdate()
+    }
+
+    root.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('pointerup', handlePointerFinish)
+    document.addEventListener('pointercancel', handlePointerFinish)
+    document.addEventListener('selectionchange', handleSelectionChange)
     scheduleUpdate()
 
     return () => {
-      document.removeEventListener('selectionchange', scheduleUpdate)
+      root.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('pointerup', handlePointerFinish)
+      document.removeEventListener('pointercancel', handlePointerFinish)
+      document.removeEventListener('selectionchange', handleSelectionChange)
+      setPointerSelectingState(false)
+      publishSelection(null)
       if (frame) {
         window.cancelAnimationFrame(frame)
       }
     }
-  }, [pdfDocument, pageNumber, scale])
+  }, [onSelectionChange, pageNumber, pdfDocument, scale])
 
   return (
     <div
@@ -194,6 +301,26 @@ export function PdfOfficialPageView({
       style={{ '--scale-factor': String(scale) } as React.CSSProperties}
     >
       <div ref={pageHostRef} className="pdf-official-page-host" />
+      <div className="pdf-annotation-overlay" aria-hidden="true">
+        {annotations
+          .filter((annotation) => annotation.type === 'highlight')
+          .flatMap((annotation) =>
+            annotation.rects.map((rect, index) => (
+              <div
+                key={`${annotation.id}-${index}`}
+                className="pdf-annotation-block"
+                style={{
+                  left: `${rect.x1 * 100}%`,
+                  top: `${rect.y1 * 100}%`,
+                  width: `${(rect.x2 - rect.x1) * 100}%`,
+                  height: `${(rect.y2 - rect.y1) * 100}%`,
+                  background: annotation.color,
+                  opacity: annotation.opacity,
+                }}
+              />
+            )),
+          )}
+      </div>
       <div className="pdf-selection-overlay" aria-hidden="true">
         {selectionBlocks.map((block, index) => (
           <div

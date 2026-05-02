@@ -28,6 +28,7 @@ import {
   matchDeleteWorkspaceEntry,
   matchRenameWorkspaceEntry,
 } from './workspaceEntryIntentMatcher'
+import { shouldRevealCurrentDirectory } from './currentDirectoryIntentMatcher'
 import { resolveWorkspaceEntryByName, type WorkspaceEntryKind } from '../../workspace/workspaceEntryResolver'
 import { loadAgentSettingsState } from '../config/agentSettingsRepo'
 import type { AgentProvider } from '../domain/types'
@@ -57,10 +58,12 @@ export type AiChatDialogProps = {
   onClose: () => void
   currentFilePath?: string | null
   currentFolderPath?: string | null
+  currentDirectoryPath?: string | null
   getCurrentMarkdown?: () => string
   getCurrentFileName?: () => string | null
   getCurrentFilePath?: () => string | null
   getCurrentFolderPath?: () => string | null
+  getCurrentDirectoryPath?: () => string | null
   getCurrentWorkspaceRoot?: () => string | null
   onDocumentSaved?: (path: string) => void
   onConfirmDeleteCurrentDocument?: (path: string) => Promise<{ ok: boolean; message: string }>
@@ -95,10 +98,12 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
   onClose,
   currentFilePath,
   currentFolderPath,
+  currentDirectoryPath,
   getCurrentMarkdown,
   getCurrentFileName,
   getCurrentFilePath,
   getCurrentFolderPath,
+  getCurrentDirectoryPath,
   getCurrentWorkspaceRoot,
   onDocumentSaved,
   onConfirmDeleteCurrentDocument,
@@ -237,6 +242,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
     getCurrentFileName,
     getCurrentFilePath,
     getCurrentFolderPath: () => currentFolderPath ?? getCurrentFolderPath?.() ?? null,
+    getCurrentDirectoryPath: () => currentDirectoryPath ?? getCurrentDirectoryPath?.() ?? null,
     getCurrentWorkspaceRoot,
     onDocumentSaved,
     onRequestDeleteCurrentDocument: async (path: string) => {
@@ -748,6 +754,18 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
         : { ok: false, message: '当前工作区创建目录能力不可用。' }
       setStatusMessage?.(result.message)
       pushLocalFeedback(result.message)
+      return
+    }
+
+    if (shouldRevealCurrentDirectory(trimmedInput)) {
+      clearHistoryBrowse()
+      setInput('')
+      const activeDirectory = (currentDirectoryPath ?? getCurrentDirectoryPath?.() ?? '').trim()
+      const message = activeDirectory
+        ? `当前目录是：${activeDirectory}`
+        : '当前没有可确定的目录。'
+      setStatusMessage?.(message)
+      pushLocalFeedback(message)
       return
     }
 
