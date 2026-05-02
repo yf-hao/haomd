@@ -35,7 +35,6 @@ type MessageViewMode = 'rendered' | 'source'
 
 export interface AiChatBodyProps {
   messages: ChatMessageView[]
-  localFeedbackMessages?: ChatMessageView[]
   ephemeralMessages?: EphemeralAiChatMessage[]
   agentMode?: AiChatAgentMode
   activeDisplayAssistantId?: string | null
@@ -281,7 +280,6 @@ const AiChatMessageItem = memo(({
 
 export const AiChatBody: FC<AiChatBodyProps> = ({
   messages,
-  localFeedbackMessages = [],
   ephemeralMessages = [],
   agentMode = 'chat',
   activeDisplayAssistantId,
@@ -364,14 +362,6 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
     if (visibleMessages.length <= renderCount) return visibleMessages
     return visibleMessages.slice(-renderCount)
   }, [visibleMessages, renderCount])
-  const renderedStaticMessages = useMemo(
-    () => renderedMessages.filter((msg) => msg.id !== latestDynamicAssistantId),
-    [renderedMessages, latestDynamicAssistantId],
-  )
-  const renderedDynamicMessage = useMemo(
-    () => renderedMessages.find((msg) => msg.id === latestDynamicAssistantId) ?? null,
-    [renderedMessages, latestDynamicAssistantId],
-  )
   useEffect(() => {
     setRenderCount(INITIAL_HISTORY_RENDER_COUNT)
     pendingPrependDeltaRef.current = null
@@ -565,7 +555,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
   }
 
   const hasMessages = visibleMessages.length > 0 || loading
-  const hasEphemeralMessages = ephemeralMessages.length > 0 || localFeedbackMessages.length > 0
+  const hasEphemeralMessages = ephemeralMessages.length > 0
   const fullPageClass = fullPage ? ((hasMessages || hasEphemeralMessages) ? 'ai-chat-body-fullpage has-messages' : 'ai-chat-body-fullpage') : ''
 
   return (
@@ -590,11 +580,17 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
             {visibleMessages.length === 0 && !loading && (
               <div className="ai-chat-empty muted small"></div>
             )}
-            {renderedStaticMessages.map((msg) => {
+            {renderedMessages.map((msg) => {
               const viewMode: MessageViewMode = messageViewModes[msg.id] ?? 'rendered'
               const displayContent =
                 msg.role === 'assistant'
-                  ? msg.content
+                  ? (
+                    viewMode === 'source'
+                      ? msg.content
+                      : msg.id === latestDynamicAssistantId
+                        ? getDisplayContent(msg.id, msg.content, msg.streaming)
+                        : msg.content
+                  )
                   : getUserDisplayContent(msg.content)
               return (
                 <AiChatMessageItem
@@ -624,82 +620,6 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
                   viewMarkdownSourceLabel={t('ai.viewMarkdownSource')}
                   summaryPreservedUserInputLabel={t('ai.summaryPreservedUserInput')}
                 />
-              )
-            })}
-            {renderedDynamicMessage && (() => {
-              const msg = renderedDynamicMessage
-              const viewMode: MessageViewMode = messageViewModes[msg.id] ?? 'rendered'
-              const displayContent =
-                msg.role === 'assistant'
-                  ? (viewMode === 'source'
-                    ? msg.content
-                    : getDisplayContent(msg.id, msg.content, msg.streaming))
-                  : getUserDisplayContent(msg.content)
-              return (
-                <AiChatMessageItem
-                  key={msg.id}
-                  msg={msg}
-                  displayContent={displayContent}
-                  viewMode={viewMode}
-                  onCopy={onCopy}
-                  onInsert={onInsert}
-                  onReplace={onReplace}
-                  onSave={onSave}
-                  onSaveToNotes={onSaveToNotes}
-                  onToggleViewMode={() => {
-                    setMessageViewModes((prev) => {
-                      const current = prev[msg.id] ?? 'rendered'
-                      const next: MessageViewMode = current === 'rendered' ? 'source' : 'rendered'
-                      return { ...prev, [msg.id]: next }
-                    })
-                  }}
-                  toolExecutionDetailsLabel={t('ai.toolExecutionDetails')}
-                  copyMarkdownLabel={t('ai.copyMarkdown')}
-                  insertIntoEditorLabel={t('ai.insertIntoEditor')}
-                  replaceSelectionLabel={t('ai.replaceSelection')}
-                  saveAsNewDocumentLabel={t('ai.saveAsNewDocument')}
-                  saveToNotesLabel={t('notes.saveToNotes')}
-                  showRenderedMarkdownLabel={t('ai.showRenderedMarkdown')}
-                  viewMarkdownSourceLabel={t('ai.viewMarkdownSource')}
-                  summaryPreservedUserInputLabel={t('ai.summaryPreservedUserInput')}
-                />
-              )
-            })()}
-            {localFeedbackMessages.map((msg) => {
-              const viewMode: MessageViewMode = messageViewModes[msg.id] ?? 'rendered'
-              const displayContent =
-                msg.role === 'assistant'
-                  ? msg.content
-                  : getUserDisplayContent(msg.content)
-              return (
-                <div key={msg.id} className="ai-chat-message-ephemeral">
-                  <AiChatMessageItem
-                    msg={msg}
-                    displayContent={displayContent}
-                    viewMode={viewMode}
-                    onCopy={onCopy}
-                    onInsert={onInsert}
-                    onReplace={onReplace}
-                    onSave={onSave}
-                    onSaveToNotes={onSaveToNotes}
-                    onToggleViewMode={() => {
-                      setMessageViewModes((prev) => {
-                        const current = prev[msg.id] ?? 'rendered'
-                        const next: MessageViewMode = current === 'rendered' ? 'source' : 'rendered'
-                        return { ...prev, [msg.id]: next }
-                      })
-                    }}
-                    toolExecutionDetailsLabel={t('ai.toolExecutionDetails')}
-                    copyMarkdownLabel={t('ai.copyMarkdown')}
-                    insertIntoEditorLabel={t('ai.insertIntoEditor')}
-                    replaceSelectionLabel={t('ai.replaceSelection')}
-                    saveAsNewDocumentLabel={t('ai.saveAsNewDocument')}
-                    saveToNotesLabel={t('notes.saveToNotes')}
-                    showRenderedMarkdownLabel={t('ai.showRenderedMarkdown')}
-                    viewMarkdownSourceLabel={t('ai.viewMarkdownSource')}
-                    summaryPreservedUserInputLabel={t('ai.summaryPreservedUserInput')}
-                  />
-                </div>
               )
             })}
             {ephemeralMessages.map((message) => {

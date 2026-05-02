@@ -4,6 +4,7 @@ import { getAiChatUiSettings } from '../../settings/editorSettings'
 import type { ChatEntryMode, ChatMessageView, EntryContext } from '../domain/chatSession'
 import { getDirKeyFromDocPath, normalizePersistableDocPath } from '../domain/docPathUtils'
 import { AiChatBody } from './AiChatBody'
+import { buildDisplayMessages } from './displayMessageOrder'
 import { useAiChatSession } from './hooks/useAiChatSession'
 import { getAiInputHistory, appendAiInputHistory } from '../application/localStorageAiChatInputHistory'
 import { resolveHistoryEntryByOrdinal } from '../application/historyViewService'
@@ -1011,10 +1012,11 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
   const messageSource = state?.viewMessages ?? EMPTY_MESSAGES
   const allMessages = messageSource.filter((m) => !m.hidden)
   const limit = maxVisibleMessages && maxVisibleMessages > 0 ? maxVisibleMessages : allMessages.length
-  const messages =
+  const persistedMessages =
     allMessages.length > limit
       ? allMessages.slice(-limit)
       : allMessages
+  const messages = buildDisplayMessages(persistedMessages, localFeedbackMessages)
   const [visibleLengths, setVisibleLengths] = useState<Record<string, number>>({})
   const [activeTypewriterId, setActiveTypewriterId] = useState<string | null>(null)
 
@@ -1378,7 +1380,6 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
 
         <AiChatBody
           messages={messages}
-          localFeedbackMessages={localFeedbackMessages}
           ephemeralMessages={ephemeralMessages}
           agentMode={activeAgentMode}
           loading={isProcessing}

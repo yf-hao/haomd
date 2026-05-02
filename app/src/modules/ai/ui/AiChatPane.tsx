@@ -10,6 +10,7 @@ import { copyTextToClipboard } from '../platform/clipboardService'
 import { insertMarkdownAtCursorBelow, replaceSelectionWithText, createTabAndInsertContent } from '../platform/editorInsertService'
 import { onNativePaste, onNativePasteImage } from '../../platform/clipboardEvents'
 import { AiChatBody } from './AiChatBody'
+import { buildDisplayMessages } from './displayMessageOrder'
 import { base64ToImageDataUrl, base64ToImageFile, readClipboardImageBase64 } from '../platform/clipboardImageService'
 import { tryHandleSlashCommand, parseHistoryRecallCommand } from './aiSlashCommands'
 import { AiChatCommandBridgeContext } from './AiChatCommandBridgeContext'
@@ -1029,7 +1030,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
 
   const messageSource = state?.viewMessages ?? EMPTY_MESSAGES
   const allMessages = messageSource.filter((m) => !m.hidden)
-  const messages = allMessages
+  const messages = buildDisplayMessages(allMessages, localFeedbackMessages)
 
   const [visibleLengths, setVisibleLengths] = useState<Record<string, number>>({})
   const [activeTypewriterId, setActiveTypewriterId] = useState<string | null>(null)
@@ -1453,7 +1454,6 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
       <div className="ai-chat-pane-body">
         <AiChatBody
           messages={messages}
-          localFeedbackMessages={localFeedbackMessages}
           ephemeralMessages={ephemeralMessages}
           agentMode={activeAgentMode}
           activeDisplayAssistantId={isDifyProvider ? activeTypewriterId : latestStreamingAssistantId}
