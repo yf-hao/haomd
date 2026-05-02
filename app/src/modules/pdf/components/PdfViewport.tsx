@@ -13,7 +13,9 @@ import { PdfOfficialPageView } from './PdfOfficialPageView'
 
 export interface PdfViewportHandle {
   scrollToPage: (page: number, estimatedPageHeight?: number) => void
+  scrollToOffset: (offset: number) => void
   getContainerWidth: () => number | null
+  getRenderedPageMetrics: (page: number) => { top: number; height: number } | null
 }
 
 export interface PdfViewportProps {
@@ -26,6 +28,9 @@ export interface PdfViewportProps {
   onRegisterSelectionGetter?: (getter: (() => string | null) | null) => void
   annotations?: Annotation[]
   onSelectionChange?: (selection: PdfSelectionDraft | null) => void
+  selectedAnnotationId?: string | null
+  onAnnotationClick?: (annotationId: string) => void
+  onClearAnnotationSelection?: () => void
 }
 
 export const PdfViewport = forwardRef<PdfViewportHandle, PdfViewportProps>(function PdfViewport(
@@ -39,6 +44,9 @@ export const PdfViewport = forwardRef<PdfViewportHandle, PdfViewportProps>(funct
     onRegisterSelectionGetter,
     annotations = [],
     onSelectionChange,
+    selectedAnnotationId = null,
+    onAnnotationClick,
+    onClearAnnotationSelection,
   },
   ref,
 ) {
@@ -53,8 +61,26 @@ export const PdfViewport = forwardRef<PdfViewportHandle, PdfViewportProps>(funct
         const nextPageHeight = Math.max(1, estimatedPageHeight ?? pageHeight)
         container.scrollTop = (page - 1) * nextPageHeight
       },
+      scrollToOffset(offset) {
+        const container = containerRef.current
+        if (!container) return
+        container.scrollTop = Math.max(0, offset)
+      },
       getContainerWidth() {
         return containerRef.current?.clientWidth ?? null
+      },
+      getRenderedPageMetrics(page) {
+        const container = containerRef.current
+        if (!container) return null
+        const slot = container.querySelector<HTMLElement>(`.pdf-page-slot[data-page-number="${page}"]`)
+        if (!slot) return null
+        const pageEl = slot.querySelector<HTMLElement>('.page')
+        const height = pageEl?.getBoundingClientRect().height ?? slot.getBoundingClientRect().height
+        if (!height || height <= 0) return null
+        return {
+          top: slot.offsetTop,
+          height,
+        }
       },
     }),
     [pageHeight],
@@ -113,6 +139,7 @@ export const PdfViewport = forwardRef<PdfViewportHandle, PdfViewportProps>(funct
     pages.push(
       <div
         key={pageNumber}
+        data-page-number={pageNumber}
         className="pdf-page-slot"
         style={{
           position: 'absolute',
@@ -121,13 +148,16 @@ export const PdfViewport = forwardRef<PdfViewportHandle, PdfViewportProps>(funct
           transform: 'translateX(-50%)',
         }}
       >
-        <PdfOfficialPageView
-          pdfDocument={pdfDocument}
-          pageNumber={pageNumber}
-          scale={scale}
-          annotations={annotations.filter((annotation) => annotation.page === pageNumber)}
-          onSelectionChange={onSelectionChange}
-        />
+          <PdfOfficialPageView
+            pdfDocument={pdfDocument}
+            pageNumber={pageNumber}
+            scale={scale}
+            annotations={annotations.filter((annotation) => annotation.page === pageNumber)}
+            onSelectionChange={onSelectionChange}
+            selectedAnnotationId={selectedAnnotationId}
+            onAnnotationClick={onAnnotationClick}
+            onClearAnnotationSelection={onClearAnnotationSelection}
+          />
       </div>,
     )
   }

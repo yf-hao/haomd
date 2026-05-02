@@ -17,6 +17,9 @@ export interface PdfOfficialPageViewProps {
   scale: number
   annotations?: Annotation[]
   onSelectionChange?: (selection: PdfSelectionDraft | null) => void
+  selectedAnnotationId?: string | null
+  onAnnotationClick?: (annotationId: string) => void
+  onClearAnnotationSelection?: () => void
 }
 
 /**
@@ -35,6 +38,9 @@ export function PdfOfficialPageView({
   scale,
   annotations = [],
   onSelectionChange,
+  selectedAnnotationId = null,
+  onAnnotationClick,
+  onClearAnnotationSelection,
 }: PdfOfficialPageViewProps) {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const pageHostRef = useRef<HTMLDivElement | null>(null)
@@ -250,6 +256,11 @@ export function PdfOfficialPageView({
       if (event.button !== 0) return
       const target = event.target
       if (!(target instanceof Node) || !root.contains(target)) return
+      const annotationBlock = target instanceof HTMLElement ? target.closest('.pdf-annotation-block') : null
+      if (annotationBlock instanceof HTMLElement) {
+        return
+      }
+      onClearAnnotationSelection?.()
       setPointerSelectingState(true)
       clearSelectionBlocks()
     }
@@ -262,8 +273,6 @@ export function PdfOfficialPageView({
 
     const handleSelectionChange = () => {
       if (isPointerSelectionActiveRef.current) {
-        clearSelectionBlocks()
-        publishSelection(null)
         return
       }
       const selection = window.getSelection()
@@ -279,7 +288,13 @@ export function PdfOfficialPageView({
     document.addEventListener('pointerup', handlePointerFinish)
     document.addEventListener('pointercancel', handlePointerFinish)
     document.addEventListener('selectionchange', handleSelectionChange)
-    scheduleUpdate()
+    const selection = window.getSelection()
+    if (selectionBelongsToCurrentPage(selection)) {
+      scheduleUpdate()
+    } else {
+      clearSelectionBlocks()
+      publishSelection(null)
+    }
 
     return () => {
       root.removeEventListener('pointerdown', handlePointerDown)
@@ -308,7 +323,7 @@ export function PdfOfficialPageView({
             annotation.rects.map((rect, index) => (
               <div
                 key={`${annotation.id}-${index}`}
-                className="pdf-annotation-block"
+                className={`pdf-annotation-block ${selectedAnnotationId === annotation.id ? 'selected' : ''}`}
                 style={{
                   left: `${rect.x1 * 100}%`,
                   top: `${rect.y1 * 100}%`,
@@ -316,6 +331,9 @@ export function PdfOfficialPageView({
                   height: `${(rect.y2 - rect.y1) * 100}%`,
                   background: annotation.color,
                   opacity: annotation.opacity,
+                }}
+                onClick={() => {
+                  onAnnotationClick?.(annotation.id)
                 }}
               />
             )),

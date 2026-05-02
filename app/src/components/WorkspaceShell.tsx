@@ -3392,8 +3392,28 @@ export function WorkspaceShell({
                     </div>
                   </>
                 )}
-                <section className="pane-group editor-preview-group" style={{ gridTemplateColumns: editMode === 'wysiwyg' && !isPdfActive ? '1fr' : gridTemplateColumns }} ref={workspaceRef}>
-                  {editMode === 'wysiwyg' && !isPdfActive ? (
+                <section className="pane-group editor-preview-group" style={{ gridTemplateColumns: editMode === 'wysiwyg' && !isPdfActive ? '1fr' : isPdfActive ? '1fr' : gridTemplateColumns }} ref={workspaceRef}>
+                  {isPdfActive ? (
+                    <section className="pane preview" style={{ gridColumn: '1 / -1', gridRow: '1 / 2' }}>
+                      <Suspense fallback={<div className="code-editor" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13 }}>{t('workspace.loadingPreview')}</div>}>
+                        <TabBar
+                          tabs={tabs}
+                          activeId={activeId}
+                          onTabClick={setActiveTab}
+                          onTabClose={closeTabWithAiSession}
+                          onRequestSaveAndClose={handleTabSaveAndClose}
+                        />
+                        {activeTab?.path && (
+                          <PdfViewerLazy
+                            filePath={activeTab.path}
+                            onRegisterSelectionGetter={(getter) => {
+                              pdfSelectionGetterRef.current = getter
+                            }}
+                          />
+                        )}
+                      </Suspense>
+                    </section>
+                  ) : editMode === 'wysiwyg' && !isPdfActive ? (
                     /* WYSIWYG 所见即所得模式 */
                     <section className="pane editor-pane" style={{ gridColumn: '1/-1' }}>
                       <Suspense fallback={<div className="code-editor" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13 }}>{t('workspace.loadingEditor')}</div>}>
@@ -3491,50 +3511,24 @@ export function WorkspaceShell({
 
                   <PreviewErrorBoundary>
                   <Suspense fallback={<section className="pane preview"><div className="preview-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13 }}>{t('workspace.loadingPreview')}</div></section>}>
-                    {isPdfActive ? (
-                      <section
-                        className="pane preview"
-                        style={
-                          effectiveLayout === 'preview-only'
-                            ? { gridColumn: '1 / -1', gridRow: '1 / 2' }
-                            : effectiveLayout === 'preview-left'
-                              ? { gridColumn: '1 / 2', gridRow: '1 / 2' }
-                              : effectiveLayout === 'preview-right'
-                                ? { gridColumn: '2 / 3', gridRow: '1 / 2' }
-                                : effectiveLayout === 'editor-only'
-                                  ? { display: 'none' }
-                                  : undefined
-                        }
-                      >
-                        {activeTab?.path && (
-                          <PdfViewerLazy
-                            filePath={activeTab.path}
-                            onRegisterSelectionGetter={(getter) => {
-                              pdfSelectionGetterRef.current = getter
-                            }}
-                          />
-                        )}
-                      </section>
-                    ) : (
-                      <PreviewPaneLazy
-                        value={previewValue}
-                        activeLine={previewActiveLine}
-                        previewWidth={previewWidthForRender}
-                        effectiveLayout={effectiveLayout}
-                        loading={isPreviewLoading}
-                        loadingLabel={t('workspace.loadingPreview')}
-                        filePath={filePath}
-                        foldRegions={foldRegions}
-                        onPreviewLineClick={handlePreviewLineClick}
-                        onSelectionChange={setPreviewSelectionText}
-                      />
-                    )}
+                    <PreviewPaneLazy
+                      value={previewValue}
+                      activeLine={previewActiveLine}
+                      previewWidth={previewWidthForRender}
+                      effectiveLayout={effectiveLayout}
+                      loading={isPreviewLoading}
+                      loadingLabel={t('workspace.loadingPreview')}
+                      filePath={filePath}
+                      foldRegions={foldRegions}
+                      onPreviewLineClick={handlePreviewLineClick}
+                      onSelectionChange={setPreviewSelectionText}
+                    />
                   </Suspense>
                   </PreviewErrorBoundary>
                     </>
                   )}
 
-                  {effectiveLayout !== 'editor-only' && editMode !== 'wysiwyg' && (effectiveLayout === 'preview-left' || effectiveLayout === 'preview-right') && (
+                  {!isPdfActive && effectiveLayout !== 'editor-only' && editMode !== 'wysiwyg' && (effectiveLayout === 'preview-left' || effectiveLayout === 'preview-right') && (
                     <div className={`divider-hotzone editor-preview-divider ${dragging ? 'active' : ''}`} style={{ left: effectiveLayout === 'preview-left' ? `${previewWidthForRender}%` : `${100 - previewWidthForRender}%` }} onMouseDown={startDragging}>
                       <div className="divider-rail"><span className="divider-handle" /></div>
                     </div>

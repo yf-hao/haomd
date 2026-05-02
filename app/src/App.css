@@ -1575,7 +1575,7 @@ button:disabled {
 /* PDF Viewer 内部布局：不影响全局 Workspace，只作用于 PdfViewer */
 .pdf-viewer {
   display: flex;
-  flex-direction: column-reverse;
+  flex-direction: column;
   height: 100%;
   flex: 1;
   min-height: 0;
@@ -1655,6 +1655,19 @@ button:disabled {
 .pdf-annotation-block {
   position: absolute;
   border-radius: 4px;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, outline-color 0.15s ease, opacity 0.15s ease;
+}
+
+.pdf-annotation-block:hover {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--theme-accent-primary) 28%, transparent);
+}
+
+.pdf-annotation-block.selected {
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--theme-accent-primary) 42%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--theme-accent-primary) 56%, transparent);
 }
 
 .pdf-selection-overlay {
@@ -1680,6 +1693,148 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.pdf-viewer-content {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+}
+
+.pdf-viewer-content.annotation-panel-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.pdf-viewer-main {
+  min-width: 0;
+  min-height: 0;
+}
+
+.pdf-annotation-panel {
+  min-width: 0;
+  min-height: 0;
+  border-left: 1px solid var(--theme-border-subtle);
+  background: color-mix(in srgb, var(--theme-surface-panel) 82%, var(--theme-surface-preview) 18%);
+  display: flex;
+  flex-direction: column;
+}
+
+.pdf-annotation-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--theme-border-subtle);
+}
+
+.pdf-annotation-panel-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--theme-text-default);
+}
+
+.pdf-annotation-panel-count {
+  min-width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid var(--theme-border-subtle);
+  background: var(--theme-surface-toolbar-button);
+  color: var(--theme-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.pdf-annotation-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+
+.pdf-annotation-empty {
+  padding: 10px 2px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--theme-text-muted);
+}
+
+.pdf-annotation-item {
+  width: 100%;
+  border: 1px solid var(--theme-border-subtle);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--theme-surface-card) 88%, var(--theme-surface-panel) 12%);
+  color: inherit;
+  text-align: left;
+  padding: 10px 11px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.08s ease, box-shadow 0.15s ease;
+}
+
+.pdf-annotation-item:hover {
+  border-color: var(--theme-border-toolbar-hover);
+  background: color-mix(in srgb, var(--theme-surface-card-active) 84%, var(--theme-surface-panel) 16%);
+  transform: translateY(-0.5px);
+}
+
+.pdf-annotation-item.selected {
+  border-color: color-mix(in srgb, var(--theme-accent-primary) 52%, var(--theme-border-toolbar) 48%);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--theme-accent-primary) 12%, transparent);
+}
+
+.pdf-annotation-item-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pdf-annotation-page,
+.pdf-annotation-type {
+  font-size: 11px;
+  line-height: 1;
+  color: var(--theme-text-muted);
+}
+
+.pdf-annotation-page {
+  font-weight: 700;
+  color: var(--theme-text-default);
+}
+
+.pdf-annotation-type {
+  text-transform: capitalize;
+}
+
+.pdf-annotation-color-dot {
+  margin-left: auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--pdf-annotation-color);
+  border: 1px solid color-mix(in srgb, var(--theme-border-toolbar) 72%, #000 28%);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.32);
+}
+
+.pdf-annotation-content {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--theme-text-default);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
 }
 
 /* 顶部 PDF 工具栏：横向工具条布局 */
@@ -1756,6 +1911,26 @@ button:disabled {
     inset 0 0 0 1px rgb(255 255 255 / 0.55);
 }
 
+.pdf-highlight-color-swatch-delete {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--theme-border-toolbar) 82%, var(--theme-text-toolbar) 18%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--theme-surface-toolbar) 70%, transparent);
+}
+
+.pdf-highlight-color-swatch-delete:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--theme-danger, #c23b4b) 52%, var(--theme-border-toolbar-hover) 48%);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--theme-danger, #c23b4b) 10%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--theme-surface-toolbar) 70%, transparent);
+}
+
+.pdf-highlight-color-swatch-delete.active {
+  border-color: color-mix(in srgb, var(--theme-danger, #c23b4b) 68%, var(--theme-accent-primary) 32%);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--theme-danger, #c23b4b) 16%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--theme-surface-toolbar) 70%, transparent);
+}
+
 /* 页码显示：当前页大号胶囊 + 总页数文本 */
 .pdf-page-current-wrapper {
   display: flex;
@@ -1819,6 +1994,12 @@ button:disabled {
   background: var(--theme-surface-toolbar-button-hover);
   border-color: var(--theme-border-toolbar-hover);
   transform: translateY(-0.5px);
+}
+
+.pdf-icon-btn.active {
+  border-color: var(--theme-accent-primary);
+  background: color-mix(in srgb, var(--theme-accent-primary) 12%, var(--theme-surface-toolbar-button));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--theme-accent-primary) 12%, transparent);
 }
 
 .pdf-icon-btn:disabled {

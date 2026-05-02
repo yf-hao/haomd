@@ -2,11 +2,12 @@ import { useRef, useState, useEffect, useCallback } from 'react'
 import type { PDFDocumentProxy } from '../hooks/usePdfDocument'
 import { usePdfDocument } from '../hooks/usePdfDocument'
 import { PdfViewport, type PdfViewportHandle } from './PdfViewport'
+import { PdfAnnotationPanel } from './PdfAnnotationPanel'
 import { useI18n } from '../../i18n/I18nContext'
 import { isTauriEnv } from '../../platform/runtime'
 import { appendAnnotation, createHighlightAnnotation, getPdfFileName, normalizeDocumentAnnotations, type PdfSelectionDraft } from '../annotationUtils'
 import { computePdfHash, loadAnnotations, saveAnnotations } from '../store/annotationStore'
-import type { DocumentAnnotations } from '../types/annotation'
+import type { Annotation, DocumentAnnotations } from '../types/annotation'
 
 type PdfReadingState = {
   page: number
@@ -72,6 +73,8 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
   const [annotationMessage, setAnnotationMessage] = useState<string | null>(null)
   const [isAnnotationBusy, setAnnotationBusy] = useState(false)
   const [selectedHighlightColor, setSelectedHighlightColor] = useState<string>(HIGHLIGHT_COLOR_OPTIONS[0].value)
+  const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null)
+  const [annotationPanelOpen, setAnnotationPanelOpen] = useState(true)
 
   const ZOOM_MIN = 0.5
   const ZOOM_MAX = 3
@@ -205,6 +208,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
       setSelectionDraft(null)
       setAnnotationMessage(null)
       setAnnotationBusy(false)
+      setSelectedAnnotationId(null)
       return
     }
 
@@ -223,11 +227,13 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
           normalizeDocumentAnnotations(stored, pdfHash, getPdfFileName(filePath), pageCount),
         )
         setAnnotationMessage(null)
+        setSelectedAnnotationId(null)
       } catch (loadError) {
         if (cancelled) return
         const message = loadError instanceof Error ? loadError.message : String(loadError)
         setAnnotationDocument(null)
         setAnnotationMessage(t('pdf.annotationLoadFailed', { message }))
+        setSelectedAnnotationId(null)
       } finally {
         if (!cancelled) {
           setAnnotationBusy(false)
@@ -288,7 +294,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     }
   }
 
-  const handleAddHighlight = async () => {
+  const handleAddHighlight = async (color = selectedHighlightColor) => {
     if (!annotationDocument || !selectionDraft) return
 
     setAnnotationBusy(true)
@@ -296,13 +302,14 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
 
     const nextDocument = appendAnnotation(
       annotationDocument,
-      createHighlightAnnotation(selectionDraft, selectedHighlightColor),
+      createHighlightAnnotation(selectionDraft, color),
     )
 
     try {
       await saveAnnotations(nextDocument.pdfHash, nextDocument)
       setAnnotationDocument(nextDocument)
       setSelectionDraft(null)
+      setSelectedAnnotationId(null)
       setAnnotationMessage(null)
       if (typeof window !== 'undefined') {
         window.getSelection()?.removeAllRanges()
@@ -314,6 +321,85 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
       setAnnotationBusy(false)
     }
   }
+
+  const handleDeleteHighlight = async () => {
+    if (!annotationDocument || !selectedAnnotationId) return
+
+    setAnnotationBusy(true)
+    setAnnotationMessage(t('pdf.savingAnnotation'))
+
+    const nextDocument = {
+      ...annotationDocument,
+      annotations: annotationDocument.annotations.filter((annotation) => annotation.id !== selectedAnnotationId),
+      lastModified: Date.now(),
+    }
+
+    try {
+      await saveAnnotations(nextDocument.pdfHash, nextDocument)
+      setAnnotationDocument(nextDocument)
+      setSelectedAnnotationId(null)
+      setAnnotationMessage(null)
+    } catch (saveError) {
+      const message = saveError instanceof Error ? saveError.message : String(saveError)
+      setAnnotationMessage(t('pdf.annotationSaveFailed', { message }))
+    } finally {
+      setAnnotationBusy(false)
+    }
+  }
+
+  const handleAnnotationItemClick = (annotation: Annotation) => {
+    setSelectedAnnotationId(annotation.id)
+    setSelectionDraft(null)
+    if (typeof window !== 'undefined') {
+      window.getSelection()?.removeAllRanges()
+    }
+    goToPage(annotation.page, pageHeightForVirtual)
+
+    const firstRect = annotation.rects[0]
+    if (!firstRect || typeof window === 'undefined') return
+
+    const adjustToRenderedPosition = () => {
+      const metrics = viewportRef.current?.getRenderedPageMetrics(annotation.page)
+      if (!metrics) return
+      const topPadding = 24
+      const absoluteOffset = Math.max(
+        0,
+        metrics.top + firstRect.y1 * metrics.height - topPadding,
+      )
+      viewportRef.current?.scrollToOffset(absoluteOffset)
+    }
+
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        adjustToRenderedPosition()
+      })
+    })
+  }
+
+  useEffect(() => {
+    if (!selectedAnnotationId) return
+
+    const isEditableTarget = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement)) return false
+      if (target.isContentEditable) return true
+      const tag = target.tagName
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || isAnnotationBusy) return
+      if (event.key !== 'Delete' && event.key !== 'Backspace') return
+      if (isEditableTarget(event.target)) return
+
+      event.preventDefault()
+      void handleDeleteHighlight()
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [selectedAnnotationId, isAnnotationBusy, handleDeleteHighlight])
 
   if (loading) {
     return <div className="pdf-viewer">正在加载 PDF…</div>
@@ -329,23 +415,6 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
 
   return (
     <div className="pdf-viewer">
-      <div className="pdf-viewer-main">
-        <PdfViewport
-          ref={viewportRef}
-          pdfDocument={pdfDocument as PDFDocumentProxy}
-          pageCount={pageCount}
-          scale={scale}
-          pageHeight={pageHeightForVirtual}
-          currentPage={currentPage}
-          onCurrentPageChange={(page) => {
-            setCurrentPage(page)
-            setPageInput(String(page))
-          }}
-          onRegisterSelectionGetter={onRegisterSelectionGetter}
-          annotations={annotationDocument?.annotations ?? []}
-          onSelectionChange={setSelectionDraft}
-        />
-      </div>
       <div className="pdf-viewer-sidebar">
         <div className="pdf-toolbar">
           <div className="pdf-toolbar-group pdf-toolbar-group-annotations">
@@ -357,8 +426,14 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                     type="button"
                     className={`pdf-highlight-color-swatch ${selectedHighlightColor === option.value ? 'active' : ''}`}
                     style={{ '--pdf-highlight-color': option.value } as React.CSSProperties}
+                    onMouseDown={(event) => {
+                      event.preventDefault()
+                    }}
                     onClick={() => {
                       setSelectedHighlightColor(option.value)
+                      if (selectionDraft && annotationDocument && !isAnnotationBusy) {
+                        void handleAddHighlight(option.value)
+                      }
                     }}
                     aria-label={t(`pdf.highlightColors.${option.key}`)}
                     aria-pressed={selectedHighlightColor === option.value}
@@ -368,19 +443,25 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
               </div>
               <button
                 type="button"
-                className="pdf-page-btn"
-                onClick={() => {
-                  void handleAddHighlight()
+                className={`pdf-highlight-color-swatch pdf-highlight-color-swatch-delete ${selectedAnnotationId ? 'active' : ''}`}
+                onMouseDown={(event) => {
+                  event.preventDefault()
                 }}
-                disabled={!selectionDraft || !annotationDocument || isAnnotationBusy}
-                title={
-                  selectionDraft
-                    ? t('pdf.addHighlight')
-                    : t('pdf.addHighlightDisabled')
+                onClick={() => {
+                  void handleDeleteHighlight()
+                }}
+                disabled={!selectedAnnotationId || isAnnotationBusy}
+                aria-label={
+                  selectedAnnotationId
+                    ? t('pdf.deleteHighlight')
+                    : t('pdf.deleteHighlightDisabled')
                 }
-              >
-                {t('pdf.addHighlight')}
-              </button>
+                title={
+                  selectedAnnotationId
+                    ? t('pdf.deleteHighlight')
+                    : t('pdf.deleteHighlightDisabled')
+                }
+              />
               {annotationMessage ? <div className="pdf-annotation-status">{annotationMessage}</div> : null}
             </div>
           </div>
@@ -455,10 +536,63 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                 >
                   -
                 </button>
+                <button
+                  type="button"
+                  className={`pdf-icon-btn ${annotationPanelOpen ? 'active' : ''}`}
+                  onClick={() => {
+                    setAnnotationPanelOpen((prev) => !prev)
+                  }}
+                  aria-label={annotationPanelOpen ? t('pdf.hideAnnotationPanel') : t('pdf.showAnnotationPanel')}
+                  title={annotationPanelOpen ? t('pdf.hideAnnotationPanel') : t('pdf.showAnnotationPanel')}
+                >
+                  ≣
+                </button>
               </div>
             </div>
           </div>
         </div>
+      </div>
+      <div className={`pdf-viewer-content ${annotationPanelOpen ? '' : 'annotation-panel-collapsed'}`}>
+        <div className="pdf-viewer-main">
+          <PdfViewport
+            ref={viewportRef}
+            pdfDocument={pdfDocument as PDFDocumentProxy}
+            pageCount={pageCount}
+            scale={scale}
+            pageHeight={pageHeightForVirtual}
+            currentPage={currentPage}
+            onCurrentPageChange={(page) => {
+              setCurrentPage(page)
+              setPageInput(String(page))
+            }}
+            onRegisterSelectionGetter={onRegisterSelectionGetter}
+            annotations={annotationDocument?.annotations ?? []}
+            onSelectionChange={(selection) => {
+              setSelectionDraft(selection)
+              if (selection) {
+                setSelectedAnnotationId(null)
+              }
+            }}
+            selectedAnnotationId={selectedAnnotationId}
+            onAnnotationClick={(annotationId) => {
+              setSelectedAnnotationId(annotationId)
+              setSelectionDraft(null)
+              if (typeof window !== 'undefined') {
+                window.getSelection()?.removeAllRanges()
+              }
+            }}
+            onClearAnnotationSelection={() => {
+              setSelectedAnnotationId(null)
+            }}
+          />
+        </div>
+        {annotationPanelOpen && (
+          <PdfAnnotationPanel
+            annotations={annotationDocument?.annotations ?? []}
+            selectedAnnotationId={selectedAnnotationId}
+            onAnnotationClick={handleAnnotationItemClick}
+          />
+        )}
       </div>
     </div>
   )
