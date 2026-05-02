@@ -164,3 +164,37 @@ export function buildSelectionBlocks(
       })),
   )
 }
+
+export function annotationRectsToSelectionBlocks(
+  rects: readonly {
+    x1: number
+    y1: number
+    x2: number
+    y2: number
+  }[],
+  pageWidth: number,
+  pageHeight: number,
+): SelectionBlock[] {
+  if (pageWidth <= 0 || pageHeight <= 0) {
+    return []
+  }
+
+  return mergeSelectionRects(
+    rects
+      .map((rect) => {
+        const left = rect.x1 * pageWidth
+        const top = rect.y1 * pageHeight
+        const right = rect.x2 * pageWidth
+        const bottom = rect.y2 * pageHeight
+        const width = Math.max(0, right - left)
+        const height = Math.max(0, bottom - top)
+        return {
+          left,
+          top,
+          width,
+          height,
+        }
+      })
+      .filter((rect) => rect.width > 0 && rect.height > 0),
+  )
+}

@@ -1,5 +1,7 @@
 import type { Annotation, DocumentAnnotations, Rect } from './types/annotation'
 import type { SelectionBlock } from './components/pdfSelectionOverlay'
+import type { RectLike } from './components/pdfSelectionOverlay'
+import type { AnnotationType } from './types/annotation'
 
 export interface PdfSelectionDraft {
   page: number
@@ -9,10 +11,49 @@ export interface PdfSelectionDraft {
 
 const DEFAULT_HIGHLIGHT_COLOR = '#f5d90a'
 const DEFAULT_HIGHLIGHT_OPACITY = 0.35
+const DEFAULT_TEXT_MARKUP_OPACITY = 1
 const ANNOTATION_SCHEMA_VERSION = 1
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
+}
+
+function mergePageRelativeRects(rects: RectLike[]): RectLike[] {
+  if (rects.length === 0) return []
+
+  const sorted = [...rects].sort((a, b) => {
+    if (Math.abs(a.top - b.top) > 3) return a.top - b.top
+    return a.left - b.left
+  })
+
+  const merged: RectLike[] = []
+
+  for (const rect of sorted) {
+    const last = merged[merged.length - 1]
+    if (!last) {
+      merged.push({ ...rect })
+      continue
+    }
+
+    const lineThreshold = Math.max(3, Math.min(last.height, rect.height) * 0.35)
+    const horizontalGap = Math.max(8, Math.min(last.height, rect.height) * 0.6)
+    const sameLine = Math.abs(last.top - rect.top) <= lineThreshold
+    const closeEnough = rect.left <= last.right + horizontalGap
+
+    if (sameLine && closeEnough) {
+      last.left = Math.min(last.left, rect.left)
+      last.top = Math.min(last.top, rect.top)
+      last.right = Math.max(last.right, rect.right)
+      last.bottom = Math.max(last.bottom, rect.bottom)
+      last.width = last.right - last.left
+      last.height = last.bottom - last.top
+      continue
+    }
+
+    merged.push({ ...rect })
+  }
+
+  return merged
 }
 
 export function getPdfFileName(filePath: string) {
@@ -76,19 +117,65 @@ export function selectionBlocksToAnnotationRects(
     .filter((rect) => rect.x2 > rect.x1 && rect.y2 > rect.y1)
 }
 
+export function selectionRectsToAnnotationRects(
+  rects: readonly RectLike[],
+  pageRect: RectLike,
+): Rect[] {
+  if (pageRect.width <= 0 || pageRect.height <= 0) {
+    return []
+  }
+
+  const pageRelativeRects = rects
+    .filter((rect) => rect.width > 0 && rect.height > 0)
+    .map((rect) => {
+      const left = clamp(rect.left - pageRect.left, 0, pageRect.width)
+      const top = clamp(rect.top - pageRect.top, 0, pageRect.height)
+      const right = clamp(rect.right - pageRect.left, 0, pageRect.width)
+      const bottom = clamp(rect.bottom - pageRect.top, 0, pageRect.height)
+
+      return {
+        left,
+        top,
+        right,
+        bottom,
+        width: Math.max(0, right - left),
+        height: Math.max(0, bottom - top),
+      }
+    })
+    .filter((rect) => rect.width > 0 && rect.height > 0)
+
+  return mergePageRelativeRects(pageRelativeRects)
+    .map((rect) => ({
+      x1: clamp(rect.left / pageRect.width, 0, 1),
+      y1: clamp(rect.top / pageRect.height, 0, 1),
+      x2: clamp(rect.right / pageRect.width, 0, 1),
+      y2: clamp(rect.bottom / pageRect.height, 0, 1),
+    }))
+    .filter((rect) => rect.x2 > rect.x1 && rect.y2 > rect.y1)
+}
+
 export function createHighlightAnnotation(
   selection: PdfSelectionDraft,
   color = DEFAULT_HIGHLIGHT_COLOR,
 ): Annotation {
+  return createTextMarkupAnnotation(selection, 'highlight', color)
+}
+
+export function createTextMarkupAnnotation(
+  selection: PdfSelectionDraft,
+  type: Extract<AnnotationType, 'highlight' | 'underline' | 'strikeout' | 'squiggly'>,
+  color = DEFAULT_HIGHLIGHT_COLOR,
+): Annotation {
   const now = Date.now()
+  const opacity = type === 'highlight' ? DEFAULT_HIGHLIGHT_OPACITY : DEFAULT_TEXT_MARKUP_OPACITY
 
   return {
     id: crypto.randomUUID(),
     page: selection.page,
-    type: 'highlight',
+    type,
     rects: selection.rects,
     color,
-    opacity: DEFAULT_HIGHLIGHT_OPACITY,
+    opacity,
     content: selection.text,
     createdAt: now,
     updatedAt: now,

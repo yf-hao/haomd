@@ -5,9 +5,10 @@ import { PdfViewport, type PdfViewportHandle } from './PdfViewport'
 import { PdfAnnotationPanel } from './PdfAnnotationPanel'
 import { useI18n } from '../../i18n/I18nContext'
 import { isTauriEnv } from '../../platform/runtime'
-import { appendAnnotation, createHighlightAnnotation, getPdfFileName, normalizeDocumentAnnotations, type PdfSelectionDraft } from '../annotationUtils'
+import { appendAnnotation, createTextMarkupAnnotation, getPdfFileName, normalizeDocumentAnnotations, type PdfSelectionDraft } from '../annotationUtils'
 import { computePdfHash, loadAnnotations, saveAnnotations } from '../store/annotationStore'
 import type { Annotation, DocumentAnnotations } from '../types/annotation'
+import type { AnnotationType } from '../types/annotation'
 
 type PdfReadingState = {
   page: number
@@ -22,6 +23,60 @@ const HIGHLIGHT_COLOR_OPTIONS = [
   { value: '#ff8a4c', key: 'orange' },
   { value: '#f06292', key: 'pink' },
 ] as const
+
+const TEXT_MARKUP_TOOL_OPTIONS = [
+  { type: 'highlight', labelKey: 'pdf.annotationTypes.highlight' },
+  { type: 'underline', labelKey: 'pdf.annotationTypes.underline' },
+  { type: 'strikeout', labelKey: 'pdf.annotationTypes.strikeout' },
+  { type: 'squiggly', labelKey: 'pdf.annotationTypes.squiggly' },
+] as const satisfies ReadonlyArray<{
+  type: Extract<AnnotationType, 'highlight' | 'underline' | 'strikeout' | 'squiggly'>
+  labelKey: string
+}>
+
+function renderMarkupToolIcon(
+  type: Extract<AnnotationType, 'highlight' | 'underline' | 'strikeout' | 'squiggly'>,
+) {
+  switch (type) {
+    case 'highlight':
+      return (
+        <svg className="pdf-markup-tool-icon" viewBox="0 0 20 20" aria-hidden="true">
+          <path
+            d="M10 3.2C6.1 3.2 3 6 3 9.8C3 13.4 5.8 16 9.1 16H10.7C11.4 16 11.9 15.4 11.9 14.8C11.9 14.3 11.6 13.9 11.6 13.5C11.6 12.8 12.2 12.4 12.9 12.4H13.8C16.1 12.4 17.8 10.8 17.8 8.6C17.8 5.4 14.7 3.2 10 3.2Z"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <circle cx="7" cy="8.1" r="1" fill="currentColor" />
+          <circle cx="9.8" cy="6.9" r="1" fill="currentColor" />
+          <circle cx="12.7" cy="8" r="1" fill="currentColor" />
+          <circle cx="8.6" cy="10.9" r="1" fill="currentColor" />
+        </svg>
+      )
+    case 'underline':
+      return (
+        <svg className="pdf-markup-tool-icon" viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M6.2 5.5V10C6.2 12.1 7.8 13.7 10 13.7C12.2 13.7 13.8 12.1 13.8 10V5.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <path d="M5 16H15" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+        </svg>
+      )
+    case 'strikeout':
+      return (
+        <svg className="pdf-markup-tool-icon" viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M5 7.2C5 5.8 6.2 4.8 8 4.8H12C13.8 4.8 15 5.8 15 7.2C15 8.7 13.7 9.4 12.3 9.8L7.7 11.1C6.3 11.5 5 12.2 5 13.6C5 15 6.2 16 8 16H12C13.8 16 15 15 15 13.6" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M4.5 10H15.5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+        </svg>
+      )
+    case 'squiggly':
+      return (
+        <svg className="pdf-markup-tool-icon" viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M4 12Q5.5 9.2 7 12T10 12T13 12T16 12" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )
+  }
+}
 
 function getPdfStateKey(filePath: string) {
   return `pdf-reading-state:${filePath}`
@@ -62,6 +117,7 @@ export interface PdfViewerProps {
 export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProps) {
   const { t } = useI18n()
   const viewportRef = useRef<PdfViewportHandle | null>(null)
+  const selectionDraftRef = useRef<PdfSelectionDraft | null>(null)
   const [scale, setScale] = useState(1.25)
   const { pdfDocument, pageCount, loading, error } = usePdfDocument(filePath)
   const [currentPage, setCurrentPage] = useState(1)
@@ -69,12 +125,14 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
   const [basePageWidth, setBasePageWidth] = useState<number | null>(null)
   const [basePageHeight, setBasePageHeight] = useState<number | null>(null)
   const [annotationDocument, setAnnotationDocument] = useState<DocumentAnnotations | null>(null)
-  const [selectionDraft, setSelectionDraft] = useState<PdfSelectionDraft | null>(null)
+  const [, setSelectionDraft] = useState<PdfSelectionDraft | null>(null)
   const [annotationMessage, setAnnotationMessage] = useState<string | null>(null)
   const [isAnnotationBusy, setAnnotationBusy] = useState(false)
   const [selectedHighlightColor, setSelectedHighlightColor] = useState<string>(HIGHLIGHT_COLOR_OPTIONS[0].value)
+  const [activeMarkupTool, setActiveMarkupTool] = useState<Extract<AnnotationType, 'highlight' | 'underline' | 'strikeout' | 'squiggly'> | null>(null)
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null)
   const [annotationPanelOpen, setAnnotationPanelOpen] = useState(true)
+  const [clearSelectionSignal, setClearSelectionSignal] = useState(0)
 
   const ZOOM_MIN = 0.5
   const ZOOM_MAX = 3
@@ -206,6 +264,8 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     if (!pdfDocument || pageCount <= 0) {
       setAnnotationDocument(null)
       setSelectionDraft(null)
+      selectionDraftRef.current = null
+      setActiveMarkupTool(null)
       setAnnotationMessage(null)
       setAnnotationBusy(false)
       setSelectedAnnotationId(null)
@@ -294,26 +354,34 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     }
   }
 
-  const handleAddHighlight = async (color = selectedHighlightColor) => {
-    if (!annotationDocument || !selectionDraft) return
+  const handleAddHighlight = async (
+    type: Extract<AnnotationType, 'highlight' | 'underline' | 'strikeout' | 'squiggly'> = activeMarkupTool ?? 'highlight',
+    color = selectedHighlightColor,
+    draft = selectionDraftRef.current,
+  ) => {
+    const currentSelectionDraft = draft
+    if (!annotationDocument || !currentSelectionDraft) return
+
+    setSelectionDraft(null)
+    selectionDraftRef.current = null
+    setSelectedAnnotationId(null)
+    setClearSelectionSignal((prev) => prev + 1)
+    if (typeof window !== 'undefined') {
+      window.getSelection()?.removeAllRanges()
+    }
 
     setAnnotationBusy(true)
     setAnnotationMessage(t('pdf.savingAnnotation'))
 
     const nextDocument = appendAnnotation(
       annotationDocument,
-      createHighlightAnnotation(selectionDraft, color),
+      createTextMarkupAnnotation(currentSelectionDraft, type, color),
     )
 
     try {
       await saveAnnotations(nextDocument.pdfHash, nextDocument)
       setAnnotationDocument(nextDocument)
-      setSelectionDraft(null)
-      setSelectedAnnotationId(null)
       setAnnotationMessage(null)
-      if (typeof window !== 'undefined') {
-        window.getSelection()?.removeAllRanges()
-      }
     } catch (saveError) {
       const message = saveError instanceof Error ? saveError.message : String(saveError)
       setAnnotationMessage(t('pdf.annotationSaveFailed', { message }))
@@ -350,6 +418,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
   const handleAnnotationItemClick = (annotation: Annotation) => {
     setSelectedAnnotationId(annotation.id)
     setSelectionDraft(null)
+    selectionDraftRef.current = null
     if (typeof window !== 'undefined') {
       window.getSelection()?.removeAllRanges()
     }
@@ -420,23 +489,71 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
           <div className="pdf-toolbar-group pdf-toolbar-group-annotations">
             <div className="pdf-toolbar-section pdf-toolbar-annotations">
               <div className="pdf-highlight-color-row" aria-label={t('pdf.highlightColor')}>
+                <button
+                  type="button"
+                  className={`pdf-highlight-tool-btn ${activeMarkupTool === null ? 'active' : ''}`}
+                  onMouseDown={(event) => {
+                    event.preventDefault()
+                  }}
+                  onClick={() => {
+                    setActiveMarkupTool(null)
+                  }}
+                  aria-label={t('pdf.selectTextOnly')}
+                  aria-pressed={activeMarkupTool === null}
+                  title={t('pdf.selectTextOnly')}
+                >
+                  <svg
+                    className="pdf-highlight-tool-arrow"
+                    viewBox="0 0 16 16"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M3 2.5L12.5 8L7.2 8.8L10 14L8.2 14.8L5.5 9.6L3 13V2.5Z"
+                      fill="currentColor"
+                    />
+                  </svg>
+                </button>
+                {TEXT_MARKUP_TOOL_OPTIONS.map((option) => (
+                  <button
+                    key={option.type}
+                    type="button"
+                    className={`pdf-highlight-tool-btn ${activeMarkupTool === option.type ? 'active' : ''}`}
+                    onMouseDown={(event) => {
+                      event.preventDefault()
+                    }}
+                    onClick={() => {
+                      setActiveMarkupTool(option.type)
+                      if (selectionDraftRef.current && annotationDocument && !isAnnotationBusy) {
+                        void handleAddHighlight(option.type, selectedHighlightColor)
+                      }
+                    }}
+                    aria-label={t(option.labelKey)}
+                    aria-pressed={activeMarkupTool === option.type}
+                    title={t(option.labelKey)}
+                  >
+                    {renderMarkupToolIcon(option.type)}
+                  </button>
+                ))}
                 {HIGHLIGHT_COLOR_OPTIONS.map((option) => (
                   <button
                     key={option.value}
                     type="button"
-                    className={`pdf-highlight-color-swatch ${selectedHighlightColor === option.value ? 'active' : ''}`}
+                    className={`pdf-highlight-color-swatch ${selectedHighlightColor === option.value && activeMarkupTool === 'highlight' ? 'active' : ''}`}
                     style={{ '--pdf-highlight-color': option.value } as React.CSSProperties}
                     onMouseDown={(event) => {
                       event.preventDefault()
                     }}
                     onClick={() => {
                       setSelectedHighlightColor(option.value)
-                      if (selectionDraft && annotationDocument && !isAnnotationBusy) {
-                        void handleAddHighlight(option.value)
+                      if (selectionDraftRef.current && annotationDocument && !isAnnotationBusy) {
+                        if (activeMarkupTool === null) {
+                          return
+                        }
+                        void handleAddHighlight(activeMarkupTool, option.value)
                       }
                     }}
                     aria-label={t(`pdf.highlightColors.${option.key}`)}
-                    aria-pressed={selectedHighlightColor === option.value}
+                    aria-pressed={selectedHighlightColor === option.value && activeMarkupTool === 'highlight'}
                     title={t(`pdf.highlightColors.${option.key}`)}
                   />
                 ))}
@@ -560,6 +677,8 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
             pageCount={pageCount}
             scale={scale}
             pageHeight={pageHeightForVirtual}
+            previewHighlightColor={selectedHighlightColor}
+            clearSelectionSignal={clearSelectionSignal}
             currentPage={currentPage}
             onCurrentPageChange={(page) => {
               setCurrentPage(page)
@@ -568,15 +687,20 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
             onRegisterSelectionGetter={onRegisterSelectionGetter}
             annotations={annotationDocument?.annotations ?? []}
             onSelectionChange={(selection) => {
+              selectionDraftRef.current = selection
               setSelectionDraft(selection)
               if (selection) {
                 setSelectedAnnotationId(null)
+                if (activeMarkupTool && annotationDocument && !isAnnotationBusy) {
+                  void handleAddHighlight(activeMarkupTool, selectedHighlightColor, selection)
+                }
               }
             }}
             selectedAnnotationId={selectedAnnotationId}
             onAnnotationClick={(annotationId) => {
               setSelectedAnnotationId(annotationId)
               setSelectionDraft(null)
+              selectionDraftRef.current = null
               if (typeof window !== 'undefined') {
                 window.getSelection()?.removeAllRanges()
               }

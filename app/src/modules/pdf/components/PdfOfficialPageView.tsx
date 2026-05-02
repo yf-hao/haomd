@@ -3,18 +3,24 @@ import type { PDFDocumentProxy } from '../hooks/usePdfDocument'
 import { EventBus, PDFLinkService, PDFPageView } from 'pdfjs-dist/web/pdf_viewer.mjs'
 import 'pdfjs-dist/web/pdf_viewer.css'
 import {
+  annotationRectsToSelectionBlocks,
   areSelectionBlocksEqual,
   buildSelectionBlocks,
   type RectLike,
   type SelectionBlock,
 } from './pdfSelectionOverlay'
-import { selectionBlocksToAnnotationRects, type PdfSelectionDraft } from '../annotationUtils'
+import {
+  selectionRectsToAnnotationRects,
+  type PdfSelectionDraft,
+} from '../annotationUtils'
 import type { Annotation } from '../types/annotation'
 
 export interface PdfOfficialPageViewProps {
   pdfDocument: PDFDocumentProxy
   pageNumber: number
   scale: number
+  previewHighlightColor?: string
+  clearSelectionSignal?: number
   annotations?: Annotation[]
   onSelectionChange?: (selection: PdfSelectionDraft | null) => void
   selectedAnnotationId?: string | null
@@ -36,6 +42,8 @@ export function PdfOfficialPageView({
   pdfDocument,
   pageNumber,
   scale,
+  previewHighlightColor = '#f5d90a',
+  clearSelectionSignal = 0,
   annotations = [],
   onSelectionChange,
   selectedAnnotationId = null,
@@ -202,6 +210,27 @@ export function PdfOfficialPageView({
 
     let frame = 0
 
+    const normalizeSelectionRects = (rawRects: DOMRectList | DOMRect[]) => {
+      const pageEl = root.querySelector('.page') as HTMLElement | null
+      if (!pageEl) return [] as RectLike[]
+
+      const pageRect = pageEl.getBoundingClientRect()
+      return Array.from(rawRects)
+        .filter((rect) => rect.width > 0 && rect.height > 0)
+        .map((rect) => {
+          const offsetY = rect.height * 0.14
+          const top = Math.max(pageRect.top, rect.top - offsetY)
+          return {
+            left: rect.left,
+            top,
+            right: rect.right,
+            bottom: top + rect.height,
+            width: rect.width,
+            height: rect.height,
+          }
+        })
+    }
+
     const publishSelection = (selection: PdfSelectionDraft | null) => {
       if (!onSelectionChange) return
 
@@ -233,17 +262,27 @@ export function PdfOfficialPageView({
       }
 
       const pageRect = pageEl.getBoundingClientRect()
-      const rawRects = Array.from(selection.getRangeAt(0).getClientRects())
+      const normalizedRawRects = normalizeSelectionRects(selection.getRangeAt(0).getClientRects())
       if (textRectsDirtyRef.current || textRectsRef.current.length === 0) {
         updateCachedTextRects()
       }
       const textRects = textRectsRef.current
 
-      const nextBlocks = buildSelectionBlocks(rawRects, pageRect, textRects)
-      applySelectionBlocks(nextBlocks)
-
       const text = selection.toString().trim()
-      const rects = selectionBlocksToAnnotationRects(nextBlocks, pageRect.width, pageRect.height)
+      const rects = selectionRectsToAnnotationRects(normalizedRawRects, {
+        left: pageRect.left,
+        top: pageRect.top,
+        right: pageRect.right,
+        bottom: pageRect.bottom,
+        width: pageRect.width,
+        height: pageRect.height,
+      })
+      const nextBlocks =
+        rects.length > 0
+          ? annotationRectsToSelectionBlocks(rects, pageRect.width, pageRect.height)
+          : buildSelectionBlocks(normalizedRawRects, pageRect, textRects)
+
+      applySelectionBlocks(nextBlocks)
       publishSelection(text && rects.length > 0 ? { page: pageNumber, text, rects } : null)
     }
 
@@ -268,7 +307,11 @@ export function PdfOfficialPageView({
     const handlePointerFinish = () => {
       if (!isPointerSelectionActiveRef.current) return
       setPointerSelectingState(false)
-      scheduleUpdate()
+      if (frame) {
+        window.cancelAnimationFrame(frame)
+        frame = 0
+      }
+      updateSelectionBlocks()
     }
 
     const handleSelectionChange = () => {
@@ -307,37 +350,89 @@ export function PdfOfficialPageView({
         window.cancelAnimationFrame(frame)
       }
     }
-  }, [onSelectionChange, pageNumber, pdfDocument, scale])
+  }, [onSelectionChange, pageNumber, pdfDocument, scale, clearSelectionSignal])
+
+  useEffect(() => {
+    clearSelectionBlocks()
+    hasActiveSelectionRef.current = false
+    onSelectionChange?.(null)
+  }, [clearSelectionSignal, onSelectionChange])
 
   return (
     <div
       ref={rootRef}
       className="pdf-official-page-view pdfViewer"
-      style={{ '--scale-factor': String(scale) } as React.CSSProperties}
+      style={{
+        '--scale-factor': String(scale),
+        '--pdf-selection-preview-color': previewHighlightColor,
+      } as React.CSSProperties}
     >
       <div ref={pageHostRef} className="pdf-official-page-host" />
       <div className="pdf-annotation-overlay" aria-hidden="true">
-        {annotations
-          .filter((annotation) => annotation.type === 'highlight')
-          .flatMap((annotation) =>
-            annotation.rects.map((rect, index) => (
+        {annotations.flatMap((annotation) =>
+          annotation.rects.map((rect, index) => {
+            const left = `${rect.x1 * 100}%`
+            const top = `${rect.y1 * 100}%`
+            const width = `${(rect.x2 - rect.x1) * 100}%`
+            const height = `${(rect.y2 - rect.y1) * 100}%`
+            const annotationKey = `${annotation.id}-${index}`
+            const sharedClassName = `pdf-annotation-block pdf-annotation-block--${annotation.type} ${selectedAnnotationId === annotation.id ? 'selected' : ''}`
+            const sharedProps = {
+              className: sharedClassName,
+              style: {
+                left,
+                top,
+                width,
+                height,
+                '--pdf-annotation-color': annotation.color,
+                '--pdf-annotation-opacity': String(annotation.opacity),
+              } as React.CSSProperties,
+              onClick: () => {
+                onAnnotationClick?.(annotation.id)
+              },
+            }
+
+            if (annotation.type === 'highlight') {
+              return (
+                <div
+                  key={annotationKey}
+                  {...sharedProps}
+                  style={{
+                    ...sharedProps.style,
+                    background: annotation.color,
+                    opacity: annotation.opacity,
+                  }}
+                />
+              )
+            }
+
+            return (
               <div
-                key={`${annotation.id}-${index}`}
-                className={`pdf-annotation-block ${selectedAnnotationId === annotation.id ? 'selected' : ''}`}
+                key={annotationKey}
+                {...sharedProps}
                 style={{
-                  left: `${rect.x1 * 100}%`,
-                  top: `${rect.y1 * 100}%`,
-                  width: `${(rect.x2 - rect.x1) * 100}%`,
-                  height: `${(rect.y2 - rect.y1) * 100}%`,
-                  background: annotation.color,
-                  opacity: annotation.opacity,
+                  ...sharedProps.style,
+                  opacity: 1,
                 }}
-                onClick={() => {
-                  onAnnotationClick?.(annotation.id)
-                }}
-              />
-            )),
-          )}
+              >
+                <div className={`pdf-annotation-mark pdf-annotation-mark--${annotation.type}`}>
+                  {annotation.type === 'squiggly' ? (
+                    <svg className="pdf-annotation-squiggly" viewBox="0 0 100 12" preserveAspectRatio="none" aria-hidden="true">
+                      <path
+                        d="M0 8 Q 6 2 12 8 T 24 8 T 36 8 T 48 8 T 60 8 T 72 8 T 84 8 T 96 8"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  ) : null}
+                </div>
+              </div>
+            )
+          }),
+        )}
       </div>
       <div className="pdf-selection-overlay" aria-hidden="true">
         {selectionBlocks.map((block, index) => (

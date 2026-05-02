@@ -23,6 +23,8 @@ export interface PdfViewportProps {
   pageCount: number
   scale: number
   pageHeight: number
+  previewHighlightColor?: string
+  clearSelectionSignal?: number
   currentPage: number
   onCurrentPageChange: (page: number) => void
   onRegisterSelectionGetter?: (getter: (() => string | null) | null) => void
@@ -39,6 +41,8 @@ export const PdfViewport = forwardRef<PdfViewportHandle, PdfViewportProps>(funct
     pageCount,
     scale,
     pageHeight,
+    previewHighlightColor,
+    clearSelectionSignal = 0,
     currentPage,
     onCurrentPageChange,
     onRegisterSelectionGetter,
@@ -152,6 +156,8 @@ export const PdfViewport = forwardRef<PdfViewportHandle, PdfViewportProps>(funct
             pdfDocument={pdfDocument}
             pageNumber={pageNumber}
             scale={scale}
+            previewHighlightColor={previewHighlightColor}
+            clearSelectionSignal={clearSelectionSignal}
             annotations={annotations.filter((annotation) => annotation.page === pageNumber)}
             onSelectionChange={onSelectionChange}
             selectedAnnotationId={selectedAnnotationId}
