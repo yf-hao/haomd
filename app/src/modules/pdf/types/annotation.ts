@@ -23,6 +23,7 @@ export interface Annotation {
   color: string
   opacity: number
   content?: string
+  note?: string
   author?: string
   inkList?: Array<{ x: number; y: number }[]>
   createdAt: number

@@ -5,6 +5,13 @@ export interface PdfAnnotationPanelProps {
   annotations: Annotation[]
   selectedAnnotationId?: string | null
   onAnnotationClick?: (annotation: Annotation) => void
+  onAnnotationDoubleClick?: (annotation: Annotation) => void
+}
+
+type DisplayAnnotationItem = {
+  primary: Annotation
+  noteSource: Annotation | null
+  noteText: string | null
 }
 
 const COLOR_LABELS: Record<string, string> = {
@@ -13,6 +20,10 @@ const COLOR_LABELS: Record<string, string> = {
   '#4da3ff': 'pdf.highlightColors.blue',
   '#ff8a4c': 'pdf.highlightColors.orange',
   '#f06292': 'pdf.highlightColors.pink',
+  '#ff0000': 'pdf.highlightColors.pureRed',
+  '#ffff00': 'pdf.highlightColors.pureYellow',
+  '#0000ff': 'pdf.highlightColors.pureBlue',
+  '#000000': 'pdf.highlightColors.black',
 }
 
 const TYPE_LABELS: Record<Annotation['type'], string> = {
@@ -65,10 +76,47 @@ function renderAnnotationTypeIcon(type: Annotation['type']) {
   }
 }
 
+function isMarkupAnnotation(annotation: Annotation) {
+  return (
+    annotation.type === 'highlight' ||
+    annotation.type === 'underline' ||
+    annotation.type === 'strikeout' ||
+    annotation.type === 'squiggly'
+  )
+}
+
+function areRectsEqual(left: Annotation['rects'], right: Annotation['rects']) {
+  if (left.length !== right.length) return false
+  return left.every((rect, index) => {
+    const other = right[index]
+    return (
+      rect.x1 === other.x1 &&
+      rect.y1 === other.y1 &&
+      rect.x2 === other.x2 &&
+      rect.y2 === other.y2
+    )
+  })
+}
+
+function findLinkedMarkupAnnotation(annotation: Annotation, annotations: readonly Annotation[]) {
+  if (annotation.type !== 'text') return null
+  return (
+    annotations.find(
+      (candidate) =>
+        candidate.id !== annotation.id &&
+        isMarkupAnnotation(candidate) &&
+        candidate.page === annotation.page &&
+        (candidate.content?.trim() || '') === (annotation.content?.trim() || '') &&
+        areRectsEqual(candidate.rects, annotation.rects),
+    ) ?? null
+  )
+}
+
 export function PdfAnnotationPanel({
   annotations,
   selectedAnnotationId = null,
   onAnnotationClick,
+  onAnnotationDoubleClick,
 }: PdfAnnotationPanelProps) {
   const { t } = useI18n()
 
@@ -77,43 +125,89 @@ export function PdfAnnotationPanel({
     return left.createdAt - right.createdAt
   })
 
+  const displayAnnotations: DisplayAnnotationItem[] = []
+  const consumedTextIds = new Set<string>()
+
+  for (const annotation of sortedAnnotations) {
+    if (annotation.type === 'text' && consumedTextIds.has(annotation.id)) {
+      continue
+    }
+
+    if (annotation.type === 'text') {
+      const linkedMarkup = findLinkedMarkupAnnotation(annotation, sortedAnnotations)
+      if (linkedMarkup) {
+        consumedTextIds.add(annotation.id)
+        continue
+      }
+    }
+
+    const linkedText =
+      isMarkupAnnotation(annotation)
+        ? sortedAnnotations.find(
+            (candidate) =>
+              candidate.type === 'text' &&
+              candidate.page === annotation.page &&
+              (candidate.content?.trim() || '') === (annotation.content?.trim() || '') &&
+              areRectsEqual(candidate.rects, annotation.rects),
+          ) ?? null
+        : null
+
+    if (linkedText) {
+      consumedTextIds.add(linkedText.id)
+    }
+
+    displayAnnotations.push({
+      primary: annotation,
+      noteSource: annotation.note?.trim() ? annotation : linkedText,
+      noteText: annotation.note?.trim() || linkedText?.note?.trim() || null,
+    })
+  }
+
   return (
     <aside className="pdf-annotation-panel">
       <div className="pdf-annotation-panel-header">
         <div className="pdf-annotation-panel-title">{t('pdf.annotationTools')}</div>
-        <div className="pdf-annotation-panel-count">{sortedAnnotations.length}</div>
+        <div className="pdf-annotation-panel-count">{displayAnnotations.length}</div>
       </div>
 
       <div className="pdf-annotation-panel-body">
-        {sortedAnnotations.length === 0 ? (
+        {displayAnnotations.length === 0 ? (
           <div className="pdf-annotation-empty">{t('pdf.noAnnotations')}</div>
         ) : (
-          sortedAnnotations.map((annotation) => {
-            const colorKey = COLOR_LABELS[annotation.color]
+          displayAnnotations.map(({ primary, noteSource, noteText }) => {
+            const colorKey = COLOR_LABELS[primary.color]
             return (
               <button
-                key={annotation.id}
+                key={primary.id}
                 type="button"
-                className={`pdf-annotation-item ${selectedAnnotationId === annotation.id ? 'selected' : ''}`}
+                className={`pdf-annotation-item ${selectedAnnotationId === primary.id || selectedAnnotationId === noteSource?.id ? 'selected' : ''}`}
                 onClick={() => {
-                  onAnnotationClick?.(annotation)
+                  onAnnotationClick?.(primary)
+                }}
+                onDoubleClick={() => {
+                  if (noteSource && noteText) {
+                    onAnnotationDoubleClick?.(noteSource)
+                  }
                 }}
               >
                 <div className="pdf-annotation-item-top">
-                  <span className="pdf-annotation-page">P{annotation.page}</span>
+                  <span className="pdf-annotation-page">P{primary.page}</span>
                   <span className="pdf-annotation-type-badge">
-                    {renderAnnotationTypeIcon(annotation.type)}
-                    <span className="pdf-annotation-type">{t(TYPE_LABELS[annotation.type])}</span>
+                    {renderAnnotationTypeIcon(primary.type)}
+                    <span className="pdf-annotation-type">{t(TYPE_LABELS[primary.type])}</span>
                   </span>
                   <span
                     className="pdf-annotation-color-dot"
-                    style={{ '--pdf-annotation-color': annotation.color } as React.CSSProperties}
-                    title={colorKey ? t(colorKey) : annotation.color}
+                    style={{ '--pdf-annotation-color': primary.color } as React.CSSProperties}
+                    title={colorKey ? t(colorKey) : primary.color}
                   />
                 </div>
                 <div className="pdf-annotation-content">
-                  {annotation.content?.trim() || t('pdf.emptyAnnotationContent')}
+                  {primary.content?.trim() || t('pdf.emptyAnnotationContent')}
                 </div>
+                {noteText ? (
+                  <div className="pdf-annotation-note">{noteText}</div>
+                ) : null}
               </button>
             )
           })

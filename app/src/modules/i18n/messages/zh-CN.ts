@@ -357,6 +357,7 @@ export const zhCNMessages: MessageDictionary = {
     deleteHighlightDisabled: '先选中要删除的高亮。',
     noAnnotations: '暂无批注。',
     emptyAnnotationContent: '（无文本内容）',
+    notePlaceholder: '输入批注内容…',
     showAnnotationPanel: '展开批注面板',
     hideAnnotationPanel: '关闭批注面板',
     savingAnnotation: '正在保存批注…',
@@ -368,6 +369,10 @@ export const zhCNMessages: MessageDictionary = {
       blue: '蓝色高亮',
       orange: '橙色高亮',
       pink: '粉色高亮',
+      pureRed: '纯红高亮',
+      pureYellow: '纯黄高亮',
+      pureBlue: '纯蓝高亮',
+      black: '黑色高亮',
     },
     annotationTypes: {
       highlight: '高亮',

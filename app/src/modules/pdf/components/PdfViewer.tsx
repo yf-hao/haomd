@@ -5,7 +5,14 @@ import { PdfViewport, type PdfViewportHandle } from './PdfViewport'
 import { PdfAnnotationPanel } from './PdfAnnotationPanel'
 import { useI18n } from '../../i18n/I18nContext'
 import { isTauriEnv } from '../../platform/runtime'
-import { appendAnnotation, createTextMarkupAnnotation, getPdfFileName, normalizeDocumentAnnotations, type PdfSelectionDraft } from '../annotationUtils'
+import {
+  appendAnnotation,
+  createTextMarkupAnnotation,
+  createTextNoteAnnotation,
+  getPdfFileName,
+  normalizeDocumentAnnotations,
+  type PdfSelectionDraft,
+} from '../annotationUtils'
 import { computePdfHash, loadAnnotations, saveAnnotations } from '../store/annotationStore'
 import type { Annotation, DocumentAnnotations } from '../types/annotation'
 import type { AnnotationType } from '../types/annotation'
@@ -15,6 +22,18 @@ type PdfReadingState = {
   scale: number
 }
 
+type NoteEditorPosition = {
+  top: number
+  left: number
+}
+
+type AnnotationRect = {
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+}
+
 const PDF_CSS_UNITS = 96 / 72
 const HIGHLIGHT_COLOR_OPTIONS = [
   { value: '#f5d90a', key: 'yellow' },
@@ -22,6 +41,10 @@ const HIGHLIGHT_COLOR_OPTIONS = [
   { value: '#4da3ff', key: 'blue' },
   { value: '#ff8a4c', key: 'orange' },
   { value: '#f06292', key: 'pink' },
+  { value: '#ff0000', key: 'pureRed' },
+  { value: '#ffff00', key: 'pureYellow' },
+  { value: '#0000ff', key: 'pureBlue' },
+  { value: '#000000', key: 'black' },
 ] as const
 
 const TEXT_MARKUP_TOOL_OPTIONS = [
@@ -108,6 +131,72 @@ function savePdfReadingState(filePath: string, state: PdfReadingState) {
   }
 }
 
+function getAnchorRect(rects: readonly AnnotationRect[]) {
+  if (rects.length === 0) return null
+  return [...rects].sort((left, right) => {
+    if (left.y1 !== right.y1) return left.y1 - right.y1
+    return left.x1 - right.x1
+  })[0] ?? null
+}
+
+function isMarkupAnnotation(
+  annotation: Annotation,
+): annotation is Annotation & { type: 'highlight' | 'underline' | 'strikeout' | 'squiggly' } {
+  return (
+    annotation.type === 'highlight' ||
+    annotation.type === 'underline' ||
+    annotation.type === 'strikeout' ||
+    annotation.type === 'squiggly'
+  )
+}
+
+function areAnnotationRectsEqual(left: readonly AnnotationRect[], right: readonly AnnotationRect[]) {
+  if (left.length !== right.length) return false
+  return left.every((rect, index) => {
+    const other = right[index]
+    return (
+      rect.x1 === other.x1 &&
+      rect.y1 === other.y1 &&
+      rect.x2 === other.x2 &&
+      rect.y2 === other.y2
+    )
+  })
+}
+
+function findLinkedMarkupAnnotation(
+  annotation: Annotation,
+  annotations: readonly Annotation[],
+) {
+  if (annotation.type !== 'text') return null
+  return (
+    annotations.find(
+      (candidate) =>
+        candidate.id !== annotation.id &&
+        isMarkupAnnotation(candidate) &&
+        candidate.page === annotation.page &&
+        (candidate.content?.trim() || '') === (annotation.content?.trim() || '') &&
+        areAnnotationRectsEqual(candidate.rects, annotation.rects),
+    ) ?? null
+  )
+}
+
+function findLinkedTextAnnotation(
+  annotation: Annotation,
+  annotations: readonly Annotation[],
+) {
+  if (!isMarkupAnnotation(annotation)) return null
+  return (
+    annotations.find(
+      (candidate) =>
+        candidate.id !== annotation.id &&
+        candidate.type === 'text' &&
+        candidate.page === annotation.page &&
+        (candidate.content?.trim() || '') === (annotation.content?.trim() || '') &&
+        areAnnotationRectsEqual(candidate.rects, annotation.rects),
+    ) ?? null
+  )
+}
+
 export interface PdfViewerProps {
   filePath: string
   onClose?: () => void
@@ -118,6 +207,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
   const { t } = useI18n()
   const viewportRef = useRef<PdfViewportHandle | null>(null)
   const selectionDraftRef = useRef<PdfSelectionDraft | null>(null)
+  const pulseTimerRef = useRef<number | null>(null)
   const [scale, setScale] = useState(1.25)
   const { pdfDocument, pageCount, loading, error } = usePdfDocument(filePath)
   const [currentPage, setCurrentPage] = useState(1)
@@ -131,8 +221,55 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
   const [selectedHighlightColor, setSelectedHighlightColor] = useState<string>(HIGHLIGHT_COLOR_OPTIONS[0].value)
   const [activeMarkupTool, setActiveMarkupTool] = useState<Extract<AnnotationType, 'highlight' | 'underline' | 'strikeout' | 'squiggly'> | null>(null)
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null)
+  const [pulsingAnnotationId, setPulsingAnnotationId] = useState<string | null>(null)
   const [annotationPanelOpen, setAnnotationPanelOpen] = useState(true)
   const [clearSelectionSignal, setClearSelectionSignal] = useState(0)
+  const [isTextNoteArmed, setIsTextNoteArmed] = useState(false)
+  const [pendingNoteDraft, setPendingNoteDraft] = useState<PdfSelectionDraft | null>(null)
+  const [pendingNoteTargetAnnotationId, setPendingNoteTargetAnnotationId] = useState<string | null>(null)
+  const [editingTextNoteAnnotationId, setEditingTextNoteAnnotationId] = useState<string | null>(null)
+  const [noteInputValue, setNoteInputValue] = useState('')
+  const [noteEditorPosition, setNoteEditorPosition] = useState<NoteEditorPosition | null>(null)
+  const [openedNoteAnnotationId, setOpenedNoteAnnotationId] = useState<string | null>(null)
+  const [notePreviewPosition, setNotePreviewPosition] = useState<NoteEditorPosition | null>(null)
+  const selectedAnnotatableAnnotation =
+    selectedAnnotationId && annotationDocument
+      ? annotationDocument.annotations.find(
+          (annotation) =>
+            annotation.id === selectedAnnotationId &&
+            (annotation.type === 'highlight' ||
+              annotation.type === 'underline' ||
+              annotation.type === 'strikeout' ||
+              annotation.type === 'squiggly'),
+        ) ?? null
+      : null
+  const selectedColorableAnnotation =
+    selectedAnnotationId && annotationDocument
+      ? (() => {
+          const selected =
+            annotationDocument.annotations.find((annotation) => annotation.id === selectedAnnotationId) ?? null
+          if (!selected) return null
+          const linkedMarkup = findLinkedMarkupAnnotation(selected, annotationDocument.annotations)
+          if (linkedMarkup) return linkedMarkup
+          return (
+            (isMarkupAnnotation(selected) || selected.type === 'text')
+              ? selected
+              : null
+          )
+        })()
+      : null
+  const selectedNoteAnnotation =
+    selectedAnnotationId && annotationDocument
+      ? annotationDocument.annotations.find(
+          (annotation) => annotation.id === selectedAnnotationId && !!annotation.note?.trim(),
+        ) ?? null
+      : null
+  const openedNoteAnnotation =
+    openedNoteAnnotationId && annotationDocument
+      ? annotationDocument.annotations.find(
+          (annotation) => annotation.id === openedNoteAnnotationId && annotation.note?.trim(),
+        ) ?? null
+      : null
 
   const ZOOM_MIN = 0.5
   const ZOOM_MAX = 3
@@ -181,6 +318,17 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     setScale(clamped)
     scrollToPageWithScale(currentPage, clamped)
   }
+
+  const triggerAnnotationPulse = useCallback((annotationId: string) => {
+    setPulsingAnnotationId(annotationId)
+    if (pulseTimerRef.current) {
+      window.clearTimeout(pulseTimerRef.current)
+    }
+    pulseTimerRef.current = window.setTimeout(() => {
+      setPulsingAnnotationId((current) => (current === annotationId ? null : current))
+      pulseTimerRef.current = null
+    }, 1400)
+  }, [])
 
   useEffect(() => {
     if (!pageCount || pageCount <= 0) {
@@ -261,6 +409,14 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
   }, [pdfDocument])
 
   useEffect(() => {
+    return () => {
+      if (pulseTimerRef.current) {
+        window.clearTimeout(pulseTimerRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
     if (!pdfDocument || pageCount <= 0) {
       setAnnotationDocument(null)
       setSelectionDraft(null)
@@ -269,6 +425,11 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
       setAnnotationMessage(null)
       setAnnotationBusy(false)
       setSelectedAnnotationId(null)
+      setIsTextNoteArmed(false)
+      setPendingNoteDraft(null)
+      setEditingTextNoteAnnotationId(null)
+      setNoteInputValue('')
+      setNoteEditorPosition(null)
       return
     }
 
@@ -415,8 +576,215 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     }
   }
 
+  const handleUpdateSelectedAnnotationColor = async (color: string) => {
+    if (!annotationDocument || !selectedColorableAnnotation || !selectedAnnotationId) return
+
+    const selectedAnnotation =
+      annotationDocument.annotations.find((annotation) => annotation.id === selectedAnnotationId) ?? null
+    const linkedMarkup = selectedAnnotation
+      ? findLinkedMarkupAnnotation(selectedAnnotation, annotationDocument.annotations)
+      : null
+    const linkedText = selectedAnnotation
+      ? findLinkedTextAnnotation(selectedAnnotation, annotationDocument.annotations)
+      : null
+    const targetIds = new Set<string>([selectedColorableAnnotation.id])
+    if (linkedMarkup) targetIds.add(linkedMarkup.id)
+    if (linkedText) targetIds.add(linkedText.id)
+
+    const nextDocument = {
+      ...annotationDocument,
+      annotations: annotationDocument.annotations.map((annotation) =>
+        targetIds.has(annotation.id)
+          ? {
+              ...annotation,
+              color,
+              updatedAt: Date.now(),
+            }
+          : annotation,
+      ),
+      lastModified: Date.now(),
+    }
+
+    setAnnotationBusy(true)
+    setAnnotationMessage(t('pdf.savingAnnotation'))
+
+    try {
+      await saveAnnotations(nextDocument.pdfHash, nextDocument)
+      setAnnotationDocument(nextDocument)
+      setAnnotationMessage(null)
+    } catch (saveError) {
+      const message = saveError instanceof Error ? saveError.message : String(saveError)
+      setAnnotationMessage(t('pdf.annotationSaveFailed', { message }))
+    } finally {
+      setAnnotationBusy(false)
+    }
+  }
+
+  const handleStartTextNote = () => {
+    const selection = selectionDraftRef.current
+    if (!annotationDocument || isAnnotationBusy) return
+    if (!selection && selectedAnnotatableAnnotation) {
+      setIsTextNoteArmed(false)
+      setPendingNoteDraft({
+        page: selectedAnnotatableAnnotation.page,
+        text: selectedAnnotatableAnnotation.content?.trim() || '',
+        rects: selectedAnnotatableAnnotation.rects,
+      })
+      setPendingNoteTargetAnnotationId(selectedAnnotatableAnnotation.id)
+      setEditingTextNoteAnnotationId(null)
+      setNoteInputValue(selectedAnnotatableAnnotation.note ?? '')
+      setNoteEditorPosition(null)
+      setOpenedNoteAnnotationId(null)
+      setNotePreviewPosition(null)
+      return
+    }
+    if (!selection) {
+      setSelectedAnnotationId(null)
+      setIsTextNoteArmed(true)
+      setActiveMarkupTool(null)
+      setPendingNoteDraft(null)
+      setPendingNoteTargetAnnotationId(null)
+      setEditingTextNoteAnnotationId(null)
+      setNoteInputValue('')
+      setOpenedNoteAnnotationId(null)
+      setNotePreviewPosition(null)
+      return
+    }
+    setIsTextNoteArmed(false)
+    setSelectedAnnotationId(null)
+    setPendingNoteDraft(selection)
+    setPendingNoteTargetAnnotationId(null)
+    setEditingTextNoteAnnotationId(null)
+    setNoteInputValue('')
+    setNoteEditorPosition(null)
+    setOpenedNoteAnnotationId(null)
+    setNotePreviewPosition(null)
+    setSelectionDraft(null)
+    selectionDraftRef.current = null
+    setClearSelectionSignal((prev) => prev + 1)
+    if (typeof window !== 'undefined') {
+      window.getSelection()?.removeAllRanges()
+    }
+  }
+
+  const handleCancelTextNote = () => {
+    setIsTextNoteArmed(false)
+    setPendingNoteDraft(null)
+    setPendingNoteTargetAnnotationId(null)
+    setEditingTextNoteAnnotationId(null)
+    setNoteInputValue('')
+    setNoteEditorPosition(null)
+  }
+
+  const handleEditTextNote = useCallback((annotation: Annotation) => {
+    if (!annotationDocument || isAnnotationBusy || !annotation.note?.trim()) return
+    setIsTextNoteArmed(false)
+    setSelectedAnnotationId(annotation.id)
+    setPendingNoteDraft({
+      page: annotation.page,
+      text: annotation.content?.trim() || '',
+      rects: annotation.rects,
+    })
+    setPendingNoteTargetAnnotationId(annotation.type === 'text' ? null : annotation.id)
+    setEditingTextNoteAnnotationId(annotation.id)
+    setNoteInputValue(annotation.note ?? '')
+    setNoteEditorPosition(null)
+    setOpenedNoteAnnotationId(null)
+    setNotePreviewPosition(null)
+    setSelectionDraft(null)
+    selectionDraftRef.current = null
+    setClearSelectionSignal((prev) => prev + 1)
+    if (typeof window !== 'undefined') {
+      window.getSelection()?.removeAllRanges()
+    }
+  }, [annotationDocument, isAnnotationBusy])
+
+  const handleSaveTextNote = async () => {
+    const currentSelectionDraft = pendingNoteDraft
+    const note = noteInputValue.trim()
+    if (!annotationDocument || !currentSelectionDraft || !note) return
+
+    setSelectionDraft(null)
+    selectionDraftRef.current = null
+    setSelectedAnnotationId(null)
+    setIsTextNoteArmed(false)
+    setPendingNoteDraft(null)
+    const targetAnnotationId = pendingNoteTargetAnnotationId
+    setPendingNoteTargetAnnotationId(null)
+    const editingId = editingTextNoteAnnotationId
+    setEditingTextNoteAnnotationId(null)
+    setNoteInputValue('')
+    setNoteEditorPosition(null)
+    setOpenedNoteAnnotationId(null)
+    setNotePreviewPosition(null)
+    setClearSelectionSignal((prev) => prev + 1)
+    if (typeof window !== 'undefined') {
+      window.getSelection()?.removeAllRanges()
+    }
+
+    setAnnotationBusy(true)
+    setAnnotationMessage(t('pdf.savingAnnotation'))
+
+    const nextDocument = editingId
+      ? {
+          ...annotationDocument,
+          annotations: annotationDocument.annotations.map((annotation) =>
+            annotation.id === editingId
+              ? {
+                  ...annotation,
+                  note,
+                  updatedAt: Date.now(),
+                }
+              : annotation,
+          ),
+          lastModified: Date.now(),
+        }
+      : targetAnnotationId
+        ? {
+            ...annotationDocument,
+            annotations: annotationDocument.annotations.map((annotation) =>
+              annotation.id === targetAnnotationId
+                ? {
+                    ...annotation,
+                    note,
+                    updatedAt: Date.now(),
+                  }
+                : annotation,
+            ),
+            lastModified: Date.now(),
+          }
+      : appendAnnotation(
+          annotationDocument,
+          createTextNoteAnnotation(currentSelectionDraft, note, selectedHighlightColor),
+        )
+
+    try {
+      await saveAnnotations(nextDocument.pdfHash, nextDocument)
+      setAnnotationDocument(nextDocument)
+      setAnnotationMessage(null)
+    } catch (saveError) {
+      const message = saveError instanceof Error ? saveError.message : String(saveError)
+      setAnnotationMessage(t('pdf.annotationSaveFailed', { message }))
+    } finally {
+      setAnnotationBusy(false)
+    }
+  }
+
+  const handleAnnotationPreviewOpen = useCallback((annotation: Annotation | null) => {
+    const note = annotation?.note?.trim()
+    if (!annotation || !note) {
+      setOpenedNoteAnnotationId(null)
+      setNotePreviewPosition(null)
+      return
+    }
+    setOpenedNoteAnnotationId(annotation.id)
+    setNotePreviewPosition(null)
+  }, [])
+
   const handleAnnotationItemClick = (annotation: Annotation) => {
     setSelectedAnnotationId(annotation.id)
+    triggerAnnotationPulse(annotation.id)
+    handleAnnotationPreviewOpen(null)
     setSelectionDraft(null)
     selectionDraftRef.current = null
     if (typeof window !== 'undefined') {
@@ -424,16 +792,18 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     }
     goToPage(annotation.page, pageHeightForVirtual)
 
-    const firstRect = annotation.rects[0]
-    if (!firstRect || typeof window === 'undefined') return
+    const anchorRect = getAnchorRect(annotation.rects)
+    if (!anchorRect || typeof window === 'undefined') return
 
     const adjustToRenderedPosition = () => {
       const metrics = viewportRef.current?.getRenderedPageMetrics(annotation.page)
       if (!metrics) return
-      const topPadding = 24
+      const containerHeight = viewportRef.current?.getContainerHeight() ?? 0
+      const targetY = metrics.top + ((anchorRect.y1 + anchorRect.y2) / 2) * metrics.height
+      const centerBias = 0.42
       const absoluteOffset = Math.max(
         0,
-        metrics.top + firstRect.y1 * metrics.height - topPadding,
+        targetY - containerHeight * centerBias,
       )
       viewportRef.current?.scrollToOffset(absoluteOffset)
     }
@@ -470,6 +840,109 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     }
   }, [selectedAnnotationId, isAnnotationBusy, handleDeleteHighlight])
 
+  useEffect(() => {
+    if (!selectedNoteAnnotation || pendingNoteDraft || isAnnotationBusy) return
+
+    const isEditableTarget = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement)) return false
+      if (target.isContentEditable) return true
+      const tag = target.tagName
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.key !== 'Enter') return
+      if (isEditableTarget(event.target)) return
+      event.preventDefault()
+      handleEditTextNote(selectedNoteAnnotation)
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [selectedNoteAnnotation, pendingNoteDraft, isAnnotationBusy, handleEditTextNote])
+
+  useEffect(() => {
+    if (!pendingNoteDraft) {
+      setNoteEditorPosition(null)
+      return
+    }
+
+    const updatePosition = () => {
+      const metrics = viewportRef.current?.getRenderedPageMetrics(pendingNoteDraft.page)
+      if (!metrics) return
+
+      const anchorRect = getAnchorRect(pendingNoteDraft.rects)
+      if (!anchorRect) return
+
+      const anchorLeft = metrics.left + ((anchorRect.x1 + anchorRect.x2) / 2) * metrics.width
+      const anchorTop = metrics.viewportTop + anchorRect.y1 * metrics.height
+      const popupWidth = 360
+      const popupHeight = 128
+      const mainWidth = viewportRef.current?.getContainerWidth() ?? metrics.width
+      const aboveTop = anchorTop - popupHeight - 12
+      const nextTop = aboveTop >= 8 ? aboveTop : anchorTop + 18
+      const nextLeft = Math.min(
+        Math.max(8, anchorLeft - popupWidth / 2),
+        Math.max(8, mainWidth - popupWidth - 8),
+      )
+
+      setNoteEditorPosition({
+        top: nextTop,
+        left: nextLeft,
+      })
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      updatePosition()
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+    }
+  }, [pendingNoteDraft, currentPage, scale])
+
+  useEffect(() => {
+    if (!openedNoteAnnotation || pendingNoteDraft) {
+      setNotePreviewPosition(null)
+      return
+    }
+
+    const updatePosition = () => {
+      const metrics = viewportRef.current?.getRenderedPageMetrics(openedNoteAnnotation.page)
+      if (!metrics) return
+
+      const anchorRect = getAnchorRect(openedNoteAnnotation.rects)
+      if (!anchorRect) return
+
+      const anchorLeft = metrics.left + ((anchorRect.x1 + anchorRect.x2) / 2) * metrics.width
+      const anchorTop = metrics.viewportTop + anchorRect.y1 * metrics.height
+      const popupWidth = 360
+      const popupHeight = 132
+      const mainWidth = viewportRef.current?.getContainerWidth() ?? metrics.width
+      const aboveTop = anchorTop - popupHeight - 12
+      const nextTop = aboveTop >= 8 ? aboveTop : anchorTop + 18
+      const nextLeft = Math.min(
+        Math.max(8, anchorLeft - popupWidth / 2),
+        Math.max(8, mainWidth - popupWidth - 8),
+      )
+
+      setNotePreviewPosition({
+        top: nextTop,
+        left: nextLeft,
+      })
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      updatePosition()
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+    }
+  }, [openedNoteAnnotation, pendingNoteDraft, currentPage, scale])
+
   if (loading) {
     return <div className="pdf-viewer">正在加载 PDF…</div>
   }
@@ -491,15 +964,20 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
               <div className="pdf-highlight-color-row" aria-label={t('pdf.highlightColor')}>
                 <button
                   type="button"
-                  className={`pdf-highlight-tool-btn ${activeMarkupTool === null ? 'active' : ''}`}
+                  className={`pdf-highlight-tool-btn ${activeMarkupTool === null && !isTextNoteArmed && !pendingNoteDraft ? 'active' : ''}`}
                   onMouseDown={(event) => {
                     event.preventDefault()
                   }}
                   onClick={() => {
+                    setIsTextNoteArmed(false)
+                    setPendingNoteDraft(null)
+                    setNoteInputValue('')
+                    setNoteEditorPosition(null)
+                    handleAnnotationPreviewOpen(null)
                     setActiveMarkupTool(null)
                   }}
                   aria-label={t('pdf.selectTextOnly')}
-                  aria-pressed={activeMarkupTool === null}
+                  aria-pressed={activeMarkupTool === null && !isTextNoteArmed && !pendingNoteDraft}
                   title={t('pdf.selectTextOnly')}
                 >
                   <svg
@@ -522,6 +1000,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                       event.preventDefault()
                     }}
                     onClick={() => {
+                      handleAnnotationPreviewOpen(null)
                       setActiveMarkupTool(option.type)
                       if (selectionDraftRef.current && annotationDocument && !isAnnotationBusy) {
                         void handleAddHighlight(option.type, selectedHighlightColor)
@@ -534,6 +1013,31 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                     {renderMarkupToolIcon(option.type)}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  className={`pdf-highlight-tool-btn ${(pendingNoteDraft || isTextNoteArmed) ? 'active' : ''}`}
+                  onMouseDown={(event) => {
+                    event.preventDefault()
+                  }}
+                  onClick={handleStartTextNote}
+                  aria-label={t('pdf.annotationTypes.text')}
+                  aria-pressed={pendingNoteDraft !== null || isTextNoteArmed}
+                  title={t('pdf.annotationTypes.text')}
+                  disabled={(!annotationDocument || isAnnotationBusy) || (!selectionDraftRef.current && !selectedAnnotatableAnnotation && !pendingNoteDraft)}
+                >
+                  <svg className="pdf-markup-tool-icon pdf-markup-tool-icon--text-note" viewBox="0 0 20 20" aria-hidden="true">
+                    <path
+                      d="M5 5.5H15V12.5H9.5L6.5 15V12.5H5V5.5Z"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                    />
+                    <path d="M7.2 8.4H12.8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                    <path d="M7.2 10.6H10.8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                  </svg>
+                </button>
                 {HIGHLIGHT_COLOR_OPTIONS.map((option) => (
                   <button
                     key={option.value}
@@ -549,7 +1053,13 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                         if (activeMarkupTool === null) {
                           return
                         }
+                        handleAnnotationPreviewOpen(null)
                         void handleAddHighlight(activeMarkupTool, option.value)
+                        return
+                      }
+                      if (selectedColorableAnnotation && !isAnnotationBusy) {
+                        handleAnnotationPreviewOpen(null)
+                        void handleUpdateSelectedAnnotationColor(option.value)
                       }
                     }}
                     aria-label={t(`pdf.highlightColors.${option.key}`)}
@@ -565,6 +1075,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                   event.preventDefault()
                 }}
                 onClick={() => {
+                  handleAnnotationPreviewOpen(null)
                   void handleDeleteHighlight()
                 }}
                 disabled={!selectedAnnotationId || isAnnotationBusy}
@@ -687,34 +1198,126 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
             onRegisterSelectionGetter={onRegisterSelectionGetter}
             annotations={annotationDocument?.annotations ?? []}
             onSelectionChange={(selection) => {
+              if (pendingNoteDraft) {
+                return
+              }
+              if (isTextNoteArmed) {
+                selectionDraftRef.current = selection
+                setSelectionDraft(selection)
+                if (selection) {
+                  setSelectedAnnotationId(null)
+                  handleAnnotationPreviewOpen(null)
+                  setIsTextNoteArmed(false)
+                  setPendingNoteDraft(selection)
+                  setPendingNoteTargetAnnotationId(null)
+                  setNoteInputValue('')
+                  setSelectionDraft(null)
+                  selectionDraftRef.current = null
+                  setClearSelectionSignal((prev) => prev + 1)
+                  if (typeof window !== 'undefined') {
+                    window.getSelection()?.removeAllRanges()
+                  }
+                }
+                return
+              }
               selectionDraftRef.current = selection
               setSelectionDraft(selection)
               if (selection) {
                 setSelectedAnnotationId(null)
+                handleAnnotationPreviewOpen(null)
                 if (activeMarkupTool && annotationDocument && !isAnnotationBusy) {
                   void handleAddHighlight(activeMarkupTool, selectedHighlightColor, selection)
                 }
               }
             }}
             selectedAnnotationId={selectedAnnotationId}
+            pulsingAnnotationId={pulsingAnnotationId}
             onAnnotationClick={(annotationId) => {
+              const annotation = annotationDocument?.annotations.find((item) => item.id === annotationId) ?? null
               setSelectedAnnotationId(annotationId)
+              triggerAnnotationPulse(annotationId)
+              handleAnnotationPreviewOpen(annotation)
               setSelectionDraft(null)
               selectionDraftRef.current = null
               if (typeof window !== 'undefined') {
                 window.getSelection()?.removeAllRanges()
               }
             }}
+            onAnnotationDoubleClick={(annotationId) => {
+              const annotation = annotationDocument?.annotations.find((item) => item.id === annotationId)
+              if (annotation?.note?.trim()) {
+                handleEditTextNote(annotation)
+              }
+            }}
             onClearAnnotationSelection={() => {
               setSelectedAnnotationId(null)
+              handleAnnotationPreviewOpen(null)
             }}
           />
+          {openedNoteAnnotation && notePreviewPosition && !pendingNoteDraft ? (
+            <div
+              className="pdf-note-preview pdf-note-preview-popover"
+              style={{
+                top: `${notePreviewPosition.top}px`,
+                left: `${notePreviewPosition.left}px`,
+              }}
+            >
+              {openedNoteAnnotation.content?.trim() ? (
+                <div className="pdf-note-preview-selection">{openedNoteAnnotation.content.trim()}</div>
+              ) : null}
+              <div className="pdf-note-preview-body">{openedNoteAnnotation.note?.trim()}</div>
+            </div>
+          ) : null}
+          {pendingNoteDraft && noteEditorPosition ? (
+            <div
+              className="pdf-note-editor pdf-note-editor-popover"
+              style={{
+                top: `${noteEditorPosition.top}px`,
+                left: `${noteEditorPosition.left}px`,
+              }}
+            >
+              <textarea
+                className="pdf-note-editor-input"
+                value={noteInputValue}
+                onChange={(event) => {
+                  setNoteInputValue(event.target.value)
+                }}
+                placeholder={t('pdf.notePlaceholder')}
+                rows={2}
+                autoFocus
+              />
+              <div className="pdf-note-editor-actions">
+                <button
+                  type="button"
+                  className="pdf-note-editor-btn"
+                  onClick={handleCancelTextNote}
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  type="button"
+                  className="pdf-note-editor-btn primary"
+                  onClick={() => {
+                    void handleSaveTextNote()
+                  }}
+                  disabled={!noteInputValue.trim() || isAnnotationBusy}
+                >
+                  {t('common.save')}
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
         {annotationPanelOpen && (
           <PdfAnnotationPanel
             annotations={annotationDocument?.annotations ?? []}
             selectedAnnotationId={selectedAnnotationId}
             onAnnotationClick={handleAnnotationItemClick}
+            onAnnotationDoubleClick={(annotation) => {
+              if (annotation.note?.trim()) {
+                handleEditTextNote(annotation)
+              }
+            }}
           />
         )}
       </div>

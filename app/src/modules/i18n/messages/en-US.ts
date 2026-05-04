@@ -358,6 +358,7 @@ export const enUSMessages: MessageDictionary = {
     deleteHighlightDisabled: 'Select a highlight to delete.',
     noAnnotations: 'No annotations yet.',
     emptyAnnotationContent: '(No text content)',
+    notePlaceholder: 'Enter note content…',
     showAnnotationPanel: 'Show annotation panel',
     hideAnnotationPanel: 'Hide annotation panel',
     savingAnnotation: 'Saving annotation…',
@@ -369,6 +370,10 @@ export const enUSMessages: MessageDictionary = {
       blue: 'Blue highlight',
       orange: 'Orange highlight',
       pink: 'Pink highlight',
+      pureRed: 'Pure red highlight',
+      pureYellow: 'Pure yellow highlight',
+      pureBlue: 'Pure blue highlight',
+      black: 'Black highlight',
     },
     annotationTypes: {
       highlight: 'Highlight',

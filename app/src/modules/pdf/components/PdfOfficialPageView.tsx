@@ -24,7 +24,9 @@ export interface PdfOfficialPageViewProps {
   annotations?: Annotation[]
   onSelectionChange?: (selection: PdfSelectionDraft | null) => void
   selectedAnnotationId?: string | null
+  pulsingAnnotationId?: string | null
   onAnnotationClick?: (annotationId: string) => void
+  onAnnotationDoubleClick?: (annotationId: string) => void
   onClearAnnotationSelection?: () => void
 }
 
@@ -47,7 +49,9 @@ export function PdfOfficialPageView({
   annotations = [],
   onSelectionChange,
   selectedAnnotationId = null,
+  pulsingAnnotationId = null,
   onAnnotationClick,
+  onAnnotationDoubleClick,
   onClearAnnotationSelection,
 }: PdfOfficialPageViewProps) {
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -55,6 +59,7 @@ export function PdfOfficialPageView({
   const textRectsRef = useRef<RectLike[]>([])
   const textRectsDirtyRef = useRef(true)
   const isPointerSelectionActiveRef = useRef(false)
+  const assistRegionRef = useRef<{ left: number; top: number; right: number; bottom: number } | null>(null)
   const hasActiveSelectionRef = useRef(false)
   const [selectionBlocks, setSelectionBlocks] = useState<SelectionBlock[]>([])
 
@@ -66,9 +71,98 @@ export function PdfOfficialPageView({
     setSelectionBlocks((prev) => (areSelectionBlocksEqual(prev, nextBlocks) ? prev : nextBlocks))
   }
 
+  const setSelectionAssistRegionDefaults = () => {
+    const root = rootRef.current
+    if (!root) return
+    assistRegionRef.current = null
+    root.classList.remove('is-selection-assist-active')
+    root.style.setProperty('--pdf-text-right-edge', '100%')
+    root.style.setProperty('--pdf-text-selection-top', '0px')
+    root.style.setProperty('--pdf-text-selection-height', '100%')
+    root.style.setProperty('--pdf-text-selection-assist-left', '100%')
+  }
+
+  const setSelectionAssistRegionFromRects = (
+    pageRect: DOMRect,
+    selectionRects: readonly RectLike[],
+  ) => {
+    const root = rootRef.current
+    if (!root) return
+
+    if (selectionRects.length === 0) {
+      setSelectionAssistRegionDefaults()
+      return
+    }
+
+    const pageRelativeRects = selectionRects
+      .filter((rect) => rect.width > 0 && rect.height > 0)
+      .map((rect) => ({
+        left: Math.max(0, rect.left - pageRect.left),
+        top: Math.max(0, rect.top - pageRect.top),
+        right: Math.min(pageRect.width, rect.right - pageRect.left),
+        bottom: Math.min(pageRect.height, rect.bottom - pageRect.top),
+        width: rect.width,
+        height: rect.height,
+      }))
+      .filter((rect) => rect.right > rect.left && rect.bottom > rect.top)
+
+    if (pageRelativeRects.length === 0) {
+      setSelectionAssistRegionDefaults()
+      return
+    }
+
+    const lineBottom = Math.max(...pageRelativeRects.map((rect) => rect.bottom))
+    const lineHeight = Math.max(...pageRelativeRects.map((rect) => rect.height))
+    const lineThreshold = Math.max(3, lineHeight * 0.45)
+    const currentLineRects = pageRelativeRects.filter(
+      (rect) => Math.abs(rect.bottom - lineBottom) <= lineThreshold,
+    )
+
+    const intersectingTextRects = textRectsRef.current.filter((textRect) =>
+      currentLineRects.some(
+        (lineRect) =>
+          textRect.left < lineRect.right &&
+          textRect.right > lineRect.left &&
+          textRect.top < lineRect.bottom &&
+          textRect.bottom > lineRect.top,
+      ),
+    )
+
+    const effectiveLineRects = intersectingTextRects.length > 0 ? intersectingTextRects : currentLineRects
+    const lineTop = Math.max(0, Math.min(...effectiveLineRects.map((rect) => rect.top)))
+    const lineBottomFromRects = Math.min(
+      pageRect.height,
+      Math.max(...effectiveLineRects.map((rect) => rect.bottom)),
+    )
+    const effectiveLineHeight = Math.max(1, lineBottomFromRects - lineTop)
+    const paddedLineTop = Math.max(0, lineTop - effectiveLineHeight * 0.12)
+    const paddedLineBottom = Math.min(
+      pageRect.height,
+      lineBottomFromRects + effectiveLineHeight * 0.12,
+    )
+    const lineRight = Math.min(pageRect.width, Math.max(...effectiveLineRects.map((rect) => rect.right)))
+    assistRegionRef.current = {
+      left: lineRight,
+      top: paddedLineTop,
+      right: pageRect.width,
+      bottom: paddedLineBottom,
+    }
+
+    root.style.setProperty('--pdf-text-right-edge', `${lineRight}px`)
+    root.style.setProperty('--pdf-text-selection-top', `${paddedLineTop}px`)
+    root.style.setProperty(
+      '--pdf-text-selection-height',
+      `${Math.max(1, paddedLineBottom - paddedLineTop)}px`,
+    )
+    root.style.setProperty('--pdf-text-selection-assist-left', `${lineRight}px`)
+  }
+
   const setPointerSelectingState = (active: boolean) => {
     isPointerSelectionActiveRef.current = active
     rootRef.current?.classList.toggle('is-pointer-selecting', active)
+    if (!active) {
+      rootRef.current?.classList.remove('is-selection-assist-active')
+    }
   }
 
   const invalidateCachedTextRects = () => {
@@ -83,6 +177,7 @@ export function PdfOfficialPageView({
     if (!pageEl) {
       textRectsRef.current = []
       textRectsDirtyRef.current = false
+      root.style.setProperty('--pdf-text-right-edge', '100%')
       return
     }
 
@@ -98,6 +193,13 @@ export function PdfOfficialPageView({
         width: rect.width,
         height: rect.height,
       }))
+    const maxRight = textRectsRef.current.reduce((right, rect) => Math.max(right, rect.right), 0)
+    root.style.setProperty(
+      '--pdf-text-right-edge',
+      textRectsRef.current.length > 0 ? `${Math.min(maxRight, pageRect.width)}px` : '100%',
+    )
+    root.style.setProperty('--pdf-text-selection-top', '0px')
+    root.style.setProperty('--pdf-text-selection-height', '100%')
     textRectsDirtyRef.current = false
   }
 
@@ -251,6 +353,7 @@ export function PdfOfficialPageView({
       const selection = window.getSelection()
       if (!selection || !selectionBelongsToCurrentPage(selection)) {
         clearSelectionBlocks()
+        setSelectionAssistRegionDefaults()
         publishSelection(null)
         return
       }
@@ -263,6 +366,7 @@ export function PdfOfficialPageView({
 
       const pageRect = pageEl.getBoundingClientRect()
       const normalizedRawRects = normalizeSelectionRects(selection.getRangeAt(0).getClientRects())
+      setSelectionAssistRegionFromRects(pageRect, normalizedRawRects)
       if (textRectsDirtyRef.current || textRectsRef.current.length === 0) {
         updateCachedTextRects()
       }
@@ -314,6 +418,36 @@ export function PdfOfficialPageView({
       updateSelectionBlocks()
     }
 
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!isPointerSelectionActiveRef.current) return
+      const root = rootRef.current
+      if (!root) return
+      const pageEl = root.querySelector('.page') as HTMLElement | null
+      const region = assistRegionRef.current
+      if (!pageEl || !region) {
+        root.classList.remove('is-selection-assist-active')
+        return
+      }
+
+      const pageRect = pageEl.getBoundingClientRect()
+      const x = event.clientX - pageRect.left
+      const y = event.clientY - pageRect.top
+      const active =
+        x >= region.left &&
+        x <= region.right &&
+        y >= region.top &&
+        y <= region.bottom
+
+      if (active) {
+        const assistLeft = Math.max(region.left, x - 24)
+        root.style.setProperty('--pdf-text-selection-assist-left', `${assistLeft}px`)
+      } else {
+        root.style.setProperty('--pdf-text-selection-assist-left', `${region.left}px`)
+      }
+
+      root.classList.toggle('is-selection-assist-active', active)
+    }
+
     const handleSelectionChange = () => {
       if (isPointerSelectionActiveRef.current) {
         return
@@ -321,6 +455,7 @@ export function PdfOfficialPageView({
       const selection = window.getSelection()
       if (!selectionBelongsToCurrentPage(selection)) {
         clearSelectionBlocks()
+        setSelectionAssistRegionDefaults()
         publishSelection(null)
         return
       }
@@ -328,6 +463,7 @@ export function PdfOfficialPageView({
     }
 
     root.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('pointermove', handlePointerMove)
     document.addEventListener('pointerup', handlePointerFinish)
     document.addEventListener('pointercancel', handlePointerFinish)
     document.addEventListener('selectionchange', handleSelectionChange)
@@ -336,15 +472,18 @@ export function PdfOfficialPageView({
       scheduleUpdate()
     } else {
       clearSelectionBlocks()
+      setSelectionAssistRegionDefaults()
       publishSelection(null)
     }
 
     return () => {
       root.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('pointermove', handlePointerMove)
       document.removeEventListener('pointerup', handlePointerFinish)
       document.removeEventListener('pointercancel', handlePointerFinish)
       document.removeEventListener('selectionchange', handleSelectionChange)
       setPointerSelectingState(false)
+      setSelectionAssistRegionDefaults()
       publishSelection(null)
       if (frame) {
         window.cancelAnimationFrame(frame)
@@ -355,6 +494,7 @@ export function PdfOfficialPageView({
   useEffect(() => {
     clearSelectionBlocks()
     hasActiveSelectionRef.current = false
+    setSelectionAssistRegionDefaults()
     onSelectionChange?.(null)
   }, [clearSelectionSignal, onSelectionChange])
 
@@ -376,7 +516,15 @@ export function PdfOfficialPageView({
             const width = `${(rect.x2 - rect.x1) * 100}%`
             const height = `${(rect.y2 - rect.y1) * 100}%`
             const annotationKey = `${annotation.id}-${index}`
-            const sharedClassName = `pdf-annotation-block pdf-annotation-block--${annotation.type} ${selectedAnnotationId === annotation.id ? 'selected' : ''}`
+            const notePreview = annotation.note?.trim() || annotation.content?.trim() || ''
+            const noteMarker = annotation.note?.trim() && index === 0 ? (
+              <div className="pdf-annotation-note-marker" title={notePreview}>
+                <span className="pdf-annotation-note-marker-glyph" aria-hidden="true">
+                  N
+                </span>
+              </div>
+            ) : null
+            const sharedClassName = `pdf-annotation-block pdf-annotation-block--${annotation.type} ${selectedAnnotationId === annotation.id ? 'selected' : ''} ${pulsingAnnotationId === annotation.id ? 'pulsing' : ''}`
             const sharedProps = {
               className: sharedClassName,
               style: {
@@ -390,6 +538,9 @@ export function PdfOfficialPageView({
               onClick: () => {
                 onAnnotationClick?.(annotation.id)
               },
+              onDoubleClick: () => {
+                onAnnotationDoubleClick?.(annotation.id)
+              },
             }
 
             if (annotation.type === 'highlight') {
@@ -399,10 +550,40 @@ export function PdfOfficialPageView({
                   {...sharedProps}
                   style={{
                     ...sharedProps.style,
-                    background: annotation.color,
-                    opacity: annotation.opacity,
+                    opacity: 1,
                   }}
-                />
+                >
+                  <div
+                    className="pdf-annotation-highlight-fill"
+                    style={{
+                      background: annotation.color,
+                      opacity: annotation.opacity,
+                    }}
+                  />
+                  {noteMarker}
+                </div>
+              )
+            }
+
+            if (annotation.type === 'text') {
+              const notePreview = annotation.note?.trim() || annotation.content?.trim() || ''
+              return (
+                <div
+                  key={annotationKey}
+                  {...sharedProps}
+                  style={{
+                    ...sharedProps.style,
+                    opacity: 1,
+                  }}
+                >
+                  {index === 0 ? (
+                    <div className="pdf-annotation-note-marker" title={notePreview}>
+                      <span className="pdf-annotation-note-marker-glyph" aria-hidden="true">
+                        N
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
               )
             }
 
@@ -415,6 +596,7 @@ export function PdfOfficialPageView({
                   opacity: 1,
                 }}
               >
+                {noteMarker}
                 <div className={`pdf-annotation-mark pdf-annotation-mark--${annotation.type}`}>
                   {annotation.type === 'squiggly' ? (
                     <svg className="pdf-annotation-squiggly" viewBox="0 0 100 12" preserveAspectRatio="none" aria-hidden="true">

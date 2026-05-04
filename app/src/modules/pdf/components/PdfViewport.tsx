@@ -15,7 +15,8 @@ export interface PdfViewportHandle {
   scrollToPage: (page: number, estimatedPageHeight?: number) => void
   scrollToOffset: (offset: number) => void
   getContainerWidth: () => number | null
-  getRenderedPageMetrics: (page: number) => { top: number; height: number } | null
+  getContainerHeight: () => number | null
+  getRenderedPageMetrics: (page: number) => { top: number; viewportTop: number; left: number; width: number; height: number } | null
 }
 
 export interface PdfViewportProps {
@@ -31,7 +32,9 @@ export interface PdfViewportProps {
   annotations?: Annotation[]
   onSelectionChange?: (selection: PdfSelectionDraft | null) => void
   selectedAnnotationId?: string | null
+  pulsingAnnotationId?: string | null
   onAnnotationClick?: (annotationId: string) => void
+  onAnnotationDoubleClick?: (annotationId: string) => void
   onClearAnnotationSelection?: () => void
 }
 
@@ -49,7 +52,9 @@ export const PdfViewport = forwardRef<PdfViewportHandle, PdfViewportProps>(funct
     annotations = [],
     onSelectionChange,
     selectedAnnotationId = null,
+    pulsingAnnotationId = null,
     onAnnotationClick,
+    onAnnotationDoubleClick,
     onClearAnnotationSelection,
   },
   ref,
@@ -73,16 +78,25 @@ export const PdfViewport = forwardRef<PdfViewportHandle, PdfViewportProps>(funct
       getContainerWidth() {
         return containerRef.current?.clientWidth ?? null
       },
+      getContainerHeight() {
+        return containerRef.current?.clientHeight ?? null
+      },
       getRenderedPageMetrics(page) {
         const container = containerRef.current
         if (!container) return null
         const slot = container.querySelector<HTMLElement>(`.pdf-page-slot[data-page-number="${page}"]`)
         if (!slot) return null
         const pageEl = slot.querySelector<HTMLElement>('.page')
-        const height = pageEl?.getBoundingClientRect().height ?? slot.getBoundingClientRect().height
-        if (!height || height <= 0) return null
+        const containerRect = container.getBoundingClientRect()
+        const pageRect = pageEl?.getBoundingClientRect() ?? slot.getBoundingClientRect()
+        const height = pageRect.height
+        const width = pageRect.width
+        if (!height || height <= 0 || !width || width <= 0) return null
         return {
           top: slot.offsetTop,
+          viewportTop: pageRect.top - containerRect.top,
+          left: pageRect.left - containerRect.left,
+          width,
           height,
         }
       },
@@ -161,7 +175,9 @@ export const PdfViewport = forwardRef<PdfViewportHandle, PdfViewportProps>(funct
             annotations={annotations.filter((annotation) => annotation.page === pageNumber)}
             onSelectionChange={onSelectionChange}
             selectedAnnotationId={selectedAnnotationId}
+            pulsingAnnotationId={pulsingAnnotationId}
             onAnnotationClick={onAnnotationClick}
+            onAnnotationDoubleClick={onAnnotationDoubleClick}
             onClearAnnotationSelection={onClearAnnotationSelection}
           />
       </div>,

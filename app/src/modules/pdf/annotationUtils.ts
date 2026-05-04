@@ -182,6 +182,27 @@ export function createTextMarkupAnnotation(
   }
 }
 
+export function createTextNoteAnnotation(
+  selection: PdfSelectionDraft,
+  note: string,
+  color = DEFAULT_HIGHLIGHT_COLOR,
+): Annotation {
+  const now = Date.now()
+
+  return {
+    id: crypto.randomUUID(),
+    page: selection.page,
+    type: 'text',
+    rects: selection.rects,
+    color,
+    opacity: 1,
+    content: selection.text,
+    note,
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
 export function appendAnnotation(
   data: DocumentAnnotations,
   annotation: Annotation,
