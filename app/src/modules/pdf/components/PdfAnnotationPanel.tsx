@@ -112,6 +112,13 @@ function findLinkedMarkupAnnotation(annotation: Annotation, annotations: readonl
   )
 }
 
+function getAnchorRect(annotation: Annotation) {
+  return [...annotation.rects].sort((left, right) => {
+    if (left.y1 !== right.y1) return left.y1 - right.y1
+    return left.x1 - right.x1
+  })[0] ?? null
+}
+
 export function PdfAnnotationPanel({
   annotations,
   selectedAnnotationId = null,
@@ -162,6 +169,24 @@ export function PdfAnnotationPanel({
       noteText: annotation.note?.trim() || linkedText?.note?.trim() || null,
     })
   }
+
+  displayAnnotations.sort((left, right) => {
+    if (left.primary.page !== right.primary.page) {
+      return left.primary.page - right.primary.page
+    }
+
+    const leftAnchor = getAnchorRect(left.primary)
+    const rightAnchor = getAnchorRect(right.primary)
+
+    if (leftAnchor && rightAnchor) {
+      if (leftAnchor.y1 !== rightAnchor.y1) return leftAnchor.y1 - rightAnchor.y1
+      if (leftAnchor.x1 !== rightAnchor.x1) return leftAnchor.x1 - rightAnchor.x1
+    } else if (leftAnchor || rightAnchor) {
+      return leftAnchor ? -1 : 1
+    }
+
+    return left.primary.createdAt - right.primary.createdAt
+  })
 
   return (
     <aside className="pdf-annotation-panel">
