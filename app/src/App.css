@@ -2327,7 +2327,6 @@ button:disabled {
   margin-top: 0;
   z-index: var(--z-popover);
   box-shadow: var(--theme-shadow-modal);
-  backdrop-filter: blur(10px);
 }
 
 .pdf-note-preview-popover::before {
@@ -2367,7 +2366,6 @@ button:disabled {
   margin-top: 0;
   z-index: var(--z-popover);
   box-shadow: var(--theme-shadow-modal);
-  backdrop-filter: blur(10px);
 }
 
 .pdf-note-editor-popover::before {

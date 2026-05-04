@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback } from 'react'
+import { memo, useRef, useState, useEffect, useCallback } from 'react'
 import type { PDFDocumentProxy } from '../hooks/usePdfDocument'
 import { usePdfDocument } from '../hooks/usePdfDocument'
 import { PdfViewport, type PdfViewportHandle } from './PdfViewport'
@@ -25,6 +25,17 @@ type PdfReadingState = {
 type NoteEditorPosition = {
   top: number
   left: number
+}
+
+type PdfNoteEditorPopoverProps = {
+  position: NoteEditorPosition
+  initialValue: string
+  placeholder: string
+  cancelLabel: string
+  saveLabel: string
+  busy: boolean
+  onCancel: () => void
+  onSave: (value: string) => void
 }
 
 type AnnotationRect = {
@@ -197,6 +208,57 @@ function findLinkedTextAnnotation(
   )
 }
 
+const PdfNoteEditorPopover = memo(function PdfNoteEditorPopover({
+  position,
+  initialValue,
+  placeholder,
+  cancelLabel,
+  saveLabel,
+  busy,
+  onCancel,
+  onSave,
+}: PdfNoteEditorPopoverProps) {
+  const inputRef = useRef<HTMLTextAreaElement | null>(null)
+
+  return (
+    <div
+      className="pdf-note-editor pdf-note-editor-popover"
+      style={{
+        top: `${position.top}px`,
+        left: `${position.left}px`,
+      }}
+    >
+      <textarea
+        ref={inputRef}
+        className="pdf-note-editor-input"
+        defaultValue={initialValue}
+        placeholder={placeholder}
+        rows={2}
+        autoFocus
+      />
+      <div className="pdf-note-editor-actions">
+        <button
+          type="button"
+          className="pdf-note-editor-btn"
+          onClick={onCancel}
+        >
+          {cancelLabel}
+        </button>
+        <button
+          type="button"
+          className="pdf-note-editor-btn primary"
+          onClick={() => {
+            onSave(inputRef.current?.value ?? initialValue)
+          }}
+          disabled={busy}
+        >
+          {saveLabel}
+        </button>
+      </div>
+    </div>
+  )
+})
+
 export interface PdfViewerProps {
   filePath: string
   onClose?: () => void
@@ -228,7 +290,6 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
   const [pendingNoteDraft, setPendingNoteDraft] = useState<PdfSelectionDraft | null>(null)
   const [pendingNoteTargetAnnotationId, setPendingNoteTargetAnnotationId] = useState<string | null>(null)
   const [editingTextNoteAnnotationId, setEditingTextNoteAnnotationId] = useState<string | null>(null)
-  const [noteInputValue, setNoteInputValue] = useState('')
   const [noteEditorPosition, setNoteEditorPosition] = useState<NoteEditorPosition | null>(null)
   const [openedNoteAnnotationId, setOpenedNoteAnnotationId] = useState<string | null>(null)
   const [notePreviewPosition, setNotePreviewPosition] = useState<NoteEditorPosition | null>(null)
@@ -270,6 +331,20 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
           (annotation) => annotation.id === openedNoteAnnotationId && annotation.note?.trim(),
         ) ?? null
       : null
+  const noteEditorInitialValue =
+    editingTextNoteAnnotationId && annotationDocument
+      ? (
+          annotationDocument.annotations.find((annotation) => annotation.id === editingTextNoteAnnotationId)?.note ??
+          (pendingNoteTargetAnnotationId
+            ? annotationDocument.annotations.find((annotation) => annotation.id === pendingNoteTargetAnnotationId)?.note
+            : '') ??
+          ''
+        )
+      : (
+          pendingNoteTargetAnnotationId && annotationDocument
+            ? annotationDocument.annotations.find((annotation) => annotation.id === pendingNoteTargetAnnotationId)?.note ?? ''
+            : ''
+        )
 
   const ZOOM_MIN = 0.5
   const ZOOM_MAX = 3
@@ -427,9 +502,11 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
       setSelectedAnnotationId(null)
       setIsTextNoteArmed(false)
       setPendingNoteDraft(null)
+      setPendingNoteTargetAnnotationId(null)
       setEditingTextNoteAnnotationId(null)
-      setNoteInputValue('')
       setNoteEditorPosition(null)
+      setOpenedNoteAnnotationId(null)
+      setNotePreviewPosition(null)
       return
     }
 
@@ -632,7 +709,6 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
       })
       setPendingNoteTargetAnnotationId(selectedAnnotatableAnnotation.id)
       setEditingTextNoteAnnotationId(null)
-      setNoteInputValue(selectedAnnotatableAnnotation.note ?? '')
       setNoteEditorPosition(null)
       setOpenedNoteAnnotationId(null)
       setNotePreviewPosition(null)
@@ -645,7 +721,6 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
       setPendingNoteDraft(null)
       setPendingNoteTargetAnnotationId(null)
       setEditingTextNoteAnnotationId(null)
-      setNoteInputValue('')
       setOpenedNoteAnnotationId(null)
       setNotePreviewPosition(null)
       return
@@ -655,7 +730,6 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     setPendingNoteDraft(selection)
     setPendingNoteTargetAnnotationId(null)
     setEditingTextNoteAnnotationId(null)
-    setNoteInputValue('')
     setNoteEditorPosition(null)
     setOpenedNoteAnnotationId(null)
     setNotePreviewPosition(null)
@@ -672,7 +746,6 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     setPendingNoteDraft(null)
     setPendingNoteTargetAnnotationId(null)
     setEditingTextNoteAnnotationId(null)
-    setNoteInputValue('')
     setNoteEditorPosition(null)
   }
 
@@ -687,7 +760,6 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     })
     setPendingNoteTargetAnnotationId(annotation.type === 'text' ? null : annotation.id)
     setEditingTextNoteAnnotationId(annotation.id)
-    setNoteInputValue(annotation.note ?? '')
     setNoteEditorPosition(null)
     setOpenedNoteAnnotationId(null)
     setNotePreviewPosition(null)
@@ -699,9 +771,9 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     }
   }, [annotationDocument, isAnnotationBusy])
 
-  const handleSaveTextNote = async () => {
+  const handleSaveTextNote = async (rawValue: string) => {
     const currentSelectionDraft = pendingNoteDraft
-    const note = noteInputValue.trim()
+    const note = rawValue.trim()
     if (!annotationDocument || !currentSelectionDraft || !note) return
 
     setSelectionDraft(null)
@@ -713,7 +785,6 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     setPendingNoteTargetAnnotationId(null)
     const editingId = editingTextNoteAnnotationId
     setEditingTextNoteAnnotationId(null)
-    setNoteInputValue('')
     setNoteEditorPosition(null)
     setOpenedNoteAnnotationId(null)
     setNotePreviewPosition(null)
@@ -971,7 +1042,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                   onClick={() => {
                     setIsTextNoteArmed(false)
                     setPendingNoteDraft(null)
-                    setNoteInputValue('')
+                    setPendingNoteTargetAnnotationId(null)
                     setNoteEditorPosition(null)
                     handleAnnotationPreviewOpen(null)
                     setActiveMarkupTool(null)
@@ -1210,7 +1281,6 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                   setIsTextNoteArmed(false)
                   setPendingNoteDraft(selection)
                   setPendingNoteTargetAnnotationId(null)
-                  setNoteInputValue('')
                   setSelectionDraft(null)
                   selectionDraftRef.current = null
                   setClearSelectionSignal((prev) => prev + 1)
@@ -1269,43 +1339,19 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
             </div>
           ) : null}
           {pendingNoteDraft && noteEditorPosition ? (
-            <div
-              className="pdf-note-editor pdf-note-editor-popover"
-              style={{
-                top: `${noteEditorPosition.top}px`,
-                left: `${noteEditorPosition.left}px`,
+            <PdfNoteEditorPopover
+              key={`${editingTextNoteAnnotationId ?? pendingNoteTargetAnnotationId ?? pendingNoteDraft.page}-${pendingNoteDraft.rects[0]?.x1 ?? 0}-${pendingNoteDraft.rects[0]?.y1 ?? 0}`}
+              position={noteEditorPosition}
+              initialValue={noteEditorInitialValue}
+              placeholder={t('pdf.notePlaceholder')}
+              cancelLabel={t('common.cancel')}
+              saveLabel={t('common.save')}
+              busy={isAnnotationBusy}
+              onCancel={handleCancelTextNote}
+              onSave={(value) => {
+                void handleSaveTextNote(value)
               }}
-            >
-              <textarea
-                className="pdf-note-editor-input"
-                value={noteInputValue}
-                onChange={(event) => {
-                  setNoteInputValue(event.target.value)
-                }}
-                placeholder={t('pdf.notePlaceholder')}
-                rows={2}
-                autoFocus
-              />
-              <div className="pdf-note-editor-actions">
-                <button
-                  type="button"
-                  className="pdf-note-editor-btn"
-                  onClick={handleCancelTextNote}
-                >
-                  {t('common.cancel')}
-                </button>
-                <button
-                  type="button"
-                  className="pdf-note-editor-btn primary"
-                  onClick={() => {
-                    void handleSaveTextNote()
-                  }}
-                  disabled={!noteInputValue.trim() || isAnnotationBusy}
-                >
-                  {t('common.save')}
-                </button>
-              </div>
-            </div>
+            />
           ) : null}
         </div>
         {annotationPanelOpen && (

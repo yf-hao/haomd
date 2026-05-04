@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import type { PDFDocumentProxy } from '../hooks/usePdfDocument'
 import { EventBus, PDFLinkService, PDFPageView } from 'pdfjs-dist/web/pdf_viewer.mjs'
 import 'pdfjs-dist/web/pdf_viewer.css'
@@ -40,7 +40,7 @@ export interface PdfOfficialPageViewProps {
  *
  * 当前仍保持最小接法，不接 PDFViewer 整体体系。
  */
-export function PdfOfficialPageView({
+export const PdfOfficialPageView = memo(function PdfOfficialPageView({
   pdfDocument,
   pageNumber,
   scale,
@@ -632,4 +632,4 @@ export function PdfOfficialPageView({
       </div>
     </div>
   )
-}
+})

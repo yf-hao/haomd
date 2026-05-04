@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react'
 import { useI18n } from '../../i18n/I18nContext'
 import type { Annotation } from '../types/annotation'
 
@@ -119,7 +120,7 @@ function getAnchorRect(annotation: Annotation) {
   })[0] ?? null
 }
 
-export function PdfAnnotationPanel({
+function PdfAnnotationPanelInner({
   annotations,
   selectedAnnotationId = null,
   onAnnotationClick,
@@ -127,66 +128,70 @@ export function PdfAnnotationPanel({
 }: PdfAnnotationPanelProps) {
   const { t } = useI18n()
 
-  const sortedAnnotations = [...annotations].sort((left, right) => {
-    if (left.page !== right.page) return left.page - right.page
-    return left.createdAt - right.createdAt
-  })
+  const displayAnnotations = useMemo(() => {
+    const sortedAnnotations = [...annotations].sort((left, right) => {
+      if (left.page !== right.page) return left.page - right.page
+      return left.createdAt - right.createdAt
+    })
 
-  const displayAnnotations: DisplayAnnotationItem[] = []
-  const consumedTextIds = new Set<string>()
+    const nextDisplayAnnotations: DisplayAnnotationItem[] = []
+    const consumedTextIds = new Set<string>()
 
-  for (const annotation of sortedAnnotations) {
-    if (annotation.type === 'text' && consumedTextIds.has(annotation.id)) {
-      continue
-    }
-
-    if (annotation.type === 'text') {
-      const linkedMarkup = findLinkedMarkupAnnotation(annotation, sortedAnnotations)
-      if (linkedMarkup) {
-        consumedTextIds.add(annotation.id)
+    for (const annotation of sortedAnnotations) {
+      if (annotation.type === 'text' && consumedTextIds.has(annotation.id)) {
         continue
       }
+
+      if (annotation.type === 'text') {
+        const linkedMarkup = findLinkedMarkupAnnotation(annotation, sortedAnnotations)
+        if (linkedMarkup) {
+          consumedTextIds.add(annotation.id)
+          continue
+        }
+      }
+
+      const linkedText =
+        isMarkupAnnotation(annotation)
+          ? sortedAnnotations.find(
+              (candidate) =>
+                candidate.type === 'text' &&
+                candidate.page === annotation.page &&
+                (candidate.content?.trim() || '') === (annotation.content?.trim() || '') &&
+                areRectsEqual(candidate.rects, annotation.rects),
+            ) ?? null
+          : null
+
+      if (linkedText) {
+        consumedTextIds.add(linkedText.id)
+      }
+
+      nextDisplayAnnotations.push({
+        primary: annotation,
+        noteSource: annotation.note?.trim() ? annotation : linkedText,
+        noteText: annotation.note?.trim() || linkedText?.note?.trim() || null,
+      })
     }
 
-    const linkedText =
-      isMarkupAnnotation(annotation)
-        ? sortedAnnotations.find(
-            (candidate) =>
-              candidate.type === 'text' &&
-              candidate.page === annotation.page &&
-              (candidate.content?.trim() || '') === (annotation.content?.trim() || '') &&
-              areRectsEqual(candidate.rects, annotation.rects),
-          ) ?? null
-        : null
+    nextDisplayAnnotations.sort((left, right) => {
+      if (left.primary.page !== right.primary.page) {
+        return left.primary.page - right.primary.page
+      }
 
-    if (linkedText) {
-      consumedTextIds.add(linkedText.id)
-    }
+      const leftAnchor = getAnchorRect(left.primary)
+      const rightAnchor = getAnchorRect(right.primary)
 
-    displayAnnotations.push({
-      primary: annotation,
-      noteSource: annotation.note?.trim() ? annotation : linkedText,
-      noteText: annotation.note?.trim() || linkedText?.note?.trim() || null,
+      if (leftAnchor && rightAnchor) {
+        if (leftAnchor.y1 !== rightAnchor.y1) return leftAnchor.y1 - rightAnchor.y1
+        if (leftAnchor.x1 !== rightAnchor.x1) return leftAnchor.x1 - rightAnchor.x1
+      } else if (leftAnchor || rightAnchor) {
+        return leftAnchor ? -1 : 1
+      }
+
+      return left.primary.createdAt - right.primary.createdAt
     })
-  }
 
-  displayAnnotations.sort((left, right) => {
-    if (left.primary.page !== right.primary.page) {
-      return left.primary.page - right.primary.page
-    }
-
-    const leftAnchor = getAnchorRect(left.primary)
-    const rightAnchor = getAnchorRect(right.primary)
-
-    if (leftAnchor && rightAnchor) {
-      if (leftAnchor.y1 !== rightAnchor.y1) return leftAnchor.y1 - rightAnchor.y1
-      if (leftAnchor.x1 !== rightAnchor.x1) return leftAnchor.x1 - rightAnchor.x1
-    } else if (leftAnchor || rightAnchor) {
-      return leftAnchor ? -1 : 1
-    }
-
-    return left.primary.createdAt - right.primary.createdAt
-  })
+    return nextDisplayAnnotations
+  }, [annotations])
 
   return (
     <aside className="pdf-annotation-panel">
@@ -241,3 +246,5 @@ export function PdfAnnotationPanel({
     </aside>
   )
 }
+
+export const PdfAnnotationPanel = memo(PdfAnnotationPanelInner)

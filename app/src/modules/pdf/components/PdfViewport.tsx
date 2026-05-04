@@ -1,5 +1,6 @@
 import {
   forwardRef,
+  memo,
   useEffect,
   useImperativeHandle,
   useRef,
@@ -38,7 +39,7 @@ export interface PdfViewportProps {
   onClearAnnotationSelection?: () => void
 }
 
-export const PdfViewport = forwardRef<PdfViewportHandle, PdfViewportProps>(function PdfViewport(
+const PdfViewportInner = forwardRef<PdfViewportHandle, PdfViewportProps>(function PdfViewport(
   {
     pdfDocument,
     pageCount,
@@ -201,3 +202,7 @@ export const PdfViewport = forwardRef<PdfViewportHandle, PdfViewportProps>(funct
     </div>
   )
 })
+
+PdfViewportInner.displayName = 'PdfViewport'
+
+export const PdfViewport = memo(PdfViewportInner)
