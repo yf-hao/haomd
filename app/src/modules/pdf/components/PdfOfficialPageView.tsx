@@ -13,7 +13,8 @@ import {
   selectionRectsToAnnotationRects,
   type PdfSelectionDraft,
 } from '../annotationUtils'
-import type { Annotation } from '../types/annotation'
+import type { Annotation, Rect } from '../types/annotation'
+import type { AnnotationType } from '../types/annotation'
 
 export interface PdfOfficialPageViewProps {
   pdfDocument: PDFDocumentProxy
@@ -23,6 +24,12 @@ export interface PdfOfficialPageViewProps {
   clearSelectionSignal?: number
   annotations?: Annotation[]
   onSelectionChange?: (selection: PdfSelectionDraft | null) => void
+  activeShapeTool?: Extract<AnnotationType, 'square' | 'circle'> | null
+  onShapeCreate?: (shape: {
+    page: number
+    rect: Rect
+    type: Extract<AnnotationType, 'square' | 'circle'>
+  }) => void
   selectedAnnotationId?: string | null
   pulsingAnnotationId?: string | null
   onAnnotationClick?: (annotationId: string) => void
@@ -48,6 +55,8 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
   clearSelectionSignal = 0,
   annotations = [],
   onSelectionChange,
+  activeShapeTool = null,
+  onShapeCreate,
   selectedAnnotationId = null,
   pulsingAnnotationId = null,
   onAnnotationClick,
@@ -61,7 +70,11 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
   const isPointerSelectionActiveRef = useRef(false)
   const assistRegionRef = useRef<{ left: number; top: number; right: number; bottom: number } | null>(null)
   const hasActiveSelectionRef = useRef(false)
+  const shapeDraftStartRef = useRef<{ x: number; y: number } | null>(null)
+  const isShapeDrawingActiveRef = useRef(false)
+  const shapeDraftRectRef = useRef<Rect | null>(null)
   const [selectionBlocks, setSelectionBlocks] = useState<SelectionBlock[]>([])
+  const [shapeDraftRect, setShapeDraftRect] = useState<Rect | null>(null)
 
   const clearSelectionBlocks = () => {
     setSelectionBlocks((prev) => (prev.length === 0 ? prev : []))
@@ -69,6 +82,23 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
 
   const applySelectionBlocks = (nextBlocks: SelectionBlock[]) => {
     setSelectionBlocks((prev) => (areSelectionBlocksEqual(prev, nextBlocks) ? prev : nextBlocks))
+  }
+
+  const applyShapeDraftRect = (nextRect: Rect | null) => {
+    shapeDraftRectRef.current = nextRect
+    setShapeDraftRect((prev) => {
+      if (prev === nextRect) return prev
+      if (!prev || !nextRect) return nextRect
+      if (
+        prev.x1 === nextRect.x1 &&
+        prev.y1 === nextRect.y1 &&
+        prev.x2 === nextRect.x2 &&
+        prev.y2 === nextRect.y2
+      ) {
+        return prev
+      }
+      return nextRect
+    })
   }
 
   const setSelectionAssistRegionDefaults = () => {
@@ -390,6 +420,45 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       publishSelection(text && rects.length > 0 ? { page: pageNumber, text, rects } : null)
     }
 
+    const getPageRelativePoint = (event: PointerEvent) => {
+      const pageEl = root.querySelector('.page') as HTMLElement | null
+      if (!pageEl) return null
+      const pageRect = pageEl.getBoundingClientRect()
+      if (pageRect.width <= 0 || pageRect.height <= 0) return null
+      const x = Math.min(Math.max((event.clientX - pageRect.left) / pageRect.width, 0), 1)
+      const y = Math.min(Math.max((event.clientY - pageRect.top) / pageRect.height, 0), 1)
+      return { x, y }
+    }
+
+    const buildDraftRect = (
+      start: { x: number; y: number },
+      end: { x: number; y: number },
+      shapeType: Extract<AnnotationType, 'square' | 'circle'> | null,
+      constrainAspectRatio: boolean,
+    ): Rect => {
+      if (!shapeType || !constrainAspectRatio) {
+        return {
+          x1: Math.min(start.x, end.x),
+          y1: Math.min(start.y, end.y),
+          x2: Math.max(start.x, end.x),
+          y2: Math.max(start.y, end.y),
+        }
+      }
+
+      const deltaX = end.x - start.x
+      const deltaY = end.y - start.y
+      const size = Math.min(Math.abs(deltaX), Math.abs(deltaY))
+      const constrainedEndX = start.x + Math.sign(deltaX || 1) * size
+      const constrainedEndY = start.y + Math.sign(deltaY || 1) * size
+
+      return {
+        x1: Math.min(start.x, constrainedEndX),
+        y1: Math.min(start.y, constrainedEndY),
+        x2: Math.max(start.x, constrainedEndX),
+        y2: Math.max(start.y, constrainedEndY),
+      }
+    }
+
     const scheduleUpdate = () => {
       if (frame) return
       frame = window.requestAnimationFrame(updateSelectionBlocks)
@@ -403,12 +472,49 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       if (annotationBlock instanceof HTMLElement) {
         return
       }
+      if (activeShapeTool) {
+        const point = getPageRelativePoint(event)
+        if (!point) return
+        event.preventDefault()
+        onClearAnnotationSelection?.()
+        clearSelectionBlocks()
+        publishSelection(null)
+        setSelectionAssistRegionDefaults()
+        shapeDraftStartRef.current = point
+        isShapeDrawingActiveRef.current = true
+        applyShapeDraftRect({
+          x1: point.x,
+          y1: point.y,
+          x2: point.x,
+          y2: point.y,
+        })
+        return
+      }
       onClearAnnotationSelection?.()
       setPointerSelectingState(true)
       clearSelectionBlocks()
     }
 
     const handlePointerFinish = () => {
+      if (isShapeDrawingActiveRef.current) {
+        const draftRect = shapeDraftRectRef.current
+        shapeDraftStartRef.current = null
+        isShapeDrawingActiveRef.current = false
+        applyShapeDraftRect(null)
+        if (
+          activeShapeTool &&
+          draftRect &&
+          draftRect.x2 - draftRect.x1 >= 0.006 &&
+          draftRect.y2 - draftRect.y1 >= 0.006
+        ) {
+          onShapeCreate?.({
+            page: pageNumber,
+            rect: draftRect,
+            type: activeShapeTool,
+          })
+        }
+        return
+      }
       if (!isPointerSelectionActiveRef.current) return
       setPointerSelectingState(false)
       if (frame) {
@@ -419,6 +525,13 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     }
 
     const handlePointerMove = (event: PointerEvent) => {
+      if (isShapeDrawingActiveRef.current) {
+        const start = shapeDraftStartRef.current
+        const point = getPageRelativePoint(event)
+        if (!start || !point) return
+        applyShapeDraftRect(buildDraftRect(start, point, activeShapeTool, event.shiftKey))
+        return
+      }
       if (!isPointerSelectionActiveRef.current) return
       const root = rootRef.current
       if (!root) return
@@ -452,6 +565,9 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       if (isPointerSelectionActiveRef.current) {
         return
       }
+      if (activeShapeTool) {
+        return
+      }
       const selection = window.getSelection()
       if (!selectionBelongsToCurrentPage(selection)) {
         clearSelectionBlocks()
@@ -483,20 +599,26 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       document.removeEventListener('pointercancel', handlePointerFinish)
       document.removeEventListener('selectionchange', handleSelectionChange)
       setPointerSelectingState(false)
+      shapeDraftStartRef.current = null
+      isShapeDrawingActiveRef.current = false
+      applyShapeDraftRect(null)
       setSelectionAssistRegionDefaults()
       publishSelection(null)
       if (frame) {
         window.cancelAnimationFrame(frame)
       }
     }
-  }, [onSelectionChange, pageNumber, pdfDocument, scale, clearSelectionSignal])
+  }, [onSelectionChange, pageNumber, pdfDocument, scale, clearSelectionSignal, activeShapeTool, onShapeCreate, onClearAnnotationSelection])
 
   useEffect(() => {
     clearSelectionBlocks()
     hasActiveSelectionRef.current = false
+    applyShapeDraftRect(null)
+    shapeDraftStartRef.current = null
+    isShapeDrawingActiveRef.current = false
     setSelectionAssistRegionDefaults()
     onSelectionChange?.(null)
-  }, [clearSelectionSignal, onSelectionChange])
+  }, [clearSelectionSignal, onSelectionChange, activeShapeTool])
 
   return (
     <div
@@ -587,6 +709,22 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
               )
             }
 
+            if (annotation.type === 'square' || annotation.type === 'circle') {
+              return (
+                <div
+                  key={annotationKey}
+                  {...sharedProps}
+                  style={{
+                    ...sharedProps.style,
+                    opacity: 1,
+                  }}
+                >
+                  <div className={`pdf-annotation-shape pdf-annotation-shape--${annotation.type}`} />
+                  {noteMarker}
+                </div>
+              )
+            }
+
             return (
               <div
                 key={annotationKey}
@@ -617,6 +755,18 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         )}
       </div>
       <div className="pdf-selection-overlay" aria-hidden="true">
+        {shapeDraftRect ? (
+          <div
+            className={`pdf-selection-shape-draft pdf-selection-shape-draft--${activeShapeTool ?? 'square'}`}
+            style={{
+              left: `${shapeDraftRect.x1 * 100}%`,
+              top: `${shapeDraftRect.y1 * 100}%`,
+              width: `${(shapeDraftRect.x2 - shapeDraftRect.x1) * 100}%`,
+              height: `${(shapeDraftRect.y2 - shapeDraftRect.y1) * 100}%`,
+              '--pdf-selection-preview-color': previewHighlightColor,
+            } as React.CSSProperties}
+          />
+        ) : null}
         {selectionBlocks.map((block, index) => (
           <div
             key={`${pageNumber}-${index}`}

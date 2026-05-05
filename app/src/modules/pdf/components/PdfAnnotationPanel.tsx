@@ -1,6 +1,6 @@
 import { memo, useMemo } from 'react'
 import { useI18n } from '../../i18n/I18nContext'
-import type { Annotation } from '../types/annotation'
+import { isMarkupAnnotation, type Annotation } from '../types/annotation'
 
 export interface PdfAnnotationPanelProps {
   annotations: Annotation[]
@@ -32,6 +32,8 @@ const TYPE_LABELS: Record<Annotation['type'], string> = {
   underline: 'pdf.annotationTypes.underline',
   strikeout: 'pdf.annotationTypes.strikeout',
   squiggly: 'pdf.annotationTypes.squiggly',
+  square: 'pdf.annotationTypes.square',
+  circle: 'pdf.annotationTypes.circle',
   text: 'pdf.annotationTypes.text',
   popup: 'pdf.annotationTypes.popup',
   stamp: 'pdf.annotationTypes.stamp',
@@ -66,6 +68,18 @@ function renderAnnotationTypeIcon(type: Annotation['type']) {
           <path d="M4 12Q5.5 9.2 7 12T10 12T13 12T16 12" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       )
+    case 'square':
+      return (
+        <svg className="pdf-annotation-type-icon" viewBox="0 0 20 20" aria-hidden="true">
+          <rect x="4.5" y="4.5" width="11" height="11" rx="1.5" fill="none" stroke="currentColor" strokeWidth="2" />
+        </svg>
+      )
+    case 'circle':
+      return (
+        <svg className="pdf-annotation-type-icon" viewBox="0 0 20 20" aria-hidden="true">
+          <ellipse cx="10" cy="10" rx="5.5" ry="5.5" fill="none" stroke="currentColor" strokeWidth="2" />
+        </svg>
+      )
     case 'text':
       return <span className="pdf-annotation-type-icon pdf-annotation-type-icon-text" aria-hidden="true">T</span>
     case 'popup':
@@ -75,15 +89,6 @@ function renderAnnotationTypeIcon(type: Annotation['type']) {
     case 'ink':
       return <span className="pdf-annotation-type-icon pdf-annotation-type-icon-text" aria-hidden="true">✎</span>
   }
-}
-
-function isMarkupAnnotation(annotation: Annotation) {
-  return (
-    annotation.type === 'highlight' ||
-    annotation.type === 'underline' ||
-    annotation.type === 'strikeout' ||
-    annotation.type === 'squiggly'
-  )
 }
 
 function areRectsEqual(left: Annotation['rects'], right: Annotation['rects']) {
@@ -233,7 +238,7 @@ function PdfAnnotationPanelInner({
                   />
                 </div>
                 <div className="pdf-annotation-content">
-                  {primary.content?.trim() || t('pdf.emptyAnnotationContent')}
+                  {primary.content?.trim() || t(TYPE_LABELS[primary.type])}
                 </div>
                 {noteText ? (
                   <div className="pdf-annotation-note">{noteText}</div>

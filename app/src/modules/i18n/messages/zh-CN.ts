@@ -379,6 +379,8 @@ export const zhCNMessages: MessageDictionary = {
       underline: '下划线',
       strikeout: '删除线',
       squiggly: '波浪线',
+      square: '矩形',
+      circle: '圆形',
       text: '文本批注',
       popup: '弹出批注',
       stamp: '图章',

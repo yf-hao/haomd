@@ -182,6 +182,26 @@ export function createTextMarkupAnnotation(
   }
 }
 
+export function createShapeAnnotation(
+  page: number,
+  rect: Rect,
+  type: Extract<AnnotationType, 'square' | 'circle'>,
+  color = DEFAULT_HIGHLIGHT_COLOR,
+): Annotation {
+  const now = Date.now()
+
+  return {
+    id: crypto.randomUUID(),
+    page,
+    type,
+    rects: [rect],
+    color,
+    opacity: 1,
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
 export function createTextNoteAnnotation(
   selection: PdfSelectionDraft,
   note: string,

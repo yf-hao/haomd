@@ -1699,10 +1699,27 @@ button:disabled {
 
 .pdf-annotation-block--underline,
 .pdf-annotation-block--strikeout,
-.pdf-annotation-block--squiggly {
+.pdf-annotation-block--squiggly,
+.pdf-annotation-block--square,
+.pdf-annotation-block--circle {
   background: transparent !important;
   color: var(--pdf-annotation-color);
   opacity: 1;
+}
+
+.pdf-annotation-shape {
+  position: absolute;
+  inset: 0;
+  border: 2px solid currentColor;
+  pointer-events: none;
+}
+
+.pdf-annotation-shape--square {
+  border-radius: 6px;
+}
+
+.pdf-annotation-shape--circle {
+  border-radius: 999px;
 }
 
 .pdf-annotation-mark {
@@ -1764,7 +1781,9 @@ button:disabled {
 
 .pdf-annotation-block--underline.pulsing,
 .pdf-annotation-block--strikeout.pulsing,
-.pdf-annotation-block--squiggly.pulsing {
+.pdf-annotation-block--squiggly.pulsing,
+.pdf-annotation-block--square.pulsing,
+.pdf-annotation-block--circle.pulsing {
   color: color-mix(in srgb, var(--pdf-annotation-color) 90%, white 10%);
   filter: drop-shadow(0 0 10px color-mix(in srgb, var(--pdf-annotation-color) 24%, transparent));
 }
@@ -1787,6 +1806,21 @@ button:disabled {
   position: absolute;
   border-radius: 4px;
   background: color-mix(in srgb, var(--pdf-selection-preview-color, var(--theme-accent-primary)) 28%, transparent);
+}
+
+.pdf-selection-shape-draft {
+  position: absolute;
+  border: 2px solid color-mix(in srgb, var(--pdf-selection-preview-color, var(--theme-accent-primary)) 82%, white 18%);
+  background: color-mix(in srgb, var(--pdf-selection-preview-color, var(--theme-accent-primary)) 14%, transparent);
+  pointer-events: none;
+}
+
+.pdf-selection-shape-draft--square {
+  border-radius: 6px;
+}
+
+.pdf-selection-shape-draft--circle {
+  border-radius: 999px;
 }
 
 @keyframes pdf-annotation-pulse {

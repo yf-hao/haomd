@@ -380,6 +380,8 @@ export const enUSMessages: MessageDictionary = {
       underline: 'Underline',
       strikeout: 'Strikeout',
       squiggly: 'Squiggly',
+      square: 'Rectangle',
+      circle: 'Circle',
       text: 'Text note',
       popup: 'Popup',
       stamp: 'Stamp',

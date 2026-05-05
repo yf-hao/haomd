@@ -3,12 +3,14 @@ import {
   memo,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   type UIEventHandler,
 } from 'react'
 import type { PDFDocumentProxy } from '../hooks/usePdfDocument'
 import type { PdfSelectionDraft } from '../annotationUtils'
-import type { Annotation } from '../types/annotation'
+import type { Annotation, Rect } from '../types/annotation'
+import type { AnnotationType } from '../types/annotation'
 import { useVirtualPages } from '../hooks/useVirtualPages'
 import { PdfOfficialPageView } from './PdfOfficialPageView'
 
@@ -32,6 +34,12 @@ export interface PdfViewportProps {
   onRegisterSelectionGetter?: (getter: (() => string | null) | null) => void
   annotations?: Annotation[]
   onSelectionChange?: (selection: PdfSelectionDraft | null) => void
+  activeShapeTool?: Extract<AnnotationType, 'square' | 'circle'> | null
+  onShapeCreate?: (shape: {
+    page: number
+    rect: Rect
+    type: Extract<AnnotationType, 'square' | 'circle'>
+  }) => void
   selectedAnnotationId?: string | null
   pulsingAnnotationId?: string | null
   onAnnotationClick?: (annotationId: string) => void
@@ -52,6 +60,8 @@ const PdfViewportInner = forwardRef<PdfViewportHandle, PdfViewportProps>(functio
     onRegisterSelectionGetter,
     annotations = [],
     onSelectionChange,
+    activeShapeTool = null,
+    onShapeCreate,
     selectedAnnotationId = null,
     pulsingAnnotationId = null,
     onAnnotationClick,
@@ -135,6 +145,19 @@ const PdfViewportInner = forwardRef<PdfViewportHandle, PdfViewportProps>(functio
     bufferPages: 2,
   })
 
+  const annotationsByPage = useMemo(() => {
+    const grouped = new Map<number, Annotation[]>()
+    for (const annotation of annotations) {
+      const current = grouped.get(annotation.page)
+      if (current) {
+        current.push(annotation)
+      } else {
+        grouped.set(annotation.page, [annotation])
+      }
+    }
+    return grouped
+  }, [annotations])
+
   const handleScroll: UIEventHandler<HTMLDivElement> = (e) => {
     handleVirtualScroll()
 
@@ -173,8 +196,10 @@ const PdfViewportInner = forwardRef<PdfViewportHandle, PdfViewportProps>(functio
             scale={scale}
             previewHighlightColor={previewHighlightColor}
             clearSelectionSignal={clearSelectionSignal}
-            annotations={annotations.filter((annotation) => annotation.page === pageNumber)}
+            annotations={annotationsByPage.get(pageNumber) ?? []}
             onSelectionChange={onSelectionChange}
+            activeShapeTool={activeShapeTool}
+            onShapeCreate={onShapeCreate}
             selectedAnnotationId={selectedAnnotationId}
             pulsingAnnotationId={pulsingAnnotationId}
             onAnnotationClick={onAnnotationClick}

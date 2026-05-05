@@ -3,6 +3,8 @@ export type AnnotationType =
   | 'underline'
   | 'strikeout'
   | 'squiggly'
+  | 'square'
+  | 'circle'
   | 'text'
   | 'popup'
   | 'stamp'
@@ -44,4 +46,36 @@ export interface RenderContext {
   pageWidth: number
   pageHeight: number
   rotation: number
+}
+
+export function isMarkupAnnotationType(type: AnnotationType): type is 'highlight' | 'underline' | 'strikeout' | 'squiggly' | 'square' | 'circle' {
+  return (
+    type === 'highlight' ||
+    type === 'underline' ||
+    type === 'strikeout' ||
+    type === 'squiggly' ||
+    type === 'square' ||
+    type === 'circle'
+  )
+}
+
+export function isTextMarkupAnnotationType(type: AnnotationType): type is 'highlight' | 'underline' | 'strikeout' | 'squiggly' {
+  return (
+    type === 'highlight' ||
+    type === 'underline' ||
+    type === 'strikeout' ||
+    type === 'squiggly'
+  )
+}
+
+export function isMarkupAnnotation(annotation: Annotation): annotation is Annotation & {
+  type: 'highlight' | 'underline' | 'strikeout' | 'squiggly' | 'square' | 'circle'
+} {
+  return isMarkupAnnotationType(annotation.type)
+}
+
+export function isColorableAnnotation(annotation: Annotation): annotation is Annotation & {
+  type: 'highlight' | 'underline' | 'strikeout' | 'squiggly' | 'square' | 'circle' | 'text'
+} {
+  return isMarkupAnnotationType(annotation.type) || annotation.type === 'text'
 }
