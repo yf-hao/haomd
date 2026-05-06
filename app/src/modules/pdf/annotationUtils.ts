@@ -1,4 +1,4 @@
-import type { Annotation, DocumentAnnotations, Rect } from './types/annotation'
+import type { Annotation, DocumentAnnotations, Rect, StampKind } from './types/annotation'
 import type { SelectionBlock } from './components/pdfSelectionOverlay'
 import type { RectLike } from './components/pdfSelectionOverlay'
 import type { AnnotationType } from './types/annotation'
@@ -185,8 +185,9 @@ export function createTextMarkupAnnotation(
 export function createShapeAnnotation(
   page: number,
   rect: Rect,
-  type: Extract<AnnotationType, 'square' | 'circle'>,
+  type: Extract<AnnotationType, 'square' | 'circle' | 'line' | 'arrow'>,
   color = DEFAULT_HIGHLIGHT_COLOR,
+  linePoints?: Rect,
 ): Annotation {
   const now = Date.now()
 
@@ -197,6 +198,52 @@ export function createShapeAnnotation(
     rects: [rect],
     color,
     opacity: 1,
+    linePoints,
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+export function createStampAnnotation(
+  page: number,
+  rect: Rect,
+  stampKind: StampKind,
+  label: string,
+  color = DEFAULT_HIGHLIGHT_COLOR,
+): Annotation {
+  const now = Date.now()
+
+  return {
+    id: crypto.randomUUID(),
+    page,
+    type: 'stamp',
+    rects: [rect],
+    color,
+    opacity: 1,
+    content: label,
+    stampKind,
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+export function createFreeTextAnnotation(
+  page: number,
+  rect: Rect,
+  text: string,
+  color = DEFAULT_HIGHLIGHT_COLOR,
+): Annotation {
+  const now = Date.now()
+
+  return {
+    id: crypto.randomUUID(),
+    page,
+    type: 'freeText',
+    rects: [rect],
+    color,
+    opacity: 1,
+    text,
+    content: text,
     createdAt: now,
     updatedAt: now,
   }

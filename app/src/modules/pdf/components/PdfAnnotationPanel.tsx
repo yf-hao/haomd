@@ -1,6 +1,6 @@
 import { memo, useMemo } from 'react'
 import { useI18n } from '../../i18n/I18nContext'
-import { isMarkupAnnotation, type Annotation } from '../types/annotation'
+import { isMarkupAnnotation, type Annotation, type StampKind } from '../types/annotation'
 
 export interface PdfAnnotationPanelProps {
   annotations: Annotation[]
@@ -34,6 +34,9 @@ const TYPE_LABELS: Record<Annotation['type'], string> = {
   squiggly: 'pdf.annotationTypes.squiggly',
   square: 'pdf.annotationTypes.square',
   circle: 'pdf.annotationTypes.circle',
+  line: 'pdf.annotationTypes.line',
+  arrow: 'pdf.annotationTypes.arrow',
+  freeText: 'pdf.annotationTypes.freeText',
   text: 'pdf.annotationTypes.text',
   popup: 'pdf.annotationTypes.popup',
   stamp: 'pdf.annotationTypes.stamp',
@@ -80,14 +83,67 @@ function renderAnnotationTypeIcon(type: Annotation['type']) {
           <ellipse cx="10" cy="10" rx="5.5" ry="5.5" fill="none" stroke="currentColor" strokeWidth="2" />
         </svg>
       )
+    case 'line':
+      return (
+        <svg className="pdf-annotation-type-icon" viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M4.5 14.5L15.5 5.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+        </svg>
+      )
+    case 'arrow':
+      return (
+        <svg className="pdf-annotation-type-icon" viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M4.5 14.5L14.2 6.8" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+          <path d="M10.8 6.5H14.8V10.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )
+    case 'freeText':
+      return (
+        <svg className="pdf-annotation-type-icon" viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M5.2 5.5H14.8" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+          <path d="M10 5.5V15.2" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+          <path d="M7.4 15.2H12.6" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+        </svg>
+      )
     case 'text':
       return <span className="pdf-annotation-type-icon pdf-annotation-type-icon-text" aria-hidden="true">T</span>
     case 'popup':
       return <span className="pdf-annotation-type-icon pdf-annotation-type-icon-text" aria-hidden="true">P</span>
     case 'stamp':
-      return <span className="pdf-annotation-type-icon pdf-annotation-type-icon-text" aria-hidden="true">S</span>
+      return renderStampIcon('important')
     case 'ink':
       return <span className="pdf-annotation-type-icon pdf-annotation-type-icon-text" aria-hidden="true">✎</span>
+  }
+}
+
+function renderStampIcon(kind: StampKind) {
+  switch (kind) {
+    case 'important':
+      return (
+        <svg className="pdf-annotation-type-icon" viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M10 3.6L11.6 8.2L16.5 8.3L12.6 11.2L14.1 15.9L10 13L5.9 15.9L7.4 11.2L3.5 8.3L8.4 8.2Z" fill="currentColor" />
+        </svg>
+      )
+    case 'question':
+      return (
+        <svg className="pdf-annotation-type-icon" viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M7.3 7.6C7.5 5.9 8.8 4.9 10.5 4.9C12.3 4.9 13.6 6 13.6 7.6C13.6 8.8 12.9 9.5 11.9 10.1C10.9 10.7 10.3 11.3 10.3 12.4V12.8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <circle cx="10.3" cy="15.4" r="1.1" fill="currentColor" />
+        </svg>
+      )
+    case 'todo':
+      return (
+        <svg className="pdf-annotation-type-icon" viewBox="0 0 20 20" aria-hidden="true">
+          <rect x="4.7" y="4.7" width="10.6" height="10.6" rx="2" fill="none" stroke="currentColor" strokeWidth="2" />
+          <path d="M7.5 10.2L9.1 11.8L12.7 8.2" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )
+    case 'done':
+      return (
+        <svg className="pdf-annotation-type-icon" viewBox="0 0 20 20" aria-hidden="true">
+          <circle cx="10" cy="10" r="5.8" fill="none" stroke="currentColor" strokeWidth="2" />
+          <path d="M7.2 10.2L9.2 12.2L13 8.4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )
   }
 }
 
@@ -228,7 +284,9 @@ function PdfAnnotationPanelInner({
                 <div className="pdf-annotation-item-top">
                   <span className="pdf-annotation-page">P{primary.page}</span>
                   <span className="pdf-annotation-type-badge">
-                    {renderAnnotationTypeIcon(primary.type)}
+                    {primary.type === 'stamp'
+                      ? renderStampIcon(primary.stampKind ?? 'important')
+                      : renderAnnotationTypeIcon(primary.type)}
                     <span className="pdf-annotation-type">{t(TYPE_LABELS[primary.type])}</span>
                   </span>
                   <span

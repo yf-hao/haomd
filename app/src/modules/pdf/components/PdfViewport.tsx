@@ -9,7 +9,7 @@ import {
 } from 'react'
 import type { PDFDocumentProxy } from '../hooks/usePdfDocument'
 import type { PdfSelectionDraft } from '../annotationUtils'
-import type { Annotation, Rect } from '../types/annotation'
+import type { Annotation, Rect, StampKind } from '../types/annotation'
 import type { AnnotationType } from '../types/annotation'
 import { useVirtualPages } from '../hooks/useVirtualPages'
 import { PdfOfficialPageView } from './PdfOfficialPageView'
@@ -34,11 +34,40 @@ export interface PdfViewportProps {
   onRegisterSelectionGetter?: (getter: (() => string | null) | null) => void
   annotations?: Annotation[]
   onSelectionChange?: (selection: PdfSelectionDraft | null) => void
-  activeShapeTool?: Extract<AnnotationType, 'square' | 'circle'> | null
+  activeShapeTool?: Extract<AnnotationType, 'square' | 'circle' | 'line' | 'arrow'> | null
   onShapeCreate?: (shape: {
     page: number
     rect: Rect
-    type: Extract<AnnotationType, 'square' | 'circle'>
+    type: Extract<AnnotationType, 'square' | 'circle' | 'line' | 'arrow'>
+    linePoints?: Rect
+  }) => void
+  activeFreeTextTool?: boolean
+  onFreeTextCreate?: (draft: {
+    page: number
+    rect: Rect
+  }) => void
+  editingFreeTextDraft?: {
+    page: number
+    rect: Rect
+  } | null
+  editingFreeTextAnnotationId?: string | null
+  editingFreeTextInitialValue?: string
+  onFreeTextSave?: (value: string, rect: Rect) => void
+  onFreeTextCancel?: () => void
+  activeStampKind?: StampKind | null
+  activeStampLabel?: string | null
+  activeStampSize?: number
+  onStampCreate?: (stamp: {
+    page: number
+    rect: Rect
+    kind: StampKind
+    label: string
+  }) => void
+  onStampResize?: (stamp: { annotationId: string; rect: Rect }) => void
+  onLineResize?: (shape: {
+    annotationId: string
+    rect: Rect
+    linePoints: Rect
   }) => void
   selectedAnnotationId?: string | null
   pulsingAnnotationId?: string | null
@@ -62,6 +91,19 @@ const PdfViewportInner = forwardRef<PdfViewportHandle, PdfViewportProps>(functio
     onSelectionChange,
     activeShapeTool = null,
     onShapeCreate,
+    activeFreeTextTool = false,
+    onFreeTextCreate,
+    editingFreeTextDraft = null,
+    editingFreeTextAnnotationId = null,
+    editingFreeTextInitialValue = '',
+    onFreeTextSave,
+    onFreeTextCancel,
+    activeStampKind = null,
+    activeStampLabel = null,
+    activeStampSize = 0.045,
+    onStampCreate,
+    onStampResize,
+    onLineResize,
     selectedAnnotationId = null,
     pulsingAnnotationId = null,
     onAnnotationClick,
@@ -200,6 +242,19 @@ const PdfViewportInner = forwardRef<PdfViewportHandle, PdfViewportProps>(functio
             onSelectionChange={onSelectionChange}
             activeShapeTool={activeShapeTool}
             onShapeCreate={onShapeCreate}
+            activeFreeTextTool={activeFreeTextTool}
+            onFreeTextCreate={onFreeTextCreate}
+            editingFreeTextDraft={editingFreeTextDraft}
+            editingFreeTextAnnotationId={editingFreeTextAnnotationId}
+            editingFreeTextInitialValue={editingFreeTextInitialValue}
+            onFreeTextSave={onFreeTextSave}
+            onFreeTextCancel={onFreeTextCancel}
+            activeStampKind={activeStampKind}
+            activeStampLabel={activeStampLabel}
+            activeStampSize={activeStampSize}
+            onStampCreate={onStampCreate}
+            onStampResize={onStampResize}
+            onLineResize={onLineResize}
             selectedAnnotationId={selectedAnnotationId}
             pulsingAnnotationId={pulsingAnnotationId}
             onAnnotationClick={onAnnotationClick}

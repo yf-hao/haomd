@@ -375,6 +375,12 @@ export const enUSMessages: MessageDictionary = {
       pureBlue: 'Pure blue highlight',
       black: 'Black highlight',
     },
+    stampOptions: {
+      important: 'Important',
+      question: 'Question',
+      todo: 'Todo',
+      done: 'Done',
+    },
     annotationTypes: {
       highlight: 'Highlight',
       underline: 'Underline',
@@ -382,6 +388,9 @@ export const enUSMessages: MessageDictionary = {
       squiggly: 'Squiggly',
       square: 'Rectangle',
       circle: 'Circle',
+      line: 'Line',
+      arrow: 'Arrow',
+      freeText: 'Page Text',
       text: 'Text note',
       popup: 'Popup',
       stamp: 'Stamp',

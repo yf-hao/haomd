@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react'
+import { Fragment, memo, useEffect, useRef, useState } from 'react'
 import type { PDFDocumentProxy } from '../hooks/usePdfDocument'
 import { EventBus, PDFLinkService, PDFPageView } from 'pdfjs-dist/web/pdf_viewer.mjs'
 import 'pdfjs-dist/web/pdf_viewer.css'
@@ -13,8 +13,11 @@ import {
   selectionRectsToAnnotationRects,
   type PdfSelectionDraft,
 } from '../annotationUtils'
-import type { Annotation, Rect } from '../types/annotation'
+import type { Annotation, Rect, StampKind } from '../types/annotation'
 import type { AnnotationType } from '../types/annotation'
+
+const MIN_STAMP_SIZE = 0.045 / 3
+const LINE_RECT_PADDING = 0.006
 
 export interface PdfOfficialPageViewProps {
   pdfDocument: PDFDocumentProxy
@@ -24,11 +27,40 @@ export interface PdfOfficialPageViewProps {
   clearSelectionSignal?: number
   annotations?: Annotation[]
   onSelectionChange?: (selection: PdfSelectionDraft | null) => void
-  activeShapeTool?: Extract<AnnotationType, 'square' | 'circle'> | null
+  activeShapeTool?: Extract<AnnotationType, 'square' | 'circle' | 'line' | 'arrow'> | null
   onShapeCreate?: (shape: {
     page: number
     rect: Rect
-    type: Extract<AnnotationType, 'square' | 'circle'>
+    type: Extract<AnnotationType, 'square' | 'circle' | 'line' | 'arrow'>
+    linePoints?: Rect
+  }) => void
+  activeFreeTextTool?: boolean
+  onFreeTextCreate?: (draft: {
+    page: number
+    rect: Rect
+  }) => void
+  editingFreeTextDraft?: {
+    page: number
+    rect: Rect
+  } | null
+  editingFreeTextAnnotationId?: string | null
+  editingFreeTextInitialValue?: string
+  onFreeTextSave?: (value: string, rect: Rect) => void
+  onFreeTextCancel?: () => void
+  activeStampKind?: StampKind | null
+  activeStampLabel?: string | null
+  activeStampSize?: number
+  onStampCreate?: (stamp: {
+    page: number
+    rect: Rect
+    kind: StampKind
+    label: string
+  }) => void
+  onStampResize?: (stamp: { annotationId: string; rect: Rect }) => void
+  onLineResize?: (shape: {
+    annotationId: string
+    rect: Rect
+    linePoints: Rect
   }) => void
   selectedAnnotationId?: string | null
   pulsingAnnotationId?: string | null
@@ -57,6 +89,19 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
   onSelectionChange,
   activeShapeTool = null,
   onShapeCreate,
+  activeFreeTextTool = false,
+  onFreeTextCreate,
+  editingFreeTextDraft = null,
+  editingFreeTextAnnotationId = null,
+  editingFreeTextInitialValue = '',
+  onFreeTextSave,
+  onFreeTextCancel,
+  activeStampKind = null,
+  activeStampLabel = null,
+  activeStampSize = 0.045,
+  onStampCreate,
+  onStampResize,
+  onLineResize,
   selectedAnnotationId = null,
   pulsingAnnotationId = null,
   onAnnotationClick,
@@ -73,8 +118,108 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
   const shapeDraftStartRef = useRef<{ x: number; y: number } | null>(null)
   const isShapeDrawingActiveRef = useRef(false)
   const shapeDraftRectRef = useRef<Rect | null>(null)
+  const stampResizeDraftRef = useRef<{ annotationId: string; rect: Rect } | null>(null)
+  const lineResizeDraftRef = useRef<{ annotationId: string; rect: Rect; linePoints: Rect } | null>(null)
+  const movingStampStateRef = useRef<{
+    annotationId: string
+    pointerOffsetX: number
+    pointerOffsetY: number
+    width: number
+    height: number
+  } | null>(null)
+  const resizingStampStateRef = useRef<{
+    annotationId: string
+    centerX: number
+    centerY: number
+    minHalfSize: number
+  } | null>(null)
+  const movingLineStateRef = useRef<{
+    annotationId: string
+    origin: { x: number; y: number }
+    startPoints: Rect
+  } | null>(null)
+  const resizingLineStateRef = useRef<{
+    annotationId: string
+    handle: 'start' | 'end'
+    startPoints: Rect
+  } | null>(null)
   const [selectionBlocks, setSelectionBlocks] = useState<SelectionBlock[]>([])
   const [shapeDraftRect, setShapeDraftRect] = useState<Rect | null>(null)
+  const [stampResizeDraft, setStampResizeDraft] = useState<{ annotationId: string; rect: Rect } | null>(null)
+  const [lineResizeDraft, setLineResizeDraft] = useState<{ annotationId: string; rect: Rect; linePoints: Rect } | null>(null)
+  const [lineDraftOrigin, setLineDraftOrigin] = useState<{ x: number; y: number } | null>(null)
+  const freeTextEditorRef = useRef<HTMLTextAreaElement | null>(null)
+  const activeFreeTextDraft = editingFreeTextDraft?.page === pageNumber ? editingFreeTextDraft : null
+  const activeFreeTextEditorKey = activeFreeTextDraft
+    ? `${editingFreeTextAnnotationId ?? 'new'}-${activeFreeTextDraft.rect.x1}-${activeFreeTextDraft.rect.y1}-${activeFreeTextDraft.rect.x2}-${activeFreeTextDraft.rect.y2}`
+    : null
+  const activeFreeTextColor =
+    (
+      editingFreeTextAnnotationId
+        ? annotations.find((annotation) => annotation.id === editingFreeTextAnnotationId)?.color
+        : null
+    ) ?? previewHighlightColor
+
+  const buildPaddedLineRect = (linePoints: Rect): Rect => ({
+    x1: Math.max(0, Math.min(linePoints.x1, linePoints.x2) - LINE_RECT_PADDING),
+    y1: Math.max(0, Math.min(linePoints.y1, linePoints.y2) - LINE_RECT_PADDING),
+    x2: Math.min(1, Math.max(linePoints.x1, linePoints.x2) + LINE_RECT_PADDING),
+    y2: Math.min(1, Math.max(linePoints.y1, linePoints.y2) + LINE_RECT_PADDING),
+  })
+
+  const applyLineResizeDraft = (nextDraft: { annotationId: string; rect: Rect; linePoints: Rect } | null) => {
+    lineResizeDraftRef.current = nextDraft
+    setLineResizeDraft((prev) => {
+      if (prev === nextDraft) return prev
+      if (!prev || !nextDraft) return nextDraft
+      if (
+        prev.annotationId === nextDraft.annotationId &&
+        prev.rect.x1 === nextDraft.rect.x1 &&
+        prev.rect.y1 === nextDraft.rect.y1 &&
+        prev.rect.x2 === nextDraft.rect.x2 &&
+        prev.rect.y2 === nextDraft.rect.y2 &&
+        prev.linePoints.x1 === nextDraft.linePoints.x1 &&
+        prev.linePoints.y1 === nextDraft.linePoints.y1 &&
+        prev.linePoints.x2 === nextDraft.linePoints.x2 &&
+        prev.linePoints.y2 === nextDraft.linePoints.y2
+      ) {
+        return prev
+      }
+      return nextDraft
+    })
+  }
+
+  const renderStampIcon = (kind: StampKind) => {
+    switch (kind) {
+      case 'important':
+        return (
+          <svg className="pdf-annotation-stamp-icon" viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M10 3.6L11.6 8.2L16.5 8.3L12.6 11.2L14.1 15.9L10 13L5.9 15.9L7.4 11.2L3.5 8.3L8.4 8.2Z" fill="currentColor" />
+          </svg>
+        )
+      case 'question':
+        return (
+          <svg className="pdf-annotation-stamp-icon" viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M7.3 7.6C7.5 5.9 8.8 4.9 10.5 4.9C12.3 4.9 13.6 6 13.6 7.6C13.6 8.8 12.9 9.5 11.9 10.1C10.9 10.7 10.3 11.3 10.3 12.4V12.8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            <circle cx="10.3" cy="15.4" r="1.1" fill="currentColor" />
+          </svg>
+        )
+      case 'todo':
+        return (
+          <svg className="pdf-annotation-stamp-icon" viewBox="0 0 20 20" aria-hidden="true">
+            <rect x="4.7" y="4.7" width="10.6" height="10.6" rx="2" fill="none" stroke="currentColor" strokeWidth="2" />
+            <path d="M7.5 10.2L9.1 11.8L12.7 8.2" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )
+      case 'done':
+        return (
+          <svg className="pdf-annotation-stamp-icon" viewBox="0 0 20 20" aria-hidden="true">
+            <circle cx="10" cy="10" r="5.8" fill="none" stroke="currentColor" strokeWidth="2" />
+            <path d="M7.2 10.2L9.2 12.2L13 8.4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )
+    }
+  }
 
   const clearSelectionBlocks = () => {
     setSelectionBlocks((prev) => (prev.length === 0 ? prev : []))
@@ -98,6 +243,24 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         return prev
       }
       return nextRect
+    })
+  }
+
+  const applyStampResizeDraft = (nextDraft: { annotationId: string; rect: Rect } | null) => {
+    stampResizeDraftRef.current = nextDraft
+    setStampResizeDraft((prev) => {
+      if (prev === nextDraft) return prev
+      if (!prev || !nextDraft) return nextDraft
+      if (
+        prev.annotationId === nextDraft.annotationId &&
+        prev.rect.x1 === nextDraft.rect.x1 &&
+        prev.rect.y1 === nextDraft.rect.y1 &&
+        prev.rect.x2 === nextDraft.rect.x2 &&
+        prev.rect.y2 === nextDraft.rect.y2
+      ) {
+        return prev
+      }
+      return nextDraft
     })
   }
 
@@ -232,6 +395,21 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     root.style.setProperty('--pdf-text-selection-height', '100%')
     textRectsDirtyRef.current = false
   }
+
+  useEffect(() => {
+    if (!activeFreeTextDraft) return
+    const frame = window.requestAnimationFrame(() => {
+      const input = freeTextEditorRef.current
+      if (!input) return
+      input.style.height = '0px'
+      input.style.height = `${Math.max(input.scrollHeight, input.clientHeight)}px`
+      input.focus()
+      input.setSelectionRange(input.value.length, input.value.length)
+    })
+    return () => {
+      window.cancelAnimationFrame(frame)
+    }
+  }, [activeFreeTextDraft, editingFreeTextInitialValue, activeFreeTextEditorKey])
 
   const selectionBelongsToCurrentPage = (selection: Selection | null) => {
     const root = rootRef.current
@@ -433,9 +611,17 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     const buildDraftRect = (
       start: { x: number; y: number },
       end: { x: number; y: number },
-      shapeType: Extract<AnnotationType, 'square' | 'circle'> | null,
+      shapeType: Extract<AnnotationType, 'square' | 'circle' | 'line' | 'arrow'> | null,
       constrainAspectRatio: boolean,
     ): Rect => {
+      if (shapeType === 'line' || shapeType === 'arrow') {
+        return {
+          x1: start.x,
+          y1: start.y,
+          x2: end.x,
+          y2: end.y,
+        }
+      }
       if (!shapeType || !constrainAspectRatio) {
         return {
           x1: Math.min(start.x, end.x),
@@ -459,6 +645,35 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       }
     }
 
+    const buildStampRect = (
+      point: { x: number; y: number },
+      _label: string,
+    ): Rect => {
+      const width = activeStampSize
+      const height = activeStampSize
+      const x1 = Math.min(Math.max(point.x - width / 2, 0), Math.max(0, 1 - width))
+      const y1 = Math.min(Math.max(point.y - height / 2, 0), Math.max(0, 1 - height))
+      return {
+        x1,
+        y1,
+        x2: x1 + width,
+        y2: y1 + height,
+      }
+    }
+
+    const buildFreeTextRect = (point: { x: number; y: number }): Rect => {
+      const width = 0.22
+      const height = 0.034
+      const x1 = Math.min(Math.max(point.x, 0), Math.max(0, 1 - width))
+      const y1 = Math.min(Math.max(point.y, 0), Math.max(0, 1 - height))
+      return {
+        x1,
+        y1,
+        x2: x1 + width,
+        y2: y1 + height,
+      }
+    }
+
     const scheduleUpdate = () => {
       if (frame) return
       frame = window.requestAnimationFrame(updateSelectionBlocks)
@@ -468,8 +683,192 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       if (event.button !== 0) return
       const target = event.target
       if (!(target instanceof Node) || !root.contains(target)) return
-      const annotationBlock = target instanceof HTMLElement ? target.closest('.pdf-annotation-block') : null
+      const targetElement = target instanceof Element ? target : null
+      if (targetElement?.closest('.pdf-annotation-free-text-editor')) {
+        return
+      }
+      if (activeFreeTextDraft) {
+        return
+      }
+      const lineHandle = targetElement?.closest<SVGElement | HTMLElement>('[data-line-handle]') ?? null
+      if (lineHandle) {
+        const annotationId = lineHandle.dataset.annotationId
+        const handle = lineHandle.dataset.lineHandle
+        const annotation =
+          annotationId && (handle === 'start' || handle === 'end')
+            ? annotations.find(
+                (item) =>
+                  item.id === annotationId &&
+                  (item.type === 'line' || item.type === 'arrow'),
+              ) ?? null
+            : null
+        const points = annotation?.linePoints ?? null
+        if (annotationId && points && (handle === 'start' || handle === 'end')) {
+          event.preventDefault()
+          event.stopPropagation()
+          resizingLineStateRef.current = {
+            annotationId,
+            handle,
+            startPoints: points,
+          }
+          applyLineResizeDraft({
+            annotationId,
+            rect: buildPaddedLineRect(points),
+            linePoints: points,
+          })
+          return
+        }
+      }
+      const lineMoveZone = targetElement?.closest<SVGElement | HTMLElement>('[data-line-move-zone]') ?? null
+      if (lineMoveZone) {
+        const annotationId = lineMoveZone.dataset.annotationId
+        const annotation =
+          annotationId
+            ? annotations.find(
+                (item) =>
+                  item.id === annotationId &&
+                  (item.type === 'line' || item.type === 'arrow'),
+              ) ?? null
+            : null
+        const points = annotation?.linePoints ?? null
+        const point = getPageRelativePoint(event)
+        if (annotationId && points && point) {
+          event.preventDefault()
+          event.stopPropagation()
+          movingLineStateRef.current = {
+            annotationId,
+            origin: point,
+            startPoints: points,
+          }
+          applyLineResizeDraft({
+            annotationId,
+            rect: buildPaddedLineRect(points),
+            linePoints: points,
+          })
+          return
+        }
+      }
+      const annotationBlock = targetElement?.closest<HTMLElement>('.pdf-annotation-block') ?? null
       if (annotationBlock instanceof HTMLElement) {
+        const annotationId = annotationBlock.dataset.annotationId
+        if (annotationId && annotationId === selectedAnnotationId) {
+          const noteMarker = targetElement?.closest<HTMLElement>('.pdf-annotation-note-marker') ?? null
+          if (noteMarker) {
+            return
+          }
+          const stampAnnotation =
+            annotations.find((annotation) => annotation.id === annotationId && annotation.type === 'stamp') ?? null
+          const stampRect = stampAnnotation?.rects[0] ?? null
+          if (stampAnnotation && stampRect) {
+            const blockRect = annotationBlock.getBoundingClientRect()
+            const localX = event.clientX - blockRect.left
+            const localY = event.clientY - blockRect.top
+            const edgeThreshold = Math.min(12, Math.max(6, Math.min(blockRect.width, blockRect.height) * 0.28))
+            const nearEdge =
+              localX <= edgeThreshold ||
+              localX >= blockRect.width - edgeThreshold ||
+              localY <= edgeThreshold ||
+              localY >= blockRect.height - edgeThreshold
+            if (nearEdge) {
+              event.preventDefault()
+              event.stopPropagation()
+              resizingStampStateRef.current = {
+                annotationId,
+                centerX: (stampRect.x1 + stampRect.x2) / 2,
+                centerY: (stampRect.y1 + stampRect.y2) / 2,
+                minHalfSize: MIN_STAMP_SIZE / 2,
+              }
+              applyStampResizeDraft({
+                annotationId,
+                rect: stampRect,
+              })
+              return
+            }
+            event.preventDefault()
+            event.stopPropagation()
+            movingStampStateRef.current = {
+              annotationId,
+              pointerOffsetX: event.clientX - blockRect.left,
+              pointerOffsetY: event.clientY - blockRect.top,
+              width: stampRect.x2 - stampRect.x1,
+              height: stampRect.y2 - stampRect.y1,
+            }
+            applyStampResizeDraft({
+              annotationId,
+              rect: stampRect,
+            })
+            return
+          }
+        }
+        return
+      }
+      if (activeFreeTextTool) {
+        const point = getPageRelativePoint(event)
+        if (!point) return
+        event.preventDefault()
+        onClearAnnotationSelection?.()
+        clearSelectionBlocks()
+        publishSelection(null)
+        setSelectionAssistRegionDefaults()
+        onFreeTextCreate?.({
+          page: pageNumber,
+          rect: buildFreeTextRect(point),
+        })
+        return
+      }
+      if (activeStampLabel) {
+        const point = getPageRelativePoint(event)
+        if (!point) return
+        event.preventDefault()
+        onClearAnnotationSelection?.()
+        clearSelectionBlocks()
+        publishSelection(null)
+        setSelectionAssistRegionDefaults()
+        onStampCreate?.({
+          page: pageNumber,
+          rect: buildStampRect(point, activeStampLabel),
+          kind: activeStampKind ?? 'important',
+          label: activeStampLabel,
+        })
+        return
+      }
+      if (activeShapeTool === 'line' || activeShapeTool === 'arrow') {
+        const point = getPageRelativePoint(event)
+        if (!point) return
+        event.preventDefault()
+        onClearAnnotationSelection?.()
+        clearSelectionBlocks()
+        publishSelection(null)
+        setSelectionAssistRegionDefaults()
+        const start = shapeDraftStartRef.current
+        if (!start) {
+          shapeDraftStartRef.current = point
+          setLineDraftOrigin(point)
+          applyShapeDraftRect({
+            x1: point.x,
+            y1: point.y,
+            x2: point.x,
+            y2: point.y,
+          })
+          return
+        }
+        const draftRect = {
+          x1: start.x,
+          y1: start.y,
+          x2: point.x,
+          y2: point.y,
+        }
+        shapeDraftStartRef.current = null
+        setLineDraftOrigin(null)
+        applyShapeDraftRect(null)
+        if (Math.hypot(draftRect.x2 - draftRect.x1, draftRect.y2 - draftRect.y1) >= 0.01) {
+          onShapeCreate?.({
+            page: pageNumber,
+            rect: buildPaddedLineRect(draftRect),
+            type: activeShapeTool,
+            linePoints: draftRect,
+          })
+        }
         return
       }
       if (activeShapeTool) {
@@ -496,6 +895,46 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     }
 
     const handlePointerFinish = () => {
+      const movingLine = movingLineStateRef.current
+      if (movingLine) {
+        const draft = lineResizeDraftRef.current
+        movingLineStateRef.current = null
+        applyLineResizeDraft(null)
+        if (draft && draft.annotationId === movingLine.annotationId) {
+          onLineResize?.(draft)
+        }
+        return
+      }
+      const resizingLine = resizingLineStateRef.current
+      if (resizingLine) {
+        const draft = lineResizeDraftRef.current
+        resizingLineStateRef.current = null
+        applyLineResizeDraft(null)
+        if (draft && draft.annotationId === resizingLine.annotationId) {
+          onLineResize?.(draft)
+        }
+        return
+      }
+      const movingStamp = movingStampStateRef.current
+      if (movingStamp) {
+        const draft = stampResizeDraftRef.current
+        movingStampStateRef.current = null
+        applyStampResizeDraft(null)
+        if (draft && draft.annotationId === movingStamp.annotationId) {
+          onStampResize?.(draft)
+        }
+        return
+      }
+      const resizingStamp = resizingStampStateRef.current
+      if (resizingStamp) {
+        const draft = stampResizeDraftRef.current
+        resizingStampStateRef.current = null
+        applyStampResizeDraft(null)
+        if (draft && draft.annotationId === resizingStamp.annotationId) {
+          onStampResize?.(draft)
+        }
+        return
+      }
       if (isShapeDrawingActiveRef.current) {
         const draftRect = shapeDraftRectRef.current
         shapeDraftStartRef.current = null
@@ -504,13 +943,30 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         if (
           activeShapeTool &&
           draftRect &&
-          draftRect.x2 - draftRect.x1 >= 0.006 &&
-          draftRect.y2 - draftRect.y1 >= 0.006
+          (
+            activeShapeTool === 'line' ||
+            activeShapeTool === 'arrow'
+              ? Math.hypot(draftRect.x2 - draftRect.x1, draftRect.y2 - draftRect.y1) >= 0.01
+              : (draftRect.x2 - draftRect.x1 >= 0.006 && draftRect.y2 - draftRect.y1 >= 0.006)
+          )
         ) {
+          const rect =
+            activeShapeTool === 'line' || activeShapeTool === 'arrow'
+              ? {
+                  x1: Math.min(draftRect.x1, draftRect.x2),
+                  y1: Math.min(draftRect.y1, draftRect.y2),
+                  x2: Math.max(draftRect.x1, draftRect.x2),
+                  y2: Math.max(draftRect.y1, draftRect.y2),
+                }
+              : draftRect
           onShapeCreate?.({
             page: pageNumber,
-            rect: draftRect,
+            rect,
             type: activeShapeTool,
+            linePoints:
+              activeShapeTool === 'line' || activeShapeTool === 'arrow'
+                ? draftRect
+                : undefined,
           })
         }
         return
@@ -525,11 +981,121 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     }
 
     const handlePointerMove = (event: PointerEvent) => {
+      const movingLine = movingLineStateRef.current
+      if (movingLine) {
+        const point = getPageRelativePoint(event)
+        if (!point) return
+        const rawDx = point.x - movingLine.origin.x
+        const rawDy = point.y - movingLine.origin.y
+        const minDx = -Math.min(movingLine.startPoints.x1, movingLine.startPoints.x2)
+        const maxDx = 1 - Math.max(movingLine.startPoints.x1, movingLine.startPoints.x2)
+        const minDy = -Math.min(movingLine.startPoints.y1, movingLine.startPoints.y2)
+        const maxDy = 1 - Math.max(movingLine.startPoints.y1, movingLine.startPoints.y2)
+        const dx = Math.min(Math.max(rawDx, minDx), maxDx)
+        const dy = Math.min(Math.max(rawDy, minDy), maxDy)
+        const linePoints = {
+          x1: movingLine.startPoints.x1 + dx,
+          y1: movingLine.startPoints.y1 + dy,
+          x2: movingLine.startPoints.x2 + dx,
+          y2: movingLine.startPoints.y2 + dy,
+        }
+        applyLineResizeDraft({
+          annotationId: movingLine.annotationId,
+          rect: buildPaddedLineRect(linePoints),
+          linePoints,
+        })
+        return
+      }
+      const resizingLine = resizingLineStateRef.current
+      if (resizingLine) {
+        const point = getPageRelativePoint(event)
+        if (!point) return
+        const linePoints =
+          resizingLine.handle === 'start'
+            ? {
+                x1: point.x,
+                y1: point.y,
+                x2: resizingLine.startPoints.x2,
+                y2: resizingLine.startPoints.y2,
+              }
+            : {
+                x1: resizingLine.startPoints.x1,
+                y1: resizingLine.startPoints.y1,
+                x2: point.x,
+                y2: point.y,
+              }
+        applyLineResizeDraft({
+          annotationId: resizingLine.annotationId,
+          rect: buildPaddedLineRect(linePoints),
+          linePoints,
+        })
+        return
+      }
+      const movingStamp = movingStampStateRef.current
+      if (movingStamp) {
+        const rootNode = rootRef.current
+        const pageEl = rootNode?.querySelector('.page') as HTMLElement | null
+        if (!pageEl) return
+        const pageRect = pageEl.getBoundingClientRect()
+        if (pageRect.width <= 0 || pageRect.height <= 0) return
+        const width = movingStamp.width
+        const height = movingStamp.height
+        const x1 = Math.min(
+          Math.max((event.clientX - pageRect.left - movingStamp.pointerOffsetX) / pageRect.width, 0),
+          Math.max(0, 1 - width),
+        )
+        const y1 = Math.min(
+          Math.max((event.clientY - pageRect.top - movingStamp.pointerOffsetY) / pageRect.height, 0),
+          Math.max(0, 1 - height),
+        )
+        applyStampResizeDraft({
+          annotationId: movingStamp.annotationId,
+          rect: {
+            x1,
+            y1,
+            x2: x1 + width,
+            y2: y1 + height,
+          },
+        })
+        return
+      }
+      const resizingStamp = resizingStampStateRef.current
+      if (resizingStamp) {
+        const point = getPageRelativePoint(event)
+        if (!point) return
+        const halfSize = Math.max(
+          resizingStamp.minHalfSize,
+          Math.max(Math.abs(point.x - resizingStamp.centerX), Math.abs(point.y - resizingStamp.centerY)),
+        )
+        const rect = {
+          x1: Math.max(0, resizingStamp.centerX - halfSize),
+          y1: Math.max(0, resizingStamp.centerY - halfSize),
+          x2: Math.min(1, resizingStamp.centerX + halfSize),
+          y2: Math.min(1, resizingStamp.centerY + halfSize),
+        }
+        applyStampResizeDraft({
+          annotationId: resizingStamp.annotationId,
+          rect,
+        })
+        return
+      }
       if (isShapeDrawingActiveRef.current) {
         const start = shapeDraftStartRef.current
         const point = getPageRelativePoint(event)
         if (!start || !point) return
         applyShapeDraftRect(buildDraftRect(start, point, activeShapeTool, event.shiftKey))
+        return
+      }
+      if ((activeShapeTool === 'line' || activeShapeTool === 'arrow') && shapeDraftStartRef.current) {
+        const point = getPageRelativePoint(event)
+        if (!point) return
+        const start = shapeDraftStartRef.current
+        applyShapeDraftRect({
+          x1: start.x,
+          y1: start.y,
+          x2: point.x,
+          y2: point.y,
+        })
         return
       }
       if (!isPointerSelectionActiveRef.current) return
@@ -565,7 +1131,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       if (isPointerSelectionActiveRef.current) {
         return
       }
-      if (activeShapeTool) {
+      if (activeShapeTool || activeStampLabel || activeFreeTextTool) {
         return
       }
       const selection = window.getSelection()
@@ -602,13 +1168,20 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       shapeDraftStartRef.current = null
       isShapeDrawingActiveRef.current = false
       applyShapeDraftRect(null)
+      setLineDraftOrigin(null)
+      movingStampStateRef.current = null
+      resizingStampStateRef.current = null
+      applyStampResizeDraft(null)
+      movingLineStateRef.current = null
+      resizingLineStateRef.current = null
+      applyLineResizeDraft(null)
       setSelectionAssistRegionDefaults()
       publishSelection(null)
       if (frame) {
         window.cancelAnimationFrame(frame)
       }
     }
-  }, [onSelectionChange, pageNumber, pdfDocument, scale, clearSelectionSignal, activeShapeTool, onShapeCreate, onClearAnnotationSelection])
+  }, [annotations, selectedAnnotationId, onSelectionChange, pageNumber, pdfDocument, scale, clearSelectionSignal, activeShapeTool, onShapeCreate, activeFreeTextTool, activeFreeTextDraft, onFreeTextCreate, activeStampKind, activeStampLabel, activeStampSize, onStampCreate, onStampResize, onLineResize, onClearAnnotationSelection])
 
   useEffect(() => {
     clearSelectionBlocks()
@@ -616,9 +1189,47 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     applyShapeDraftRect(null)
     shapeDraftStartRef.current = null
     isShapeDrawingActiveRef.current = false
+    setLineDraftOrigin(null)
+    movingLineStateRef.current = null
+    resizingLineStateRef.current = null
+    applyLineResizeDraft(null)
     setSelectionAssistRegionDefaults()
     onSelectionChange?.(null)
-  }, [clearSelectionSignal, onSelectionChange, activeShapeTool])
+  }, [clearSelectionSignal, onSelectionChange, activeShapeTool, activeFreeTextTool])
+
+  const handleFreeTextEditorSave = () => {
+    const input = freeTextEditorRef.current
+    const value = input?.value.trim() ?? ''
+    if (!value) {
+      onFreeTextCancel?.()
+      return
+    }
+    if (input) {
+      input.style.height = '0px'
+      input.style.height = `${Math.max(input.scrollHeight, input.clientHeight)}px`
+    }
+    const pageEl = rootRef.current?.querySelector('.page') as HTMLElement | null
+    const pageHeightPx = pageEl?.getBoundingClientRect().height ?? 0
+    const nextRect =
+      activeFreeTextDraft && pageHeightPx > 0 && input
+        ? {
+            ...activeFreeTextDraft.rect,
+            y2: Math.min(
+              1,
+              activeFreeTextDraft.rect.y1 + input.offsetHeight / pageHeightPx,
+            ),
+          }
+        : activeFreeTextDraft?.rect
+    if (!nextRect) {
+      onFreeTextCancel?.()
+      return
+    }
+    onFreeTextSave?.(value, nextRect)
+  }
+
+  const handleFreeTextEditorCancel = () => {
+    onFreeTextCancel?.()
+  }
 
   return (
     <div
@@ -632,12 +1243,28 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       <div ref={pageHostRef} className="pdf-official-page-host" />
       <div className="pdf-annotation-overlay" aria-hidden="true">
         {annotations.flatMap((annotation) =>
-          annotation.rects.map((rect, index) => {
+          annotation.rects.map((annotationRect, index) => {
+            const rect =
+              (annotation.type === 'line' || annotation.type === 'arrow') &&
+              index === 0 &&
+              lineResizeDraft &&
+              lineResizeDraft.annotationId === annotation.id
+                ? lineResizeDraft.rect
+                : (
+              annotation.type === 'stamp' &&
+              index === 0 &&
+              stampResizeDraft &&
+              stampResizeDraft.annotationId === annotation.id
+                ? stampResizeDraft.rect
+                : annotationRect
+                )
             const left = `${rect.x1 * 100}%`
             const top = `${rect.y1 * 100}%`
             const width = `${(rect.x2 - rect.x1) * 100}%`
             const height = `${(rect.y2 - rect.y1) * 100}%`
             const annotationKey = `${annotation.id}-${index}`
+            const isSelected = selectedAnnotationId === annotation.id
+            const isPulsing = pulsingAnnotationId === annotation.id
             const notePreview = annotation.note?.trim() || annotation.content?.trim() || ''
             const noteMarker = annotation.note?.trim() && index === 0 ? (
               <div className="pdf-annotation-note-marker" title={notePreview}>
@@ -646,7 +1273,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
                 </span>
               </div>
             ) : null
-            const sharedClassName = `pdf-annotation-block pdf-annotation-block--${annotation.type} ${selectedAnnotationId === annotation.id ? 'selected' : ''} ${pulsingAnnotationId === annotation.id ? 'pulsing' : ''}`
+            const sharedClassName = `pdf-annotation-block pdf-annotation-block--${annotation.type} ${isSelected ? 'selected' : ''} ${isPulsing ? 'pulsing' : ''}`
             const sharedProps = {
               className: sharedClassName,
               style: {
@@ -657,6 +1284,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
                 '--pdf-annotation-color': annotation.color,
                 '--pdf-annotation-opacity': String(annotation.opacity),
               } as React.CSSProperties,
+              'data-annotation-id': annotation.id,
               onClick: () => {
                 onAnnotationClick?.(annotation.id)
               },
@@ -709,6 +1337,26 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
               )
             }
 
+            if (annotation.type === 'freeText') {
+              if (activeFreeTextDraft && editingFreeTextAnnotationId === annotation.id) {
+                return []
+              }
+              return (
+                <div
+                  key={annotationKey}
+                  {...sharedProps}
+                  style={{
+                    ...sharedProps.style,
+                    opacity: 1,
+                  }}
+                >
+                  <div className="pdf-annotation-free-text">
+                    {annotation.text?.trim() || annotation.content?.trim() || ''}
+                  </div>
+                </div>
+              )
+            }
+
             if (annotation.type === 'square' || annotation.type === 'circle') {
               return (
                 <div
@@ -720,6 +1368,135 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
                   }}
                 >
                   <div className={`pdf-annotation-shape pdf-annotation-shape--${annotation.type}`} />
+                  {noteMarker}
+                </div>
+              )
+            }
+
+            if (annotation.type === 'line' || annotation.type === 'arrow') {
+              const points =
+                lineResizeDraft && lineResizeDraft.annotationId === annotation.id
+                  ? lineResizeDraft.linePoints
+                  : (annotation.linePoints ?? rect)
+              const startX = points.x1 * 100
+              const startY = points.y1 * 100
+              const endX = points.x2 * 100
+              const endY = points.y2 * 100
+              const angle = Math.atan2(endY - startY, endX - startX)
+              const arrowSize = 1.8
+              const arrowAngle = Math.PI / 7
+              const leftX = endX - Math.cos(angle - arrowAngle) * arrowSize
+              const leftY = endY - Math.sin(angle - arrowAngle) * arrowSize
+              const rightX = endX - Math.cos(angle + arrowAngle) * arrowSize
+              const rightY = endY - Math.sin(angle + arrowAngle) * arrowSize
+              return (
+                <Fragment key={annotationKey}>
+                  <div
+                    {...sharedProps}
+                    style={{
+                      ...sharedProps.style,
+                      opacity: 1,
+                    }}
+                  >
+                    {noteMarker}
+                  </div>
+                  <div
+                    className={`pdf-annotation-line-layer${isSelected ? ' selected' : ''}${isPulsing ? ' pulsing' : ''}`}
+                    aria-hidden="true"
+                    style={{
+                      '--pdf-annotation-color': annotation.color,
+                    } as React.CSSProperties}
+                  >
+                    <svg
+                      className={`pdf-annotation-line pdf-annotation-line--${annotation.type}`}
+                      viewBox="0 0 100 100"
+                      preserveAspectRatio="none"
+                    >
+                      <path
+                        d={`M ${startX} ${startY} L ${endX} ${endY}`}
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="0.32"
+                        strokeLinecap="round"
+                      />
+                      {annotation.type === 'arrow' ? (
+                        <path
+                          d={`M ${leftX} ${leftY} L ${endX} ${endY} L ${rightX} ${rightY}`}
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="0.32"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      ) : null}
+                    </svg>
+                    {isSelected ? (
+                      <>
+                      <svg
+                        className="pdf-annotation-line-interaction"
+                        viewBox="0 0 100 100"
+                        preserveAspectRatio="none"
+                        aria-hidden="true"
+                      >
+                        <path
+                          className="pdf-annotation-line-move-zone"
+                          data-annotation-id={annotation.id}
+                          data-line-move-zone="true"
+                          d={`M ${startX} ${startY} L ${endX} ${endY}`}
+                        />
+                      </svg>
+                      <div
+                        className="pdf-annotation-line-handle pdf-annotation-line-handle--start"
+                        data-annotation-id={annotation.id}
+                        data-line-handle="start"
+                        style={{
+                          left: `${startX}%`,
+                          top: `${startY}%`,
+                        } as React.CSSProperties}
+                      />
+                      <div
+                        className="pdf-annotation-line-handle pdf-annotation-line-handle--end"
+                        data-annotation-id={annotation.id}
+                        data-line-handle="end"
+                        style={{
+                          left: `${endX}%`,
+                          top: `${endY}%`,
+                        } as React.CSSProperties}
+                      />
+                      </>
+                    ) : null}
+                  </div>
+                </Fragment>
+              )
+            }
+
+            if (annotation.type === 'stamp') {
+              const isSelected = selectedAnnotationId === annotation.id
+              return (
+                <div
+                  key={annotationKey}
+                  {...sharedProps}
+                  style={{
+                    ...sharedProps.style,
+                    opacity: 1,
+                  }}
+                >
+                  <div className="pdf-annotation-stamp">
+                    {renderStampIcon(annotation.stampKind ?? 'important')}
+                  </div>
+                  {isSelected ? (
+                    <div className="pdf-annotation-stamp-frame" aria-hidden="true">
+                      <span className="pdf-annotation-stamp-move-zone" />
+                      <span className="pdf-annotation-stamp-edge pdf-annotation-stamp-edge--top" />
+                      <span className="pdf-annotation-stamp-edge pdf-annotation-stamp-edge--right" />
+                      <span className="pdf-annotation-stamp-edge pdf-annotation-stamp-edge--bottom" />
+                      <span className="pdf-annotation-stamp-edge pdf-annotation-stamp-edge--left" />
+                      <span className="pdf-annotation-stamp-handle pdf-annotation-stamp-handle--tl" />
+                      <span className="pdf-annotation-stamp-handle pdf-annotation-stamp-handle--tr" />
+                      <span className="pdf-annotation-stamp-handle pdf-annotation-stamp-handle--br" />
+                      <span className="pdf-annotation-stamp-handle pdf-annotation-stamp-handle--bl" />
+                    </div>
+                  ) : null}
                   {noteMarker}
                 </div>
               )
@@ -754,18 +1531,121 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
           }),
         )}
       </div>
+      {activeFreeTextDraft ? (
+        <div
+          key={activeFreeTextEditorKey ?? undefined}
+          className="pdf-free-text-editor-layer"
+          style={{
+            left: `${activeFreeTextDraft.rect.x1 * 100}%`,
+            top: `${activeFreeTextDraft.rect.y1 * 100}%`,
+            width: `${(activeFreeTextDraft.rect.x2 - activeFreeTextDraft.rect.x1) * 100}%`,
+            minHeight: `${(activeFreeTextDraft.rect.y2 - activeFreeTextDraft.rect.y1) * 100}%`,
+            '--pdf-annotation-color': activeFreeTextColor,
+          } as React.CSSProperties}
+        >
+          <textarea
+            ref={freeTextEditorRef}
+            className="pdf-annotation-free-text-editor"
+            defaultValue={editingFreeTextInitialValue}
+            onInput={(event) => {
+              const target = event.currentTarget
+              if (target.scrollHeight > target.clientHeight + 1) {
+                target.style.height = `${target.scrollHeight}px`
+              }
+            }}
+            onBlur={handleFreeTextEditorSave}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault()
+                handleFreeTextEditorCancel()
+                return
+              }
+              if (event.key === 'Enter') {
+                const target = event.currentTarget
+                window.requestAnimationFrame(() => {
+                  if (target.scrollHeight > target.clientHeight + 1) {
+                    target.style.height = `${target.scrollHeight}px`
+                  }
+                })
+              }
+              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault()
+                handleFreeTextEditorSave()
+              }
+            }}
+            spellCheck={false}
+          />
+        </div>
+      ) : null}
       <div className="pdf-selection-overlay" aria-hidden="true">
         {shapeDraftRect ? (
-          <div
-            className={`pdf-selection-shape-draft pdf-selection-shape-draft--${activeShapeTool ?? 'square'}`}
-            style={{
-              left: `${shapeDraftRect.x1 * 100}%`,
-              top: `${shapeDraftRect.y1 * 100}%`,
-              width: `${(shapeDraftRect.x2 - shapeDraftRect.x1) * 100}%`,
-              height: `${(shapeDraftRect.y2 - shapeDraftRect.y1) * 100}%`,
-              '--pdf-selection-preview-color': previewHighlightColor,
-            } as React.CSSProperties}
-          />
+          activeShapeTool === 'line' || activeShapeTool === 'arrow' ? (
+            (() => {
+              const startX = shapeDraftRect.x1 * 100
+              const startY = shapeDraftRect.y1 * 100
+              const endX = shapeDraftRect.x2 * 100
+              const endY = shapeDraftRect.y2 * 100
+              const angle = Math.atan2(endY - startY, endX - startX)
+              const arrowSize = 1.8
+              const arrowAngle = Math.PI / 7
+              const leftX = endX - Math.cos(angle - arrowAngle) * arrowSize
+              const leftY = endY - Math.sin(angle - arrowAngle) * arrowSize
+              const rightX = endX - Math.cos(angle + arrowAngle) * arrowSize
+              const rightY = endY - Math.sin(angle + arrowAngle) * arrowSize
+              return (
+                <>
+              {lineDraftOrigin ? (
+                <div
+                  className="pdf-selection-line-origin"
+                  style={{
+                    left: `${lineDraftOrigin.x * 100}%`,
+                    top: `${lineDraftOrigin.y * 100}%`,
+                    '--pdf-selection-preview-color': previewHighlightColor,
+                  } as React.CSSProperties}
+                />
+              ) : null}
+              <svg
+                className={`pdf-selection-line-draft pdf-selection-line-draft--${activeShapeTool}`}
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+                style={{
+                  '--pdf-selection-preview-color': previewHighlightColor,
+                } as React.CSSProperties}
+                aria-hidden="true"
+              >
+                <path
+                  d={`M ${startX} ${startY} L ${endX} ${endY}`}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="0.32"
+                  strokeLinecap="round"
+                />
+                {activeShapeTool === 'arrow' ? (
+                  <path
+                    d={`M ${leftX} ${leftY} L ${endX} ${endY} L ${rightX} ${rightY}`}
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="0.32"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                ) : null}
+              </svg>
+            </>
+              )
+            })()
+          ) : (
+            <div
+              className={`pdf-selection-shape-draft pdf-selection-shape-draft--${activeShapeTool ?? 'square'}`}
+              style={{
+                left: `${shapeDraftRect.x1 * 100}%`,
+                top: `${shapeDraftRect.y1 * 100}%`,
+                width: `${(shapeDraftRect.x2 - shapeDraftRect.x1) * 100}%`,
+                height: `${(shapeDraftRect.y2 - shapeDraftRect.y1) * 100}%`,
+                '--pdf-selection-preview-color': previewHighlightColor,
+              } as React.CSSProperties}
+            />
+          )
         ) : null}
         {selectionBlocks.map((block, index) => (
           <div

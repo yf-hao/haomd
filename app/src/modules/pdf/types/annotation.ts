@@ -5,6 +5,9 @@ export type AnnotationType =
   | 'squiggly'
   | 'square'
   | 'circle'
+  | 'line'
+  | 'arrow'
+  | 'freeText'
   | 'text'
   | 'popup'
   | 'stamp'
@@ -17,6 +20,8 @@ export interface Rect {
   y2: number
 }
 
+export type StampKind = 'important' | 'question' | 'todo' | 'done'
+
 export interface Annotation {
   id: string
   page: number
@@ -25,6 +30,9 @@ export interface Annotation {
   color: string
   opacity: number
   content?: string
+  text?: string
+  stampKind?: StampKind
+  linePoints?: Rect
   note?: string
   author?: string
   inkList?: Array<{ x: number; y: number }[]>
@@ -48,14 +56,17 @@ export interface RenderContext {
   rotation: number
 }
 
-export function isMarkupAnnotationType(type: AnnotationType): type is 'highlight' | 'underline' | 'strikeout' | 'squiggly' | 'square' | 'circle' {
+export function isMarkupAnnotationType(type: AnnotationType): type is 'highlight' | 'underline' | 'strikeout' | 'squiggly' | 'square' | 'circle' | 'line' | 'arrow' | 'stamp' {
   return (
     type === 'highlight' ||
     type === 'underline' ||
     type === 'strikeout' ||
     type === 'squiggly' ||
     type === 'square' ||
-    type === 'circle'
+    type === 'circle' ||
+    type === 'line' ||
+    type === 'arrow' ||
+    type === 'stamp'
   )
 }
 
@@ -69,13 +80,13 @@ export function isTextMarkupAnnotationType(type: AnnotationType): type is 'highl
 }
 
 export function isMarkupAnnotation(annotation: Annotation): annotation is Annotation & {
-  type: 'highlight' | 'underline' | 'strikeout' | 'squiggly' | 'square' | 'circle'
+  type: 'highlight' | 'underline' | 'strikeout' | 'squiggly' | 'square' | 'circle' | 'line' | 'arrow' | 'stamp'
 } {
   return isMarkupAnnotationType(annotation.type)
 }
 
 export function isColorableAnnotation(annotation: Annotation): annotation is Annotation & {
-  type: 'highlight' | 'underline' | 'strikeout' | 'squiggly' | 'square' | 'circle' | 'text'
+  type: 'highlight' | 'underline' | 'strikeout' | 'squiggly' | 'square' | 'circle' | 'line' | 'arrow' | 'stamp' | 'text' | 'freeText'
 } {
-  return isMarkupAnnotationType(annotation.type) || annotation.type === 'text'
+  return isMarkupAnnotationType(annotation.type) || annotation.type === 'text' || annotation.type === 'freeText'
 }

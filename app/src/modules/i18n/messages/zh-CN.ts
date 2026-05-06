@@ -374,6 +374,12 @@ export const zhCNMessages: MessageDictionary = {
       pureBlue: '纯蓝高亮',
       black: '黑色高亮',
     },
+    stampOptions: {
+      important: '重点',
+      question: '疑问',
+      todo: '待办',
+      done: '完成',
+    },
     annotationTypes: {
       highlight: '高亮',
       underline: '下划线',
@@ -381,6 +387,9 @@ export const zhCNMessages: MessageDictionary = {
       squiggly: '波浪线',
       square: '矩形',
       circle: '圆形',
+      line: '直线',
+      arrow: '箭头',
+      freeText: '页面文字',
       text: '文本批注',
       popup: '弹出批注',
       stamp: '图章',
