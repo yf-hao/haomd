@@ -249,6 +249,28 @@ export function createFreeTextAnnotation(
   }
 }
 
+export function createNoteAnnotation(
+  page: number,
+  rect: Rect,
+  text: string,
+  color = DEFAULT_HIGHLIGHT_COLOR,
+): Annotation {
+  const now = Date.now()
+
+  return {
+    id: crypto.randomUUID(),
+    page,
+    type: 'note',
+    rects: [rect],
+    color,
+    opacity: 1,
+    text,
+    content: text,
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
 export function createTextNoteAnnotation(
   selection: PdfSelectionDraft,
   note: string,

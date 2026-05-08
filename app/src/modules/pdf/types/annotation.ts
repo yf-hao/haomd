@@ -8,6 +8,7 @@ export type AnnotationType =
   | 'line'
   | 'arrow'
   | 'freeText'
+  | 'note'
   | 'text'
   | 'popup'
   | 'stamp'
@@ -20,7 +21,15 @@ export interface Rect {
   y2: number
 }
 
-export type StampKind = 'important' | 'question' | 'todo' | 'done'
+export type StampKind =
+  | 'important'
+  | 'question'
+  | 'todo'
+  | 'done'
+  | 'warning'
+  | 'info'
+  | 'flag'
+  | 'pin'
 
 export interface Annotation {
   id: string
@@ -86,7 +95,7 @@ export function isMarkupAnnotation(annotation: Annotation): annotation is Annota
 }
 
 export function isColorableAnnotation(annotation: Annotation): annotation is Annotation & {
-  type: 'highlight' | 'underline' | 'strikeout' | 'squiggly' | 'square' | 'circle' | 'line' | 'arrow' | 'stamp' | 'text' | 'freeText'
+  type: 'highlight' | 'underline' | 'strikeout' | 'squiggly' | 'square' | 'circle' | 'line' | 'arrow' | 'stamp' | 'text' | 'freeText' | 'note'
 } {
-  return isMarkupAnnotationType(annotation.type) || annotation.type === 'text' || annotation.type === 'freeText'
+  return isMarkupAnnotationType(annotation.type) || annotation.type === 'text' || annotation.type === 'freeText' || annotation.type === 'note'
 }

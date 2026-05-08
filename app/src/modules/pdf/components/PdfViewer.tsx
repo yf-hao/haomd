@@ -8,6 +8,7 @@ import { isTauriEnv } from '../../platform/runtime'
 import {
   appendAnnotation,
   createFreeTextAnnotation,
+  createNoteAnnotation,
   createShapeAnnotation,
   createStampAnnotation,
   createTextMarkupAnnotation,
@@ -100,6 +101,10 @@ const STAMP_OPTIONS = [
   { key: 'question', labelKey: 'pdf.stampOptions.question' },
   { key: 'todo', labelKey: 'pdf.stampOptions.todo' },
   { key: 'done', labelKey: 'pdf.stampOptions.done' },
+  { key: 'warning', labelKey: 'pdf.stampOptions.warning' },
+  { key: 'info', labelKey: 'pdf.stampOptions.info' },
+  { key: 'flag', labelKey: 'pdf.stampOptions.flag' },
+  { key: 'pin', labelKey: 'pdf.stampOptions.pin' },
 ] as const satisfies ReadonlyArray<{
   key: StampKind
   labelKey: string
@@ -208,6 +213,35 @@ function renderStampToolIcon(kind: StampKind) {
         <svg className="pdf-markup-tool-icon" viewBox="0 0 20 20" aria-hidden="true">
           <circle cx="10" cy="10" r="5.8" fill="none" stroke="currentColor" strokeWidth="2" />
           <path d="M7.2 10.2L9.2 12.2L13 8.4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )
+    case 'warning':
+      return (
+        <svg className="pdf-markup-tool-icon" viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M10 4.2L15.8 14.7H4.2L10 4.2Z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+          <path d="M10 8V11.1" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <circle cx="10" cy="13.4" r="1" fill="currentColor" />
+        </svg>
+      )
+    case 'info':
+      return (
+        <svg className="pdf-markup-tool-icon" viewBox="0 0 20 20" aria-hidden="true">
+          <circle cx="10" cy="10" r="5.8" fill="none" stroke="currentColor" strokeWidth="2" />
+          <path d="M10 9V13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <circle cx="10" cy="6.4" r="1" fill="currentColor" />
+        </svg>
+      )
+    case 'flag':
+      return (
+        <svg className="pdf-markup-tool-icon" viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M6 4.5V15.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <path d="M6.8 5.2H14.8L12.6 8.4L14.8 11.4H6.8Z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+        </svg>
+      )
+    case 'pin':
+      return (
+        <svg className="pdf-markup-tool-icon" viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M8.1 5.3C8.1 4.2 9 3.3 10.1 3.3C11.2 3.3 12.1 4.2 12.1 5.3C12.1 5.9 11.8 6.5 11.3 6.9L13.2 9.6L10.8 10.1L10.3 15.5L9.6 15.5L9.1 10.1L6.7 9.6L8.7 6.9C8.3 6.5 8.1 5.9 8.1 5.3Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
         </svg>
       )
   }
@@ -370,10 +404,11 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
   const [, setSelectionDraft] = useState<PdfSelectionDraft | null>(null)
   const [annotationMessage, setAnnotationMessage] = useState<string | null>(null)
   const [isAnnotationBusy, setAnnotationBusy] = useState(false)
-  const [selectedHighlightColor, setSelectedHighlightColor] = useState<string>(HIGHLIGHT_COLOR_OPTIONS[0].value)
+  const [selectedHighlightColor, setSelectedHighlightColor] = useState<string>('#ff0000')
   const [activeMarkupTool, setActiveMarkupTool] = useState<Extract<AnnotationType, 'highlight' | 'underline' | 'strikeout' | 'squiggly'> | null>(null)
   const [activeShapeTool, setActiveShapeTool] = useState<Extract<AnnotationType, 'square' | 'circle' | 'line' | 'arrow'> | null>(null)
   const [activeFreeTextTool, setActiveFreeTextTool] = useState(false)
+  const [activeStandaloneNoteTool, setActiveStandaloneNoteTool] = useState(false)
   const [activeStampKey, setActiveStampKey] = useState<StampKind | null>(null)
   const [stampSize, setStampSize] = useState(DEFAULT_STAMP_SIZE)
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null)
@@ -389,6 +424,8 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
   const [notePreviewPosition, setNotePreviewPosition] = useState<NoteEditorPosition | null>(null)
   const [pendingFreeTextDraft, setPendingFreeTextDraft] = useState<FreeTextDraft | null>(null)
   const [editingFreeTextAnnotationId, setEditingFreeTextAnnotationId] = useState<string | null>(null)
+  const [pendingStandaloneNoteDraft, setPendingStandaloneNoteDraft] = useState<FreeTextDraft | null>(null)
+  const [editingStandaloneNoteAnnotationId, setEditingStandaloneNoteAnnotationId] = useState<string | null>(null)
   const selectedAnnotatableAnnotation =
     selectedAnnotationId && annotationDocument
       ? annotationDocument.annotations.find(
@@ -425,6 +462,25 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
           (annotation) => annotation.id === selectedAnnotationId && annotation.type === 'freeText',
         ) ?? null
       : null
+  const selectedStandaloneNoteAnnotation =
+    selectedAnnotationId && annotationDocument
+      ? annotationDocument.annotations.find(
+          (annotation) => annotation.id === selectedAnnotationId && annotation.type === 'note',
+        ) ?? null
+      : null
+  const selectedStampAnnotation =
+    selectedAnnotationId && annotationDocument
+      ? annotationDocument.annotations.find(
+          (annotation) => annotation.id === selectedAnnotationId && annotation.type === 'stamp',
+        ) ?? null
+      : null
+  const isColorPaletteActive =
+    activeMarkupTool !== null ||
+    activeShapeTool !== null ||
+    activeStampKey !== null ||
+    activeFreeTextTool ||
+    activeStandaloneNoteTool ||
+    selectedColorableAnnotation !== null
   const noteEditorInitialValue =
     editingTextNoteAnnotationId && annotationDocument
       ? (
@@ -442,6 +498,10 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
   const freeTextEditorInitialValue =
     editingFreeTextAnnotationId && annotationDocument
       ? annotationDocument.annotations.find((annotation) => annotation.id === editingFreeTextAnnotationId)?.text ?? ''
+      : ''
+  const standaloneNoteEditorInitialValue =
+    editingStandaloneNoteAnnotationId && annotationDocument
+      ? annotationDocument.annotations.find((annotation) => annotation.id === editingStandaloneNoteAnnotationId)?.text ?? ''
       : ''
 
   const ZOOM_MIN = 0.5
@@ -596,6 +656,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
       selectionDraftRef.current = null
       setActiveMarkupTool(null)
       setActiveFreeTextTool(false)
+      setActiveStandaloneNoteTool(false)
       setAnnotationMessage(null)
       setAnnotationBusy(false)
       setSelectedAnnotationId(null)
@@ -608,6 +669,8 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
       setNotePreviewPosition(null)
       setPendingFreeTextDraft(null)
       setEditingFreeTextAnnotationId(null)
+      setPendingStandaloneNoteDraft(null)
+      setEditingStandaloneNoteAnnotationId(null)
       return
     }
 
@@ -926,6 +989,41 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     }
   }
 
+  const handleResizeFreeText = async (freeText: {
+    annotationId: string
+    rect: AnnotationRect
+  }) => {
+    if (!annotationDocument || isAnnotationBusy) return
+
+    const nextDocument = {
+      ...annotationDocument,
+      annotations: annotationDocument.annotations.map((annotation) =>
+        annotation.id === freeText.annotationId
+          ? {
+              ...annotation,
+              rects: [freeText.rect],
+              updatedAt: Date.now(),
+            }
+          : annotation,
+      ),
+      lastModified: Date.now(),
+    }
+
+    setAnnotationBusy(true)
+    setAnnotationMessage(t('pdf.savingAnnotation'))
+
+    try {
+      await saveAnnotations(nextDocument.pdfHash, nextDocument)
+      setAnnotationDocument(nextDocument)
+      setAnnotationMessage(null)
+    } catch (saveError) {
+      const message = saveError instanceof Error ? saveError.message : String(saveError)
+      setAnnotationMessage(t('pdf.annotationSaveFailed', { message }))
+    } finally {
+      setAnnotationBusy(false)
+    }
+  }
+
   const handleResizeLine = async (shape: {
     annotationId: string
     rect: AnnotationRect
@@ -963,14 +1061,52 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     }
   }
 
+  const handleUpdateSelectedStampKind = async (stampKind: StampKind) => {
+    if (!annotationDocument || !selectedStampAnnotation) return
+
+    const labelKey =
+      STAMP_OPTIONS.find((option) => option.key === stampKind)?.labelKey ?? 'pdf.stampOptions.important'
+    const nextDocument = {
+      ...annotationDocument,
+      annotations: annotationDocument.annotations.map((annotation) =>
+        annotation.id === selectedStampAnnotation.id
+          ? {
+              ...annotation,
+              stampKind,
+              content: t(labelKey),
+              updatedAt: Date.now(),
+            }
+          : annotation,
+      ),
+      lastModified: Date.now(),
+    }
+
+    setAnnotationBusy(true)
+    setAnnotationMessage(t('pdf.savingAnnotation'))
+
+    try {
+      await saveAnnotations(nextDocument.pdfHash, nextDocument)
+      setAnnotationDocument(nextDocument)
+      setAnnotationMessage(null)
+    } catch (saveError) {
+      const message = saveError instanceof Error ? saveError.message : String(saveError)
+      setAnnotationMessage(t('pdf.annotationSaveFailed', { message }))
+    } finally {
+      setAnnotationBusy(false)
+    }
+  }
+
   const handleStartTextNote = () => {
     const selection = selectionDraftRef.current
     if (!annotationDocument || isAnnotationBusy) return
     setActiveShapeTool(null)
     setActiveFreeTextTool(false)
+    setActiveStandaloneNoteTool(false)
     setActiveStampKey(null)
     setPendingFreeTextDraft(null)
     setEditingFreeTextAnnotationId(null)
+    setPendingStandaloneNoteDraft(null)
+    setEditingStandaloneNoteAnnotationId(null)
     if (!selection && selectedAnnotatableAnnotation) {
       setIsTextNoteArmed(false)
       setPendingNoteDraft({
@@ -1024,6 +1160,12 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     setPendingFreeTextDraft(null)
     setEditingFreeTextAnnotationId(null)
     setActiveFreeTextTool(false)
+  }
+
+  const handleCancelStandaloneNote = () => {
+    setPendingStandaloneNoteDraft(null)
+    setEditingStandaloneNoteAnnotationId(null)
+    setActiveStandaloneNoteTool(false)
   }
 
   const handleEditTextNote = useCallback((annotation: Annotation) => {
@@ -1167,6 +1309,55 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     }
   }
 
+  const handleSaveStandaloneNote = async (rawValue: string, nextRect: AnnotationRect) => {
+    const text = rawValue.trim()
+    if (!annotationDocument || !text) return
+
+    const draft = pendingStandaloneNoteDraft
+    const editingId = editingStandaloneNoteAnnotationId
+    if (!draft && !editingId) return
+
+    setSelectedAnnotationId(null)
+    setPendingStandaloneNoteDraft(null)
+    setEditingStandaloneNoteAnnotationId(null)
+    setOpenedNoteAnnotationId(null)
+    setNotePreviewPosition(null)
+    setAnnotationBusy(true)
+    setAnnotationMessage(t('pdf.savingAnnotation'))
+
+    const nextDocument = editingId
+      ? {
+          ...annotationDocument,
+          annotations: annotationDocument.annotations.map((annotation) =>
+            annotation.id === editingId
+              ? {
+                  ...annotation,
+                  rects: [nextRect],
+                  text,
+                  content: text,
+                  updatedAt: Date.now(),
+                }
+              : annotation,
+          ),
+          lastModified: Date.now(),
+        }
+      : appendAnnotation(
+          annotationDocument,
+          createNoteAnnotation(draft!.page, nextRect, text, selectedHighlightColor),
+        )
+
+    try {
+      await saveAnnotations(nextDocument.pdfHash, nextDocument)
+      setAnnotationDocument(nextDocument)
+      setAnnotationMessage(null)
+    } catch (saveError) {
+      const message = saveError instanceof Error ? saveError.message : String(saveError)
+      setAnnotationMessage(t('pdf.annotationSaveFailed', { message }))
+    } finally {
+      setAnnotationBusy(false)
+    }
+  }
+
   const handleAnnotationPreviewOpen = useCallback((annotation: Annotation | null) => {
     const note = annotation?.note?.trim()
     if (!annotation || !note) {
@@ -1183,6 +1374,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     setActiveMarkupTool(null)
     setActiveShapeTool(null)
     setActiveStampKey(null)
+    setActiveStandaloneNoteTool(false)
     setPendingNoteDraft(null)
     setPendingNoteTargetAnnotationId(null)
     setEditingTextNoteAnnotationId(null)
@@ -1206,6 +1398,35 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     setActiveFreeTextTool(true)
   }
 
+  const handleStartStandaloneNote = () => {
+    handleAnnotationPreviewOpen(null)
+    setActiveMarkupTool(null)
+    setActiveShapeTool(null)
+    setActiveStampKey(null)
+    setActiveFreeTextTool(false)
+    setPendingNoteDraft(null)
+    setPendingNoteTargetAnnotationId(null)
+    setEditingTextNoteAnnotationId(null)
+    setNoteEditorPosition(null)
+    if (selectedStandaloneNoteAnnotation) {
+      setPendingStandaloneNoteDraft({
+        page: selectedStandaloneNoteAnnotation.page,
+        rect: selectedStandaloneNoteAnnotation.rects[0] ?? {
+          x1: 0.2,
+          y1: 0.2,
+          x2: 0.38,
+          y2: 0.26,
+        },
+      })
+      setEditingStandaloneNoteAnnotationId(selectedStandaloneNoteAnnotation.id)
+      setActiveStandaloneNoteTool(false)
+      return
+    }
+    setEditingStandaloneNoteAnnotationId(null)
+    setSelectedAnnotationId(null)
+    setActiveStandaloneNoteTool(true)
+  }
+
   const handleAnnotationItemClick = (annotation: Annotation) => {
     setSelectedAnnotationId(annotation.id)
     triggerAnnotationPulse(annotation.id)
@@ -1214,6 +1435,8 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     selectionDraftRef.current = null
     setPendingFreeTextDraft(null)
     setEditingFreeTextAnnotationId(null)
+    setPendingStandaloneNoteDraft(null)
+    setEditingStandaloneNoteAnnotationId(null)
     if (typeof window !== 'undefined') {
       window.getSelection()?.removeAllRanges()
     }
@@ -1307,6 +1530,13 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     setEditingFreeTextAnnotationId(null)
   }, [handleAnnotationPreviewOpen])
 
+  const handleViewportStandaloneNoteCreate = useCallback((draft: FreeTextDraft) => {
+    handleAnnotationPreviewOpen(null)
+    setSelectedAnnotationId(null)
+    setPendingStandaloneNoteDraft(draft)
+    setEditingStandaloneNoteAnnotationId(null)
+  }, [handleAnnotationPreviewOpen])
+
   const handleViewportStampCreate = useCallback((stamp: {
     page: number
     rect: AnnotationRect
@@ -1374,6 +1604,22 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
       setEditingTextNoteAnnotationId(null)
       return
     }
+    if (annotation?.type === 'note') {
+      setPendingStandaloneNoteDraft({
+        page: annotation.page,
+        rect: annotation.rects[0] ?? {
+          x1: 0.2,
+          y1: 0.2,
+          x2: 0.38,
+          y2: 0.26,
+        },
+      })
+      setEditingStandaloneNoteAnnotationId(annotation.id)
+      setPendingNoteDraft(null)
+      setPendingNoteTargetAnnotationId(null)
+      setEditingTextNoteAnnotationId(null)
+      return
+    }
     if (annotation?.note?.trim()) {
       handleEditTextNote(annotation)
     }
@@ -1396,6 +1642,22 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
         },
       })
       setEditingFreeTextAnnotationId(annotation.id)
+      setPendingNoteDraft(null)
+      setPendingNoteTargetAnnotationId(null)
+      setEditingTextNoteAnnotationId(null)
+      return
+    }
+    if (annotation.type === 'note') {
+      setPendingStandaloneNoteDraft({
+        page: annotation.page,
+        rect: annotation.rects[0] ?? {
+          x1: 0.2,
+          y1: 0.2,
+          x2: 0.38,
+          y2: 0.26,
+        },
+      })
+      setEditingStandaloneNoteAnnotationId(annotation.id)
       setPendingNoteDraft(null)
       setPendingNoteTargetAnnotationId(null)
       setEditingTextNoteAnnotationId(null)
@@ -1555,7 +1817,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
               <div className="pdf-highlight-color-row" aria-label={t('pdf.highlightColor')}>
                 <button
                   type="button"
-                  className={`pdf-highlight-tool-btn ${activeMarkupTool === null && activeShapeTool === null && activeStampOption === null && !activeFreeTextTool && !isTextNoteArmed && !pendingNoteDraft && !pendingFreeTextDraft ? 'active' : ''}`}
+                  className={`pdf-highlight-tool-btn ${activeMarkupTool === null && activeShapeTool === null && activeStampOption === null && !activeFreeTextTool && !activeStandaloneNoteTool && !isTextNoteArmed && !pendingNoteDraft && !pendingFreeTextDraft && !pendingStandaloneNoteDraft ? 'active' : ''}`}
                   onMouseDown={(event) => {
                     event.preventDefault()
                   }}
@@ -1566,14 +1828,17 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                     setNoteEditorPosition(null)
                     setPendingFreeTextDraft(null)
                     setEditingFreeTextAnnotationId(null)
+                    setPendingStandaloneNoteDraft(null)
+                    setEditingStandaloneNoteAnnotationId(null)
                     handleAnnotationPreviewOpen(null)
                     setActiveMarkupTool(null)
                     setActiveShapeTool(null)
                     setActiveFreeTextTool(false)
+                    setActiveStandaloneNoteTool(false)
                     setActiveStampKey(null)
                   }}
                   aria-label={t('pdf.selectTextOnly')}
-                  aria-pressed={activeMarkupTool === null && activeShapeTool === null && activeStampOption === null && !activeFreeTextTool && !isTextNoteArmed && !pendingNoteDraft && !pendingFreeTextDraft}
+                  aria-pressed={activeMarkupTool === null && activeShapeTool === null && activeStampOption === null && !activeFreeTextTool && !activeStandaloneNoteTool && !isTextNoteArmed && !pendingNoteDraft && !pendingFreeTextDraft && !pendingStandaloneNoteDraft}
                   title={t('pdf.selectTextOnly')}
                 >
                   <svg
@@ -1599,10 +1864,13 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                       handleAnnotationPreviewOpen(null)
                       setActiveShapeTool(null)
                       setActiveFreeTextTool(false)
+                      setActiveStandaloneNoteTool(false)
                       setActiveStampKey(null)
                       setActiveMarkupTool(option.type)
                       setPendingFreeTextDraft(null)
                       setEditingFreeTextAnnotationId(null)
+                      setPendingStandaloneNoteDraft(null)
+                      setEditingStandaloneNoteAnnotationId(null)
                       if (selectionDraftRef.current && annotationDocument && !isAnnotationBusy) {
                         void handleAddHighlight(option.type, selectedHighlightColor)
                       }
@@ -1626,6 +1894,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                       handleAnnotationPreviewOpen(null)
                       setActiveMarkupTool(null)
                       setActiveFreeTextTool(false)
+                      setActiveStandaloneNoteTool(false)
                       setActiveStampKey(null)
                       setIsTextNoteArmed(false)
                       setPendingNoteDraft(null)
@@ -1633,6 +1902,8 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                       setNoteEditorPosition(null)
                       setPendingFreeTextDraft(null)
                       setEditingFreeTextAnnotationId(null)
+                      setPendingStandaloneNoteDraft(null)
+                      setEditingStandaloneNoteAnnotationId(null)
                       setActiveShapeTool(option.type)
                     }}
                     aria-label={t(option.labelKey)}
@@ -1646,25 +1917,33 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                   <button
                     key={option.key}
                     type="button"
-                    className={`pdf-stamp-tool-btn ${activeStampKey === option.key ? 'active' : ''}`}
+                    className={`pdf-stamp-tool-btn ${activeStampKey === option.key || selectedStampAnnotation?.stampKind === option.key ? 'active' : ''}`}
                     onMouseDown={(event) => {
                       event.preventDefault()
                     }}
                     onClick={() => {
+                      setActiveStampKey(option.key)
+                      if (selectedStampAnnotation && annotationDocument && !isAnnotationBusy) {
+                        handleAnnotationPreviewOpen(null)
+                        void handleUpdateSelectedStampKind(option.key)
+                        return
+                      }
                       handleAnnotationPreviewOpen(null)
                       setActiveMarkupTool(null)
                       setActiveShapeTool(null)
                       setActiveFreeTextTool(false)
+                      setActiveStandaloneNoteTool(false)
                       setIsTextNoteArmed(false)
                       setPendingNoteDraft(null)
                       setPendingNoteTargetAnnotationId(null)
                       setNoteEditorPosition(null)
                       setPendingFreeTextDraft(null)
                       setEditingFreeTextAnnotationId(null)
-                      setActiveStampKey(option.key)
+                      setPendingStandaloneNoteDraft(null)
+                      setEditingStandaloneNoteAnnotationId(null)
                     }}
                     aria-label={t(option.labelKey)}
-                    aria-pressed={activeStampKey === option.key}
+                    aria-pressed={activeStampKey === option.key || selectedStampAnnotation?.stampKind === option.key}
                     title={t(option.labelKey)}
                   >
                     {renderStampToolIcon(option.key)}
@@ -1713,11 +1992,29 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                     <path d="M7.4 15.2H12.6" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
                   </svg>
                 </button>
+                <button
+                  type="button"
+                  className={`pdf-highlight-tool-btn ${activeStandaloneNoteTool || pendingStandaloneNoteDraft ? 'active' : ''}`}
+                  onMouseDown={(event) => {
+                    event.preventDefault()
+                  }}
+                  onClick={handleStartStandaloneNote}
+                  aria-label={t('pdf.annotationTypes.note')}
+                  aria-pressed={activeStandaloneNoteTool || pendingStandaloneNoteDraft !== null}
+                  title={t('pdf.annotationTypes.note')}
+                  disabled={!annotationDocument || isAnnotationBusy}
+                >
+                  <svg className="pdf-markup-tool-icon" viewBox="0 0 20 20" aria-hidden="true">
+                    <path d="M5.2 4.8H14.8V13.6H8.8L5.2 16.2V4.8Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
+                    <path d="M7.2 7.6H12.8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                    <path d="M7.2 10H11.6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                  </svg>
+                </button>
                 {HIGHLIGHT_COLOR_OPTIONS.map((option) => (
                   <button
                     key={option.value}
                     type="button"
-                    className={`pdf-highlight-color-swatch ${selectedHighlightColor === option.value && activeMarkupTool === 'highlight' ? 'active' : ''}`}
+                    className={`pdf-highlight-color-swatch ${selectedHighlightColor === option.value && isColorPaletteActive ? 'active' : ''}`}
                     style={{ '--pdf-highlight-color': option.value } as React.CSSProperties}
                     onMouseDown={(event) => {
                       event.preventDefault()
@@ -1738,7 +2035,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                       }
                     }}
                     aria-label={t(`pdf.highlightColors.${option.key}`)}
-                    aria-pressed={selectedHighlightColor === option.value && activeMarkupTool === 'highlight'}
+                    aria-pressed={selectedHighlightColor === option.value && isColorPaletteActive}
                     title={t(`pdf.highlightColors.${option.key}`)}
                   />
                 ))}
@@ -1874,6 +2171,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
             onShapeCreate={handleViewportShapeCreate}
             activeFreeTextTool={activeFreeTextTool}
             onFreeTextCreate={handleViewportFreeTextCreate}
+            onFreeTextResize={handleResizeFreeText}
             editingFreeTextDraft={pendingFreeTextDraft}
             editingFreeTextAnnotationId={editingFreeTextAnnotationId}
             editingFreeTextInitialValue={freeTextEditorInitialValue}
@@ -1881,6 +2179,16 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
               void handleSaveFreeText(value, rect)
             }}
             onFreeTextCancel={handleCancelFreeText}
+            activeNoteTool={activeStandaloneNoteTool}
+            onNoteCreate={handleViewportStandaloneNoteCreate}
+            onNoteResize={handleResizeFreeText}
+            editingNoteDraft={pendingStandaloneNoteDraft}
+            editingNoteAnnotationId={editingStandaloneNoteAnnotationId}
+            editingNoteInitialValue={standaloneNoteEditorInitialValue}
+            onNoteSave={(value, rect) => {
+              void handleSaveStandaloneNote(value, rect)
+            }}
+            onNoteCancel={handleCancelStandaloneNote}
             activeStampKind={activeStampOption?.key ?? null}
             activeStampLabel={activeStampOption ? t(activeStampOption.labelKey) : null}
             activeStampSize={stampSize}

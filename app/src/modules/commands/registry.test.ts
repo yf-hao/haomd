@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createCommandRegistry, type CommandContext } from './registry'
+import { docConversationService } from '../ai/application/docConversationService'
 
 // jsdom 环境下，可能没有全局 alert，这里兜底一个，避免 export_pdf 报错
 ;(globalThis as any).alert = (globalThis as any).alert ?? vi.fn()
@@ -66,6 +67,7 @@ function createMockCtx(): CommandContext & {
 
 describe('command registry - layout & view', () => {
   beforeEach(() => {
+    vi.restoreAllMocks()
     vi.clearAllMocks()
   })
 
@@ -120,6 +122,7 @@ describe('command registry - layout & view', () => {
 
 describe('command registry - file commands', () => {
   beforeEach(() => {
+    vi.restoreAllMocks()
     vi.clearAllMocks()
   })
 
@@ -231,6 +234,7 @@ describe('command registry - file commands', () => {
 
 describe('command registry - lifecycle & clipboard', () => {
   beforeEach(() => {
+    vi.restoreAllMocks()
     vi.clearAllMocks()
   })
 
@@ -283,6 +287,7 @@ describe('command registry - lifecycle & clipboard', () => {
 
 describe('command registry - help commands', () => {
   beforeEach(() => {
+    vi.restoreAllMocks()
     vi.clearAllMocks()
   })
 
@@ -318,6 +323,7 @@ describe('command registry - help commands', () => {
 
 describe('command registry - ai commands', () => {
   beforeEach(() => {
+    vi.restoreAllMocks()
     vi.clearAllMocks()
   })
 
@@ -368,5 +374,70 @@ describe('command registry - ai commands', () => {
     registry.ai_session_globalMemory_userPersona()
     registry.ai_session_globalMemory_manage()
     expect(ctx.setStatusMessage).toHaveBeenCalledWith('当前版本未注册 Global Memory 对话框')
+  })
+
+  it('ai_conversation_compress should reflect live compression status updates', async () => {
+    const ctx = createMockCtx()
+    const compressSpy = vi.spyOn(docConversationService, 'compressByDocPath').mockImplementation(async (_docPath, options) => {
+      options?.onStatus?.({
+        type: 'compression-status',
+        docPath: '/dir',
+        phase: 'preparing',
+        elapsedMs: 1_000,
+      })
+      options?.onStatus?.({
+        type: 'compression-status',
+        docPath: '/dir',
+        phase: 'summarizing-batch',
+        elapsedMs: 5_000,
+        currentBatch: 2,
+        totalBatches: 3,
+      })
+      options?.onStatus?.({
+        type: 'compression-status',
+        docPath: '/dir',
+        phase: 'saving',
+        elapsedMs: 8_000,
+      })
+      options?.onStatus?.({
+        type: 'compression-status',
+        docPath: '/dir',
+        phase: 'completed',
+        elapsedMs: 9_000,
+      })
+    })
+    const registry = createCommandRegistry(ctx)
+
+    await registry.ai_conversation_compress()
+
+    expect(compressSpy).toHaveBeenCalledWith('/dir', expect.objectContaining({ onStatus: expect.any(Function) }))
+    expect(ctx.setStatusMessage).toHaveBeenCalledWith('正在准备压缩会话历史…（1s）')
+    expect(ctx.setStatusMessage).toHaveBeenCalledWith('正在压缩第 2/3 批会话历史…（5s）')
+    expect(ctx.setStatusMessage).toHaveBeenCalledWith('正在保存压缩结果…（8s）')
+    expect(ctx.setStatusMessage).toHaveBeenCalledWith('会话压缩完成 ✓')
+  })
+
+  it('ai_conversation_compress should show timeout and already-running states', async () => {
+    const ctx = createMockCtx()
+    vi.spyOn(docConversationService, 'compressByDocPath').mockImplementation(async (_docPath, options) => {
+      options?.onStatus?.({
+        type: 'compression-status',
+        docPath: '/dir',
+        phase: 'already-running',
+        elapsedMs: 31_000,
+      })
+      options?.onStatus?.({
+        type: 'compression-status',
+        docPath: '/dir',
+        phase: 'timeout',
+        elapsedMs: 46_000,
+      })
+    })
+    const registry = createCommandRegistry(ctx)
+
+    await registry.ai_conversation_compress()
+
+    expect(ctx.setStatusMessage).toHaveBeenCalledWith('当前文档的会话压缩已在后台运行…（31s）')
+    expect(ctx.setStatusMessage).toHaveBeenCalledWith('会话压缩超时，已停止。请检查模型连接后重试。（46s）')
   })
 })

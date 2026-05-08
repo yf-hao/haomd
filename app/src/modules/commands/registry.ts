@@ -1,7 +1,7 @@
 import usageDocs from '../../docs/使用说明.md?raw'
 import type { IAiClient } from '../ai/client'
 import type { ChatEntryMode, EntryContext } from '../ai/domain/chatSession'
-import { docConversationService } from '../ai/application/docConversationService'
+import { docConversationService, type CompressionStatusEvent } from '../ai/application/docConversationService'
 import { getDirKeyFromDocPath } from '../ai/domain/docPathUtils'
 import type { CommandRegistry } from './types'
 
@@ -169,6 +169,72 @@ const tr = (
   fallback: string,
   params?: Record<string, string | number>,
 ) => ctx.t?.(key, params) ?? fallback
+
+function formatElapsedSeconds(elapsedMs: number): number {
+  return Math.max(1, Math.round(elapsedMs / 1000))
+}
+
+function formatCompressionStatusMessage(ctx: StatusContext, event: CompressionStatusEvent): string {
+  const seconds = formatElapsedSeconds(event.elapsedMs)
+  const slow = event.elapsedMs >= 30_000
+
+  switch (event.phase) {
+    case 'preparing':
+      return tr(
+        ctx,
+        slow ? 'commands.conversationCompressPreparingSlow' : 'commands.conversationCompressPreparing',
+        slow ? `正在准备压缩会话历史，耗时较长…（${seconds}s）` : `正在准备压缩会话历史…（${seconds}s）`,
+        { seconds },
+      )
+    case 'summarizing-batch':
+      return tr(
+        ctx,
+        slow ? 'commands.conversationCompressBatchSlow' : 'commands.conversationCompressBatch',
+        slow
+          ? `正在压缩第 ${event.currentBatch}/${event.totalBatches} 批会话历史，耗时较长…（${seconds}s）`
+          : `正在压缩第 ${event.currentBatch}/${event.totalBatches} 批会话历史…（${seconds}s）`,
+        { current: event.currentBatch ?? 1, total: event.totalBatches ?? 1, seconds },
+      )
+    case 'summarizing-level2':
+      return tr(
+        ctx,
+        slow ? 'commands.conversationCompressLevel2Slow' : 'commands.conversationCompressLevel2',
+        slow ? `正在合并压缩摘要，耗时较长…（${seconds}s）` : `正在合并压缩摘要…（${seconds}s）`,
+        { seconds },
+      )
+    case 'saving':
+      return tr(
+        ctx,
+        slow ? 'commands.conversationCompressSavingSlow' : 'commands.conversationCompressSaving',
+        slow ? `正在保存压缩结果，耗时较长…（${seconds}s）` : `正在保存压缩结果…（${seconds}s）`,
+        { seconds },
+      )
+    case 'already-running':
+      return tr(
+        ctx,
+        'commands.conversationCompressAlreadyRunning',
+        `当前文档的会话压缩已在后台运行…（${seconds}s）`,
+        { seconds },
+      )
+    case 'timeout':
+      return tr(
+        ctx,
+        'commands.conversationCompressTimeout',
+        `会话压缩超时，已停止。请检查模型连接后重试。（${seconds}s）`,
+        { seconds },
+      )
+    case 'failed':
+      return tr(
+        ctx,
+        'commands.conversationCompressFailed',
+        '压缩文档会话历史失败，请检查控制台日志',
+      )
+    case 'completed':
+      return tr(ctx, 'commands.conversationCompressed', '会话压缩完成 ✓')
+    default:
+      return tr(ctx, 'commands.conversationCompressing', '正在压缩会话历史…')
+  }
+}
 
 function createLayoutCommands(ctx: LayoutCommandContext): CommandRegistry {
   return {
@@ -642,13 +708,13 @@ function createAiCommands(ctx: AiCommandContext): CommandRegistry {
           return
         }
         const docPath = getDirKeyFromDocPath(filePath) ?? filePath
-        ctx.setStatusMessage(tr(ctx, 'commands.conversationCompressing', '正在压缩会话历史…'))
         // fire-and-forget: don't await, let user continue chatting
-        docConversationService.compressByDocPath(docPath).then(() => {
-          ctx.setStatusMessage(tr(ctx, 'commands.conversationCompressed', '会话压缩完成 ✓'))
+        void docConversationService.compressByDocPath(docPath, {
+          onStatus: (event) => {
+            ctx.setStatusMessage(formatCompressionStatusMessage(ctx, event))
+          },
         }).catch((err) => {
           console.error('[commands] ai_conversation_compress error', err)
-          ctx.setStatusMessage(tr(ctx, 'commands.conversationCompressFailed', '压缩文档会话历史失败，请检查控制台日志'))
         })
       } catch (err) {
         console.error('[commands] ai_conversation_compress error', err)

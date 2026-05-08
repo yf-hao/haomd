@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
+  ConversationCompressionTimeoutError,
   createConversationCompressor,
   type CompressionConfig,
   defaultCompressionConfig,
@@ -239,6 +240,44 @@ describe('createConversationCompressor', () => {
     expect(provider.summarizeBatch).not.toHaveBeenCalled()
     // Result: prev_summary + recent(3,4)
     expect(result.messages).toHaveLength(3)
+  })
+
+  it('should report batch and level2 progress while compressing', async () => {
+    const configWithLevel2: CompressionConfig = {
+      ...mockConfig,
+      maxMessagesPerSummaryBatch: 10,
+      maxInputCharsPerSummaryBatch: 1_600,
+      maxSummaryCharsPerLevel: (level) => (level === 1 ? 5 : 1000),
+    }
+    const record = createRecord([
+      createMsg('1', 'user', 'u'.repeat(700), 100),
+      createMsg('2', 'assistant', 'a'.repeat(700), 110),
+      createMsg('3', 'user', 'u'.repeat(700), 200),
+      createMsg('4', 'assistant', 'a'.repeat(700), 210),
+      createMsg('5', 'user', 'u'.repeat(700), 300),
+      createMsg('6', 'assistant', 'a'.repeat(700), 310),
+      createMsg('7', 'user', 'recent', 1100),
+      createMsg('8', 'assistant', 'recent reply', 1200),
+    ])
+    const provider = {
+      summarizeBatch: vi
+        .fn()
+        .mockResolvedValueOnce('S1')
+        .mockResolvedValueOnce('S2')
+        .mockResolvedValueOnce('S3')
+        .mockResolvedValueOnce('L2 summary'),
+    }
+    const compressor = createConversationCompressor(provider)
+    const onProgress = vi.fn()
+
+    await compressor.compress(record, configWithLevel2, { onProgress })
+
+    expect(onProgress.mock.calls.map(([event]) => event)).toEqual([
+      { phase: 'summarizing-batch', level: 1, currentBatch: 1, totalBatches: 3 },
+      { phase: 'summarizing-batch', level: 1, currentBatch: 2, totalBatches: 3 },
+      { phase: 'summarizing-batch', level: 1, currentBatch: 3, totalBatches: 3 },
+      { phase: 'summarizing-level2', level: 2, totalBatches: 3 },
+    ])
   })
 
   it('should split uncovered old messages into multiple batches when input chars exceed budget', async () => {
@@ -520,5 +559,49 @@ describe('createLLMSummaryProvider', () => {
     ])
 
     expect(llm).toBe(simple)
+  })
+
+  it('should throw timeout error when summary request exceeds timeout', async () => {
+    vi.useFakeTimers()
+    const state: AiSettingsState = {
+      providers: [
+        {
+          id: 'p1',
+          name: 'P1',
+          baseUrl: 'https://api',
+          apiKey: 'sk',
+          models: [{ id: 'm1' }],
+          defaultModelId: 'm1',
+        },
+      ],
+      defaultProviderId: 'p1',
+    }
+    mockedLoadAiSettingsState.mockResolvedValueOnce(state)
+
+    const askStream = vi.fn(
+      ({ signal }: StreamingChatRequest) =>
+        new Promise<StreamingChatResult>((_resolve, reject) => {
+          signal?.addEventListener(
+            'abort',
+            () => {
+              reject(new Error('aborted'))
+            },
+            { once: true },
+          )
+        }),
+    )
+
+    const client: IStreamingChatClient = { askStream }
+    mockedCreateStreamingClientFromSettings.mockReturnValue(client)
+
+    const llmProvider = createLLMSummaryProvider()
+    const assertion = expect(
+      llmProvider.summarizeBatch({ docPath: 'doc.md', level: 1, messages }),
+    ).rejects.toBeInstanceOf(ConversationCompressionTimeoutError)
+
+    await vi.advanceTimersByTimeAsync(45_000)
+
+    await assertion
+    vi.useRealTimers()
   })
 })

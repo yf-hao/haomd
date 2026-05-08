@@ -8,7 +8,14 @@ import type {
   ConversationIndexEntry,
   DocConversationKind,
 } from '../domain/docConversations'
-import { createConversationCompressor, createLLMSummaryProvider, loadCompressionConfig, defaultCompressionConfig } from './conversationCompression'
+import {
+  ConversationCompressionTimeoutError,
+  createConversationCompressor,
+  createLLMSummaryProvider,
+  loadCompressionConfig,
+  defaultCompressionConfig,
+  type CompressionProgressEvent,
+} from './conversationCompression'
 import { enqueueSessionDigestFromCompressedRecord } from '../globalMemory/sessionDigestQueue'
 import { readFile, writeFile } from '../../files/service'
 import { getDirKeyFromDocPath } from '../domain/docPathUtils'
@@ -20,6 +27,24 @@ export type DocConversationEvent =
   | { type: 'cleared'; docPath: string; kind?: DocConversationKind }
   | { type: 'compressed'; docPath: string; kind?: DocConversationKind }
   | { type: 'updated'; docPath: string; kind?: DocConversationKind }
+  | {
+      type: 'compression-status'
+      docPath: string
+      phase:
+        | 'preparing'
+        | 'summarizing-batch'
+        | 'summarizing-level2'
+        | 'saving'
+        | 'completed'
+        | 'failed'
+        | 'timeout'
+        | 'already-running'
+      elapsedMs: number
+      currentBatch?: number
+      totalBatches?: number
+      detail?: string
+      isHeartbeat?: boolean
+    }
 
 type DocConversationEventListener = (event: DocConversationEvent) => void
 
@@ -41,6 +66,57 @@ export function subscribeDocConversationEvents(listener: DocConversationEventLis
   return () => {
     docConversationEventListeners.delete(listener)
   }
+}
+
+export type CompressionStatusEvent = Extract<DocConversationEvent, { type: 'compression-status' }>
+type CompressionStatusListener = (event: CompressionStatusEvent) => void
+
+type ActiveCompressionJob = {
+  docPath: string
+  startedAt: number
+  latestEvent: CompressionStatusEvent
+  listeners: Set<CompressionStatusListener>
+  heartbeatTimer: ReturnType<typeof setInterval> | null
+}
+
+function toCompressionStatusEvent(
+  job: Pick<ActiveCompressionJob, 'docPath' | 'startedAt'>,
+  partial: Omit<CompressionStatusEvent, 'type' | 'docPath' | 'elapsedMs'>,
+): CompressionStatusEvent {
+  return {
+    type: 'compression-status',
+    docPath: job.docPath,
+    elapsedMs: Math.max(0, Date.now() - job.startedAt),
+    ...partial,
+  }
+}
+
+function notifyCompressionStatus(job: ActiveCompressionJob, event: CompressionStatusEvent): void {
+  job.latestEvent = event
+  emitDocConversationEvent(event)
+  for (const listener of job.listeners) {
+    try {
+      listener(event)
+    } catch (e) {
+      console.error('[docConversationService] compression listener error', e)
+    }
+  }
+}
+
+function startCompressionHeartbeat(job: ActiveCompressionJob): void {
+  job.heartbeatTimer = setInterval(() => {
+    notifyCompressionStatus(job, {
+      ...job.latestEvent,
+      elapsedMs: Math.max(0, Date.now() - job.startedAt),
+      isHeartbeat: true,
+    })
+  }, 1000)
+}
+
+function stopCompressionHeartbeat(job: ActiveCompressionJob): void {
+  if (!job.heartbeatTimer) return
+  clearInterval(job.heartbeatTimer)
+  job.heartbeatTimer = null
 }
 
 function genSessionId(): string {
@@ -512,12 +588,18 @@ export type DocConversationService = {
     messages: DocConversationMessage[]
   }): Promise<void>
   clearByDocPath(docPath: string, kind?: DocConversationKind): Promise<void>
-  compressByDocPath(docPath: string, kind?: DocConversationKind): Promise<void>
+  compressByDocPath(
+    docPath: string,
+    options?: {
+      onStatus?: CompressionStatusListener
+      kind?: DocConversationKind
+    },
+  ): Promise<void>
   getIndex(): Promise<ConversationIndexEntry[]>
 }
 
 // Re-entry guard for background compression
-const compressingPaths = new Set<string>()
+const compressionJobs = new Map<string, ActiveCompressionJob>()
 
 export function createDocConversationService(): DocConversationService {
   return {
@@ -684,15 +766,42 @@ export function createDocConversationService(): DocConversationService {
       emitDocConversationEvent({ type: 'cleared', docPath })
     },
 
-    async compressByDocPath(docPath: string): Promise<void> {
+    async compressByDocPath(
+      docPath: string,
+      options?: {
+        onStatus?: CompressionStatusListener
+        kind?: DocConversationKind
+      },
+    ): Promise<void> {
       const stableKey = await toStableDocPathKey(docPath)
+      const activeJob = compressionJobs.get(stableKey)
 
-      // Re-entry guard: prevent concurrent compression on the same docPath
-      if (compressingPaths.has(stableKey)) {
-        console.warn('[docConversationService] compression already in progress for', stableKey)
+      if (activeJob) {
+        const event = toCompressionStatusEvent(activeJob, {
+          phase: 'already-running',
+          detail: 'Compression already running for this document',
+        })
+        emitDocConversationEvent(event)
+        options?.onStatus?.(event)
         return
       }
-      compressingPaths.add(stableKey)
+
+      const startedAt = Date.now()
+      const job: ActiveCompressionJob = {
+        docPath,
+        startedAt,
+        latestEvent: {
+          type: 'compression-status',
+          docPath,
+          phase: 'preparing',
+          elapsedMs: 0,
+        },
+        listeners: new Set(options?.onStatus ? [options.onStatus] : []),
+        heartbeatTimer: null,
+      }
+      compressionJobs.set(stableKey, job)
+      notifyCompressionStatus(job, toCompressionStatusEvent(job, { phase: 'preparing' }))
+      startCompressionHeartbeat(job)
 
       try {
         const workspaceContext = await ensureLoadedForDocPath(docPath)
@@ -704,6 +813,7 @@ export function createDocConversationService(): DocConversationService {
         })
 
         if (idx < 0) {
+          notifyCompressionStatus(job, toCompressionStatusEvent(job, { phase: 'completed' }))
           return
         }
 
@@ -714,7 +824,11 @@ export function createDocConversationService(): DocConversationService {
 
         const cfg = await loadCompressionConfig().catch(() => defaultCompressionConfig)
         const summaryCreatedAfter = Date.now()
-        const compressed = await conversationCompressor.compress(existing, cfg)
+        const compressed = await conversationCompressor.compress(existing, cfg, {
+          onProgress: (event: CompressionProgressEvent) => {
+            notifyCompressionStatus(job, toCompressionStatusEvent(job, event))
+          },
+        })
 
         // Detect messages added during compression (user kept chatting)
         const latest = records[idx]
@@ -728,8 +842,10 @@ export function createDocConversationService(): DocConversationService {
             : compressed.messages,
         }
         records[idx] = merged
+        notifyCompressionStatus(job, toCompressionStatusEvent(job, { phase: 'saving' }))
         await persistForDocPath(docPath, records)
         emitDocConversationEvent({ type: 'compressed', docPath })
+        notifyCompressionStatus(job, toCompressionStatusEvent(job, { phase: 'completed' }))
 
         // 在压缩完成后，根据此次生成的摘要消息构建 SessionDigest 并入队
         try {
@@ -739,8 +855,27 @@ export function createDocConversationService(): DocConversationService {
         }
       } catch (e) {
         console.error('[docConversationService] compressByDocPath failed', e)
+        if (e instanceof ConversationCompressionTimeoutError) {
+          notifyCompressionStatus(
+            job,
+            toCompressionStatusEvent(job, {
+              phase: 'timeout',
+              detail: e.message,
+            }),
+          )
+        } else {
+          notifyCompressionStatus(
+            job,
+            toCompressionStatusEvent(job, {
+              phase: 'failed',
+              detail: e instanceof Error ? e.message : String(e),
+            }),
+          )
+        }
+        throw e
       } finally {
-        compressingPaths.delete(stableKey)
+        stopCompressionHeartbeat(job)
+        compressionJobs.delete(stableKey)
       }
     },
 

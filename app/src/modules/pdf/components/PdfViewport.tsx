@@ -46,6 +46,13 @@ export interface PdfViewportProps {
     page: number
     rect: Rect
   }) => void
+  onFreeTextResize?: (freeText: { annotationId: string; rect: Rect }) => void
+  activeNoteTool?: boolean
+  onNoteCreate?: (draft: {
+    page: number
+    rect: Rect
+  }) => void
+  onNoteResize?: (note: { annotationId: string; rect: Rect }) => void
   editingFreeTextDraft?: {
     page: number
     rect: Rect
@@ -54,6 +61,14 @@ export interface PdfViewportProps {
   editingFreeTextInitialValue?: string
   onFreeTextSave?: (value: string, rect: Rect) => void
   onFreeTextCancel?: () => void
+  editingNoteDraft?: {
+    page: number
+    rect: Rect
+  } | null
+  editingNoteAnnotationId?: string | null
+  editingNoteInitialValue?: string
+  onNoteSave?: (value: string, rect: Rect) => void
+  onNoteCancel?: () => void
   activeStampKind?: StampKind | null
   activeStampLabel?: string | null
   activeStampSize?: number
@@ -93,11 +108,20 @@ const PdfViewportInner = forwardRef<PdfViewportHandle, PdfViewportProps>(functio
     onShapeCreate,
     activeFreeTextTool = false,
     onFreeTextCreate,
+    onFreeTextResize,
+    activeNoteTool = false,
+    onNoteCreate,
+    onNoteResize,
     editingFreeTextDraft = null,
     editingFreeTextAnnotationId = null,
     editingFreeTextInitialValue = '',
     onFreeTextSave,
     onFreeTextCancel,
+    editingNoteDraft = null,
+    editingNoteAnnotationId = null,
+    editingNoteInitialValue = '',
+    onNoteSave,
+    onNoteCancel,
     activeStampKind = null,
     activeStampLabel = null,
     activeStampSize = 0.045,
@@ -244,11 +268,20 @@ const PdfViewportInner = forwardRef<PdfViewportHandle, PdfViewportProps>(functio
             onShapeCreate={onShapeCreate}
             activeFreeTextTool={activeFreeTextTool}
             onFreeTextCreate={onFreeTextCreate}
+            onFreeTextResize={onFreeTextResize}
+            activeNoteTool={activeNoteTool}
+            onNoteCreate={onNoteCreate}
+            onNoteResize={onNoteResize}
             editingFreeTextDraft={editingFreeTextDraft}
             editingFreeTextAnnotationId={editingFreeTextAnnotationId}
             editingFreeTextInitialValue={editingFreeTextInitialValue}
             onFreeTextSave={onFreeTextSave}
             onFreeTextCancel={onFreeTextCancel}
+            editingNoteDraft={editingNoteDraft}
+            editingNoteAnnotationId={editingNoteAnnotationId}
+            editingNoteInitialValue={editingNoteInitialValue}
+            onNoteSave={onNoteSave}
+            onNoteCancel={onNoteCancel}
             activeStampKind={activeStampKind}
             activeStampLabel={activeStampLabel}
             activeStampSize={activeStampSize}

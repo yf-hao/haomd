@@ -1705,7 +1705,8 @@ button:disabled {
 .pdf-annotation-block--line,
 .pdf-annotation-block--arrow,
 .pdf-annotation-block--stamp,
-.pdf-annotation-block--freeText {
+.pdf-annotation-block--freeText,
+.pdf-annotation-block--note {
   background: transparent !important;
   color: var(--pdf-annotation-color);
   opacity: 1;
@@ -1743,7 +1744,32 @@ button:disabled {
   border-radius: 6px;
 }
 
+.pdf-annotation-note-box {
+  position: absolute;
+  inset: 0;
+  padding: 8px 10px;
+  color: var(--theme-text-default);
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: hidden;
+  border-radius: 10px;
+  border: 1.5px solid color-mix(in srgb, var(--pdf-annotation-color) 58%, white 42%);
+  background: color-mix(in srgb, var(--pdf-annotation-color) 16%, var(--theme-surface-card-active) 84%);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.08);
+}
+
 .pdf-free-text-editor-layer {
+  position: absolute;
+  z-index: 3;
+  min-height: 1lh;
+  isolation: isolate;
+  contain: layout paint style;
+  pointer-events: auto;
+}
+
+.pdf-note-editor-layer {
   position: absolute;
   z-index: 3;
   min-height: 1lh;
@@ -1776,10 +1802,133 @@ button:disabled {
   border-color: color-mix(in srgb, var(--pdf-annotation-color) 82%, white 18%);
 }
 
+.pdf-annotation-note-editor {
+  width: 100%;
+  min-height: 100%;
+  padding: 8px 10px;
+  border: 1.5px solid color-mix(in srgb, var(--pdf-annotation-color) 72%, white 28%);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--pdf-annotation-color) 18%, var(--theme-surface-card-active) 82%);
+  color: var(--theme-text-default);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  resize: none;
+  outline: none;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.56),
+    0 4px 10px rgb(0 0 0 / 0.05);
+  contain: layout paint style;
+}
+
+.pdf-annotation-note-editor:focus {
+  border-color: color-mix(in srgb, var(--pdf-annotation-color) 82%, white 18%);
+}
+
 .pdf-annotation-block--freeText.selected {
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--theme-accent-primary) 42%, transparent),
     inset 0 0 0 1px color-mix(in srgb, var(--theme-accent-primary) 56%, transparent);
+}
+
+.pdf-annotation-block--note.selected {
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--theme-accent-primary) 42%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--theme-accent-primary) 56%, transparent);
+}
+
+.pdf-annotation-free-text-frame {
+  position: absolute;
+  inset: -4px;
+  border: 1.5px solid color-mix(in srgb, var(--theme-accent-primary) 82%, white 18%);
+  border-radius: 8px;
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.64),
+    0 6px 14px rgb(0 0 0 / 0.06);
+  pointer-events: auto;
+}
+
+.pdf-annotation-free-text-move-zone {
+  position: absolute;
+  inset: 6px 10px;
+  border-radius: 6px;
+  background: transparent;
+  pointer-events: auto;
+  cursor: move;
+}
+
+.pdf-annotation-free-text-edge {
+  position: absolute;
+  background: transparent;
+  pointer-events: auto;
+}
+
+.pdf-annotation-free-text-edge--top {
+  top: -5px;
+  right: 8px;
+  left: 8px;
+  height: 10px;
+  cursor: ns-resize;
+}
+
+.pdf-annotation-free-text-edge--right {
+  top: 8px;
+  right: -5px;
+  bottom: 8px;
+  width: 10px;
+  cursor: ew-resize;
+}
+
+.pdf-annotation-free-text-edge--bottom {
+  right: 8px;
+  bottom: -5px;
+  left: 8px;
+  height: 10px;
+  cursor: ns-resize;
+}
+
+.pdf-annotation-free-text-edge--left {
+  top: 8px;
+  bottom: 8px;
+  left: -5px;
+  width: 10px;
+  cursor: ew-resize;
+}
+
+.pdf-annotation-free-text-handle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--theme-surface-primary);
+  border: 1.5px solid color-mix(in srgb, var(--theme-accent-primary) 82%, white 18%);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.14);
+  pointer-events: auto;
+}
+
+.pdf-annotation-free-text-handle--tl {
+  top: -5px;
+  left: -5px;
+  cursor: nwse-resize;
+}
+
+.pdf-annotation-free-text-handle--tr {
+  top: -5px;
+  right: -5px;
+  cursor: nesw-resize;
+}
+
+.pdf-annotation-free-text-handle--br {
+  right: -5px;
+  bottom: -5px;
+  cursor: nwse-resize;
+}
+
+.pdf-annotation-free-text-handle--bl {
+  bottom: -5px;
+  left: -5px;
+  cursor: nesw-resize;
 }
 
 .pdf-annotation-line-layer {

@@ -23,6 +23,10 @@ export type CompressionConfig = {
   maxInputCharsPerSummaryBatch: number
 }
 
+export type CompressionProgressEvent =
+  | { phase: 'summarizing-batch'; level: 1; currentBatch: number; totalBatches: number }
+  | { phase: 'summarizing-level2'; level: 2; totalBatches: number }
+
 /** 摘要提供方：封装具体模型/后端调用 */
 export interface SummaryProvider {
   summarizeBatch(input: {
@@ -34,7 +38,25 @@ export interface SummaryProvider {
 
 /** 会话压缩服务接口：输入一份文档会话记录，输出压缩后的记录 */
 export interface ConversationCompressor {
-  compress(record: DocConversationRecord, config: CompressionConfig): Promise<DocConversationRecord>
+  compress(
+    record: DocConversationRecord,
+    config: CompressionConfig,
+    options?: {
+      onProgress?: (event: CompressionProgressEvent) => void
+    },
+  ): Promise<DocConversationRecord>
+}
+
+const SUMMARY_REQUEST_TIMEOUT_MS = 45_000
+
+export class ConversationCompressionTimeoutError extends Error {
+  readonly timeoutMs: number
+
+  constructor(timeoutMs: number) {
+    super(`Conversation compression timed out after ${timeoutMs}ms`)
+    this.name = 'ConversationCompressionTimeoutError'
+    this.timeoutMs = timeoutMs
+  }
 }
 
 /** 对话轮次分组结构，与 History UI 中的分组规则保持一致 */
@@ -223,7 +245,7 @@ function createSummaryMessage(options: {
 
 export function createConversationCompressor(summaryProvider: SummaryProvider): ConversationCompressor {
   return {
-    async compress(record, config): Promise<DocConversationRecord> {
+    async compress(record, config, options): Promise<DocConversationRecord> {
       const { messages } = record
 
       if (!messages.length || messages.length < config.minMessagesToCompress) {
@@ -270,7 +292,13 @@ export function createConversationCompressor(summaryProvider: SummaryProvider): 
       }
 
       const level1Summaries: DocConversationMessage[] = []
-      for (const batch of summaryBatches) {
+      for (const [index, batch] of summaryBatches.entries()) {
+        options?.onProgress?.({
+          phase: 'summarizing-batch',
+          level: 1,
+          currentBatch: index + 1,
+          totalBatches: summaryBatches.length,
+        })
         const preservedUserInputs = buildPreservedUserInputs(
           batch.filter((message): message is DocConversationMessage => message.role === 'user'),
         )
@@ -300,6 +328,11 @@ export function createConversationCompressor(summaryProvider: SummaryProvider): 
       let finalSummaries: DocConversationMessage[]
 
       if (totalLevel1Chars > config.maxSummaryCharsPerLevel(1)) {
+        options?.onProgress?.({
+          phase: 'summarizing-level2',
+          level: 2,
+          totalBatches: allLevel1Summaries.length,
+        })
         const level2PreservedUserInputs = collectPreservedUserInputsFromMessages(allLevel1Summaries)
         const level2SummaryContent = await summaryProvider.summarizeBatch({
           docPath: record.docPath,
@@ -509,6 +542,7 @@ export function createLLMSummaryProvider(): SummaryProvider {
 
   return {
     async summarizeBatch({ docPath, level, messages }): Promise<string> {
+      let didTimeout = false
       try {
         const provider = await pickDefaultProviderForSummary()
         if (!provider) {
@@ -530,35 +564,72 @@ export function createLLMSummaryProvider(): SummaryProvider {
         const maxTokens = level >= 2 ? 2048 : 4096
 
         let fullContent = ''
-        const result = await client.askStream(
-          {
-            messages: chatMessages,
-            temperature: 0.1, // #5: 适度随机性，避免固化句式
-            maxTokens,
-          },
-          {
-            onChunk: (chunk) => {
-              if (chunk.content) {
-                fullContent += chunk.content
+        const abortController = new AbortController()
+        let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+        try {
+          const streamPromise = client.askStream(
+            {
+              messages: chatMessages,
+              temperature: 0.1, // #5: 适度随机性，避免固化句式
+              maxTokens,
+              signal: abortController.signal,
+            },
+            {
+              onChunk: (chunk) => {
+                if (chunk.content) {
+                  fullContent += chunk.content
+                }
+              },
+              onComplete: () => {
+                // no-op, content 已在 onChunk 中累积
+              },
+              onError: (err) => {
+                console.error('[SummaryProvider] LLM summarize error', err)
+              },
+            },
+          ).catch((error) => {
+            if (didTimeout) {
+              return {
+                content: '',
+                tokenCount: 0,
+                completed: false,
+                error: error instanceof Error ? error : new Error(String(error)),
               }
-            },
-            onComplete: () => {
-              // no-op, content 已在 onChunk 中累积
-            },
-            onError: (err) => {
-              console.error('[SummaryProvider] LLM summarize error', err)
-            },
-          },
-        )
+            }
+            throw error
+          })
 
-        const trimmed = fullContent.trim() || result.content.trim()
-        if (!trimmed) {
-          console.warn('[SummaryProvider] empty summary from LLM, fallback to simple summary')
-          return fallback.summarizeBatch({ docPath, level, messages })
+          const result = await Promise.race([
+            streamPromise,
+            new Promise<never>((_, reject) => {
+              timeoutId = setTimeout(() => {
+                didTimeout = true
+                abortController.abort()
+                reject(new ConversationCompressionTimeoutError(SUMMARY_REQUEST_TIMEOUT_MS))
+              }, SUMMARY_REQUEST_TIMEOUT_MS)
+            }),
+          ])
+
+          const trimmed = fullContent.trim() || result.content.trim()
+          if (!trimmed) {
+            console.warn('[SummaryProvider] empty summary from LLM, fallback to simple summary')
+            return fallback.summarizeBatch({ docPath, level, messages })
+          }
+
+          return trimmed
+        } finally {
+          if (timeoutId != null) {
+            clearTimeout(timeoutId)
+          }
         }
-
-        return trimmed
       } catch (e) {
+        if (didTimeout) {
+          throw new ConversationCompressionTimeoutError(SUMMARY_REQUEST_TIMEOUT_MS)
+        }
+        if (e instanceof ConversationCompressionTimeoutError) {
+          throw e
+        }
         console.error('[SummaryProvider] summarizeBatch failed, fallback to simple summary', e)
         return fallback.summarizeBatch({ docPath, level, messages })
       }

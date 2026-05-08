@@ -37,6 +37,7 @@ const TYPE_LABELS: Record<Annotation['type'], string> = {
   line: 'pdf.annotationTypes.line',
   arrow: 'pdf.annotationTypes.arrow',
   freeText: 'pdf.annotationTypes.freeText',
+  note: 'pdf.annotationTypes.note',
   text: 'pdf.annotationTypes.text',
   popup: 'pdf.annotationTypes.popup',
   stamp: 'pdf.annotationTypes.stamp',
@@ -104,6 +105,14 @@ function renderAnnotationTypeIcon(type: Annotation['type']) {
           <path d="M7.4 15.2H12.6" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
         </svg>
       )
+    case 'note':
+      return (
+        <svg className="pdf-annotation-type-icon" viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M5.2 4.8H14.8V13.6H8.8L5.2 16.2V4.8Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
+          <path d="M7.2 7.6H12.8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+          <path d="M7.2 10H11.6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+        </svg>
+      )
     case 'text':
       return <span className="pdf-annotation-type-icon pdf-annotation-type-icon-text" aria-hidden="true">T</span>
     case 'popup':
@@ -142,6 +151,35 @@ function renderStampIcon(kind: StampKind) {
         <svg className="pdf-annotation-type-icon" viewBox="0 0 20 20" aria-hidden="true">
           <circle cx="10" cy="10" r="5.8" fill="none" stroke="currentColor" strokeWidth="2" />
           <path d="M7.2 10.2L9.2 12.2L13 8.4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )
+    case 'warning':
+      return (
+        <svg className="pdf-annotation-type-icon" viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M10 4.2L15.8 14.7H4.2L10 4.2Z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+          <path d="M10 8V11.1" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <circle cx="10" cy="13.4" r="1" fill="currentColor" />
+        </svg>
+      )
+    case 'info':
+      return (
+        <svg className="pdf-annotation-type-icon" viewBox="0 0 20 20" aria-hidden="true">
+          <circle cx="10" cy="10" r="5.8" fill="none" stroke="currentColor" strokeWidth="2" />
+          <path d="M10 9V13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <circle cx="10" cy="6.4" r="1" fill="currentColor" />
+        </svg>
+      )
+    case 'flag':
+      return (
+        <svg className="pdf-annotation-type-icon" viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M6 4.5V15.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <path d="M6.8 5.2H14.8L12.6 8.4L14.8 11.4H6.8Z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+        </svg>
+      )
+    case 'pin':
+      return (
+        <svg className="pdf-annotation-type-icon" viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M8.1 5.3C8.1 4.2 9 3.3 10.1 3.3C11.2 3.3 12.1 4.2 12.1 5.3C12.1 5.9 11.8 6.5 11.3 6.9L13.2 9.6L10.8 10.1L10.3 15.5L9.6 15.5L9.1 10.1L6.7 9.6L8.7 6.9C8.3 6.5 8.1 5.9 8.1 5.3Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
         </svg>
       )
   }

@@ -39,6 +39,13 @@ export interface PdfOfficialPageViewProps {
     page: number
     rect: Rect
   }) => void
+  onFreeTextResize?: (freeText: { annotationId: string; rect: Rect }) => void
+  activeNoteTool?: boolean
+  onNoteCreate?: (draft: {
+    page: number
+    rect: Rect
+  }) => void
+  onNoteResize?: (note: { annotationId: string; rect: Rect }) => void
   editingFreeTextDraft?: {
     page: number
     rect: Rect
@@ -47,6 +54,14 @@ export interface PdfOfficialPageViewProps {
   editingFreeTextInitialValue?: string
   onFreeTextSave?: (value: string, rect: Rect) => void
   onFreeTextCancel?: () => void
+  editingNoteDraft?: {
+    page: number
+    rect: Rect
+  } | null
+  editingNoteAnnotationId?: string | null
+  editingNoteInitialValue?: string
+  onNoteSave?: (value: string, rect: Rect) => void
+  onNoteCancel?: () => void
   activeStampKind?: StampKind | null
   activeStampLabel?: string | null
   activeStampSize?: number
@@ -91,11 +106,20 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
   onShapeCreate,
   activeFreeTextTool = false,
   onFreeTextCreate,
+  onFreeTextResize,
+  activeNoteTool = false,
+  onNoteCreate,
+  onNoteResize,
   editingFreeTextDraft = null,
   editingFreeTextAnnotationId = null,
   editingFreeTextInitialValue = '',
   onFreeTextSave,
   onFreeTextCancel,
+  editingNoteDraft = null,
+  editingNoteAnnotationId = null,
+  editingNoteInitialValue = '',
+  onNoteSave,
+  onNoteCancel,
   activeStampKind = null,
   activeStampLabel = null,
   activeStampSize = 0.045,
@@ -143,22 +167,58 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     handle: 'start' | 'end'
     startPoints: Rect
   } | null>(null)
+  const movingFreeTextStateRef = useRef<{
+    annotationId: string
+    pointerOffsetX: number
+    pointerOffsetY: number
+    width: number
+    height: number
+  } | null>(null)
+  const resizingFreeTextStateRef = useRef<{
+    annotationId: string
+    handle: 'left' | 'right' | 'top' | 'bottom' | 'tl' | 'tr' | 'bl' | 'br'
+    startRect: Rect
+    minWidth: number
+    minHeight: number
+  } | null>(null)
   const [selectionBlocks, setSelectionBlocks] = useState<SelectionBlock[]>([])
   const [shapeDraftRect, setShapeDraftRect] = useState<Rect | null>(null)
   const [stampResizeDraft, setStampResizeDraft] = useState<{ annotationId: string; rect: Rect } | null>(null)
   const [lineResizeDraft, setLineResizeDraft] = useState<{ annotationId: string; rect: Rect; linePoints: Rect } | null>(null)
+  const [freeTextResizeDraft, setFreeTextResizeDraft] = useState<{ annotationId: string; rect: Rect } | null>(null)
+  const freeTextResizeDraftRef = useRef<{ annotationId: string; rect: Rect } | null>(null)
+  const freeTextLiveAnnotationIdRef = useRef<string | null>(null)
   const [lineDraftOrigin, setLineDraftOrigin] = useState<{ x: number; y: number } | null>(null)
   const freeTextEditorRef = useRef<HTMLTextAreaElement | null>(null)
+  const freeTextEditorLineCountRef = useRef(1)
   const activeFreeTextDraft = editingFreeTextDraft?.page === pageNumber ? editingFreeTextDraft : null
-  const activeFreeTextEditorKey = activeFreeTextDraft
-    ? `${editingFreeTextAnnotationId ?? 'new'}-${activeFreeTextDraft.rect.x1}-${activeFreeTextDraft.rect.y1}-${activeFreeTextDraft.rect.x2}-${activeFreeTextDraft.rect.y2}`
+  const activeNoteDraft = editingNoteDraft?.page === pageNumber ? editingNoteDraft : null
+  const activeTextBoxType = activeFreeTextDraft ? 'freeText' : activeNoteDraft ? 'note' : null
+  const activeTextBoxDraft = activeFreeTextDraft ?? activeNoteDraft
+  const activeTextBoxEditingAnnotationId = editingFreeTextAnnotationId ?? editingNoteAnnotationId
+  const activeTextBoxInitialValue =
+    activeTextBoxType === 'freeText' ? editingFreeTextInitialValue : editingNoteInitialValue
+  const activeTextBoxEditorKey = activeTextBoxDraft
+    ? `${activeTextBoxType ?? 'text'}-${activeTextBoxEditingAnnotationId ?? 'new'}-${activeTextBoxDraft.rect.x1}-${activeTextBoxDraft.rect.y1}-${activeTextBoxDraft.rect.x2}-${activeTextBoxDraft.rect.y2}`
     : null
-  const activeFreeTextColor =
+  const activeTextBoxColor =
     (
-      editingFreeTextAnnotationId
-        ? annotations.find((annotation) => annotation.id === editingFreeTextAnnotationId)?.color
+      activeTextBoxEditingAnnotationId
+        ? annotations.find((annotation) => annotation.id === activeTextBoxEditingAnnotationId)?.color
         : null
     ) ?? previewHighlightColor
+
+  const updateFreeTextEditorHeight = (input: HTMLTextAreaElement, force = false) => {
+    const computed = window.getComputedStyle(input)
+    const lineHeight = Number.parseFloat(computed.lineHeight)
+    if (!Number.isFinite(lineHeight) || lineHeight <= 0) return
+    const nextLineCount = Math.max(1, Math.round(input.scrollHeight / lineHeight))
+    if (!force && nextLineCount <= freeTextEditorLineCountRef.current) {
+      return
+    }
+    input.style.height = `${input.scrollHeight}px`
+    freeTextEditorLineCountRef.current = nextLineCount
+  }
 
   const buildPaddedLineRect = (linePoints: Rect): Rect => ({
     x1: Math.max(0, Math.min(linePoints.x1, linePoints.x2) - LINE_RECT_PADDING),
@@ -218,6 +278,35 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
             <path d="M7.2 10.2L9.2 12.2L13 8.4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         )
+      case 'warning':
+        return (
+          <svg className="pdf-annotation-stamp-icon" viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M10 4.2L15.8 14.7H4.2L10 4.2Z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+            <path d="M10 8V11.1" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            <circle cx="10" cy="13.4" r="1" fill="currentColor" />
+          </svg>
+        )
+      case 'info':
+        return (
+          <svg className="pdf-annotation-stamp-icon" viewBox="0 0 20 20" aria-hidden="true">
+            <circle cx="10" cy="10" r="5.8" fill="none" stroke="currentColor" strokeWidth="2" />
+            <path d="M10 9V13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            <circle cx="10" cy="6.4" r="1" fill="currentColor" />
+          </svg>
+        )
+      case 'flag':
+        return (
+          <svg className="pdf-annotation-stamp-icon" viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M6 4.5V15.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            <path d="M6.8 5.2H14.8L12.6 8.4L14.8 11.4H6.8Z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+          </svg>
+        )
+      case 'pin':
+        return (
+          <svg className="pdf-annotation-stamp-icon" viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M8.1 5.3C8.1 4.2 9 3.3 10.1 3.3C11.2 3.3 12.1 4.2 12.1 5.3C12.1 5.9 11.8 6.5 11.3 6.9L13.2 9.6L10.8 10.1L10.3 15.5L9.6 15.5L9.1 10.1L6.7 9.6L8.7 6.9C8.3 6.5 8.1 5.9 8.1 5.3Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
+          </svg>
+        )
     }
   }
 
@@ -262,6 +351,59 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       }
       return nextDraft
     })
+  }
+
+  const commitFreeTextResizeDraft = (nextDraft: { annotationId: string; rect: Rect } | null) => {
+    freeTextResizeDraftRef.current = nextDraft
+    setFreeTextResizeDraft((prev) => {
+      if (prev === nextDraft) return prev
+      if (!prev || !nextDraft) return nextDraft
+      if (
+        prev.annotationId === nextDraft.annotationId &&
+        prev.rect.x1 === nextDraft.rect.x1 &&
+        prev.rect.y1 === nextDraft.rect.y1 &&
+        prev.rect.x2 === nextDraft.rect.x2 &&
+        prev.rect.y2 === nextDraft.rect.y2
+      ) {
+        return prev
+      }
+      return nextDraft
+    })
+  }
+
+  const setLiveFreeTextRect = (annotationId: string, rect: Rect | null) => {
+    const root = rootRef.current
+    if (!root) return
+    const selector = `.pdf-annotation-block[data-annotation-id="${annotationId}"]`
+    const annotationElement = root.querySelector<HTMLElement>(selector)
+    if (!annotationElement) return
+    if (!rect) {
+      annotationElement.style.removeProperty('--pdf-free-text-left')
+      annotationElement.style.removeProperty('--pdf-free-text-top')
+      annotationElement.style.removeProperty('--pdf-free-text-width')
+      annotationElement.style.removeProperty('--pdf-free-text-height')
+      if (freeTextLiveAnnotationIdRef.current === annotationId) {
+        freeTextLiveAnnotationIdRef.current = null
+      }
+      return
+    }
+    freeTextLiveAnnotationIdRef.current = annotationId
+    annotationElement.style.setProperty('--pdf-free-text-left', `${rect.x1 * 100}%`)
+    annotationElement.style.setProperty('--pdf-free-text-top', `${rect.y1 * 100}%`)
+    annotationElement.style.setProperty('--pdf-free-text-width', `${(rect.x2 - rect.x1) * 100}%`)
+    annotationElement.style.setProperty('--pdf-free-text-height', `${(rect.y2 - rect.y1) * 100}%`)
+  }
+
+  const applyFreeTextResizeDraft = (nextDraft: { annotationId: string; rect: Rect } | null) => {
+    freeTextResizeDraftRef.current = nextDraft
+    if (!nextDraft) {
+      const liveAnnotationId = freeTextLiveAnnotationIdRef.current
+      if (liveAnnotationId) {
+        setLiveFreeTextRect(liveAnnotationId, null)
+      }
+      return
+    }
+    setLiveFreeTextRect(nextDraft.annotationId, nextDraft.rect)
   }
 
   const setSelectionAssistRegionDefaults = () => {
@@ -397,19 +539,25 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
   }
 
   useEffect(() => {
-    if (!activeFreeTextDraft) return
+    if (!activeTextBoxDraft) return
     const frame = window.requestAnimationFrame(() => {
       const input = freeTextEditorRef.current
       if (!input) return
       input.style.height = '0px'
       input.style.height = `${Math.max(input.scrollHeight, input.clientHeight)}px`
+      const computed = window.getComputedStyle(input)
+      const lineHeight = Number.parseFloat(computed.lineHeight)
+      freeTextEditorLineCountRef.current =
+        Number.isFinite(lineHeight) && lineHeight > 0
+          ? Math.max(1, Math.round(input.scrollHeight / lineHeight))
+          : 1
       input.focus()
       input.setSelectionRange(input.value.length, input.value.length)
     })
     return () => {
       window.cancelAnimationFrame(frame)
     }
-  }, [activeFreeTextDraft, editingFreeTextInitialValue, activeFreeTextEditorKey])
+  }, [activeTextBoxDraft, activeTextBoxInitialValue, activeTextBoxEditorKey])
 
   const selectionBelongsToCurrentPage = (selection: Selection | null) => {
     const root = rootRef.current
@@ -684,10 +832,13 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       const target = event.target
       if (!(target instanceof Node) || !root.contains(target)) return
       const targetElement = target instanceof Element ? target : null
-      if (targetElement?.closest('.pdf-annotation-free-text-editor')) {
+      if (
+        targetElement?.closest('.pdf-annotation-free-text-editor') ||
+        targetElement?.closest('.pdf-annotation-note-editor')
+      ) {
         return
       }
-      if (activeFreeTextDraft) {
+      if (activeTextBoxDraft) {
         return
       }
       const lineHandle = targetElement?.closest<SVGElement | HTMLElement>('[data-line-handle]') ?? null
@@ -756,6 +907,59 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
           if (noteMarker) {
             return
           }
+          const freeTextAnnotation =
+            annotations.find(
+              (annotation) =>
+                annotation.id === annotationId &&
+                (annotation.type === 'freeText' || annotation.type === 'note'),
+            ) ?? null
+          const freeTextRect = freeTextAnnotation?.rects[0] ?? null
+          if (freeTextAnnotation && freeTextRect && !activeTextBoxDraft) {
+            const handle = targetElement?.closest<HTMLElement>('[data-free-text-handle]')?.dataset.freeTextHandle
+            if (
+              handle === 'left' ||
+              handle === 'right' ||
+              handle === 'top' ||
+              handle === 'bottom' ||
+              handle === 'tl' ||
+              handle === 'tr' ||
+              handle === 'bl' ||
+              handle === 'br'
+            ) {
+              event.preventDefault()
+              event.stopPropagation()
+              resizingFreeTextStateRef.current = {
+                annotationId,
+                handle,
+                startRect: freeTextRect,
+                minWidth: 0.06,
+                minHeight: 0.034,
+              }
+              applyFreeTextResizeDraft({
+                annotationId,
+                rect: freeTextRect,
+              })
+              return
+            }
+            const freeTextMoveZone = targetElement?.closest<HTMLElement>('[data-free-text-move-zone]')
+            if (freeTextMoveZone) {
+              const blockRect = annotationBlock.getBoundingClientRect()
+              event.preventDefault()
+              event.stopPropagation()
+              movingFreeTextStateRef.current = {
+                annotationId,
+                pointerOffsetX: event.clientX - blockRect.left,
+                pointerOffsetY: event.clientY - blockRect.top,
+                width: freeTextRect.x2 - freeTextRect.x1,
+                height: freeTextRect.y2 - freeTextRect.y1,
+              }
+              applyFreeTextResizeDraft({
+                annotationId,
+                rect: freeTextRect,
+              })
+              return
+            }
+          }
           const stampAnnotation =
             annotations.find((annotation) => annotation.id === annotationId && annotation.type === 'stamp') ?? null
           const stampRect = stampAnnotation?.rects[0] ?? null
@@ -802,7 +1006,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         }
         return
       }
-      if (activeFreeTextTool) {
+      if (activeFreeTextTool || activeNoteTool) {
         const point = getPageRelativePoint(event)
         if (!point) return
         event.preventDefault()
@@ -810,10 +1014,15 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         clearSelectionBlocks()
         publishSelection(null)
         setSelectionAssistRegionDefaults()
-        onFreeTextCreate?.({
+        const draft = {
           page: pageNumber,
           rect: buildFreeTextRect(point),
-        })
+        }
+        if (activeFreeTextTool) {
+          onFreeTextCreate?.(draft)
+        } else {
+          onNoteCreate?.(draft)
+        }
         return
       }
       if (activeStampLabel) {
@@ -895,6 +1104,40 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     }
 
     const handlePointerFinish = () => {
+      const movingFreeText = movingFreeTextStateRef.current
+      if (movingFreeText) {
+        const draft = freeTextResizeDraftRef.current
+        movingFreeTextStateRef.current = null
+        if (draft && draft.annotationId === movingFreeText.annotationId) {
+          commitFreeTextResizeDraft(draft)
+          const annotation = annotations.find((item) => item.id === draft.annotationId) ?? null
+          if (annotation?.type === 'note') {
+            onNoteResize?.(draft)
+          } else {
+            onFreeTextResize?.(draft)
+          }
+        } else {
+          applyFreeTextResizeDraft(null)
+        }
+        return
+      }
+      const resizingFreeText = resizingFreeTextStateRef.current
+      if (resizingFreeText) {
+        const draft = freeTextResizeDraftRef.current
+        resizingFreeTextStateRef.current = null
+        if (draft && draft.annotationId === resizingFreeText.annotationId) {
+          commitFreeTextResizeDraft(draft)
+          const annotation = annotations.find((item) => item.id === draft.annotationId) ?? null
+          if (annotation?.type === 'note') {
+            onNoteResize?.(draft)
+          } else {
+            onFreeTextResize?.(draft)
+          }
+        } else {
+          applyFreeTextResizeDraft(null)
+        }
+        return
+      }
       const movingLine = movingLineStateRef.current
       if (movingLine) {
         const draft = lineResizeDraftRef.current
@@ -981,6 +1224,64 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     }
 
     const handlePointerMove = (event: PointerEvent) => {
+      const movingFreeText = movingFreeTextStateRef.current
+      if (movingFreeText) {
+        const rootNode = rootRef.current
+        const pageEl = rootNode?.querySelector('.page') as HTMLElement | null
+        if (!pageEl) return
+        const pageRect = pageEl.getBoundingClientRect()
+        if (pageRect.width <= 0 || pageRect.height <= 0) return
+        const width = movingFreeText.width
+        const height = movingFreeText.height
+        const x1 = Math.min(
+          Math.max((event.clientX - pageRect.left - movingFreeText.pointerOffsetX) / pageRect.width, 0),
+          Math.max(0, 1 - width),
+        )
+        const y1 = Math.min(
+          Math.max((event.clientY - pageRect.top - movingFreeText.pointerOffsetY) / pageRect.height, 0),
+          Math.max(0, 1 - height),
+        )
+        applyFreeTextResizeDraft({
+          annotationId: movingFreeText.annotationId,
+          rect: {
+            x1,
+            y1,
+            x2: x1 + width,
+            y2: y1 + height,
+          },
+        })
+        return
+      }
+      const resizingFreeText = resizingFreeTextStateRef.current
+      if (resizingFreeText) {
+        const point = getPageRelativePoint(event)
+        if (!point) return
+        const { handle, startRect, minWidth, minHeight } = resizingFreeText
+        let x1 = startRect.x1
+        let y1 = startRect.y1
+        let x2 = startRect.x2
+        let y2 = startRect.y2
+
+        if (handle === 'left' || handle === 'tl' || handle === 'bl') {
+          x1 = Math.min(Math.max(0, point.x), Math.max(0, startRect.x2 - minWidth))
+        }
+        if (handle === 'right' || handle === 'tr' || handle === 'br') {
+          x2 = Math.max(Math.min(1, point.x), Math.min(1, startRect.x1 + minWidth))
+        }
+        if (handle === 'top' || handle === 'tl' || handle === 'tr') {
+          y1 = Math.min(Math.max(0, point.y), Math.max(0, startRect.y2 - minHeight))
+        }
+        if (handle === 'bottom' || handle === 'bl' || handle === 'br') {
+          y2 = Math.max(Math.min(1, point.y), Math.min(1, startRect.y1 + minHeight))
+        }
+
+        const nextRect = { x1, y1, x2, y2 }
+        applyFreeTextResizeDraft({
+          annotationId: resizingFreeText.annotationId,
+          rect: nextRect,
+        })
+        return
+      }
       const movingLine = movingLineStateRef.current
       if (movingLine) {
         const point = getPageRelativePoint(event)
@@ -1131,7 +1432,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       if (isPointerSelectionActiveRef.current) {
         return
       }
-      if (activeShapeTool || activeStampLabel || activeFreeTextTool) {
+      if (activeShapeTool || activeStampLabel || activeFreeTextTool || activeNoteTool) {
         return
       }
       const selection = window.getSelection()
@@ -1172,6 +1473,10 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       movingStampStateRef.current = null
       resizingStampStateRef.current = null
       applyStampResizeDraft(null)
+      movingFreeTextStateRef.current = null
+      resizingFreeTextStateRef.current = null
+      freeTextResizeDraftRef.current = null
+      applyFreeTextResizeDraft(null)
       movingLineStateRef.current = null
       resizingLineStateRef.current = null
       applyLineResizeDraft(null)
@@ -1181,7 +1486,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         window.cancelAnimationFrame(frame)
       }
     }
-  }, [annotations, selectedAnnotationId, onSelectionChange, pageNumber, pdfDocument, scale, clearSelectionSignal, activeShapeTool, onShapeCreate, activeFreeTextTool, activeFreeTextDraft, onFreeTextCreate, activeStampKind, activeStampLabel, activeStampSize, onStampCreate, onStampResize, onLineResize, onClearAnnotationSelection])
+  }, [annotations, selectedAnnotationId, onSelectionChange, pageNumber, pdfDocument, scale, clearSelectionSignal, activeShapeTool, onShapeCreate, activeFreeTextTool, activeNoteTool, activeTextBoxDraft, onFreeTextCreate, onNoteCreate, activeStampKind, activeStampLabel, activeStampSize, onStampCreate, onStampResize, onLineResize, onFreeTextResize, onNoteResize, onClearAnnotationSelection])
 
   useEffect(() => {
     clearSelectionBlocks()
@@ -1193,42 +1498,87 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     movingLineStateRef.current = null
     resizingLineStateRef.current = null
     applyLineResizeDraft(null)
+    movingFreeTextStateRef.current = null
+    resizingFreeTextStateRef.current = null
+    freeTextResizeDraftRef.current = null
+    applyFreeTextResizeDraft(null)
     setSelectionAssistRegionDefaults()
     onSelectionChange?.(null)
-  }, [clearSelectionSignal, onSelectionChange, activeShapeTool, activeFreeTextTool])
+  }, [clearSelectionSignal, onSelectionChange, activeShapeTool, activeFreeTextTool, activeNoteTool])
+
+  useEffect(() => {
+    const draft = freeTextResizeDraft
+    if (!draft) return
+    const annotation = annotations.find(
+      (item) => item.id === draft.annotationId && (item.type === 'freeText' || item.type === 'note'),
+    )
+    const rect = annotation?.rects[0]
+    if (
+      rect &&
+      rect.x1 === draft.rect.x1 &&
+      rect.y1 === draft.rect.y1 &&
+      rect.x2 === draft.rect.x2 &&
+      rect.y2 === draft.rect.y2
+    ) {
+      setLiveFreeTextRect(draft.annotationId, null)
+      commitFreeTextResizeDraft(null)
+    }
+  }, [annotations, freeTextResizeDraft])
 
   const handleFreeTextEditorSave = () => {
     const input = freeTextEditorRef.current
     const value = input?.value.trim() ?? ''
     if (!value) {
-      onFreeTextCancel?.()
+      if (activeTextBoxType === 'note') {
+        onNoteCancel?.()
+      } else {
+        onFreeTextCancel?.()
+      }
       return
     }
     if (input) {
       input.style.height = '0px'
       input.style.height = `${Math.max(input.scrollHeight, input.clientHeight)}px`
+      const computed = window.getComputedStyle(input)
+      const lineHeight = Number.parseFloat(computed.lineHeight)
+      freeTextEditorLineCountRef.current =
+        Number.isFinite(lineHeight) && lineHeight > 0
+          ? Math.max(1, Math.round(input.scrollHeight / lineHeight))
+          : 1
     }
     const pageEl = rootRef.current?.querySelector('.page') as HTMLElement | null
     const pageHeightPx = pageEl?.getBoundingClientRect().height ?? 0
     const nextRect =
-      activeFreeTextDraft && pageHeightPx > 0 && input
+      activeTextBoxDraft && pageHeightPx > 0 && input
         ? {
-            ...activeFreeTextDraft.rect,
+            ...activeTextBoxDraft.rect,
             y2: Math.min(
               1,
-              activeFreeTextDraft.rect.y1 + input.offsetHeight / pageHeightPx,
+              activeTextBoxDraft.rect.y1 + input.offsetHeight / pageHeightPx,
             ),
           }
-        : activeFreeTextDraft?.rect
+        : activeTextBoxDraft?.rect
     if (!nextRect) {
-      onFreeTextCancel?.()
+      if (activeTextBoxType === 'note') {
+        onNoteCancel?.()
+      } else {
+        onFreeTextCancel?.()
+      }
       return
     }
-    onFreeTextSave?.(value, nextRect)
+    if (activeTextBoxType === 'note') {
+      onNoteSave?.(value, nextRect)
+    } else {
+      onFreeTextSave?.(value, nextRect)
+    }
   }
 
   const handleFreeTextEditorCancel = () => {
-    onFreeTextCancel?.()
+    if (activeTextBoxType === 'note') {
+      onNoteCancel?.()
+    } else {
+      onFreeTextCancel?.()
+    }
   }
 
   return (
@@ -1251,13 +1601,25 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
               lineResizeDraft.annotationId === annotation.id
                 ? lineResizeDraft.rect
                 : (
+              annotation.type === 'freeText' &&
+              index === 0 &&
+              freeTextResizeDraft &&
+              freeTextResizeDraft.annotationId === annotation.id
+                ? freeTextResizeDraft.rect
+                : (
+              annotation.type === 'note' &&
+              index === 0 &&
+              freeTextResizeDraft &&
+              freeTextResizeDraft.annotationId === annotation.id
+                ? freeTextResizeDraft.rect
+                : (
               annotation.type === 'stamp' &&
               index === 0 &&
               stampResizeDraft &&
               stampResizeDraft.annotationId === annotation.id
                 ? stampResizeDraft.rect
                 : annotationRect
-                )
+                )))
             const left = `${rect.x1 * 100}%`
             const top = `${rect.y1 * 100}%`
             const width = `${(rect.x2 - rect.x1) * 100}%`
@@ -1337,22 +1699,41 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
               )
             }
 
-            if (annotation.type === 'freeText') {
-              if (activeFreeTextDraft && editingFreeTextAnnotationId === annotation.id) {
+            if (annotation.type === 'freeText' || annotation.type === 'note') {
+              if (activeTextBoxDraft && activeTextBoxEditingAnnotationId === annotation.id) {
                 return []
               }
+              const text = annotation.text?.trim() || annotation.content?.trim() || ''
+              const isNote = annotation.type === 'note'
               return (
                 <div
                   key={annotationKey}
                   {...sharedProps}
                   style={{
                     ...sharedProps.style,
+                    left: `var(--pdf-free-text-left, ${left})`,
+                    top: `var(--pdf-free-text-top, ${top})`,
+                    width: `var(--pdf-free-text-width, ${width})`,
+                    height: `var(--pdf-free-text-height, ${height})`,
                     opacity: 1,
                   }}
                 >
-                  <div className="pdf-annotation-free-text">
-                    {annotation.text?.trim() || annotation.content?.trim() || ''}
+                  <div className={isNote ? 'pdf-annotation-note-box' : 'pdf-annotation-free-text'}>
+                    {text}
                   </div>
+                  {isSelected ? (
+                    <div className="pdf-annotation-free-text-frame" aria-hidden="true">
+                      <span className="pdf-annotation-free-text-move-zone" data-free-text-move-zone="true" />
+                      <span className="pdf-annotation-free-text-edge pdf-annotation-free-text-edge--top" data-free-text-handle="top" />
+                      <span className="pdf-annotation-free-text-edge pdf-annotation-free-text-edge--right" data-free-text-handle="right" />
+                      <span className="pdf-annotation-free-text-edge pdf-annotation-free-text-edge--bottom" data-free-text-handle="bottom" />
+                      <span className="pdf-annotation-free-text-edge pdf-annotation-free-text-edge--left" data-free-text-handle="left" />
+                      <span className="pdf-annotation-free-text-handle pdf-annotation-free-text-handle--tl" data-free-text-handle="tl" />
+                      <span className="pdf-annotation-free-text-handle pdf-annotation-free-text-handle--tr" data-free-text-handle="tr" />
+                      <span className="pdf-annotation-free-text-handle pdf-annotation-free-text-handle--br" data-free-text-handle="br" />
+                      <span className="pdf-annotation-free-text-handle pdf-annotation-free-text-handle--bl" data-free-text-handle="bl" />
+                    </div>
+                  ) : null}
                 </div>
               )
             }
@@ -1531,27 +1912,24 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
           }),
         )}
       </div>
-      {activeFreeTextDraft ? (
+      {activeTextBoxDraft ? (
         <div
-          key={activeFreeTextEditorKey ?? undefined}
-          className="pdf-free-text-editor-layer"
+          key={activeTextBoxEditorKey ?? undefined}
+          className={activeTextBoxType === 'note' ? 'pdf-note-editor-layer' : 'pdf-free-text-editor-layer'}
           style={{
-            left: `${activeFreeTextDraft.rect.x1 * 100}%`,
-            top: `${activeFreeTextDraft.rect.y1 * 100}%`,
-            width: `${(activeFreeTextDraft.rect.x2 - activeFreeTextDraft.rect.x1) * 100}%`,
-            minHeight: `${(activeFreeTextDraft.rect.y2 - activeFreeTextDraft.rect.y1) * 100}%`,
-            '--pdf-annotation-color': activeFreeTextColor,
+            left: `${activeTextBoxDraft.rect.x1 * 100}%`,
+            top: `${activeTextBoxDraft.rect.y1 * 100}%`,
+            width: `${(activeTextBoxDraft.rect.x2 - activeTextBoxDraft.rect.x1) * 100}%`,
+            minHeight: `${(activeTextBoxDraft.rect.y2 - activeTextBoxDraft.rect.y1) * 100}%`,
+            '--pdf-annotation-color': activeTextBoxColor,
           } as React.CSSProperties}
         >
           <textarea
             ref={freeTextEditorRef}
-            className="pdf-annotation-free-text-editor"
-            defaultValue={editingFreeTextInitialValue}
+            className={activeTextBoxType === 'note' ? 'pdf-annotation-note-editor' : 'pdf-annotation-free-text-editor'}
+            defaultValue={activeTextBoxInitialValue}
             onInput={(event) => {
-              const target = event.currentTarget
-              if (target.scrollHeight > target.clientHeight + 1) {
-                target.style.height = `${target.scrollHeight}px`
-              }
+              updateFreeTextEditorHeight(event.currentTarget)
             }}
             onBlur={handleFreeTextEditorSave}
             onKeyDown={(event) => {
@@ -1563,9 +1941,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
               if (event.key === 'Enter') {
                 const target = event.currentTarget
                 window.requestAnimationFrame(() => {
-                  if (target.scrollHeight > target.clientHeight + 1) {
-                    target.style.height = `${target.scrollHeight}px`
-                  }
+                  updateFreeTextEditorHeight(target, true)
                 })
               }
               if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
