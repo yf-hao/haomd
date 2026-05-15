@@ -24,6 +24,7 @@ mod mcp_manager;
 mod menu;
 mod notes_config;
 mod openai_compat;
+mod pdf_export;
 mod platform;
 mod protocol;
 mod search_db;
@@ -58,6 +59,7 @@ use mcp_manager::*;
 use menu::*;
 use notes_config::*;
 use openai_compat::*;
+use pdf_export::*;
 use platform::*;
 use protocol::*;
 use search_commands::*;
@@ -88,6 +90,7 @@ macro_rules! app_invoke_handler {
             // File IO and app-local state
             read_file,
             read_binary_file,
+            export_pdf_with_annotations,
             write_file,
             write_file_no_recent,
             list_recent,

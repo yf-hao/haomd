@@ -1,14 +1,19 @@
-import { memo, useRef, useState, useEffect, useCallback } from 'react'
+import { memo, useRef, useState, useEffect, useCallback, useMemo, type ReactNode, type ReactElement } from 'react'
+import { save as saveDialog } from '@tauri-apps/plugin-dialog'
+import CodeMirror from '@uiw/react-codemirror'
+import { EditorSelection } from '@codemirror/state'
+import { EditorView, keymap, placeholder as editorPlaceholder } from '@codemirror/view'
 import type { PDFDocumentProxy } from '../hooks/usePdfDocument'
 import { usePdfDocument } from '../hooks/usePdfDocument'
 import { PdfViewport, type PdfViewportHandle } from './PdfViewport'
 import { PdfAnnotationPanel } from './PdfAnnotationPanel'
+import { PdfNotesPanel } from './PdfNotesPanel'
 import { useI18n } from '../../i18n/I18nContext'
 import { isTauriEnv } from '../../platform/runtime'
+import { useResolvedThemeMode } from '../../theme/ThemeContext'
 import {
   appendAnnotation,
   createFreeTextAnnotation,
-  createNoteAnnotation,
   createShapeAnnotation,
   createStampAnnotation,
   createTextMarkupAnnotation,
@@ -19,6 +24,13 @@ import {
 } from '../annotationUtils'
 import { computePdfHash, loadAnnotations, saveAnnotations } from '../store/annotationStore'
 import type { Annotation, DocumentAnnotations } from '../types/annotation'
+import type { PdfNote } from '../types/note'
+import { loadNotes, saveNotes } from '../store/noteStore'
+import { writeFileNoRecent } from '../../files/service'
+import {
+  buildStandaloneNotesFileName,
+  buildStandaloneNotesMarkdown,
+} from '../export/standaloneNotesMarkdown'
 import {
   isColorableAnnotation,
   isMarkupAnnotation,
@@ -42,10 +54,32 @@ type FreeTextDraft = {
   rect: AnnotationRect
 }
 
+type DetachedNoteDraft = {
+  id: string | null
+  page: number | null
+  quote: string | null
+  text: string
+  color: string
+}
+
 type PdfNoteEditorPopoverProps = {
   position: NoteEditorPosition
   initialValue: string
   placeholder: string
+  cancelLabel: string
+  saveLabel: string
+  busy: boolean
+  onCancel: () => void
+  onSave: (value: string) => void
+}
+
+type DetachedNoteEditorOverlayProps = {
+  initialValue: string
+  quote: string | null
+  page: number | null
+  color: string
+  placeholder: string
+  title: string
   cancelLabel: string
   saveLabel: string
   busy: boolean
@@ -95,6 +129,194 @@ const SHAPE_TOOL_OPTIONS = [
   type: Extract<AnnotationType, 'square' | 'circle' | 'line' | 'arrow'>
   labelKey: string
 }>
+
+const PDF_TOOL_GROUP_STORAGE_KEY = 'pdf-toolbar-tool-groups-v1'
+
+type PersistedPdfToolGroups = {
+  markup?: Extract<AnnotationType, 'highlight' | 'underline' | 'strikeout' | 'squiggly'>
+  shape?: Extract<AnnotationType, 'square' | 'circle' | 'line' | 'arrow'>
+  stamp?: StampKind
+}
+
+function loadPersistedPdfToolGroups(): PersistedPdfToolGroups {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = window.localStorage.getItem(PDF_TOOL_GROUP_STORAGE_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw) as PersistedPdfToolGroups
+    return parsed ?? {}
+  } catch {
+    return {}
+  }
+}
+
+function savePersistedPdfToolGroups(nextState: PersistedPdfToolGroups) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(PDF_TOOL_GROUP_STORAGE_KEY, JSON.stringify(nextState))
+  } catch {
+    // ignore
+  }
+}
+
+type GroupedToolOption<T extends string> = {
+  key: T
+  label: string
+  icon: ReactNode
+}
+
+type GroupedToolButtonProps<T extends string> = {
+  active: boolean
+  currentKey: T
+  options: readonly GroupedToolOption<T>[]
+  menuOpen: boolean
+  onMenuOpenChange: (open: boolean) => void
+  onActivate: (key: T) => void
+  onChoose: (key: T) => void
+}
+
+const GroupedToolButton = memo(function GroupedToolButton<T extends string>({
+  active,
+  currentKey,
+  options,
+  menuOpen,
+  onMenuOpenChange,
+  onActivate,
+  onChoose,
+}: GroupedToolButtonProps<T>) {
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const longPressTriggeredRef = useRef(false)
+  const longPressTimerRef = useRef<number | null>(null)
+  const suppressClickRef = useRef(false)
+  const currentOption = options.find((option) => option.key === currentKey) ?? options[0]
+
+  const clearLongPressTimer = useCallback(() => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const handlePointerDown = (event: PointerEvent) => {
+      const container = containerRef.current
+      if (!container) return
+      if (!container.contains(event.target as Node)) {
+        onMenuOpenChange(false)
+      }
+    }
+    window.addEventListener('pointerdown', handlePointerDown)
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown)
+    }
+  }, [menuOpen, onMenuOpenChange])
+
+  useEffect(() => () => clearLongPressTimer(), [clearLongPressTimer])
+
+  const startLongPress = useCallback(() => {
+    longPressTriggeredRef.current = false
+    suppressClickRef.current = false
+    clearLongPressTimer()
+    longPressTimerRef.current = window.setTimeout(() => {
+      longPressTriggeredRef.current = true
+      suppressClickRef.current = true
+      onMenuOpenChange(true)
+    }, 420)
+  }, [clearLongPressTimer, onMenuOpenChange])
+
+  const finishPress = useCallback(() => {
+    const triggered = longPressTriggeredRef.current
+    clearLongPressTimer()
+    if (triggered) {
+      longPressTriggeredRef.current = false
+      return
+    }
+    onMenuOpenChange(false)
+    onActivate(currentOption.key)
+  }, [clearLongPressTimer, currentOption.key, onActivate, onMenuOpenChange])
+
+  const cancelPress = useCallback(() => {
+    clearLongPressTimer()
+    longPressTriggeredRef.current = false
+  }, [clearLongPressTimer])
+
+  return (
+    <div ref={containerRef} className={`pdf-grouped-tool ${menuOpen ? 'open' : ''}`}>
+      <button
+        type="button"
+        className={`pdf-highlight-tool-btn pdf-grouped-tool-trigger ${active ? 'active' : ''}`}
+        onMouseDown={(event) => {
+          if (event.button !== 0) return
+          event.preventDefault()
+          startLongPress()
+        }}
+        onMouseUp={(event) => {
+          if (event.button !== 0) return
+          event.preventDefault()
+          finishPress()
+        }}
+        onMouseLeave={() => {
+          cancelPress()
+        }}
+        onTouchStart={(event) => {
+          event.preventDefault()
+          startLongPress()
+        }}
+        onTouchEnd={(event) => {
+          event.preventDefault()
+          finishPress()
+        }}
+        onTouchCancel={() => {
+          cancelPress()
+        }}
+        onClick={(event) => {
+          if (suppressClickRef.current) {
+            event.preventDefault()
+            event.stopPropagation()
+            suppressClickRef.current = false
+          }
+        }}
+        onContextMenu={(event) => {
+          event.preventDefault()
+          cancelPress()
+          longPressTriggeredRef.current = true
+          suppressClickRef.current = true
+          onMenuOpenChange(!menuOpen)
+        }}
+        aria-label={currentOption.label}
+        aria-pressed={active}
+        title={currentOption.label}
+      >
+        {currentOption.icon}
+        <span className="pdf-grouped-tool-caret" aria-hidden="true" />
+      </button>
+      {menuOpen ? (
+        <div className="pdf-grouped-tool-menu" role="menu" aria-label={currentOption.label}>
+          {options.map((option) => (
+            <button
+              key={option.key}
+              type="button"
+              className={`pdf-grouped-tool-menu-item ${option.key === currentKey ? 'active' : ''}`}
+              onMouseDown={(event) => {
+                event.preventDefault()
+              }}
+              onClick={() => {
+                onChoose(option.key)
+                onMenuOpenChange(false)
+              }}
+              role="menuitemradio"
+              aria-checked={option.key === currentKey}
+              title={option.label}
+            >
+              {option.icon}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}) as <T extends string>(props: GroupedToolButtonProps<T>) => ReactElement
 
 const STAMP_OPTIONS = [
   { key: 'important', labelKey: 'pdf.stampOptions.important' },
@@ -383,6 +605,201 @@ const PdfNoteEditorPopover = memo(function PdfNoteEditorPopover({
   )
 })
 
+const DetachedNoteEditorOverlay = memo(function DetachedNoteEditorOverlay({
+  initialValue,
+  quote,
+  page,
+  color,
+  placeholder,
+  title,
+  cancelLabel,
+  saveLabel,
+  busy,
+  onCancel,
+  onSave,
+}: DetachedNoteEditorOverlayProps) {
+  const editorRef = useRef<HTMLDivElement | null>(null)
+  const editorViewRef = useRef<import('@codemirror/view').EditorView | null>(null)
+  const currentValueRef = useRef(initialValue)
+  const dragStateRef = useRef<{
+    pointerId: number
+    offsetX: number
+    offsetY: number
+  } | null>(null)
+  const themeMode = useResolvedThemeMode()
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(null)
+
+  const extensions = useMemo(() => [
+    EditorView.lineWrapping,
+    editorPlaceholder(placeholder),
+    EditorView.theme({
+      '&': {
+        height: '100%',
+        backgroundColor: 'transparent',
+      },
+      '.cm-scroller': {
+        fontFamily: 'inherit',
+        lineHeight: '1.65',
+      },
+      '.cm-content': {
+        padding: '0',
+        caretColor: 'var(--theme-text-default)',
+      },
+      '.cm-focused': {
+        outline: 'none',
+      },
+      '.cm-editor': {
+        backgroundColor: 'transparent',
+      },
+    }),
+    keymap.of([
+      {
+        key: 'Escape',
+        run: () => {
+          onCancel()
+          return true
+        },
+      },
+      {
+        key: 'Mod-Enter',
+        run: () => {
+          onSave(currentValueRef.current)
+          return true
+        },
+      },
+    ]),
+  ], [onCancel, onSave, placeholder])
+
+  useEffect(() => {
+    const editor = editorRef.current
+    if (!editor) return
+    const width = editor.offsetWidth
+    const centerLeft = Math.max(16, Math.round((window.innerWidth - width) / 2))
+    setPosition({
+      x: centerLeft,
+      y: 72,
+    })
+  }, [])
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      const dragState = dragStateRef.current
+      const editor = editorRef.current
+      if (!dragState || !editor || event.pointerId !== dragState.pointerId) return
+      const width = editor.offsetWidth
+      const height = editor.offsetHeight
+      const nextLeft = Math.min(
+        Math.max(16, event.clientX - dragState.offsetX),
+        Math.max(16, window.innerWidth - width - 16),
+      )
+      const nextTop = Math.min(
+        Math.max(16, event.clientY - dragState.offsetY),
+        Math.max(16, window.innerHeight - height - 16),
+      )
+      setPosition({
+        x: nextLeft,
+        y: nextTop,
+      })
+    }
+
+    const handlePointerUp = (event: PointerEvent) => {
+      if (dragStateRef.current?.pointerId !== event.pointerId) return
+      dragStateRef.current = null
+    }
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
+    window.addEventListener('pointercancel', handlePointerUp)
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+      window.removeEventListener('pointercancel', handlePointerUp)
+    }
+  }, [])
+
+  return (
+    <div className="pdf-detached-note-editor-backdrop" aria-hidden="true">
+      <div
+        ref={editorRef}
+        className="pdf-detached-note-editor"
+        style={{
+          '--pdf-note-color': color,
+          transform: position ? `translate3d(${position.x}px, ${position.y}px, 0)` : undefined,
+        } as React.CSSProperties}
+        role="dialog"
+        aria-modal="false"
+        aria-label={title}
+      >
+        <div
+          className="pdf-detached-note-editor-header"
+          onPointerDown={(event) => {
+            const editor = editorRef.current
+            if (!editor) return
+            const rect = editor.getBoundingClientRect()
+            dragStateRef.current = {
+              pointerId: event.pointerId,
+              offsetX: event.clientX - rect.left,
+              offsetY: event.clientY - rect.top,
+            }
+          }}
+        >
+          <div className="pdf-detached-note-editor-title">{title}</div>
+          <button
+            type="button"
+            className="pdf-note-inline-btn"
+            onPointerDown={(event) => {
+              event.stopPropagation()
+            }}
+            onClick={onCancel}
+          >
+            {cancelLabel}
+          </button>
+        </div>
+        {page ? <div className="pdf-note-card-meta">P{page}</div> : null}
+        {quote ? <div className="pdf-note-card-quote">{quote}</div> : null}
+        <div className="pdf-detached-note-editor-input">
+          <CodeMirror
+            value={initialValue}
+            height="100%"
+            basicSetup={false}
+            theme={themeMode}
+            extensions={extensions}
+            onChange={(nextValue) => {
+              currentValueRef.current = nextValue
+            }}
+            onCreateEditor={(view) => {
+              editorViewRef.current = view
+              currentValueRef.current = view.state.doc.toString()
+              requestAnimationFrame(() => {
+                view.focus()
+                view.dispatch({
+                  selection: EditorSelection.cursor(view.state.doc.length),
+                })
+              })
+            }}
+          />
+        </div>
+        <div className="pdf-note-card-actions">
+          <button type="button" className="pdf-note-editor-btn" onClick={onCancel}>
+            {cancelLabel}
+          </button>
+          <button
+            type="button"
+            className="pdf-note-editor-btn primary"
+            onClick={() => {
+              const view = editorViewRef.current
+              onSave(view ? view.state.doc.toString() : currentValueRef.current)
+            }}
+            disabled={busy}
+          >
+            {saveLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+})
+
 export interface PdfViewerProps {
   filePath: string
   onClose?: () => void
@@ -391,6 +808,7 @@ export interface PdfViewerProps {
 
 export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProps) {
   const { t } = useI18n()
+  const persistedToolGroups = useMemo(() => loadPersistedPdfToolGroups(), [])
   const viewportRef = useRef<PdfViewportHandle | null>(null)
   const selectionDraftRef = useRef<PdfSelectionDraft | null>(null)
   const pulseTimerRef = useRef<number | null>(null)
@@ -405,15 +823,26 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
   const [annotationMessage, setAnnotationMessage] = useState<string | null>(null)
   const [isAnnotationBusy, setAnnotationBusy] = useState(false)
   const [selectedHighlightColor, setSelectedHighlightColor] = useState<string>('#ff0000')
+  const [preferredMarkupTool, setPreferredMarkupTool] = useState<Extract<AnnotationType, 'highlight' | 'underline' | 'strikeout' | 'squiggly'>>(
+    persistedToolGroups.markup ?? TEXT_MARKUP_TOOL_OPTIONS[0].type,
+  )
+  const [preferredShapeTool, setPreferredShapeTool] = useState<Extract<AnnotationType, 'square' | 'circle' | 'line' | 'arrow'>>(
+    persistedToolGroups.shape ?? SHAPE_TOOL_OPTIONS[0].type,
+  )
+  const [preferredStampKey, setPreferredStampKey] = useState<StampKind>(
+    persistedToolGroups.stamp ?? STAMP_OPTIONS[0].key,
+  )
   const [activeMarkupTool, setActiveMarkupTool] = useState<Extract<AnnotationType, 'highlight' | 'underline' | 'strikeout' | 'squiggly'> | null>(null)
   const [activeShapeTool, setActiveShapeTool] = useState<Extract<AnnotationType, 'square' | 'circle' | 'line' | 'arrow'> | null>(null)
   const [activeFreeTextTool, setActiveFreeTextTool] = useState(false)
   const [activeStandaloneNoteTool, setActiveStandaloneNoteTool] = useState(false)
   const [activeStampKey, setActiveStampKey] = useState<StampKind | null>(null)
+  const [openGroupedToolMenu, setOpenGroupedToolMenu] = useState<'markup' | 'shape' | 'stamp' | null>(null)
   const [stampSize, setStampSize] = useState(DEFAULT_STAMP_SIZE)
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null)
   const [pulsingAnnotationId, setPulsingAnnotationId] = useState<string | null>(null)
   const [annotationPanelOpen, setAnnotationPanelOpen] = useState(true)
+  const [activeSidePanel, setActiveSidePanel] = useState<'annotations' | 'notes'>('annotations')
   const [clearSelectionSignal, setClearSelectionSignal] = useState(0)
   const [isTextNoteArmed, setIsTextNoteArmed] = useState(false)
   const [pendingNoteDraft, setPendingNoteDraft] = useState<PdfSelectionDraft | null>(null)
@@ -425,7 +854,12 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
   const [pendingFreeTextDraft, setPendingFreeTextDraft] = useState<FreeTextDraft | null>(null)
   const [editingFreeTextAnnotationId, setEditingFreeTextAnnotationId] = useState<string | null>(null)
   const [pendingStandaloneNoteDraft, setPendingStandaloneNoteDraft] = useState<FreeTextDraft | null>(null)
-  const [editingStandaloneNoteAnnotationId, setEditingStandaloneNoteAnnotationId] = useState<string | null>(null)
+  const [, setEditingStandaloneNoteAnnotationId] = useState<string | null>(null)
+  const [detachedNotes, setDetachedNotes] = useState<PdfNote[]>([])
+  const [selectedDetachedNoteId, setSelectedDetachedNoteId] = useState<string | null>(null)
+  const [detachedNoteDraft, setDetachedNoteDraft] = useState<DetachedNoteDraft | null>(null)
+  const [detachedNotesBusy, setDetachedNotesBusy] = useState(false)
+  const [pdfHashForNotes, setPdfHashForNotes] = useState<string | null>(null)
   const selectedAnnotatableAnnotation =
     selectedAnnotationId && annotationDocument
       ? annotationDocument.annotations.find(
@@ -462,11 +896,9 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
           (annotation) => annotation.id === selectedAnnotationId && annotation.type === 'freeText',
         ) ?? null
       : null
-  const selectedStandaloneNoteAnnotation =
-    selectedAnnotationId && annotationDocument
-      ? annotationDocument.annotations.find(
-          (annotation) => annotation.id === selectedAnnotationId && annotation.type === 'note',
-        ) ?? null
+  const selectedDetachedNote =
+    selectedDetachedNoteId
+      ? detachedNotes.find((note) => note.id === selectedDetachedNoteId) ?? null
       : null
   const selectedStampAnnotation =
     selectedAnnotationId && annotationDocument
@@ -480,7 +912,9 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     activeStampKey !== null ||
     activeFreeTextTool ||
     activeStandaloneNoteTool ||
-    selectedColorableAnnotation !== null
+    selectedColorableAnnotation !== null ||
+    selectedDetachedNote !== null ||
+    detachedNoteDraft !== null
   const noteEditorInitialValue =
     editingTextNoteAnnotationId && annotationDocument
       ? (
@@ -499,11 +933,6 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     editingFreeTextAnnotationId && annotationDocument
       ? annotationDocument.annotations.find((annotation) => annotation.id === editingFreeTextAnnotationId)?.text ?? ''
       : ''
-  const standaloneNoteEditorInitialValue =
-    editingStandaloneNoteAnnotationId && annotationDocument
-      ? annotationDocument.annotations.find((annotation) => annotation.id === editingStandaloneNoteAnnotationId)?.text ?? ''
-      : ''
-
   const ZOOM_MIN = 0.5
   const ZOOM_MAX = 3
   const ZOOM_STEP = 0.25
@@ -652,6 +1081,10 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
   useEffect(() => {
     if (!pdfDocument || pageCount <= 0) {
       setAnnotationDocument(null)
+      setPdfHashForNotes(null)
+      setDetachedNotes([])
+      setSelectedDetachedNoteId(null)
+      setDetachedNoteDraft(null)
       setSelectionDraft(null)
       selectionDraftRef.current = null
       setActiveMarkupTool(null)
@@ -683,6 +1116,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
       try {
         const pdfHash = isTauriEnv() ? await computePdfHash(filePath) : `web:${filePath}`
         if (cancelled) return
+        setPdfHashForNotes(pdfHash)
         const stored = await loadAnnotations(pdfHash)
         if (cancelled) return
         setAnnotationDocument(
@@ -709,6 +1143,40 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
       cancelled = true
     }
   }, [filePath, pageCount, pdfDocument, t])
+
+  useEffect(() => {
+    if (!pdfHashForNotes) {
+      setDetachedNotes([])
+      setSelectedDetachedNoteId(null)
+      setDetachedNoteDraft(null)
+      return
+    }
+
+    let cancelled = false
+    const loadDetachedNotes = async () => {
+      try {
+        const notes = await loadNotes(pdfHashForNotes)
+        if (cancelled) return
+        setDetachedNotes(
+          [...notes].sort((left, right) => {
+            const leftPage = left.page ?? Number.MAX_SAFE_INTEGER
+            const rightPage = right.page ?? Number.MAX_SAFE_INTEGER
+            if (leftPage !== rightPage) return leftPage - rightPage
+            return left.updatedAt - right.updatedAt
+          }),
+        )
+      } catch (loadError) {
+        if (cancelled) return
+        console.error('[PdfViewer] failed to load detached notes', loadError)
+        setDetachedNotes([])
+      }
+    }
+
+    void loadDetachedNotes()
+    return () => {
+      cancelled = true
+    }
+  }, [pdfHashForNotes])
 
   const pageHeightForVirtual = Math.max(1, (basePageHeight ?? 800) * scale)
 
@@ -1162,10 +1630,171 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     setActiveFreeTextTool(false)
   }
 
-  const handleCancelStandaloneNote = () => {
-    setPendingStandaloneNoteDraft(null)
-    setEditingStandaloneNoteAnnotationId(null)
-    setActiveStandaloneNoteTool(false)
+  const handleStartDetachedNote = () => {
+    const selection = selectionDraftRef.current
+    const selectedContent = selectedAnnotatableAnnotation?.content?.trim() || null
+    const quote = selection?.text?.trim() || selectedContent || null
+    const page = selection?.page ?? selectedAnnotatableAnnotation?.page ?? currentPage
+    setAnnotationPanelOpen(true)
+    setActiveSidePanel('notes')
+    setSelectedDetachedNoteId(null)
+    setDetachedNoteDraft({
+      id: null,
+      page,
+      quote,
+      text: '',
+      color: selectedHighlightColor,
+    })
+  }
+
+  const persistDetachedNotes = async (nextNotes: PdfNote[]) => {
+    if (!pdfHashForNotes) return
+    setDetachedNotesBusy(true)
+    try {
+      await saveNotes(pdfHashForNotes, nextNotes)
+      setDetachedNotes(
+        [...nextNotes].sort((left, right) => {
+          const leftPage = left.page ?? Number.MAX_SAFE_INTEGER
+          const rightPage = right.page ?? Number.MAX_SAFE_INTEGER
+          if (leftPage !== rightPage) return leftPage - rightPage
+          return left.updatedAt - right.updatedAt
+        }),
+      )
+    } finally {
+      setDetachedNotesBusy(false)
+    }
+  }
+
+  const handleSaveDetachedNote = async (rawValue?: string) => {
+    if (!pdfHashForNotes || !detachedNoteDraft) return
+    const text = (rawValue ?? detachedNoteDraft.text).trim()
+    if (!text) return
+    const now = Date.now()
+    const nextNotes =
+      detachedNoteDraft.id
+        ? detachedNotes.map((note) =>
+            note.id === detachedNoteDraft.id
+              ? {
+                  ...note,
+                  page: detachedNoteDraft.page,
+                  quote: detachedNoteDraft.quote,
+                  text,
+                  color: detachedNoteDraft.color,
+                  updatedAt: now,
+                }
+              : note,
+          )
+        : [
+            ...detachedNotes,
+            {
+              id: `pdf-note-${now}`,
+              pdfHash: pdfHashForNotes,
+              fileName: getPdfFileName(filePath),
+              page: detachedNoteDraft.page,
+              quote: detachedNoteDraft.quote,
+              text,
+              color: detachedNoteDraft.color,
+              createdAt: now,
+              updatedAt: now,
+            },
+          ]
+    await persistDetachedNotes(nextNotes)
+    const savedId = detachedNoteDraft.id ?? `pdf-note-${now}`
+    setDetachedNoteDraft(null)
+    setSelectedDetachedNoteId(savedId)
+  }
+
+  const handleCancelDetachedNote = () => {
+    setDetachedNoteDraft(null)
+  }
+
+  const handleSelectDetachedNote = (note: PdfNote) => {
+    setActiveSidePanel('notes')
+    setSelectedDetachedNoteId(note.id)
+    setDetachedNoteDraft({
+      id: note.id,
+      page: note.page,
+      quote: note.quote,
+      text: note.text,
+      color: note.color,
+    })
+    if (note.page) {
+      goToPage(note.page, pageHeightForVirtual)
+    }
+  }
+
+  const handleDeleteDetachedNote = async (note: PdfNote) => {
+    const nextNotes = detachedNotes.filter((item) => item.id !== note.id)
+    await persistDetachedNotes(nextNotes)
+    if (selectedDetachedNoteId === note.id) {
+      setSelectedDetachedNoteId(null)
+    }
+    if (detachedNoteDraft?.id === note.id) {
+      setDetachedNoteDraft(null)
+    }
+  }
+
+  const handleUpdateSelectedDetachedNoteColor = async (color: string) => {
+    if (!selectedDetachedNote) return
+    const now = Date.now()
+    const nextNotes = detachedNotes.map((note) =>
+      note.id === selectedDetachedNote.id
+        ? {
+            ...note,
+            color,
+            updatedAt: now,
+          }
+        : note,
+    )
+    await persistDetachedNotes(nextNotes)
+    setSelectedDetachedNoteId(selectedDetachedNote.id)
+    if (detachedNoteDraft?.id === selectedDetachedNote.id) {
+      setDetachedNoteDraft({
+        ...detachedNoteDraft,
+        color,
+      })
+    }
+  }
+
+  const handleExportDetachedNotesMarkdown = async () => {
+    if (detachedNotes.length === 0) return
+    const markdown = buildStandaloneNotesMarkdown({
+      fileName: getPdfFileName(filePath),
+      notes: detachedNotes,
+    })
+    const suggestedFileName = buildStandaloneNotesFileName(getPdfFileName(filePath))
+
+    try {
+      if (isTauriEnv()) {
+        const outputPath = await saveDialog({
+          defaultPath: suggestedFileName,
+          filters: [{ name: 'Markdown 文件', extensions: ['md'] }],
+        })
+        if (!outputPath) return
+        const result = await writeFileNoRecent({
+          path: outputPath,
+          content: markdown,
+        })
+        if (!result.ok) {
+          throw new Error(result.error.message)
+        }
+      } else if (typeof window !== 'undefined') {
+        const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' })
+        const url = window.URL.createObjectURL(blob)
+        const anchor = window.document.createElement('a')
+        anchor.href = url
+        anchor.download = suggestedFileName
+        anchor.click()
+        window.URL.revokeObjectURL(url)
+      }
+      setAnnotationMessage(t('pdf.exportNotesSuccess', { fileName: suggestedFileName }))
+    } catch (error) {
+      setAnnotationMessage(
+        t('pdf.exportNotesFailed', {
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      )
+    }
   }
 
   const handleEditTextNote = useCallback((annotation: Annotation) => {
@@ -1309,55 +1938,6 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     }
   }
 
-  const handleSaveStandaloneNote = async (rawValue: string, nextRect: AnnotationRect) => {
-    const text = rawValue.trim()
-    if (!annotationDocument || !text) return
-
-    const draft = pendingStandaloneNoteDraft
-    const editingId = editingStandaloneNoteAnnotationId
-    if (!draft && !editingId) return
-
-    setSelectedAnnotationId(null)
-    setPendingStandaloneNoteDraft(null)
-    setEditingStandaloneNoteAnnotationId(null)
-    setOpenedNoteAnnotationId(null)
-    setNotePreviewPosition(null)
-    setAnnotationBusy(true)
-    setAnnotationMessage(t('pdf.savingAnnotation'))
-
-    const nextDocument = editingId
-      ? {
-          ...annotationDocument,
-          annotations: annotationDocument.annotations.map((annotation) =>
-            annotation.id === editingId
-              ? {
-                  ...annotation,
-                  rects: [nextRect],
-                  text,
-                  content: text,
-                  updatedAt: Date.now(),
-                }
-              : annotation,
-          ),
-          lastModified: Date.now(),
-        }
-      : appendAnnotation(
-          annotationDocument,
-          createNoteAnnotation(draft!.page, nextRect, text, selectedHighlightColor),
-        )
-
-    try {
-      await saveAnnotations(nextDocument.pdfHash, nextDocument)
-      setAnnotationDocument(nextDocument)
-      setAnnotationMessage(null)
-    } catch (saveError) {
-      const message = saveError instanceof Error ? saveError.message : String(saveError)
-      setAnnotationMessage(t('pdf.annotationSaveFailed', { message }))
-    } finally {
-      setAnnotationBusy(false)
-    }
-  }
-
   const handleAnnotationPreviewOpen = useCallback((annotation: Annotation | null) => {
     const note = annotation?.note?.trim()
     if (!annotation || !note) {
@@ -1396,35 +1976,6 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     setEditingFreeTextAnnotationId(null)
     setSelectedAnnotationId(null)
     setActiveFreeTextTool(true)
-  }
-
-  const handleStartStandaloneNote = () => {
-    handleAnnotationPreviewOpen(null)
-    setActiveMarkupTool(null)
-    setActiveShapeTool(null)
-    setActiveStampKey(null)
-    setActiveFreeTextTool(false)
-    setPendingNoteDraft(null)
-    setPendingNoteTargetAnnotationId(null)
-    setEditingTextNoteAnnotationId(null)
-    setNoteEditorPosition(null)
-    if (selectedStandaloneNoteAnnotation) {
-      setPendingStandaloneNoteDraft({
-        page: selectedStandaloneNoteAnnotation.page,
-        rect: selectedStandaloneNoteAnnotation.rects[0] ?? {
-          x1: 0.2,
-          y1: 0.2,
-          x2: 0.38,
-          y2: 0.26,
-        },
-      })
-      setEditingStandaloneNoteAnnotationId(selectedStandaloneNoteAnnotation.id)
-      setActiveStandaloneNoteTool(false)
-      return
-    }
-    setEditingStandaloneNoteAnnotationId(null)
-    setSelectedAnnotationId(null)
-    setActiveStandaloneNoteTool(true)
   }
 
   const handleAnnotationItemClick = (annotation: Annotation) => {
@@ -1530,13 +2081,6 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     setEditingFreeTextAnnotationId(null)
   }, [handleAnnotationPreviewOpen])
 
-  const handleViewportStandaloneNoteCreate = useCallback((draft: FreeTextDraft) => {
-    handleAnnotationPreviewOpen(null)
-    setSelectedAnnotationId(null)
-    setPendingStandaloneNoteDraft(draft)
-    setEditingStandaloneNoteAnnotationId(null)
-  }, [handleAnnotationPreviewOpen])
-
   const handleViewportStampCreate = useCallback((stamp: {
     page: number
     rect: AnnotationRect
@@ -1573,6 +2117,110 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
   const activeStampOption = activeStampKey
     ? STAMP_OPTIONS.find((option) => option.key === activeStampKey) ?? null
     : null
+  const markupToolOptions = useMemo(
+    () => TEXT_MARKUP_TOOL_OPTIONS.map((option) => ({
+      key: option.type,
+      label: t(option.labelKey),
+      icon: renderMarkupToolIcon(option.type),
+    })),
+    [t],
+  )
+  const shapeToolOptions = useMemo(
+    () => SHAPE_TOOL_OPTIONS.map((option) => ({
+      key: option.type,
+      label: t(option.labelKey),
+      icon: renderShapeToolIcon(option.type),
+    })),
+    [t],
+  )
+  const stampToolOptions = useMemo(
+    () => STAMP_OPTIONS.map((option) => ({
+      key: option.key,
+      label: t(option.labelKey),
+      icon: renderStampToolIcon(option.key),
+    })),
+    [t],
+  )
+  const isSelectTextToolActive =
+    activeMarkupTool === null &&
+    activeShapeTool === null &&
+    activeStampOption === null &&
+    !activeFreeTextTool &&
+    !activeStandaloneNoteTool &&
+    !isTextNoteArmed &&
+    !pendingNoteDraft &&
+    !pendingFreeTextDraft &&
+    !pendingStandaloneNoteDraft &&
+    !detachedNoteDraft
+  const isMarkupGroupActive = activeMarkupTool !== null
+  const isShapeGroupActive = activeShapeTool !== null
+  const isStampGroupActive = activeStampKey !== null || selectedStampAnnotation !== null
+
+  useEffect(() => {
+    savePersistedPdfToolGroups({
+      markup: preferredMarkupTool,
+      shape: preferredShapeTool,
+      stamp: preferredStampKey,
+    })
+  }, [preferredMarkupTool, preferredShapeTool, preferredStampKey])
+
+  const resetToolOverlays = useCallback(() => {
+    handleAnnotationPreviewOpen(null)
+    setIsTextNoteArmed(false)
+    setPendingNoteDraft(null)
+    setPendingNoteTargetAnnotationId(null)
+    setNoteEditorPosition(null)
+    setPendingFreeTextDraft(null)
+    setEditingFreeTextAnnotationId(null)
+    setPendingStandaloneNoteDraft(null)
+    setEditingStandaloneNoteAnnotationId(null)
+    setOpenGroupedToolMenu(null)
+  }, [handleAnnotationPreviewOpen])
+
+  const activateSelectTextMode = useCallback(() => {
+    resetToolOverlays()
+    setActiveMarkupTool(null)
+    setActiveShapeTool(null)
+    setActiveFreeTextTool(false)
+    setActiveStandaloneNoteTool(false)
+    setActiveStampKey(null)
+  }, [resetToolOverlays])
+
+  const activateMarkupTool = useCallback((tool: Extract<AnnotationType, 'highlight' | 'underline' | 'strikeout' | 'squiggly'>) => {
+    resetToolOverlays()
+    setActiveShapeTool(null)
+    setActiveFreeTextTool(false)
+    setActiveStandaloneNoteTool(false)
+    setActiveStampKey(null)
+    setActiveMarkupTool(tool)
+    if (selectionDraftRef.current && annotationDocument && !isAnnotationBusy) {
+      void handleAddHighlight(tool, selectedHighlightColor)
+    }
+  }, [annotationDocument, handleAddHighlight, isAnnotationBusy, resetToolOverlays, selectedHighlightColor])
+
+  const activateShapeTool = useCallback((tool: Extract<AnnotationType, 'square' | 'circle' | 'line' | 'arrow'>) => {
+    resetToolOverlays()
+    setActiveMarkupTool(null)
+    setActiveFreeTextTool(false)
+    setActiveStandaloneNoteTool(false)
+    setActiveStampKey(null)
+    setActiveShapeTool(tool)
+  }, [resetToolOverlays])
+
+  const activateStampTool = useCallback((stampKind: StampKind) => {
+    setActiveStampKey(stampKind)
+    if (selectedStampAnnotation && annotationDocument && !isAnnotationBusy) {
+      handleAnnotationPreviewOpen(null)
+      void handleUpdateSelectedStampKind(stampKind)
+      return
+    }
+    resetToolOverlays()
+    setActiveMarkupTool(null)
+    setActiveShapeTool(null)
+    setActiveFreeTextTool(false)
+    setActiveStandaloneNoteTool(false)
+    setActiveStampKey(stampKind)
+  }, [annotationDocument, handleAnnotationPreviewOpen, handleUpdateSelectedStampKind, isAnnotationBusy, resetToolOverlays, selectedStampAnnotation])
 
   const handleViewportAnnotationClick = useCallback((annotationId: string) => {
     const annotation = annotationDocument?.annotations.find((item) => item.id === annotationId) ?? null
@@ -1817,28 +2465,13 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
               <div className="pdf-highlight-color-row" aria-label={t('pdf.highlightColor')}>
                 <button
                   type="button"
-                  className={`pdf-highlight-tool-btn ${activeMarkupTool === null && activeShapeTool === null && activeStampOption === null && !activeFreeTextTool && !activeStandaloneNoteTool && !isTextNoteArmed && !pendingNoteDraft && !pendingFreeTextDraft && !pendingStandaloneNoteDraft ? 'active' : ''}`}
+                  className={`pdf-highlight-tool-btn ${isSelectTextToolActive ? 'active' : ''}`}
                   onMouseDown={(event) => {
                     event.preventDefault()
                   }}
-                  onClick={() => {
-                    setIsTextNoteArmed(false)
-                    setPendingNoteDraft(null)
-                    setPendingNoteTargetAnnotationId(null)
-                    setNoteEditorPosition(null)
-                    setPendingFreeTextDraft(null)
-                    setEditingFreeTextAnnotationId(null)
-                    setPendingStandaloneNoteDraft(null)
-                    setEditingStandaloneNoteAnnotationId(null)
-                    handleAnnotationPreviewOpen(null)
-                    setActiveMarkupTool(null)
-                    setActiveShapeTool(null)
-                    setActiveFreeTextTool(false)
-                    setActiveStandaloneNoteTool(false)
-                    setActiveStampKey(null)
-                  }}
+                  onClick={activateSelectTextMode}
                   aria-label={t('pdf.selectTextOnly')}
-                  aria-pressed={activeMarkupTool === null && activeShapeTool === null && activeStampOption === null && !activeFreeTextTool && !activeStandaloneNoteTool && !isTextNoteArmed && !pendingNoteDraft && !pendingFreeTextDraft && !pendingStandaloneNoteDraft}
+                  aria-pressed={isSelectTextToolActive}
                   title={t('pdf.selectTextOnly')}
                 >
                   <svg
@@ -1852,110 +2485,52 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                     />
                   </svg>
                 </button>
-                {TEXT_MARKUP_TOOL_OPTIONS.map((option) => (
-                  <button
-                    key={option.type}
-                    type="button"
-                    className={`pdf-highlight-tool-btn ${activeMarkupTool === option.type ? 'active' : ''}`}
-                    onMouseDown={(event) => {
-                      event.preventDefault()
-                    }}
-                    onClick={() => {
-                      handleAnnotationPreviewOpen(null)
-                      setActiveShapeTool(null)
-                      setActiveFreeTextTool(false)
-                      setActiveStandaloneNoteTool(false)
-                      setActiveStampKey(null)
-                      setActiveMarkupTool(option.type)
-                      setPendingFreeTextDraft(null)
-                      setEditingFreeTextAnnotationId(null)
-                      setPendingStandaloneNoteDraft(null)
-                      setEditingStandaloneNoteAnnotationId(null)
-                      if (selectionDraftRef.current && annotationDocument && !isAnnotationBusy) {
-                        void handleAddHighlight(option.type, selectedHighlightColor)
-                      }
-                    }}
-                    aria-label={t(option.labelKey)}
-                    aria-pressed={activeMarkupTool === option.type}
-                    title={t(option.labelKey)}
-                  >
-                    {renderMarkupToolIcon(option.type)}
-                  </button>
-                ))}
-                {SHAPE_TOOL_OPTIONS.map((option) => (
-                  <button
-                    key={option.type}
-                    type="button"
-                    className={`pdf-highlight-tool-btn ${activeShapeTool === option.type ? 'active' : ''}`}
-                    onMouseDown={(event) => {
-                      event.preventDefault()
-                    }}
-                    onClick={() => {
-                      handleAnnotationPreviewOpen(null)
-                      setActiveMarkupTool(null)
-                      setActiveFreeTextTool(false)
-                      setActiveStandaloneNoteTool(false)
-                      setActiveStampKey(null)
-                      setIsTextNoteArmed(false)
-                      setPendingNoteDraft(null)
-                      setPendingNoteTargetAnnotationId(null)
-                      setNoteEditorPosition(null)
-                      setPendingFreeTextDraft(null)
-                      setEditingFreeTextAnnotationId(null)
-                      setPendingStandaloneNoteDraft(null)
-                      setEditingStandaloneNoteAnnotationId(null)
-                      setActiveShapeTool(option.type)
-                    }}
-                    aria-label={t(option.labelKey)}
-                    aria-pressed={activeShapeTool === option.type}
-                    title={t(option.labelKey)}
-                  >
-                    {renderShapeToolIcon(option.type)}
-                  </button>
-                ))}
-                {STAMP_OPTIONS.map((option) => (
-                  <button
-                    key={option.key}
-                    type="button"
-                    className={`pdf-stamp-tool-btn ${activeStampKey === option.key || selectedStampAnnotation?.stampKind === option.key ? 'active' : ''}`}
-                    onMouseDown={(event) => {
-                      event.preventDefault()
-                    }}
-                    onClick={() => {
-                      setActiveStampKey(option.key)
-                      if (selectedStampAnnotation && annotationDocument && !isAnnotationBusy) {
-                        handleAnnotationPreviewOpen(null)
-                        void handleUpdateSelectedStampKind(option.key)
-                        return
-                      }
-                      handleAnnotationPreviewOpen(null)
-                      setActiveMarkupTool(null)
-                      setActiveShapeTool(null)
-                      setActiveFreeTextTool(false)
-                      setActiveStandaloneNoteTool(false)
-                      setIsTextNoteArmed(false)
-                      setPendingNoteDraft(null)
-                      setPendingNoteTargetAnnotationId(null)
-                      setNoteEditorPosition(null)
-                      setPendingFreeTextDraft(null)
-                      setEditingFreeTextAnnotationId(null)
-                      setPendingStandaloneNoteDraft(null)
-                      setEditingStandaloneNoteAnnotationId(null)
-                    }}
-                    aria-label={t(option.labelKey)}
-                    aria-pressed={activeStampKey === option.key || selectedStampAnnotation?.stampKind === option.key}
-                    title={t(option.labelKey)}
-                  >
-                    {renderStampToolIcon(option.key)}
-                  </button>
-                ))}
+                <GroupedToolButton
+                  active={isMarkupGroupActive}
+                  currentKey={preferredMarkupTool}
+                  options={markupToolOptions}
+                  menuOpen={openGroupedToolMenu === 'markup'}
+                  onMenuOpenChange={(open) => setOpenGroupedToolMenu(open ? 'markup' : null)}
+                  onActivate={activateMarkupTool}
+                  onChoose={(tool) => {
+                    setPreferredMarkupTool(tool)
+                    activateMarkupTool(tool)
+                  }}
+                />
+                <GroupedToolButton
+                  active={isShapeGroupActive}
+                  currentKey={preferredShapeTool}
+                  options={shapeToolOptions}
+                  menuOpen={openGroupedToolMenu === 'shape'}
+                  onMenuOpenChange={(open) => setOpenGroupedToolMenu(open ? 'shape' : null)}
+                  onActivate={activateShapeTool}
+                  onChoose={(tool) => {
+                    setPreferredShapeTool(tool)
+                    activateShapeTool(tool)
+                  }}
+                />
+                <GroupedToolButton
+                  active={isStampGroupActive}
+                  currentKey={preferredStampKey}
+                  options={stampToolOptions}
+                  menuOpen={openGroupedToolMenu === 'stamp'}
+                  onMenuOpenChange={(open) => setOpenGroupedToolMenu(open ? 'stamp' : null)}
+                  onActivate={activateStampTool}
+                  onChoose={(stampKind) => {
+                    setPreferredStampKey(stampKind)
+                    activateStampTool(stampKind)
+                  }}
+                />
                 <button
                   type="button"
                   className={`pdf-highlight-tool-btn ${(pendingNoteDraft || isTextNoteArmed) ? 'active' : ''}`}
                   onMouseDown={(event) => {
                     event.preventDefault()
                   }}
-                  onClick={handleStartTextNote}
+                  onClick={() => {
+                    setOpenGroupedToolMenu(null)
+                    handleStartTextNote()
+                  }}
                   aria-label={t('pdf.annotationTypes.text')}
                   aria-pressed={pendingNoteDraft !== null || isTextNoteArmed}
                   title={t('pdf.annotationTypes.text')}
@@ -1980,7 +2555,10 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                   onMouseDown={(event) => {
                     event.preventDefault()
                   }}
-                  onClick={handleStartFreeText}
+                  onClick={() => {
+                    setOpenGroupedToolMenu(null)
+                    handleStartFreeText()
+                  }}
                   aria-label={t('pdf.annotationTypes.freeText')}
                   aria-pressed={activeFreeTextTool || pendingFreeTextDraft !== null}
                   title={t('pdf.annotationTypes.freeText')}
@@ -1994,13 +2572,16 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                 </button>
                 <button
                   type="button"
-                  className={`pdf-highlight-tool-btn ${activeStandaloneNoteTool || pendingStandaloneNoteDraft ? 'active' : ''}`}
+                  className={`pdf-highlight-tool-btn ${activeSidePanel === 'notes' && (!!detachedNoteDraft || !!selectedDetachedNoteId) ? 'active' : ''}`}
                   onMouseDown={(event) => {
                     event.preventDefault()
                   }}
-                  onClick={handleStartStandaloneNote}
+                  onClick={() => {
+                    setOpenGroupedToolMenu(null)
+                    handleStartDetachedNote()
+                  }}
                   aria-label={t('pdf.annotationTypes.note')}
-                  aria-pressed={activeStandaloneNoteTool || pendingStandaloneNoteDraft !== null}
+                  aria-pressed={activeSidePanel === 'notes' && (!!detachedNoteDraft || !!selectedDetachedNoteId)}
                   title={t('pdf.annotationTypes.note')}
                   disabled={!annotationDocument || isAnnotationBusy}
                 >
@@ -2020,6 +2601,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                       event.preventDefault()
                     }}
                     onClick={() => {
+                      setOpenGroupedToolMenu(null)
                       setSelectedHighlightColor(option.value)
                       if (selectionDraftRef.current && annotationDocument && !isAnnotationBusy) {
                         if (activeMarkupTool === null) {
@@ -2027,6 +2609,17 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                         }
                         handleAnnotationPreviewOpen(null)
                         void handleAddHighlight(activeMarkupTool, option.value)
+                        return
+                      }
+                      if (detachedNoteDraft) {
+                        setDetachedNoteDraft({
+                          ...detachedNoteDraft,
+                          color: option.value,
+                        })
+                        return
+                      }
+                      if (selectedDetachedNote && !detachedNotesBusy) {
+                        void handleUpdateSelectedDetachedNoteColor(option.value)
                         return
                       }
                       if (selectedColorableAnnotation && !isAnnotationBusy) {
@@ -2179,16 +2772,14 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
               void handleSaveFreeText(value, rect)
             }}
             onFreeTextCancel={handleCancelFreeText}
-            activeNoteTool={activeStandaloneNoteTool}
-            onNoteCreate={handleViewportStandaloneNoteCreate}
-            onNoteResize={handleResizeFreeText}
-            editingNoteDraft={pendingStandaloneNoteDraft}
-            editingNoteAnnotationId={editingStandaloneNoteAnnotationId}
-            editingNoteInitialValue={standaloneNoteEditorInitialValue}
-            onNoteSave={(value, rect) => {
-              void handleSaveStandaloneNote(value, rect)
-            }}
-            onNoteCancel={handleCancelStandaloneNote}
+            activeNoteTool={false}
+            onNoteCreate={undefined}
+            onNoteResize={undefined}
+            editingNoteDraft={null}
+            editingNoteAnnotationId={null}
+            editingNoteInitialValue=""
+            onNoteSave={undefined}
+            onNoteCancel={undefined}
             activeStampKind={activeStampOption?.key ?? null}
             activeStampLabel={activeStampOption ? t(activeStampOption.labelKey) : null}
             activeStampSize={stampSize}
@@ -2232,13 +2823,69 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
           ) : null}
         </div>
         {annotationPanelOpen && (
-          <PdfAnnotationPanel
-            annotations={annotationDocument?.annotations ?? []}
-            selectedAnnotationId={selectedAnnotationId}
-            onAnnotationClick={handleAnnotationItemClick}
-            onAnnotationDoubleClick={handlePanelAnnotationDoubleClick}
-          />
+          <div className="pdf-side-panel">
+            <div className="pdf-side-panel-tabs">
+              <button
+                type="button"
+                className={`pdf-side-panel-tab ${activeSidePanel === 'annotations' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveSidePanel('annotations')
+                }}
+              >
+                {t('pdf.annotationPanelTitle')}
+              </button>
+              <button
+                type="button"
+                className={`pdf-side-panel-tab ${activeSidePanel === 'notes' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveSidePanel('notes')
+                }}
+              >
+                {t('pdf.notesPanelTitle')}
+              </button>
+            </div>
+            {activeSidePanel === 'annotations' ? (
+              <PdfAnnotationPanel
+                annotations={annotationDocument?.annotations ?? []}
+                selectedAnnotationId={selectedAnnotationId}
+                onAnnotationClick={handleAnnotationItemClick}
+                onAnnotationDoubleClick={handlePanelAnnotationDoubleClick}
+              />
+            ) : (
+              <PdfNotesPanel
+                notes={detachedNotes}
+                selectedNoteId={selectedDetachedNoteId}
+                busy={detachedNotesBusy}
+                onStartCreate={handleStartDetachedNote}
+                onExportMarkdown={() => {
+                  void handleExportDetachedNotesMarkdown()
+                }}
+                onSelectNote={handleSelectDetachedNote}
+                onDeleteNote={(note) => {
+                  void handleDeleteDetachedNote(note)
+                }}
+              />
+            )}
+          </div>
         )}
+        {detachedNoteDraft ? (
+          <DetachedNoteEditorOverlay
+            key={detachedNoteDraft.id ?? 'new'}
+            initialValue={detachedNoteDraft.text}
+            quote={detachedNoteDraft.quote}
+            page={detachedNoteDraft.page}
+            color={detachedNoteDraft.color}
+            placeholder={t('pdf.notePlaceholder')}
+            title={detachedNoteDraft.id ? t('common.edit') : t('pdf.newNote')}
+            cancelLabel={t('common.cancel')}
+            saveLabel={t('common.save')}
+            busy={detachedNotesBusy}
+            onCancel={handleCancelDetachedNote}
+            onSave={(value) => {
+              void handleSaveDetachedNote(value)
+            }}
+          />
+        ) : null}
       </div>
     </div>
   )

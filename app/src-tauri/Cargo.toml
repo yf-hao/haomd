@@ -44,3 +44,4 @@ futures-util = "0.3"
 rquickjs = "0.6"
 regex = "1"
 rusqlite = { version = "0.32", features = ["bundled", "modern_sqlite"] }
+lopdf = "0.35"

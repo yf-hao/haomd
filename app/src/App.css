@@ -2291,6 +2291,41 @@ button:disabled {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.pdf-side-panel {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pdf-side-panel-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-left: 1px solid var(--theme-border-subtle);
+  border-bottom: 1px solid var(--theme-border-subtle);
+  background: color-mix(in srgb, var(--theme-surface-panel) 86%, var(--theme-surface-preview) 14%);
+}
+
+.pdf-side-panel-tab {
+  min-height: 36px;
+  border: none;
+  border-right: 1px solid var(--theme-border-subtle);
+  background: transparent;
+  color: var(--theme-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pdf-side-panel-tab:last-child {
+  border-right: none;
+}
+
+.pdf-side-panel-tab.active {
+  background: var(--theme-surface-card-active);
+  color: var(--theme-text-default);
+}
+
 .pdf-viewer-main {
   min-width: 0;
   min-height: 0;
@@ -2459,6 +2494,143 @@ button:disabled {
   border-top: 1px dashed color-mix(in srgb, var(--theme-border-subtle) 78%, transparent);
 }
 
+.pdf-notes-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pdf-notes-panel-action {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 7px;
+  border: 1px solid var(--theme-border-toolbar);
+  background: var(--theme-surface-toolbar-button);
+  color: var(--theme-text-default);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.pdf-note-card-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--pdf-note-color) 28%, var(--theme-border-subtle) 72%);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--pdf-note-color) 10%, var(--theme-surface-card) 90%);
+  padding: 10px;
+}
+
+.pdf-note-card-meta {
+  font-size: 11px;
+  color: var(--theme-text-muted);
+}
+
+.pdf-note-card-quote {
+  margin: 0;
+  padding: 6px 0 6px 10px;
+  border-left: 2px solid var(--theme-border-subtle);
+  color: var(--theme-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pdf-note-card-input {
+  min-height: 120px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--pdf-note-color) 32%, var(--theme-border-input-strong) 68%);
+  background: var(--theme-surface-input);
+  color: var(--theme-text-default);
+  resize: vertical;
+  outline: none;
+}
+
+.pdf-note-card-actions,
+.pdf-note-card-list-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pdf-note-inline-btn {
+  border: none;
+  background: transparent;
+  color: var(--theme-text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.pdf-detached-note-editor-backdrop {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: calc(var(--z-modal, 1200) + 10);
+}
+
+.pdf-detached-note-editor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: min(420px, calc(100vw - 48px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: auto;
+  border: 1px solid var(--theme-border-subtle);
+  border-radius: 12px;
+  background: var(--theme-surface-modal);
+  box-shadow: 0 4px 12px rgb(15 23 42 / 0.08);
+  padding: 12px;
+  isolation: isolate;
+  contain: layout paint style;
+  will-change: transform;
+}
+
+.pdf-detached-note-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: move;
+  user-select: none;
+}
+
+.pdf-detached-note-editor-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--theme-text-default);
+}
+
+.pdf-detached-note-editor-input {
+  min-height: 180px;
+  contain: layout paint style;
+  border: 1px solid var(--theme-border-subtle);
+  border-radius: 8px;
+  background: var(--theme-surface-input);
+  overflow: hidden;
+}
+
+.pdf-detached-note-editor-input .cm-editor,
+.pdf-detached-note-editor-input .cm-scroller {
+  height: 100%;
+}
+
+.pdf-detached-note-editor-input .cm-editor {
+  font-size: 14px;
+}
+
+.pdf-detached-note-editor-input .cm-content {
+  padding: 8px 10px;
+}
+
+.pdf-detached-note-editor-input .cm-placeholder {
+  color: var(--theme-text-muted);
+}
+
 /* 顶部 PDF 工具栏：横向工具条布局 */
 .pdf-toolbar {
   display: flex;
@@ -2486,6 +2658,7 @@ button:disabled {
   min-width: 0;
   padding: 0;
   justify-content: center;
+  overflow: visible;
 }
 
 .pdf-toolbar-group-controls {
@@ -2504,9 +2677,8 @@ button:disabled {
 .pdf-toolbar-annotations {
   flex-wrap: nowrap;
   min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
+  overflow: visible;
+  scrollbar-width: none;
 }
 
 .pdf-toolbar-controls {
@@ -2520,6 +2692,77 @@ button:disabled {
   flex-wrap: nowrap;
   flex: 0 0 auto;
   white-space: nowrap;
+}
+
+.pdf-grouped-tool {
+  position: relative;
+  display: inline-flex;
+}
+
+.pdf-grouped-tool-trigger {
+  position: relative;
+  width: 24px;
+  height: 24px;
+}
+
+.pdf-grouped-tool-caret {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-top: 4px solid color-mix(in srgb, var(--theme-text-toolbar) 58%, transparent);
+  opacity: 0.88;
+}
+
+.pdf-grouped-tool-trigger.active .pdf-grouped-tool-caret {
+  border-top-color: color-mix(in srgb, var(--theme-accent-primary) 82%, transparent);
+}
+
+.pdf-grouped-tool-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: var(--z-popover);
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--theme-border-toolbar);
+  border-radius: 10px;
+  background: var(--theme-surface-toolbar);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--theme-shadow) 18%, transparent);
+}
+
+.pdf-grouped-tool-menu-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: color-mix(in srgb, var(--theme-text-toolbar) 78%, var(--theme-accent-primary) 22%);
+  cursor: pointer;
+  opacity: 0.78;
+  transition:
+    transform 0.08s ease,
+    opacity 0.15s ease,
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+.pdf-grouped-tool-menu-item:hover {
+  opacity: 0.96;
+  transform: translateY(-0.5px);
+}
+
+.pdf-grouped-tool-menu-item.active {
+  opacity: 1;
+  color: var(--theme-accent-primary);
+  background: color-mix(in srgb, var(--theme-accent-primary) 14%, transparent);
 }
 
 .pdf-highlight-color-swatch {

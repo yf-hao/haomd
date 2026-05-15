@@ -1755,15 +1755,30 @@ export function WorkspaceShell({
 
   const saveAsWithPdfGuard = useCallback(async () => {
     if (isPdfActive) {
-      setStatusMessage(t('workspace.saveUnsupportedPdf'))
-      return { ok: false as const, error: { code: 'UNSUPPORTED', message: t('workspace.saveAsUnsupportedPdfError'), traceId: undefined } }
+      if (!activePdfPath) {
+        setStatusMessage(t('workspace.saveUnsupportedPdf'))
+        return { ok: false as const, error: { code: 'UNSUPPORTED', message: t('workspace.saveAsUnsupportedPdfError'), traceId: undefined } }
+      }
+      try {
+        const { exportAnnotatedPdf } = await import('../modules/pdf/export/exportAnnotatedPdf')
+        await exportAnnotatedPdf({
+          filePath: activePdfPath,
+          setStatusMessage,
+          t,
+        })
+        return { ok: true as const, data: { path: activePdfPath } }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        setStatusMessage(t('workspace.exportAnnotatedPdfFailed', { message }))
+        return { ok: false as const, error: { code: 'UNKNOWN', message, traceId: undefined } }
+      }
     }
     const latest = syncLatestWysiwygToReact()
     if (latest !== null) {
       return await saveAs(latest)
     }
     return await saveAs()
-  }, [isPdfActive, saveAs, setStatusMessage, syncLatestWysiwygToReact, t])
+  }, [activePdfPath, isPdfActive, saveAs, setStatusMessage, syncLatestWysiwygToReact, t])
 
   const markPendingRestoreRef = useRef<((tabId: string) => void) | null>(null)
 
