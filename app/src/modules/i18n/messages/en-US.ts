@@ -371,6 +371,13 @@ export const enUSMessages: MessageDictionary = {
     notePlaceholder: 'Enter note content…',
     showAnnotationPanel: 'Show annotation panel',
     hideAnnotationPanel: 'Hide annotation panel',
+    shortcutsHelp: 'PDF shortcuts',
+    shortcutsHelpOpen: 'View PDF shortcuts',
+    shortcutsSections: {
+      tools: 'Tools',
+      actions: 'Actions',
+      colors: 'Colors',
+    },
     savingAnnotation: 'Saving annotation…',
     annotationLoadFailed: 'Failed to load annotations: {message}',
     annotationSaveFailed: 'Failed to save annotation: {message}',

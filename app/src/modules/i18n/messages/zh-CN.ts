@@ -370,6 +370,13 @@ export const zhCNMessages: MessageDictionary = {
     notePlaceholder: '输入批注内容…',
     showAnnotationPanel: '展开批注面板',
     hideAnnotationPanel: '关闭批注面板',
+    shortcutsHelp: 'PDF 快捷键',
+    shortcutsHelpOpen: '查看 PDF 快捷键',
+    shortcutsSections: {
+      tools: '工具切换',
+      actions: '操作',
+      colors: '颜色',
+    },
     savingAnnotation: '正在保存批注…',
     annotationLoadFailed: '加载批注失败：{message}',
     annotationSaveFailed: '保存批注失败：{message}',

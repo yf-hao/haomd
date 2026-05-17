@@ -29,6 +29,19 @@ export type LayoutCommandContext = StatusContext & {
   openSearch?: () => void
   editorZoom: number
   setEditorZoom: (value: number | ((prev: number) => number)) => void
+  isPdfActive?: boolean
+  onPdfZoomIn?: () => number | null
+  onPdfZoomOut?: () => number | null
+  onPdfZoomReset?: () => number | null
+  onPdfSelectTool?: () => void
+  onPdfActivateMarkupTool?: (tool: 'highlight' | 'underline' | 'strikeout' | 'squiggly') => void
+  onPdfActivateShapeTool?: (tool: 'square' | 'circle' | 'line' | 'arrow') => void
+  onPdfActivateStampTool?: () => void
+  onPdfActivateFreeTextTool?: () => void
+  onPdfAddNote?: () => void
+  onPdfAddDetachedNote?: () => void
+  onPdfDeleteSelected?: () => void
+  onPdfSelectColorIndex?: (index: number) => void
   editMode?: 'source' | 'wysiwyg'
   setEditMode?: (mode: 'source' | 'wysiwyg') => void
 }
@@ -290,6 +303,13 @@ function createLayoutCommands(ctx: LayoutCommandContext): CommandRegistry {
       ctx.setStatusMessage(tr(ctx, 'commands.aiChatDockRight', 'AI Chat：Dock 在右侧'))
     },
     zoom_in: () => {
+      if (ctx.isPdfActive && ctx.onPdfZoomIn) {
+        const percent = ctx.onPdfZoomIn()
+        if (typeof percent === 'number') {
+          ctx.setStatusMessage(tr(ctx, 'commands.pdfZoomPercent', `PDF Zoom：${percent}%`, { percent }))
+        }
+        return
+      }
       ctx.setEditorZoom((prev) => {
         const next = Math.min(EDITOR_ZOOM_MAX, prev + EDITOR_ZOOM_STEP)
         const percent = Math.round(next * 100)
@@ -298,6 +318,13 @@ function createLayoutCommands(ctx: LayoutCommandContext): CommandRegistry {
       })
     },
     zoom_out: () => {
+      if (ctx.isPdfActive && ctx.onPdfZoomOut) {
+        const percent = ctx.onPdfZoomOut()
+        if (typeof percent === 'number') {
+          ctx.setStatusMessage(tr(ctx, 'commands.pdfZoomPercent', `PDF Zoom：${percent}%`, { percent }))
+        }
+        return
+      }
       ctx.setEditorZoom((prev) => {
         const next = Math.max(EDITOR_ZOOM_MIN, prev - EDITOR_ZOOM_STEP)
         const percent = Math.round(next * 100)
@@ -306,6 +333,13 @@ function createLayoutCommands(ctx: LayoutCommandContext): CommandRegistry {
       })
     },
     zoom_reset: () => {
+      if (ctx.isPdfActive && ctx.onPdfZoomReset) {
+        const percent = ctx.onPdfZoomReset()
+        if (typeof percent === 'number') {
+          ctx.setStatusMessage(tr(ctx, 'commands.pdfZoomPercent', `PDF Zoom：${percent}%`, { percent }))
+        }
+        return
+      }
       const next = 1.0
       ctx.setEditorZoom(next)
       ctx.setStatusMessage(tr(ctx, 'commands.editorZoomPercent', 'Editor Zoom：100%', { percent: 100 }))
@@ -327,6 +361,111 @@ function createLayoutCommands(ctx: LayoutCommandContext): CommandRegistry {
           ? tr(ctx, 'commands.editModeWysiwyg', '编辑模式：所见即所得')
           : tr(ctx, 'commands.editModeSource', '编辑模式：源码'),
       )
+    },
+    pdf_tool_select: () => {
+      if (!ctx.isPdfActive) return
+      ctx.onPdfSelectTool?.()
+      ctx.setStatusMessage(tr(ctx, 'pdf.selectTextOnly', '仅选择文本'))
+    },
+    pdf_tool_highlight: () => {
+      if (!ctx.isPdfActive) return
+      ctx.onPdfActivateMarkupTool?.('highlight')
+      ctx.setStatusMessage(tr(ctx, 'pdf.annotationTypes.highlight', '高亮'))
+    },
+    pdf_tool_underline: () => {
+      if (!ctx.isPdfActive) return
+      ctx.onPdfActivateMarkupTool?.('underline')
+      ctx.setStatusMessage(tr(ctx, 'pdf.annotationTypes.underline', '下划线'))
+    },
+    pdf_tool_strikeout: () => {
+      if (!ctx.isPdfActive) return
+      ctx.onPdfActivateMarkupTool?.('strikeout')
+      ctx.setStatusMessage(tr(ctx, 'pdf.annotationTypes.strikeout', '删除线'))
+    },
+    pdf_tool_squiggly: () => {
+      if (!ctx.isPdfActive) return
+      ctx.onPdfActivateMarkupTool?.('squiggly')
+      ctx.setStatusMessage(tr(ctx, 'pdf.annotationTypes.squiggly', '波浪线'))
+    },
+    pdf_tool_square: () => {
+      if (!ctx.isPdfActive) return
+      ctx.onPdfActivateShapeTool?.('square')
+      ctx.setStatusMessage(tr(ctx, 'pdf.annotationTypes.square', '矩形'))
+    },
+    pdf_tool_circle: () => {
+      if (!ctx.isPdfActive) return
+      ctx.onPdfActivateShapeTool?.('circle')
+      ctx.setStatusMessage(tr(ctx, 'pdf.annotationTypes.circle', '圆形'))
+    },
+    pdf_tool_line: () => {
+      if (!ctx.isPdfActive) return
+      ctx.onPdfActivateShapeTool?.('line')
+      ctx.setStatusMessage(tr(ctx, 'pdf.annotationTypes.line', '直线'))
+    },
+    pdf_tool_arrow: () => {
+      if (!ctx.isPdfActive) return
+      ctx.onPdfActivateShapeTool?.('arrow')
+      ctx.setStatusMessage(tr(ctx, 'pdf.annotationTypes.arrow', '箭头'))
+    },
+    pdf_tool_stamp: () => {
+      if (!ctx.isPdfActive) return
+      ctx.onPdfActivateStampTool?.()
+      ctx.setStatusMessage(tr(ctx, 'pdf.annotationTypes.stamp', '图章'))
+    },
+    pdf_tool_free_text: () => {
+      if (!ctx.isPdfActive) return
+      ctx.onPdfActivateFreeTextTool?.()
+      ctx.setStatusMessage(tr(ctx, 'pdf.annotationTypes.freeText', '页面文字'))
+    },
+    pdf_add_note: () => {
+      if (!ctx.isPdfActive) return
+      ctx.onPdfAddNote?.()
+      ctx.setStatusMessage(tr(ctx, 'pdf.annotationTypes.text', '文本批注'))
+    },
+    pdf_add_detached_note: () => {
+      if (!ctx.isPdfActive) return
+      ctx.onPdfAddDetachedNote?.()
+      ctx.setStatusMessage(tr(ctx, 'pdf.annotationTypes.note', '独立笔记'))
+    },
+    pdf_delete_selected: () => {
+      if (!ctx.isPdfActive) return
+      ctx.onPdfDeleteSelected?.()
+    },
+    pdf_color_1: () => {
+      if (!ctx.isPdfActive) return
+      ctx.onPdfSelectColorIndex?.(0)
+    },
+    pdf_color_2: () => {
+      if (!ctx.isPdfActive) return
+      ctx.onPdfSelectColorIndex?.(1)
+    },
+    pdf_color_3: () => {
+      if (!ctx.isPdfActive) return
+      ctx.onPdfSelectColorIndex?.(2)
+    },
+    pdf_color_4: () => {
+      if (!ctx.isPdfActive) return
+      ctx.onPdfSelectColorIndex?.(3)
+    },
+    pdf_color_5: () => {
+      if (!ctx.isPdfActive) return
+      ctx.onPdfSelectColorIndex?.(4)
+    },
+    pdf_color_6: () => {
+      if (!ctx.isPdfActive) return
+      ctx.onPdfSelectColorIndex?.(5)
+    },
+    pdf_color_7: () => {
+      if (!ctx.isPdfActive) return
+      ctx.onPdfSelectColorIndex?.(6)
+    },
+    pdf_color_8: () => {
+      if (!ctx.isPdfActive) return
+      ctx.onPdfSelectColorIndex?.(7)
+    },
+    pdf_color_9: () => {
+      if (!ctx.isPdfActive) return
+      ctx.onPdfSelectColorIndex?.(8)
     },
   }
 }

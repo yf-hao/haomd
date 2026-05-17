@@ -244,6 +244,22 @@ export function WorkspaceShell({
   const [transientSearchQuery, setTransientSearchQuery] = useState<EditorTransientSearchQuery | null>(null)
   const [previewSelectionText, setPreviewSelectionText] = useState<string | null>(null)
   const pdfSelectionGetterRef = useRef<(() => string | null) | null>(null)
+  const pdfZoomActionsRef = useRef<{
+    zoomIn: () => number | null
+    zoomOut: () => number | null
+    zoomReset: () => number | null
+  } | null>(null)
+  const pdfShortcutActionsRef = useRef<{
+    selectTool: () => void
+    activateMarkupTool: (tool: 'highlight' | 'underline' | 'strikeout' | 'squiggly') => void
+    activateShapeTool: (tool: 'square' | 'circle' | 'line' | 'arrow') => void
+    activateStampTool: () => void
+    activateFreeTextTool: () => void
+    addNote: () => void
+    addDetachedNote: () => void
+    deleteSelected: () => void
+    selectColorIndex: (index: number) => void
+  } | null>(null)
   const wysiwygSelectionGetterRef = useRef<(() => string | null) | null>(null)
   const wysiwygMarkdownGetterRef = useRef<(() => string) | null>(null)
   const wysiwygOutlineNavigatorRef = useRef<((target: { headingIndex: number; text: string; level: 1 | 2 | 3 | 4 | 5 | 6 }) => boolean) | null>(null)
@@ -2719,6 +2735,19 @@ export function WorkspaceShell({
     layout, setLayout: setLayout as any, setShowPreview, setStatusMessage,
     aiChatMode, setAiChatMode, aiChatDockSide, setAiChatDockSide, aiChatOpen, aiChatOpenRef,
     editorZoom, setEditorZoom,
+    isPdfActive,
+    onPdfZoomIn: () => pdfZoomActionsRef.current?.zoomIn() ?? null,
+    onPdfZoomOut: () => pdfZoomActionsRef.current?.zoomOut() ?? null,
+    onPdfZoomReset: () => pdfZoomActionsRef.current?.zoomReset() ?? null,
+    onPdfSelectTool: () => pdfShortcutActionsRef.current?.selectTool(),
+    onPdfActivateMarkupTool: (tool: 'highlight' | 'underline' | 'strikeout' | 'squiggly') => pdfShortcutActionsRef.current?.activateMarkupTool(tool),
+    onPdfActivateShapeTool: (tool: 'square' | 'circle' | 'line' | 'arrow') => pdfShortcutActionsRef.current?.activateShapeTool(tool),
+    onPdfActivateStampTool: () => pdfShortcutActionsRef.current?.activateStampTool(),
+    onPdfActivateFreeTextTool: () => pdfShortcutActionsRef.current?.activateFreeTextTool(),
+    onPdfAddNote: () => pdfShortcutActionsRef.current?.addNote(),
+    onPdfAddDetachedNote: () => pdfShortcutActionsRef.current?.addDetachedNote(),
+    onPdfDeleteSelected: () => pdfShortcutActionsRef.current?.deleteSelected(),
+    onPdfSelectColorIndex: (index: number) => pdfShortcutActionsRef.current?.selectColorIndex(index),
     editMode, setEditMode: setEditModeWithFlush,
     confirmLoseChanges, hasUnsavedChanges, newDocument, setFilePath, applyOpenedContent,
     openFile, save: saveWithPdfGuard, saveAs: saveAsWithPdfGuard, handleShowRecent: undefined, clearRecentAll,
@@ -3423,6 +3452,12 @@ export function WorkspaceShell({
                             filePath={activeTab.path}
                             onRegisterSelectionGetter={(getter) => {
                               pdfSelectionGetterRef.current = getter
+                            }}
+                            onRegisterZoomActions={(actions) => {
+                              pdfZoomActionsRef.current = actions
+                            }}
+                            onRegisterShortcutActions={(actions) => {
+                              pdfShortcutActionsRef.current = actions
                             }}
                           />
                         )}

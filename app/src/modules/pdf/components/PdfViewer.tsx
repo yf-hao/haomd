@@ -804,12 +804,29 @@ export interface PdfViewerProps {
   filePath: string
   onClose?: () => void
   onRegisterSelectionGetter?: (getter: (() => string | null) | null) => void
+  onRegisterZoomActions?: (actions: {
+    zoomIn: () => number | null
+    zoomOut: () => number | null
+    zoomReset: () => number | null
+  } | null) => void
+  onRegisterShortcutActions?: (actions: {
+    selectTool: () => void
+    activateMarkupTool: (tool: Extract<AnnotationType, 'highlight' | 'underline' | 'strikeout' | 'squiggly'>) => void
+    activateShapeTool: (tool: Extract<AnnotationType, 'square' | 'circle' | 'line' | 'arrow'>) => void
+    activateStampTool: () => void
+    activateFreeTextTool: () => void
+    addNote: () => void
+    addDetachedNote: () => void
+    deleteSelected: () => void
+    selectColorIndex: (index: number) => void
+  } | null) => void
 }
 
-export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProps) {
+export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomActions, onRegisterShortcutActions }: PdfViewerProps) {
   const { t } = useI18n()
   const persistedToolGroups = useMemo(() => loadPersistedPdfToolGroups(), [])
   const viewportRef = useRef<PdfViewportHandle | null>(null)
+  const shortcutHelpButtonRef = useRef<HTMLButtonElement | null>(null)
   const selectionDraftRef = useRef<PdfSelectionDraft | null>(null)
   const pulseTimerRef = useRef<number | null>(null)
   const [scale, setScale] = useState(1.25)
@@ -843,6 +860,8 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
   const [pulsingAnnotationId, setPulsingAnnotationId] = useState<string | null>(null)
   const [annotationPanelOpen, setAnnotationPanelOpen] = useState(true)
   const [activeSidePanel, setActiveSidePanel] = useState<'annotations' | 'notes'>('annotations')
+  const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false)
+  const [shortcutHelpPosition, setShortcutHelpPosition] = useState<NoteEditorPosition | null>(null)
   const [clearSelectionSignal, setClearSelectionSignal] = useState(0)
   const [isTextNoteArmed, setIsTextNoteArmed] = useState(false)
   const [pendingNoteDraft, setPendingNoteDraft] = useState<PdfSelectionDraft | null>(null)
@@ -945,26 +964,34 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
   }, [basePageHeight])
 
   const handleZoomIn = () => {
+    let nextPercent: number | null = null
     setScale((prev) => {
       const next = Math.min(ZOOM_MAX, prev + ZOOM_STEP)
+      nextPercent = Math.round(next * 100)
       scrollToPageWithScale(currentPage, next)
       return next
     })
+    return nextPercent
   }
 
   const handleZoomOut = () => {
+    let nextPercent: number | null = null
     setScale((prev) => {
       const next = Math.max(ZOOM_MIN, prev - ZOOM_STEP)
+      nextPercent = Math.round(next * 100)
       scrollToPageWithScale(currentPage, next)
       return next
     })
+    return nextPercent
   }
 
   const handleZoomReset = () => {
     const next = 1.0
     setScale(next)
     scrollToPageWithScale(currentPage, next)
+    return Math.round(next * 100)
   }
+
 
   const handleZoomFitWidth = () => {
     const containerWidth = viewportRef.current?.getContainerWidth()
@@ -980,6 +1007,16 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     setScale(clamped)
     scrollToPageWithScale(currentPage, clamped)
   }
+
+  useEffect(() => {
+    if (!onRegisterZoomActions) return
+    onRegisterZoomActions({
+      zoomIn: handleZoomIn,
+      zoomOut: handleZoomOut,
+      zoomReset: handleZoomReset,
+    })
+    return () => onRegisterZoomActions(null)
+  }, [handleZoomIn, handleZoomOut, handleZoomReset, onRegisterZoomActions])
 
   const triggerAnnotationPulse = useCallback((annotationId: string) => {
     setPulsingAnnotationId(annotationId)
@@ -1756,6 +1793,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     }
   }
 
+
   const handleExportDetachedNotesMarkdown = async () => {
     if (detachedNotes.length === 0) return
     const markdown = buildStandaloneNotesMarkdown({
@@ -1949,6 +1987,46 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     setNotePreviewPosition(null)
   }, [])
 
+  const handleChooseHighlightColor = useCallback((color: string) => {
+    setOpenGroupedToolMenu(null)
+    setSelectedHighlightColor(color)
+    if (selectionDraftRef.current && annotationDocument && !isAnnotationBusy) {
+      if (activeMarkupTool === null) {
+        return
+      }
+      handleAnnotationPreviewOpen(null)
+      void handleAddHighlight(activeMarkupTool, color)
+      return
+    }
+    if (detachedNoteDraft) {
+      setDetachedNoteDraft({
+        ...detachedNoteDraft,
+        color,
+      })
+      return
+    }
+    if (selectedDetachedNote && !detachedNotesBusy) {
+      void handleUpdateSelectedDetachedNoteColor(color)
+      return
+    }
+    if (selectedColorableAnnotation && !isAnnotationBusy) {
+      handleAnnotationPreviewOpen(null)
+      void handleUpdateSelectedAnnotationColor(color)
+    }
+  }, [
+    activeMarkupTool,
+    annotationDocument,
+    detachedNoteDraft,
+    detachedNotesBusy,
+    handleAddHighlight,
+    handleAnnotationPreviewOpen,
+    handleUpdateSelectedAnnotationColor,
+    handleUpdateSelectedDetachedNoteColor,
+    isAnnotationBusy,
+    selectedColorableAnnotation,
+    selectedDetachedNote,
+  ])
+
   const handleStartFreeText = () => {
     handleAnnotationPreviewOpen(null)
     setActiveMarkupTool(null)
@@ -2117,28 +2195,82 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
   const activeStampOption = activeStampKey
     ? STAMP_OPTIONS.find((option) => option.key === activeStampKey) ?? null
     : null
+  const withShortcutLabel = useCallback((label: string, shortcut: string) => `${label} (${shortcut})`, [])
   const markupToolOptions = useMemo(
     () => TEXT_MARKUP_TOOL_OPTIONS.map((option) => ({
       key: option.type,
-      label: t(option.labelKey),
+      label: withShortcutLabel(
+        t(option.labelKey),
+        option.type === 'highlight'
+          ? 'H'
+          : option.type === 'underline'
+            ? 'U'
+            : option.type === 'strikeout'
+              ? 'J'
+              : 'Q',
+      ),
       icon: renderMarkupToolIcon(option.type),
     })),
-    [t],
+    [t, withShortcutLabel],
   )
   const shapeToolOptions = useMemo(
     () => SHAPE_TOOL_OPTIONS.map((option) => ({
       key: option.type,
-      label: t(option.labelKey),
+      label: withShortcutLabel(
+        t(option.labelKey),
+        option.type === 'square'
+          ? 'R'
+          : option.type === 'circle'
+            ? 'O'
+            : option.type === 'line'
+              ? 'L'
+              : 'A',
+      ),
       icon: renderShapeToolIcon(option.type),
     })),
-    [t],
+    [t, withShortcutLabel],
   )
   const stampToolOptions = useMemo(
     () => STAMP_OPTIONS.map((option) => ({
       key: option.key,
-      label: t(option.labelKey),
+      label: withShortcutLabel(t(option.labelKey), 'T'),
       icon: renderStampToolIcon(option.key),
     })),
+    [t, withShortcutLabel],
+  )
+  const pdfShortcutGroups = useMemo(
+    () => [
+      {
+        title: t('pdf.shortcutsSections.tools'),
+        items: [
+          ['V', t('pdf.selectTextOnly')],
+          ['H', t('pdf.annotationTypes.highlight')],
+          ['U', t('pdf.annotationTypes.underline')],
+          ['J', t('pdf.annotationTypes.strikeout')],
+          ['Q', t('pdf.annotationTypes.squiggly')],
+          ['R', t('pdf.annotationTypes.square')],
+          ['O', t('pdf.annotationTypes.circle')],
+          ['L', t('pdf.annotationTypes.line')],
+          ['A', t('pdf.annotationTypes.arrow')],
+          ['T', t('pdf.annotationTypes.stamp')],
+          ['F', t('pdf.annotationTypes.freeText')],
+          ['N', t('pdf.annotationTypes.text')],
+          ['Shift+N', t('pdf.annotationTypes.note')],
+        ],
+      },
+      {
+        title: t('pdf.shortcutsSections.actions'),
+        items: [
+          ['Delete / Backspace', t('pdf.deleteHighlight')],
+        ],
+      },
+      {
+        title: t('pdf.shortcutsSections.colors'),
+        items: [
+          ['1-9', t('pdf.highlightColor')],
+        ],
+      },
+    ],
     [t],
   )
   const isSelectTextToolActive =
@@ -2221,6 +2353,65 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     setActiveStandaloneNoteTool(false)
     setActiveStampKey(stampKind)
   }, [annotationDocument, handleAnnotationPreviewOpen, handleUpdateSelectedStampKind, isAnnotationBusy, resetToolOverlays, selectedStampAnnotation])
+
+  const handleShortcutActivateMarkupTool = useCallback((tool: Extract<AnnotationType, 'highlight' | 'underline' | 'strikeout' | 'squiggly'>) => {
+    setPreferredMarkupTool(tool)
+    activateMarkupTool(tool)
+  }, [activateMarkupTool])
+
+  const handleShortcutActivateShapeTool = useCallback((tool: Extract<AnnotationType, 'square' | 'circle' | 'line' | 'arrow'>) => {
+    setPreferredShapeTool(tool)
+    activateShapeTool(tool)
+  }, [activateShapeTool])
+
+  const handleDeleteSelected = useCallback(() => {
+    if (selectedAnnotationId) {
+      handleAnnotationPreviewOpen(null)
+      void handleDeleteHighlight()
+      return
+    }
+    if (selectedDetachedNote) {
+      void handleDeleteDetachedNote(selectedDetachedNote)
+    }
+  }, [
+    handleAnnotationPreviewOpen,
+    handleDeleteDetachedNote,
+    handleDeleteHighlight,
+    selectedAnnotationId,
+    selectedDetachedNote,
+  ])
+
+  useEffect(() => {
+    if (!onRegisterShortcutActions) return
+    onRegisterShortcutActions({
+      selectTool: activateSelectTextMode,
+      activateMarkupTool: handleShortcutActivateMarkupTool,
+      activateShapeTool: handleShortcutActivateShapeTool,
+      activateStampTool: () => activateStampTool(preferredStampKey),
+      activateFreeTextTool: handleStartFreeText,
+      addNote: handleStartTextNote,
+      addDetachedNote: handleStartDetachedNote,
+      deleteSelected: handleDeleteSelected,
+      selectColorIndex: (index) => {
+        const option = HIGHLIGHT_COLOR_OPTIONS[index]
+        if (!option) return
+        handleChooseHighlightColor(option.value)
+      },
+    })
+    return () => onRegisterShortcutActions(null)
+  }, [
+    activateSelectTextMode,
+    activateStampTool,
+    handleChooseHighlightColor,
+    handleDeleteSelected,
+    handleStartDetachedNote,
+    handleStartFreeText,
+    handleStartTextNote,
+    handleShortcutActivateMarkupTool,
+    handleShortcutActivateShapeTool,
+    onRegisterShortcutActions,
+    preferredStampKey,
+  ])
 
   const handleViewportAnnotationClick = useCallback((annotationId: string) => {
     const annotation = annotationDocument?.annotations.find((item) => item.id === annotationId) ?? null
@@ -2444,6 +2635,55 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
     }
   }, [openedNoteAnnotation, pendingNoteDraft, currentPage, scale])
 
+  useEffect(() => {
+    if (!shortcutHelpOpen) return
+    const updatePosition = () => {
+      const button = shortcutHelpButtonRef.current
+      if (!button) return
+      const rect = button.getBoundingClientRect()
+      const width = 320
+      const left = Math.min(
+        Math.max(8, rect.right - width),
+        Math.max(8, window.innerWidth - width - 8),
+      )
+      setShortcutHelpPosition({
+        top: rect.bottom + 10,
+        left,
+      })
+    }
+
+    updatePosition()
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (!(target instanceof Element)) return
+      if (target.closest('.pdf-shortcuts-popover, .pdf-shortcuts-help-btn')) return
+      setShortcutHelpOpen(false)
+    }
+    const handleResize = () => {
+      updatePosition()
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      setShortcutHelpOpen(false)
+    }
+    window.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('resize', handleResize)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('resize', handleResize)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [shortcutHelpOpen])
+
+  useEffect(() => {
+    if (!shortcutHelpOpen) {
+      setShortcutHelpPosition(null)
+    }
+  }, [shortcutHelpOpen])
+
   if (loading) {
     return <div className="pdf-viewer">正在加载 PDF…</div>
   }
@@ -2470,9 +2710,9 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                     event.preventDefault()
                   }}
                   onClick={activateSelectTextMode}
-                  aria-label={t('pdf.selectTextOnly')}
+                  aria-label={withShortcutLabel(t('pdf.selectTextOnly'), 'V')}
                   aria-pressed={isSelectTextToolActive}
-                  title={t('pdf.selectTextOnly')}
+                  title={withShortcutLabel(t('pdf.selectTextOnly'), 'V')}
                 >
                   <svg
                     className="pdf-highlight-tool-arrow"
@@ -2531,9 +2771,9 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                     setOpenGroupedToolMenu(null)
                     handleStartTextNote()
                   }}
-                  aria-label={t('pdf.annotationTypes.text')}
+                  aria-label={withShortcutLabel(t('pdf.annotationTypes.text'), 'N')}
                   aria-pressed={pendingNoteDraft !== null || isTextNoteArmed}
-                  title={t('pdf.annotationTypes.text')}
+                  title={withShortcutLabel(t('pdf.annotationTypes.text'), 'N')}
                   disabled={(!annotationDocument || isAnnotationBusy) || (!selectionDraftRef.current && !selectedAnnotatableAnnotation && !pendingNoteDraft)}
                 >
                   <svg className="pdf-markup-tool-icon pdf-markup-tool-icon--text-note" viewBox="0 0 20 20" aria-hidden="true">
@@ -2559,9 +2799,9 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                     setOpenGroupedToolMenu(null)
                     handleStartFreeText()
                   }}
-                  aria-label={t('pdf.annotationTypes.freeText')}
+                  aria-label={withShortcutLabel(t('pdf.annotationTypes.freeText'), 'F')}
                   aria-pressed={activeFreeTextTool || pendingFreeTextDraft !== null}
-                  title={t('pdf.annotationTypes.freeText')}
+                  title={withShortcutLabel(t('pdf.annotationTypes.freeText'), 'F')}
                   disabled={!annotationDocument || isAnnotationBusy}
                 >
                   <svg className="pdf-markup-tool-icon" viewBox="0 0 20 20" aria-hidden="true">
@@ -2580,9 +2820,9 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                     setOpenGroupedToolMenu(null)
                     handleStartDetachedNote()
                   }}
-                  aria-label={t('pdf.annotationTypes.note')}
+                  aria-label={withShortcutLabel(t('pdf.annotationTypes.note'), 'Shift+N')}
                   aria-pressed={activeSidePanel === 'notes' && (!!detachedNoteDraft || !!selectedDetachedNoteId)}
-                  title={t('pdf.annotationTypes.note')}
+                  title={withShortcutLabel(t('pdf.annotationTypes.note'), 'Shift+N')}
                   disabled={!annotationDocument || isAnnotationBusy}
                 >
                   <svg className="pdf-markup-tool-icon" viewBox="0 0 20 20" aria-hidden="true">
@@ -2601,35 +2841,11 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                       event.preventDefault()
                     }}
                     onClick={() => {
-                      setOpenGroupedToolMenu(null)
-                      setSelectedHighlightColor(option.value)
-                      if (selectionDraftRef.current && annotationDocument && !isAnnotationBusy) {
-                        if (activeMarkupTool === null) {
-                          return
-                        }
-                        handleAnnotationPreviewOpen(null)
-                        void handleAddHighlight(activeMarkupTool, option.value)
-                        return
-                      }
-                      if (detachedNoteDraft) {
-                        setDetachedNoteDraft({
-                          ...detachedNoteDraft,
-                          color: option.value,
-                        })
-                        return
-                      }
-                      if (selectedDetachedNote && !detachedNotesBusy) {
-                        void handleUpdateSelectedDetachedNoteColor(option.value)
-                        return
-                      }
-                      if (selectedColorableAnnotation && !isAnnotationBusy) {
-                        handleAnnotationPreviewOpen(null)
-                        void handleUpdateSelectedAnnotationColor(option.value)
-                      }
+                      handleChooseHighlightColor(option.value)
                     }}
-                    aria-label={t(`pdf.highlightColors.${option.key}`)}
+                    aria-label={withShortcutLabel(t(`pdf.highlightColors.${option.key}`), String(HIGHLIGHT_COLOR_OPTIONS.indexOf(option) + 1))}
                     aria-pressed={selectedHighlightColor === option.value && isColorPaletteActive}
-                    title={t(`pdf.highlightColors.${option.key}`)}
+                    title={withShortcutLabel(t(`pdf.highlightColors.${option.key}`), String(HIGHLIGHT_COLOR_OPTIONS.indexOf(option) + 1))}
                   />
                 ))}
               </div>
@@ -2655,70 +2871,108 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                     : t('pdf.deleteHighlightDisabled')
                 }
               />
+              <button
+                ref={shortcutHelpButtonRef}
+                type="button"
+                className={`pdf-highlight-tool-btn pdf-shortcuts-help-btn ${shortcutHelpOpen ? 'active' : ''}`}
+                onClick={() => {
+                  setShortcutHelpOpen((prev) => !prev)
+                }}
+                aria-label={t('pdf.shortcutsHelpOpen')}
+                title={t('pdf.shortcutsHelpOpen')}
+              >
+                <svg className="pdf-markup-tool-icon" viewBox="0 0 20 20" aria-hidden="true">
+                  <path d="M10 14.2V14.3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M7.8 7.6C7.8 6.38 8.79 5.4 10 5.4C11.21 5.4 12.2 6.3 12.2 7.44C12.2 8.33 11.73 8.88 10.92 9.37C10.24 9.79 9.95 10.08 9.95 10.9" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+                  <circle cx="10" cy="10" r="7.2" fill="none" stroke="currentColor" strokeWidth="1.7" />
+                </svg>
+              </button>
               {annotationMessage ? <div className="pdf-annotation-status">{annotationMessage}</div> : null}
             </div>
           </div>
 
           <div className="pdf-toolbar-group pdf-toolbar-group-controls">
             <div className="pdf-toolbar-section pdf-toolbar-controls">
-              <div className="pdf-page-current-wrapper">
-                <input
-                  type="text"
-                  className="pdf-page-input-pill"
-                  value={pageInput}
-                  onChange={handlePageInputChange}
-                  onBlur={handlePageInputBlur}
-                  onKeyDown={handlePageInputKeyDown}
-                  inputMode="numeric"
-                />
+              <div className="pdf-control-cluster pdf-control-cluster-page">
+                <button
+                  type="button"
+                  className="pdf-icon-btn pdf-icon-btn-nav"
+                  onClick={handlePrev}
+                  disabled={currentPage <= 1}
+                  aria-label="上一页"
+                  title="上一页"
+                >
+                  <svg className="pdf-toolbar-control-icon" viewBox="0 0 20 20" aria-hidden="true">
+                    <path d="M10 5.2L15.6 12.8H4.4L10 5.2Z" fill="currentColor" />
+                  </svg>
+                </button>
+                <div className="pdf-page-current-wrapper">
+                  <input
+                    type="text"
+                    className="pdf-page-input-pill"
+                    value={pageInput}
+                    onChange={handlePageInputChange}
+                    onBlur={handlePageInputBlur}
+                    onKeyDown={handlePageInputKeyDown}
+                    inputMode="numeric"
+                  />
+                  <div className="pdf-page-total-text">/ {pageCount}</div>
+                </div>
+                <button
+                  type="button"
+                  className="pdf-icon-btn pdf-icon-btn-nav"
+                  onClick={handleNext}
+                  disabled={currentPage >= pageCount}
+                  aria-label="下一页"
+                  title="下一页"
+                >
+                  <svg className="pdf-toolbar-control-icon" viewBox="0 0 20 20" aria-hidden="true">
+                    <path d="M10 14.8L4.4 7.2H15.6L10 14.8Z" fill="currentColor" />
+                  </svg>
+                </button>
               </div>
-              <div className="pdf-page-total-text">{pageCount}</div>
-              <button
-                type="button"
-                className="pdf-icon-btn"
-                onClick={handlePrev}
-                disabled={currentPage <= 1}
-                aria-label="上一页"
-              >
-                ▲
-              </button>
-              <button
-                type="button"
-                className="pdf-icon-btn"
-                onClick={handleNext}
-                disabled={currentPage >= pageCount}
-                aria-label="下一页"
-              >
-                ▼
-              </button>
-              <button
-                type="button"
-                className="pdf-icon-btn pdf-icon-btn--zoom-reset"
-                onClick={handleZoomReset}
-                disabled={Math.abs(scale - 1) < 0.001}
-                aria-label="恢复实际大小"
-              >
-                <span className="pdf-icon-glyph" aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                className="pdf-icon-btn"
-                onClick={handleZoomFitWidth}
-                disabled={!basePageWidth}
-                aria-label="适配宽度"
-              >
-                ⤢
-              </button>
-              <div className="pdf-zoom-percent">{zoomPercent}%</div>
-              <div className="pdf-zoom-icon-row">
+              <div className="pdf-control-cluster pdf-control-cluster-zoom">
+                <button
+                  type="button"
+                  className="pdf-icon-btn pdf-icon-btn--zoom-reset"
+                  onClick={handleZoomReset}
+                  disabled={Math.abs(scale - 1) < 0.001}
+                  aria-label="恢复实际大小"
+                  title="恢复实际大小"
+                >
+                  <svg className="pdf-toolbar-control-icon" viewBox="0 0 20 20" aria-hidden="true">
+                    <rect x="3.4" y="4.8" width="13.2" height="10.4" rx="2.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+                    <rect x="6.4" y="7.3" width="7.2" height="5.4" rx="1" fill="none" stroke="currentColor" strokeWidth="1.8" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  className="pdf-icon-btn"
+                  onClick={handleZoomFitWidth}
+                  disabled={!basePageWidth}
+                  aria-label="适配宽度"
+                  title="适配宽度"
+                >
+                  <svg className="pdf-toolbar-control-icon" viewBox="0 0 20 20" aria-hidden="true">
+                    <path d="M3.8 7.5V4.8H6.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M16.2 7.5V4.8H13.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M3.8 12.5V15.2H6.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M16.2 12.5V15.2H13.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                <div className="pdf-zoom-percent">{zoomPercent}%</div>
                 <button
                   type="button"
                   className="pdf-icon-btn"
                   onClick={handleZoomIn}
                   disabled={scale >= ZOOM_MAX}
                   aria-label="放大"
+                  title="放大"
                 >
-                  +
+                  <svg className="pdf-toolbar-control-icon" viewBox="0 0 20 20" aria-hidden="true">
+                    <path d="M10 5.2V14.8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    <path d="M5.2 10H14.8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
                 </button>
                 <button
                   type="button"
@@ -2726,9 +2980,14 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                   onClick={handleZoomOut}
                   disabled={scale <= ZOOM_MIN}
                   aria-label="缩小"
+                  title="缩小"
                 >
-                  -
+                  <svg className="pdf-toolbar-control-icon" viewBox="0 0 20 20" aria-hidden="true">
+                    <path d="M5.2 10H14.8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
                 </button>
+              </div>
+              <div className="pdf-control-cluster pdf-control-cluster-panel">
                 <button
                   type="button"
                   className={`pdf-icon-btn ${annotationPanelOpen ? 'active' : ''}`}
@@ -2738,13 +2997,44 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter }: PdfViewerProp
                   aria-label={annotationPanelOpen ? t('pdf.hideAnnotationPanel') : t('pdf.showAnnotationPanel')}
                   title={annotationPanelOpen ? t('pdf.hideAnnotationPanel') : t('pdf.showAnnotationPanel')}
                 >
-                  ≣
+                  <svg className="pdf-toolbar-control-icon" viewBox="0 0 20 20" aria-hidden="true">
+                    <path d="M4.5 6H15.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+                    <path d="M4.5 10H15.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+                    <path d="M4.5 14H15.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+                  </svg>
                 </button>
               </div>
             </div>
           </div>
         </div>
       </div>
+      {shortcutHelpOpen && shortcutHelpPosition ? (
+        <div
+          className="pdf-shortcuts-popover"
+          role="dialog"
+          aria-label={t('pdf.shortcutsHelp')}
+          style={{
+            position: 'fixed',
+            top: `${shortcutHelpPosition.top}px`,
+            left: `${shortcutHelpPosition.left}px`,
+          }}
+        >
+          <div className="pdf-shortcuts-title">{t('pdf.shortcutsHelp')}</div>
+          {pdfShortcutGroups.map((group) => (
+            <div key={group.title} className="pdf-shortcuts-group">
+              <div className="pdf-shortcuts-group-title">{group.title}</div>
+              <div className="pdf-shortcuts-list">
+                {group.items.map(([shortcut, label]) => (
+                  <div key={`${group.title}-${shortcut}`} className="pdf-shortcuts-item">
+                    <kbd className="pdf-shortcuts-kbd">{shortcut}</kbd>
+                    <span className="pdf-shortcuts-label">{label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
       <div className={`pdf-viewer-content ${annotationPanelOpen ? '' : 'annotation-panel-collapsed'}`}>
         <div className="pdf-viewer-main">
           <PdfViewport

@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { CommandContext, CommandRegistry } from '../modules/commands/registry'
 import { createCommandRegistry } from '../modules/commands/registry'
+import {
+  EDITOR_SHORTCUT_SCOPE_SELECTORS,
+  FORMAT_SHORTCUT_ACTIONS,
+  FORMAT_SHORTCUT_BINDINGS,
+  PDF_SHORTCUT_BINDINGS,
+} from '../modules/commands/shortcutBindings'
 import { onMenuAction } from '../modules/platform/menuEvents'
 import type { IAiClient } from '../modules/ai/client'
 import { createDefaultAiClient } from '../modules/ai/client'
@@ -47,7 +53,24 @@ export type CommandSystemParams = CommandContext & {
 
 export function useCommandSystem(params: CommandSystemParams) {
   const MENU_DUPLICATE_WINDOW_MS = 250
-  const menuDedupActions = new Set(['ai_chat', 'ai_ask_file', 'ai_ask_selection', 'find'])
+  const menuDedupActions = new Set([
+    'save',
+    'save_as',
+    'open_file',
+    'open_folder',
+    'new_file',
+    'close_file',
+    'toggle_preview',
+    'toggle_preview_only',
+    'zoom_in',
+    'zoom_out',
+    'zoom_reset',
+    'ai_chat',
+    'ai_ask_file',
+    'ai_ask_selection',
+    'find',
+    ...FORMAT_SHORTCUT_ACTIONS,
+  ])
   const {
     layout,
     setLayout,
@@ -61,6 +84,19 @@ export function useCommandSystem(params: CommandSystemParams) {
     hasOpenTabs,
     editorZoom,
     setEditorZoom,
+    isPdfActive,
+    onPdfZoomIn,
+    onPdfZoomOut,
+    onPdfZoomReset,
+    onPdfSelectTool,
+    onPdfActivateMarkupTool,
+    onPdfActivateShapeTool,
+    onPdfActivateStampTool,
+    onPdfActivateFreeTextTool,
+    onPdfAddNote,
+    onPdfAddDetachedNote,
+    onPdfDeleteSelected,
+    onPdfSelectColorIndex,
     editMode,
     setEditMode,
     confirmLoseChanges,
@@ -162,6 +198,19 @@ export function useCommandSystem(params: CommandSystemParams) {
         setAiChatOpening,
         editorZoom,
         setEditorZoom,
+        isPdfActive,
+        onPdfZoomIn,
+        onPdfZoomOut,
+        onPdfZoomReset,
+        onPdfSelectTool,
+        onPdfActivateMarkupTool,
+        onPdfActivateShapeTool,
+        onPdfActivateStampTool,
+        onPdfActivateFreeTextTool,
+        onPdfAddNote,
+        onPdfAddDetachedNote,
+        onPdfDeleteSelected,
+        onPdfSelectColorIndex,
         editMode,
         setEditMode,
         confirmLoseChanges,
@@ -221,6 +270,19 @@ export function useCommandSystem(params: CommandSystemParams) {
       setAiChatOpening,
       editorZoom,
       setEditorZoom,
+      isPdfActive,
+      onPdfZoomIn,
+      onPdfZoomOut,
+      onPdfZoomReset,
+      onPdfSelectTool,
+      onPdfActivateMarkupTool,
+      onPdfActivateShapeTool,
+      onPdfActivateStampTool,
+      onPdfActivateFreeTextTool,
+      onPdfAddNote,
+      onPdfAddDetachedNote,
+      onPdfDeleteSelected,
+      onPdfSelectColorIndex,
       editMode,
       setEditMode,
       confirmLoseChanges,
@@ -298,14 +360,57 @@ export function useCommandSystem(params: CommandSystemParams) {
       return false
     }
 
-    const onKey = (e: KeyboardEvent) => {
-      const meta = e.metaKey || e.ctrlKey
-      const key = e.key.toLowerCase()
-      if (!meta) return
+    const isEditorShortcutContext = (el: Element | null): boolean => {
+      if (!el) return false
+      if (!(el instanceof Element)) return false
+      return Boolean(el.closest(EDITOR_SHORTCUT_SCOPE_SELECTORS))
+    }
 
+    const isTextEntryContext = (el: Element | null): boolean => {
+      if (!el) return false
+      if (isEditableElement(el)) return true
+      if (!(el instanceof Element)) return false
+      return (
+        Boolean(el.closest(EDITOR_SHORTCUT_SCOPE_SELECTORS)) ||
+        Boolean(el.closest('.pdf-note-editor, .pdf-detached-note-editor'))
+      )
+    }
+
+    const onKey = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase()
       const isMac = typeof navigator !== 'undefined' && /macintosh|mac os x/i.test(navigator.userAgent)
       const isTauri = typeof isTauriEnv === 'function' && !!isTauriEnv()
       const isWysiwygMode = editMode === 'wysiwyg'
+      const activeElement = typeof document !== 'undefined'
+        ? (document.activeElement as Element | null)
+        : null
+      const meta = e.metaKey || e.ctrlKey
+
+      if (isPdfActive && !meta && !e.altKey) {
+        if (isTextEntryContext(activeElement)) return
+        const pdfBinding = PDF_SHORTCUT_BINDINGS.find((binding) => binding.matches(e, key))
+        if (pdfBinding) {
+          e.preventDefault()
+          void dispatchAction(pdfBinding.action)
+          return
+        }
+      }
+
+      if (!meta) return
+
+      const formatBinding = FORMAT_SHORTCUT_BINDINGS.find((binding) => binding.matches(e, key))
+      const prefersMenuAccelerator = isTauri && isMac
+
+      if (formatBinding) {
+        if (formatBinding.requireEditorContext && !isEditorShortcutContext(activeElement)) {
+          return
+        }
+        if (prefersMenuAccelerator) return
+        if (formatBinding.action === 'format_insert_code_block' && isWysiwygMode) return
+        e.preventDefault()
+        void dispatchAction(formatBinding.action)
+        return
+      }
 
       // 避免在 Tauri Mac 中与系统菜单快捷键（会发 menu://action 事件）重复触发。
       // Windows/Linux 下原生菜单加速键响应不如 Mac 稳定，且 JS 处理与原生通常不冲突，因此仅在 Mac 下阻断。
@@ -393,7 +498,7 @@ export function useCommandSystem(params: CommandSystemParams) {
         }
         // Zoom In: Ctrl+=  (Windows/Linux 下原生菜单加速键不稳定，需 JS 兜底；
         // 同时 preventDefault 阻止 WebView2 默认缩放)
-        if (isTauri && isMac && !isWysiwygMode) return
+        if (isTauri && isMac && !isWysiwygMode && !isPdfActive) return
         e.preventDefault()
         void dispatchAction('zoom_in')
       } else if (key === '-') {
@@ -403,12 +508,12 @@ export function useCommandSystem(params: CommandSystemParams) {
           return
         }
         // Zoom Out: Ctrl+-
-        if (isTauri && isMac && !isWysiwygMode) return
+        if (isTauri && isMac && !isWysiwygMode && !isPdfActive) return
         e.preventDefault()
         void dispatchAction('zoom_out')
       } else if (key === '0' && e.shiftKey) {
         // Reset Zoom: Ctrl+Shift+0
-        if (isTauri && isMac && editMode !== 'wysiwyg') return
+        if (isTauri && isMac && editMode !== 'wysiwyg' && !isPdfActive) return
         e.preventDefault()
         void dispatchAction('zoom_reset')
       }
@@ -416,7 +521,7 @@ export function useCommandSystem(params: CommandSystemParams) {
 
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [adjustWysiwygFontSize, dispatchAction, editMode, isTauriEnv])
+  }, [adjustWysiwygFontSize, dispatchAction, editMode, isPdfActive, isTauriEnv])
 
   // 统一处理来自 Tauri 原生菜单的命令分发
   useEffect(() => {

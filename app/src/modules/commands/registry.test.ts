@@ -21,6 +21,23 @@ function createMockCtx(): CommandContext & {
     aiChatDockSide: 'right',
     setAiChatDockSide: vi.fn(),
     aiChatOpen: false,
+    editorZoom: 1,
+    setEditorZoom: vi.fn(),
+    isPdfActive: false,
+    onPdfZoomIn: vi.fn().mockReturnValue(150),
+    onPdfZoomOut: vi.fn().mockReturnValue(100),
+    onPdfZoomReset: vi.fn().mockReturnValue(100),
+    onPdfSelectTool: vi.fn(),
+    onPdfActivateMarkupTool: vi.fn(),
+    onPdfActivateShapeTool: vi.fn(),
+    onPdfActivateStampTool: vi.fn(),
+    onPdfActivateFreeTextTool: vi.fn(),
+    onPdfAddNote: vi.fn(),
+    onPdfAddDetachedNote: vi.fn(),
+    onPdfDeleteSelected: vi.fn(),
+    onPdfSelectColorIndex: vi.fn(),
+    editMode: 'source',
+    setEditMode: vi.fn(),
 
     // FileCommandContext
     confirmLoseChanges: () => true,
@@ -117,6 +134,61 @@ describe('command registry - layout & view', () => {
 
     registry.view_ai_chat_dock_right()
     expect(ctx.setAiChatDockSide).toHaveBeenCalledWith('right')
+  })
+
+  it('zoom commands should control PDF when current tab is a PDF', () => {
+    const ctx = createMockCtx()
+    ctx.isPdfActive = true
+    const registry = createCommandRegistry(ctx)
+
+    registry.zoom_in()
+    registry.zoom_out()
+    registry.zoom_reset()
+
+    expect(ctx.onPdfZoomIn).toHaveBeenCalledTimes(1)
+    expect(ctx.onPdfZoomOut).toHaveBeenCalledTimes(1)
+    expect(ctx.onPdfZoomReset).toHaveBeenCalledTimes(1)
+    expect(ctx.setEditorZoom).not.toHaveBeenCalled()
+    expect(ctx.setStatusMessage).toHaveBeenCalledWith('PDF Zoom：150%')
+    expect(ctx.setStatusMessage).toHaveBeenCalledWith('PDF Zoom：100%')
+  })
+
+  it('zoom commands should keep using editor zoom when current tab is not a PDF', () => {
+    const ctx = createMockCtx()
+    const registry = createCommandRegistry(ctx)
+
+    registry.zoom_in()
+    registry.zoom_out()
+    registry.zoom_reset()
+
+    expect(ctx.onPdfZoomIn).not.toHaveBeenCalled()
+    expect(ctx.onPdfZoomOut).not.toHaveBeenCalled()
+    expect(ctx.onPdfZoomReset).not.toHaveBeenCalled()
+    expect(ctx.setEditorZoom).toHaveBeenCalledTimes(3)
+  })
+
+  it('pdf annotation commands should dispatch through PDF callbacks only when current tab is a PDF', () => {
+    const ctx = createMockCtx()
+    ctx.isPdfActive = true
+    const registry = createCommandRegistry(ctx)
+
+    registry.pdf_tool_highlight()
+    registry.pdf_tool_arrow()
+    registry.pdf_tool_stamp()
+    registry.pdf_tool_free_text()
+    registry.pdf_add_note()
+    registry.pdf_add_detached_note()
+    registry.pdf_color_3()
+    registry.pdf_delete_selected()
+
+    expect(ctx.onPdfActivateMarkupTool).toHaveBeenCalledWith('highlight')
+    expect(ctx.onPdfActivateShapeTool).toHaveBeenCalledWith('arrow')
+    expect(ctx.onPdfActivateStampTool).toHaveBeenCalledTimes(1)
+    expect(ctx.onPdfActivateFreeTextTool).toHaveBeenCalledTimes(1)
+    expect(ctx.onPdfAddNote).toHaveBeenCalledTimes(1)
+    expect(ctx.onPdfAddDetachedNote).toHaveBeenCalledTimes(1)
+    expect(ctx.onPdfSelectColorIndex).toHaveBeenCalledWith(2)
+    expect(ctx.onPdfDeleteSelected).toHaveBeenCalledTimes(1)
   })
 })
 
