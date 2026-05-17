@@ -2,6 +2,50 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.11.0] - 2026-05-17
+
+### 中文
+
+本次版本（v0.11.0）带来了两大核心模块的深度革新：全新的 PDF 批注系统与基于 FTS5 的高性能全局检索引擎，助力深度创作者实现对多格式文献的沉浸式研读和毫秒级的知识唤醒。
+
+#### 💡 主要更新
+*   **全新 PDF 批注系统 (PDF Annotation System)**：
+    *   **重构渲染核心**：引入 `PdfViewport` 与 `PdfOfficialPageView` 组件，大幅优化了 PDF 渲染管线的性能与流畅度。
+    *   **丰富标记工具**：支持文本高亮 (Highlights) 与几何形状 (Shapes) 标注，满足多样化的文献研读习惯。
+    *   **随笔联动与导出**：支持独立随笔批注 (Standalone notes)，支持批注导出分离，将研读灵感无缝转化为交付资产。
+    *   **交互细节优化**：批注面板支持按页面位置自动排序，重构了文本选择流与快捷键支持。
+*   **高性能全局搜索引擎 (FTS5 Search Engine)**：
+    *   **千万级全文检索**：底层接入高性能 FTS5 检索引擎，并支持多线程并行扫描配置 (Parallel scan settings)，提供极致的毫秒级检索响应。
+    *   **结构化检索交互**：全新搜索面板支持结构化元数据展示与即时预览渲染 (Preview rendering)，查找定位一目了然。
+    *   **定位焦点同步**：优化了编辑器检索聚焦与高亮清除效果。
+*   **系统与体验优化**：
+    *   **加载体验升级**：预览区域新增平滑加载遮罩状态。
+    *   **macOS 适配**：修复了首次使用菜单与快捷键的竞态冲突问题。
+    *   **会话机制微调**：优化了 AI 消息流的渲染顺序，并精简移除了无用的本地反馈消息。
+
+---
+
+### English
+
+Version v0.11.0 introduces two major architectural upgrades: a next-generation PDF Annotation System and a high-performance FTS5-powered Global Search Engine, designed to help deep creators research literature immersively and retrieve knowledge with millisecond-level speeds.
+
+#### 💡 Key Updates
+*   **Next-Generation PDF Annotation System**:
+    *   **Overhauled Render Engine**: Shipped `PdfViewport` and `PdfOfficialPageView` components, drastically optimizing PDF rendering performance and visual fidelity.
+    *   **Rich Markup Tools**: Added support for text highlights and shape annotations (rectangles, circles, lines) to cater to diverse reading styles.
+    *   **Detached Notes & Export**: Supported standalone note annotations and detached annotated exports, transforming reading insights into persistent, deliverable assets.
+    *   **UX Refinements**: Integrated automatic sorting by page position in the annotation drawer, alongside revamped text selection flows and keyboard shortcut mappings.
+*   **High-Performance Global Search Engine**:
+    *   **FTS5 Full-Text Retrieval**: Rebuilt search indexing on top of SQLite's FTS5, introducing parallel scanning configurations to ensure millisecond-level responses across massive document libraries.
+    *   **Structured Search Interface**: Redesigned the search drawer to display structured file metadata and real-time preview rendering.
+    *   **Editor Highlight Synchronization**: Refined search result navigation with unified focus alignment and clean highlight teardowns.
+*   **System Improvements & Fixes**:
+    *   **Visual Smoothness**: Added a loading overlay and smooth state management in the document preview panel.
+    *   **macOS Race Condition Fix**: Patched a startup bug to prevent race conditions on macOS menus and hotkeys.
+    *   **Session Refinements**: Tweaked message display ordering algorithms and discarded redundant local feedback messages.
+
+---
+
 ## [v0.10.0] - 2026-04-25
 
 ### 中文
