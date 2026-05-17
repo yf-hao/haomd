@@ -508,7 +508,7 @@ pub fn import_editor_background_image_sync(
 
 #[tauri::command]
 async fn load_editor_settings_cfg(app: &AppHandle) -> Result<EditorSettingsCfg, String> {
-    let path: PathBuf = match editor_settings_path(&app) {
+    let path: PathBuf = match editor_settings_path(app) {
         Ok(p) => p,
         Err(err) => return Err(format!("获取 editor_settings 路径失败: {err}")),
     };
@@ -988,11 +988,13 @@ async fn load_editor_settings_cfg(app: &AppHandle) -> Result<EditorSettingsCfg, 
 }
 
 pub async fn load_search_settings_cfg(app: &AppHandle) -> SearchSettingsCfg {
-    let default_cfg = default_editor_settings().search.unwrap_or(SearchSettingsCfg {
-        fts5_enabled: Some(false),
-        parallel_scan_enabled: Some(true),
-        parallel_scan_workers: None,
-    });
+    let default_cfg = default_editor_settings()
+        .search
+        .unwrap_or(SearchSettingsCfg {
+            fts5_enabled: Some(false),
+            parallel_scan_enabled: Some(true),
+            parallel_scan_workers: None,
+        });
     match load_editor_settings_cfg(app).await {
         Ok(cfg) => cfg.search.unwrap_or(default_cfg),
         Err(_) => default_cfg,
@@ -1004,11 +1006,7 @@ pub async fn load_editor_settings(app: AppHandle) -> ResultPayload<EditorSetting
     let trace = new_trace_id();
     match load_editor_settings_cfg(&app).await {
         Ok(cfg) => ok(cfg, trace),
-        Err(message) => err_payload(
-            ErrorCode::IoError,
-            message,
-            trace,
-        ),
+        Err(message) => err_payload(ErrorCode::IoError, message, trace),
     }
 }
 

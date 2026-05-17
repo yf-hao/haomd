@@ -20,8 +20,8 @@ const MAX_INDEXABLE_FILE_BYTES: u64 = 2 * 1024 * 1024;
 const META_KEY_SCOPE_SIGNATURE: &str = "scope_signature";
 const SEARCH_INDEX_BATCH_WINDOW_MS: u64 = 300;
 const SEARCHABLE_EXTENSIONS: &[&str] = &[
-    "md", "markdown", "mdx", "txt", "json", "yaml", "yml", "toml", "ini", "env", "ts", "tsx",
-    "js", "jsx", "css", "html", "sql", "csv",
+    "md", "markdown", "mdx", "txt", "json", "yaml", "yml", "toml", "ini", "env", "ts", "tsx", "js",
+    "jsx", "css", "html", "sql", "csv",
 ];
 static SEARCH_DB_WRITE_LOCK: StdMutex<()> = StdMutex::new(());
 static SEARCH_INDEX_UPDATE_QUEUE: OnceCell<UnboundedSender<SearchIndexOp>> = OnceCell::new();
@@ -30,7 +30,10 @@ static SEARCH_INDEX_UPDATE_QUEUE: OnceCell<UnboundedSender<SearchIndexOp>> = Onc
 enum SearchIndexOp {
     Upsert(PathBuf),
     Delete(PathBuf),
-    Rename { old_path: PathBuf, new_path: PathBuf },
+    Rename {
+        old_path: PathBuf,
+        new_path: PathBuf,
+    },
 }
 
 pub fn ensure_search_index_for_scope<R: Runtime>(
@@ -61,7 +64,9 @@ pub fn rebuild_search_index_for_scope<R: Runtime>(
         .map_err(|_| "获取搜索索引写锁失败".to_string())?;
 
     let files = gather_search_files(scope);
-    let tx = conn.transaction().map_err(|err| format!("启动搜索索引事务失败: {err}"))?;
+    let tx = conn
+        .transaction()
+        .map_err(|err| format!("启动搜索索引事务失败: {err}"))?;
     tx.execute("DELETE FROM search_files", [])
         .map_err(|err| format!("清空搜索文件索引失败: {err}"))?;
     tx.execute("DELETE FROM search_fts", [])
@@ -129,7 +134,9 @@ pub fn search_indexed_candidates<R: Runtime>(
         .prepare("SELECT path FROM search_fts WHERE search_fts MATCH ?1 LIMIT ?2")
         .map_err(|err| format!("准备 FTS5 查询失败: {err}"))?;
     let rows = stmt
-        .query_map(params![fts_query, limit as i64], |row| row.get::<_, String>(0))
+        .query_map(params![fts_query, limit as i64], |row| {
+            row.get::<_, String>(0)
+        })
         .map_err(|err| format!("执行 FTS5 查询失败: {err}"))?;
 
     let mut seen = HashSet::new();
@@ -144,11 +151,17 @@ pub fn search_indexed_candidates<R: Runtime>(
     Ok(files)
 }
 
-pub fn upsert_search_index_entry<R: Runtime>(app: &AppHandle<R>, path: &Path) -> Result<(), String> {
+pub fn upsert_search_index_entry<R: Runtime>(
+    app: &AppHandle<R>,
+    path: &Path,
+) -> Result<(), String> {
     enqueue_search_index_op(app, SearchIndexOp::Upsert(path.to_path_buf()))
 }
 
-pub fn delete_search_index_entry<R: Runtime>(app: &AppHandle<R>, path: &Path) -> Result<(), String> {
+pub fn delete_search_index_entry<R: Runtime>(
+    app: &AppHandle<R>,
+    path: &Path,
+) -> Result<(), String> {
     enqueue_search_index_op(app, SearchIndexOp::Delete(path.to_path_buf()))
 }
 
@@ -249,8 +262,7 @@ fn open_search_db<R: Runtime>(app: &AppHandle<R>) -> Result<Connection, String> 
     let Some(settings_dir) = notes_path.parent() else {
         return Err("无法确定 notes_config.json 所在目录".to_string());
     };
-    std::fs::create_dir_all(settings_dir)
-        .map_err(|err| format!("创建搜索索引目录失败: {err}"))?;
+    std::fs::create_dir_all(settings_dir).map_err(|err| format!("创建搜索索引目录失败: {err}"))?;
     let db_path = settings_dir.join(SEARCH_DB_FILE_NAME);
     Connection::open(db_path).map_err(|err| format!("打开搜索索引数据库失败: {err}"))
 }
@@ -314,8 +326,11 @@ fn upsert_search_index_entry_with_conn(conn: &Connection, path: &Path) -> Result
         .unwrap_or(0);
     let size_bytes = meta.len() as i64;
 
-    conn.execute("DELETE FROM search_fts WHERE path = ?1", params![display_path.clone()])
-        .map_err(|err| format!("清理旧 FTS5 索引失败: {err}"))?;
+    conn.execute(
+        "DELETE FROM search_fts WHERE path = ?1",
+        params![display_path.clone()],
+    )
+    .map_err(|err| format!("清理旧 FTS5 索引失败: {err}"))?;
     conn.execute(
         "INSERT OR REPLACE INTO search_files(path, scope_root, mtime_ms, size_bytes) VALUES (?1, ?2, ?3, ?4)",
         params![display_path.clone(), display_path.clone(), mtime_ms, size_bytes],
@@ -362,7 +377,13 @@ fn rename_search_index_entry_with_conn(
            ELSE ?2 || substr(path, ?5)
          END
          WHERE path = ?1 OR path LIKE ?3",
-        params![old_display, new_display, old_like_prefix, new_display, old_prefix_len_plus_one],
+        params![
+            old_display,
+            new_display,
+            old_like_prefix,
+            new_display,
+            old_prefix_len_plus_one
+        ],
     )
     .map_err(|err| format!("更新搜索文件索引路径失败: {err}"))?;
     conn.execute(
@@ -372,7 +393,13 @@ fn rename_search_index_entry_with_conn(
            ELSE ?2 || substr(path, ?5)
          END
          WHERE path = ?1 OR path LIKE ?3",
-        params![old_display, new_display, old_like_prefix, new_display, old_prefix_len_plus_one],
+        params![
+            old_display,
+            new_display,
+            old_like_prefix,
+            new_display,
+            old_prefix_len_plus_one
+        ],
     )
     .map_err(|err| format!("更新 FTS5 索引路径失败: {err}"))?;
 
@@ -419,9 +446,11 @@ fn load_meta_value(conn: &Connection, key: &str) -> Result<Option<String>, Strin
 }
 
 fn count_indexed_files(conn: &Connection) -> Result<usize, String> {
-    conn.query_row("SELECT COUNT(*) FROM search_files", [], |row| row.get::<_, i64>(0))
-        .map(|count| count.max(0) as usize)
-        .map_err(|err| format!("统计搜索索引文件数失败: {err}"))
+    conn.query_row("SELECT COUNT(*) FROM search_files", [], |row| {
+        row.get::<_, i64>(0)
+    })
+    .map(|count| count.max(0) as usize)
+    .map_err(|err| format!("统计搜索索引文件数失败: {err}"))
 }
 
 fn resolve_scope_root(scope: &SearchScope, display_path: &str) -> String {
@@ -458,7 +487,10 @@ mod tests {
     }
 
     fn unique_dir(prefix: &str) -> PathBuf {
-        std::env::temp_dir().join(format!("{prefix}-{}", crate::new_trace_id().replace("trace_", "")))
+        std::env::temp_dir().join(format!(
+            "{prefix}-{}",
+            crate::new_trace_id().replace("trace_", "")
+        ))
     }
 
     #[test]
@@ -507,7 +539,9 @@ mod tests {
         rename_search_index_entry_with_conn(&conn, &old_dir, &new_dir).expect("rename index");
 
         let indexed_path: String = conn
-            .query_row("SELECT path FROM search_files LIMIT 1", [], |row| row.get(0))
+            .query_row("SELECT path FROM search_files LIMIT 1", [], |row| {
+                row.get(0)
+            })
             .expect("load indexed path");
         assert_eq!(indexed_path, normalize_display_path(&new_file));
 

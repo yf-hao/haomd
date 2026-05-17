@@ -8,7 +8,11 @@ fn parse_rgb(color: &str) -> [f32; 3] {
     if hex.len() != 6 {
         return [1.0, 0.0, 0.0];
     }
-    let parse = |slice: &str| u8::from_str_radix(slice, 16).ok().map(|value| value as f32 / 255.0);
+    let parse = |slice: &str| {
+        u8::from_str_radix(slice, 16)
+            .ok()
+            .map(|value| value as f32 / 255.0)
+    };
     match (parse(&hex[0..2]), parse(&hex[2..4]), parse(&hex[4..6])) {
         (Some(red), Some(green), Some(blue)) => [red, green, blue],
         _ => [1.0, 0.0, 0.0],
@@ -32,7 +36,15 @@ fn icon_y(left: f64, bottom: f64, width: f64, height: f64, y: f64) -> f64 {
     origin_y + size * ((20.0 - y) / 20.0)
 }
 
-fn move_to(operations: &mut Vec<Operation>, left: f64, bottom: f64, width: f64, height: f64, x: f64, y: f64) {
+fn move_to(
+    operations: &mut Vec<Operation>,
+    left: f64,
+    bottom: f64,
+    width: f64,
+    height: f64,
+    x: f64,
+    y: f64,
+) {
     operations.push(Operation::new(
         "m",
         vec![
@@ -42,7 +54,15 @@ fn move_to(operations: &mut Vec<Operation>, left: f64, bottom: f64, width: f64, 
     ));
 }
 
-fn line_to(operations: &mut Vec<Operation>, left: f64, bottom: f64, width: f64, height: f64, x: f64, y: f64) {
+fn line_to(
+    operations: &mut Vec<Operation>,
+    left: f64,
+    bottom: f64,
+    width: f64,
+    height: f64,
+    x: f64,
+    y: f64,
+) {
     operations.push(Operation::new(
         "l",
         vec![
@@ -52,6 +72,7 @@ fn line_to(operations: &mut Vec<Operation>, left: f64, bottom: f64, width: f64, 
     ));
 }
 
+#[allow(clippy::too_many_arguments)]
 fn cubic_to(
     operations: &mut Vec<Operation>,
     left: f64,
@@ -78,18 +99,82 @@ fn cubic_to(
     ));
 }
 
-fn circle_path(operations: &mut Vec<Operation>, left: f64, bottom: f64, width: f64, height: f64, cx: f64, cy: f64, r: f64) {
+#[allow(clippy::too_many_arguments)]
+fn circle_path(
+    operations: &mut Vec<Operation>,
+    left: f64,
+    bottom: f64,
+    width: f64,
+    height: f64,
+    cx: f64,
+    cy: f64,
+    r: f64,
+) {
     let kappa = 0.552_284_749_831_f64;
     let ox = r * kappa;
     let oy = r * kappa;
     move_to(operations, left, bottom, width, height, cx - r, cy);
-    cubic_to(operations, left, bottom, width, height, cx - r, cy + oy, cx - ox, cy + r, cx, cy + r);
-    cubic_to(operations, left, bottom, width, height, cx + ox, cy + r, cx + r, cy + oy, cx + r, cy);
-    cubic_to(operations, left, bottom, width, height, cx + r, cy - oy, cx + ox, cy - r, cx, cy - r);
-    cubic_to(operations, left, bottom, width, height, cx - ox, cy - r, cx - r, cy - oy, cx - r, cy);
+    cubic_to(
+        operations,
+        left,
+        bottom,
+        width,
+        height,
+        cx - r,
+        cy + oy,
+        cx - ox,
+        cy + r,
+        cx,
+        cy + r,
+    );
+    cubic_to(
+        operations,
+        left,
+        bottom,
+        width,
+        height,
+        cx + ox,
+        cy + r,
+        cx + r,
+        cy + oy,
+        cx + r,
+        cy,
+    );
+    cubic_to(
+        operations,
+        left,
+        bottom,
+        width,
+        height,
+        cx + r,
+        cy - oy,
+        cx + ox,
+        cy - r,
+        cx,
+        cy - r,
+    );
+    cubic_to(
+        operations,
+        left,
+        bottom,
+        width,
+        height,
+        cx - ox,
+        cy - r,
+        cx - r,
+        cy - oy,
+        cx - r,
+        cy,
+    );
 }
 
-fn draw_important(operations: &mut Vec<Operation>, left: f64, bottom: f64, width: f64, height: f64) {
+fn draw_important(
+    operations: &mut Vec<Operation>,
+    left: f64,
+    bottom: f64,
+    width: f64,
+    height: f64,
+) {
     move_to(operations, left, bottom, width, height, 10.0, 3.6);
     line_to(operations, left, bottom, width, height, 11.6, 8.2);
     line_to(operations, left, bottom, width, height, 16.5, 8.3);
@@ -107,10 +192,18 @@ fn draw_question(operations: &mut Vec<Operation>, left: f64, bottom: f64, width:
     operations.push(Operation::new("J", vec![1.into()]));
     operations.push(Operation::new("j", vec![1.into()]));
     move_to(operations, left, bottom, width, height, 7.3, 7.6);
-    cubic_to(operations, left, bottom, width, height, 7.5, 5.9, 8.8, 4.9, 10.5, 4.9);
-    cubic_to(operations, left, bottom, width, height, 12.3, 4.9, 13.6, 6.0, 13.6, 7.6);
-    cubic_to(operations, left, bottom, width, height, 13.6, 8.8, 12.9, 9.5, 11.9, 10.1);
-    cubic_to(operations, left, bottom, width, height, 10.9, 10.7, 10.3, 11.3, 10.3, 12.4);
+    cubic_to(
+        operations, left, bottom, width, height, 7.5, 5.9, 8.8, 4.9, 10.5, 4.9,
+    );
+    cubic_to(
+        operations, left, bottom, width, height, 12.3, 4.9, 13.6, 6.0, 13.6, 7.6,
+    );
+    cubic_to(
+        operations, left, bottom, width, height, 13.6, 8.8, 12.9, 9.5, 11.9, 10.1,
+    );
+    cubic_to(
+        operations, left, bottom, width, height, 10.9, 10.7, 10.3, 11.3, 10.3, 12.4,
+    );
     line_to(operations, left, bottom, width, height, 10.3, 12.8);
     operations.push(Operation::new("S", vec![]));
     circle_path(operations, left, bottom, width, height, 10.3, 15.4, 1.1);
@@ -194,9 +287,15 @@ fn draw_pin(operations: &mut Vec<Operation>, left: f64, bottom: f64, width: f64,
     operations.push(Operation::new("J", vec![1.into()]));
     operations.push(Operation::new("j", vec![1.into()]));
     move_to(operations, left, bottom, width, height, 8.1, 5.3);
-    cubic_to(operations, left, bottom, width, height, 8.1, 4.2, 9.0, 3.3, 10.1, 3.3);
-    cubic_to(operations, left, bottom, width, height, 11.2, 3.3, 12.1, 4.2, 12.1, 5.3);
-    cubic_to(operations, left, bottom, width, height, 12.1, 5.9, 11.8, 6.5, 11.3, 6.9);
+    cubic_to(
+        operations, left, bottom, width, height, 8.1, 4.2, 9.0, 3.3, 10.1, 3.3,
+    );
+    cubic_to(
+        operations, left, bottom, width, height, 11.2, 3.3, 12.1, 4.2, 12.1, 5.3,
+    );
+    cubic_to(
+        operations, left, bottom, width, height, 12.1, 5.9, 11.8, 6.5, 11.3, 6.9,
+    );
     line_to(operations, left, bottom, width, height, 13.2, 9.6);
     line_to(operations, left, bottom, width, height, 10.8, 10.1);
     line_to(operations, left, bottom, width, height, 10.3, 15.5);
@@ -204,7 +303,9 @@ fn draw_pin(operations: &mut Vec<Operation>, left: f64, bottom: f64, width: f64,
     line_to(operations, left, bottom, width, height, 9.1, 10.1);
     line_to(operations, left, bottom, width, height, 6.7, 9.6);
     line_to(operations, left, bottom, width, height, 8.7, 6.9);
-    cubic_to(operations, left, bottom, width, height, 8.3, 6.5, 8.1, 5.9, 8.1, 5.3);
+    cubic_to(
+        operations, left, bottom, width, height, 8.3, 6.5, 8.1, 5.9, 8.1, 5.3,
+    );
     operations.push(Operation::new("S", vec![]));
 }
 
@@ -228,23 +329,88 @@ pub fn render(
     operations.push(Operation::new("q", vec![]));
     operations.push(Operation::new(
         "rg",
-        vec![Object::Real(color[0]), Object::Real(color[1]), Object::Real(color[2])],
+        vec![
+            Object::Real(color[0]),
+            Object::Real(color[1]),
+            Object::Real(color[2]),
+        ],
     ));
     operations.push(Operation::new(
         "RG",
-        vec![Object::Real(color[0]), Object::Real(color[1]), Object::Real(color[2])],
+        vec![
+            Object::Real(color[0]),
+            Object::Real(color[1]),
+            Object::Real(color[2]),
+        ],
     ));
-    operations.push(Operation::new("w", vec![Object::Real(((bounds.height * 0.08).max(1.2)) as f32)]));
+    operations.push(Operation::new(
+        "w",
+        vec![Object::Real(((bounds.height * 0.08).max(1.2)) as f32)],
+    ));
     match stamp_kind {
-        "important" => draw_important(operations, bounds.left, bounds.bottom, bounds.width, bounds.height),
-        "question" => draw_question(operations, bounds.left, bounds.bottom, bounds.width, bounds.height),
-        "todo" => draw_todo(operations, bounds.left, bounds.bottom, bounds.width, bounds.height),
-        "done" => draw_done(operations, bounds.left, bounds.bottom, bounds.width, bounds.height),
-        "warning" => draw_warning(operations, bounds.left, bounds.bottom, bounds.width, bounds.height),
-        "info" => draw_info(operations, bounds.left, bounds.bottom, bounds.width, bounds.height),
-        "flag" => draw_flag(operations, bounds.left, bounds.bottom, bounds.width, bounds.height),
-        "pin" => draw_pin(operations, bounds.left, bounds.bottom, bounds.width, bounds.height),
-        _ => draw_info(operations, bounds.left, bounds.bottom, bounds.width, bounds.height),
+        "important" => draw_important(
+            operations,
+            bounds.left,
+            bounds.bottom,
+            bounds.width,
+            bounds.height,
+        ),
+        "question" => draw_question(
+            operations,
+            bounds.left,
+            bounds.bottom,
+            bounds.width,
+            bounds.height,
+        ),
+        "todo" => draw_todo(
+            operations,
+            bounds.left,
+            bounds.bottom,
+            bounds.width,
+            bounds.height,
+        ),
+        "done" => draw_done(
+            operations,
+            bounds.left,
+            bounds.bottom,
+            bounds.width,
+            bounds.height,
+        ),
+        "warning" => draw_warning(
+            operations,
+            bounds.left,
+            bounds.bottom,
+            bounds.width,
+            bounds.height,
+        ),
+        "info" => draw_info(
+            operations,
+            bounds.left,
+            bounds.bottom,
+            bounds.width,
+            bounds.height,
+        ),
+        "flag" => draw_flag(
+            operations,
+            bounds.left,
+            bounds.bottom,
+            bounds.width,
+            bounds.height,
+        ),
+        "pin" => draw_pin(
+            operations,
+            bounds.left,
+            bounds.bottom,
+            bounds.width,
+            bounds.height,
+        ),
+        _ => draw_info(
+            operations,
+            bounds.left,
+            bounds.bottom,
+            bounds.width,
+            bounds.height,
+        ),
     }
     operations.push(Operation::new("Q", vec![]));
 }

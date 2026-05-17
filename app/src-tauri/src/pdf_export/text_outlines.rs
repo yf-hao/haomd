@@ -128,7 +128,11 @@ impl OutlineBuilder for PdfOutlineBuilder<'_> {
         let current = self
             .operations
             .last()
-            .and_then(|operation| operation.operands.get(operation.operands.len().saturating_sub(2)..))
+            .and_then(|operation| {
+                operation
+                    .operands
+                    .get(operation.operands.len().saturating_sub(2)..)
+            })
             .and_then(|coords| {
                 if coords.len() == 2 {
                     Some((

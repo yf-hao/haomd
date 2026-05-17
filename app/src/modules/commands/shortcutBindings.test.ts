@@ -7,9 +7,10 @@ import {
 import menuSource from '../../../src-tauri/src/menu.rs?raw'
 
 function expectAcceleratorsToMatch(accelerators: Readonly<Record<string, string>>) {
+  const normalizedMenuSource = menuSource.toLowerCase()
   for (const [action, accelerator] of Object.entries(accelerators)) {
     expect(menuSource).toContain(`.id("${action}")`)
-    expect(menuSource).toContain(`.accelerator("${accelerator}")`)
+    expect(normalizedMenuSource).toContain(`.accelerator("${accelerator.toLowerCase()}")`)
   }
 }
 

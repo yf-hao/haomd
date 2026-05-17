@@ -9,8 +9,8 @@ use std::path::{Path, PathBuf};
 use tauri::AppHandle;
 
 const SEARCHABLE_EXTENSIONS: &[&str] = &[
-    "md", "markdown", "mdx", "txt", "json", "yaml", "yml", "toml", "ini", "env", "ts", "tsx",
-    "js", "jsx", "css", "html", "sql", "csv",
+    "md", "markdown", "mdx", "txt", "json", "yaml", "yml", "toml", "ini", "env", "ts", "tsx", "js",
+    "jsx", "css", "html", "sql", "csv",
 ];
 const MAX_SEARCHABLE_FILE_BYTES: u64 = 2 * 1024 * 1024;
 const IGNORED_DIRECTORY_NAMES: &[&str] = &[".haomd"];
@@ -410,7 +410,8 @@ fn scan_files_in_parallel(
         for chunk in files.chunks(chunk_size) {
             let regex = regex.cloned();
             handles.push(scope.spawn(move || {
-                chunk.iter()
+                chunk
+                    .iter()
                     .map(|path| {
                         scan_single_file(
                             path,
@@ -435,6 +436,7 @@ fn scan_files_in_parallel(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn execute_scan_search(
     request: &SearchRequest,
     query: &str,
@@ -539,11 +541,7 @@ pub async fn search_workspace_contents(
     let regex = match build_regex_pattern(&request) {
         Ok(value) => value,
         Err(err) => {
-            return err_payload(
-                ErrorCode::UNKNOWN,
-                format!("正则表达式无效: {err}"),
-                trace,
-            );
+            return err_payload(ErrorCode::UNKNOWN, format!("正则表达式无效: {err}"), trace);
         }
     };
 
@@ -587,12 +585,13 @@ pub async fn search_workspace_contents(
                     );
                 }
 
-                let indexed_files = match search_db::ensure_search_index_for_scope(&app, &request.scope) {
-                    Ok(value) => value,
-                    Err(message) => {
-                        return err_payload(ErrorCode::UNKNOWN, message, trace);
-                    }
-                };
+                let indexed_files =
+                    match search_db::ensure_search_index_for_scope(&app, &request.scope) {
+                        Ok(value) => value,
+                        Err(message) => {
+                            return err_payload(ErrorCode::UNKNOWN, message, trace);
+                        }
+                    };
                 let candidate_limit = request
                     .max_results
                     .unwrap_or(200)
@@ -633,10 +632,7 @@ pub async fn search_workspace_contents(
 }
 
 #[tauri::command]
-pub async fn rebuild_search_index(
-    app: AppHandle,
-    scope: SearchScope,
-) -> ResultPayload<usize> {
+pub async fn rebuild_search_index(app: AppHandle, scope: SearchScope) -> ResultPayload<usize> {
     let trace = new_trace_id();
     match search_db::rebuild_search_index_for_scope(&app, &scope) {
         Ok(indexed) => ok(indexed, trace),
@@ -670,8 +666,12 @@ mod tests {
             .map(|path| normalize_display_path(path))
             .collect();
 
-        assert!(normalized_files.iter().any(|path| path.ends_with("/notes/visible.md")));
-        assert!(!normalized_files.iter().any(|path| path.contains("/.haomd/")));
+        assert!(normalized_files
+            .iter()
+            .any(|path| path.ends_with("/notes/visible.md")));
+        assert!(!normalized_files
+            .iter()
+            .any(|path| path.contains("/.haomd/")));
 
         let _ = std::fs::remove_dir_all(root);
     }

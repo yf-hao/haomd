@@ -1,8 +1,6 @@
 use crate::pdf_export::coords::rect_to_pdf_bounds;
 use crate::pdf_export::renderers::PageRenderContext;
-use crate::pdf_export::text_outlines::{
-    draw_text_line_outline, load_export_font, wrap_text_lines,
-};
+use crate::pdf_export::text_outlines::{draw_text_line_outline, load_export_font, wrap_text_lines};
 use crate::pdf_export::types::ExportPdfAnnotation;
 use lopdf::{content::Operation, Object};
 use ttf_parser::Face;
@@ -12,7 +10,11 @@ fn parse_rgb(color: &str) -> [f32; 3] {
     if hex.len() != 6 {
         return [0.0, 0.0, 0.0];
     }
-    let parse = |slice: &str| u8::from_str_radix(slice, 16).ok().map(|value| value as f32 / 255.0);
+    let parse = |slice: &str| {
+        u8::from_str_radix(slice, 16)
+            .ok()
+            .map(|value| value as f32 / 255.0)
+    };
     match (parse(&hex[0..2]), parse(&hex[2..4]), parse(&hex[4..6])) {
         (Some(red), Some(green), Some(blue)) => [red, green, blue],
         _ => [0.0, 0.0, 0.0],
@@ -25,9 +27,9 @@ pub fn render(
     context: &PageRenderContext,
 ) {
     let (color, rect, text) = match annotation {
-        ExportPdfAnnotation::FreeText { color, rect, text, .. } => {
-            (parse_rgb(color), rect, text)
-        }
+        ExportPdfAnnotation::FreeText {
+            color, rect, text, ..
+        } => (parse_rgb(color), rect, text),
         _ => return,
     };
 
@@ -51,7 +53,11 @@ pub fn render(
     operations.push(Operation::new("q", vec![]));
     operations.push(Operation::new(
         "rg",
-        vec![Object::Real(color[0]), Object::Real(color[1]), Object::Real(color[2])],
+        vec![
+            Object::Real(color[0]),
+            Object::Real(color[1]),
+            Object::Real(color[2]),
+        ],
     ));
     for (index, line) in lines.iter().enumerate() {
         let baseline = first_baseline - line_height * index as f64;

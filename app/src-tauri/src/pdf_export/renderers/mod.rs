@@ -1,7 +1,7 @@
-pub mod line;
-pub mod stamp;
-pub mod shapes;
 pub mod free_text;
+pub mod line;
+pub mod shapes;
+pub mod stamp;
 pub mod text_markup;
 
 use crate::pdf_export::coords::PdfPageSize;

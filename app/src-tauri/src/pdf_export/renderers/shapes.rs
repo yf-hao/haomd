@@ -8,7 +8,11 @@ fn parse_rgb(color: &str) -> [f32; 3] {
     if hex.len() != 6 {
         return [1.0, 0.84, 0.04];
     }
-    let parse = |slice: &str| u8::from_str_radix(slice, 16).ok().map(|value| value as f32 / 255.0);
+    let parse = |slice: &str| {
+        u8::from_str_radix(slice, 16)
+            .ok()
+            .map(|value| value as f32 / 255.0)
+    };
     match (parse(&hex[0..2]), parse(&hex[2..4]), parse(&hex[4..6])) {
         (Some(red), Some(green), Some(blue)) => [red, green, blue],
         _ => [1.0, 0.84, 0.04],
@@ -18,7 +22,11 @@ fn parse_rgb(color: &str) -> [f32; 3] {
 fn set_stroke_color(operations: &mut Vec<Operation>, color: [f32; 3]) {
     operations.push(Operation::new(
         "RG",
-        vec![Object::Real(color[0]), Object::Real(color[1]), Object::Real(color[2])],
+        vec![
+            Object::Real(color[0]),
+            Object::Real(color[1]),
+            Object::Real(color[2]),
+        ],
     ));
 }
 

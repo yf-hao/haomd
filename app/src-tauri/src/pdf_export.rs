@@ -1,12 +1,12 @@
 mod coords;
-mod text_outlines;
 mod renderers;
 mod service;
+mod text_outlines;
 mod types;
 
-use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
 use crate::file_io::normalize_path;
 use crate::support::service_error;
+use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
 use std::path::PathBuf;
 use types::ExportPdfDocument;
 
@@ -54,12 +54,20 @@ pub async fn export_pdf_with_annotations(
     };
 
     let task = tauri::async_runtime::spawn_blocking(move || {
-        service::export_pdf_with_annotations(&source_path_string, &output_path_for_task, &export_document)
+        service::export_pdf_with_annotations(
+            &source_path_string,
+            &output_path_for_task,
+            &export_document,
+        )
     });
 
     match task.await {
         Ok(Ok(())) => ok(output_path_string, trace),
         Ok(Err(error)) => err_payload(ErrorCode::IoError, error, trace),
-        Err(error) => err_payload(ErrorCode::UNKNOWN, format!("导出任务执行失败: {error}"), trace),
+        Err(error) => err_payload(
+            ErrorCode::UNKNOWN,
+            format!("导出任务执行失败: {error}"),
+            trace,
+        ),
     }
 }

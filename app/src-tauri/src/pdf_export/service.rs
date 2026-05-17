@@ -1,17 +1,17 @@
 use super::coords::resolve_page_size;
 use super::renderers::{render_annotation, PageRenderContext};
-use super::types::{ExportPdfAnnotation, ExportPdfAppendixNote, ExportPdfDocument};
 use super::text_outlines::{draw_text_line_outline, load_export_font, wrap_text_lines};
+use super::types::{ExportPdfAnnotation, ExportPdfAppendixNote, ExportPdfDocument};
 use lopdf::{content::Content, dictionary, Dictionary, Document, Object, ObjectId, Stream};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 use ttf_parser::Face;
 
-fn get_or_create_page_resources<'a>(
-    doc: &'a mut Document,
+fn get_or_create_page_resources(
+    doc: &mut Document,
     page_id: ObjectId,
-) -> Result<&'a mut Dictionary, String> {
+) -> Result<&mut Dictionary, String> {
     let resources_reference = {
         let page = doc
             .get_object_mut(page_id)
@@ -86,7 +86,11 @@ fn ensure_ext_gstate_for_page(
     Ok(ext_gstate_name)
 }
 
-fn append_content_stream(doc: &mut Document, page_id: ObjectId, stream_id: ObjectId) -> Result<(), String> {
+fn append_content_stream(
+    doc: &mut Document,
+    page_id: ObjectId,
+    stream_id: ObjectId,
+) -> Result<(), String> {
     let page = doc
         .get_object_mut(page_id)
         .map_err(|error| format!("读取页面对象失败: {error}"))?
@@ -235,7 +239,10 @@ fn render_appendix_pages(
         .iter()
         .map(|entry| {
             let quote = entry.quote.clone().unwrap_or_default();
-            format!("批注备注附录 第{}页 {} 摘录 {} 备注 {}", entry.page, entry.annotation_kind, quote, entry.note)
+            format!(
+                "批注备注附录 第{}页 {} 摘录 {} 备注 {}",
+                entry.page, entry.annotation_kind, quote, entry.note
+            )
         })
         .collect::<Vec<_>>()
         .join("\n");
@@ -266,7 +273,8 @@ fn render_appendix_pages(
     let flush_page = |doc: &mut Document,
                       pages_root_id: ObjectId,
                       page_size: super::coords::PdfPageSize,
-                      operations: &mut Vec<lopdf::content::Operation>| -> Result<(), String> {
+                      operations: &mut Vec<lopdf::content::Operation>|
+     -> Result<(), String> {
         operations.push(lopdf::content::Operation::new("Q", vec![]));
         let rendered = std::mem::take(operations);
         append_new_page(doc, pages_root_id, page_size, rendered)
@@ -369,14 +377,15 @@ pub fn export_pdf_with_annotations(
     document: &ExportPdfDocument,
 ) -> Result<(), String> {
     if document.annotations.is_empty() && document.appendix_notes.is_empty() {
-      if let Some(parent) = Path::new(output_path).parent() {
-        fs::create_dir_all(parent).map_err(|error| format!("创建输出目录失败: {error}"))?;
-      }
-      fs::copy(source_path, output_path).map_err(|error| format!("复制原 PDF 失败: {error}"))?;
-      return Ok(());
+        if let Some(parent) = Path::new(output_path).parent() {
+            fs::create_dir_all(parent).map_err(|error| format!("创建输出目录失败: {error}"))?;
+        }
+        fs::copy(source_path, output_path).map_err(|error| format!("复制原 PDF 失败: {error}"))?;
+        return Ok(());
     }
 
-    let mut pdf_document = Document::load(source_path).map_err(|error| format!("读取 PDF 失败: {error}"))?;
+    let mut pdf_document =
+        Document::load(source_path).map_err(|error| format!("读取 PDF 失败: {error}"))?;
     let pages = pdf_document.get_pages();
     let pages_root_id = get_pages_root_id(&pdf_document)?;
     let appendix_page_size = pages
@@ -403,7 +412,10 @@ pub fn export_pdf_with_annotations(
             | ExportPdfAnnotation::Stamp { page, .. }
             | ExportPdfAnnotation::FreeText { page, .. } => *page,
         };
-        annotations_by_page.entry(page).or_default().push(annotation);
+        annotations_by_page
+            .entry(page)
+            .or_default()
+            .push(annotation);
     }
 
     let mut ext_gstate_counter = 0usize;
@@ -423,7 +435,12 @@ pub fn export_pdf_with_annotations(
 
         let ext_gstate_name = if let Some(opacity) = highlight_opacity {
             ext_gstate_counter += 1;
-            Some(ensure_ext_gstate_for_page(&mut pdf_document, page_id, opacity, ext_gstate_counter)?)
+            Some(ensure_ext_gstate_for_page(
+                &mut pdf_document,
+                page_id,
+                opacity,
+                ext_gstate_counter,
+            )?)
         } else {
             None
         };

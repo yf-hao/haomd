@@ -33,6 +33,10 @@ function renderWithProviders(node: ReactNode) {
   )
 }
 
+function getHitByTextContent(text: string) {
+  return screen.getByText((_, node) => node?.textContent === text)
+}
+
 describe('GlobalSearchPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -128,8 +132,8 @@ describe('GlobalSearchPanel', () => {
       await new Promise((resolve) => window.setTimeout(resolve, 320))
     })
 
-    await screen.findByText('hello demo world')
-    fireEvent.click(screen.getByText('hello demo world'))
+    await screen.findByText((_, node) => node?.textContent === 'hello demo world')
+    fireEvent.click(getHitByTextContent('hello demo world'))
 
     expect(onOpenResult).toHaveBeenCalledWith({
       path: '/root/doc.md',
@@ -181,7 +185,7 @@ describe('GlobalSearchPanel', () => {
       await new Promise((resolve) => window.setTimeout(resolve, 320))
     })
 
-    await screen.findByText('demo line')
+    await screen.findByText((_, node) => node?.textContent === 'demo line')
     first.unmount()
 
     renderWithProviders(
@@ -193,6 +197,6 @@ describe('GlobalSearchPanel', () => {
     )
 
     expect((screen.getByPlaceholderText('搜索文件内容') as HTMLInputElement).value).toBe('demo')
-    expect(screen.getByText('demo line')).toBeDefined()
+    expect(getHitByTextContent('demo line')).toBeDefined()
   })
 })
