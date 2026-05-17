@@ -1,4 +1,14 @@
-import { memo, useRef, useState, useEffect, useCallback, useMemo, type ReactNode, type ReactElement } from 'react'
+import {
+  memo,
+  useRef,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useEffectEvent,
+  type ReactNode,
+  type ReactElement,
+} from 'react'
 import { save as saveDialog } from '@tauri-apps/plugin-dialog'
 import CodeMirror from '@uiw/react-codemirror'
 import { EditorSelection } from '@codemirror/state'
@@ -628,6 +638,12 @@ const DetachedNoteEditorOverlay = memo(function DetachedNoteEditorOverlay({
   } | null>(null)
   const themeMode = useResolvedThemeMode()
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null)
+  const handleEditorCancel = useEffectEvent(() => {
+    onCancel()
+  })
+  const handleEditorSave = useEffectEvent(() => {
+    onSave(currentValueRef.current)
+  })
 
   const extensions = useMemo(() => [
     EditorView.lineWrapping,
@@ -656,19 +672,19 @@ const DetachedNoteEditorOverlay = memo(function DetachedNoteEditorOverlay({
       {
         key: 'Escape',
         run: () => {
-          onCancel()
+          handleEditorCancel()
           return true
         },
       },
       {
         key: 'Mod-Enter',
         run: () => {
-          onSave(currentValueRef.current)
+          handleEditorSave()
           return true
         },
       },
     ]),
-  ], [onCancel, onSave, placeholder])
+  ], [placeholder])
 
   useEffect(() => {
     const editor = editorRef.current
