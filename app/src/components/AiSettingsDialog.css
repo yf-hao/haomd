@@ -1143,8 +1143,16 @@ button.ghost.ghost-subtle:hover {
   color: var(--theme-text-muted);
 }
 
+.badge-select-option-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .badge-select-label {
-  display: block;
+  display: inline-block;
   min-width: 0;
   max-width: 100%;
   flex: 1 1 auto;
@@ -1154,6 +1162,14 @@ button.ghost.ghost-subtle:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   user-select: none;
+}
+
+.badge-select-eye-icon {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  color: currentColor;
+  opacity: 0.82;
 }
 
 .badge-select-dropdown {

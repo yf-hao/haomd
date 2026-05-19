@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 export interface BadgeSelectOption {
   value: string
   label: string
+  showEye?: boolean
 }
 
 export interface BadgeSelectGroup {
@@ -19,6 +20,39 @@ export interface BadgeSelectProps {
   groups?: BadgeSelectGroup[]
   disabled?: boolean
   title?: string
+}
+
+const EyeIcon: FC<{ className?: string }> = ({ className }) => (
+  <svg
+    className={className}
+    viewBox="0 0 16 16"
+    fill="none"
+    aria-hidden="true"
+  >
+    <path
+      d="M1.6 8c1.3-2.4 3.67-3.9 6.4-3.9S13.1 5.6 14.4 8c-1.3 2.4-3.67 3.9-6.4 3.9S2.9 10.4 1.6 8Z"
+      stroke="currentColor"
+      strokeWidth="1.35"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <circle
+      cx="8"
+      cy="8"
+      r="1.9"
+      stroke="currentColor"
+      strokeWidth="1.35"
+    />
+  </svg>
+)
+
+function renderOptionContent(option: BadgeSelectOption) {
+  return (
+    <span className="badge-select-option-content">
+      <span className="badge-select-label">{option.label}</span>
+      {option.showEye ? <EyeIcon className="badge-select-eye-icon" /> : null}
+    </span>
+  )
 }
 
 export const BadgeSelect: FC<BadgeSelectProps> = ({ options, value, onChange, groups, disabled = false, title }) => {
@@ -57,7 +91,7 @@ export const BadgeSelect: FC<BadgeSelectProps> = ({ options, value, onChange, gr
 
   const groupedOptions = (groups ?? []).flatMap((group) => group.options)
   const flatOptions = hasGroups ? [...options, ...groupedOptions] : options
-  const selectedLabel = flatOptions.find((o) => o.value === value)?.label ?? ''
+  const selectedOption = flatOptions.find((option) => option.value === value) ?? null
   // Fallback: use the group containing the currently selected model (not the first group)
   const selectedGroup = groups?.find((group) => group.options.some((opt) => opt.value === value))
   const activeGroup = groups?.find((group) => group.id === activeGroupId) ?? selectedGroup ?? groups?.[0]
@@ -74,7 +108,7 @@ export const BadgeSelect: FC<BadgeSelectProps> = ({ options, value, onChange, gr
       }}
     >
       <span className="ai-chat-icon-chevron-up" aria-hidden="true" />
-      <span className="badge-select-label">{selectedLabel}</span>
+      {selectedOption ? renderOptionContent(selectedOption) : <span className="badge-select-label" />}
       {open && (
         <div className="badge-select-dropdown">
           {hasGroups ? (
@@ -89,7 +123,7 @@ export const BadgeSelect: FC<BadgeSelectProps> = ({ options, value, onChange, gr
                     setOpen(false)
                   }}
                 >
-                  {opt.label}
+                  {renderOptionContent(opt)}
                 </div>
               ))}
               {options.length > 0 && groups?.length ? (
@@ -124,7 +158,7 @@ export const BadgeSelect: FC<BadgeSelectProps> = ({ options, value, onChange, gr
                           setOpen(false)
                         }}
                       >
-                        {opt.label}
+                        {renderOptionContent(opt)}
                       </div>
                     ))}
                   </div>
@@ -142,7 +176,7 @@ export const BadgeSelect: FC<BadgeSelectProps> = ({ options, value, onChange, gr
                   setOpen(false)
                 }}
               >
-                {opt.label}
+                {renderOptionContent(opt)}
               </div>
             ))
           )}

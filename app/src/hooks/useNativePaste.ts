@@ -1,6 +1,7 @@
 import { useEffect, type RefObject } from 'react'
 import type { EditorView } from '@codemirror/view'
 import { onNativePaste, onNativePasteError } from '../modules/platform/clipboardEvents'
+import { isTauriEnv } from '../modules/platform/runtime'
 
 /**
  * 将 Tauri 原生粘贴事件桥接到 CodeMirror 编辑器。
@@ -10,6 +11,33 @@ export function useNativePaste(
   setStatusMessage: (msg: string) => void,
 ) {
   useEffect(() => {
+    const view = editorViewRef.current
+    let detachPreventDefaultPaste: (() => void) | undefined
+
+    if (isTauriEnv() && view) {
+      const handlePaste = (event: ClipboardEvent) => {
+        const active = typeof document !== 'undefined' ? document.activeElement : null
+        if (!active || !view.dom.contains(active)) return
+        event.preventDefault()
+        event.stopPropagation()
+      }
+
+      const handleBeforeInput = (event: InputEvent) => {
+        if (event.inputType !== 'insertFromPaste') return
+        const active = typeof document !== 'undefined' ? document.activeElement : null
+        if (!active || !view.dom.contains(active)) return
+        event.preventDefault()
+        event.stopPropagation()
+      }
+
+      view.dom.addEventListener('paste', handlePaste, true)
+      view.dom.addEventListener('beforeinput', handleBeforeInput, true)
+      detachPreventDefaultPaste = () => {
+        view.dom.removeEventListener('paste', handlePaste, true)
+        view.dom.removeEventListener('beforeinput', handleBeforeInput, true)
+      }
+    }
+
     const unPaste = onNativePaste((text) => {
       const view = editorViewRef.current
       console.log('[useNativePaste] native://paste handler fired, view =', view, 'len=', text?.length)
@@ -56,11 +84,11 @@ export function useNativePaste(
       if (!view) return
 
       const { state } = view
-      const tr = state.changeByRange((range) => ({
-        range,
-        changes: { from: range.from, to: range.to, insert: text },
+      view.dispatch(state.update({
+        ...state.replaceSelection(text),
+        userEvent: 'input.paste',
+        scrollIntoView: true,
       }))
-      view.dispatch(tr)
     })
 
     const unError = onNativePasteError((message) => {
@@ -68,6 +96,7 @@ export function useNativePaste(
     })
 
     return () => {
+      detachPreventDefaultPaste?.()
       unPaste()
       unError()
     }

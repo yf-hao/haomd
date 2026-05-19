@@ -268,7 +268,7 @@ export const zhCNMessages: MessageDictionary = {
   },
   welcome: {
     subtitle:
-      '专为深度创作打造的 AI 工作台：让写作更流畅，知识管理更有序，支持通过 AI 构建你的专属技能与工作流。',
+      '围绕写作、知识整理与人机协作，提供连贯而有序的创作空间，让灵感记录、内容推进与知识沉淀自然衔接。',
     newFile: '新建文件',
     openFile: '打开文件',
     openAiChat: '打开 AI Chat',

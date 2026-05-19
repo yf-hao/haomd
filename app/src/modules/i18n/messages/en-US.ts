@@ -268,7 +268,7 @@ export const enUSMessages: MessageDictionary = {
   },
   welcome: {
     subtitle:
-      'An AI workspace for deep creation: fluent writing, orderly knowledge management, and AI-powered custom workflows.',
+      'Built around writing, knowledge organization, and human-AI collaboration, it provides a coherent creative space where capturing ideas, advancing drafts, and accumulating knowledge connect naturally.',
     newFile: 'New File',
     openFile: 'Open File',
     openAiChat: 'Open AI Chat',

@@ -19,7 +19,7 @@ import type {
 } from './imageGenerationEphemeral'
 import { useAiSlashCommandHints } from './hooks/useAiSlashCommandHints'
 import { AiSlashCommandHintPanel } from './AiSlashCommandHintPanel'
-import { BadgeSelect, type BadgeSelectGroup } from './BadgeSelect'
+import { BadgeSelect, type BadgeSelectGroup, type BadgeSelectOption } from './BadgeSelect'
 import { useThemeContext } from '../../theme/ThemeContext'
 import {
   resolveAiChatEffectiveBackground,
@@ -424,7 +424,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
   }
 
   const modelGroups: BadgeSelectGroup[] = useMemo(() => {
-    const grouped = new Map<string, { id: string; label: string; options: { value: string; label: string }[] }>()
+    const grouped = new Map<string, { id: string; label: string; options: BadgeSelectOption[] }>()
     for (const model of models ?? []) {
       const group = grouped.get(model.providerName) ?? {
         id: model.providerName,
@@ -433,7 +433,8 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
       }
       group.options.push({
         value: model.id,
-        label: `${getModelDisplayName(model.id)}${model.visionMode === 'enabled' ? '  👁' : ''}`,
+        label: getModelDisplayName(model.id),
+        showEye: model.visionMode === 'enabled',
       })
       grouped.set(model.providerName, group)
     }
