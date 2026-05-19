@@ -155,6 +155,8 @@ export type FormatUiCommandContext = StatusContext & {
   openMathSymbolDialog?: (categoryKey: string) => void
   /** 打开“文字颜色”对话框的 UI 回调，由 WorkspaceShell 提供 */
   openTextColorDialog?: () => void
+  /** 在当前 Markdown 文档头部插入或更新 Front Matter 模板配置 */
+  insertWordTemplateFrontMatter?: () => void
 }
 
 /**

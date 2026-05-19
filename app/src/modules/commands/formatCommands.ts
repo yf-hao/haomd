@@ -19,6 +19,7 @@ export type FormatCommandContext = {
   openInsertTableDialog?: () => void
   openMathSymbolDialog?: (categoryKey: string) => void
   openTextColorDialog?: () => void
+  insertWordTemplateFrontMatter?: () => void
   t?: (key: string, params?: Record<string, string | number>) => string
 }
 
@@ -133,6 +134,20 @@ export function createFormatCommands(ctx: FormatCommandContext): CommandRegistry
     },
     format_insert_code_block: async () => {
       await insertCodeBlock()
+    },
+    format_insert_front_matter: () => {
+      if (!ctx.insertWordTemplateFrontMatter) {
+        ctx.setStatusMessage(tr(ctx, 'commands.insertFrontMatterUnavailable', '当前版本未注册 Front Matter 插入能力'))
+        return
+      }
+      ctx.insertWordTemplateFrontMatter()
+      ctx.setStatusMessage(
+        tr(
+          ctx,
+          'commands.insertFrontMatterApplied',
+          '已在文档头部插入 Front Matter，并设置 word_template: default_plan',
+        ),
+      )
     },
     // Math symbol category commands — open dialog with the selected category
     ...Object.fromEntries(

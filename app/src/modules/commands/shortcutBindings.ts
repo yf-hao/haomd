@@ -82,6 +82,11 @@ export const FORMAT_SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
     requireEditorContext: true,
   },
   {
+    action: 'format_insert_front_matter',
+    matches: (event, key) => key === 'f' && event.altKey && !event.shiftKey,
+    requireEditorContext: true,
+  },
+  {
     action: 'format_text_color_cycle',
     matches: (event, key) => key === 'c' && event.shiftKey && !event.altKey,
     requireEditorContext: true,
@@ -109,6 +114,7 @@ export const FORMAT_MENU_ACCELERATORS: Readonly<Record<string, string>> = {
   format_emphasize_selection: 'CmdOrCtrl+B',
   format_insert_table: 'CmdOrCtrl+T',
   format_insert_code_block: 'CmdOrCtrl+Alt+C',
+  format_insert_front_matter: 'CmdOrCtrl+Alt+F',
   format_text_color_cycle: 'CmdOrCtrl+Shift+C',
 }
 

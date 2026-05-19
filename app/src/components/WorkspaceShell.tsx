@@ -78,7 +78,7 @@ import {
   getTextColorAtRange,
   normalizeTextColor,
 } from '../modules/markdown/extensions/colorMark'
-import { extractFrontMatter } from '../modules/markdown/frontMatter'
+import { extractFrontMatter, upsertFrontMatterValue } from '../modules/markdown/frontMatter'
 import { MAX_RECENT_TEXT_COLORS, RECENT_TEXT_COLORS_STORAGE_KEY } from '../modules/editor/textColorPalette'
 import { createTextColorTarget, isTextColorTargetActive, type TextColorTarget } from '../modules/editor/textColorTarget'
 import { setWorkspaceMountedRoots } from '../modules/workspace/workspaceMountedRoots'
@@ -858,6 +858,20 @@ export function WorkspaceShell({
     if (editMode !== 'wysiwyg' || isPdfActive) return null
     return wysiwygMarkdownGetterRef.current?.() ?? null
   }, [editMode, isPdfActive])
+
+  const insertDefaultWordTemplateFrontMatter = useCallback(() => {
+    if (isPdfActive) {
+      setStatusMessage(t('workspace.insertFrontMatterUnsupportedPdf'))
+      return
+    }
+
+    const current = getLatestWysiwygMarkdown() ?? markdownRef.current
+    const next = upsertFrontMatterValue(current, 'word_template', 'default_plan')
+    if (next === current) {
+      return
+    }
+    handleMarkdownChange(next)
+  }, [getLatestWysiwygMarkdown, handleMarkdownChange, isPdfActive, setStatusMessage, t])
 
   const syncLatestWysiwygToReact = useCallback(() => {
     const latest = getLatestWysiwygMarkdown()
@@ -2756,6 +2770,7 @@ export function WorkspaceShell({
     openInsertTableDialog,
     openMathSymbolDialog,
     openTextColorDialog,
+    insertWordTemplateFrontMatter: insertDefaultWordTemplateFrontMatter,
     openAiChatDialog: (options: any) => openAiChatDialog(options as any),
     closeAiChatDialog,
     openGlobalMemoryDialog,

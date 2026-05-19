@@ -91,6 +91,7 @@ struct MenuTexts {
     text_color_clear: &'static str,
     table: &'static str,
     code_block: &'static str,
+    front_matter: &'static str,
     math_symbols: &'static str,
     math_greek: &'static str,
     math_discrete: &'static str,
@@ -194,6 +195,7 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             text_color_clear: "清除颜色",
             table: "表格",
             code_block: "代码块",
+            front_matter: "Front Matter",
             math_symbols: "数学符号",
             math_greek: "希腊字母",
             math_discrete: "离散数学",
@@ -294,6 +296,7 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             text_color_clear: "Clear Color",
             table: "Table",
             code_block: "Code Block",
+            front_matter: "Front Matter",
             math_symbols: "Math Symbols",
             math_greek: "Greek Letters",
             math_discrete: "Discrete Math",
@@ -785,6 +788,12 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
             &MenuItemBuilder::new(texts.code_block)
                 .id("format_insert_code_block")
                 .accelerator("CmdOrCtrl+Alt+C")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.front_matter)
+                .id("format_insert_front_matter")
+                .accelerator("CmdOrCtrl+Alt+F")
                 .build(app)?,
         )
         .separator()

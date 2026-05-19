@@ -60,6 +60,41 @@ export function composeMarkdownWithFrontMatter(frontMatterBlock: string | null |
   return `${frontMatterBlock.replace(/\r\n/g, '\n')}${normalizedBody}`
 }
 
+export function upsertFrontMatterValue(markdown: string, key: string, value: string): string {
+  const normalized = markdown.replace(/\r\n/g, '\n')
+  const document = extractFrontMatter(normalized)
+  const normalizedLine = `${key}: ${value}`
+
+  if (!document.hasFrontMatter) {
+    const body = normalized.trim().length > 0 ? `\n${normalized}` : ''
+    return `---\n${normalizedLine}\n---\n${body}`
+  }
+
+  const lines = document.rawContent.length > 0 ? document.rawContent.split('\n') : []
+  let replaced = false
+  const nextLines = lines.map((line) => {
+    const separatorIndex = line.indexOf(':')
+    if (separatorIndex < 0) return line
+    const currentKey = line.slice(0, separatorIndex).trim()
+    if (currentKey !== key || replaced) return line
+    replaced = true
+    return normalizedLine
+  })
+
+  if (!replaced) {
+    if (nextLines.length > 0 && nextLines[nextLines.length - 1].trim().length > 0) {
+      nextLines.push(normalizedLine)
+    } else if (nextLines.length === 0) {
+      nextLines.push(normalizedLine)
+    } else {
+      nextLines.splice(nextLines.length - 1, 0, normalizedLine)
+    }
+  }
+
+  const frontMatterBlock = `---\n${nextLines.join('\n')}\n---\n`
+  return composeMarkdownWithFrontMatter(frontMatterBlock, document.body)
+}
+
 function stripWrappingQuotes(value: string): string {
   if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
     return value.slice(1, -1)
