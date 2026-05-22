@@ -67,7 +67,7 @@ export const AboutDialog: FC<AboutDialogProps> = ({ open, onClose }) => {
           </div>
         </div>
         <div className="modal-actions">
-          <button className="ghost" type="button" onClick={onClose}>
+          <button className="ghost primary" type="button" onClick={onClose}>
             OK
           </button>
         </div>

@@ -272,6 +272,7 @@ pub(crate) struct WordRenderState {
     pub(crate) image_assets: HashMap<String, WordAssetRuntime>,
     pub(crate) hyperlinks: Vec<(String, String)>,
     pub(crate) style_settings: WordExportStyleSettingsResolved,
+    pub(crate) template_styles: Option<WordTemplateConventionStylesResolved>,
 }
 
 impl Default for WordRenderState {
@@ -282,8 +283,20 @@ impl Default for WordRenderState {
             image_assets: HashMap::new(),
             hyperlinks: Vec::new(),
             style_settings: crate::resolve_word_export_style_settings(None),
+            template_styles: None,
         }
     }
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct WordTemplateConventionStylesResolved {
+    pub(crate) heading_style_ids: [Option<String>; 6],
+    pub(crate) body_paragraph_style_id: Option<String>,
+    pub(crate) list_paragraph_style_id: Option<String>,
+    pub(crate) quote_style_id: Option<String>,
+    pub(crate) code_block_style_id: Option<String>,
+    pub(crate) formula_block_style_id: Option<String>,
+    pub(crate) figure_paragraph_style_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

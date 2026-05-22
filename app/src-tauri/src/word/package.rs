@@ -6,6 +6,22 @@ pub(crate) fn build_word_export_workspace(
     dir: &Path,
     payload: &WordDocPayloadCfg,
 ) -> Result<(), String> {
+    build_word_export_workspace_internal(dir, payload, None)
+}
+
+pub(crate) fn build_word_export_workspace_with_template(
+    dir: &Path,
+    payload: &WordDocPayloadCfg,
+    template_overlay: &WordTemplateDocxOverlay,
+) -> Result<(), String> {
+    build_word_export_workspace_internal(dir, payload, Some(template_overlay))
+}
+
+fn build_word_export_workspace_internal(
+    dir: &Path,
+    payload: &WordDocPayloadCfg,
+    template_overlay: Option<&WordTemplateDocxOverlay>,
+) -> Result<(), String> {
     std::fs::create_dir_all(dir.join("_rels")).map_err(|e| format!("创建 _rels 目录失败: {e}"))?;
     std::fs::create_dir_all(dir.join("docProps"))
         .map_err(|e| format!("创建 docProps 目录失败: {e}"))?;
@@ -22,9 +38,12 @@ pub(crate) fn build_word_export_workspace(
     content_type_defaults.insert("xml".to_string(), "application/xml".to_string());
 
     let mut render_state = WordRenderState {
-        next_rel_id: 3,
+        next_rel_id: template_overlay
+            .map(|overlay| overlay.next_available_relationship_id)
+            .unwrap_or(3),
         next_doc_pr_id: 1,
         style_settings: crate::resolve_word_export_style_settings(payload.style_settings.as_ref()),
+        template_styles: template_overlay.map(|overlay| overlay.convention_styles.clone()),
         ..Default::default()
     };
 
@@ -35,11 +54,32 @@ pub(crate) fn build_word_export_workspace(
         &mut content_type_defaults,
     )?;
 
-    let document_xml = build_document_xml(payload, &mut render_state)?;
-    let document_rels_xml = build_document_relationships_xml(&render_state);
-    let styles_xml = build_word_styles_xml(&render_state.style_settings);
+    if let Some(template_overlay) = template_overlay {
+        write_template_additional_parts(dir, template_overlay)?;
+        for (ext, mime) in &template_overlay.content_type_defaults {
+            content_type_defaults.entry(ext.clone()).or_insert_with(|| mime.clone());
+        }
+    }
+
+    let document_xml = build_document_xml_with_section_properties(
+        payload,
+        &mut render_state,
+        template_overlay.and_then(|overlay| overlay.section_properties_xml.as_deref()),
+    )?;
+    let document_rels_xml = build_document_relationships_xml_with_template(
+        &render_state,
+        template_overlay.map(|overlay| overlay.document_relationships.as_slice()),
+        template_overlay.map(|overlay| overlay.styles_relationship_id),
+        template_overlay.map(|overlay| overlay.numbering_relationship_id),
+    );
+    let styles_xml = template_overlay
+        .and_then(|overlay| overlay.styles_xml.clone())
+        .unwrap_or_else(|| build_word_styles_xml(&render_state.style_settings));
     let numbering_xml = build_word_numbering_xml();
-    let content_types_xml = build_content_types_xml(&content_type_defaults);
+    let content_types_xml = build_content_types_xml_with_template(
+        &content_type_defaults,
+        template_overlay.map(|overlay| &overlay.content_type_overrides),
+    );
     let root_rels_xml = build_root_relationships_xml();
     let core_xml = build_core_props_xml(&payload.title);
     let app_xml = build_app_props_xml();
@@ -64,6 +104,22 @@ pub(crate) fn build_word_export_workspace(
     )
     .map_err(|e| format!("写入 document.xml.rels 失败: {e}"))?;
 
+    Ok(())
+}
+
+fn write_template_additional_parts(
+    dir: &Path,
+    template_overlay: &WordTemplateDocxOverlay,
+) -> Result<(), String> {
+    for part in &template_overlay.additional_parts {
+        let target_path = dir.join(&part.path);
+        if let Some(parent) = target_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("创建模板附加部件目录失败: {e}"))?;
+        }
+        std::fs::write(&target_path, &part.bytes)
+            .map_err(|e| format!("写入模板附加部件失败 {}: {e}", part.path))?;
+    }
     Ok(())
 }
 

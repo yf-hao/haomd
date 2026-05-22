@@ -168,6 +168,7 @@ macro_rules! app_invoke_handler {
             pick_editor_background_image,
             save_remote_image_with_dialog,
             export_word_docx,
+            export_word_docx_with_template,
             fill_docx_template,
             get_system_language,
             export_settings_backup,

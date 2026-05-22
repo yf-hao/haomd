@@ -142,20 +142,24 @@ pub(crate) async fn list_word_templates(app: AppHandle) -> Result<Vec<WordTempla
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| "unknown-template".to_string());
         let (json_path, markdown_path, docx_path) = build_word_template_asset_paths(&template_dir);
-        if !json_path.is_file() {
+        if !docx_path.is_file() && !json_path.is_file() {
             continue;
         }
 
-        let name = std::fs::read_to_string(&json_path)
-            .ok()
-            .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
-            .and_then(|value| {
-                value
-                    .get("name")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string())
-            })
-            .unwrap_or_else(|| id.clone());
+        let name = if json_path.is_file() {
+            std::fs::read_to_string(&json_path)
+                .ok()
+                .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+                .and_then(|value| {
+                    value
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string())
+                })
+                .unwrap_or_else(|| id.clone())
+        } else {
+            id.clone()
+        };
 
         items.push(WordTemplateEntry {
             id,
@@ -166,7 +170,11 @@ pub(crate) async fn list_word_templates(app: AppHandle) -> Result<Vec<WordTempla
             } else {
                 String::new()
             },
-            json_path: json_path.to_string_lossy().into_owned(),
+            json_path: if json_path.exists() {
+                json_path.to_string_lossy().into_owned()
+            } else {
+                String::new()
+            },
             markdown_path: if markdown_path.exists() {
                 markdown_path.to_string_lossy().into_owned()
             } else {

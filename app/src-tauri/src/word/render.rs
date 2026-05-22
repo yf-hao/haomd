@@ -4,12 +4,21 @@ use quick_xml::events::Event;
 use quick_xml::Reader;
 use std::collections::HashMap;
 
-pub(crate) fn build_document_xml(
+pub(crate) fn build_document_xml_with_section_properties(
     payload: &WordDocPayloadCfg,
     render_state: &mut WordRenderState,
+    section_properties_xml: Option<&str>,
 ) -> Result<String, String> {
     let body = render_word_blocks(&payload.blocks, render_state, 0, None)?;
     let margin = render_state.style_settings.page_margin_twips;
+    let section_xml = section_properties_xml
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| {
+            format!(
+                r#"<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="{}" w:right="{}" w:bottom="{}" w:left="{}" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>"#,
+                margin, margin, margin, margin
+            )
+        });
     Ok(format!(
         concat!(
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
@@ -31,10 +40,10 @@ pub(crate) fn build_document_xml(
             r#"xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" "#,
             r#"xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" "#,
             r#"mc:Ignorable="w14 wp14"><w:body>{}"#,
-            r#"<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="{}" w:right="{}" w:bottom="{}" w:left="{}" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>"#,
+            r#"{}"#,
             r#"</w:body></w:document>"#
         ),
-        body, margin, margin, margin, margin
+        body, section_xml
     ))
 }
 
@@ -74,7 +83,7 @@ fn render_word_block(
     match block {
         WordBlockCfg::Heading { level, text, style } => Ok(render_paragraph_xml(
             render_inline_runs_xml(text, render_state),
-            Some(format!("Heading{}", (*level).clamp(1, 6))),
+            resolve_heading_style_id(render_state, *level),
             style.as_ref(),
             quote_depth,
             list_info,
@@ -83,7 +92,7 @@ fn render_word_block(
         )),
         WordBlockCfg::Paragraph { text, style } => Ok(render_paragraph_xml(
             render_inline_runs_xml(text, render_state),
-            None,
+            resolve_paragraph_style_id(render_state, quote_depth, list_info, false, false),
             style.as_ref(),
             quote_depth,
             list_info,
@@ -94,7 +103,7 @@ fn render_word_block(
             let paragraph_style = crate::left_aligned_math_paragraph_style();
             Ok(render_paragraph_xml(
                 render_math_run_xml(content, math_ml.as_deref(), true),
-                None,
+                resolve_paragraph_style_id(render_state, quote_depth, list_info, false, true),
                 Some(&paragraph_style),
                 quote_depth,
                 list_info,
@@ -112,7 +121,7 @@ fn render_word_block(
             );
             Ok(render_paragraph_xml(
                 runs,
-                None,
+                resolve_paragraph_style_id(render_state, quote_depth, list_info, true, false),
                 None,
                 quote_depth,
                 list_info,
@@ -134,6 +143,7 @@ fn render_word_block(
             height_px: *height_px,
             width_percent: *width_percent,
             max_width_percent: *max_width_percent,
+            style_id: resolve_figure_style_id(render_state),
             render_state,
             quote_depth,
             list_info,
@@ -336,6 +346,51 @@ fn resolve_table_column_width_twips(
         .map(|value| value.saturating_mul(TWIPS_PER_PX_AT_96_DPI).max(1))
 }
 
+fn resolve_heading_style_id(render_state: &WordRenderState, level: u8) -> Option<String> {
+    let level = level.clamp(1, 6) as usize;
+    render_state
+        .template_styles
+        .as_ref()
+        .and_then(|styles| styles.heading_style_ids[level - 1].clone())
+        .or_else(|| Some(format!("Heading{level}")))
+}
+
+fn resolve_paragraph_style_id(
+    render_state: &WordRenderState,
+    quote_depth: usize,
+    list_info: Option<(bool, usize)>,
+    code_block: bool,
+    math_block: bool,
+) -> Option<String> {
+    let styles = render_state.template_styles.as_ref()?;
+    if code_block {
+        return styles.code_block_style_id.clone();
+    }
+    if math_block {
+        return styles.formula_block_style_id.clone();
+    }
+    if list_info.is_some() {
+        return styles
+            .list_paragraph_style_id
+            .clone()
+            .or_else(|| styles.body_paragraph_style_id.clone());
+    }
+    if quote_depth > 0 {
+        return styles
+            .quote_style_id
+            .clone()
+            .or_else(|| styles.body_paragraph_style_id.clone());
+    }
+    styles.body_paragraph_style_id.clone()
+}
+
+fn resolve_figure_style_id(render_state: &WordRenderState) -> Option<String> {
+    render_state
+        .template_styles
+        .as_ref()
+        .and_then(|styles| styles.figure_paragraph_style_id.clone())
+}
+
 fn render_table_cell_blocks_xml(
     blocks: &[WordBlockCfg],
     cell_style: Option<&WordTableCellStyleCfg>,
@@ -368,7 +423,7 @@ fn render_word_block_in_table_cell(
             let merged_style = merge_paragraph_style(style.as_ref(), cell_paragraph_style.as_ref());
             Ok(render_paragraph_xml(
                 render_inline_runs_xml(text, render_state),
-                Some(format!("Heading{}", (*level).clamp(1, 6))),
+                resolve_heading_style_id(render_state, *level),
                 merged_style.as_ref(),
                 quote_depth,
                 list_info,
@@ -380,7 +435,7 @@ fn render_word_block_in_table_cell(
             let merged_style = merge_paragraph_style(style.as_ref(), cell_paragraph_style.as_ref());
             Ok(render_paragraph_xml(
                 render_inline_runs_xml(text, render_state),
-                None,
+                resolve_paragraph_style_id(render_state, quote_depth, list_info, false, false),
                 merged_style.as_ref(),
                 quote_depth,
                 list_info,
@@ -1481,6 +1536,7 @@ struct RenderImageParagraphOptions<'a> {
     height_px: Option<u32>,
     width_percent: Option<f32>,
     max_width_percent: Option<f32>,
+    style_id: Option<String>,
     render_state: &'a mut WordRenderState,
     quote_depth: usize,
     list_info: Option<(bool, usize)>,
@@ -1494,6 +1550,7 @@ fn render_image_paragraph_xml(options: RenderImageParagraphOptions<'_>) -> Resul
         height_px,
         width_percent,
         max_width_percent,
+        style_id,
         render_state,
         quote_depth,
         list_info,
@@ -1542,7 +1599,7 @@ fn render_image_paragraph_xml(options: RenderImageParagraphOptions<'_>) -> Resul
 
     Ok(render_paragraph_xml(
         drawing,
-        None,
+        style_id,
         None,
         quote_depth,
         list_info,
@@ -1631,13 +1688,40 @@ fn image_layout_constraints(
     (available_twips, safe_twips, max_width_px)
 }
 
-pub(crate) fn build_document_relationships_xml(render_state: &WordRenderState) -> String {
+pub(crate) fn build_document_relationships_xml_with_template(
+    render_state: &WordRenderState,
+    template_relationships: Option<&[WordTemplateDocxRelationship]>,
+    styles_relationship_id: Option<u32>,
+    numbering_relationship_id: Option<u32>,
+) -> String {
+    let styles_relationship_id = styles_relationship_id.unwrap_or(1);
+    let numbering_relationship_id = numbering_relationship_id.unwrap_or(2);
     let mut xml = String::from(concat!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
-        r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#,
-        r#"<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>"#,
-        r#"<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>"#
+        r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#
     ));
+    xml.push_str(&format!(
+        r#"<Relationship Id="rId{}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>"#,
+        styles_relationship_id
+    ));
+    xml.push_str(&format!(
+        r#"<Relationship Id="rId{}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>"#,
+        numbering_relationship_id
+    ));
+    if let Some(template_relationships) = template_relationships {
+        for rel in template_relationships {
+            xml.push_str(&format!(
+                r#"<Relationship Id="{}" Type="{}" Target="{}"{} />"#,
+                crate::escape_xml_attr(&rel.id),
+                crate::escape_xml_attr(&rel.rel_type),
+                crate::escape_xml_attr(&rel.target),
+                rel.target_mode
+                    .as_deref()
+                    .map(|mode| format!(r#" TargetMode="{}""#, crate::escape_xml_attr(mode)))
+                    .unwrap_or_default()
+            ));
+        }
+    }
     for asset in render_state.image_assets.values() {
         xml.push_str(&format!(
             r#"<Relationship Id="{}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="{}"/>"#,
@@ -1655,8 +1739,9 @@ pub(crate) fn build_document_relationships_xml(render_state: &WordRenderState) -
     xml
 }
 
-pub(crate) fn build_content_types_xml(
+pub(crate) fn build_content_types_xml_with_template(
     defaults: &std::collections::BTreeMap<String, String>,
+    template_overrides: Option<&std::collections::BTreeMap<String, String>>,
 ) -> String {
     let mut defaults_xml = String::new();
     for (ext, mime) in defaults {
@@ -1665,6 +1750,26 @@ pub(crate) fn build_content_types_xml(
             crate::escape_xml_attr(ext),
             crate::escape_xml_attr(mime)
         ));
+    }
+    let mut overrides_xml = String::new();
+    if let Some(template_overrides) = template_overrides {
+        for (part_name, content_type) in template_overrides {
+            if matches!(
+                part_name.as_str(),
+                "/word/document.xml"
+                    | "/word/styles.xml"
+                    | "/word/numbering.xml"
+                    | "/docProps/core.xml"
+                    | "/docProps/app.xml"
+            ) {
+                continue;
+            }
+            overrides_xml.push_str(&format!(
+                r#"<Override PartName="{}" ContentType="{}"/>"#,
+                crate::escape_xml_attr(part_name),
+                crate::escape_xml_attr(content_type)
+            ));
+        }
     }
     format!(
         concat!(
@@ -1676,9 +1781,11 @@ pub(crate) fn build_content_types_xml(
             r#"<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>"#,
             r#"<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>"#,
             r#"<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>"#,
+            "{}",
             r#"</Types>"#
         ),
-        defaults_xml
+        defaults_xml,
+        overrides_xml
     )
 }
 

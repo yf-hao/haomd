@@ -138,6 +138,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     openInsertTableDialog,
     openMathSymbolDialog,
     openTextColorDialog,
+    insertWordTemplateFrontMatter,
     openRecentDialog,
     t,
   } = params
@@ -250,6 +251,7 @@ export function useCommandSystem(params: CommandSystemParams) {
         openInsertTableDialog,
         openMathSymbolDialog,
         openTextColorDialog,
+        insertWordTemplateFrontMatter,
         closeAiChatDialog,
         openRecentDialog,
         t,
@@ -322,6 +324,7 @@ export function useCommandSystem(params: CommandSystemParams) {
       openInsertTableDialog,
       openMathSymbolDialog,
       openTextColorDialog,
+      insertWordTemplateFrontMatter,
       closeAiChatDialog,
       t,
     ],

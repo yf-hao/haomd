@@ -4,6 +4,7 @@ import { collectWordAssets } from './collectAssets'
 import { markdownToWordModel, plainTextToWordModel } from './markdownToWordModel'
 import { renderWordDiagramAssets } from './renderDiagramAssets'
 import { getWordExportStyleSettings } from '../../settings/editorSettings'
+import { extractFrontMatter } from '../../markdown/frontMatter'
 import { parseMarkdownToTemplateModel, resolveWordTemplateId } from './template/parseMarkdownToTemplateModel'
 import type { WordTemplateConfig } from './template/types'
 
@@ -50,6 +51,7 @@ export async function exportToWordAtPath(ctx: {
     const title = buildWordExportBaseName(rawTitle)
     const filePath = ctx.getFilePath ? ctx.getFilePath() : null
     const markdown = ctx.getCurrentMarkdown()
+    const { body: markdownBody } = extractFrontMatter(markdown)
     const isPlainText = /\.txt$/i.test(rawTitle) || /\.txt$/i.test(filePath || '')
     const styleSettings = await getWordExportStyleSettings()
     const selectedTemplateId = resolveWordTemplateId(markdown)
@@ -92,25 +94,29 @@ export async function exportToWordAtPath(ctx: {
 
     if (selectedTemplateId && !isPlainText) {
       ctx.setStatusMessage(tr('export.wordParsing', '正在解析 Markdown 结构...'))
-      const templateConfig = await loadWordTemplateConfig(selectedTemplateId)
-      const parsed = parseMarkdownToTemplateModel(markdown, templateConfig)
+      const templateConfig = await loadWordTemplateConfigIfAvailable(selectedTemplateId)
+      const hasBindings = !!templateConfig?.bindings?.length
 
-      ctx.setStatusMessage(tr('export.wordGenerating', '正在生成 Word 文档...'))
-      await invoke('fill_docx_template', {
-        templateId: selectedTemplateId,
-        modelJson: JSON.stringify(parsed.model),
-        richBlocksJson: JSON.stringify(parsed.richBlocksByField),
-        outputPath,
-      })
+      if (hasBindings && templateConfig) {
+        const parsed = parseMarkdownToTemplateModel(markdown, templateConfig)
 
-      ctx.setStatusMessage(tr('export.wordSuccess', `Word 导出成功: ${outputPath}`, { path: outputPath }))
-      return true
+        ctx.setStatusMessage(tr('export.wordGenerating', '正在生成 Word 文档...'))
+        await invoke('fill_docx_template', {
+          templateId: selectedTemplateId,
+          modelJson: JSON.stringify(parsed.model),
+          richBlocksJson: JSON.stringify(parsed.richBlocksByField),
+          outputPath,
+        })
+
+        ctx.setStatusMessage(tr('export.wordSuccess', `Word 导出成功: ${outputPath}`, { path: outputPath }))
+        return true
+      }
     }
 
     ctx.setStatusMessage(tr('export.wordParsing', '正在解析 Markdown 结构...'))
     let payload = isPlainText
       ? plainTextToWordModel(markdown, title)
-      : markdownToWordModel(markdown, title)
+      : markdownToWordModel(markdownBody, title)
     payload.styleSettings = styleSettings
 
     ctx.setStatusMessage(tr('export.wordCollectingAssets', '正在收集文档资源...'))
@@ -124,10 +130,18 @@ export async function exportToWordAtPath(ctx: {
     })
 
     ctx.setStatusMessage(tr('export.wordGenerating', '正在生成 Word 文档...'))
-    await invoke('export_word_docx', {
-      payloadJson: JSON.stringify(payload),
-      outputPath,
-    })
+    if (selectedTemplateId && !isPlainText) {
+      await invoke('export_word_docx_with_template', {
+        templateId: selectedTemplateId,
+        payloadJson: JSON.stringify(payload),
+        outputPath,
+      })
+    } else {
+      await invoke('export_word_docx', {
+        payloadJson: JSON.stringify(payload),
+        outputPath,
+      })
+    }
 
     ctx.setStatusMessage(tr('export.wordSuccess', `Word 导出成功: ${outputPath}`, { path: outputPath }))
     return true
@@ -159,4 +173,12 @@ async function checkInkscapeAvailability(): Promise<boolean> {
 async function loadWordTemplateConfig(templateId: string): Promise<WordTemplateConfig> {
   const configJson = await invoke<string>('get_word_template_config', { templateId })
   return JSON.parse(configJson) as WordTemplateConfig
+}
+
+async function loadWordTemplateConfigIfAvailable(templateId: string): Promise<WordTemplateConfig | null> {
+  try {
+    return await loadWordTemplateConfig(templateId)
+  } catch {
+    return null
+  }
 }
