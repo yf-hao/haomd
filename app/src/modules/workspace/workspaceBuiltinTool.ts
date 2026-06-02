@@ -56,7 +56,7 @@ export const writeToWorkspaceToolSchema: OpenAIToolDef = {
     description:
       '将内容保存到当前文件浏览器挂载目录树中的某个目录下。' +
       '只有当用户明确要求将内容保存到某个课程目录、子目录、文件浏览器中的目录、或给出了明确的工作区目录路径时，才调用此工具。' +
-      '如果用户没有指定工作区目录，应改用 write_to_notes，将内容默认保存到随笔中。' +
+      '如果用户没有指定工作区目录，不要调用此工具；只有用户同时明确表达保存意图时，才可考虑使用 write_to_notes。' +
       '只能写入当前文件浏览器已挂载的目录树内，不能写到其它路径。' +
       '目录名不唯一时应让用户确认。',
     parameters: {
@@ -87,7 +87,7 @@ export const resolveWorkspaceDirectoryToolSchema: OpenAIToolDef = {
     description:
       '解析当前文件浏览器挂载目录树中的目标目录。' +
       '只有当用户已经明确提到工作区目录、课程目录或子目录，但模型不确定目录是否唯一或真实存在时，才先调用此工具。' +
-      '如果用户根本没有指定工作区目录，不应调用此工具，而应默认使用 write_to_notes。' +
+      '如果用户根本没有指定工作区目录，不应调用此工具，也不要因此默认保存到随笔。' +
       '该工具只解析目录，不写入文件。',
     parameters: {
       type: 'object',
@@ -158,7 +158,7 @@ export function buildWorkspaceMountedRootsPrompt(): string {
     '\n仅当用户明确要求保存到这些目录树内的目录或子目录时，才可调用 write_to_workspace。' +
     '\n如果用户明确要求在这些目录树内创建子目录，可调用 create_workspace_directory。' +
     '\n如果用户询问当前目录是哪里，应调用 get_current_directory。' +
-    '\n如果用户没有指定工作区目录，默认使用 write_to_notes，将内容保存到随笔中。' +
+    '\n如果用户没有指定工作区目录，不要默认保存；只有用户明确表达保存意图时，才可考虑使用 write_to_notes。' +
     '\n当用户已指定工作区目录，但你不确定目录是否存在或是否唯一时，应先调用 resolve_workspace_directory，再决定是否写入。'
   )
 }
