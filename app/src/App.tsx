@@ -45,6 +45,7 @@ const appStartTime = performance.now()
 
 function App() {
   const [activeLeftPanel, setActiveLeftPanel] = useState<LeftPanelId>(null)
+  const lastVisibleLeftPanelRef = useRef<Exclude<LeftPanelId, null>>('files')
   const [initialWorkspaceAction, setInitialWorkspaceAction] = useState<InitialWorkspaceAction>(null)
   const [initialOpenRecentPath, setInitialOpenRecentPath] = useState<string | null>(null)
   const [initialOpenRecentIsFolder, setInitialOpenRecentIsFolder] = useState<boolean | null>(null)
@@ -92,10 +93,24 @@ function App() {
 
   const handleLeftPanelToggle = useCallback(
     (id: LeftPanelId) => {
-      setActiveLeftPanel((prev) => (prev === id ? null : id))
+      setActiveLeftPanel((prev) => {
+        const next = prev === id ? null : id
+        if (next) lastVisibleLeftPanelRef.current = next
+        return next
+      })
     },
     [],
   )
+
+  const toggleSidebarVisible = useCallback(() => {
+    setActiveLeftPanel((prev) => {
+      if (prev) {
+        lastVisibleLeftPanelRef.current = prev
+        return null
+      }
+      return lastVisibleLeftPanelRef.current
+    })
+  }, [])
 
   const handleInitialActionHandled = useCallback(() => {
     setInitialWorkspaceAction(null)
@@ -257,6 +272,7 @@ function App() {
           docCharCount={docCharCount}
           statusMessage={statusMessage}
           handleLeftPanelToggle={handleLeftPanelToggle}
+          toggleSidebarVisible={toggleSidebarVisible}
           handleInitialActionHandled={handleInitialActionHandled}
           onThemeSettingsChange={handleThemeSettingsPreview}
           onLanguageModeChange={(mode) => {
@@ -300,6 +316,7 @@ type AppShellContentProps = {
   docCharCount: number | null
   statusMessage: string
   handleLeftPanelToggle: (id: LeftPanelId) => void
+  toggleSidebarVisible: () => void
   handleInitialActionHandled: () => void
   onThemeSettingsChange: (settings: ThemeSettings) => void
   onLanguageModeChange: (mode: LanguageMode) => void
@@ -333,6 +350,7 @@ function AppShellContent({
   docCharCount,
   statusMessage,
   handleLeftPanelToggle,
+  toggleSidebarVisible,
   handleInitialActionHandled,
   onThemeSettingsChange,
   onLanguageModeChange,
@@ -628,6 +646,7 @@ function AppShellContent({
 
         <WorkspaceShell
           activeLeftPanel={activeLeftPanel}
+          toggleSidebarVisible={toggleSidebarVisible}
           isTauriEnv={isTauriEnv}
           initialAction={initialWorkspaceAction}
           initialOpenRecentPath={initialOpenRecentPath}

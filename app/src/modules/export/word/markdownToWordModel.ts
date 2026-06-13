@@ -10,6 +10,7 @@ import { toString } from 'mdast-util-to-string'
 import type { InlineRun, WordAsset, WordBlock, WordDocPayload } from './types'
 import { htmlFragmentToBlocks, htmlFragmentToInlineRuns, type HtmlWordModelContext } from './htmlToWordModel'
 import { parseHtmlTextStyle } from './htmlStyleParser'
+import { splitAlignedTabInlineNodes } from '../../markdown/alignedTab'
 
 type TextRun = Extract<InlineRun, { type: 'text' }>
 type TextMarks = Pick<TextRun, 'bold' | 'italic' | 'code' | 'strike' | 'underline' | 'color' | 'backgroundColor' | 'fontSizePt' | 'fontFamily'>
@@ -34,15 +35,40 @@ export function markdownToWordModel(markdown: string, title: string): WordDocPay
     assetCounter: 0,
   }
 
-  const blocks = tree.children
-    .flatMap((node) => transformBlock(node, ctx))
-    .filter((block): block is WordBlock => block != null)
+  const blocks = transformBlocks(tree.children, ctx)
 
   return {
     title,
     blocks,
     assets: ctx.assets,
   }
+}
+
+function transformBlocks(nodes: Content[], ctx: ParseContext): WordBlock[] {
+  const blocks: WordBlock[] = []
+
+  for (let index = 0; index < nodes.length; index += 1) {
+    const node = nodes[index]
+    const alignedRows = paragraphToAlignedTabRows(node)
+    if (!alignedRows) {
+      blocks.push(...transformBlock(node, ctx))
+      continue
+    }
+
+    const groupedRows = [...alignedRows]
+    let endIndex = index
+    for (let nextIndex = index + 1; nextIndex < nodes.length; nextIndex += 1) {
+      const nextRows = paragraphToAlignedTabRows(nodes[nextIndex])
+      if (!nextRows) break
+      groupedRows.push(...nextRows)
+      endIndex = nextIndex
+    }
+
+    blocks.push(alignedTabRowsToWordTable(groupedRows, ctx))
+    index = endIndex
+  }
+
+  return blocks
 }
 
 export function plainTextToWordModel(text: string, title: string): WordDocPayload {
@@ -90,7 +116,7 @@ function transformBlock(node: Content, ctx: ParseContext): WordBlock[] {
     case 'blockquote':
       return [{
         type: 'blockquote',
-        children: node.children.flatMap((child) => transformBlock(child, ctx)),
+        children: transformBlocks(node.children, ctx),
       }]
     case 'math':
       return [{
@@ -153,6 +179,44 @@ function tableCellToBlocks(cell: TableCell, ctx: ParseContext): WordBlock[] {
   if (blocks.length > 0) return blocks
   const fallback = toString(cell).trim()
   return fallback ? [{ type: 'paragraph', text: [{ type: 'text', value: fallback }] }] : []
+}
+
+function paragraphToAlignedTabRows(node: Content): ReturnType<typeof splitAlignedTabInlineNodes<PhrasingContent>> {
+  if (node.type !== 'paragraph') return null
+  return splitAlignedTabInlineNodes<PhrasingContent>(node.children, {
+    getText: (node) => node.type === 'text' ? node.value : null,
+    createText: (value, source) => ({ ...source, value }),
+  })
+}
+
+function alignedTabRowsToWordTable(
+  rows: NonNullable<ReturnType<typeof splitAlignedTabInlineNodes<PhrasingContent>>>,
+  ctx: ParseContext,
+): WordBlock {
+  return {
+    type: 'table',
+    style: {
+      borderColor: 'none',
+      layout: 'fixed',
+      widthPercent: 100,
+      columnWidths: [
+        { widthPercent: 42 },
+        { widthPercent: 58 },
+      ],
+    },
+    rows: rows.map((row) => ({
+      cells: [
+        {
+          blocks: [{ type: 'paragraph', text: transformInline(row.left, ctx) }],
+          style: { borderColor: 'none' },
+        },
+        {
+          blocks: [{ type: 'paragraph', text: transformInline(row.right, ctx) }],
+          style: { borderColor: 'none' },
+        },
+      ],
+    })),
+  }
 }
 
 function transformInline(nodes: PhrasingContent[], ctx: ParseContext, marks: TextMarks = {}): InlineRun[] {

@@ -59,6 +59,8 @@ export type FileCommandContext = StatusContext & {
   setFilePath: (path: string) => void
   applyOpenedContent: (content: string) => void
   openFile: () => Promise<any>
+  importWordFile?: () => Promise<any>
+  openImportedWordDocument?: (path: string) => Promise<any>
   save: () => Promise<any>
   saveAs: () => Promise<any>
   handleShowRecent?: () => Promise<void>
@@ -542,6 +544,9 @@ function createFileCommands(ctx: FileCommandContext): CommandRegistry {
         console.warn('[commands.open_file] openFile returned non-ok or missing data', resp)
       }
     },
+    import_word_docx: async () => {
+      await ctx.importWordFile?.()
+    },
     open_folder: async () => {
       // 打开文件夹不会直接丢失当前文档内容，这里不再拦截未保存变更
       if (!ctx.openFolderInSidebar) {
@@ -596,6 +601,13 @@ function createFileCommands(ctx: FileCommandContext): CommandRegistry {
 
 function createLifecycleCommands(ctx: AppLifecycleCommandContext): CommandRegistry {
   return {
+    toggle_sidebar: () => {
+      if (ctx.toggleSidebarVisible) {
+        ctx.toggleSidebarVisible()
+      } else {
+        ctx.setStatusMessage(tr(ctx, 'commands.toggleSidebarUnavailable', '当前版本未注册侧边栏切换能力'))
+      }
+    },
     close_file: () => {
       // 优先使用 App 层的确认对话框（与 TabBar 一致）
       if (ctx.onRequestCloseCurrentTab) {

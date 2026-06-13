@@ -47,8 +47,6 @@ export interface ConversationCompressor {
   ): Promise<DocConversationRecord>
 }
 
-const SUMMARY_REQUEST_TIMEOUT_MS = 45_000
-
 export class ConversationCompressionTimeoutError extends Error {
   readonly timeoutMs: number
 
@@ -197,6 +195,57 @@ function buildSummaryBatches(
   return batches
 }
 
+const USER_REFERENCE_PATTERNS = [
+  /第[一二三四五六七八九十\d]+个方案/,
+  /第[一二三四五六七八九十\d]+种方案/,
+  /方案[一二三四五六七八九十\d]+/,
+  /按你说的/,
+  /按.*实现/,
+  /用这个/,
+  /就这个/,
+  /这样实现/,
+  /这个方向/,
+  /这个方案/,
+  /上面/,
+  /前面/,
+  /继续/,
+]
+
+function containsUserReference(content: string): boolean {
+  const normalized = content.replace(/\s+/g, '')
+  return USER_REFERENCE_PATTERNS.some((pattern) => pattern.test(normalized))
+}
+
+function buildLevel1SummaryInputMessages(batch: DocConversationMessage[]): DocConversationMessage[] {
+  const result: DocConversationMessage[] = []
+  const includedIds = new Set<string>()
+  let previousAssistant: DocConversationMessage | null = null
+
+  const include = (message: DocConversationMessage) => {
+    if (includedIds.has(message.id)) return
+    includedIds.add(message.id)
+    result.push(message)
+  }
+
+  for (const message of batch) {
+    if (message.role === 'assistant') {
+      previousAssistant = message
+      continue
+    }
+
+    if (message.role !== 'user') {
+      continue
+    }
+
+    if (previousAssistant && containsUserReference(message.content)) {
+      include(previousAssistant)
+    }
+    include(message)
+  }
+
+  return result
+}
+
 function collectPreservedUserInputsFromMessages(messages: DocConversationMessage[]): string[] {
   const snippets: string[] = []
   const seen = new Set<string>()
@@ -302,10 +351,14 @@ export function createConversationCompressor(summaryProvider: SummaryProvider): 
         const preservedUserInputs = buildPreservedUserInputs(
           batch.filter((message): message is DocConversationMessage => message.role === 'user'),
         )
+        const level1InputMessages = buildLevel1SummaryInputMessages(batch)
+        if (!level1InputMessages.length) {
+          continue
+        }
         const level1SummaryContent = await summaryProvider.summarizeBatch({
           docPath: record.docPath,
           level: 1,
-          messages: batch,
+          messages: level1InputMessages,
         })
         level1Summaries.push(
           createSummaryMessage({
@@ -474,7 +527,12 @@ function buildSummarySystemPrompt(level: SummaryLevel): string {
   if (level >= 2) {
     lines.push('当前是更高层次的二级摘要，请聚焦更宏观的主题和结论，可以省略底层实现细节，但用户输入分类整理仍需完整保留。')
   } else {
-    lines.push('当前是一阶摘要，请尽量保留关键信息，但避免逐段复述原文。')
+    lines.push('当前是一阶摘要，重点不是总结 assistant 回答，而是尽可能完整保留用户输入。')
+    lines.push('- 必须优先记录用户提出的问题、需求、限制、纠正、偏好、确认和反复强调的点。')
+    lines.push('- 如果输入中出现 Assistant Context，它只用于解析用户的引用表达，例如“第二个方案”“按你说的”“继续”，不要独立总结 assistant 内容。')
+    lines.push('- assistant 的内容只作为理解用户输入背景、结论和已完成工作的辅助信息，不要让 assistant 回答淹没用户意图。')
+    lines.push('- 对短用户输入也要保留其原始关键词，例如“继续”“为什么”“转换为 typst”“不要保存”等，因为这些通常代表上下文动作或约束。')
+    lines.push('- 避免逐段复述 assistant 长回答；如果需要引用 assistant 内容，应压缩为与用户输入相关的结论。')
   }
 
   return lines.join('\n')
@@ -542,7 +600,6 @@ export function createLLMSummaryProvider(): SummaryProvider {
 
   return {
     async summarizeBatch({ docPath, level, messages }): Promise<string> {
-      let didTimeout = false
       try {
         const provider = await pickDefaultProviderForSummary()
         if (!provider) {
@@ -564,69 +621,36 @@ export function createLLMSummaryProvider(): SummaryProvider {
         const maxTokens = level >= 2 ? 2048 : 4096
 
         let fullContent = ''
-        const abortController = new AbortController()
-        let timeoutId: ReturnType<typeof setTimeout> | null = null
 
-        try {
-          const streamPromise = client.askStream(
-            {
-              messages: chatMessages,
-              temperature: 0.1, // #5: 适度随机性，避免固化句式
-              maxTokens,
-              signal: abortController.signal,
-            },
-            {
-              onChunk: (chunk) => {
-                if (chunk.content) {
-                  fullContent += chunk.content
-                }
-              },
-              onComplete: () => {
-                // no-op, content 已在 onChunk 中累积
-              },
-              onError: (err) => {
-                console.error('[SummaryProvider] LLM summarize error', err)
-              },
-            },
-          ).catch((error) => {
-            if (didTimeout) {
-              return {
-                content: '',
-                tokenCount: 0,
-                completed: false,
-                error: error instanceof Error ? error : new Error(String(error)),
+        const result = await client.askStream(
+          {
+            messages: chatMessages,
+            temperature: 0.1, // #5: 适度随机性，避免固化句式
+            maxTokens,
+          },
+          {
+            onChunk: (chunk) => {
+              if (chunk.content) {
+                fullContent += chunk.content
               }
-            }
-            throw error
-          })
+            },
+            onComplete: () => {
+              // no-op, content 已在 onChunk 中累积
+            },
+            onError: (err) => {
+              console.error('[SummaryProvider] LLM summarize error', err)
+            },
+          },
+        )
 
-          const result = await Promise.race([
-            streamPromise,
-            new Promise<never>((_, reject) => {
-              timeoutId = setTimeout(() => {
-                didTimeout = true
-                abortController.abort()
-                reject(new ConversationCompressionTimeoutError(SUMMARY_REQUEST_TIMEOUT_MS))
-              }, SUMMARY_REQUEST_TIMEOUT_MS)
-            }),
-          ])
-
-          const trimmed = fullContent.trim() || result.content.trim()
-          if (!trimmed) {
-            console.warn('[SummaryProvider] empty summary from LLM, fallback to simple summary')
-            return fallback.summarizeBatch({ docPath, level, messages })
-          }
-
-          return trimmed
-        } finally {
-          if (timeoutId != null) {
-            clearTimeout(timeoutId)
-          }
+        const trimmed = fullContent.trim() || result.content.trim()
+        if (!trimmed) {
+          console.warn('[SummaryProvider] empty summary from LLM, fallback to simple summary')
+          return fallback.summarizeBatch({ docPath, level, messages })
         }
+
+        return trimmed
       } catch (e) {
-        if (didTimeout) {
-          throw new ConversationCompressionTimeoutError(SUMMARY_REQUEST_TIMEOUT_MS)
-        }
         if (e instanceof ConversationCompressionTimeoutError) {
           throw e
         }

@@ -35,6 +35,7 @@ mod state_store;
 mod support;
 mod word;
 mod word_commands;
+mod word_import;
 mod workflows;
 mod workspace_io;
 
@@ -70,6 +71,7 @@ use state_store::*;
 pub(crate) use support::*;
 use word::*;
 use word_commands::*;
+use word_import::*;
 use workflows::*;
 use workspace_io::*;
 
@@ -170,6 +172,10 @@ macro_rules! app_invoke_handler {
             export_word_docx,
             export_word_docx_with_template,
             fill_docx_template,
+            import_word_docx_to_temp_markdown,
+            finalize_imported_word_markdown,
+            cleanup_imported_word_temp,
+            cleanup_stale_imported_word_temps,
             get_system_language,
             export_settings_backup,
             test_webdav_connection,

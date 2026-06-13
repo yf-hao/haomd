@@ -322,6 +322,15 @@ describe('command registry - lifecycle & clipboard', () => {
     expect(ctx.closeCurrentTab).toHaveBeenCalled()
   })
 
+  it('toggle_sidebar should delegate to ctx.toggleSidebarVisible', () => {
+    const ctx = createMockCtx()
+    const registry = createCommandRegistry(ctx)
+
+    registry.toggle_sidebar()
+
+    expect(ctx.toggleSidebarVisible).toHaveBeenCalled()
+  })
+
   it('quit should prefer onRequestQuit and fallback to confirmLoseChanges', () => {
     const ctx = createMockCtx()
     const registry = createCommandRegistry(ctx)

@@ -42,6 +42,7 @@ export type TableCellStyle = {
 
 export type TableStyle = {
   align?: 'left' | 'center' | 'right'
+  borderColor?: string
   widthPercent?: number
   widthPx?: number
   maxWidthPercent?: number

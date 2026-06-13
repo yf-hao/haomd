@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
-  ConversationCompressionTimeoutError,
   createConversationCompressor,
   type CompressionConfig,
   defaultCompressionConfig,
@@ -307,16 +306,39 @@ describe('createConversationCompressor', () => {
     expect(provider.summarizeBatch).toHaveBeenCalledTimes(2)
     expect(provider.summarizeBatch.mock.calls[0]?.[0].messages.map((m: DocConversationMessage) => m.id)).toEqual([
       '1',
-      '2',
     ])
     expect(provider.summarizeBatch.mock.calls[1]?.[0].messages.map((m: DocConversationMessage) => m.id)).toEqual([
       '3',
-      '4',
     ])
 
     const summaries = result.messages.filter((message) => (message.meta?.summaryLevel ?? 0) === 1)
     expect(summaries).toHaveLength(2)
     expect(result.messages.slice(-2).map((message) => message.id)).toEqual(['5', '6'])
+  })
+
+  it('should include previous assistant context for level1 when user references it', async () => {
+    const record = createRecord([
+      createMsg('1', 'assistant', '方案一：全部使用 accelerator。\n方案二：macOS 用 accelerator，Windows 用前端兜底。', 100),
+      createMsg('2', 'user', '按第二个方案实现', 110),
+      createMsg('3', 'user', 'recent user', 1100),
+      createMsg('4', 'assistant', 'recent assistant', 1200),
+    ])
+
+    const provider = {
+      summarizeBatch: vi.fn().mockResolvedValueOnce('Summary with referenced context'),
+    }
+    const compressor = createConversationCompressor(provider)
+
+    await compressor.compress(record, {
+      ...mockConfig,
+      keepRecentRounds: 1,
+    })
+
+    expect(provider.summarizeBatch).toHaveBeenCalledTimes(1)
+    expect(provider.summarizeBatch.mock.calls[0]?.[0].messages.map((m: DocConversationMessage) => m.id)).toEqual([
+      '1',
+      '2',
+    ])
   })
 })
 
@@ -561,8 +583,7 @@ describe('createLLMSummaryProvider', () => {
     expect(llm).toBe(simple)
   })
 
-  it('should throw timeout error when summary request exceeds timeout', async () => {
-    vi.useFakeTimers()
+  it('should not abort long-running summary requests at compression layer', async () => {
     const state: AiSettingsState = {
       providers: [
         {
@@ -578,16 +599,11 @@ describe('createLLMSummaryProvider', () => {
     }
     mockedLoadAiSettingsState.mockResolvedValueOnce(state)
 
+    const streamControls: { resolve?: (value: StreamingChatResult) => void } = {}
     const askStream = vi.fn(
-      ({ signal }: StreamingChatRequest) =>
-        new Promise<StreamingChatResult>((_resolve, reject) => {
-          signal?.addEventListener(
-            'abort',
-            () => {
-              reject(new Error('aborted'))
-            },
-            { once: true },
-          )
+      (_request: StreamingChatRequest) =>
+        new Promise<StreamingChatResult>((resolve) => {
+          streamControls.resolve = resolve
         }),
     )
 
@@ -595,13 +611,17 @@ describe('createLLMSummaryProvider', () => {
     mockedCreateStreamingClientFromSettings.mockReturnValue(client)
 
     const llmProvider = createLLMSummaryProvider()
-    const assertion = expect(
-      llmProvider.summarizeBatch({ docPath: 'doc.md', level: 1, messages }),
-    ).rejects.toBeInstanceOf(ConversationCompressionTimeoutError)
+    const pending = llmProvider.summarizeBatch({ docPath: 'doc.md', level: 1, messages })
 
-    await vi.advanceTimersByTimeAsync(45_000)
+    await vi.waitFor(() => expect(askStream).toHaveBeenCalled())
+    expect(askStream.mock.calls[0][0]).not.toHaveProperty('signal')
 
-    await assertion
-    vi.useRealTimers()
+    streamControls.resolve?.({
+      content: 'late summary',
+      tokenCount: 2,
+      completed: true,
+    })
+
+    await expect(pending).resolves.toBe('late summary')
   })
 })

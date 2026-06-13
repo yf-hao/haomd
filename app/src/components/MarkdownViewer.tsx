@@ -10,6 +10,7 @@ import { extractFrontMatter } from '../modules/markdown/frontMatter'
 import { replaceTextColorSyntaxWithHtml } from '../modules/markdown/extensions/colorMark'
 import { normalizeLatexDelimiters } from '../modules/markdown/normalizeLatexDelimiters'
 import { remarkToc } from '../modules/markdown/remarkToc'
+import { splitAlignedTabInlineNodes } from '../modules/markdown/alignedTab'
 import { DownloadOnClickUseCase, TauriWebviewOpener } from '../modules/download/handleMarkdownLinkClick'
 import { ExamAttachmentLinkClassifier } from '../modules/download/linkClassifier'
 import { FetchTextDownloadService } from '../modules/download/downloadService'
@@ -124,6 +125,105 @@ function remarkPreserveSingleLineBreaks() {
 
         walk(child)
         nextChildren.push(child)
+      }
+
+      node.children = nextChildren
+    }
+
+    walk(tree)
+  }
+}
+
+function rehypeAlignedTabBlocks() {
+  return (tree: any) => {
+    const paragraphToAlignedRows = (node: any) => {
+      if (
+        node?.type !== 'element' ||
+        node.tagName !== 'p' ||
+        !Array.isArray(node.children)
+      ) {
+        return null
+      }
+
+      return splitAlignedTabInlineNodes<any>(node.children, {
+        getText: (child) => child?.type === 'text' && typeof child.value === 'string' ? child.value : null,
+        createText: (value, source) => ({ ...source, value }),
+      })
+    }
+
+    const rowsToAlignedBlock = (rows: any[], position?: any) => ({
+      type: 'element',
+      tagName: 'div',
+      properties: { className: ['md-align-block'] },
+      position,
+      children: rows.map((row) => ({
+        type: 'element',
+        tagName: 'span',
+        properties: { className: ['md-align-row'] },
+        children: [
+          {
+            type: 'element',
+            tagName: 'span',
+            properties: { className: ['md-align-left'] },
+            children: row.left,
+          },
+          {
+            type: 'element',
+            tagName: 'span',
+            properties: { className: ['md-align-right'] },
+            children: row.right,
+          },
+        ],
+      })),
+    })
+
+    const isWhitespaceTextNode = (node: any) => (
+      node?.type === 'text' &&
+      typeof node.value === 'string' &&
+      node.value.trim().length === 0
+    )
+
+    const walk = (node: any) => {
+      if (!node || typeof node !== 'object') return
+      if (!Array.isArray(node.children)) return
+
+      const nextChildren: any[] = []
+      for (let index = 0; index < node.children.length; index += 1) {
+        const child = node.children[index]
+        if (isWhitespaceTextNode(child)) {
+          nextChildren.push(child)
+          continue
+        }
+
+        const rows = paragraphToAlignedRows(child)
+        if (!rows) {
+          walk(child)
+          nextChildren.push(child)
+          continue
+        }
+
+        const groupedRows = [...rows]
+        let endIndex = index
+        for (let nextIndex = index + 1; nextIndex < node.children.length; nextIndex += 1) {
+          const nextChild = node.children[nextIndex]
+          if (isWhitespaceTextNode(nextChild)) {
+            endIndex = nextIndex
+            continue
+          }
+
+          const nextRows = paragraphToAlignedRows(nextChild)
+          if (!nextRows) break
+          groupedRows.push(...nextRows)
+          endIndex = nextIndex
+        }
+
+        nextChildren.push(
+          rowsToAlignedBlock(groupedRows, {
+            start: child.position?.start,
+            end: node.children[endIndex]?.position?.end,
+          }),
+        )
+        index = endIndex
       }
 
       node.children = nextChildren
@@ -695,7 +795,7 @@ function MarkdownViewerComponent(
             <ReactMarkdown
               remarkPlugins={activeRemarkPlugins}
               remarkRehypeOptions={remarkRehypeOptions}
-              rehypePlugins={[rehypeRaw]}
+              rehypePlugins={[rehypeAlignedTabBlocks, rehypeRaw]}
               components={components}
             >
               {renderedValue}

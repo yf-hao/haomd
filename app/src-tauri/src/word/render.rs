@@ -208,21 +208,53 @@ fn render_table_xml(
     Ok(format!(
         concat!(
             "<w:tbl>",
-            r#"<w:tblPr>{}<w:tblBorders>"#,
-            r#"<w:top w:val="single" w:sz="4" w:space="0" w:color="D9D9D9"/>"#,
-            r#"<w:left w:val="single" w:sz="4" w:space="0" w:color="D9D9D9"/>"#,
-            r#"<w:bottom w:val="single" w:sz="4" w:space="0" w:color="D9D9D9"/>"#,
-            r#"<w:right w:val="single" w:sz="4" w:space="0" w:color="D9D9D9"/>"#,
-            r#"<w:insideH w:val="single" w:sz="4" w:space="0" w:color="D9D9D9"/>"#,
-            r#"<w:insideV w:val="single" w:sz="4" w:space="0" w:color="D9D9D9"/></w:tblBorders></w:tblPr>"#,
+            r#"<w:tblPr>{}{}</w:tblPr>"#,
             "{}",
             "{}",
             "</w:tbl>"
         ),
         render_table_properties_xml(table_style, render_state.style_settings.page_margin_twips).0,
+        render_table_borders_xml(table_style),
         render_table_grid_xml(table_style, render_state.style_settings.page_margin_twips),
         rows_xml
     ))
+}
+
+fn render_table_borders_xml(table_style: Option<&WordTableStyleCfg>) -> String {
+    let border_color = table_style
+        .and_then(|style| style.border_color.as_deref())
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+
+    if matches!(border_color, Some(value) if value.eq_ignore_ascii_case("none")) {
+        return concat!(
+            r#"<w:tblBorders>"#,
+            r#"<w:top w:val="nil"/>"#,
+            r#"<w:left w:val="nil"/>"#,
+            r#"<w:bottom w:val="nil"/>"#,
+            r#"<w:right w:val="nil"/>"#,
+            r#"<w:insideH w:val="nil"/>"#,
+            r#"<w:insideV w:val="nil"/>"#,
+            r#"</w:tblBorders>"#
+        )
+        .to_string();
+    }
+
+    let color = border_color.unwrap_or("D9D9D9");
+    let color = crate::escape_xml_attr(color);
+    format!(
+        concat!(
+            r#"<w:tblBorders>"#,
+            r#"<w:top w:val="single" w:sz="4" w:space="0" w:color="{0}"/>"#,
+            r#"<w:left w:val="single" w:sz="4" w:space="0" w:color="{0}"/>"#,
+            r#"<w:bottom w:val="single" w:sz="4" w:space="0" w:color="{0}"/>"#,
+            r#"<w:right w:val="single" w:sz="4" w:space="0" w:color="{0}"/>"#,
+            r#"<w:insideH w:val="single" w:sz="4" w:space="0" w:color="{0}"/>"#,
+            r#"<w:insideV w:val="single" w:sz="4" w:space="0" w:color="{0}"/>"#,
+            r#"</w:tblBorders>"#
+        ),
+        color
+    )
 }
 
 pub(crate) fn render_table_properties_xml(
@@ -506,6 +538,17 @@ pub(crate) fn render_table_cell_properties_xml(
             .as_deref()
             .filter(|value| !value.trim().is_empty())
         {
+            if border_color.trim().eq_ignore_ascii_case("none") {
+                tc_pr.push_str(concat!(
+                    r#"<w:tcBorders>"#,
+                    r#"<w:top w:val="nil"/>"#,
+                    r#"<w:left w:val="nil"/>"#,
+                    r#"<w:bottom w:val="nil"/>"#,
+                    r#"<w:right w:val="nil"/>"#,
+                    r#"</w:tcBorders>"#
+                ));
+                return format!("<w:tcPr>{}</w:tcPr>", tc_pr);
+            }
             let border_color = crate::escape_xml_attr(border_color);
             tc_pr.push_str(&format!(
                 concat!(
@@ -1402,6 +1445,10 @@ fn column_alignments(node: &MathMlNode, keep_columns: &[usize]) -> Vec<&'static 
 }
 
 fn convert_mathml_row(node: &MathMlNode) -> String {
+    if let Some(xml) = convert_delimited_mathml_table_row(node) {
+        return xml;
+    }
+
     let mut xml = String::new();
     let mut index = 0;
     while index < node.children.len() {
@@ -1421,6 +1468,61 @@ fn convert_mathml_row(node: &MathMlNode) -> String {
         index += 1;
     }
     xml
+}
+
+fn convert_delimited_mathml_table_row(node: &MathMlNode) -> Option<String> {
+    let meaningful_children = node
+        .children
+        .iter()
+        .filter(|child| !is_ignorable_mathml_node(child))
+        .collect::<Vec<_>>();
+
+    if meaningful_children.len() != 3 {
+        return None;
+    }
+
+    let left = mathml_operator_text(meaningful_children[0])?;
+    let table = meaningful_children[1];
+    let right = mathml_operator_text(meaningful_children[2])?;
+
+    if table.name != "mtable" || !is_matching_delimiter_pair(&left, &right) {
+        return None;
+    }
+
+    let table_xml = convert_mathml_table(table);
+    Some(format!(
+        concat!(
+            r#"<m:d><m:dPr><m:begChr m:val="{}"/><m:endChr m:val="{}"/>"#,
+            r#"<m:grow m:val="1"/></m:dPr><m:e>{}</m:e></m:d>"#
+        ),
+        crate::escape_xml_attr(&left),
+        crate::escape_xml_attr(&right),
+        table_xml
+    ))
+}
+
+fn mathml_operator_text(node: &MathMlNode) -> Option<String> {
+    if node.name != "mo" {
+        return None;
+    }
+
+    let text = collect_mathml_text(node).trim().to_string();
+    if text.is_empty() {
+        None
+    } else {
+        Some(text)
+    }
+}
+
+fn is_matching_delimiter_pair(left: &str, right: &str) -> bool {
+    matches!(
+        (left, right),
+        ("(", ")") | ("[", "]") | ("{", "}") | ("|", "|") | ("‖", "‖")
+    )
+}
+
+fn is_ignorable_mathml_node(node: &MathMlNode) -> bool {
+    node.text.trim().is_empty() && node.children.is_empty()
 }
 
 fn render_nary_or_limit(

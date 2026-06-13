@@ -53,6 +53,7 @@ struct MenuTexts {
     open_recent: &'static str,
     clear_recent: &'static str,
     more: &'static str,
+    import: &'static str,
     export: &'static str,
     file: &'static str,
     new_file: &'static str,
@@ -157,6 +158,7 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             open_recent: "打开最近文件",
             clear_recent: "清空最近记录",
             more: "更多...",
+            import: "导入",
             export: "导出",
             file: "文件",
             new_file: "新建",
@@ -258,6 +260,7 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             open_recent: "Open Recent",
             clear_recent: "Clear Recent",
             more: "More...",
+            import: "Import",
             export: "Export",
             file: "File",
             new_file: "New",
@@ -532,6 +535,14 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         )
         .build()?;
 
+    let import_menu = SubmenuBuilder::new(app, texts.import)
+        .item(
+            &MenuItemBuilder::new(texts.word_docx)
+                .id("import_word_docx")
+                .build(app)?,
+        )
+        .build()?;
+
     let file_menu = SubmenuBuilder::new(app, texts.file)
         .item(
             &MenuItemBuilder::new(texts.new_file)
@@ -554,6 +565,8 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         )
         .item(&open_recent_menu)
         .separator()
+        .item(&import_menu)
+        .separator()
         .item(
             &MenuItemBuilder::new(texts.save)
                 .id("save")
@@ -563,7 +576,7 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         .item(
             &MenuItemBuilder::new(texts.save_as)
                 .id("save_as")
-                .accelerator("CmdOrCtrl+Shift+s")
+                .accelerator("CmdOrCtrl+Alt+s")
                 .build(app)?,
         )
         .item(
@@ -866,6 +879,7 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         .item(
             &MenuItemBuilder::new(texts.toggle_sidebar)
                 .id("toggle_sidebar")
+                .accelerator("CmdOrCtrl+Shift+s")
                 .build(app)?,
         )
         .item(

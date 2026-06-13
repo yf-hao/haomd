@@ -242,6 +242,7 @@ fn should_generate_editable_word_xml_for_core_blocks() {
                 WordBlockCfg::Table {
                     style: Some(WordTableStyleCfg {
                         align: Some("center".to_string()),
+                        border_color: None,
                         width_percent: Some(80.0),
                         width_px: None,
                         max_width_percent: Some(90.0),
@@ -527,6 +528,7 @@ fn should_render_table_layout_modes() {
     let (fixed_xml, _) = render_table_properties_xml(
         Some(&WordTableStyleCfg {
             align: None,
+            border_color: None,
             width_percent: None,
             width_px: None,
             max_width_percent: None,
@@ -538,6 +540,7 @@ fn should_render_table_layout_modes() {
     let (auto_xml, _) = render_table_properties_xml(
         Some(&WordTableStyleCfg {
             align: None,
+            border_color: None,
             width_percent: None,
             width_px: None,
             max_width_percent: None,
@@ -618,6 +621,28 @@ fn should_convert_mathml_alignment_table_to_word_matrix() {
     assert!(omml.contains("<m:t>=</m:t>"));
     assert!(omml.contains("<m:t>d</m:t>"));
     assert!(omml.contains("<m:t>f</m:t>"));
+}
+
+#[test]
+fn should_convert_parenthesized_mathml_table_to_word_delimiter_matrix() {
+    let math_ml = concat!(
+        r#"<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics>"#,
+        r#"<mrow><mi>A</mi><mo>=</mo><mrow><mo>(</mo>"#,
+        r#"<mtable><mtr><mtd><mn>1</mn></mtd><mtd><mn>0</mn></mtd></mtr>"#,
+        r#"<mtr><mtd><mn>0</mn></mtd><mtd><mn>1</mn></mtd></mtr></mtable>"#,
+        r#"<mo>)</mo></mrow></mrow>"#,
+        r#"</semantics></math>"#
+    );
+
+    let omml = mathml_to_omml(math_ml).expect("parenthesized mtable should convert");
+
+    assert!(omml.contains("<m:d>"));
+    assert!(omml.contains(r#"<m:begChr m:val="("/>"#));
+    assert!(omml.contains(r#"<m:endChr m:val=")"/>"#));
+    assert!(omml.contains(r#"<m:grow m:val="1"/>"#));
+    assert!(omml.contains("<m:m>"));
+    assert!(omml.contains("<m:t>A</m:t>"));
+    assert!(omml.contains("<m:t>=</m:t>"));
 }
 
 #[test]

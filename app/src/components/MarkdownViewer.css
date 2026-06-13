@@ -40,6 +40,38 @@
   contain-intrinsic-size: auto 50px;
 }
 
+.markdown-body.gh-markdown .md-align-block {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: 2.5rem;
+  gap: 0.18em;
+  margin: 0.35em 0 0.75em;
+}
+
+.markdown-body.gh-markdown .md-align-row {
+  display: contents;
+}
+
+.markdown-body.gh-markdown .md-align-left,
+.markdown-body.gh-markdown .md-align-right {
+  min-width: 0;
+}
+
+.markdown-body.gh-markdown .md-align-right {
+  color: var(--theme-text-muted);
+}
+
+@media (max-width: 640px) {
+  .markdown-body.gh-markdown .md-align-block {
+    grid-template-columns: 1fr;
+    row-gap: 0.08em;
+  }
+
+  .markdown-body.gh-markdown .md-align-right {
+    padding-left: 1.5em;
+  }
+}
+
 /* 提高语义权重覆盖原始，仅作用于普通 pre */
 .markdown-body pre:not(.no-style):not(:has(> .code-block-wrapper)):not(:has(> .diagram-block)) {
   padding: 6px 6px;

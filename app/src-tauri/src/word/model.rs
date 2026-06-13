@@ -117,6 +117,8 @@ pub(crate) struct WordTableStyleCfg {
     #[serde(default)]
     pub(crate) align: Option<String>,
     #[serde(default)]
+    pub(crate) border_color: Option<String>,
+    #[serde(default)]
     pub(crate) width_percent: Option<f32>,
     #[serde(default)]
     pub(crate) width_px: Option<u32>,

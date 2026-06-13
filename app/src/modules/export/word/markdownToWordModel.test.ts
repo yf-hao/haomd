@@ -114,6 +114,55 @@ describe('export/word - markdownToWordModel', () => {
     })
   })
 
+  it('should map aligned tab paragraphs into borderless two-column tables', () => {
+    const markdown = [
+      '① $s$    \\t 附近前提',
+      '② $\\lnot s \\lor p$  \\t 前提',
+      '③ $p$  \\t ①②析取三段论',
+    ].join('\n')
+
+    const payload = markdownToWordModel(markdown, 'Aligned')
+
+    expect(payload.blocks).toEqual([
+      {
+        type: 'table',
+        style: {
+          borderColor: 'none',
+          layout: 'fixed',
+          widthPercent: 100,
+          columnWidths: [
+            { widthPercent: 42 },
+            { widthPercent: 58 },
+          ],
+        },
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [{ type: 'paragraph', text: [{ type: 'text', value: '① ' }, expect.objectContaining({ type: 'math', value: 's' })] }],
+                style: { borderColor: 'none' },
+              },
+              {
+                blocks: [{ type: 'paragraph', text: [{ type: 'text', value: '附近前提' }] }],
+                style: { borderColor: 'none' },
+              },
+            ],
+          },
+          expect.objectContaining({
+            cells: expect.arrayContaining([
+              expect.objectContaining({ style: { borderColor: 'none' } }),
+            ]),
+          }),
+          expect.objectContaining({
+            cells: expect.arrayContaining([
+              expect.objectContaining({ style: { borderColor: 'none' } }),
+            ]),
+          }),
+        ],
+      },
+    ])
+  })
+
   it('should preserve blank lines for plain text export', () => {
     const payload = plainTextToWordModel('first\n\nthird\n', 'Plain')
 

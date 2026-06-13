@@ -62,6 +62,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     'close_file',
     'toggle_preview',
     'toggle_preview_only',
+    'toggle_sidebar',
     'zoom_in',
     'zoom_out',
     'zoom_reset',
@@ -105,6 +106,8 @@ export function useCommandSystem(params: CommandSystemParams) {
     setFilePath,
     applyOpenedContent,
     openFile,
+    importWordFile,
+    openImportedWordDocument,
     save,
     saveAs,
     handleShowRecent,
@@ -220,6 +223,8 @@ export function useCommandSystem(params: CommandSystemParams) {
         setFilePath,
         applyOpenedContent,
         openFile,
+        importWordFile,
+        openImportedWordDocument,
         save,
         saveAs,
         handleShowRecent,
@@ -293,6 +298,8 @@ export function useCommandSystem(params: CommandSystemParams) {
       setFilePath,
       applyOpenedContent,
       openFile,
+      importWordFile,
+      openImportedWordDocument,
       save,
       saveAs,
       handleShowRecent,
@@ -422,8 +429,10 @@ export function useCommandSystem(params: CommandSystemParams) {
 
       if (key === 's') {
         e.preventDefault()
-        if (e.shiftKey) {
+        if (e.altKey && !e.shiftKey) {
           void dispatchAction('save_as')
+        } else if (e.shiftKey && !e.altKey) {
+          void dispatchAction('toggle_sidebar')
         } else {
           void dispatchAction('save')
         }

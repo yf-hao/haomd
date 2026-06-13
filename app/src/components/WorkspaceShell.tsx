@@ -54,6 +54,17 @@ import { openTerminalAt } from '../modules/platform/terminalService'
 import { openInFileManager } from '../modules/platform/fileExplorerService'
 import { loadDefaultImagePathStrategyConfig, resolveImageTarget } from '../modules/images/imagePasteStrategy'
 import {
+  buildImportedWordTabTitle,
+  cleanupImportedWordTemp,
+  cleanupStaleImportedWordTemps,
+  finalizeImportedWordDocument,
+  importWordDocxToTempMarkdown,
+  isWordDocxPath,
+  pickWordDocxImportPath,
+  pickImportedWordSavePath,
+} from '../modules/import/word/service'
+import type { ImportedWordState } from '../modules/import/word/types'
+import {
   registerApplyHeadingLevel,
   registerResetHeadingToParagraph,
   registerEmphasizeSelection,
@@ -147,6 +158,7 @@ export type InitialWorkspaceAction = 'new' | 'open' | 'open_folder' | 'open_rece
 
 export interface WorkspaceShellProps {
   activeLeftPanel: LeftPanelId
+  toggleSidebarVisible: () => void
   isTauriEnv: () => boolean
   initialAction: InitialWorkspaceAction
   initialOpenRecentPath?: string | null
@@ -169,6 +181,7 @@ const seed = ''
 
 export function WorkspaceShell({
   activeLeftPanel,
+  toggleSidebarVisible,
   isTauriEnv,
   initialAction,
   initialOpenRecentPath,
@@ -427,6 +440,38 @@ export function WorkspaceShell({
     },
   })
 
+  const [importedWordTabs, setImportedWordTabs] = useState<Record<string, ImportedWordState>>({})
+  const importedWordTabsRef = useRef<Record<string, ImportedWordState>>({})
+
+  useEffect(() => {
+    importedWordTabsRef.current = importedWordTabs
+  }, [importedWordTabs])
+
+  useEffect(() => {
+    void cleanupStaleImportedWordTemps().catch((error) => {
+      console.warn('[word-import] cleanup stale temp failed', error)
+    })
+  }, [])
+
+  const registerImportedWordTab = useCallback((tabId: string, state: ImportedWordState) => {
+    setImportedWordTabs((prev) => ({ ...prev, [tabId]: state }))
+  }, [])
+
+  const clearImportedWordTab = useCallback((tabId: string) => {
+    setImportedWordTabs((prev) => {
+      if (!prev[tabId]) return prev
+      const next = { ...prev }
+      delete next[tabId]
+      return next
+    })
+  }, [])
+
+  const findImportedWordTabBySourcePath = useCallback((path: string) => {
+    return tabs.find((tab) => importedWordTabs[tab.id]?.sourceDocxPath === path) ?? null
+  }, [importedWordTabs, tabs])
+
+  const activeImportedWordState = activeId ? (importedWordTabs[activeId] ?? null) : null
+
   const isPdfActive = !!activeTab?.path && activeTab.path.toLowerCase().endsWith('.pdf')
 
   // AI Chat hook
@@ -483,8 +528,32 @@ export function WorkspaceShell({
   const closeTabWithAiSession = useCallback((id: string) => {
     // 按 tab 维度清理 AI Chat 会话
     aiChatSessionManager.deleteSession(id)
+    const imported = importedWordTabsRef.current[id]
+    if (imported) {
+      void cleanupImportedWordTemp(imported.tempDir).catch((error) => {
+        console.warn('[word-import] cleanup temp failed on tab close', error)
+      })
+      setImportedWordTabs((prev) => {
+        if (!prev[id]) return prev
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
+    }
     closeTab(id)
   }, [closeTab])
+
+  const cleanupAllImportedWordTemps = useCallback(() => {
+    const importedStates = Object.values(importedWordTabsRef.current)
+    for (const imported of importedStates) {
+      void cleanupImportedWordTemp(imported.tempDir).catch((error) => {
+        console.warn('[word-import] cleanup temp failed on quit', error)
+      })
+    }
+    if (importedStates.length > 0) {
+      setImportedWordTabs({})
+    }
+  }, [])
 
   const sidebar = useSidebar()
   const editorViewRef = useRef<EditorView | null>(null)
@@ -1658,6 +1727,7 @@ export function WorkspaceShell({
         cancelText: t('common.cancel'),
         onConfirm: () => {
           setConfirmDialog(null)
+          cleanupAllImportedWordTemps()
           if (isTauriEnv()) invoke('quit_app').catch(() => { })
           else window.close()
         },
@@ -1676,16 +1746,18 @@ export function WorkspaceShell({
           const res = await guardedSaveRef.current?.()
           if ((res as any)?.ok === false) return
         }
+        cleanupAllImportedWordTemps()
         if (isTauriEnv()) invoke('quit_app').catch(() => { })
         else window.close()
       },
       onQuitWithoutSaving: () => {
         setQuitConfirmDialog(null)
+        cleanupAllImportedWordTemps()
         if (isTauriEnv()) invoke('quit_app').catch(() => { })
         else window.close()
       }
     })
-  }, [isCreatingTab, getUnsavedTabs, isTauriEnv, setActiveTab, setConfirmDialog])
+  }, [isCreatingTab, getUnsavedTabs, isTauriEnv, setActiveTab, setConfirmDialog, cleanupAllImportedWordTemps, t])
 
   // 预览内容只在预览可见时才节流同步，避免 editor-only 模式下做无意义渲染
   useEffect(() => {
@@ -1767,10 +1839,126 @@ export function WorkspaceShell({
     // 闭包中的 activeId 仍指向旧标签，会误将旧标签内容覆写为新文件内容。
   }, [isPreviewVisible, clearPreviewSyncTimer])
 
+  const openImportedWordDocument = useCallback(async (path: string) => {
+    if (isCreatingTab) {
+      return { ok: false as const, error: { code: 'CANCELLED', message: '正在创建新标签，请稍候…', traceId: undefined } }
+    }
+
+    const existing = findImportedWordTabBySourcePath(path)
+    if (existing) {
+      setActiveTab(existing.id)
+      return { ok: true as const, data: { path } }
+    }
+
+    try {
+      setStatusMessage(t('workspace.importingWordPleaseWait'))
+      const imported = await importWordDocxToTempMarkdown(path)
+      const tab = createTab({
+        title: buildImportedWordTabTitle(path),
+        path: 'untitled',
+        content: imported.markdown,
+      })
+      registerImportedWordTab(tab.id, {
+        kind: 'word-import',
+        sourceDocxPath: imported.sourceDocxPath,
+        tempDir: imported.tempDir,
+        tempMarkdownPath: imported.tempMarkdownPath,
+        tempImagesDir: imported.tempImagesDir,
+        needsSaveAs: true,
+      })
+      setActiveTab(tab.id)
+      applyOpenedContent(imported.markdown)
+      setFilePath('untitled')
+      if (imported.warnings.length > 0) {
+        setStatusMessage(imported.warnings[0])
+      } else {
+        setStatusMessage(t('workspace.wordImportedToTemp'))
+      }
+      return { ok: true as const, data: { path } }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setStatusMessage(t('workspace.wordImportFailed', { message }))
+      return { ok: false as const, error: { code: 'UNKNOWN', message, traceId: undefined } }
+    }
+  }, [
+    applyOpenedContent,
+    createTab,
+    findImportedWordTabBySourcePath,
+    isCreatingTab,
+    registerImportedWordTab,
+    setActiveTab,
+    setFilePath,
+    setStatusMessage,
+    t,
+  ])
+
+  const importWordFile = useCallback(async () => {
+    try {
+      const path = await pickWordDocxImportPath()
+      if (!path) {
+        setStatusMessage(t('workspace.importCancelled'))
+        return { ok: false as const, error: { code: 'CANCELLED', message: '用户取消', traceId: undefined } }
+      }
+      return await openImportedWordDocument(path)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setStatusMessage(t('workspace.wordImportFailed', { message }))
+      return { ok: false as const, error: { code: 'UNKNOWN', message, traceId: undefined } }
+    }
+  }, [openImportedWordDocument, setStatusMessage, t])
+
+  const saveImportedWordDocumentAs = useCallback(async (markdownContent: string) => {
+    if (!activeImportedWordState || !activeId) {
+      return { ok: false as const, error: { code: 'UNKNOWN', message: '当前文档不是 Word 导入态', traceId: undefined } }
+    }
+
+    const outputPath = await pickImportedWordSavePath(activeImportedWordState.sourceDocxPath)
+    if (!outputPath) {
+      setStatusMessage(t('workspace.saveCancelled'))
+      return { ok: false as const, error: { code: 'CANCELLED', message: '用户取消', traceId: undefined } }
+    }
+
+    try {
+      setStatusMessage(t('workspace.savingImportedWord'))
+      const finalized = await finalizeImportedWordDocument(activeImportedWordState, markdownContent, outputPath)
+      const reopened = await openFromPath(finalized.savedPath)
+      if (!reopened.ok) {
+        setStatusMessage(reopened.error.message)
+        return reopened
+      }
+      updateActiveContent(reopened.data.content, { markDirty: false })
+      updateActiveMeta(reopened.data.path, false)
+      applyOpenedContent(finalized.markdown)
+      clearImportedWordTab(activeId)
+      sidebar.addStandaloneFile(finalized.savedPath)
+      setStatusMessage(t('workspace.wordImportSaved', { path: finalized.savedPath }))
+      return { ok: true as const, data: { path: finalized.savedPath } }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setStatusMessage(t('workspace.wordImportSaveFailed', { message }))
+      return { ok: false as const, error: { code: 'UNKNOWN', message, traceId: undefined } }
+    }
+  }, [
+    activeId,
+    activeImportedWordState,
+    applyOpenedContent,
+    clearImportedWordTab,
+    openFromPath,
+    setStatusMessage,
+    sidebar,
+    t,
+    updateActiveContent,
+    updateActiveMeta,
+  ])
+
   const saveWithPdfGuard = useCallback(async () => {
     if (isPdfActive) {
       setStatusMessage(t('workspace.saveUnsupportedPdf'))
       return { ok: false as const, error: { code: 'UNSUPPORTED', message: t('workspace.saveUnsupportedPdfError'), traceId: undefined } }
+    }
+    if (activeImportedWordState) {
+      const latestImported = syncLatestWysiwygToReact() ?? markdownRef.current
+      return await saveImportedWordDocumentAs(latestImported)
     }
     const latest = syncLatestWysiwygToReact()
     if (latest !== null) {
@@ -1780,7 +1968,7 @@ export function WorkspaceShell({
       flushSync(() => { wysiwygFlushRef.current!() })
     }
     return await save()
-  }, [isPdfActive, save, setStatusMessage, syncLatestWysiwygToReact, t])
+  }, [activeImportedWordState, isPdfActive, save, saveImportedWordDocumentAs, setStatusMessage, syncLatestWysiwygToReact, t])
   guardedSaveRef.current = saveWithPdfGuard
 
   const saveAsWithPdfGuard = useCallback(async () => {
@@ -1803,12 +1991,16 @@ export function WorkspaceShell({
         return { ok: false as const, error: { code: 'UNKNOWN', message, traceId: undefined } }
       }
     }
+    if (activeImportedWordState) {
+      const latestImported = syncLatestWysiwygToReact() ?? markdownRef.current
+      return await saveImportedWordDocumentAs(latestImported)
+    }
     const latest = syncLatestWysiwygToReact()
     if (latest !== null) {
       return await saveAs(latest)
     }
     return await saveAs()
-  }, [activePdfPath, isPdfActive, saveAs, setStatusMessage, syncLatestWysiwygToReact, t])
+  }, [activeImportedWordState, activePdfPath, isPdfActive, saveAs, saveImportedWordDocumentAs, setStatusMessage, syncLatestWysiwygToReact, t])
 
   const markPendingRestoreRef = useRef<((tabId: string) => void) | null>(null)
 
@@ -1816,6 +2008,7 @@ export function WorkspaceShell({
     if (isCreatingTab) return { ok: false } as any
 
     const isPdf = path.toLowerCase().endsWith('.pdf')
+    const isDocx = isWordDocxPath(path)
 
     if (isPdf) {
       // PDF 文件：不通过文本读取管线，直接新建只读标签，由 PdfViewer 负责展示
@@ -1823,6 +2016,10 @@ export function WorkspaceShell({
       // 对于 PDF，不更新 markdown/preview 内容，保持当前文档内容不变
       setActiveTab(tab.id)
       return { ok: true, data: { path } } as any
+    }
+
+    if (isDocx) {
+      return await openImportedWordDocument(path)
     }
 
     const resp = await openFromPath(path)
@@ -1834,12 +2031,15 @@ export function WorkspaceShell({
       markPendingRestoreRef.current?.(tab.id)
     }
     return resp
-  }, [isCreatingTab, openFromPath, createTab, updateTabContent, setActiveTab, applyOpenedContent])
+  }, [isCreatingTab, openFromPath, createTab, updateTabContent, setActiveTab, applyOpenedContent, openImportedWordDocument])
 
   const openFileFromSidebar = useCallback(async (path: string) => {
     if (isCreatingTab) return { ok: false } as any
     // 点击文件时，清空文件夹选中状态
     setSelectedFolderPath(null)
+    if (isWordDocxPath(path)) {
+      return await openImportedWordDocument(path)
+    }
     const existing = tabs.find(t => t.path === path)
     if (existing) {
       setActiveTab(existing.id)
@@ -2764,8 +2964,8 @@ export function WorkspaceShell({
     onPdfSelectColorIndex: (index: number) => pdfShortcutActionsRef.current?.selectColorIndex(index),
     editMode, setEditMode: setEditModeWithFlush,
     confirmLoseChanges, hasUnsavedChanges, newDocument, setFilePath, applyOpenedContent,
-    openFile, save: saveWithPdfGuard, saveAs: saveAsWithPdfGuard, handleShowRecent: undefined, clearRecentAll,
-    createTab, updateActiveMeta, openFolderInSidebar, closeCurrentTab,
+    openFile, importWordFile, openImportedWordDocument, save: saveWithPdfGuard, saveAs: saveAsWithPdfGuard, handleShowRecent: undefined, clearRecentAll,
+    createTab, updateActiveMeta, openFolderInSidebar, toggleSidebarVisible, closeCurrentTab,
     openSearch: openSearchWithSelection,
     openInsertTableDialog,
     openMathSymbolDialog,
