@@ -53,6 +53,7 @@ struct MenuTexts {
     open_recent: &'static str,
     clear_recent: &'static str,
     more: &'static str,
+    import_export: &'static str,
     import: &'static str,
     export: &'static str,
     file: &'static str,
@@ -147,7 +148,6 @@ struct MenuTexts {
     report_issue: &'static str,
     about: &'static str,
     html: &'static str,
-    print: &'static str,
     word_docx: &'static str,
 }
 
@@ -160,6 +160,7 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             open_recent: "打开最近文件",
             clear_recent: "清空最近记录",
             more: "更多...",
+            import_export: "导入/导出",
             import: "导入",
             export: "导出",
             file: "文件",
@@ -254,7 +255,6 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             report_issue: "报告问题",
             about: "关于",
             html: "HTML",
-            print: "打印",
             word_docx: "Word (.docx)",
         },
         MenuLocale::EnUs => MenuTexts {
@@ -264,6 +264,7 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             open_recent: "Open Recent",
             clear_recent: "Clear Recent",
             more: "More...",
+            import_export: "Import / Export",
             import: "Import",
             export: "Export",
             file: "File",
@@ -358,7 +359,6 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             report_issue: "Report Issue",
             about: "About",
             html: "HTML",
-            print: "Print",
             word_docx: "Word (.docx)",
         },
     }
@@ -549,6 +549,11 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         )
         .build()?;
 
+    let import_export_menu = SubmenuBuilder::new(app, texts.import_export)
+        .item(&import_menu)
+        .item(&export_menu)
+        .build()?;
+
     let file_menu = SubmenuBuilder::new(app, texts.file)
         .item(
             &MenuItemBuilder::new(texts.new_file)
@@ -571,7 +576,7 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         )
         .item(&open_recent_menu)
         .separator()
-        .item(&import_menu)
+        .item(&import_export_menu)
         .separator()
         .item(
             &MenuItemBuilder::new(texts.save)
@@ -585,13 +590,6 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
                 .accelerator("CmdOrCtrl+Alt+s")
                 .build(app)?,
         )
-        .item(
-            &MenuItemBuilder::new(texts.print)
-                .id("export_pdf")
-                .accelerator("CmdOrCtrl+p")
-                .build(app)?,
-        )
-        .separator()
         .item(&export_menu)
         .separator()
         .item(

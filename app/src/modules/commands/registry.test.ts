@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createCommandRegistry, type CommandContext } from './registry'
 import { docConversationService } from '../ai/application/docConversationService'
 
-// jsdom 环境下，可能没有全局 alert，这里兜底一个，避免 export_pdf 报错
+// jsdom 环境下，可能没有全局 alert，这里兜底一个
 ;(globalThis as any).alert = (globalThis as any).alert ?? vi.fn()
 
 function createMockCtx(): CommandContext & {
@@ -56,7 +56,6 @@ function createMockCtx(): CommandContext & {
     addStandaloneFile: vi.fn(),
     refreshPdfRecent: vi.fn(),
     exportHtml: vi.fn().mockResolvedValue(undefined),
-    exportPdf: vi.fn().mockResolvedValue(undefined),
 
     // AppLifecycleCommandContext
     toggleSidebarVisible: vi.fn(),
@@ -297,7 +296,7 @@ describe('command registry - file commands', () => {
     expect(ctx.setStatusMessage).toHaveBeenCalledWith('已清空最近文件')
   })
 
-  it('export_html / export_pdf should call hooks or show fallback message', async () => {
+  it('export_html should call hooks or show fallback message', async () => {
     const ctx = createMockCtx()
     const registry = createCommandRegistry(ctx)
 
@@ -307,13 +306,6 @@ describe('command registry - file commands', () => {
     ctx.exportHtml = undefined
     await registry.export_html()
     expect(ctx.setStatusMessage).toHaveBeenCalledWith('当前版本 HTML 导出功能未挂载')
-
-    await registry.export_pdf()
-    expect(ctx.exportPdf).toHaveBeenCalled()
-
-    ctx.exportPdf = undefined
-    await registry.export_pdf()
-    expect(ctx.setStatusMessage).toHaveBeenCalledWith('当前版本 PDF 导出功能未挂载')
   })
 })
 

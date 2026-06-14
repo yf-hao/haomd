@@ -2748,7 +2748,6 @@ export function WorkspaceShell({
   }, [activeLeftPanel, requestDeleteSelectedFsEntry, startFsEntryInlineRename])
 
   const isExportingHtmlRef = useRef(false)
-  const isExportingPdfRef = useRef(false)
   const activeTabPathRef = useRef<string | null>(null)
 
   // 同步 Ref 以保持回调函数稳定
@@ -2781,33 +2780,6 @@ export function WorkspaceShell({
       setStatusMessage(t('workspace.exportFeatureLoadFailed'))
     } finally {
       isExportingHtmlRef.current = false
-    }
-  }, [setStatusMessage, getCurrentMarkdown, getCurrentFileName])
-
-  const handleExportPdf = useCallback(async () => {
-    console.log('[WorkspaceShell] 预备导出 PDF...')
-    // 防重入
-    if (isExportingPdfRef.current) {
-      setStatusMessage(t('workspace.preparingExportPleaseWait'))
-      return
-    }
-
-    isExportingPdfRef.current = true
-    try {
-      const { exportToPdf: dynamicPdfExport } = await import('../modules/export/pdf')
-
-      await dynamicPdfExport({
-        setStatusMessage,
-        getCurrentMarkdown,
-        getCurrentFileName,
-        getFilePath: () => activeTabPathRef.current,
-        t,
-      })
-    } catch (e) {
-      console.error('[Export PDF] 动态加载失败:', e)
-      setStatusMessage(t('workspace.pdfExportLoadFailed'))
-    } finally {
-      isExportingPdfRef.current = false
     }
   }, [setStatusMessage, getCurrentMarkdown, getCurrentFileName])
 
@@ -2991,7 +2963,6 @@ export function WorkspaceShell({
     refreshPdfRecent,
     hasOpenTabs: () => tabs.length > 0,
     exportHtml: handleExportHtml,
-    exportPdf: handleExportPdf,
     exportWord: handleExportWord,
     openRecentDialog: () => setRecentDialogOpen(true),
     t,
