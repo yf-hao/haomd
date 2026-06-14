@@ -49,6 +49,10 @@ export type CommandSystemParams = CommandContext & {
    */
   openCalendarDialog?: () => void
   /**
+   * 打开“重复提醒”工具对话框的 UI 回调，由 WorkspaceShell 提供。
+   */
+  openReminderToolDialog?: () => void
+  /**
    * 可选的 AI 客户端实现，默认使用基于 AI Settings 的实现。
    */
   aiClient?: IAiClient
@@ -74,6 +78,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     'ai_ask_file',
     'ai_ask_selection',
     'tools_calendar',
+    'tools_repeat_reminders',
     'find',
     ...FORMAT_SHORTCUT_ACTIONS,
   ])
@@ -149,6 +154,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     insertWordTemplateFrontMatter,
     openRecentDialog,
     openCalendarDialog,
+    openReminderToolDialog,
     t,
   } = params
 
@@ -266,6 +272,7 @@ export function useCommandSystem(params: CommandSystemParams) {
         closeAiChatDialog,
         openRecentDialog,
         openCalendarDialog,
+        openReminderToolDialog,
         t,
       }),
     [
@@ -342,6 +349,7 @@ export function useCommandSystem(params: CommandSystemParams) {
       closeAiChatDialog,
       openRecentDialog,
       openCalendarDialog,
+      openReminderToolDialog,
       t,
     ],
   )

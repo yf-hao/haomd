@@ -6,33 +6,39 @@ import {
   monthStart,
   sameCalendarDate,
 } from '../modules/tools/calendar/dateUtils'
+import { useI18n } from '../modules/i18n/I18nContext'
 import {
+  CALENDAR_REPEAT_RULES_UPDATED_EVENT,
   createCalendarReminder,
+  calendarEntriesForDate,
   loadCalendarReminders,
+  loadCalendarRepeatRules,
   remindersForDate,
   saveCalendarReminders,
   toDateKey,
   updateCalendarReminder,
+  type CalendarRepeatRule,
   type CalendarReminder,
 } from '../modules/tools/calendar/reminders'
 import './CalendarDialog.css'
 
 export type CalendarDialogProps = {
   open: boolean
-  locale?: 'zh-CN' | 'en-US'
   onClose: () => void
 }
 
 const WEEKDAYS_ZH = ['日', '一', '二', '三', '四', '五', '六']
 const WEEKDAYS_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-export function CalendarDialog({ open, locale = 'zh-CN', onClose }: CalendarDialogProps) {
+export function CalendarDialog({ open, onClose }: CalendarDialogProps) {
+  const { resolvedLanguage: locale } = useI18n()
   const dialogRef = useRef<HTMLDivElement | null>(null)
   const titleInputRef = useRef<HTMLInputElement | null>(null)
   const today = new Date()
   const [visibleMonth, setVisibleMonth] = useState(() => monthStart(new Date()))
   const [selectedDate, setSelectedDate] = useState(() => new Date())
-  const [reminders, setReminders] = useState<CalendarReminder[]>(() => loadCalendarReminders())
+  const [reminders, setReminders] = useState<CalendarReminder[]>([])
+  const [repeatRules, setRepeatRules] = useState<CalendarRepeatRule[]>([])
   const [draftTitle, setDraftTitle] = useState('')
   const [draftTime, setDraftTime] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -40,13 +46,13 @@ export function CalendarDialog({ open, locale = 'zh-CN', onClose }: CalendarDial
 
   const calendarDays = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth])
   const selectedDateKey = toDateKey(selectedDate)
-  const selectedDateReminders = useMemo(
-    () => remindersForDate(reminders, selectedDateKey),
-    [reminders, selectedDateKey],
+  const selectedDateEntries = useMemo(
+    () => remindersForDate(reminders, selectedDateKey).filter((reminder) => reminder.id !== editingId),
+    [editingId, reminders, selectedDateKey],
   )
-  const visibleSelectedDateReminders = useMemo(
-    () => selectedDateReminders.filter((reminder) => reminder.id !== editingId),
-    [editingId, selectedDateReminders],
+  const selectedDateRepeatEntries = useMemo(
+    () => calendarEntriesForDate(reminders, repeatRules, selectedDateKey).filter((entry) => entry.kind === 'repeat'),
+    [reminders, repeatRules, selectedDateKey],
   )
   const weekdays = locale === 'en-US' ? WEEKDAYS_EN : WEEKDAYS_ZH
   const title = locale === 'en-US'
@@ -58,6 +64,32 @@ export function CalendarDialog({ open, locale = 'zh-CN', onClose }: CalendarDial
     if (!open) return
     queueMicrotask(() => dialogRef.current?.focus())
   }, [open])
+
+  useEffect(() => {
+    let cancelled = false
+    void loadCalendarReminders().then((items) => {
+      if (!cancelled) setReminders(items)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const reload = () => {
+      void loadCalendarRepeatRules().then((items) => {
+        if (!cancelled) setRepeatRules(items)
+      })
+    }
+    reload()
+    const handleRepeatRulesUpdated = () => reload()
+    window.addEventListener(CALENDAR_REPEAT_RULES_UPDATED_EVENT, handleRepeatRulesUpdated)
+    return () => {
+      cancelled = true
+      window.removeEventListener(CALENDAR_REPEAT_RULES_UPDATED_EVENT, handleRepeatRulesUpdated)
+    }
+  }, [])
 
   useEffect(() => {
     if (!reminderPanelOpen) return
@@ -153,36 +185,37 @@ export function CalendarDialog({ open, locale = 'zh-CN', onClose }: CalendarDial
 
   function persistReminders(next: CalendarReminder[]) {
     setReminders(next)
-    saveCalendarReminders(next)
+    void saveCalendarReminders(next)
   }
 
   function handleSubmitReminder() {
     const titleText = draftTitle.trim()
     if (!titleText) return
+    const normalizedTime = normalizeReminderTime(draftTime)
 
     if (editingId) {
       const originalReminder = reminders.find((reminder) => reminder.id === editingId)
       if (!originalReminder) return
       persistReminders([
         ...reminders.filter((reminder) => reminder.id !== editingId),
-        updateCalendarReminder(originalReminder, { date: selectedDateKey, time: draftTime, title: titleText }),
+        updateCalendarReminder(originalReminder, { date: selectedDateKey, time: normalizedTime, title: titleText }),
       ])
     } else {
       persistReminders([
         ...reminders,
-        createCalendarReminder({ date: selectedDateKey, time: draftTime, title: titleText }),
+        createCalendarReminder({ date: selectedDateKey, time: normalizedTime, title: titleText }),
       ])
     }
 
     setDraftTitle('')
-    setDraftTime('')
+    setDraftTime(getDefaultReminderTime())
     setEditingId(null)
   }
 
   function handleEditReminder(reminder: CalendarReminder) {
     setEditingId(reminder.id)
     setDraftTitle(reminder.title)
-    setDraftTime(reminder.time)
+    setDraftTime(reminder.time || getDefaultReminderTime())
   }
 
   function handleDeleteReminder(id: string) {
@@ -190,7 +223,7 @@ export function CalendarDialog({ open, locale = 'zh-CN', onClose }: CalendarDial
     if (editingId === id) {
       setEditingId(null)
       setDraftTitle('')
-      setDraftTime('')
+      setDraftTime(getDefaultReminderTime())
     }
   }
 
@@ -241,8 +274,8 @@ export function CalendarDialog({ open, locale = 'zh-CN', onClose }: CalendarDial
               const isSelected = sameCalendarDate(date, selectedDate)
               const isToday = sameCalendarDate(date, today)
               const dateKey = toDateKey(date)
-              const dayReminders = remindersForDate(reminders, dateKey)
-              const reminderCount = dayReminders.length
+              const dayEntries = calendarEntriesForDate(reminders, repeatRules, dateKey)
+              const reminderCount = dayEntries.length
               return (
                 <button
                   type="button"
@@ -262,9 +295,10 @@ export function CalendarDialog({ open, locale = 'zh-CN', onClose }: CalendarDial
                   <span className="calendar-day-number">{date.getDate()}</span>
                   {reminderCount > 0 ? (
                     <span className="calendar-day-reminders" aria-hidden="true">
-                      {dayReminders.slice(0, 2).map((reminder) => (
-                        <span key={reminder.id} className="calendar-day-reminder-line">
-                          {reminder.time ? `${reminder.time} ` : ''}{reminder.title}
+                      {dayEntries.slice(0, 2).map((entry) => (
+                        <span key={`${entry.kind}-${entry.id}`} className="calendar-day-reminder-line">
+                          {entry.time ? `${entry.time} ` : ''}
+                          {entry.title}
                         </span>
                       ))}
                       {reminderCount > 2 ? (
@@ -288,7 +322,7 @@ export function CalendarDialog({ open, locale = 'zh-CN', onClose }: CalendarDial
             </div>
             <div className="calendar-reminder-panel-meta">
               <span className="calendar-reminder-count">
-                {locale === 'en-US' ? `${visibleSelectedDateReminders.length} item(s)` : `${visibleSelectedDateReminders.length} 条`}
+                {locale === 'en-US' ? `${selectedDateEntries.length} item(s)` : `${selectedDateEntries.length} 条`}
               </span>
               <button className="calendar-reminder-close-btn" type="button" onClick={closeReminderPanel} aria-label="Close">×</button>
             </div>
@@ -297,11 +331,23 @@ export function CalendarDialog({ open, locale = 'zh-CN', onClose }: CalendarDial
           <div className="calendar-reminder-form">
             <input
               className="calendar-reminder-time"
-              type="time"
-              step={60}
-              lang="zh-CN"
+              type="text"
+              inputMode="numeric"
+              maxLength={5}
+              placeholder="HH:mm"
+              autoComplete="off"
               value={draftTime}
-              onChange={(event) => setDraftTime(event.target.value)}
+              onChange={(event) => setDraftTime(formatReminderTimeDraft(event.target.value))}
+              onBlur={(event) => setDraftTime(normalizeReminderTime(event.target.value))}
+              onFocus={(event) => {
+                event.currentTarget.select()
+              }}
+              onPointerDown={(event) => {
+                if (event.button !== 0) return
+                event.preventDefault()
+                event.currentTarget.focus()
+                event.currentTarget.select()
+              }}
               aria-label={locale === 'en-US' ? 'Reminder time' : '提醒时间'}
             />
             <input
@@ -335,21 +381,40 @@ export function CalendarDialog({ open, locale = 'zh-CN', onClose }: CalendarDial
           </div>
 
           <div className="calendar-reminder-list">
-            {visibleSelectedDateReminders.length === 0 ? (
+            {selectedDateEntries.length === 0 ? (
               <div className="calendar-reminder-empty">
-                {locale === 'en-US' ? 'No reminders for this day.' : '当天暂无提醒。'}
+                {selectedDateRepeatEntries.length > 0
+                  ? (locale === 'en-US' ? 'This day has repeat reminders. Manage them in Tools → Repeat Reminders.' : '这一天只有重复提醒，请在“工具 → 重复提醒”中管理。')
+                  : (locale === 'en-US' ? 'No reminders for this day.' : '当天暂无提醒。')}
               </div>
-            ) : visibleSelectedDateReminders.map((reminder) => (
-              <div key={reminder.id} className={['calendar-reminder-item', editingId === reminder.id ? 'editing' : ''].filter(Boolean).join(' ')}>
+            ) : selectedDateEntries.map((entry) => (
+              <div
+                key={entry.id}
+                className={[
+                  'calendar-reminder-item',
+                  editingId === entry.id ? 'editing' : '',
+                ].filter(Boolean).join(' ')}
+              >
                 <div className="calendar-reminder-item-main">
-                  {reminder.time ? <span className="calendar-reminder-item-time">{reminder.time}</span> : null}
-                  <span className="calendar-reminder-item-title">{reminder.title}</span>
+                  {entry.time ? <span className="calendar-reminder-item-time">{entry.time}</span> : null}
+                  <span className="calendar-reminder-item-title">{entry.title}</span>
                 </div>
                 <div className="calendar-reminder-item-actions">
-                  <button type="button" onClick={() => handleEditReminder(reminder)}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const reminder = reminders.find((item) => item.id === entry.id)
+                      if (reminder) handleEditReminder(reminder)
+                    }}
+                  >
                     {locale === 'en-US' ? 'Edit' : '修改'}
                   </button>
-                  <button type="button" onClick={() => handleDeleteReminder(reminder.id)}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleDeleteReminder(entry.id)
+                    }}
+                  >
                     {locale === 'en-US' ? 'Delete' : '删除'}
                   </button>
                 </div>
@@ -406,6 +471,30 @@ function formatDatePanelTitle(date: Date, locale: 'zh-CN' | 'en-US'): string {
 
 function isInsideReminderPanel(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && !!target.closest('.calendar-reminder-panel')
+}
+
+function formatReminderTimeDraft(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 4)
+  if (digits.length <= 2) return digits
+  return `${digits.slice(0, 2)}:${digits.slice(2)}`
+}
+
+function normalizeReminderTime(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 4)
+  if (!digits) return ''
+
+  const hourDigits = digits.slice(0, 2)
+  const minuteDigits = digits.slice(2, 4)
+
+  const hour = clampNumber(Number(hourDigits), 0, 23)
+  const minute = minuteDigits ? clampNumber(Number(minuteDigits), 0, 59) : 0
+
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  if (Number.isNaN(value)) return min
+  return Math.min(Math.max(value, min), max)
 }
 
 function getDefaultReminderTime(now = new Date()): string {

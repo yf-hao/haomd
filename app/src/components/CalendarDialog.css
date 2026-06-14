@@ -293,6 +293,13 @@
   padding: 5px 8px;
 }
 
+.calendar-reminder-time {
+  width: 86px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  letter-spacing: 0.03em;
+}
+
 .calendar-reminder-save-btn,
 .calendar-reminder-cancel-btn,
 .calendar-reminder-item-actions button {
@@ -321,6 +328,86 @@
 .calendar-reminder-cancel-btn:hover,
 .calendar-reminder-item-actions button:hover {
   background: var(--theme-surface-hover);
+}
+
+.calendar-reminder-repeat-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--theme-border-default);
+  border-radius: 7px;
+  background: var(--theme-surface-primary);
+  color: var(--theme-text-default);
+  cursor: pointer;
+  user-select: none;
+}
+
+.calendar-reminder-repeat-toggle input {
+  margin: 0;
+}
+
+.calendar-repeat-settings {
+  display: grid;
+  gap: 8px;
+  padding: 0 0 12px;
+}
+
+.calendar-repeat-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.calendar-repeat-label {
+  min-width: 44px;
+  color: var(--theme-text-muted);
+  font-size: 12px;
+}
+
+.calendar-repeat-select {
+  min-height: 32px;
+  border: 1px solid var(--theme-border-default);
+  border-radius: 7px;
+  background: var(--theme-surface-primary);
+  color: var(--theme-text-default);
+  padding: 5px 8px;
+}
+
+.calendar-repeat-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.calendar-repeat-weekday {
+  min-height: 30px;
+  border: 1px solid var(--theme-border-default);
+  border-radius: 7px;
+  background: var(--theme-surface-primary);
+  color: var(--theme-text-default);
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.calendar-repeat-weekday.active {
+  border-color: var(--theme-accent-text);
+  color: var(--theme-accent-text);
+  background: var(--theme-surface-hover);
+}
+
+.calendar-reminder-repeat-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--theme-surface-primary);
+  border: 1px solid var(--theme-border-default);
+  color: var(--theme-text-muted);
+  font-size: 11px;
+  line-height: 1;
 }
 
 .calendar-reminder-list {

@@ -166,6 +166,7 @@ export type FormatUiCommandContext = StatusContext & {
  */
 export type ToolsCommandContext = StatusContext & {
   openCalendarDialog?: () => void
+  openReminderToolDialog?: () => void
 }
 
 /**
@@ -644,6 +645,13 @@ function createToolsCommands(ctx: ToolsCommandContext): CommandRegistry {
         ctx.openCalendarDialog()
       } else {
         ctx.setStatusMessage(tr(ctx, 'commands.calendarUnavailable', '当前版本未注册日历工具'))
+      }
+    },
+    tools_repeat_reminders: () => {
+      if (ctx.openReminderToolDialog) {
+        ctx.openReminderToolDialog()
+      } else {
+        ctx.setStatusMessage(tr(ctx, 'commands.repeatRemindersUnavailable', '当前版本未注册重复提醒工具'))
       }
     },
   }

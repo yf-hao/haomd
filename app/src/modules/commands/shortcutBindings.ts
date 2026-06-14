@@ -136,4 +136,5 @@ export const GLOBAL_MENU_ACCELERATORS: Readonly<Record<string, string>> = {
   ai_ask_file: 'CmdOrCtrl+D',
   ai_ask_selection: 'CmdOrCtrl+L',
   tools_calendar: 'CmdOrCtrl+Alt+D',
+  tools_repeat_reminders: 'CmdOrCtrl+Alt+R',
 }

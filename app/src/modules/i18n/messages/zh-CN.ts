@@ -796,6 +796,7 @@ export const zhCNMessages: MessageDictionary = {
     conversationCompressFailed: '压缩文档会话历史失败，请检查控制台日志',
     globalMemoryDialogUnavailable: '当前版本未注册 Global Memory 对话框',
     calendarUnavailable: '当前版本未注册日历工具',
+    repeatRemindersUnavailable: '当前版本未注册重复提醒工具',
     formatParagraph: '已转换为段落',
     formatHeading: '已设置为 Heading {level}',
     formatBold: '已加粗选中内容',

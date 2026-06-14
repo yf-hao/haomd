@@ -1,3 +1,5 @@
+import 'github-markdown-css/github-markdown.css'
+import '../../../../components/MarkdownViewer.css'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'

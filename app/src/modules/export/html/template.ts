@@ -249,18 +249,70 @@ export function generateHTMLTemplate(options: TemplateOptions): string {
       }
     }
     @media print {
+      @page {
+        size: A4 portrait;
+        margin: 1.5cm;
+      }
+      html,
+      body,
+      #root {
+        height: auto !important;
+        min-height: auto !important;
+        overflow: visible !important;
+        background: white !important;
+      }
       body {
-        padding: 0;
+        margin: 0 !important;
+        padding: 0 !important;
         font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Source Han Sans CN', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif !important;
       }
-      .markdown-body { max-width: none; }
-      .page-break { page-break-before: always; }
+      .markdown-body {
+        width: 100%;
+        max-width: calc(210mm - 3cm);
+        margin: 0 auto;
+        padding: 0;
+      }
+      .markdown-body pre {
+        overflow: visible !important;
+        white-space: pre-wrap !important;
+        word-break: break-word !important;
+      }
+      .markdown-body table {
+        table-layout: fixed;
+        width: 100%;
+      }
+      .markdown-body blockquote,
+      .markdown-body figure {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      h1 {
+        break-before: page;
+        page-break-before: always;
+      }
+      h1:first-of-type {
+        break-before: auto;
+        page-break-before: auto;
+      }
+      h2,
+      h3 {
+        break-after: avoid;
+        page-break-after: avoid;
+      }
+      .page-break {
+        break-before: page;
+        page-break-before: always;
+      }
       /* 打印/导出为 PDF 时隐藏目录 TOC */
       .markdown-body .md-toc-item {
         display: none !important;
       }
       .markdown-body .md-toc-container {
         display: none !important;
+      }
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
       }
     }
   </style>

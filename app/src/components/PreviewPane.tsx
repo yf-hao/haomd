@@ -47,7 +47,18 @@ function HtmlPreview({ html }: HtmlPreviewProps) {
   return <iframe ref={iframeRef} className="html-preview-frame" />
 }
 
-export function PreviewPane({ value, activeLine, previewWidth, effectiveLayout, loading = false, loadingLabel, filePath, foldRegions, onPreviewLineClick, onSelectionChange }: PreviewPaneProps) {
+export function PreviewPane({
+  value,
+  activeLine,
+  previewWidth,
+  effectiveLayout,
+  loading = false,
+  loadingLabel,
+  filePath,
+  foldRegions,
+  onPreviewLineClick,
+  onSelectionChange,
+}: PreviewPaneProps) {
   const style: CSSProperties = {}
   const { themeSettings } = useThemeContext()
   const previewRootRef = useRef<HTMLElement | null>(null)

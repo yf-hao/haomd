@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createCalendarReminder,
+  createCalendarRepeatRule,
+  calendarEntriesForDate,
   loadCalendarReminders,
   remindersForDate,
+  repeatRulesForDate,
   saveCalendarReminders,
+  resetCalendarReminderCaches,
   toDateKey,
   updateCalendarReminder,
   type CalendarReminder,
@@ -23,6 +27,7 @@ describe('tools/calendar reminders', () => {
       value: undefined,
       configurable: true,
     })
+    resetCalendarReminderCaches()
     vi.restoreAllMocks()
   })
 
@@ -30,7 +35,7 @@ describe('tools/calendar reminders', () => {
     expect(toDateKey(new Date(2026, 5, 14))).toBe('2026-06-14')
   })
 
-  it('persists valid reminders and ignores invalid storage content', () => {
+  it('persists valid reminders and ignores invalid storage content', async () => {
     const reminder: CalendarReminder = {
       id: 'r1',
       date: '2026-06-14',
@@ -40,11 +45,12 @@ describe('tools/calendar reminders', () => {
       updatedAt: '2026-06-14T00:00:00.000Z',
     }
 
-    saveCalendarReminders([reminder])
-    expect(loadCalendarReminders()).toEqual([reminder])
+    await saveCalendarReminders([reminder])
+    expect(await loadCalendarReminders()).toEqual([reminder])
 
     localStorage.setItem('haomd:calendar:reminders:v1', '{bad json')
-    expect(loadCalendarReminders()).toEqual([])
+    resetCalendarReminderCaches()
+    expect(await loadCalendarReminders()).toEqual([])
   })
 
   it('creates and updates reminders with normalized fields', () => {
@@ -103,6 +109,109 @@ describe('tools/calendar reminders', () => {
     ]
 
     expect(remindersForDate(reminders, '2026-06-14').map((item) => item.id)).toEqual(['r1', 'r2'])
+  })
+
+  it('matches repeat rules by weekday and interval', () => {
+    const weekly = createCalendarRepeatRule({
+      startDate: '2026-06-01',
+      time: '10:00',
+      title: 'Weekly meeting',
+      frequency: 'weekly',
+      weekdays: [1],
+    })
+    const biweekly = createCalendarRepeatRule({
+      startDate: '2026-06-01',
+      time: '10:00',
+      title: 'Biweekly meeting',
+      frequency: 'biweekly',
+      weekdays: [1],
+    })
+
+    expect(repeatRulesForDate([weekly, biweekly], '2026-06-01').map((item) => item.title)).toEqual([
+      'Weekly meeting',
+      'Biweekly meeting',
+    ])
+    expect(repeatRulesForDate([weekly, biweekly], '2026-06-08').map((item) => item.title)).toEqual([
+      'Weekly meeting',
+    ])
+    expect(repeatRulesForDate([weekly, biweekly], '2026-06-15').map((item) => item.title)).toEqual([
+      'Weekly meeting',
+      'Biweekly meeting',
+    ])
+  })
+
+  it('matches repeat rules after the start date even when the start date is not on the target weekday', () => {
+    const rule = createCalendarRepeatRule({
+      startDate: '2026-06-10',
+      time: '10:00',
+      title: 'Planning',
+      frequency: 'weekly',
+      weekdays: [1],
+    })
+
+    expect(repeatRulesForDate([rule], '2026-06-15').map((item) => item.title)).toEqual([
+      'Planning',
+    ])
+  })
+
+  it('defaults repeat weekdays to the start date weekday when none are provided', () => {
+    const rule = createCalendarRepeatRule({
+      startDate: '2026-06-01',
+      time: '10:00',
+      title: 'Fallback weekday',
+      frequency: 'weekly',
+      weekdays: [],
+    })
+
+    expect(rule.weekdays).toEqual([1])
+    expect(repeatRulesForDate([rule], '2026-06-01').map((item) => item.title)).toEqual([
+      'Fallback weekday',
+    ])
+  })
+
+  it('stops matching repeat rules after the until date', () => {
+    const rule = createCalendarRepeatRule({
+      startDate: '2026-06-01',
+      time: '10:00',
+      title: 'Deadline meeting',
+      frequency: 'weekly',
+      weekdays: [1],
+      until: '2026-06-08',
+    })
+
+    expect(repeatRulesForDate([rule], '2026-06-08').map((item) => item.title)).toEqual([
+      'Deadline meeting',
+    ])
+    expect(repeatRulesForDate([rule], '2026-06-15')).toEqual([])
+  })
+
+  it('does not match repeat rules after the until date', () => {
+    const rule = createCalendarRepeatRule({
+      startDate: '2026-06-01',
+      time: '10:00',
+      title: 'Deadline meeting',
+      frequency: 'weekly',
+      weekdays: [1],
+      until: '2026-06-08',
+    })
+
+    expect(repeatRulesForDate([rule], '2026-06-15')).toEqual([])
+  })
+
+  it('combines single reminders and repeat rules for a date', () => {
+    const reminder = makeReminder('r1', '2026-06-14', '09:00')
+    const rule = createCalendarRepeatRule({
+      startDate: '2026-06-14',
+      time: '10:00',
+      title: 'Meeting',
+      frequency: 'weekly',
+      weekdays: [0],
+    })
+
+    expect(calendarEntriesForDate([reminder], [rule], '2026-06-14')).toEqual([
+      { kind: 'single', id: 'r1', time: '09:00', title: 'r1' },
+      { kind: 'repeat', id: rule.id, time: '10:00', title: 'Meeting' },
+    ])
   })
 })
 
