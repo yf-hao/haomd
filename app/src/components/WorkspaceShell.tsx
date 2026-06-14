@@ -8,6 +8,7 @@ import { ConfirmDialog } from './ConfirmDialog'
 import PreviewErrorBoundary from './PreviewErrorBoundary'
 import { InsertTableDialog } from './InsertTableDialog'
 import { MathSymbolDialog } from './MathSymbolDialog'
+import { CalendarDialog } from './CalendarDialog'
 import { AboutDialog } from './AboutDialog'
 import { IssueReportDialog } from './IssueReportDialog'
 import { ReleaseNotesDialog } from './ReleaseNotesDialog'
@@ -191,7 +192,7 @@ export function WorkspaceShell({
   onStatusMessageChange,
   onSearchScopeChange,
 }: WorkspaceShellProps) {
-  const { t } = useI18n()
+  const { t, resolvedLanguage } = useI18n()
   const { themeSettings } = useThemeContext()
   const [markdown, setMarkdown] = useState(seed)
   const [previewValue, setPreviewValue] = useState(seed)
@@ -672,6 +673,7 @@ export function WorkspaceShell({
   const [quitConfirmDialog, setQuitConfirmDialog] = useState<any>(null)
   const [isInsertTableDialogOpen, setIsInsertTableDialogOpen] = useState(false)
   const [mathSymbolDialog, setMathSymbolDialog] = useState<{ open: boolean; categoryKey: string }>({ open: false, categoryKey: 'greek' })
+  const [calendarDialogOpen, setCalendarDialogOpen] = useState(false)
   const [recentDialogOpen, setRecentDialogOpen] = useState(false)
   const [isTextColorDialogOpen, setIsTextColorDialogOpen] = useState(false)
   const [recentTextColors, setRecentTextColors] = useState<string[]>(() => {
@@ -2971,6 +2973,7 @@ export function WorkspaceShell({
     openMathSymbolDialog,
     openTextColorDialog,
     insertWordTemplateFrontMatter: insertDefaultWordTemplateFrontMatter,
+    openCalendarDialog: () => setCalendarDialogOpen(true),
     openAiChatDialog: (options: any) => openAiChatDialog(options as any),
     closeAiChatDialog,
     openGlobalMemoryDialog,
@@ -3859,6 +3862,12 @@ export function WorkspaceShell({
           open={mathSymbolDialog.open}
           categoryKey={mathSymbolDialog.categoryKey}
           onClose={() => setMathSymbolDialog({ open: false, categoryKey: mathSymbolDialog.categoryKey })}
+        />
+
+        <CalendarDialog
+          open={calendarDialogOpen}
+          locale={resolvedLanguage}
+          onClose={() => setCalendarDialogOpen(false)}
         />
 
         <TextColorDialog

@@ -131,6 +131,7 @@ struct MenuTexts {
     compress: &'static str,
     clear: &'static str,
     tools: &'static str,
+    calendar: &'static str,
     agent_settings: &'static str,
     ai: &'static str,
     provider_settings: &'static str,
@@ -236,6 +237,7 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             compress: "压缩",
             clear: "清空",
             tools: "工具",
+            calendar: "日历...",
             agent_settings: "Agent 设置",
             ai: "AI",
             provider_settings: "模型服务设置",
@@ -338,6 +340,7 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             compress: "Compress",
             clear: "Clear",
             tools: "Tools",
+            calendar: "Calendar...",
             agent_settings: "Agent Settings",
             ai: "AI",
             provider_settings: "Provider Settings",
@@ -959,7 +962,14 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         .item(&global_memory_menu)
         .build()?;
 
-    let tools_menu = SubmenuBuilder::new(app, texts.tools).build()?;
+    let tools_menu = SubmenuBuilder::new(app, texts.tools)
+        .item(
+            &MenuItemBuilder::new(texts.calendar)
+                .id("tools_calendar")
+                .accelerator("CmdOrCtrl+Alt+D")
+                .build(app)?,
+        )
+        .build()?;
 
     let ai_menu = SubmenuBuilder::new(app, texts.ai)
         .item(

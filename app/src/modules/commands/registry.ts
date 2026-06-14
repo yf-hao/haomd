@@ -162,6 +162,13 @@ export type FormatUiCommandContext = StatusContext & {
 }
 
 /**
+ * 轻量工具菜单所需的 UI 上下文。
+ */
+export type ToolsCommandContext = StatusContext & {
+  openCalendarDialog?: () => void
+}
+
+/**
  * 完整的命令上下文：各子上下文的并集。
  * 外层系统（如 useCommandSystem）只需要提供这一份，总体仍保持向后兼容。
  */
@@ -170,7 +177,8 @@ export type CommandContext = LayoutCommandContext &
   AppLifecycleCommandContext &
   HelpCommandContext &
   AiCommandContext &
-  FormatUiCommandContext
+  FormatUiCommandContext &
+  ToolsCommandContext
 
 // ===== 分组命令工厂 =====
 
@@ -629,6 +637,18 @@ function createLifecycleCommands(ctx: AppLifecycleCommandContext): CommandRegist
   }
 }
 
+function createToolsCommands(ctx: ToolsCommandContext): CommandRegistry {
+  return {
+    tools_calendar: () => {
+      if (ctx.openCalendarDialog) {
+        ctx.openCalendarDialog()
+      } else {
+        ctx.setStatusMessage(tr(ctx, 'commands.calendarUnavailable', '当前版本未注册日历工具'))
+      }
+    },
+  }
+}
+
 function createClipboardCommands(ctx: StatusContext): CommandRegistry {
   const isEditableElement = (el: Element | null): boolean => {
     if (!el) return false
@@ -903,4 +923,5 @@ export const createCommandRegistry = (ctx: CommandContext): CommandRegistry => (
   ...createHelpCommands(ctx),
   ...createAiCommands(ctx),
   ...createFormatCommands(ctx),
+  ...createToolsCommands(ctx),
 })

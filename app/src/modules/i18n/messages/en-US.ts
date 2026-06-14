@@ -802,6 +802,7 @@ export const enUSMessages: MessageDictionary = {
     conversationCompressTimeout: 'Conversation compression timed out and was stopped. Check the model connection and retry. ({seconds}s)',
     conversationCompressFailed: 'Failed to compress document conversation history. Please check the console log',
     globalMemoryDialogUnavailable: 'The Global Memory dialog is not registered in this version',
+    calendarUnavailable: 'The calendar tool is not registered in this version',
     formatParagraph: 'Converted to paragraph',
     formatHeading: 'Set as Heading {level}',
     formatBold: 'Bolded the selected content',

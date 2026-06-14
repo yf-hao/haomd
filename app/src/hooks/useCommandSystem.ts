@@ -45,6 +45,10 @@ export type CommandSystemParams = CommandContext & {
    */
   openRecentDialog?: () => void
   /**
+   * 打开“日历”工具对话框的 UI 回调，由 WorkspaceShell 提供。
+   */
+  openCalendarDialog?: () => void
+  /**
    * 可选的 AI 客户端实现，默认使用基于 AI Settings 的实现。
    */
   aiClient?: IAiClient
@@ -69,6 +73,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     'ai_chat',
     'ai_ask_file',
     'ai_ask_selection',
+    'tools_calendar',
     'find',
     ...FORMAT_SHORTCUT_ACTIONS,
   ])
@@ -143,6 +148,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     openTextColorDialog,
     insertWordTemplateFrontMatter,
     openRecentDialog,
+    openCalendarDialog,
     t,
   } = params
 
@@ -259,6 +265,7 @@ export function useCommandSystem(params: CommandSystemParams) {
         insertWordTemplateFrontMatter,
         closeAiChatDialog,
         openRecentDialog,
+        openCalendarDialog,
         t,
       }),
     [
@@ -333,6 +340,8 @@ export function useCommandSystem(params: CommandSystemParams) {
       openTextColorDialog,
       insertWordTemplateFrontMatter,
       closeAiChatDialog,
+      openRecentDialog,
+      openCalendarDialog,
       t,
     ],
   )
@@ -488,6 +497,9 @@ export function useCommandSystem(params: CommandSystemParams) {
           }
         }
         void dispatchAction('ai_chat')
+      } else if (key === 'd' && e.altKey && !e.shiftKey) {
+        e.preventDefault()
+        void dispatchAction('tools_calendar')
       } else if (key === 'd') {
         e.preventDefault()
         void dispatchAction('ai_ask_file')

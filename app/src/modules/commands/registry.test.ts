@@ -77,6 +77,7 @@ function createMockCtx(): CommandContext & {
     getCurrentSelectionText: vi.fn().mockReturnValue('selected'),
     getCurrentFilePath: vi.fn().mockReturnValue('/dir/doc.md'),
     openDocConversationsHistory: vi.fn(),
+    openCalendarDialog: vi.fn(),
   }
 
   return ctx
@@ -363,6 +364,17 @@ describe('command registry - lifecycle & clipboard', () => {
     expect(ctx.setStatusMessage).toHaveBeenCalledWith('剪切未生效')
 
     ;(globalThis as any).document = originalDocument
+  })
+})
+
+describe('command registry - tools', () => {
+  it('tools_calendar should open calendar dialog', () => {
+    const ctx = createMockCtx()
+    const registry = createCommandRegistry(ctx)
+
+    registry.tools_calendar()
+
+    expect(ctx.openCalendarDialog).toHaveBeenCalled()
   })
 })
 
