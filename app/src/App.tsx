@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { emit } from '@tauri-apps/api/event'
 import './App.css'
 import WorkspaceShell, { type LeftPanelId, type InitialWorkspaceAction } from './components/WorkspaceShell'
 import { AiSettingsDialog } from './components/AiSettingsDialog'
@@ -40,6 +41,7 @@ import { ThemeModeProvider } from './modules/theme/ThemeContext'
 import { resolveActiveTheme } from './modules/theme/themeResolver'
 import { loadThemePreference } from './modules/theme/themePreferenceStore'
 import type { SearchScope } from './modules/search/types'
+import { getMusicTrackState } from './modules/tools/music/musicAudio'
 
 const appStartTime = performance.now()
 
@@ -367,9 +369,10 @@ function AppShellContent({
   setImageGenerationDialogOpen,
   setInitialImageGenerationAgentId,
 }: AppShellContentProps) {
-  const { t } = useI18n()
+  const { t, resolvedLanguage } = useI18n()
   const [toastMessage, setToastMessage] = useState('')
   const [backgroundStatusMessage, setBackgroundStatusMessage] = useState('')
+  const [musicTrackName, setMusicTrackName] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isTauriEnv()) return
@@ -419,7 +422,38 @@ function AppShellContent({
     }
   }, [t])
 
+  useEffect(() => {
+    if (!isTauriEnv()) {
+      setMusicTrackName(null)
+      return
+    }
+
+    let cancelled = false
+
+    const syncMusicTrack = async () => {
+      const state = await getMusicTrackState()
+      if (cancelled) return
+      setMusicTrackName(state?.fileName ?? null)
+    }
+
+    void syncMusicTrack()
+    const timer = window.setInterval(() => {
+      void syncMusicTrack()
+    }, 1000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [])
+
+  const handleOpenMusicPlayer = useCallback(() => {
+    if (!isTauriEnv()) return
+    void emit('menu://action', 'tools_music_player')
+  }, [])
+
   const displayedStatusMessage = backgroundStatusMessage || statusMessage
+  const currentMusicLabel = musicTrackName ? stripAudioExtension(musicTrackName) : resolvedLanguage === 'en-US' ? 'No music playing' : '未播放音乐'
 
   return (
     <div className="app-shell">
@@ -661,6 +695,18 @@ function AppShellContent({
       {isStatusBarVisible && (
         <div className="status-bar">
           <div className="status-bar-left">{t('app.statusBarTitle')}</div>
+          <div className="status-bar-center">
+            <button
+              type="button"
+              className="status-bar-music-button"
+              onClick={handleOpenMusicPlayer}
+              title={resolvedLanguage === 'en-US' ? 'Open music player' : '打开音乐播放器'}
+            >
+              <span className="status-bar-music-label">
+                {currentMusicLabel}
+              </span>
+            </button>
+          </div>
           <div className="status-bar-right">
             {docCharCount != null && (
               <span style={{ marginRight: displayedStatusMessage ? 12 : 0 }}>
@@ -699,6 +745,10 @@ function AppShellContent({
       <Toast message={toastMessage} onDismiss={() => setToastMessage('')} />
     </div>
   )
+}
+
+function stripAudioExtension(fileName: string): string {
+  return fileName.replace(/\.[^.]+$/, '')
 }
 
 export default App
