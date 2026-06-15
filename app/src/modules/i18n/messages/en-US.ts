@@ -802,6 +802,7 @@ export const enUSMessages: MessageDictionary = {
     globalMemoryDialogUnavailable: 'The Global Memory dialog is not registered in this version',
     calendarUnavailable: 'The calendar tool is not registered in this version',
     repeatRemindersUnavailable: 'The repeat reminders tool is not registered in this version',
+    musicPlayerUnavailable: 'The music player tool is not registered in this version',
     formatParagraph: 'Converted to paragraph',
     formatHeading: 'Set as Heading {level}',
     formatBold: 'Bolded the selected content',

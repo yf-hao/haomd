@@ -1,7 +1,8 @@
+use crate::haomd_paths::haomd_config_file;
 use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 use tokio::fs;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -85,36 +86,15 @@ pub struct AgentSettingsCfg {
 static DEFAULT_AI_SETTINGS_JSON: &str = include_str!("../ai_settings.default.json");
 
 fn ai_settings_path(app: &AppHandle) -> std::io::Result<PathBuf> {
-    if let Ok(mut dir) = app.path().config_dir() {
-        dir.push("haomd");
-        std::fs::create_dir_all(&dir)?;
-        return Ok(dir.join("ai_settings.json"));
-    }
-
-    let dir = std::env::current_dir()?;
-    Ok(dir.join("ai_settings.json"))
+    haomd_config_file(app, "ai_settings.json")
 }
 
 fn prompt_settings_path(app: &AppHandle) -> std::io::Result<PathBuf> {
-    if let Ok(mut dir) = app.path().config_dir() {
-        dir.push("haomd");
-        std::fs::create_dir_all(&dir)?;
-        return Ok(dir.join("prompt_settings.json"));
-    }
-
-    let dir = std::env::current_dir()?;
-    Ok(dir.join("prompt_settings.json"))
+    haomd_config_file(app, "prompt_settings.json")
 }
 
 fn agent_settings_path(app: &AppHandle) -> std::io::Result<PathBuf> {
-    if let Ok(mut dir) = app.path().config_dir() {
-        dir.push("haomd");
-        std::fs::create_dir_all(&dir)?;
-        return Ok(dir.join("agent_providers.json"));
-    }
-
-    let dir = std::env::current_dir()?;
-    Ok(dir.join("agent_providers.json"))
+    haomd_config_file(app, "agent_providers.json")
 }
 
 #[tauri::command]

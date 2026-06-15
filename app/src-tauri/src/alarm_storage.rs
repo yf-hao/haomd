@@ -1,0 +1,103 @@
+use crate::alarm_paths::ensure_alarm_root_dir;
+use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
+use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
+use std::path::{Path, PathBuf};
+use tauri::AppHandle;
+use tokio::fs;
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AlarmRuleRecord {
+    pub id: String,
+    pub title: String,
+    #[serde(default)]
+    pub date: Option<String>,
+    pub time: String,
+    #[serde(rename = "type")]
+    pub alarm_type: String,
+    #[serde(default)]
+    pub frequency: Option<String>,
+    #[serde(default)]
+    pub weekdays: Vec<u8>,
+    #[serde(default)]
+    pub interval_weeks: Option<u32>,
+    #[serde(default)]
+    pub until: Option<String>,
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub sound_file: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+async fn rules_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
+    Ok(ensure_alarm_root_dir(app).await?.join("alarm_rules.json"))
+}
+
+fn sort_rules(mut rules: Vec<AlarmRuleRecord>) -> Vec<AlarmRuleRecord> {
+    rules.sort_by(compare_rules);
+    rules
+}
+
+fn compare_rules(a: &AlarmRuleRecord, b: &AlarmRuleRecord) -> Ordering {
+    let by_date = a.date.cmp(&b.date);
+    if by_date != Ordering::Equal {
+        return by_date;
+    }
+    let by_time = a.time.cmp(&b.time);
+    if by_time != Ordering::Equal {
+        return by_time;
+    }
+    a.created_at.cmp(&b.created_at)
+}
+
+async fn read_json_vec<T>(path: &Path) -> std::io::Result<Vec<T>>
+where
+    T: for<'de> Deserialize<'de>,
+{
+    match fs::read_to_string(path).await {
+        Ok(content) => Ok(serde_json::from_str::<Vec<T>>(&content).unwrap_or_default()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(vec![]),
+        Err(err) => Err(err),
+    }
+}
+
+async fn write_json_vec<T>(path: &Path, data: &[T]) -> std::io::Result<()>
+where
+    T: Serialize,
+{
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).await?;
+    }
+    let json = serde_json::to_string_pretty(data)?;
+    fs::write(path, json).await
+}
+
+#[tauri::command]
+pub async fn load_alarm_rules(app: AppHandle) -> ResultPayload<Vec<AlarmRuleRecord>> {
+    let trace = new_trace_id();
+    let path = match rules_store_path(&app).await {
+        Ok(path) => path,
+        Err(err) => return err_payload(ErrorCode::IoError, format!("获取闹钟路径失败: {err}"), trace),
+    };
+    match read_json_vec::<AlarmRuleRecord>(&path).await {
+        Ok(rules) => ok(sort_rules(rules), trace),
+        Err(err) => err_payload(ErrorCode::IoError, format!("读取闹钟失败: {err}"), trace),
+    }
+}
+
+#[tauri::command]
+pub async fn save_alarm_rules(app: AppHandle, rules: Vec<AlarmRuleRecord>) -> ResultPayload<()> {
+    let trace = new_trace_id();
+    let path = match rules_store_path(&app).await {
+        Ok(path) => path,
+        Err(err) => return err_payload(ErrorCode::IoError, format!("获取闹钟路径失败: {err}"), trace),
+    };
+    let sorted = sort_rules(rules);
+    match write_json_vec(&path, &sorted).await {
+        Ok(_) => ok((), trace),
+        Err(err) => err_payload(ErrorCode::IoError, format!("写入闹钟失败: {err}"), trace),
+    }
+}

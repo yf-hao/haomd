@@ -49,9 +49,21 @@ export type CommandSystemParams = CommandContext & {
    */
   openCalendarDialog?: () => void
   /**
+   * 打开“闹钟”工具对话框的 UI 回调，由 WorkspaceShell 提供。
+   */
+  openAlarmDialog?: () => void
+  /**
    * 打开“重复提醒”工具对话框的 UI 回调，由 WorkspaceShell 提供。
    */
   openReminderToolDialog?: () => void
+  /**
+   * 打开“番茄闹钟”工具对话框的 UI 回调，由 WorkspaceShell 提供。
+   */
+  openPomodoroDialog?: () => void
+  /**
+   * 打开“音乐播放器”工具对话框的 UI 回调，由 WorkspaceShell 提供。
+   */
+  openMusicPlayerDialog?: () => void
   /**
    * 可选的 AI 客户端实现，默认使用基于 AI Settings 的实现。
    */
@@ -79,6 +91,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     'ai_ask_selection',
     'tools_calendar',
     'tools_repeat_reminders',
+    'tools_pomodoro',
     'find',
     ...FORMAT_SHORTCUT_ACTIONS,
   ])
@@ -153,7 +166,10 @@ export function useCommandSystem(params: CommandSystemParams) {
     insertWordTemplateFrontMatter,
     openRecentDialog,
     openCalendarDialog,
+    openAlarmDialog,
     openReminderToolDialog,
+    openPomodoroDialog,
+    openMusicPlayerDialog,
     t,
   } = params
 
@@ -270,7 +286,10 @@ export function useCommandSystem(params: CommandSystemParams) {
         closeAiChatDialog,
         openRecentDialog,
         openCalendarDialog,
+        openAlarmDialog,
         openReminderToolDialog,
+        openPomodoroDialog,
+        openMusicPlayerDialog,
         t,
       }),
     [
@@ -346,7 +365,10 @@ export function useCommandSystem(params: CommandSystemParams) {
       closeAiChatDialog,
       openRecentDialog,
       openCalendarDialog,
+      openAlarmDialog,
       openReminderToolDialog,
+      openPomodoroDialog,
+      openMusicPlayerDialog,
       t,
     ],
   )

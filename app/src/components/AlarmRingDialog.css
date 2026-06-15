@@ -1,0 +1,74 @@
+.alarm-ring-backdrop {
+  align-items: center;
+  justify-content: center;
+  background: var(--theme-surface-app);
+}
+
+.modal.modal-alarm-ring {
+  width: min(640px, calc(100vw - 32px));
+  min-width: 520px;
+  padding: 0;
+  border: 1px solid var(--theme-border-subtle);
+  background: var(--theme-surface-preview);
+  overflow: hidden;
+}
+
+.alarm-ring-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 30px 28px 26px;
+  text-align: center;
+}
+
+.alarm-ring-icon {
+  width: 72px;
+  height: 72px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--theme-accent-danger) 30%, var(--theme-border-subtle));
+  background: color-mix(in srgb, var(--theme-accent-danger) 10%, var(--theme-surface-editor));
+  color: var(--theme-accent-danger);
+  font-size: 34px;
+}
+
+.alarm-ring-title {
+  font-size: calc(var(--ui-font-settings) + 12px);
+  font-weight: 700;
+  color: var(--theme-text-default);
+}
+
+.alarm-ring-name {
+  font-size: calc(var(--ui-font-settings) + 4px);
+  font-weight: 600;
+  color: var(--theme-text-secondary);
+}
+
+.alarm-ring-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  color: var(--theme-text-subtle);
+  font-size: calc(var(--ui-font-settings) - 1px);
+}
+
+.alarm-ring-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  padding-top: 6px;
+}
+
+@media (max-width: 640px) {
+  .modal.modal-alarm-ring {
+    min-width: 0;
+  }
+
+  .alarm-ring-card {
+    padding: 24px 18px 20px;
+  }
+}

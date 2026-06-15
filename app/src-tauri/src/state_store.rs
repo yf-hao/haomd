@@ -1,3 +1,4 @@
+use crate::haomd_paths::{haomd_config_file, haomd_config_root_dir};
 use crate::fs_types::RecentFile;
 use crate::{err_payload, new_trace_id, ok, refresh_app_menu, ErrorCode, ResultPayload};
 use log::{info, warn};
@@ -24,16 +25,7 @@ fn app_state_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
 }
 
 fn legacy_haomd_state_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
-    if let Ok(mut dir) = app.path().config_dir() {
-        dir.push("haomd");
-        std::fs::create_dir_all(&dir)?;
-        return Ok(dir);
-    }
-
-    let mut dir = std::env::current_dir()?;
-    dir.push("haomd");
-    std::fs::create_dir_all(&dir)?;
-    Ok(dir)
+    haomd_config_root_dir(app)
 }
 
 fn recent_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
@@ -61,47 +53,19 @@ fn legacy_root_pdf_recent_store_path(app: &AppHandle) -> std::io::Result<PathBuf
 }
 
 fn pdf_folders_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
-    if let Ok(mut dir) = app.path().config_dir() {
-        dir.push("haomd");
-        std::fs::create_dir_all(&dir)?;
-        return Ok(dir.join("pdf_folders.json"));
-    }
-
-    let dir = std::env::current_dir()?;
-    Ok(dir.join("pdf_folders.json"))
+    haomd_config_file(app, "pdf_folders.json")
 }
 
 fn file_virtual_folders_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
-    if let Ok(mut dir) = app.path().config_dir() {
-        dir.push("haomd");
-        std::fs::create_dir_all(&dir)?;
-        return Ok(dir.join("file_virtual_folders.json"));
-    }
-
-    let dir = std::env::current_dir()?;
-    Ok(dir.join("file_virtual_folders.json"))
+    haomd_config_file(app, "file_virtual_folders.json")
 }
 
 fn file_virtual_assignments_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
-    if let Ok(mut dir) = app.path().config_dir() {
-        dir.push("haomd");
-        std::fs::create_dir_all(&dir)?;
-        return Ok(dir.join("file_virtual_assignments.json"));
-    }
-
-    let dir = std::env::current_dir()?;
-    Ok(dir.join("file_virtual_assignments.json"))
+    haomd_config_file(app, "file_virtual_assignments.json")
 }
 
 fn sidebar_state_path(app: &AppHandle) -> std::io::Result<PathBuf> {
-    if let Ok(mut dir) = app.path().config_dir() {
-        dir.push("haomd");
-        std::fs::create_dir_all(&dir)?;
-        return Ok(dir.join("sidebar_state.json"));
-    }
-
-    let dir = std::env::current_dir()?;
-    Ok(dir.join("sidebar_state.json"))
+    haomd_config_file(app, "sidebar_state.json")
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

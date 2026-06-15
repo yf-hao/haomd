@@ -1,3 +1,4 @@
+use crate::haomd_paths::haomd_config_subdir;
 use futures_util::StreamExt;
 use once_cell::sync::Lazy;
 use reqwest::Client;
@@ -10,7 +11,7 @@ use std::sync::{
     Arc, Mutex,
 };
 use tauri::async_runtime::JoinHandle;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 use tokio::fs;
 
 const OPENAI_COMPAT_CHUNK_EVENT: &str = "openai://compat_chunk";
@@ -204,14 +205,7 @@ fn openai_compat_hint_key(base_url: &str, model_id: &str) -> String {
 }
 
 fn openai_compat_state_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    let mut dir = app
-        .path()
-        .config_dir()
-        .map_err(|err| format!("读取配置目录失败: {err}"))?;
-    dir.push("haomd");
-    dir.push(".state");
-    std::fs::create_dir_all(&dir).map_err(|err| format!("创建状态目录失败: {err}"))?;
-    Ok(dir)
+    haomd_config_subdir(app, ".state").map_err(|err| format!("创建状态目录失败: {err}"))
 }
 
 fn openai_compat_param_hints_path(app: &AppHandle) -> Result<PathBuf, String> {

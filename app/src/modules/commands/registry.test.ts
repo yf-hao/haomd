@@ -77,7 +77,10 @@ function createMockCtx(): CommandContext & {
     getCurrentFilePath: vi.fn().mockReturnValue('/dir/doc.md'),
     openDocConversationsHistory: vi.fn(),
     openCalendarDialog: vi.fn(),
+    openAlarmDialog: vi.fn(),
     openReminderToolDialog: vi.fn(),
+    openMusicPlayerDialog: vi.fn(),
+    openPomodoroDialog: vi.fn(),
   }
 
   return ctx
@@ -197,10 +200,16 @@ describe('command registry - layout & view', () => {
     const registry = createCommandRegistry(ctx)
 
     registry.tools_calendar()
+    registry.tools_alarm()
     registry.tools_repeat_reminders()
+    registry.tools_music_player()
+    registry.tools_pomodoro()
 
     expect(ctx.openCalendarDialog).toHaveBeenCalledTimes(1)
+    expect(ctx.openAlarmDialog).toHaveBeenCalledTimes(1)
     expect(ctx.openReminderToolDialog).toHaveBeenCalledTimes(1)
+    expect(ctx.openMusicPlayerDialog).toHaveBeenCalledTimes(1)
+    expect(ctx.openPomodoroDialog).toHaveBeenCalledTimes(1)
   })
 })
 

@@ -1,7 +1,8 @@
+use crate::haomd_paths::{haomd_config_file, haomd_config_subdir};
 use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 use tokio::fs;
 
 // ─── Data structures ────────────────────────────────────────────────
@@ -69,27 +70,11 @@ pub struct AiNamingConvCfg {
 // ─── File paths ─────────────────────────────────────────────────────
 
 fn ai_sessions_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
-    if let Ok(mut dir) = app.path().config_dir() {
-        dir.push("haomd");
-        dir.push("ai-sessions");
-        std::fs::create_dir_all(&dir)?;
-        Ok(dir)
-    } else {
-        let mut dir = std::env::current_dir()?;
-        dir.push("ai-sessions");
-        std::fs::create_dir_all(&dir)?;
-        Ok(dir)
-    }
+    haomd_config_subdir(app, "ai-sessions")
 }
 
 fn naming_conv_path(app: &AppHandle) -> std::io::Result<PathBuf> {
-    if let Ok(mut dir) = app.path().config_dir() {
-        dir.push("haomd");
-        std::fs::create_dir_all(&dir)?;
-        Ok(dir.join("ai-naming-conv.json"))
-    } else {
-        Ok(std::env::current_dir()?.join("ai-naming-conv.json"))
-    }
+    haomd_config_file(app, "ai-naming-conv.json")
 }
 
 fn sessions_index_path(app: &AppHandle) -> std::io::Result<PathBuf> {

@@ -7,9 +7,13 @@ import { ConflictModal } from './ConflictModal'
 import { ConfirmDialog } from './ConfirmDialog'
 import PreviewErrorBoundary from './PreviewErrorBoundary'
 import { InsertTableDialog } from './InsertTableDialog'
+import { AlarmDialog } from './AlarmDialog'
+import { AlarmRingDialog } from './AlarmRingDialog'
 import { MathSymbolDialog } from './MathSymbolDialog'
 import { CalendarDialog } from './CalendarDialog'
 import { ReminderToolDialog } from './ReminderToolDialog'
+import { PomodoroDialog } from './PomodoroDialog'
+import { MusicPlayerDialog } from './MusicPlayerDialog'
 import { AboutDialog } from './AboutDialog'
 import { IssueReportDialog } from './IssueReportDialog'
 import { ReleaseNotesDialog } from './ReleaseNotesDialog'
@@ -51,6 +55,8 @@ import { useCursorMemory } from '../hooks/useCursorMemory'
 import { useSidebarResize } from '../hooks/useSidebarResize'
 import { useNativeBridge } from '../hooks/useNativeBridge'
 import { useNativePaste } from '../hooks/useNativePaste'
+import { usePomodoroController } from '../modules/tools/pomodoro/usePomodoroController'
+import { useAlarmScheduler } from '../modules/tools/alarm/useAlarmScheduler'
 import { onNativePasteImage } from '../modules/platform/clipboardEvents'
 import { openTerminalAt } from '../modules/platform/terminalService'
 import { openInFileManager } from '../modules/platform/fileExplorerService'
@@ -675,9 +681,13 @@ export function WorkspaceShell({
   const [isInsertTableDialogOpen, setIsInsertTableDialogOpen] = useState(false)
   const [mathSymbolDialog, setMathSymbolDialog] = useState<{ open: boolean; categoryKey: string }>({ open: false, categoryKey: 'greek' })
   const [calendarDialogOpen, setCalendarDialogOpen] = useState(false)
+  const [alarmDialogOpen, setAlarmDialogOpen] = useState(false)
   const [reminderToolDialogOpen, setReminderToolDialogOpen] = useState(false)
+  const [musicPlayerDialogOpen, setMusicPlayerDialogOpen] = useState(false)
   const [recentDialogOpen, setRecentDialogOpen] = useState(false)
   const [isTextColorDialogOpen, setIsTextColorDialogOpen] = useState(false)
+  const pomodoro = usePomodoroController()
+  const alarmScheduler = useAlarmScheduler()
   const [recentTextColors, setRecentTextColors] = useState<string[]>(() => {
     try {
       if (typeof localStorage === 'undefined') return []
@@ -2948,7 +2958,10 @@ export function WorkspaceShell({
     openTextColorDialog,
     insertWordTemplateFrontMatter: insertDefaultWordTemplateFrontMatter,
     openCalendarDialog: () => setCalendarDialogOpen(true),
+    openAlarmDialog: () => setAlarmDialogOpen(true),
     openReminderToolDialog: () => setReminderToolDialogOpen(true),
+    openMusicPlayerDialog: () => setMusicPlayerDialogOpen(true),
+    openPomodoroDialog: pomodoro.openDialog,
     openAiChatDialog: (options: any) => openAiChatDialog(options as any),
     closeAiChatDialog,
     openGlobalMemoryDialog,
@@ -3843,9 +3856,32 @@ export function WorkspaceShell({
           onClose={() => setCalendarDialogOpen(false)}
         />
 
+        <AlarmDialog
+          open={alarmDialogOpen}
+          onClose={() => setAlarmDialogOpen(false)}
+        />
+
+        <AlarmRingDialog
+          open={alarmScheduler.activeAlarm !== null}
+          alarm={alarmScheduler.activeAlarm}
+          onStop={alarmScheduler.dismissAlarm}
+          onSnooze={alarmScheduler.snoozeAlarm}
+        />
+
         <ReminderToolDialog
           open={reminderToolDialogOpen}
           onClose={() => setReminderToolDialogOpen(false)}
+        />
+
+        <MusicPlayerDialog
+          open={musicPlayerDialogOpen}
+          onClose={() => setMusicPlayerDialogOpen(false)}
+        />
+
+        <PomodoroDialog
+          open={pomodoro.dialogOpen}
+          controller={pomodoro}
+          onClose={pomodoro.closeDialog}
         />
 
         <TextColorDialog

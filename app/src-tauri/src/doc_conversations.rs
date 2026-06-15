@@ -1,8 +1,9 @@
+use crate::haomd_paths::haomd_config_subdir;
 use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 use tokio::fs;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -55,17 +56,7 @@ pub struct ConversationIndexEntryCfg {
 }
 
 fn ai_conversations_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
-    if let Ok(mut dir) = app.path().config_dir() {
-        dir.push("haomd");
-        dir.push("ai-conversations");
-        std::fs::create_dir_all(&dir)?;
-        Ok(dir)
-    } else {
-        let mut dir = std::env::current_dir()?;
-        dir.push("ai-conversations");
-        std::fs::create_dir_all(&dir)?;
-        Ok(dir)
-    }
+    haomd_config_subdir(app, "ai-conversations")
 }
 
 fn ai_conversations_data_path(app: &AppHandle) -> std::io::Result<PathBuf> {

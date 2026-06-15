@@ -1,8 +1,9 @@
+use crate::haomd_paths::haomd_config_file;
 use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 use tokio::fs;
 
 // ─── Data structures ────────────────────────────────────────────────
@@ -59,13 +60,7 @@ pub(crate) fn mcp_settings_path_pub(app: &AppHandle) -> std::io::Result<PathBuf>
 }
 
 fn mcp_settings_path(app: &AppHandle) -> std::io::Result<PathBuf> {
-    if let Ok(mut dir) = app.path().config_dir() {
-        dir.push("haomd");
-        std::fs::create_dir_all(&dir)?;
-        return Ok(dir.join("mcp_settings.json"));
-    }
-    let dir = std::env::current_dir()?;
-    Ok(dir.join("mcp_settings.json"))
+    haomd_config_file(app, "mcp_settings.json")
 }
 
 // ─── Tauri commands ─────────────────────────────────────────────────

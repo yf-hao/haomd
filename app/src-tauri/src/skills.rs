@@ -1,9 +1,10 @@
+use crate::haomd_paths::haomd_config_subdir;
 use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 use tokio::fs;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -69,15 +70,7 @@ struct SkillDefinitionScriptCfg {
 }
 
 pub(crate) fn skills_root_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
-    if let Ok(mut dir) = app.path().config_dir() {
-        dir.push("haomd");
-        dir.push("skills");
-        std::fs::create_dir_all(&dir)?;
-        return Ok(dir);
-    }
-    let dir = std::env::current_dir()?.join("skills");
-    std::fs::create_dir_all(&dir)?;
-    Ok(dir)
+    haomd_config_subdir(app, "skills")
 }
 
 pub(crate) fn sanitize_skill_id(input: &str) -> String {

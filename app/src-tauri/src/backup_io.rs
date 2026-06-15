@@ -1,3 +1,4 @@
+use crate::haomd_paths::haomd_config_root_dir;
 use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
 use once_cell::sync::Lazy;
 use reqwest::StatusCode;
@@ -9,7 +10,7 @@ use std::io::{Cursor, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::UNIX_EPOCH;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 use url::Url;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
@@ -56,16 +57,7 @@ pub struct WebDavBackupUploadSummary {
 }
 
 fn backup_root_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
-    if let Ok(mut dir) = app.path().config_dir() {
-        dir.push("haomd");
-        std::fs::create_dir_all(&dir)?;
-        Ok(dir)
-    } else {
-        let mut dir = std::env::current_dir()?;
-        dir.push("haomd");
-        std::fs::create_dir_all(&dir)?;
-        Ok(dir)
-    }
+    haomd_config_root_dir(app)
 }
 
 fn resolve_webdav_url(base_url: &str, remote_path: &str) -> String {

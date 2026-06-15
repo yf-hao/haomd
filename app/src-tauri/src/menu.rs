@@ -132,7 +132,10 @@ struct MenuTexts {
     clear: &'static str,
     tools: &'static str,
     calendar: &'static str,
+    alarm: &'static str,
     repeat_reminders: &'static str,
+    music_player: &'static str,
+    pomodoro: &'static str,
     agent_settings: &'static str,
     ai: &'static str,
     provider_settings: &'static str,
@@ -238,7 +241,10 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             clear: "清空",
             tools: "工具",
             calendar: "日历...",
+            alarm: "闹钟...",
             repeat_reminders: "重复提醒...",
+            music_player: "音乐播放器...",
+            pomodoro: "番茄闹钟...",
             agent_settings: "Agent 设置",
             ai: "AI",
             provider_settings: "模型服务设置",
@@ -341,7 +347,10 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             clear: "Clear",
             tools: "Tools",
             calendar: "Calendar...",
+            alarm: "Alarm...",
             repeat_reminders: "Repeat Reminders...",
+            music_player: "Music Player...",
+            pomodoro: "Pomodoro Timer...",
             agent_settings: "Agent Settings",
             ai: "AI",
             provider_settings: "Provider Settings",
@@ -964,9 +973,27 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
                 .build(app)?,
         )
         .item(
+            &MenuItemBuilder::new(texts.alarm)
+                .id("tools_alarm")
+                .accelerator("CmdOrCtrl+Alt+A")
+                .build(app)?,
+        )
+        .item(
             &MenuItemBuilder::new(texts.repeat_reminders)
                 .id("tools_repeat_reminders")
                 .accelerator("CmdOrCtrl+Alt+R")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.music_player)
+                .id("tools_music_player")
+                .accelerator("CmdOrCtrl+Alt+M")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.pomodoro)
+                .id("tools_pomodoro")
+                .accelerator("CmdOrCtrl+Alt+P")
                 .build(app)?,
         )
         .build()?;

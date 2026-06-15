@@ -1,3 +1,4 @@
+use crate::haomd_paths::haomd_config_subdir;
 use super::*;
 use std::process::Command;
 
@@ -71,18 +72,8 @@ pub(crate) async fn open_in_file_explorer(target_path: String) -> Result<(), Str
 }
 
 pub(crate) fn resolve_word_templates_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    if let Ok(mut dir) = app.path().config_dir() {
-        dir.push("haomd");
-        dir.push("word_templates");
-        std::fs::create_dir_all(&dir).map_err(|e| format!("无法创建 word_templates 目录: {e}"))?;
-        return Ok(dir);
-    }
-
-    let dir = std::env::current_dir()
-        .map_err(|e| format!("无法获取当前目录: {e}"))?
-        .join("word_templates");
-    std::fs::create_dir_all(&dir).map_err(|e| format!("无法创建 word_templates 目录: {e}"))?;
-    Ok(dir)
+    haomd_config_subdir(app, "word_templates")
+        .map_err(|e| format!("无法创建 word_templates 目录: {e}"))
 }
 
 pub(crate) fn resolve_word_template_dir(

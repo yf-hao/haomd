@@ -165,7 +165,10 @@ export type FormatUiCommandContext = StatusContext & {
  */
 export type ToolsCommandContext = StatusContext & {
   openCalendarDialog?: () => void
+  openAlarmDialog?: () => void
   openReminderToolDialog?: () => void
+  openMusicPlayerDialog?: () => void
+  openPomodoroDialog?: () => void
 }
 
 /**
@@ -639,11 +642,32 @@ function createToolsCommands(ctx: ToolsCommandContext): CommandRegistry {
         ctx.setStatusMessage(tr(ctx, 'commands.calendarUnavailable', '当前版本未注册日历工具'))
       }
     },
+    tools_alarm: () => {
+      if (ctx.openAlarmDialog) {
+        ctx.openAlarmDialog()
+      } else {
+        ctx.setStatusMessage(tr(ctx, 'commands.alarmUnavailable', '当前版本未注册闹钟工具'))
+      }
+    },
     tools_repeat_reminders: () => {
       if (ctx.openReminderToolDialog) {
         ctx.openReminderToolDialog()
       } else {
         ctx.setStatusMessage(tr(ctx, 'commands.repeatRemindersUnavailable', '当前版本未注册重复提醒工具'))
+      }
+    },
+    tools_music_player: () => {
+      if (ctx.openMusicPlayerDialog) {
+        ctx.openMusicPlayerDialog()
+      } else {
+        ctx.setStatusMessage(tr(ctx, 'commands.musicPlayerUnavailable', '当前版本未注册音乐播放器工具'))
+      }
+    },
+    tools_pomodoro: () => {
+      if (ctx.openPomodoroDialog) {
+        ctx.openPomodoroDialog()
+      } else {
+        ctx.setStatusMessage(tr(ctx, 'commands.pomodoroUnavailable', '当前版本未注册番茄闹钟工具'))
       }
     },
   }

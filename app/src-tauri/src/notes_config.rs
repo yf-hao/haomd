@@ -1,7 +1,8 @@
+use crate::haomd_paths::haomd_config_file;
 use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Runtime};
 use tokio::fs;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -10,15 +11,9 @@ pub struct NotesConfigData {
     pub notes_directory: Option<String>,
 }
 
-/// 存放路径：~/Library/Application Support/com.yfhao.haomd/notes_config.json
+/// 存放路径：~/Library/Application Support/haomd/notes_config.json
 pub fn notes_config_path<R: Runtime>(app: &AppHandle<R>) -> std::io::Result<PathBuf> {
-    if let Ok(mut dir) = app.path().config_dir() {
-        dir.push(app.config().identifier.as_str());
-        std::fs::create_dir_all(&dir)?;
-        return Ok(dir.join("notes_config.json"));
-    }
-    let dir = std::env::current_dir()?;
-    Ok(dir.join("notes_config.json"))
+    haomd_config_file(app, "notes_config.json")
 }
 
 #[tauri::command]

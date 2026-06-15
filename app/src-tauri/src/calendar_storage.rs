@@ -1,3 +1,4 @@
+use crate::haomd_paths::haomd_data_root_dir;
 use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -37,6 +38,10 @@ pub struct CalendarRepeatRuleRecord {
 }
 
 fn calendar_data_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
+    Ok(haomd_data_root_dir(app)?.join("calendar"))
+}
+
+fn legacy_calendar_data_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
     let mut dir = app
         .path()
         .app_data_dir()
@@ -110,6 +115,35 @@ where
     fs::write(path, json).await
 }
 
+async fn migrate_legacy_calendar_data(app: &AppHandle, current_dir: &Path) -> std::io::Result<()> {
+    let legacy_dir = legacy_calendar_data_dir(app)?;
+    if legacy_dir == current_dir {
+        return Ok(());
+    }
+    if fs::metadata(current_dir).await.is_ok() {
+        return Ok(());
+    }
+    let Ok(metadata) = fs::metadata(&legacy_dir).await else {
+        return Ok(());
+    };
+    if !metadata.is_dir() {
+        return Ok(());
+    }
+
+    fs::create_dir_all(current_dir).await?;
+    let legacy_reminders = legacy_dir.join("reminders.json");
+    let current_reminders = current_dir.join("reminders.json");
+    if fs::metadata(&legacy_reminders).await.is_ok() {
+        let _ = fs::copy(&legacy_reminders, &current_reminders).await;
+    }
+    let legacy_repeat_rules = legacy_dir.join("repeat-rules.json");
+    let current_repeat_rules = current_dir.join("repeat-rules.json");
+    if fs::metadata(&legacy_repeat_rules).await.is_ok() {
+        let _ = fs::copy(&legacy_repeat_rules, &current_repeat_rules).await;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn load_calendar_reminders(app: AppHandle) -> ResultPayload<Vec<CalendarReminderRecord>> {
     let trace = new_trace_id();
@@ -123,6 +157,16 @@ pub async fn load_calendar_reminders(app: AppHandle) -> ResultPayload<Vec<Calend
             )
         }
     };
+
+    if let Some(parent) = path.parent() {
+        if let Err(err) = migrate_legacy_calendar_data(&app, parent).await {
+            return err_payload(
+                ErrorCode::IoError,
+                format!("迁移日历提醒数据失败: {err}"),
+                trace,
+            );
+        }
+    }
 
     match read_json_vec::<CalendarReminderRecord>(&path).await {
         Ok(reminders) => ok(sort_reminders(reminders), trace),
@@ -177,6 +221,16 @@ pub async fn load_calendar_repeat_rules(
             )
         }
     };
+
+    if let Some(parent) = path.parent() {
+        if let Err(err) = migrate_legacy_calendar_data(&app, parent).await {
+            return err_payload(
+                ErrorCode::IoError,
+                format!("迁移重复提醒数据失败: {err}"),
+                trace,
+            );
+        }
+    }
 
     match read_json_vec::<CalendarRepeatRuleRecord>(&path).await {
         Ok(rules) => ok(sort_repeat_rules(rules), trace),

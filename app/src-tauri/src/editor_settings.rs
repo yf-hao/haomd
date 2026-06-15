@@ -2,11 +2,12 @@ use crate::{
     err_payload, new_trace_id, ok, word::WordExportStyleSettingsCfg,
     word::WordExportStyleSettingsResolved, ErrorCode, ResultPayload,
 };
+use crate::haomd_paths::{haomd_config_file, haomd_config_subdir};
 use image::ImageFormat;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Runtime};
 use tauri_plugin_dialog::DialogExt;
 use tokio::fs;
 
@@ -385,27 +386,11 @@ pub(crate) fn cm_to_twips(value: f32) -> u32 {
 }
 
 pub fn editor_settings_path<R: Runtime>(app: &AppHandle<R>) -> std::io::Result<PathBuf> {
-    if let Ok(mut dir) = app.path().config_dir() {
-        dir.push("haomd");
-        std::fs::create_dir_all(&dir)?;
-        return Ok(dir.join("editor_settings.json"));
-    }
-
-    let dir = std::env::current_dir()?;
-    Ok(dir.join("editor_settings.json"))
+    haomd_config_file(app, "editor_settings.json")
 }
 
 pub fn editor_backgrounds_dir<R: Runtime>(app: &AppHandle<R>) -> std::io::Result<PathBuf> {
-    if let Ok(mut dir) = app.path().config_dir() {
-        dir.push("haomd");
-        dir.push("editor-backgrounds");
-        std::fs::create_dir_all(&dir)?;
-        return Ok(dir);
-    }
-
-    let dir = std::env::current_dir()?.join("editor-backgrounds");
-    std::fs::create_dir_all(&dir)?;
-    Ok(dir)
+    haomd_config_subdir(app, "editor-backgrounds")
 }
 
 pub fn should_cleanup_managed_editor_background(

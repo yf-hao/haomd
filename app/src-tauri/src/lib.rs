@@ -4,6 +4,10 @@ use std::path::{Path, PathBuf};
 
 mod ai_config;
 mod ai_sessions;
+mod alarm_audio;
+mod alarm_paths;
+mod alarm_sound;
+mod alarm_storage;
 mod backup_io;
 mod backup_settings;
 mod calendar_storage;
@@ -19,14 +23,22 @@ mod fs_types;
 mod gemini_compat;
 mod image_generation;
 mod inkscape;
+mod haomd_paths;
 mod locale;
 mod mcp_config;
 mod mcp_manager;
+mod music_audio;
+mod music_paths;
+mod music_sound;
+mod pomodoro_audio;
+mod pomodoro_storage;
+mod pomodoro_sound;
 mod menu;
 mod notes_config;
 mod openai_compat;
 mod pdf_export;
 mod platform;
+mod pomodoro_paths;
 mod protocol;
 mod search_commands;
 mod search_db;
@@ -42,6 +54,9 @@ mod workspace_io;
 
 use ai_config::*;
 use ai_sessions::*;
+use alarm_audio::*;
+use alarm_sound::*;
+use alarm_storage::*;
 use backup_io::*;
 use backup_settings::*;
 use calendar_storage::*;
@@ -59,6 +74,11 @@ use inkscape::*;
 use locale::*;
 use mcp_config::*;
 use mcp_manager::*;
+use music_audio::*;
+use music_sound::*;
+use pomodoro_audio::*;
+use pomodoro_storage::*;
+use pomodoro_sound::*;
 use menu::*;
 use notes_config::*;
 use openai_compat::*;
@@ -149,6 +169,27 @@ macro_rules! app_invoke_handler {
             save_calendar_reminders,
             load_calendar_repeat_rules,
             save_calendar_repeat_rules,
+            load_alarm_rules,
+            save_alarm_rules,
+            list_alarm_sound_files,
+            play_alarm_sound,
+            stop_alarm_sound,
+            import_alarm_sound,
+            play_music_track,
+            pause_music_track,
+            resume_music_track,
+            seek_music_track,
+            get_music_track_state,
+            get_music_track_duration,
+            stop_music_track,
+            load_pomodoro_state,
+            save_pomodoro_state,
+            list_pomodoro_alarm_sound_files,
+            play_pomodoro_alarm,
+            stop_pomodoro_alarm,
+            import_pomodoro_alarm_sound,
+            list_music_sound_files,
+            import_music_sound,
             editor_settings::load_editor_settings,
             editor_settings::save_editor_settings,
             font_catalog::list_system_fonts,

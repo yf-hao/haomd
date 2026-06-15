@@ -714,9 +714,9 @@ fn should_apply_custom_word_style_settings_to_styles_and_layout() {
         .expect("document xml should exist");
 
     assert!(styles_xml.contains(
-        r#"<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/><w:sz w:val="22"/>"#
+        r#"<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri" w:eastAsia="Calibri"/><w:sz w:val="22"/>"#
     ));
-    assert!(styles_xml.contains(r#"<w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:b/><w:sz w:val="40"/>"#));
+    assert!(styles_xml.contains(r#"<w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman" w:eastAsia="Times New Roman"/><w:b/><w:sz w:val="40"/>"#));
     assert!(styles_xml.contains(r#"<w:spacing w:after="240" w:line="360" w:lineRule="auto"/>"#));
     assert!(document_xml
         .contains(r#"<w:pgMar w:top="1701" w:right="1701" w:bottom="1701" w:left="1701""#));
@@ -746,10 +746,31 @@ fn should_render_text_run_color_and_underline_styles() {
     assert!(run_xml.contains(r#"<w:color w:val="1D4ED8"/>"#));
     assert!(run_xml.contains(r#"<w:shd w:val="clear" w:color="auto" w:fill="FFF59D"/>"#));
     assert!(run_xml.contains(
-        r#"<w:rFonts w:ascii="Microsoft YaHei" w:hAnsi="Microsoft YaHei" w:cs="Microsoft YaHei"/>"#
+        r#"<w:rFonts w:ascii="Microsoft YaHei" w:hAnsi="Microsoft YaHei" w:cs="Microsoft YaHei" w:eastAsia="Microsoft YaHei"/>"#
     ));
     assert!(run_xml.contains(r#"<w:sz w:val="27"/>"#));
     assert!(run_xml.contains("Styled"));
+}
+
+#[test]
+fn should_normalize_songti_font_to_word_cjk_font() {
+    let run_xml = render_text_run_xml(RenderTextRunOptions {
+        value: "中文",
+        bold: false,
+        italic: false,
+        code: false,
+        strike: false,
+        underline: false,
+        color: None,
+        background_color: None,
+        font_size_pt: Some(12.0),
+        font_family: Some("songti"),
+        code_font_size_half_points: 21,
+    });
+
+    assert!(run_xml.contains(
+        r#"<w:rFonts w:ascii="宋体" w:hAnsi="宋体" w:cs="宋体" w:eastAsia="宋体"/>"#
+    ));
 }
 
 #[test]

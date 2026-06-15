@@ -1,10 +1,11 @@
+use crate::haomd_paths::haomd_config_file;
 use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
 use base64::{decode as base64_decode, encode as base64_encode};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 use tokio::fs;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -72,36 +73,15 @@ pub fn default_backup_settings() -> BackupSettingsCfg {
 }
 
 fn backup_settings_path(app: &AppHandle) -> std::io::Result<PathBuf> {
-    if let Ok(mut dir) = app.path().config_dir() {
-        dir.push(app.config().identifier.as_str());
-        std::fs::create_dir_all(&dir)?;
-        return Ok(dir.join(".backup_settings.json"));
-    }
-
-    let dir = std::env::current_dir()?;
-    Ok(dir.join(".backup_settings.json"))
+    haomd_config_file(app, ".backup_settings.json")
 }
 
 fn backup_key_path(app: &AppHandle) -> std::io::Result<PathBuf> {
-    if let Ok(mut dir) = app.path().config_dir() {
-        dir.push(app.config().identifier.as_str());
-        std::fs::create_dir_all(&dir)?;
-        return Ok(dir.join(".backup_key"));
-    }
-
-    let dir = std::env::current_dir()?;
-    Ok(dir.join(".backup_key"))
+    haomd_config_file(app, ".backup_key")
 }
 
 fn legacy_editor_settings_path(app: &AppHandle) -> std::io::Result<PathBuf> {
-    if let Ok(mut dir) = app.path().config_dir() {
-        dir.push("haomd");
-        std::fs::create_dir_all(&dir)?;
-        return Ok(dir.join("editor_settings.json"));
-    }
-
-    let dir = std::env::current_dir()?;
-    Ok(dir.join("editor_settings.json"))
+    haomd_config_file(app, "editor_settings.json")
 }
 
 async fn load_legacy_backup_settings(app: &AppHandle) -> Option<BackupSettingsCfg> {

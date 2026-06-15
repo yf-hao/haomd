@@ -940,11 +940,7 @@ pub(crate) fn render_text_run_xml(options: RenderTextRunOptions<'_>) -> String {
         ));
     }
     if let Some(font_family) = font_family.filter(|value| !value.trim().is_empty()) {
-        let font_family = crate::escape_xml_attr(font_family);
-        rpr.push_str(&format!(
-            r#"<w:rFonts w:ascii="{0}" w:hAnsi="{0}" w:cs="{0}"/>"#,
-            font_family
-        ));
+        rpr.push_str(&render_word_font_family_xml(font_family));
     }
     if let Some(font_size_half_points) = font_size_pt_to_half_points(font_size_pt) {
         rpr.push_str(&format!(r#"<w:sz w:val="{}"/>"#, font_size_half_points));
@@ -996,6 +992,27 @@ fn font_size_pt_to_half_points(size_pt: Option<f32>) -> Option<u32> {
         return None;
     }
     Some((value * 2.0).round() as u32)
+}
+
+fn render_word_font_family_xml(font_family: &str) -> String {
+    let font_family = normalize_word_font_family(font_family);
+    let escaped = crate::escape_xml_attr(&font_family);
+    format!(
+        r#"<w:rFonts w:ascii="{0}" w:hAnsi="{0}" w:cs="{0}" w:eastAsia="{0}"/>"#,
+        escaped
+    )
+}
+
+fn normalize_word_font_family(font_family: &str) -> String {
+    let trimmed = font_family.trim();
+    if trimmed.eq_ignore_ascii_case("songti")
+        || trimmed.eq_ignore_ascii_case("songti sc")
+        || trimmed.eq_ignore_ascii_case("simsun")
+        || trimmed.eq_ignore_ascii_case("sim sun")
+    {
+        return "宋体".to_string();
+    }
+    trimmed.to_string()
 }
 
 #[derive(Debug, Clone, Default)]
@@ -1936,51 +1953,39 @@ pub(crate) fn build_app_props_xml() -> String {
 }
 
 pub(crate) fn build_word_styles_xml(settings: &WordExportStyleSettingsResolved) -> String {
+    let body_font_rpr = render_word_font_family_xml(&settings.body_font_family);
+    let heading_font_rpr = render_word_font_family_xml(&settings.heading_font_family);
     format!(
         concat!(
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
             r#"<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">"#,
             r#"<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/>"#,
             r#"<w:pPr><w:spacing w:after="{}" w:line="{}" w:lineRule="auto"/></w:pPr>"#,
-            r#"<w:rPr><w:rFonts w:ascii="{}" w:hAnsi="{}" w:cs="{}"/><w:sz w:val="{}"/></w:rPr></w:style>"#,
-            r#"<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr><w:rFonts w:ascii="{}" w:hAnsi="{}" w:cs="{}"/><w:b/><w:sz w:val="{}"/></w:rPr></w:style>"#,
-            r#"<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr><w:rFonts w:ascii="{}" w:hAnsi="{}" w:cs="{}"/><w:b/><w:sz w:val="{}"/></w:rPr></w:style>"#,
-            r#"<w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr><w:rFonts w:ascii="{}" w:hAnsi="{}" w:cs="{}"/><w:b/><w:sz w:val="{}"/></w:rPr></w:style>"#,
-            r#"<w:style w:type="paragraph" w:styleId="Heading4"><w:name w:val="heading 4"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr><w:rFonts w:ascii="{}" w:hAnsi="{}" w:cs="{}"/><w:b/><w:sz w:val="{}"/></w:rPr></w:style>"#,
-            r#"<w:style w:type="paragraph" w:styleId="Heading5"><w:name w:val="heading 5"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr><w:rFonts w:ascii="{}" w:hAnsi="{}" w:cs="{}"/><w:b/><w:sz w:val="{}"/></w:rPr></w:style>"#,
-            r#"<w:style w:type="paragraph" w:styleId="Heading6"><w:name w:val="heading 6"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr><w:rFonts w:ascii="{}" w:hAnsi="{}" w:cs="{}"/><w:b/><w:sz w:val="{}"/></w:rPr></w:style>"#,
+            r#"<w:rPr>{}<w:sz w:val="{}"/></w:rPr></w:style>"#,
+            r#"<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr>{}<w:b/><w:sz w:val="{}"/></w:rPr></w:style>"#,
+            r#"<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr>{}<w:b/><w:sz w:val="{}"/></w:rPr></w:style>"#,
+            r#"<w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr>{}<w:b/><w:sz w:val="{}"/></w:rPr></w:style>"#,
+            r#"<w:style w:type="paragraph" w:styleId="Heading4"><w:name w:val="heading 4"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr>{}<w:b/><w:sz w:val="{}"/></w:rPr></w:style>"#,
+            r#"<w:style w:type="paragraph" w:styleId="Heading5"><w:name w:val="heading 5"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr>{}<w:b/><w:sz w:val="{}"/></w:rPr></w:style>"#,
+            r#"<w:style w:type="paragraph" w:styleId="Heading6"><w:name w:val="heading 6"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr>{}<w:b/><w:sz w:val="{}"/></w:rPr></w:style>"#,
             r#"<w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:basedOn w:val="DefaultParagraphFont"/><w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:rPr><w:color w:val="0563C1"/><w:u w:val="single"/></w:rPr></w:style>"#,
             r#"</w:styles>"#
         ),
         settings.paragraph_spacing_after_twips,
         settings.line_spacing_twips,
-        crate::escape_xml_attr(&settings.body_font_family),
-        crate::escape_xml_attr(&settings.body_font_family),
-        crate::escape_xml_attr(&settings.body_font_family),
+        body_font_rpr,
         settings.body_font_size_half_points,
-        crate::escape_xml_attr(&settings.heading_font_family),
-        crate::escape_xml_attr(&settings.heading_font_family),
-        crate::escape_xml_attr(&settings.heading_font_family),
+        heading_font_rpr.clone(),
         settings.heading1_size_half_points,
-        crate::escape_xml_attr(&settings.heading_font_family),
-        crate::escape_xml_attr(&settings.heading_font_family),
-        crate::escape_xml_attr(&settings.heading_font_family),
+        heading_font_rpr.clone(),
         settings.heading2_size_half_points,
-        crate::escape_xml_attr(&settings.heading_font_family),
-        crate::escape_xml_attr(&settings.heading_font_family),
-        crate::escape_xml_attr(&settings.heading_font_family),
+        heading_font_rpr.clone(),
         settings.heading3_size_half_points,
-        crate::escape_xml_attr(&settings.heading_font_family),
-        crate::escape_xml_attr(&settings.heading_font_family),
-        crate::escape_xml_attr(&settings.heading_font_family),
+        heading_font_rpr.clone(),
         settings.heading3_size_half_points,
-        crate::escape_xml_attr(&settings.heading_font_family),
-        crate::escape_xml_attr(&settings.heading_font_family),
-        crate::escape_xml_attr(&settings.heading_font_family),
+        heading_font_rpr.clone(),
         settings.heading3_size_half_points,
-        crate::escape_xml_attr(&settings.heading_font_family),
-        crate::escape_xml_attr(&settings.heading_font_family),
-        crate::escape_xml_attr(&settings.heading_font_family),
+        heading_font_rpr,
         settings.heading3_size_half_points.saturating_sub(2),
     )
 }
