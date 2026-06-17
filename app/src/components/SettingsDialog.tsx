@@ -18,6 +18,12 @@ import {
   type WebDavBackupSettings,
 } from '../modules/settings/backupSettings'
 import {
+  getDefaultBackupScopeSettings,
+  loadBackupScopeSettings,
+  saveBackupScopeSettings,
+  type BackupScopeSettings,
+} from '../modules/settings/backupScopeSettings'
+import {
   DEFAULT_WEBDAV_REMOTE_PATH,
   getDefaultLanguageSetting,
   getDefaultSearchSettings,
@@ -39,6 +45,7 @@ import {
   type UiTypographySettings,
   type WordExportStyleSettings,
 } from '../modules/settings/editorSettings'
+import { getWorkspaceMountedRoots } from '../modules/workspace/workspaceMountedRoots'
 import { resolveManagedBackgroundImageUrl } from '../modules/theme/backgroundImageRuntime'
 import type { ThemeMode } from '../modules/theme/schema'
 import { subscribeUiTypographyChanged } from '../modules/settings/uiTypographyRuntime'
@@ -56,6 +63,7 @@ export type SettingsDialogProps = {
 type SettingsSectionId = 'theme' | 'typography' | 'word-export' | 'search' | 'backup'
 type ThemePanelTabId = 'theme-preset' | 'backgrounds'
 type WordExportTabId = 'document' | 'layout' | 'diagrams' | 'templates'
+type BackupPanelTabId = 'sync' | 'settings'
 type WordTemplateOption = {
   id: string
   name: string
@@ -93,11 +101,13 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const [languageMode, setLanguageMode] = useState<LanguageMode>(getDefaultLanguageSetting())
   const [wordExport, setWordExport] = useState<WordExportStyleSettings>(getDefaultWordExportStyleSettings())
   const [webdavBackup, setWebdavBackup] = useState<WebDavBackupSettings>(getDefaultWebDavBackupSettings())
+  const [backupScope, setBackupScope] = useState<BackupScopeSettings>(getDefaultBackupScopeSettings())
   const [searchSettings, setSearchSettings] = useState<SearchSettings>(getDefaultSearchSettings())
   const [uiTypography, setUiTypography] = useState<UiTypographySettings>(getDefaultUiTypographySettings())
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('theme')
   const [activeThemeTab, setActiveThemeTab] = useState<ThemePanelTabId>('theme-preset')
   const [activeWordExportTab, setActiveWordExportTab] = useState<WordExportTabId>('document')
+  const [activeBackupTab, setActiveBackupTab] = useState<BackupPanelTabId>('sync')
   const [wordTemplates, setWordTemplates] = useState<WordTemplateOption[]>([])
   const [wordTemplateAuthoringOpen, setWordTemplateAuthoringOpen] = useState(false)
   const [wordTemplateAuthoringMode, setWordTemplateAuthoringMode] = useState<'create' | 'revise'>('create')
@@ -161,6 +171,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   useEffect(() => {
     if (!open) return
     setDragOffset({ x: 0, y: 0 })
+    setActiveBackupTab('sync')
     setBackupBusy(null)
     setBackupStatus(null)
     setSearchBusy(null)
@@ -169,13 +180,14 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     let cancelled = false
     ;(async () => {
       try {
-        const [loadedSettings, loadedTheme, loadedLanguage, loadedTypography, loadedWordExport, loadedBackupSettings, loadedSearchSettings] = await Promise.all([
+        const [loadedSettings, loadedTheme, loadedLanguage, loadedTypography, loadedWordExport, loadedBackupSettings, loadedBackupScopeSettings, loadedSearchSettings] = await Promise.all([
           loadEditorSettings(),
           getThemeSettings(),
           getLanguageSetting(),
           getUiTypographySettings(),
           getWordExportStyleSettings(),
           loadBackupSettings(),
+          loadBackupScopeSettings(),
           getSearchSettings(),
         ])
         if (cancelled) return
@@ -190,6 +202,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
         themePreviewReadyRef.current = true
         setWordExport(loadedWordExport)
         setWebdavBackup(loadedBackupSettings)
+        setBackupScope(loadedBackupScopeSettings)
         setSearchSettings(loadedSearchSettings)
         setWorkspaceBackgroundOpacityInput(String(loadedTheme.workspaceBackground?.opacity ?? getDefaultThemeSettings().workspaceBackground?.opacity ?? 0.22))
         setWorkspaceBackgroundOverlayOpacityInput(String(loadedTheme.workspaceBackground?.overlayOpacity ?? getDefaultThemeSettings().workspaceBackground?.overlayOpacity ?? 0.12))
@@ -418,7 +431,11 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
       if (!outputPath || typeof outputPath !== 'string') return
 
       setBackupBusy('export')
-      const resp = await invoke<BackendResult<null>>('export_settings_backup', { outputPath })
+      const resp = await invoke<BackendResult<null>>('export_settings_backup', {
+        outputPath,
+        scopeSettings: backupScope,
+        documentRoots: getWorkspaceMountedRoots(),
+      })
       expectBackendOk(resp)
       setBackupStatus({ tone: 'success', message: t('backup.exportSuccess', { path: outputPath }) })
     } catch (err) {
@@ -459,6 +476,8 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
         username: webdavBackup.username,
         password: webdavBackup.password,
         remotePath: DEFAULT_WEBDAV_REMOTE_PATH,
+        scopeSettings: backupScope,
+        documentRoots: getWorkspaceMountedRoots(),
       })
       expectBackendOk(resp)
       setBackupStatus({ tone: 'success', message: t('backup.webdavExportStarted') })
@@ -741,6 +760,12 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
       setSearchSettings(getDefaultSearchSettings())
       return
     }
+    if (activeSection === 'backup') {
+      if (activeBackupTab === 'settings') {
+        setBackupScope(getDefaultBackupScopeSettings())
+      }
+      return
+    }
     setWordExport(getDefaultWordExportStyleSettings())
   }
 
@@ -760,6 +785,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
       await Promise.all([
         saveEditorSettings(nextSettings),
         saveBackupSettings(webdavBackup),
+        saveBackupScopeSettings(backupScope),
       ])
       setSettings(nextSettings)
       originalThemeRef.current = theme
@@ -1689,146 +1715,220 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                       <div className="settings-panel-title">{t('backup.title')}</div>
                     </div>
                     <div className="settings-panel-description">{t('backup.description')}</div>
-                  </div>
-
-                  <div className="settings-subgroup">
-                    <div className="settings-subgroup-title">{t('backup.groups.sync')}</div>
-                    <div style={{ display: 'grid', gap: 14 }}>
-                      <div style={fieldGridStyle}>
-                        <div className="settings-field-label">{t('backup.exportLabel')}</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                          <Button
-                            variant="tertiary"
-                            type="button"
-                            onClick={() => void handleExportBackup()}
-                            disabled={backupBusy !== null}
-                            loading={backupBusy === 'export'}
-                          >
-                            {t('backup.exportAction')}
-                          </Button>
-                        </div>
-                      </div>
-
-                      <div style={fieldGridStyle}>
-                        <div className="settings-field-label">{t('backup.importLabel')}</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                          <Button
-                            variant="tertiary"
-                            type="button"
-                            onClick={() => void handleImportBackup()}
-                            disabled={backupBusy !== null}
-                            loading={backupBusy === 'import'}
-                          >
-                            {t('backup.importAction')}
-                          </Button>
-                        </div>
-                      </div>
-
+                    <div className="settings-panel-tabs" role="tablist" aria-label={t('backup.tabsLabel')}>
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={activeBackupTab === 'sync'}
+                        className={`settings-panel-tab ${activeBackupTab === 'sync' ? 'active' : ''}`}
+                        onClick={() => setActiveBackupTab('sync')}
+                      >
+                        {t('backup.tabs.sync')}
+                      </button>
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={activeBackupTab === 'settings'}
+                        className={`settings-panel-tab ${activeBackupTab === 'settings' ? 'active' : ''}`}
+                        onClick={() => setActiveBackupTab('settings')}
+                      >
+                        {t('backup.tabs.settings')}
+                      </button>
                     </div>
                   </div>
 
-                  <div className="settings-subsection">
-                    <div className="settings-subgroup">
-                      <div className="settings-subgroup-title">{t('backup.groups.webdav')}</div>
-                      <div style={{ display: 'grid', gap: 14 }}>
-                      <div style={fieldGridStyle}>
-                        <div className="settings-field-label">{t('backup.webdavEnabled')}</div>
-                        <label className="settings-checkbox-label">
-                          <input
-                            type="checkbox"
-                            checked={webdavBackup.enabled}
-                            onChange={(event) =>
-                              setWebdavBackup((prev) => ({ ...prev, enabled: event.target.checked }))}
-                          />
-                        </label>
-                      </div>
-                      <div style={fieldGridStyle}>
-                        <div className="settings-field-label">{t('backup.webdavUrl')}</div>
-                        <input
-                          ref={webdavUrlInputRef}
-                          className="field-input"
-                          value={webdavBackup.url}
-                          onChange={(event) =>
-                            setWebdavBackup((prev) => ({ ...prev, url: event.target.value }))}
-                          placeholder="https://example.com/dav"
-                        />
-                      </div>
-                      <div style={fieldGridStyle}>
-                        <div className="settings-field-label">{t('backup.webdavUsername')}</div>
-                        <input
-                          ref={webdavUsernameInputRef}
-                          className="field-input"
-                          value={webdavBackup.username}
-                          onChange={(event) =>
-                            setWebdavBackup((prev) => ({ ...prev, username: event.target.value }))}
-                        />
-                      </div>
-                      <div style={fieldGridStyle}>
-                        <div className="settings-field-label">{t('backup.webdavPassword')}</div>
-                        <input
-                          ref={webdavPasswordInputRef}
-                          className="field-input"
-                          type="password"
-                          value={webdavBackup.password}
-                          onChange={(event) =>
-                            setWebdavBackup((prev) => ({ ...prev, password: event.target.value }))}
-                        />
-                      </div>
-                      <div style={fieldGridStyle}>
-                        <div className="settings-field-label">{t('backup.webdavTestLabel')}</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                          <Button
-                            variant="tertiary"
-                            type="button"
-                            onClick={() => void handleTestWebDavConnection()}
-                            disabled={backupBusy !== null}
-                            loading={backupBusy === 'webdav-test'}
-                          >
-                            {t('backup.webdavTestAction')}
-                          </Button>
-                        </div>
-                      </div>
-                      <div style={fieldGridStyle}>
-                        <div className="settings-field-label">{t('backup.webdavExportLabel')}</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                          <Button
-                            variant="tertiary"
-                            type="button"
-                            onClick={() => void handleExportBackupToWebDav()}
-                            disabled={backupBusy !== null}
-                            loading={backupBusy === 'webdav-export'}
-                          >
-                            {t('backup.webdavExportAction')}
-                          </Button>
-                        </div>
-                      </div>
-                      <div style={fieldGridStyle}>
-                        <div className="settings-field-label">{t('backup.webdavImportLabel')}</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                          <Button
-                            variant="tertiary"
-                            type="button"
-                            onClick={() => void handleImportBackupFromWebDav()}
-                            disabled={backupBusy !== null}
-                            loading={backupBusy === 'webdav-import'}
-                          >
-                            {t('backup.webdavImportAction')}
-                          </Button>
-                        </div>
-                      </div>
-                      {backupStatus ? (
-                        <div style={fieldGridStyle}>
-                          <div className="settings-field-label">{t('backup.statusLabel')}</div>
-                          <div
-                            className={`settings-status-message settings-status-${backupStatus.tone}`}
-                          >
-                            {backupStatus.message}
+                  {activeBackupTab === 'sync' ? (
+                    <>
+                      <div className="settings-subgroup">
+                        <div className="settings-subgroup-title">{t('backup.groups.sync')}</div>
+                        <div style={{ display: 'grid', gap: 14 }}>
+                          <div style={fieldGridStyle}>
+                            <div className="settings-field-label">{t('backup.exportLabel')}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                              <Button
+                                variant="tertiary"
+                                type="button"
+                                onClick={() => void handleExportBackup()}
+                                disabled={backupBusy !== null}
+                                loading={backupBusy === 'export'}
+                              >
+                                {t('backup.exportAction')}
+                              </Button>
+                            </div>
+                          </div>
+
+                          <div style={fieldGridStyle}>
+                            <div className="settings-field-label">{t('backup.importLabel')}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                              <Button
+                                variant="tertiary"
+                                type="button"
+                                onClick={() => void handleImportBackup()}
+                                disabled={backupBusy !== null}
+                                loading={backupBusy === 'import'}
+                              >
+                                {t('backup.importAction')}
+                              </Button>
+                            </div>
                           </div>
                         </div>
-                      ) : null}
+                      </div>
+
+                      <div className="settings-subsection">
+                        <div className="settings-subgroup">
+                          <div className="settings-subgroup-title">{t('backup.groups.webdav')}</div>
+                          <div style={{ display: 'grid', gap: 14 }}>
+                            <div style={fieldGridStyle}>
+                              <div className="settings-field-label">{t('backup.webdavEnabled')}</div>
+                              <label className="settings-checkbox-label">
+                                <input
+                                  type="checkbox"
+                                  checked={webdavBackup.enabled}
+                                  onChange={(event) =>
+                                    setWebdavBackup((prev) => ({ ...prev, enabled: event.target.checked }))}
+                                />
+                              </label>
+                            </div>
+                            <div style={fieldGridStyle}>
+                              <div className="settings-field-label">{t('backup.webdavUrl')}</div>
+                              <input
+                                ref={webdavUrlInputRef}
+                                className="field-input"
+                                value={webdavBackup.url}
+                                onChange={(event) =>
+                                  setWebdavBackup((prev) => ({ ...prev, url: event.target.value }))}
+                                placeholder="https://example.com/dav"
+                              />
+                            </div>
+                            <div style={fieldGridStyle}>
+                              <div className="settings-field-label">{t('backup.webdavUsername')}</div>
+                              <input
+                                ref={webdavUsernameInputRef}
+                                className="field-input"
+                                value={webdavBackup.username}
+                                onChange={(event) =>
+                                  setWebdavBackup((prev) => ({ ...prev, username: event.target.value }))}
+                              />
+                            </div>
+                            <div style={fieldGridStyle}>
+                              <div className="settings-field-label">{t('backup.webdavPassword')}</div>
+                              <input
+                                ref={webdavPasswordInputRef}
+                                className="field-input"
+                                type="password"
+                                value={webdavBackup.password}
+                                onChange={(event) =>
+                                  setWebdavBackup((prev) => ({ ...prev, password: event.target.value }))}
+                              />
+                            </div>
+                            <div style={fieldGridStyle}>
+                              <div className="settings-field-label">{t('backup.webdavTestLabel')}</div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                                <Button
+                                  variant="tertiary"
+                                  type="button"
+                                  onClick={() => void handleTestWebDavConnection()}
+                                  disabled={backupBusy !== null}
+                                  loading={backupBusy === 'webdav-test'}
+                                >
+                                  {t('backup.webdavTestAction')}
+                                </Button>
+                              </div>
+                            </div>
+                            <div style={fieldGridStyle}>
+                              <div className="settings-field-label">{t('backup.webdavExportLabel')}</div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                                <Button
+                                  variant="tertiary"
+                                  type="button"
+                                  onClick={() => void handleExportBackupToWebDav()}
+                                  disabled={backupBusy !== null}
+                                  loading={backupBusy === 'webdav-export'}
+                                >
+                                  {t('backup.webdavExportAction')}
+                                </Button>
+                              </div>
+                            </div>
+                            <div style={fieldGridStyle}>
+                              <div className="settings-field-label">{t('backup.webdavImportLabel')}</div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                                <Button
+                                  variant="tertiary"
+                                  type="button"
+                                  onClick={() => void handleImportBackupFromWebDav()}
+                                  disabled={backupBusy !== null}
+                                  loading={backupBusy === 'webdav-import'}
+                                >
+                                  {t('backup.webdavImportAction')}
+                                </Button>
+                              </div>
+                            </div>
+                            {backupStatus ? (
+                              <div style={fieldGridStyle}>
+                                <div className="settings-field-label">{t('backup.statusLabel')}</div>
+                                <div
+                                  className={`settings-status-message settings-status-${backupStatus.tone}`}
+                                >
+                                  {backupStatus.message}
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="settings-subgroup">
+                      <div className="settings-subgroup-title">{t('backup.scopeLabel')}</div>
+                      <div className="settings-panel-description" style={{ marginTop: 0 }}>
+                        {t('backup.scopeHint')}
+                      </div>
+                      <div style={{ display: 'grid', gap: 14, marginTop: 14 }}>
+                        <div style={fieldGridStyle}>
+                          <div className="settings-field-label">{t('backup.scopeMusic')}</div>
+                          <div className="settings-check-option">
+                            <label className="settings-checkbox-label">
+                              <input
+                                type="checkbox"
+                                checked={backupScope.music}
+                                onChange={(event) =>
+                                  setBackupScope((prev) => ({ ...prev, music: event.target.checked }))}
+                              />
+                            </label>
+                            <div className="settings-field-description">{t('backup.scopeMusicHint')}</div>
+                          </div>
+                        </div>
+                        <div style={fieldGridStyle}>
+                          <div className="settings-field-label">{t('backup.scopeDocuments')}</div>
+                          <div className="settings-check-option">
+                            <label className="settings-checkbox-label">
+                              <input
+                                type="checkbox"
+                                checked={backupScope.documents}
+                                onChange={(event) =>
+                                  setBackupScope((prev) => ({ ...prev, documents: event.target.checked }))}
+                              />
+                            </label>
+                            <div className="settings-field-description">{t('backup.scopeDocumentsHint')}</div>
+                          </div>
+                        </div>
+                        <div style={fieldGridStyle}>
+                          <div className="settings-field-label">{t('backup.scopeNotes')}</div>
+                          <div className="settings-check-option">
+                            <label className="settings-checkbox-label">
+                              <input
+                                type="checkbox"
+                                checked={backupScope.notes}
+                                onChange={(event) =>
+                                  setBackupScope((prev) => ({ ...prev, notes: event.target.checked }))}
+                              />
+                            </label>
+                            <div className="settings-field-description">{t('backup.scopeNotesHint')}</div>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                 </>
               )}
 

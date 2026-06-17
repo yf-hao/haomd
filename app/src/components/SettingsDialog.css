@@ -347,6 +347,17 @@
   accent-color: var(--theme-accent-primary);
 }
 
+.settings-check-option {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-field-description {
+  font-size: calc(var(--ui-font-settings) - 1px);
+  color: var(--theme-text-subtle);
+  line-height: 1.45;
+}
+
 .settings-inline-actions {
   display: grid;
   gap: 10px;

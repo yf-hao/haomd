@@ -1,4 +1,6 @@
-use crate::haomd_paths::haomd_config_root_dir;
+use crate::backup_scope::BackupScopeSettingsCfg;
+use crate::haomd_paths::{haomd_config_root_dir, haomd_data_root_dir};
+use crate::notes_config::notes_config_path;
 use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
 use once_cell::sync::Lazy;
 use reqwest::StatusCode;
@@ -16,6 +18,8 @@ use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 const WEBDAV_SYNC_INDEX_FILE: &str = ".haomd-sync-index.json";
+const BACKUP_MANIFEST_FILE: &str = ".haomd-backup-manifest.json";
+const BACKUP_EXTRA_ROOT: &str = ".haomd-backup-extra";
 const EXCLUDED_BACKUP_FILE_NAMES: &[&str] = &[
     "recent.json",
     "pdf_recent.json",
@@ -56,8 +60,297 @@ pub struct WebDavBackupUploadSummary {
     pub incremental: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct BackupManifest {
+    version: u32,
+    scopes: Vec<BackupManifestScope>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct BackupManifestScope {
+    kind: BackupManifestScopeKind,
+    stage_path: String,
+    source_path: String,
+    target_path: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+enum BackupManifestScopeKind {
+    Music,
+    Notes,
+    Documents,
+}
+
+#[derive(Debug, Clone)]
+struct BackupPackage {
+    root: PathBuf,
+    temp_dir: PathBuf,
+}
+
 fn backup_root_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
     haomd_config_root_dir(app)
+}
+
+fn backup_temp_dir(prefix: &str) -> std::io::Result<PathBuf> {
+    let dir = std::env::temp_dir().join(format!(
+        "{prefix}-{}",
+        new_trace_id().replace("trace_", "")
+    ));
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir)
+}
+
+fn expand_tilde_path(value: &str) -> PathBuf {
+    let trimmed = value.trim();
+    if trimmed == "~" {
+        if let Ok(home) = std::env::var("HOME") {
+            return PathBuf::from(home);
+        }
+    }
+    if let Some(rest) = trimmed.strip_prefix("~/") {
+        if let Ok(home) = std::env::var("HOME") {
+            return PathBuf::from(home).join(rest);
+        }
+    }
+    PathBuf::from(trimmed)
+}
+
+fn is_config_backup_artifact(relative: &Path) -> bool {
+    matches!(
+        relative.file_name().and_then(|name| name.to_str()),
+        Some(".haomd-backup-manifest.json")
+    ) || relative
+        .components()
+        .next()
+        .and_then(|component| component.as_os_str().to_str())
+        == Some(".haomd-backup-extra")
+}
+
+fn copy_tree_contents(
+    source_root: &Path,
+    source_dir: &Path,
+    target_dir: &Path,
+    skip_relative: Option<fn(&Path) -> bool>,
+) -> Result<(), String> {
+    if !source_dir.exists() {
+        return Ok(());
+    }
+
+    std::fs::create_dir_all(target_dir)
+        .map_err(|err| format!("创建备份暂存目录失败: {err}"))?;
+
+    for entry in std::fs::read_dir(source_dir)
+        .map_err(|err| format!("读取备份来源目录失败: {err}"))?
+    {
+        let entry = entry.map_err(|err| format!("读取备份来源目录失败: {err}"))?;
+        let entry_path = entry.path();
+        let file_name = entry.file_name();
+        let file_name = file_name.to_string_lossy();
+
+        if file_name == ".DS_Store" || file_name == "Thumbs.db" || file_name.starts_with("._") {
+            continue;
+        }
+
+        let relative = entry_path
+            .strip_prefix(source_root)
+            .map_err(|err| format!("解析备份来源相对路径失败: {err}"))?
+            .to_path_buf();
+        if let Some(predicate) = skip_relative {
+            if predicate(&relative) {
+                continue;
+            }
+        }
+
+        let target_path = target_dir.join(&relative);
+        if entry_path.is_dir() {
+            copy_tree_contents(source_root, &entry_path, target_dir, skip_relative)?;
+        } else if entry_path.is_file() {
+            if let Some(parent) = target_path.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|err| format!("创建备份暂存目录失败: {err}"))?;
+            }
+            std::fs::copy(&entry_path, &target_path)
+                .map_err(|err| format!("复制备份文件失败 {}: {err}", relative.display()))?;
+        }
+    }
+
+    Ok(())
+}
+
+fn read_notes_directory(app: &AppHandle) -> Result<Option<PathBuf>, String> {
+    let path = notes_config_path(app).map_err(|err| format!("获取 notes_config 路径失败: {err}"))?;
+    let bytes = match std::fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => return Err(format!("读取 notes_config 失败: {err}")),
+    };
+
+    let config: crate::notes_config::NotesConfigData = serde_json::from_slice(&bytes)
+        .map_err(|err| format!("解析 notes_config 失败: {err}"))?;
+    let Some(notes_directory) = config.notes_directory.as_deref() else {
+        return Ok(None);
+    };
+    let target = expand_tilde_path(notes_directory);
+    if target.as_os_str().is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(target))
+}
+
+fn build_backup_manifest(app: &AppHandle, scope_settings: &BackupScopeSettingsCfg) -> Result<BackupManifest, String> {
+    let mut scopes = Vec::new();
+
+    if scope_settings.music {
+        let music_root = haomd_data_root_dir(app)
+            .map_err(|err| format!("获取 music 目录失败: {err}"))?
+            .join("music");
+        if music_root.exists() {
+            scopes.push(BackupManifestScope {
+                kind: BackupManifestScopeKind::Music,
+                stage_path: format!("{BACKUP_EXTRA_ROOT}/music"),
+                source_path: music_root.to_string_lossy().to_string(),
+                target_path: music_root.to_string_lossy().to_string(),
+            });
+        }
+    }
+
+    if scope_settings.notes {
+        if let Some(notes_dir) = read_notes_directory(app)? {
+            if notes_dir.exists() {
+                scopes.push(BackupManifestScope {
+                    kind: BackupManifestScopeKind::Notes,
+                    stage_path: format!("{BACKUP_EXTRA_ROOT}/notes"),
+                    source_path: notes_dir.to_string_lossy().to_string(),
+                    target_path: notes_dir.to_string_lossy().to_string(),
+                });
+            }
+        }
+    }
+
+    Ok(BackupManifest {
+        version: 1,
+        scopes,
+    })
+}
+
+async fn build_backup_package(
+    app: &AppHandle,
+    scope_settings: &BackupScopeSettingsCfg,
+    document_roots: &[String],
+) -> Result<BackupPackage, String> {
+    let config_root = backup_root_dir(app).map_err(|err| format!("获取备份根目录失败: {err}"))?;
+    let temp_dir = backup_temp_dir("haomd-backup")
+        .map_err(|err| format!("创建备份暂存目录失败: {err}"))?;
+    let package_root = temp_dir.clone();
+    let result = (|| -> Result<BackupPackage, String> {
+        copy_tree_contents(
+            &config_root,
+            &config_root,
+            &package_root,
+            Some(is_config_backup_artifact),
+        )?;
+
+        let mut manifest = build_backup_manifest(app, &scope_settings)?;
+
+        if scope_settings.documents {
+            let mut document_scopes = Vec::new();
+            for (index, root) in document_roots.iter().enumerate() {
+                let trimmed = root.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                let source = PathBuf::from(trimmed);
+                if !source.exists() {
+                    continue;
+                }
+                let stage_path = format!("{BACKUP_EXTRA_ROOT}/documents/{index}");
+                copy_tree_contents(&source, &source, &package_root.join(&stage_path), None)?;
+                document_scopes.push(BackupManifestScope {
+                    kind: BackupManifestScopeKind::Documents,
+                    stage_path,
+                    source_path: source.to_string_lossy().to_string(),
+                    target_path: source.to_string_lossy().to_string(),
+                });
+            }
+            manifest.scopes.extend(document_scopes);
+        }
+
+        if !manifest.scopes.is_empty() {
+            let manifest_path = package_root.join(BACKUP_MANIFEST_FILE);
+            let bytes = serde_json::to_vec_pretty(&manifest)
+                .map_err(|err| format!("序列化备份清单失败: {err}"))?;
+            std::fs::write(&manifest_path, bytes)
+                .map_err(|err| format!("写入备份清单失败: {err}"))?;
+        }
+
+        Ok(BackupPackage {
+            root: package_root,
+            temp_dir: temp_dir.clone(),
+        })
+    })();
+
+    if result.is_err() {
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    result
+}
+
+fn cleanup_backup_package(package: &BackupPackage) {
+    let _ = std::fs::remove_dir_all(&package.temp_dir);
+}
+
+fn restore_target_for_relative(
+    relative: &Path,
+    config_root: &Path,
+    manifest: Option<&BackupManifest>,
+) -> PathBuf {
+    if let Some(manifest) = manifest {
+        let mut scopes = manifest.scopes.iter().collect::<Vec<_>>();
+        scopes.sort_by(|a, b| b.stage_path.len().cmp(&a.stage_path.len()));
+        for scope in scopes {
+            let stage_path = Path::new(&scope.stage_path);
+            if !relative.starts_with(stage_path) {
+                continue;
+            }
+            let target_root = PathBuf::from(&scope.target_path);
+            let stripped = relative.strip_prefix(stage_path).unwrap_or(Path::new(""));
+            return if stripped.as_os_str().is_empty() {
+                target_root
+            } else {
+                target_root.join(stripped)
+            };
+        }
+    }
+
+    config_root.join(relative)
+}
+
+fn matches_backup_scope(relative: &Path, manifest: Option<&BackupManifest>) -> bool {
+    let Some(manifest) = manifest else {
+        return false;
+    };
+    manifest.scopes.iter().any(|scope| {
+        let stage_path = Path::new(&scope.stage_path);
+        relative.starts_with(stage_path)
+    })
+}
+
+fn read_manifest_from_zip<R: Read + Seek>(archive: &mut ZipArchive<R>) -> Result<Option<BackupManifest>, String> {
+    let Ok(mut entry) = archive.by_name(BACKUP_MANIFEST_FILE) else {
+        return Ok(None);
+    };
+
+    let mut bytes = Vec::new();
+    entry
+        .read_to_end(&mut bytes)
+        .map_err(|err| format!("读取备份清单失败: {err}"))?;
+    let manifest: BackupManifest =
+        serde_json::from_slice(&bytes).map_err(|err| format!("解析备份清单失败: {err}"))?;
+    Ok(Some(manifest))
 }
 
 fn resolve_webdav_url(base_url: &str, remote_path: &str) -> String {
@@ -132,6 +425,13 @@ fn should_include_backup_relative(relative: &Path) -> bool {
         Some(name) => !EXCLUDED_BACKUP_FILE_NAMES.contains(&name),
         None => true,
     }
+}
+
+fn should_include_backup_package_relative(relative: &Path) -> bool {
+    if relative.starts_with(BACKUP_EXTRA_ROOT) || relative == Path::new(BACKUP_MANIFEST_FILE) {
+        return true;
+    }
+    should_include_backup_relative(relative)
 }
 
 fn join_remote_relative(root: &str, relative: &str) -> String {
@@ -231,7 +531,7 @@ fn collect_local_entries(
             .map_err(|err| format!("解析本地相对路径失败: {err}"))?
             .to_path_buf();
 
-        if !should_include_backup_relative(&relative) {
+        if !should_include_backup_package_relative(&relative) {
             continue;
         }
 
@@ -380,6 +680,38 @@ async fn fetch_remote_sync_index(
     let index: WebDavSyncIndexCompat =
         serde_json::from_slice(&bytes).map_err(|err| format!("解析同步索引失败: {err}"))?;
     Ok(Some(normalize_remote_sync_index(index)))
+}
+
+async fn fetch_remote_manifest(
+    client: &Client,
+    base_url: &str,
+    username: &str,
+    password: &str,
+    remote_root: &str,
+) -> Result<Option<BackupManifest>, String> {
+    let target = resolve_webdav_url(
+        base_url,
+        &join_remote_relative(remote_root, BACKUP_MANIFEST_FILE),
+    );
+    let response = webdav_request(client, Method::GET, &target, username, password)
+        .send()
+        .await
+        .map_err(|err| format!("读取备份清单失败: {err}"))?;
+
+    if response.status() == StatusCode::NOT_FOUND {
+        return Ok(None);
+    }
+    if !response.status().is_success() {
+        return Err(format!("读取备份清单失败: HTTP {}", response.status()));
+    }
+
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|err| format!("读取备份清单失败: {err}"))?;
+    let manifest: BackupManifest =
+        serde_json::from_slice(&bytes).map_err(|err| format!("解析备份清单失败: {err}"))?;
+    Ok(Some(manifest))
 }
 
 fn build_sync_plan(local: &WebDavSyncIndex, remote: Option<&WebDavSyncIndex>) -> WebDavSyncPlan {
@@ -532,13 +864,20 @@ async fn download_directory_from_webdav(
     let index = fetch_remote_sync_index(&client, base_url, username, password, remote_root)
         .await?
         .ok_or_else(|| "读取同步索引失败: 远端未找到索引文件".to_string())?;
+    let manifest = fetch_remote_manifest(&client, base_url, username, password, remote_root).await?;
 
     for entry in index.files {
         let relative = entry.path;
-        if !should_include_backup_relative(Path::new(&relative)) {
+        if relative == BACKUP_MANIFEST_FILE {
             continue;
         }
-        let local_path = root.join(&relative);
+        let relative_path = Path::new(&relative);
+        if !matches_backup_scope(relative_path, manifest.as_ref())
+            && !should_include_backup_relative(relative_path)
+        {
+            continue;
+        }
+        let local_path = restore_target_for_relative(relative_path, root, manifest.as_ref());
         if let Some(parent) = local_path.parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|err| format!("创建本地恢复目录失败 {relative}: {err}"))?;
@@ -587,7 +926,7 @@ fn add_path_to_zip(
         Ok(rel) => rel,
         Err(_) => return Ok(()),
     };
-    if !should_include_backup_relative(relative) {
+    if !should_include_backup_package_relative(relative) {
         return Ok(());
     }
     let relative_name = relative.to_string_lossy().replace('\\', "/");
@@ -617,6 +956,7 @@ fn build_backup_zip_bytes(root: &Path) -> Result<Vec<u8>, String> {
 fn restore_backup_from_reader<R: Read + Seek>(reader: R, root: &Path) -> Result<(), String> {
     let mut archive =
         ZipArchive::new(reader).map_err(|err| format!("读取备份压缩包失败: {err}"))?;
+    let manifest = read_manifest_from_zip(&mut archive)?;
 
     for index in 0..archive.len() {
         let mut entry = archive
@@ -627,11 +967,16 @@ fn restore_backup_from_reader<R: Read + Seek>(reader: R, root: &Path) -> Result<
             Some(path) => path.to_path_buf(),
             None => continue,
         };
-        if !should_include_backup_relative(&relative) {
+        if relative == Path::new(BACKUP_MANIFEST_FILE) {
+            continue;
+        }
+        if !matches_backup_scope(&relative, manifest.as_ref())
+            && !should_include_backup_relative(&relative)
+        {
             continue;
         }
 
-        let out_path = root.join(relative);
+        let out_path = restore_target_for_relative(&relative, root, manifest.as_ref());
         if entry.is_dir() {
             std::fs::create_dir_all(&out_path).map_err(|err| format!("创建恢复目录失败: {err}"))?;
             continue;
@@ -650,19 +995,13 @@ fn restore_backup_from_reader<R: Read + Seek>(reader: R, root: &Path) -> Result<
 }
 
 #[tauri::command]
-pub async fn export_settings_backup(app: AppHandle, output_path: String) -> ResultPayload<()> {
+pub async fn export_settings_backup(
+    app: AppHandle,
+    output_path: String,
+    scope_settings: BackupScopeSettingsCfg,
+    document_roots: Vec<String>,
+) -> ResultPayload<()> {
     let trace = new_trace_id();
-    let root = match backup_root_dir(&app) {
-        Ok(dir) => dir,
-        Err(err) => {
-            return err_payload(
-                ErrorCode::IoError,
-                format!("获取备份根目录失败: {err}"),
-                trace,
-            )
-        }
-    };
-
     let output = PathBuf::from(output_path);
     if let Some(parent) = output.parent() {
         if let Err(err) = std::fs::create_dir_all(parent) {
@@ -682,15 +1021,22 @@ pub async fn export_settings_backup(app: AppHandle, output_path: String) -> Resu
         );
     }
 
-    match build_backup_zip_bytes(&root) {
-        Ok(bytes) => match std::fs::write(&output, bytes) {
-            Ok(()) => ok((), trace),
-            Err(err) => err_payload(
-                ErrorCode::IoError,
-                format!("写入备份文件失败: {err}"),
-                trace,
-            ),
-        },
+    match build_backup_package(&app, &scope_settings, &document_roots).await {
+        Ok(package) => {
+            let result = match build_backup_zip_bytes(&package.root) {
+                Ok(bytes) => match std::fs::write(&output, bytes) {
+                    Ok(()) => ok((), trace),
+                    Err(err) => err_payload(
+                        ErrorCode::IoError,
+                        format!("写入备份文件失败: {err}"),
+                        trace,
+                    ),
+                },
+                Err(message) => err_payload(ErrorCode::IoError, message, trace),
+            };
+            cleanup_backup_package(&package);
+            result
+        }
         Err(message) => err_payload(ErrorCode::IoError, message, trace),
     }
 }
@@ -702,25 +1048,32 @@ pub async fn export_settings_backup_to_webdav(
     username: String,
     password: String,
     remote_path: String,
+    scope_settings: BackupScopeSettingsCfg,
+    document_roots: Vec<String>,
 ) -> ResultPayload<WebDavBackupUploadSummary> {
     let trace = new_trace_id();
-    let root = match backup_root_dir(&app) {
-        Ok(dir) => dir,
-        Err(err) => {
-            return err_payload(
-                ErrorCode::IoError,
-                format!("获取备份根目录失败: {err}"),
-                trace,
-            )
-        }
-    };
     let (base_url, remote_root) = match resolve_webdav_sync_target(&url, &remote_path) {
         Ok(value) => value,
         Err(message) => return err_payload(ErrorCode::UNKNOWN, message, trace),
     };
 
-    match upload_directory_to_webdav(&root, &base_url, &username, &password, &remote_root).await {
-        Ok(summary) => ok(summary, trace),
+    match build_backup_package(&app, &scope_settings, &document_roots).await {
+        Ok(package) => {
+            let result = match upload_directory_to_webdav(
+                &package.root,
+                &base_url,
+                &username,
+                &password,
+                &remote_root,
+            )
+            .await
+            {
+                Ok(summary) => ok(summary, trace),
+                Err(message) => err_payload(ErrorCode::UNKNOWN, message, trace),
+            };
+            cleanup_backup_package(&package);
+            result
+        }
         Err(message) => err_payload(ErrorCode::UNKNOWN, message, trace),
     }
 }
@@ -885,6 +1238,8 @@ pub async fn start_export_settings_backup_to_webdav(
     username: String,
     password: String,
     remote_path: String,
+    scope_settings: BackupScopeSettingsCfg,
+    document_roots: Vec<String>,
 ) -> ResultPayload<()> {
     let trace = new_trace_id();
 
@@ -908,6 +1263,8 @@ pub async fn start_export_settings_backup_to_webdav(
             username,
             password,
             remote_path,
+            scope_settings,
+            document_roots,
         )
         .await
         {

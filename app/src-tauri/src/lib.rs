@@ -10,6 +10,7 @@ mod alarm_sound;
 mod alarm_storage;
 mod backup_io;
 mod backup_settings;
+mod backup_scope;
 mod calendar_storage;
 mod clipboard_io;
 mod dialog_io;
@@ -26,8 +27,10 @@ mod inkscape;
 mod haomd_paths;
 mod locale;
 mod mcp_config;
+mod shared_audio;
 mod mcp_manager;
 mod music_audio;
+mod music_playlist;
 mod music_paths;
 mod music_sound;
 mod pomodoro_audio;
@@ -59,6 +62,7 @@ use alarm_sound::*;
 use alarm_storage::*;
 use backup_io::*;
 use backup_settings::*;
+use backup_scope::*;
 use calendar_storage::*;
 use clipboard_io::*;
 use dialog_io::*;
@@ -75,6 +79,7 @@ use locale::*;
 use mcp_config::*;
 use mcp_manager::*;
 use music_audio::*;
+use music_playlist::*;
 use music_sound::*;
 use pomodoro_audio::*;
 use pomodoro_storage::*;
@@ -163,6 +168,8 @@ macro_rules! app_invoke_handler {
             run_modelscope_image_generation,
             load_backup_settings,
             save_backup_settings,
+            load_backup_scope_settings,
+            save_backup_scope_settings,
             load_notes_config,
             save_notes_config,
             load_calendar_reminders,
@@ -177,10 +184,12 @@ macro_rules! app_invoke_handler {
             import_alarm_sound,
             play_music_track,
             pause_music_track,
+            pause_music_track_by_alarm,
             resume_music_track,
             seek_music_track,
             get_music_track_state,
             get_music_track_duration,
+            set_music_track_volume,
             stop_music_track,
             load_pomodoro_state,
             save_pomodoro_state,
@@ -190,6 +199,10 @@ macro_rules! app_invoke_handler {
             import_pomodoro_alarm_sound,
             list_music_sound_files,
             import_music_sound,
+            delete_music_sound,
+            move_music_sound,
+            load_music_playlist_store,
+            save_music_playlist_store,
             editor_settings::load_editor_settings,
             editor_settings::save_editor_settings,
             font_catalog::list_system_fonts,

@@ -54,6 +54,11 @@ export const enUSMessages: MessageDictionary = {
   backup: {
     title: 'Backup & Restore',
     description: 'Export local configuration backups, or sync settings across devices using local backups and WebDAV.',
+    tabsLabel: 'Backup panel tabs',
+    tabs: {
+      sync: 'Backup & Restore',
+      settings: 'Backup Settings',
+    },
     groups: {
       sync: 'Config Sync',
       webdav: 'WebDAV',
@@ -65,7 +70,13 @@ export const enUSMessages: MessageDictionary = {
     importAction: 'Import Backup',
     importHint: 'Choose a previously exported zip backup and restore it into the current device config directory.',
     scopeLabel: 'Backup scope',
-    scopeHint: 'Includes AI config, Prompt, Agent, MCP, Session, template directory, and other sibling files and subdirectories.',
+    scopeHint: 'Choose which extra content should be included with the backup. When nothing is checked, only the original config sync content is exported.',
+    scopeMusic: 'Music library',
+    scopeMusicHint: 'Includes the music directory and all audio files / playlist data under it.',
+    scopeDocuments: 'Documents',
+    scopeDocumentsHint: 'Includes the currently mounted workspace roots and all nested files.',
+    scopeNotes: 'Notes',
+    scopeNotesHint: 'Includes the current notes directory and everything under it.',
     statusLabel: 'Status',
     webdavEnabled: 'Enable WebDAV',
     webdavEnabledHint: 'Save WebDAV configuration for future remote backup and restore.',

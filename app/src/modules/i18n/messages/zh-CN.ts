@@ -54,6 +54,11 @@ export const zhCNMessages: MessageDictionary = {
   backup: {
     title: '备份与恢复',
     description: '导出本地配置备份，或通过本地备份与 WebDAV 在不同设备之间同步配置。',
+    tabsLabel: '备份面板标签',
+    tabs: {
+      sync: '备份与恢复',
+      settings: '备份设置',
+    },
     groups: {
       sync: '配置同步',
       webdav: 'WebDAV',
@@ -65,7 +70,13 @@ export const zhCNMessages: MessageDictionary = {
     importAction: '导入备份',
     importHint: '选择之前导出的 zip 备份并覆盖恢复到当前设备配置目录。',
     scopeLabel: '备份范围',
-    scopeHint: '包含 AI 配置、Prompt、Agent、MCP、Session、模板目录等同级文件与子目录。',
+    scopeHint: '选择需要随备份一起导出的附加内容。未勾选时仅导出原有配置同步内容。',
+    scopeMusic: '音乐库',
+    scopeMusicHint: '包含 music 目录及其下的音频与列表数据。',
+    scopeDocuments: '文档',
+    scopeDocumentsHint: '包含当前打开的工作区目录及其子文件夹。',
+    scopeNotes: '笔记',
+    scopeNotesHint: '包含当前笔记目录及其全部内容。',
     statusLabel: '状态',
     webdavEnabled: '启用 WebDAV',
     webdavEnabledHint: '保存 WebDAV 配置，供后续远程备份与恢复使用。',
