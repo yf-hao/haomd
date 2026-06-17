@@ -294,13 +294,13 @@ fn parse_run(
                     break;
                 }
             }
-                Ok(Event::Text(text_node)) => {
-                    text.push_str(
-                        &text_node
-                            .decode()
-                            .map_err(|e| format!("解析文本失败: {e}"))?,
-                    );
-                }
+            Ok(Event::Text(text_node)) => {
+                text.push_str(
+                    &text_node
+                        .decode()
+                        .map_err(|e| format!("解析文本失败: {e}"))?,
+                );
+            }
             Ok(Event::Eof) => break,
             Err(err) => return Err(format!("解析文本运行失败: {err}")),
             _ => {}

@@ -135,9 +135,8 @@ fn build_sink() -> std::io::Result<Sink> {
     let handle = ensure_output_stream_handle().map_err(|err| {
         std::io::Error::other(format!("create shared output stream failed: {err}"))
     })?;
-    let sink = Sink::try_new(&handle).map_err(|err| {
-        std::io::Error::other(format!("create sink failed: {err}"))
-    })?;
+    let sink = Sink::try_new(&handle)
+        .map_err(|err| std::io::Error::other(format!("create sink failed: {err}")))?;
     Ok(sink)
 }
 
