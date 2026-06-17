@@ -36,7 +36,8 @@ where
     T: for<'de> Deserialize<'de>,
 {
     let content = fs::read_to_string(path).await?;
-    serde_json::from_str::<T>(&content).map_err(|err| std::io::Error::other(err.to_string()))
+    serde_json::from_str::<T>(&content)
+        .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err.to_string()))
 }
 
 async fn write_json<T>(path: &Path, data: &T) -> std::io::Result<()>
@@ -102,6 +103,11 @@ pub async fn load_music_playlist_store_impl(app: &AppHandle) -> ResultPayload<Mu
         Ok(store) => ok(normalize_store(store), trace),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
             ok(default_playlist_store(), trace)
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::InvalidData => {
+            let store = default_playlist_store();
+            let _ = save_music_playlist_store_impl(app, store.clone()).await;
+            ok(store, trace)
         }
         Err(err) => err_payload(
             ErrorCode::IoError,
@@ -204,6 +210,117 @@ pub async fn ensure_music_playlist_record_exists_impl(
     }
 }
 
+pub async fn rename_music_playlist_impl(
+    app: &AppHandle,
+    playlist_id: &str,
+    new_name: &str,
+) -> ResultPayload<()> {
+    let trace = new_trace_id();
+    let new_name = new_name.trim();
+    if new_name.is_empty() {
+        return err_payload(
+            ErrorCode::InvalidPath,
+            "播放列表名称不能为空".to_string(),
+            trace,
+        );
+    }
+
+    let loaded = load_music_playlist_store_impl(app).await;
+    let mut store = match loaded {
+        ResultPayload::Ok { data, .. } => data,
+        ResultPayload::Err { error } => {
+            return ResultPayload::Err { error };
+        }
+    };
+    let Some(playlist) = store
+        .playlists
+        .iter_mut()
+        .find(|item| item.id == playlist_id)
+    else {
+        return err_payload(
+            ErrorCode::InvalidPath,
+            format!("未找到播放列表: {playlist_id}"),
+            trace,
+        );
+    };
+    playlist.name = new_name.to_string();
+    playlist.updated_at = Utc::now().to_rfc3339();
+    match save_music_playlist_store_impl(app, store).await {
+        ResultPayload::Ok { .. } => ok((), trace),
+        ResultPayload::Err { error } => ResultPayload::Err { error },
+    }
+}
+
+pub async fn delete_music_playlist_impl(app: &AppHandle, playlist_id: &str) -> ResultPayload<()> {
+    let trace = new_trace_id();
+    let playlist_id = playlist_id.trim();
+    if playlist_id.is_empty() {
+        return err_payload(
+            ErrorCode::InvalidPath,
+            "播放列表 ID 无效".to_string(),
+            trace,
+        );
+    }
+    if playlist_id == "default" {
+        return err_payload(
+            ErrorCode::InvalidPath,
+            "默认列表不能删除".to_string(),
+            trace,
+        );
+    }
+
+    let loaded = load_music_playlist_store_impl(app).await;
+    let mut store = match loaded {
+        ResultPayload::Ok { data, .. } => data,
+        ResultPayload::Err { error } => {
+            return ResultPayload::Err { error };
+        }
+    };
+    let Some(index) = store.playlists.iter().position(|item| item.id == playlist_id) else {
+        return err_payload(
+            ErrorCode::InvalidPath,
+            format!("未找到播放列表: {playlist_id}"),
+            trace,
+        );
+    };
+
+    let removed = store.playlists.remove(index);
+    if store.active_playlist_id == removed.id {
+        store.active_playlist_id = store
+            .playlists
+            .first()
+            .map(|playlist| playlist.id.clone())
+            .unwrap_or_else(|| "default".to_string());
+    }
+
+    match save_music_playlist_store_impl(app, store).await {
+        ResultPayload::Ok { .. } => {}
+        ResultPayload::Err { error } => {
+            return ResultPayload::Err { error };
+        }
+    }
+
+    let dir = match crate::music_paths::music_playlist_dir(app, playlist_id) {
+        Ok(dir) => dir,
+        Err(err) => {
+            return err_payload(
+                ErrorCode::IoError,
+                format!("获取播放列表目录失败: {err}"),
+                trace,
+            );
+        }
+    };
+    match fs::remove_dir_all(&dir).await {
+        Ok(_) => ok((), trace),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => ok((), trace),
+        Err(err) => err_payload(
+            ErrorCode::IoError,
+            format!("删除播放列表目录失败: {err}"),
+            trace,
+        ),
+    }
+}
+
 #[tauri::command]
 pub async fn load_music_playlist_store(app: AppHandle) -> ResultPayload<MusicPlaylistStore> {
     load_music_playlist_store_impl(&app).await
@@ -215,4 +332,18 @@ pub async fn save_music_playlist_store(
     store: MusicPlaylistStore,
 ) -> ResultPayload<()> {
     save_music_playlist_store_impl(&app, store).await
+}
+
+#[tauri::command]
+pub async fn rename_music_playlist(
+    app: AppHandle,
+    playlist_id: String,
+    new_name: String,
+) -> ResultPayload<()> {
+    rename_music_playlist_impl(&app, &playlist_id, &new_name).await
+}
+
+#[tauri::command]
+pub async fn delete_music_playlist(app: AppHandle, playlist_id: String) -> ResultPayload<()> {
+    delete_music_playlist_impl(&app, &playlist_id).await
 }

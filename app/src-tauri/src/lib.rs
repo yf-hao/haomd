@@ -203,6 +203,8 @@ macro_rules! app_invoke_handler {
             move_music_sound,
             load_music_playlist_store,
             save_music_playlist_store,
+            rename_music_playlist,
+            delete_music_playlist,
             editor_settings::load_editor_settings,
             editor_settings::save_editor_settings,
             font_catalog::list_system_fonts,

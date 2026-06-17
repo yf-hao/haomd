@@ -5,7 +5,9 @@ import { Button } from './Button'
 import { useI18n } from '../modules/i18n/I18nContext'
 import { deleteMusicSound, importMusicSound, loadMusicSoundFiles, moveMusicSound } from '../modules/tools/music/musicSound'
 import {
+  deleteMusicPlaylist,
   loadMusicPlaylistStore,
+  renameMusicPlaylist,
   saveMusicPlaylistStore,
   type MusicPlaylistRecord,
   type MusicPlaylistStore,
@@ -32,6 +34,8 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
   const { resolvedLanguage: locale } = useI18n()
   const dialogRef = useRef<HTMLDivElement | null>(null)
   const playlistMenuRef = useRef<HTMLDivElement | null>(null)
+  const playlistMenuPopoverRef = useRef<HTMLDivElement | null>(null)
+  const playlistSwitcherRef = useRef<HTMLButtonElement | null>(null)
   const [tracks, setTracks] = useState<string[]>([])
   const [selectedTrack, setSelectedTrack] = useState<string | null>(null)
   const [playing, setPlaying] = useState(false)
@@ -46,8 +50,20 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
   const [isVolumeOpen, setIsVolumeOpen] = useState(false)
   const [playlistStore, setPlaylistStore] = useState<MusicPlaylistStore | null>(null)
   const [isPlaylistMenuOpen, setIsPlaylistMenuOpen] = useState(false)
+  const [playlistMenuGeometry, setPlaylistMenuGeometry] = useState<{
+    left: number
+    top?: number
+    bottom?: number
+    maxHeight: number
+    placement: 'top' | 'bottom'
+  } | null>(null)
   const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false)
   const [playlistDraftName, setPlaylistDraftName] = useState('')
+  const [playlistAction, setPlaylistAction] = useState<{
+    playlistId: string
+    mode: 'actions' | 'rename'
+    draftName: string
+  } | null>(null)
   const [trackMenu, setTrackMenu] = useState<{
     fileName: string
     x: number
@@ -110,19 +126,39 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
   }, [])
 
   const syncLibrary = useCallback(async () => {
-    const store = await loadMusicPlaylistStore()
-    const nextActivePlaylistId = resolveActivePlaylistId(store ?? createDefaultPlaylistStore([]))
+    const loadedStore = await loadMusicPlaylistStore()
+    const loadedLooksLikeDefaultOnly = Boolean(
+      loadedStore
+      && loadedStore.playlists.length === 1
+      && loadedStore.playlists[0]?.id === 'default',
+    )
+    const localHasCustomPlaylists = Boolean(
+      playlistStore?.playlists.some((playlist) => playlist.id !== 'default'),
+    )
+    const shouldPreferLocalStore = !loadedStore || (loadedLooksLikeDefaultOnly && localHasCustomPlaylists)
+    const baseStore = shouldPreferLocalStore
+      ? (playlistStore ?? createDefaultPlaylistStore([]))
+      : loadedStore
+    const nextActivePlaylistId = resolveActivePlaylistId(baseStore)
     const nextTracks = await loadMusicSoundFiles(nextActivePlaylistId)
-    const nextStore = store
-      ? clonePlaylistStore(store)
-      : createDefaultPlaylistStore(nextTracks)
+    const nextStore = shouldPreferLocalStore
+      ? clonePlaylistStore(baseStore)
+      : clonePlaylistStore(loadedStore ?? baseStore)
     const activePlaylist = nextStore.playlists.find((playlist) => playlist.id === nextActivePlaylistId)
+    const nextTrackFiles = [...nextTracks]
+    const trackFilesChanged = Boolean(
+      activePlaylist && !areStringArraysEqual(activePlaylist.trackFiles, nextTrackFiles),
+    )
     if (activePlaylist) {
-      activePlaylist.trackFiles = [...nextTracks]
-      activePlaylist.updatedAt = new Date().toISOString()
+      if (trackFilesChanged) {
+        activePlaylist.trackFiles = nextTrackFiles
+        activePlaylist.updatedAt = new Date().toISOString()
+      }
     }
     setPlaylistStore(nextStore)
-    void saveMusicPlaylistStore(nextStore)
+    if ((loadedStore || !playlistStore) && trackFilesChanged) {
+      void saveMusicPlaylistStore(nextStore)
+    }
     setTracks(nextTracks)
     if (!hasInitializedSelectionRef.current) {
       setSelectedTrack(nextTracks[0] ?? null)
@@ -137,7 +173,25 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
     } else if (!selectedTrack && nextTracks.length > 0) {
       setSelectedTrack(nextTracks[0])
     }
-  }, [selectedTrack])
+  }, [playlistStore, selectedTrack])
+
+  const updatePlaylistMenuGeometry = useCallback(() => {
+    if (!playlistSwitcherRef.current || typeof window === 'undefined') return
+    const rect = playlistSwitcherRef.current.getBoundingClientRect()
+    const viewportHeight = window.innerHeight
+    const spaceAbove = Math.max(120, rect.top - 12)
+    const spaceBelow = Math.max(120, viewportHeight - rect.bottom - 12)
+    const estimatedHeight = Math.min(360, Math.max(220, playlistItems.length * 46 + 86))
+    const placement = spaceBelow >= estimatedHeight || spaceBelow >= spaceAbove ? 'bottom' : 'top'
+    const left = clampMenuCoordinate(rect.right - 220, 220, window.innerWidth)
+    setPlaylistMenuGeometry({
+      left,
+      top: placement === 'bottom' ? rect.bottom + 6 : undefined,
+      bottom: placement === 'top' ? Math.max(8, viewportHeight - rect.top + 6) : undefined,
+      maxHeight: placement === 'bottom' ? spaceBelow : spaceAbove,
+      placement,
+    })
+  }, [playlistItems.length])
 
   const handleAddTrackToActivePlaylist = useCallback(async (
     fileName: string,
@@ -172,6 +226,7 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
     await saveMusicPlaylistStore(nextStore)
     setSelectedTrack(selectedTrack && nextTracks.includes(selectedTrack) ? selectedTrack : (nextTracks[0] ?? null))
     setIsPlaylistMenuOpen(false)
+    setPlaylistAction(null)
   }, [commitPlaylistStore, playlistStore, selectedTrack, tracks])
 
   const handleCreatePlaylist = useCallback(async () => {
@@ -194,8 +249,52 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
     setTracks([])
     setIsPlaylistMenuOpen(false)
     setIsCreatingPlaylist(false)
+    setPlaylistAction(null)
     setPlaylistDraftName('')
   }, [commitPlaylistStore, playlistDraftName, playlistStore, tracks])
+
+  const closePlaylistAction = useCallback(() => {
+    setPlaylistAction(null)
+  }, [])
+
+  const handleOpenPlaylistActionMenu = useCallback((playlistId: string) => {
+    const currentStore = playlistStore ?? createDefaultPlaylistStore(tracks)
+    const playlist = currentStore.playlists.find((item) => item.id === playlistId)
+    setIsCreatingPlaylist(false)
+    setPlaylistAction((current) => {
+      if (current?.playlistId === playlistId) {
+        return null
+      }
+      return {
+        playlistId,
+        mode: 'actions',
+        draftName: playlist?.name ?? '',
+      }
+    })
+  }, [playlistStore, tracks])
+
+  const handleStartRenamePlaylist = useCallback(() => {
+    setPlaylistAction((current) => {
+      if (!current) return current
+      const currentStore = playlistStore ?? createDefaultPlaylistStore(tracks)
+      const playlist = currentStore.playlists.find((item) => item.id === current.playlistId)
+      return {
+        playlistId: current.playlistId,
+        mode: 'rename',
+        draftName: playlist?.name ?? current.draftName,
+      }
+    })
+  }, [playlistStore, tracks])
+
+  const handleConfirmRenamePlaylist = useCallback(async () => {
+    if (!playlistAction) return
+    const nextName = playlistAction.draftName.trim()
+    if (!nextName) return
+    const renamed = await renameMusicPlaylist(playlistAction.playlistId, nextName)
+    if (!renamed) return
+    await syncLibrary()
+    setPlaylistAction(null)
+  }, [playlistAction, syncLibrary])
 
   const closeTrackMenu = useCallback(() => {
     setTrackMenu(null)
@@ -246,6 +345,7 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
   const handleOpenCreatePlaylist = useCallback(() => {
     setPlaylistDraftName('')
     setIsCreatingPlaylist(true)
+    setPlaylistAction(null)
   }, [])
 
   const handleCancelCreatePlaylist = useCallback(() => {
@@ -328,6 +428,32 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
     lastAutoAdvanceTrackRef.current = null
   }, [setSeekingState])
 
+  const handleDeletePlaylist = useCallback(async () => {
+    if (!playlistAction) return
+    const currentStore = playlistStore ?? createDefaultPlaylistStore(tracks)
+    const playlist = currentStore.playlists.find((item) => item.id === playlistAction.playlistId)
+    if (!playlist) return
+    if (playlist.id === 'default') return
+    const deletedPlaylistId = playlist.id
+    const deletedWasActive = activePlaylistId === deletedPlaylistId
+    const nextStore = clonePlaylistStore(currentStore)
+    nextStore.playlists = nextStore.playlists.filter((item) => item.id !== deletedPlaylistId)
+    nextStore.activePlaylistId = resolveActivePlaylistId(nextStore)
+    setPlaylistAction(null)
+    if (deletedWasActive) {
+      await handleStop()
+    }
+    const deleted = await deleteMusicPlaylist(deletedPlaylistId)
+    if (!deleted) return
+    await saveMusicPlaylistStore(nextStore)
+    setPlaylistStore(nextStore)
+    const nextActiveTracks = await loadMusicSoundFiles(nextStore.activePlaylistId)
+    setTracks(nextActiveTracks)
+    setSelectedTrack((current) => (
+      current && nextActiveTracks.includes(current) ? current : (nextActiveTracks[0] ?? null)
+    ))
+  }, [activePlaylistId, handleStop, loadMusicSoundFiles, playlistAction, playlistStore, saveMusicPlaylistStore, tracks])
+
   const handleDeleteTrack = useCallback(async () => {
     if (!trackMenu) return
     const fileName = trackMenu.fileName
@@ -396,10 +522,34 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
     setHoveredTrack(null)
     setIsVolumeOpen(false)
     setIsPlaylistMenuOpen(false)
+    setPlaylistMenuGeometry(null)
     setIsCreatingPlaylist(false)
     setPlaylistDraftName('')
+    setPlaylistAction(null)
     setTrackMenu(null)
   }, [open])
+
+  useEffect(() => {
+    if (isPlaylistMenuOpen) return
+    setIsCreatingPlaylist(false)
+    setPlaylistDraftName('')
+    setPlaylistAction(null)
+    setPlaylistMenuGeometry(null)
+  }, [isPlaylistMenuOpen])
+
+  useEffect(() => {
+    if (!isPlaylistMenuOpen) return
+    updatePlaylistMenuGeometry()
+    const handleResize = () => {
+      updatePlaylistMenuGeometry()
+    }
+    window.addEventListener('resize', handleResize)
+    window.addEventListener('scroll', handleResize, true)
+    return () => {
+      window.removeEventListener('resize', handleResize)
+      window.removeEventListener('scroll', handleResize, true)
+    }
+  }, [isPlaylistMenuOpen, updatePlaylistMenuGeometry])
 
   useEffect(() => {
     return () => {
@@ -497,6 +647,7 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
       const target = event.target as Node | null
       if (!target) return
       if (playlistMenuRef.current?.contains(target)) return
+      if (playlistMenuPopoverRef.current?.contains(target)) return
       setIsPlaylistMenuOpen(false)
     }
     window.addEventListener('pointerdown', handlePointerDown)
@@ -709,6 +860,7 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
               <div className="music-player-library-title-row">
                 <div className="music-player-library-actions" ref={playlistMenuRef}>
                   <button
+                    ref={playlistSwitcherRef}
                     className="music-player-library-switcher"
                     type="button"
                     onClick={() => setIsPlaylistMenuOpen((current) => !current)}
@@ -728,69 +880,174 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
                   >
                     +
                   </button>
-                  {isPlaylistMenuOpen ? (
-                    <div className="music-player-playlist-popover" role="menu" aria-label={locale === 'en-US' ? 'Categories' : '分类'}>
+                  {isPlaylistMenuOpen && playlistMenuGeometry && typeof document !== 'undefined' ? createPortal(
+                    <div
+                      ref={playlistMenuPopoverRef}
+                      className={['music-player-playlist-popover', playlistMenuGeometry.placement === 'top' ? 'placement-top' : 'placement-bottom'].join(' ')}
+                      role="menu"
+                      aria-label={locale === 'en-US' ? 'Categories' : '分类'}
+                      style={{
+                        left: `${playlistMenuGeometry.left}px`,
+                        top: playlistMenuGeometry.top != null ? `${playlistMenuGeometry.top}px` : undefined,
+                        bottom: playlistMenuGeometry.bottom != null ? `${playlistMenuGeometry.bottom}px` : undefined,
+                        maxHeight: `${playlistMenuGeometry.maxHeight}px`,
+                      }}
+                    >
                       <div className="music-player-playlist-list">
                         {playlistItems.map((playlist) => {
                           const isActive = playlist.id === activePlaylistId
                           const count = playlist.trackFiles.length
+                          const isActionTarget = playlistAction?.playlistId === playlist.id
                           return (
-                            <button
+                            <div
                               key={playlist.id}
-                              type="button"
-                              className={['music-player-playlist-item', isActive ? 'active' : ''].filter(Boolean).join(' ')}
-                              onClick={() => { void handleSelectPlaylist(playlist.id) }}
+                              className={['music-player-playlist-item', isActive ? 'active' : '', isActionTarget ? 'open' : ''].filter(Boolean).join(' ')}
                             >
-                              <span className="music-player-playlist-item-name">{playlist.name}</span>
-                              <span className="music-player-playlist-item-count">{count}</span>
-                            </button>
+                              <button
+                                type="button"
+                                className="music-player-playlist-item-main"
+                                onClick={() => { void handleSelectPlaylist(playlist.id) }}
+                              >
+                                <span className="music-player-playlist-item-name">{playlist.name}</span>
+                                <span className="music-player-playlist-item-count">{count}</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="music-player-playlist-item-more"
+                                onClick={(event) => {
+                                  event.preventDefault()
+                                  event.stopPropagation()
+                                  handleOpenPlaylistActionMenu(playlist.id)
+                                }}
+                                aria-label={locale === 'en-US' ? 'Playlist actions' : '列表操作'}
+                                aria-expanded={isActionTarget}
+                              >
+                                ⋯
+                              </button>
+                              {isActionTarget ? (
+                                playlistAction?.mode === 'rename' ? (
+                                  <div className="music-player-playlist-item-panel">
+                                    <input
+                                      className="music-player-playlist-item-rename-input"
+                                      value={playlistAction.draftName}
+                                      onChange={(event) => {
+                                        const nextName = event.currentTarget.value
+                                        setPlaylistAction((current) => (
+                                          current && current.playlistId === playlist.id
+                                            ? { ...current, draftName: nextName }
+                                            : current
+                                        ))
+                                      }}
+                                      autoFocus
+                                      onKeyDown={(event) => {
+                                        if (event.key === 'Enter') {
+                                          event.preventDefault()
+                                          void handleConfirmRenamePlaylist()
+                                        } else if (event.key === 'Escape') {
+                                          event.preventDefault()
+                                          closePlaylistAction()
+                                        }
+                                      }}
+                                      placeholder={locale === 'en-US' ? 'Playlist name' : '列表名称'}
+                                    />
+                                    <div className="music-player-playlist-item-panel-actions">
+                                      <button
+                                        type="button"
+                                        className="music-player-playlist-item-panel-confirm"
+                                        onClick={() => { void handleConfirmRenamePlaylist() }}
+                                      >
+                                        {locale === 'en-US' ? 'Save' : '保存'}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="music-player-playlist-item-panel-cancel"
+                                        onClick={closePlaylistAction}
+                                      >
+                                        {locale === 'en-US' ? 'Cancel' : '取消'}
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="music-player-playlist-item-panel">
+                                    <button
+                                      type="button"
+                                      className="music-player-playlist-item-panel-action"
+                                      onClick={handleStartRenamePlaylist}
+                                    >
+                                      {locale === 'en-US' ? 'Rename' : '重命名'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="music-player-playlist-item-panel-action danger"
+                                      onClick={() => { void handleDeletePlaylist() }}
+                                      disabled={playlist.id === 'default'}
+                                      title={playlist.id === 'default'
+                                        ? (locale === 'en-US' ? 'Default playlist cannot be deleted' : '默认列表不能删除')
+                                        : undefined}
+                                    >
+                                      {locale === 'en-US' ? 'Delete' : '删除'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="music-player-playlist-item-panel-action"
+                                      onClick={closePlaylistAction}
+                                    >
+                                      {locale === 'en-US' ? 'Close' : '关闭'}
+                                    </button>
+                                  </div>
+                                )
+                              ) : null}
+                            </div>
                           )
                         })}
                       </div>
-                      <button
-                        type="button"
-                        className="music-player-playlist-new"
-                        onClick={handleOpenCreatePlaylist}
-                      >
-                        + {locale === 'en-US' ? 'New playlist' : '新建列表'}
-                      </button>
-                      {isCreatingPlaylist ? (
-                        <div className="music-player-playlist-new-form">
-                          <input
-                            className="music-player-playlist-new-input"
-                            value={playlistDraftName}
-                            onChange={(event) => setPlaylistDraftName(event.currentTarget.value)}
-                            placeholder={locale === 'en-US' ? 'Playlist name' : '列表名称'}
-                            autoFocus
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter') {
-                                event.preventDefault()
-                                void handleCreatePlaylist()
-                              } else if (event.key === 'Escape') {
-                                event.preventDefault()
-                                handleCancelCreatePlaylist()
-                              }
-                            }}
-                          />
-                          <div className="music-player-playlist-new-actions">
-                            <button
-                              type="button"
-                              className="music-player-playlist-new-confirm"
-                              onClick={() => { void handleCreatePlaylist() }}
-                            >
-                              {locale === 'en-US' ? 'Create' : '创建'}
-                            </button>
-                            <button
-                              type="button"
-                              className="music-player-playlist-new-cancel"
-                              onClick={handleCancelCreatePlaylist}
-                            >
-                              {locale === 'en-US' ? 'Cancel' : '取消'}
-                            </button>
+                      <div className="music-player-playlist-footer">
+                        <button
+                          type="button"
+                          className="music-player-playlist-new"
+                          onClick={handleOpenCreatePlaylist}
+                        >
+                          + {locale === 'en-US' ? 'New playlist' : '新建列表'}
+                        </button>
+                        {isCreatingPlaylist ? (
+                          <div className="music-player-playlist-new-form">
+                            <input
+                              className="music-player-playlist-new-input"
+                              value={playlistDraftName}
+                              onChange={(event) => setPlaylistDraftName(event.currentTarget.value)}
+                              placeholder={locale === 'en-US' ? 'Playlist name' : '列表名称'}
+                              autoFocus
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter') {
+                                  event.preventDefault()
+                                  void handleCreatePlaylist()
+                                } else if (event.key === 'Escape') {
+                                  event.preventDefault()
+                                  handleCancelCreatePlaylist()
+                                }
+                              }}
+                            />
+                            <div className="music-player-playlist-new-actions">
+                              <button
+                                type="button"
+                                className="music-player-playlist-new-confirm"
+                                onClick={() => { void handleCreatePlaylist() }}
+                              >
+                                {locale === 'en-US' ? 'Create' : '创建'}
+                              </button>
+                              <button
+                                type="button"
+                                className="music-player-playlist-new-cancel"
+                                onClick={handleCancelCreatePlaylist}
+                              >
+                                {locale === 'en-US' ? 'Cancel' : '取消'}
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      ) : null}
-                    </div>
+                        ) : null}
+                      </div>
+                    </div>,
+                    document.body,
                   ) : null}
                 </div>
               </div>
@@ -922,6 +1179,11 @@ function clonePlaylistStore(store: MusicPlaylistStore): MusicPlaylistStore {
       trackFiles: [...playlist.trackFiles],
     })),
   }
+}
+
+function areStringArraysEqual(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false
+  return left.every((value, index) => value === right[index])
 }
 
 function resolveActivePlaylistId(store: MusicPlaylistStore): string {

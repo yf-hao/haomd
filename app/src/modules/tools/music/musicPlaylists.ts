@@ -42,3 +42,32 @@ export async function saveMusicPlaylistStore(store: MusicPlaylistStore): Promise
   }
 }
 
+export async function renameMusicPlaylist(playlistId: string, newName: string): Promise<boolean> {
+  if (!isTauriEnv()) return true
+  try {
+    const resp = await invoke<BackendResult<null>>('rename_music_playlist', { playlistId, newName })
+    if ('Err' in resp) {
+      console.error('[music] rename_music_playlist backend error', resp.Err.error)
+      return false
+    }
+    return true
+  } catch (error) {
+    console.error('[music] rename_music_playlist failed', error)
+    return false
+  }
+}
+
+export async function deleteMusicPlaylist(playlistId: string): Promise<boolean> {
+  if (!isTauriEnv()) return true
+  try {
+    const resp = await invoke<BackendResult<null>>('delete_music_playlist', { playlistId })
+    if ('Err' in resp) {
+      console.error('[music] delete_music_playlist backend error', resp.Err.error)
+      return false
+    }
+    return true
+  } catch (error) {
+    console.error('[music] delete_music_playlist failed', error)
+    return false
+  }
+}
