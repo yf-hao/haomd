@@ -19,8 +19,6 @@ import type { Node as ProseMirrorNode, NodeType as ProseMirrorNodeType } from '@
 import type { EditorView } from '@milkdown/prose/view'
 import { nord } from '@milkdown/theme-nord'
 import { ProsemirrorAdapterProvider, useNodeViewFactory } from '@prosemirror-adapter/react'
-import { Button } from '../Button'
-import { useI18n } from '../../modules/i18n/I18nContext'
 import { useThemeContext } from '../../modules/theme/ThemeContext'
 import { createTextColorTarget, isTextColorTargetActive, type TextColorTarget } from '../../modules/editor/textColorTarget'
 import type { LayoutType } from '../../hooks/useWorkspaceLayout'
@@ -56,7 +54,7 @@ export interface WysiwygPaneProps {
   onMarkdownGetterReady?: (getter: (() => string) | null) => void
   onOutlineNavigatorReady?: (navigator: ((target: { headingIndex: number; text: string; level: 1 | 2 | 3 | 4 | 5 | 6 }) => boolean) | null) => void
   onOutlineItemsChange?: (items: OutlineHeading[]) => void
-  onRequestTextColorDialog?: (() => void) | null
+  skipUnmountFlushRef?: { current: boolean } | null
   /** Called with a flush function when the editor mounts, null on unmount.
    *  Calling flush() synchronously serializes the current ProseMirror doc
    *  and pushes it through onChange — useful before save / tab-close. */
@@ -227,11 +225,9 @@ function PlainTextWysiwyg({
   onMarkdownGetterReady,
   onOutlineNavigatorReady,
   onOutlineItemsChange,
-  onRequestTextColorDialog,
 }: WysiwygPaneProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const [isFrontMatterCollapsed, setIsFrontMatterCollapsed] = useState(false)
-  const { t } = useI18n()
   const { themeSettings, resolvedMode } = useThemeContext()
   const isDark = resolvedMode === 'dark'
   const wysiwygBackground = themeSettings.workspaceBackground
@@ -335,13 +331,6 @@ function PlainTextWysiwyg({
             ) : null}
           </section>
         ) : null}
-        {onRequestTextColorDialog ? (
-          <div className="wysiwyg-inline-tools">
-            <Button variant="secondary" type="button" onClick={onRequestTextColorDialog}>
-              {t('workspace.textColorDialogTitle')}
-            </Button>
-          </div>
-        ) : null}
         <div className="wysiwyg-editor">
           <textarea
             ref={textareaRef}
@@ -372,13 +361,11 @@ function WysiwygEditor({
   onMarkdownGetterReady,
   onOutlineNavigatorReady,
   onOutlineItemsChange,
-  onRequestTextColorDialog,
+  skipUnmountFlushRef,
   onFlushReady,
   onDirty,
 }: WysiwygPaneProps) {
   const [isFrontMatterCollapsed, setIsFrontMatterCollapsed] = useState(false)
-  const [hasInlineSelection, setHasInlineSelection] = useState(false)
-  const { t } = useI18n()
   if (isPlainTextFile(filePath)) {
     return (
       <PlainTextWysiwyg
@@ -393,7 +380,6 @@ function WysiwygEditor({
         onMarkdownGetterReady={onMarkdownGetterReady}
         onOutlineNavigatorReady={onOutlineNavigatorReady}
         onOutlineItemsChange={onOutlineItemsChange}
-        onRequestTextColorDialog={onRequestTextColorDialog}
       />
     )
   }
@@ -1036,11 +1022,11 @@ function WysiwygEditor({
     initEditor()
     return () => {
       initRunIdRef.current += 1
-      // Only flush if the user actually made edits — flushing without interaction
-      // would re-serialize and push content that may differ from the original
-      // source (e.g. escaped '=' at line starts, or empty color marks) and
-      // override the entry markdown that setEditModeWithFlush already restored.
-      if (hasUserInteractedRef.current) {
+      if (skipUnmountFlushRef?.current) {
+        skipUnmountFlushRef.current = false
+      } else if (hasUserInteractedRef.current) {
+        // Only flush on a real unmount. Mode-switch teardown is handled
+        // explicitly by the parent and should not re-serialize here.
         flushPending()
       }
       hasUserInteractedRef.current = false
@@ -1104,50 +1090,6 @@ function WysiwygEditor({
 
     onSelectionGetterReadyRef.current?.(getter)
     return () => onSelectionGetterReadyRef.current?.(null)
-  }, [])
-
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-
-    const updateSelectionState = () => {
-      const selection = window.getSelection()
-      if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
-        setHasInlineSelection(false)
-        return
-      }
-
-      const anchorNode = selection.anchorNode
-      const focusNode = selection.focusNode
-      if (!anchorNode || !focusNode) {
-        setHasInlineSelection(false)
-        return
-      }
-
-      const isInsideEditor =
-        container.contains(anchorNode) &&
-        container.contains(focusNode) &&
-        selection.toString().trim().length > 0
-
-      setHasInlineSelection(isInsideEditor)
-    }
-
-    const handleSelectionChange = () => {
-      updateSelectionState()
-    }
-
-    container.addEventListener('mouseup', handleSelectionChange)
-    container.addEventListener('keyup', handleSelectionChange)
-    container.addEventListener('focusout', handleSelectionChange)
-    document.addEventListener('selectionchange', handleSelectionChange)
-    updateSelectionState()
-
-    return () => {
-      container.removeEventListener('mouseup', handleSelectionChange)
-      container.removeEventListener('keyup', handleSelectionChange)
-      container.removeEventListener('focusout', handleSelectionChange)
-      document.removeEventListener('selectionchange', handleSelectionChange)
-    }
   }, [])
 
   useEffect(() => {
@@ -1256,13 +1198,6 @@ function WysiwygEditor({
               />
             ) : null}
           </section>
-        ) : null}
-        {onRequestTextColorDialog && hasInlineSelection ? (
-          <div className="wysiwyg-inline-tools">
-            <Button variant="secondary" type="button" onClick={onRequestTextColorDialog}>
-              {t('workspace.textColorDialogTitle')}
-            </Button>
-          </div>
         ) : null}
         <div ref={containerRef} className="wysiwyg-editor" />
       </div>

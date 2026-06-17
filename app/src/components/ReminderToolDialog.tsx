@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../modules/i18n/I18nContext'
 import { Button } from './Button'
 import { FieldGroup } from './FieldGroup'
+import { TimeField } from './TimeField'
 import {
   createCalendarRepeatRule,
   loadCalendarRepeatRules,
@@ -187,13 +188,12 @@ export function ReminderToolDialog({ open, onClose }: ReminderToolDialogProps) {
               </FieldGroup>
 
               <FieldGroup label={locale === 'en-US' ? 'Time' : '时间'}>
-                <input
+                <TimeField
                   className="field-input reminder-tool-time"
-                  type="time"
                   lang="zh-CN"
-                  step={60}
                   value={draftTime}
-                  onChange={(event) => setDraftTime(event.target.value)}
+                  onValueChange={setDraftTime}
+                  aria-label={locale === 'en-US' ? 'Repeat reminder time' : '重复提醒时间'}
                 />
               </FieldGroup>
 

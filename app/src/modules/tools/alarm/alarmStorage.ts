@@ -32,6 +32,9 @@ export async function loadAlarmRules(): Promise<AlarmRule[]> {
 export async function saveAlarmRules(rules: AlarmRule[]): Promise<void> {
   cachedRules = rules
   writeAlarmRulesToLocalStorage(rules)
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('haomd:alarm-rules-updated'))
+  }
   if (!isTauriEnv()) return
   try {
     await invoke<BackendResult<null>>('save_alarm_rules', { rules })

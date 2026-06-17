@@ -1,5 +1,14 @@
 import type { AlarmFrequency, AlarmRule, AlarmRuleType } from './types'
 
+const MAX_LOOKAHEAD_DAYS = 370
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+const MS_PER_WEEK = 7 * MS_PER_DAY
+
+export type NextAlarmOccurrence = {
+  rule: AlarmRule
+  dueAt: Date
+}
+
 export function toDateKey(date: Date): string {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -74,6 +83,20 @@ export function alarmRulesForDate(rules: AlarmRule[], date: string): AlarmRule[]
   return rules.filter((rule) => matchesAlarmRule(rule, date)).sort(compareAlarmRule)
 }
 
+export function findNextAlarmOccurrence(rules: AlarmRule[], from = new Date()): NextAlarmOccurrence | null {
+  let nextOccurrence: NextAlarmOccurrence | null = null
+
+  for (const rule of rules) {
+    const dueAt = getNextAlarmDueAt(rule, from)
+    if (!dueAt) continue
+    if (!nextOccurrence || dueAt.getTime() < nextOccurrence.dueAt.getTime()) {
+      nextOccurrence = { rule, dueAt }
+    }
+  }
+
+  return nextOccurrence
+}
+
 export function isAlarmRuleDue(rule: AlarmRule, now: Date): boolean {
   return matchesAlarmRule(rule, toDateKey(now)) && normalizeTime(rule.time) === toTimeKey(now)
 }
@@ -103,6 +126,38 @@ function compareAlarmRule(a: AlarmRule, b: AlarmRule): number {
   return a.createdAt.localeCompare(b.createdAt)
 }
 
+function getNextAlarmDueAt(rule: AlarmRule, from: Date): Date | null {
+  if (!rule.enabled) return null
+  const [hour, minute] = parseTime(normalizeTime(rule.time))
+  if (rule.type === 'single') {
+    if (!rule.date) return null
+    const candidate = dateAtTime(rule.date, hour, minute)
+    return candidate.getTime() >= from.getTime() ? candidate : null
+  }
+
+  if (!rule.startDate) return null
+  const startDate = dateToUtc(rule.startDate)
+  const untilDate = rule.until
+  const weekdays = rule.weekdays.length > 0 ? rule.weekdays : [parseDateWeekday(rule.startDate)]
+  const intervalWeeks = rule.intervalWeeks ?? (rule.frequency === 'biweekly' ? 2 : 1)
+  const fromDate = dateToUtc(toDateKey(from))
+
+  for (let offset = 0; offset <= MAX_LOOKAHEAD_DAYS; offset += 1) {
+    const candidateDate = new Date(fromDate.getTime() + offset * MS_PER_DAY)
+    const dateKey = toDateKey(candidateDate)
+    if (dateKey < rule.startDate) continue
+    if (untilDate && dateKey > untilDate) break
+    if (!weekdays.includes(parseDateWeekday(dateKey))) continue
+    const weekDiff = Math.floor((dateToUtc(dateKey).getTime() - startDate.getTime()) / MS_PER_WEEK)
+    if (weekDiff < 0 || weekDiff % intervalWeeks !== 0) continue
+
+    const candidate = dateAtTime(dateKey, hour, minute)
+    if (candidate.getTime() >= from.getTime()) return candidate
+  }
+
+  return null
+}
+
 function normalizeWeekdays(weekdays: number[], startDate: string): number[] {
   const filtered = weekdays.filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
   if (filtered.length > 0) return Array.from(new Set(filtered)).sort((a, b) => a - b)
@@ -125,6 +180,12 @@ function normalizeSoundFile(value: string | null | undefined): string | null {
   return trimmed.length > 0 ? trimmed : null
 }
 
+function parseTime(value: string): [number, number] {
+  const parts = value.match(/^(\d{2}):(\d{2})$/)
+  if (!parts) return [0, 0]
+  return [Number(parts[1]), Number(parts[2])]
+}
+
 function parseDateWeekday(date: string): number {
   return dateToUtc(date).getUTCDay()
 }
@@ -137,6 +198,11 @@ export function toTimeKey(date: Date): string {
 
 function dateToUtc(date: string): Date {
   return new Date(`${date}T00:00:00.000Z`)
+}
+
+function dateAtTime(date: string, hours: number, minutes: number): Date {
+  const [year, month, day] = date.split('-').map((part) => Number(part))
+  return new Date(year, month - 1, day, hours, minutes, 0, 0)
 }
 
 function createId(): string {

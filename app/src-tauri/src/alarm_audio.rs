@@ -1,7 +1,8 @@
 use crate::alarm_sound::ensure_alarm_sound_available;
+use crate::shared_audio::ensure_output_stream_handle;
 use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
 use once_cell::sync::Lazy;
-use rodio::{source::SineWave, Decoder, OutputStream, Sink, Source};
+use rodio::{source::SineWave, Decoder, Sink, Source};
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::{
@@ -27,7 +28,6 @@ fn ensure_worker() -> Sender<AudioCommand> {
 
     let (tx, rx) = mpsc::channel::<AudioCommand>();
     thread::spawn(move || {
-        let mut _stream: Option<OutputStream> = None;
         let mut sink: Option<Sink> = None;
 
         for command in rx {
@@ -37,21 +37,21 @@ fn ensure_worker() -> Sender<AudioCommand> {
                         active_sink.stop();
                     }
                     sink = None;
-                    _stream = None;
 
-                    match OutputStream::try_default() {
-                        Ok((next_stream, handle)) => match Sink::try_new(&handle) {
-                            Ok(next_sink) => {
-                                _stream = Some(next_stream);
-                                sink = Some(next_sink);
-                            }
-                            Err(err) => {
-                                eprintln!("[alarm] create sink failed: {err}");
-                                continue;
-                            }
-                        },
+                    let handle = match ensure_output_stream_handle() {
+                        Ok(handle) => handle,
                         Err(err) => {
-                            eprintln!("[alarm] create output stream failed: {err}");
+                            eprintln!("[alarm] create shared output stream failed: {err}");
+                            continue;
+                        }
+                    };
+
+                    match Sink::try_new(&handle) {
+                        Ok(next_sink) => {
+                            sink = Some(next_sink);
+                        }
+                        Err(err) => {
+                            eprintln!("[alarm] create sink failed: {err}");
                             continue;
                         }
                     }
@@ -87,7 +87,6 @@ fn ensure_worker() -> Sender<AudioCommand> {
                         active_sink.stop();
                     }
                     sink = None;
-                    _stream = None;
                 }
             }
         }

@@ -57,6 +57,7 @@ import { useNativeBridge } from '../hooks/useNativeBridge'
 import { useNativePaste } from '../hooks/useNativePaste'
 import { usePomodoroController } from '../modules/tools/pomodoro/usePomodoroController'
 import { useAlarmScheduler } from '../modules/tools/alarm/useAlarmScheduler'
+import { useAlarmMusicPauseSync } from '../modules/tools/alarm/useAlarmMusicPauseSync'
 import { onNativePasteImage } from '../modules/platform/clipboardEvents'
 import { openTerminalAt } from '../modules/platform/terminalService'
 import { openInFileManager } from '../modules/platform/fileExplorerService'
@@ -285,7 +286,9 @@ export function WorkspaceShell({
   const wysiwygMarkdownGetterRef = useRef<(() => string) | null>(null)
   const wysiwygOutlineNavigatorRef = useRef<((target: { headingIndex: number; text: string; level: 1 | 2 | 3 | 4 | 5 | 6 }) => boolean) | null>(null)
   const wysiwygFormatActionsRef = useRef<WysiwygFormatActions | null>(null)
-  const syncWysiwygMarkdownRef = useRef<((markdown: string) => void) | null>(null)
+  type MarkdownSyncOptions = { markDirty?: boolean }
+  const syncWysiwygMarkdownRef = useRef<((markdown: string, options?: MarkdownSyncOptions) => void) | null>(null)
+  const skipWysiwygUnmountFlushRef = useRef(false)
   const guardedSaveRef = useRef<(() => Promise<any>) | null>(null)
   // Holds the flush function from WysiwygPane for forcing serialization before save
   const wysiwygFlushRef = useRef<(() => void) | null>(null)
@@ -347,11 +350,12 @@ export function WorkspaceShell({
       wysiwygIsDirtyRef.current = false
     }
     if (editMode === 'wysiwyg' && next === 'source') {
+      skipWysiwygUnmountFlushRef.current = true
       if (!wysiwygIsDirtyRef.current && wysiwygEntryMarkdownRef.current !== null) {
         // No edits were made — restore the original source to avoid
         // serializer escaping side effects (e.g. \= for lines starting with =)
         flushSync(() => {
-          syncWysiwygMarkdownRef.current?.(wysiwygEntryMarkdownRef.current!)
+          syncWysiwygMarkdownRef.current?.(wysiwygEntryMarkdownRef.current!, { markDirty: false })
         })
       } else {
         const latest = wysiwygMarkdownGetterRef.current?.()
@@ -359,7 +363,7 @@ export function WorkspaceShell({
           // Read directly from the WYSIWYG instance before source mode mounts,
           // so the source editor never boots from stale React state.
           flushSync(() => {
-            syncWysiwygMarkdownRef.current?.(latest)
+            syncWysiwygMarkdownRef.current?.(latest, { markDirty: false })
           })
         } else if (wysiwygFlushRef.current) {
           flushSync(() => {
@@ -704,6 +708,8 @@ export function WorkspaceShell({
     }
   })
 
+  useAlarmMusicPauseSync(alarmScheduler.activeAlarm)
+
   const workspaceBackground = themeSettings.workspaceBackground
   const workspaceBackgroundUrl = useMemo(
     () => resolveManagedBackgroundImageUrl(workspaceBackground?.path),
@@ -901,7 +907,9 @@ export function WorkspaceShell({
     activeLeftPanel,
   })
 
-  const handleMarkdownChange = useCallback((val: string) => {
+  const handleMarkdownChange = useCallback((val: string, options?: MarkdownSyncOptions) => {
+    const shouldMarkDirty = options?.markDirty ?? true
+
     const patchedDoc = applyChunkEdit(val)
     if (patchedDoc !== null) {
       if (patchedDoc === markdownRef.current) {
@@ -909,8 +917,8 @@ export function WorkspaceShell({
       }
       markdownRef.current = patchedDoc
       setMarkdown(patchedDoc)
-      markDirty()
-      updateActiveContent(patchedDoc)
+      if (shouldMarkDirty) markDirty()
+      updateActiveContent(patchedDoc, { markDirty: shouldMarkDirty })
       return
     }
 
@@ -920,8 +928,8 @@ export function WorkspaceShell({
     }
     markdownRef.current = val
     setMarkdown(val)
-    markDirty()
-    updateActiveContent(val)
+    if (shouldMarkDirty) markDirty()
+    updateActiveContent(val, { markDirty: shouldMarkDirty })
   }, [applyChunkEdit, markDirty, updateActiveContent])
 
   const handleWysiwygChange = useCallback((sourceTabId: string, val: string) => {
@@ -960,7 +968,7 @@ export function WorkspaceShell({
     const latest = getLatestWysiwygMarkdown()
     if (latest === null) return null
     flushSync(() => {
-      handleMarkdownChange(latest)
+      handleMarkdownChange(latest, { markDirty: false })
     })
     return latest
   }, [getLatestWysiwygMarkdown, handleMarkdownChange])
@@ -3685,7 +3693,7 @@ export function WorkspaceShell({
                           frontMatterBlock={wysiwygFrontMatterBlock}
                           docKey={activeId ?? null}
                           editorZoom={editorZoom}
-                          onRequestTextColorDialog={openTextColorDialog}
+                          skipUnmountFlushRef={skipWysiwygUnmountFlushRef}
                           onChange={(val) => {
                             if (!activeId) return
                             handleWysiwygChange(activeId, val)

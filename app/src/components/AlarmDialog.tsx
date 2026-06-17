@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { Button } from './Button'
 import { FieldGroup } from './FieldGroup'
+import { TimeField } from './TimeField'
 import { useI18n } from '../modules/i18n/I18nContext'
 import {
   createRepeatAlarmRule,
@@ -338,7 +339,13 @@ export function AlarmDialog({ open, onClose }: AlarmDialogProps) {
                 </>
               )}
               <FieldGroup label={locale === 'en-US' ? 'Time' : '时间'}>
-                <input className="field-input" type="time" lang="zh-CN" step={60} value={draftTime} onChange={(e) => setDraftTime(e.target.value)} />
+                <TimeField
+                  className="field-input reminder-tool-time"
+                  lang="zh-CN"
+                  value={draftTime}
+                  onValueChange={setDraftTime}
+                  aria-label={locale === 'en-US' ? 'Alarm time' : '闹钟时间'}
+                />
               </FieldGroup>
               <FieldGroup label={locale === 'en-US' ? 'Sound' : '音效'}>
                 <div className="reminder-tool-sound-row">

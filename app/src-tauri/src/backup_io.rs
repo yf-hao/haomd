@@ -90,6 +90,20 @@ struct BackupPackage {
     temp_dir: PathBuf,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct DocumentRootIndex {
+    version: u32,
+    roots: Vec<DocumentRootIndexEntry>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct DocumentRootIndexEntry {
+    id: String,
+    target_path: String,
+}
+
 fn backup_root_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
     haomd_config_root_dir(app)
 }
@@ -116,6 +130,32 @@ fn expand_tilde_path(value: &str) -> PathBuf {
         }
     }
     PathBuf::from(trimmed)
+}
+
+fn normalize_path_key(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+fn encode_path_key(path: &Path) -> String {
+    normalize_path_key(path)
+        .as_bytes()
+        .iter()
+        .map(|byte| format!("{:02x}", byte))
+        .collect()
+}
+
+fn decode_path_key(encoded: &str) -> Option<PathBuf> {
+    if encoded.len() % 2 != 0 {
+        return None;
+    }
+    let mut bytes = Vec::with_capacity(encoded.len() / 2);
+    let chars: Vec<char> = encoded.chars().collect();
+    for idx in (0..chars.len()).step_by(2) {
+        let hex = [chars[idx], chars[idx + 1]];
+        let value = u8::from_str_radix(&hex.iter().collect::<String>(), 16).ok()?;
+        bytes.push(value);
+    }
+    String::from_utf8(bytes).ok().map(PathBuf::from)
 }
 
 fn is_config_backup_artifact(relative: &Path) -> bool {
@@ -234,6 +274,22 @@ fn build_backup_manifest(app: &AppHandle, scope_settings: &BackupScopeSettingsCf
         version: 1,
         scopes,
     })
+}
+
+fn build_document_root_entries(document_roots: &[String]) -> Vec<DocumentRootIndexEntry> {
+    document_roots
+        .iter()
+        .filter_map(|root| {
+            let path = PathBuf::from(root.trim());
+            if path.as_os_str().is_empty() {
+                return None;
+            }
+            Some(DocumentRootIndexEntry {
+                id: encode_path_key(&path),
+                target_path: normalize_path_key(&path),
+            })
+        })
+        .collect()
 }
 
 async fn build_backup_package(
@@ -427,6 +483,13 @@ fn should_include_backup_relative(relative: &Path) -> bool {
     }
 }
 
+fn should_skip_config_backup_relative(relative: &Path) -> bool {
+    relative.starts_with(Path::new("music"))
+        || !should_include_backup_relative(relative)
+        || relative == Path::new(BACKUP_MANIFEST_FILE)
+        || relative.starts_with(BACKUP_EXTRA_ROOT)
+}
+
 fn should_include_backup_package_relative(relative: &Path) -> bool {
     if relative.starts_with(BACKUP_EXTRA_ROOT) || relative == Path::new(BACKUP_MANIFEST_FILE) {
         return true;
@@ -513,6 +576,7 @@ fn collect_local_entries(
     path: &Path,
     dirs: &mut Vec<String>,
     files: &mut Vec<(String, PathBuf)>,
+    skip_relative: Option<fn(&Path) -> bool>,
 ) -> Result<(), String> {
     for entry in std::fs::read_dir(path).map_err(|err| format!("读取本地配置目录失败: {err}"))?
     {
@@ -531,15 +595,17 @@ fn collect_local_entries(
             .map_err(|err| format!("解析本地相对路径失败: {err}"))?
             .to_path_buf();
 
-        if !should_include_backup_package_relative(&relative) {
-            continue;
+        if let Some(predicate) = skip_relative {
+            if predicate(&relative) {
+                continue;
+            }
         }
 
         let relative = relative.to_string_lossy().replace('\\', "/");
 
         if entry_path.is_dir() {
             dirs.push(relative.clone());
-            collect_local_entries(root, &entry_path, dirs, files)?;
+            collect_local_entries(root, &entry_path, dirs, files, skip_relative)?;
         } else if entry_path.is_file() {
             files.push((relative, entry_path));
         }
@@ -598,10 +664,13 @@ fn metadata_modified_secs(metadata: &std::fs::Metadata) -> Result<u64, String> {
     Ok(duration.as_secs())
 }
 
-fn build_local_sync_index(root: &Path) -> Result<(Vec<String>, WebDavSyncIndex), String> {
+fn build_local_sync_index(
+    root: &Path,
+    skip_relative: Option<fn(&Path) -> bool>,
+) -> Result<(Vec<String>, WebDavSyncIndex), String> {
     let mut dirs = Vec::new();
     let mut files = Vec::new();
-    collect_local_entries(root, root, &mut dirs, &mut files)?;
+    collect_local_entries(root, root, &mut dirs, &mut files, skip_relative)?;
     dirs.sort();
     files.sort_by(|a, b| a.0.cmp(&b.0));
 
@@ -714,6 +783,141 @@ async fn fetch_remote_manifest(
     Ok(Some(manifest))
 }
 
+fn build_remote_prefix(remote_root: &str, prefix: &str) -> String {
+    if prefix.is_empty() {
+        remote_root.to_string()
+    } else if remote_root.is_empty() {
+        prefix.to_string()
+    } else {
+        format!("{remote_root}/{prefix}")
+    }
+}
+
+async fn sync_directory_to_webdav(
+    root: &Path,
+    base_url: &str,
+    username: &str,
+    password: &str,
+    remote_root: &str,
+    skip_relative: Option<fn(&Path) -> bool>,
+) -> Result<WebDavBackupUploadSummary, String> {
+    upload_directory_to_webdav(root, base_url, username, password, remote_root, skip_relative).await
+}
+
+async fn delete_scope_remote_tree(
+    base_url: &str,
+    username: &str,
+    password: &str,
+    remote_root: &str,
+) -> Result<(), String> {
+    let client = Client::new();
+    let Some(index) = fetch_remote_sync_index(&client, base_url, username, password, remote_root).await? else {
+        return Ok(());
+    };
+
+    for entry in index.files {
+        let target = resolve_webdav_url(base_url, &join_remote_relative(remote_root, &entry.path));
+        let response = webdav_request(&client, Method::DELETE, &target, username, password)
+            .send()
+            .await
+            .map_err(|err| format!("删除远端文件失败 {}: {err}", entry.path))?;
+
+        if !(response.status().is_success() || response.status() == StatusCode::NOT_FOUND) {
+            return Err(format!(
+                "删除远端文件失败 {}: HTTP {}",
+                entry.path,
+                response.status()
+            ));
+        }
+    }
+
+    let index_target = resolve_webdav_url(
+        base_url,
+        &join_remote_relative(remote_root, WEBDAV_SYNC_INDEX_FILE),
+    );
+    let response = webdav_request(&client, Method::DELETE, &index_target, username, password)
+        .send()
+        .await
+        .map_err(|err| format!("删除远端索引失败: {err}"))?;
+    if !(response.status().is_success() || response.status() == StatusCode::NOT_FOUND) {
+        return Err(format!("删除远端索引失败: HTTP {}", response.status()));
+    }
+
+    Ok(())
+}
+
+async fn load_document_root_index(
+    base_url: &str,
+    username: &str,
+    password: &str,
+    remote_root: &str,
+) -> Result<Option<DocumentRootIndex>, String> {
+    let client = Client::new();
+    let remote_prefix = build_remote_prefix(remote_root, "documents");
+    let target = resolve_webdav_url(
+        base_url,
+        &join_remote_relative(&remote_prefix, ".haomd-root-index.json"),
+    );
+    let response = webdav_request(&client, Method::GET, &target, username, password)
+        .send()
+        .await
+        .map_err(|err| format!("读取文档根索引失败: {err}"))?;
+    if response.status() == StatusCode::NOT_FOUND {
+        return Ok(None);
+    }
+    if !response.status().is_success() {
+        return Err(format!("读取文档根索引失败: HTTP {}", response.status()));
+    }
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|err| format!("读取文档根索引失败: {err}"))?;
+    let index: DocumentRootIndex =
+        serde_json::from_slice(&bytes).map_err(|err| format!("解析文档根索引失败: {err}"))?;
+    Ok(Some(index))
+}
+
+async fn save_document_root_index(
+    base_url: &str,
+    username: &str,
+    password: &str,
+    remote_root: &str,
+    index: &DocumentRootIndex,
+) -> Result<(), String> {
+    let client = Client::new();
+    let remote_prefix = build_remote_prefix(remote_root, "documents");
+    let target = resolve_webdav_url(
+        base_url,
+        &join_remote_relative(&remote_prefix, ".haomd-root-index.json"),
+    );
+    let bytes = serde_json::to_vec_pretty(index)
+        .map_err(|err| format!("序列化文档根索引失败: {err}"))?;
+    let response = webdav_request(&client, Method::PUT, &target, username, password)
+        .header(
+            reqwest::header::CONTENT_TYPE,
+            "application/json; charset=utf-8",
+        )
+        .body(bytes)
+        .send()
+        .await
+        .map_err(|err| format!("写入文档根索引失败: {err}"))?;
+    if !response.status().is_success() {
+        return Err(format!("写入文档根索引失败: HTTP {}", response.status()));
+    }
+    Ok(())
+}
+
+async fn sync_single_scope_to_webdav(
+    local_root: &Path,
+    base_url: &str,
+    username: &str,
+    password: &str,
+    remote_root: &str,
+    skip_relative: Option<fn(&Path) -> bool>,
+) -> Result<WebDavBackupUploadSummary, String> {
+    sync_directory_to_webdav(local_root, base_url, username, password, remote_root, skip_relative).await
+}
+
 fn build_sync_plan(local: &WebDavSyncIndex, remote: Option<&WebDavSyncIndex>) -> WebDavSyncPlan {
     let remote_files = remote
         .map(|index| {
@@ -771,11 +975,12 @@ async fn upload_directory_to_webdav(
     username: &str,
     password: &str,
     remote_root: &str,
+    skip_relative: Option<fn(&Path) -> bool>,
 ) -> Result<WebDavBackupUploadSummary, String> {
     let client = Client::new();
     ensure_remote_dir(&client, base_url, username, password, "", remote_root).await?;
 
-    let (dirs, local_index) = build_local_sync_index(root)?;
+    let (dirs, local_index) = build_local_sync_index(root, skip_relative)?;
     let remote_index =
         fetch_remote_sync_index(&client, base_url, username, password, remote_root).await?;
     let sync_plan = build_sync_plan(&local_index, remote_index.as_ref());
@@ -859,6 +1064,7 @@ async fn download_directory_from_webdav(
     username: &str,
     password: &str,
     remote_root: &str,
+    skip_relative: Option<fn(&Path) -> bool>,
 ) -> Result<(), String> {
     let client = Client::new();
     let index = fetch_remote_sync_index(&client, base_url, username, password, remote_root)
@@ -873,7 +1079,7 @@ async fn download_directory_from_webdav(
         }
         let relative_path = Path::new(&relative);
         if !matches_backup_scope(relative_path, manifest.as_ref())
-            && !should_include_backup_relative(relative_path)
+            && skip_relative.is_some_and(|predicate| predicate(relative_path))
         {
             continue;
         }
@@ -1056,26 +1262,195 @@ pub async fn export_settings_backup_to_webdav(
         Ok(value) => value,
         Err(message) => return err_payload(ErrorCode::UNKNOWN, message, trace),
     };
+    let mut total_files = 0usize;
+    let mut uploaded_files = 0usize;
+    let mut skipped_files = 0usize;
+    let mut deleted_files = 0usize;
+    let mut incremental = false;
 
-    match build_backup_package(&app, &scope_settings, &document_roots).await {
-        Ok(package) => {
-            let result = match upload_directory_to_webdav(
-                &package.root,
+    let config_root = match backup_root_dir(&app) {
+        Ok(dir) => dir,
+        Err(err) => {
+            return err_payload(
+                ErrorCode::IoError,
+                format!("获取备份根目录失败: {err}"),
+                trace,
+            )
+        }
+    };
+    match sync_single_scope_to_webdav(
+        &config_root,
+        &base_url,
+        &username,
+        &password,
+        &remote_root,
+        Some(should_skip_config_backup_relative),
+    )
+    .await
+    {
+        Ok(summary) => {
+            total_files += summary.total_files;
+            uploaded_files += summary.uploaded_files;
+            skipped_files += summary.skipped_files;
+            deleted_files += summary.deleted_files;
+            incremental |= summary.incremental;
+        }
+        Err(message) => return err_payload(ErrorCode::UNKNOWN, message, trace),
+    }
+
+    if scope_settings.music {
+        let music_root = match crate::music_paths::music_root_dir(&app) {
+            Ok(dir) => dir,
+            Err(err) => {
+                return err_payload(
+                    ErrorCode::IoError,
+                    format!("获取 music 目录失败: {err}"),
+                    trace,
+                )
+            }
+        };
+        if music_root.exists() {
+            let music_remote_root = build_remote_prefix(&remote_root, "music");
+            match sync_single_scope_to_webdav(
+                &music_root,
                 &base_url,
                 &username,
                 &password,
-                &remote_root,
+                &music_remote_root,
+                None,
             )
             .await
             {
-                Ok(summary) => ok(summary, trace),
-                Err(message) => err_payload(ErrorCode::UNKNOWN, message, trace),
-            };
-            cleanup_backup_package(&package);
-            result
+                Ok(summary) => {
+                    total_files += summary.total_files;
+                    uploaded_files += summary.uploaded_files;
+                    skipped_files += summary.skipped_files;
+                    deleted_files += summary.deleted_files;
+                    incremental |= summary.incremental;
+                }
+                Err(message) => return err_payload(ErrorCode::UNKNOWN, message, trace),
+            }
         }
-        Err(message) => err_payload(ErrorCode::UNKNOWN, message, trace),
     }
+
+    if scope_settings.notes {
+        let notes_root = match read_notes_directory(&app) {
+            Ok(Some(dir)) => dir,
+            Ok(None) => PathBuf::new(),
+            Err(message) => return err_payload(ErrorCode::UNKNOWN, message, trace),
+        };
+        if notes_root.exists() {
+            let notes_remote_root = build_remote_prefix(&remote_root, "notes");
+            match sync_single_scope_to_webdav(
+                &notes_root,
+                &base_url,
+                &username,
+                &password,
+                &notes_remote_root,
+                None,
+            )
+            .await
+            {
+                Ok(summary) => {
+                    total_files += summary.total_files;
+                    uploaded_files += summary.uploaded_files;
+                    skipped_files += summary.skipped_files;
+                    deleted_files += summary.deleted_files;
+                    incremental |= summary.incremental;
+                }
+                Err(message) => return err_payload(ErrorCode::UNKNOWN, message, trace),
+            }
+        }
+    }
+
+    if scope_settings.documents {
+        let current_entries = build_document_root_entries(&document_roots);
+        let current_ids = current_entries
+            .iter()
+            .map(|entry| entry.id.clone())
+            .collect::<std::collections::HashSet<_>>();
+        let remote_index = match load_document_root_index(&base_url, &username, &password, &remote_root).await {
+            Ok(index) => index,
+            Err(message) => return err_payload(ErrorCode::UNKNOWN, message, trace),
+        };
+
+        if let Some(remote_index) = remote_index.as_ref() {
+            incremental = true;
+            for entry in &remote_index.roots {
+                if current_ids.contains(&entry.id) {
+                    continue;
+                }
+                let stale_remote_root = build_remote_prefix(
+                    &build_remote_prefix(&remote_root, "documents"),
+                    &entry.id,
+                );
+                if let Err(message) =
+                    delete_scope_remote_tree(&base_url, &username, &password, &stale_remote_root).await
+                {
+                    return err_payload(ErrorCode::UNKNOWN, message, trace);
+                }
+            }
+        }
+
+        for entry in &current_entries {
+            let local_root = match decode_path_key(&entry.id) {
+                Some(path) => path,
+                None => continue,
+            };
+            if !local_root.exists() {
+                continue;
+            }
+            let docs_remote_root = build_remote_prefix(
+                &build_remote_prefix(&remote_root, "documents"),
+                &entry.id,
+            );
+            match sync_single_scope_to_webdav(
+                &local_root,
+                &base_url,
+                &username,
+                &password,
+                &docs_remote_root,
+                None,
+            )
+            .await
+            {
+                Ok(summary) => {
+                    total_files += summary.total_files;
+                    uploaded_files += summary.uploaded_files;
+                    skipped_files += summary.skipped_files;
+                    deleted_files += summary.deleted_files;
+                    incremental |= summary.incremental;
+                }
+                Err(message) => return err_payload(ErrorCode::UNKNOWN, message, trace),
+            }
+        }
+
+        if let Err(message) = save_document_root_index(
+            &base_url,
+            &username,
+            &password,
+            &remote_root,
+            &DocumentRootIndex {
+                version: 1,
+                roots: current_entries,
+            },
+        )
+        .await
+        {
+            return err_payload(ErrorCode::UNKNOWN, message, trace);
+        }
+    }
+
+    ok(
+        WebDavBackupUploadSummary {
+            total_files,
+            uploaded_files,
+            skipped_files,
+            deleted_files,
+            incremental,
+        },
+        trace,
+    )
 }
 
 #[tauri::command]
@@ -1174,11 +1549,60 @@ pub async fn import_settings_backup_from_webdav(
         Err(message) => return err_payload(ErrorCode::UNKNOWN, message, trace),
     };
 
-    match download_directory_from_webdav(&root, &base_url, &username, &password, &remote_root).await
+    if let Err(message) = download_directory_from_webdav(
+        &root,
+        &base_url,
+        &username,
+        &password,
+        &remote_root,
+        Some(should_skip_config_backup_relative),
+    )
+    .await
     {
-        Ok(()) => ok((), trace),
-        Err(message) => err_payload(ErrorCode::UNKNOWN, message, trace),
+        return err_payload(ErrorCode::UNKNOWN, message, trace);
     }
+
+    let music_remote_root = build_remote_prefix(&remote_root, "music");
+    let music_root = match crate::music_paths::ensure_music_root_dir(&app).await {
+        Ok(dir) => dir,
+        Err(err) => {
+            return err_payload(
+                ErrorCode::IoError,
+                format!("获取 music 目录失败: {err}"),
+                trace,
+            )
+        }
+    };
+        if let Err(message) =
+            download_directory_from_webdav(&music_root, &base_url, &username, &password, &music_remote_root, None).await
+        {
+            return err_payload(ErrorCode::UNKNOWN, message, trace);
+        }
+
+    if let Ok(Some(notes_root)) = read_notes_directory(&app) {
+        let notes_remote_root = build_remote_prefix(&remote_root, "notes");
+        if let Err(message) =
+            download_directory_from_webdav(&notes_root, &base_url, &username, &password, &notes_remote_root, None).await
+        {
+            return err_payload(ErrorCode::UNKNOWN, message, trace);
+        }
+    }
+
+    if let Ok(Some(index)) = load_document_root_index(&base_url, &username, &password, &remote_root).await {
+        let docs_remote_root = build_remote_prefix(&remote_root, "documents");
+        for entry in index.roots {
+            if let Some(target_root) = decode_path_key(&entry.id) {
+                let scope_remote_root = build_remote_prefix(&docs_remote_root, &entry.id);
+                if let Err(message) =
+                    download_directory_from_webdav(&target_root, &base_url, &username, &password, &scope_remote_root, None).await
+                {
+                    return err_payload(ErrorCode::UNKNOWN, message, trace);
+                }
+            }
+        }
+    }
+
+    ok((), trace)
 }
 
 #[tauri::command]

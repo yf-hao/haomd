@@ -1,4 +1,9 @@
-use crate::music_paths::{ensure_music_root_dir, music_root_dir};
+use crate::music_paths::{
+    ensure_music_playlist_dir, ensure_music_playlist_tracks_dir, music_playlist_tracks_dir,
+};
+use crate::music_playlist::{
+    ensure_music_playlist_record_exists_impl, update_music_playlist_tracks_impl,
+};
 use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -11,10 +16,6 @@ use url::Url;
 pub struct MusicSoundRecord {
     pub file_name: String,
     pub target_path: String,
-}
-
-fn sound_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
-    Ok(music_root_dir(app)?.join("sounds"))
 }
 
 const AUDIO_EXTENSIONS: &[&str] = &[
@@ -30,7 +31,8 @@ const AUDIO_EXTENSIONS: &[&str] = &[
     "aif",
     "webm",
     "wma",
-];
+]
+;
 
 fn is_audio_file(path: &Path) -> bool {
     path.extension()
@@ -70,30 +72,19 @@ fn normalize_sound_file_name(source_path: &Path) -> std::io::Result<String> {
     Ok(file_name)
 }
 
-pub async fn ensure_music_sound_available(app: &AppHandle, file_name: &str) -> std::io::Result<PathBuf> {
-    let dir = sound_dir(app)?;
-    fs::create_dir_all(&dir).await?;
-    Ok(dir.join(file_name))
+fn normalize_playlist_id(playlist_id: &str) -> std::io::Result<String> {
+    let normalized = playlist_id.trim();
+    if normalized.is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "播放列表 ID 无效",
+        ));
+    }
+    Ok(normalized.to_string())
 }
 
-#[tauri::command]
-pub async fn list_music_sound_files(app: AppHandle) -> ResultPayload<Vec<String>> {
-    let trace = new_trace_id();
-    if let Err(err) = ensure_music_root_dir(&app).await {
-        return err_payload(ErrorCode::IoError, format!("准备音乐目录失败: {err}"), trace);
-    }
-
-    let entries = collect_sound_files(&sound_dir(&app).unwrap_or_default())
-        .await
-        .unwrap_or_default();
-    let mut deduped = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-    for (file_name, _) in entries {
-        if seen.insert(file_name.clone()) {
-            deduped.push(file_name);
-        }
-    }
-    ok(deduped, trace)
+fn playlist_tracks_dir(app: &AppHandle, playlist_id: &str) -> std::io::Result<PathBuf> {
+    music_playlist_tracks_dir(app, playlist_id)
 }
 
 async fn collect_sound_files(dir: &PathBuf) -> std::io::Result<Vec<(String, std::time::SystemTime)>> {
@@ -122,13 +113,64 @@ async fn collect_sound_files(dir: &PathBuf) -> std::io::Result<Vec<(String, std:
     Ok(list)
 }
 
+pub async fn ensure_music_sound_available(
+    app: &AppHandle,
+    playlist_id: &str,
+    file_name: &str,
+) -> std::io::Result<PathBuf> {
+    let playlist_id = normalize_playlist_id(playlist_id)?;
+    let dir = ensure_music_playlist_tracks_dir(app, &playlist_id).await?;
+    Ok(dir.join(file_name))
+}
+
+#[tauri::command]
+pub async fn list_music_sound_files(app: AppHandle, playlist_id: String) -> ResultPayload<Vec<String>> {
+    let trace = new_trace_id();
+    let playlist_id = match normalize_playlist_id(&playlist_id) {
+        Ok(id) => id,
+        Err(err) => {
+            return err_payload(ErrorCode::InvalidPath, format!("播放列表 ID 无效: {err}"), trace)
+        }
+    };
+    match ensure_music_playlist_record_exists_impl(&app, &playlist_id).await {
+        ResultPayload::Ok { .. } => {}
+        ResultPayload::Err { error } => return ResultPayload::Err { error },
+    }
+    if let Err(err) = ensure_music_playlist_dir(&app, &playlist_id).await {
+        return err_payload(ErrorCode::IoError, format!("准备音乐目录失败: {err}"), trace);
+    }
+
+    let entries = collect_sound_files(&playlist_tracks_dir(&app, &playlist_id).unwrap_or_default())
+        .await
+        .unwrap_or_default();
+    let mut deduped = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for (file_name, _) in entries {
+        if seen.insert(file_name.clone()) {
+            deduped.push(file_name);
+        }
+    }
+    ok(deduped, trace)
+}
+
 #[tauri::command]
 pub async fn import_music_sound(
     app: AppHandle,
+    playlist_id: String,
     source_path: String,
 ) -> ResultPayload<MusicSoundRecord> {
     let trace = new_trace_id();
-    if let Err(err) = ensure_music_root_dir(&app).await {
+    let playlist_id = match normalize_playlist_id(&playlist_id) {
+        Ok(id) => id,
+        Err(err) => {
+            return err_payload(ErrorCode::InvalidPath, format!("播放列表 ID 无效: {err}"), trace)
+        }
+    };
+    match ensure_music_playlist_record_exists_impl(&app, &playlist_id).await {
+        ResultPayload::Ok { .. } => {}
+        ResultPayload::Err { error } => return ResultPayload::Err { error },
+    }
+    if let Err(err) = ensure_music_playlist_dir(&app, &playlist_id).await {
         return err_payload(ErrorCode::IoError, format!("准备音乐目录失败: {err}"), trace);
     }
     let source = match normalize_source_path(&source_path) {
@@ -144,26 +186,131 @@ pub async fn import_music_sound(
     if !source.exists() {
         return err_payload(ErrorCode::InvalidPath, "音频文件不存在".to_string(), trace);
     }
+    if !is_audio_file(&source) {
+        return err_payload(ErrorCode::InvalidPath, "请选择音频文件".to_string(), trace);
+    }
     let file_name = match normalize_sound_file_name(&source) {
         Ok(name) => name,
         Err(err) => return err_payload(ErrorCode::InvalidPath, format!("音频文件名无效: {err}"), trace),
     };
-    let dir = match sound_dir(&app) {
+    let dir = match ensure_music_playlist_tracks_dir(&app, &playlist_id).await {
         Ok(dir) => dir,
         Err(err) => return err_payload(ErrorCode::IoError, format!("获取音乐音频目录失败: {err}"), trace),
     };
-    if let Err(err) = fs::create_dir_all(&dir).await {
-        return err_payload(ErrorCode::IoError, format!("创建音乐音频目录失败: {err}"), trace);
-    }
     let target = dir.join(&file_name);
     if let Err(err) = fs::copy(&source, &target).await {
         return err_payload(ErrorCode::IoError, format!("导入音乐音频失败: {err}"), trace);
     }
-    ok(
-        MusicSoundRecord {
-            file_name,
-            target_path: target.to_string_lossy().into_owned(),
-        },
-        trace,
-    )
+    match sync_playlist_tracks(&app, &playlist_id).await {
+        ResultPayload::Ok { .. } => ok(
+            MusicSoundRecord {
+                file_name,
+                target_path: target.to_string_lossy().into_owned(),
+            },
+            trace,
+        ),
+        ResultPayload::Err { error } => ResultPayload::Err { error },
+    }
+}
+
+#[tauri::command]
+pub async fn delete_music_sound(
+    app: AppHandle,
+    playlist_id: String,
+    file_name: String,
+) -> ResultPayload<()> {
+    let trace = new_trace_id();
+    let playlist_id = match normalize_playlist_id(&playlist_id) {
+        Ok(id) => id,
+        Err(err) => {
+            return err_payload(ErrorCode::InvalidPath, format!("播放列表 ID 无效: {err}"), trace)
+        }
+    };
+    match ensure_music_playlist_record_exists_impl(&app, &playlist_id).await {
+        ResultPayload::Ok { .. } => {}
+        ResultPayload::Err { error } => return ResultPayload::Err { error },
+    }
+    let dir = match ensure_music_playlist_tracks_dir(&app, &playlist_id).await {
+        Ok(dir) => dir,
+        Err(err) => return err_payload(ErrorCode::IoError, format!("获取音乐音频目录失败: {err}"), trace),
+    };
+    let target = dir.join(&file_name);
+    match fs::remove_file(&target).await {
+        Ok(_) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => return err_payload(ErrorCode::IoError, format!("删除音乐文件失败: {err}"), trace),
+    }
+    match sync_playlist_tracks(&app, &playlist_id).await {
+        ResultPayload::Ok { .. } => ok((), trace),
+        ResultPayload::Err { error } => ResultPayload::Err { error },
+    }
+}
+
+#[tauri::command]
+pub async fn move_music_sound(
+    app: AppHandle,
+    source_playlist_id: String,
+    target_playlist_id: String,
+    file_name: String,
+) -> ResultPayload<()> {
+    let trace = new_trace_id();
+    let source_playlist_id = match normalize_playlist_id(&source_playlist_id) {
+        Ok(id) => id,
+        Err(err) => {
+            return err_payload(ErrorCode::InvalidPath, format!("源播放列表 ID 无效: {err}"), trace)
+        }
+    };
+    let target_playlist_id = match normalize_playlist_id(&target_playlist_id) {
+        Ok(id) => id,
+        Err(err) => {
+            return err_payload(ErrorCode::InvalidPath, format!("目标播放列表 ID 无效: {err}"), trace)
+        }
+    };
+    if source_playlist_id == target_playlist_id {
+        return ok((), trace);
+    }
+    match ensure_music_playlist_record_exists_impl(&app, &source_playlist_id).await {
+        ResultPayload::Ok { .. } => {}
+        ResultPayload::Err { error } => return ResultPayload::Err { error },
+    }
+    match ensure_music_playlist_record_exists_impl(&app, &target_playlist_id).await {
+        ResultPayload::Ok { .. } => {}
+        ResultPayload::Err { error } => return ResultPayload::Err { error },
+    }
+
+    let source_dir = match ensure_music_playlist_tracks_dir(&app, &source_playlist_id).await {
+        Ok(dir) => dir,
+        Err(err) => return err_payload(ErrorCode::IoError, format!("获取源音乐目录失败: {err}"), trace),
+    };
+    let target_dir = match ensure_music_playlist_tracks_dir(&app, &target_playlist_id).await {
+        Ok(dir) => dir,
+        Err(err) => return err_payload(ErrorCode::IoError, format!("获取目标音乐目录失败: {err}"), trace),
+    };
+    let source = source_dir.join(&file_name);
+    let target = target_dir.join(&file_name);
+    if let Err(err) = fs::copy(&source, &target).await {
+        return err_payload(ErrorCode::IoError, format!("移动音乐文件失败: {err}"), trace);
+    }
+    match fs::remove_file(&source).await {
+        Ok(_) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => return err_payload(ErrorCode::IoError, format!("删除源音乐文件失败: {err}"), trace),
+    }
+    let _ = sync_playlist_tracks(&app, &source_playlist_id).await;
+    match sync_playlist_tracks(&app, &target_playlist_id).await {
+        ResultPayload::Ok { .. } => ok((), trace),
+        ResultPayload::Err { error } => ResultPayload::Err { error },
+    }
+}
+
+async fn sync_playlist_tracks(app: &AppHandle, playlist_id: &str) -> ResultPayload<()> {
+    let trace = new_trace_id();
+    let entries = match collect_sound_files(&playlist_tracks_dir(app, playlist_id).unwrap_or_default()).await {
+        Ok(entries) => entries,
+        Err(err) => {
+            return err_payload(ErrorCode::IoError, format!("读取音乐目录失败: {err}"), trace);
+        }
+    };
+    let track_files = entries.into_iter().map(|(name, _)| name).collect::<Vec<_>>();
+    update_music_playlist_tracks_impl(app, playlist_id, track_files).await
 }

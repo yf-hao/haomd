@@ -1,8 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { Button } from './Button'
 import { useI18n } from '../modules/i18n/I18nContext'
-import { importMusicSound, loadLatestMusicSoundFile, loadMusicSoundFiles } from '../modules/tools/music/musicSound'
+import { deleteMusicSound, importMusicSound, loadMusicSoundFiles, moveMusicSound } from '../modules/tools/music/musicSound'
+import {
+  loadMusicPlaylistStore,
+  saveMusicPlaylistStore,
+  type MusicPlaylistRecord,
+  type MusicPlaylistStore,
+} from '../modules/tools/music/musicPlaylists'
 import {
   getMusicTrackDuration,
   getMusicTrackState,
@@ -10,6 +17,7 @@ import {
   playMusicTrack,
   resumeMusicTrack,
   seekMusicTrack,
+  setMusicTrackVolume,
   stopMusicTrack,
   type MusicTrackState,
 } from '../modules/tools/music/musicAudio'
@@ -23,6 +31,7 @@ export type MusicPlayerDialogProps = {
 export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
   const { resolvedLanguage: locale } = useI18n()
   const dialogRef = useRef<HTMLDivElement | null>(null)
+  const playlistMenuRef = useRef<HTMLDivElement | null>(null)
   const [tracks, setTracks] = useState<string[]>([])
   const [selectedTrack, setSelectedTrack] = useState<string | null>(null)
   const [playing, setPlaying] = useState(false)
@@ -33,13 +42,42 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
   const [playbackTrackName, setPlaybackTrackName] = useState<string | null>(null)
   const [isSeeking, setIsSeeking] = useState(false)
   const [draftSeekMs, setDraftSeekMs] = useState<number | null>(null)
+  const [volumePercent, setVolumePercent] = useState(100)
+  const [isVolumeOpen, setIsVolumeOpen] = useState(false)
+  const [playlistStore, setPlaylistStore] = useState<MusicPlaylistStore | null>(null)
+  const [isPlaylistMenuOpen, setIsPlaylistMenuOpen] = useState(false)
+  const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false)
+  const [playlistDraftName, setPlaylistDraftName] = useState('')
+  const [trackMenu, setTrackMenu] = useState<{
+    fileName: string
+    x: number
+    y: number
+    mode: 'actions' | 'move'
+  } | null>(null)
   const hasInitializedSelectionRef = useRef(false)
   const isSeekingRef = useRef(false)
   const lastAutoAdvanceTrackRef = useRef<string | null>(null)
+  const volumeControlRef = useRef<HTMLDivElement | null>(null)
+  const trackMenuRef = useRef<HTMLDivElement | null>(null)
+  const activePlaylist = useMemo(() => {
+    if (!playlistStore || playlistStore.playlists.length === 0) return null
+    return playlistStore.playlists.find((playlist) => playlist.id === playlistStore.activePlaylistId)
+      ?? playlistStore.playlists[0]
+  }, [playlistStore])
+  const activePlaylistId = useMemo(() => {
+    if (!playlistStore) return 'default'
+    return resolveActivePlaylistId(playlistStore)
+  }, [playlistStore])
+  const activePlaylistTracks = useMemo(() => tracks, [tracks])
+  const playlistItems = useMemo(() => {
+    return playlistStore?.playlists.length
+      ? playlistStore.playlists
+      : createDefaultPlaylistStore(tracks).playlists
+  }, [playlistStore, tracks])
   const currentIndex = useMemo(() => {
     if (!selectedTrack) return -1
-    return tracks.indexOf(selectedTrack)
-  }, [selectedTrack, tracks])
+    return activePlaylistTracks.indexOf(selectedTrack)
+  }, [activePlaylistTracks, selectedTrack])
 
   const currentTrackName = playbackTrackName ?? selectedTrack
   const selectedLabel = currentTrackName
@@ -56,32 +94,170 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
   const progressPercent = effectiveDurationMs > 0
     ? Math.min(100, Math.max(0, (progressValue / effectiveDurationMs) * 100))
     : 0
+  const currentVolume = Math.max(0, Math.min(100, volumePercent))
+  const isMuted = currentVolume <= 0
 
   const setSeekingState = useCallback((next: boolean) => {
     isSeekingRef.current = next
     setIsSeeking(next)
   }, [])
 
-  const syncTracks = useCallback(async () => {
-    const list = await loadMusicSoundFiles()
-    setTracks(list)
-    if (!hasInitializedSelectionRef.current && list.length > 0) {
-      const latest = await loadLatestMusicSoundFile()
-      const nextSelection = latest ?? list[0] ?? null
-      if (nextSelection) {
-        setSelectedTrack(nextSelection)
-        hasInitializedSelectionRef.current = true
-      }
-    } else if (selectedTrack && list.length > 0 && !list.includes(selectedTrack)) {
-      setSelectedTrack(list[0] ?? null)
+  const commitPlaylistStore = useCallback(async (nextStore: MusicPlaylistStore) => {
+    const normalized = normalizePlaylistStore(nextStore)
+    setPlaylistStore(normalized)
+    await saveMusicPlaylistStore(normalized)
+    return normalized
+  }, [])
+
+  const syncLibrary = useCallback(async () => {
+    const store = await loadMusicPlaylistStore()
+    const nextActivePlaylistId = resolveActivePlaylistId(store ?? createDefaultPlaylistStore([]))
+    const nextTracks = await loadMusicSoundFiles(nextActivePlaylistId)
+    const nextStore = store
+      ? clonePlaylistStore(store)
+      : createDefaultPlaylistStore(nextTracks)
+    const activePlaylist = nextStore.playlists.find((playlist) => playlist.id === nextActivePlaylistId)
+    if (activePlaylist) {
+      activePlaylist.trackFiles = [...nextTracks]
+      activePlaylist.updatedAt = new Date().toISOString()
+    }
+    setPlaylistStore(nextStore)
+    void saveMusicPlaylistStore(nextStore)
+    setTracks(nextTracks)
+    if (!hasInitializedSelectionRef.current) {
+      setSelectedTrack(nextTracks[0] ?? null)
+      hasInitializedSelectionRef.current = true
+      return
+    }
+
+    if (selectedTrack && nextTracks.length > 0 && !nextTracks.includes(selectedTrack)) {
+      setSelectedTrack(nextTracks[0] ?? null)
+    } else if (selectedTrack && nextTracks.length === 0) {
+      setSelectedTrack(null)
+    } else if (!selectedTrack && nextTracks.length > 0) {
+      setSelectedTrack(nextTracks[0])
     }
   }, [selectedTrack])
 
+  const handleAddTrackToActivePlaylist = useCallback(async (
+    fileName: string,
+    baseStore?: MusicPlaylistStore,
+  ): Promise<MusicPlaylistStore | null> => {
+    const currentStore = baseStore ?? playlistStore ?? createDefaultPlaylistStore(tracks)
+    const activePlaylistId = resolveActivePlaylistId(currentStore)
+    const nextStore = clonePlaylistStore(currentStore)
+    const playlist = nextStore.playlists.find((item) => item.id === activePlaylistId)
+    if (!playlist) return null
+    if (!playlist.trackFiles.includes(fileName)) {
+      playlist.trackFiles = [...playlist.trackFiles, fileName]
+      playlist.updatedAt = new Date().toISOString()
+    }
+    nextStore.activePlaylistId = playlist.id
+    await commitPlaylistStore(nextStore)
+    return nextStore
+  }, [commitPlaylistStore, playlistStore, tracks])
+
+  const handleSelectPlaylist = useCallback(async (playlistId: string) => {
+    const currentStore = playlistStore ?? createDefaultPlaylistStore(tracks)
+    const nextStore = clonePlaylistStore(currentStore)
+    const playlist = nextStore.playlists.find((item) => item.id === playlistId)
+    if (!playlist) return
+    nextStore.activePlaylistId = playlist.id
+    await commitPlaylistStore(nextStore)
+
+    const nextTracks = await loadMusicSoundFiles(playlist.id)
+    setTracks(nextTracks)
+    playlist.trackFiles = [...nextTracks]
+    playlist.updatedAt = new Date().toISOString()
+    await saveMusicPlaylistStore(nextStore)
+    setSelectedTrack(selectedTrack && nextTracks.includes(selectedTrack) ? selectedTrack : (nextTracks[0] ?? null))
+    setIsPlaylistMenuOpen(false)
+  }, [commitPlaylistStore, playlistStore, selectedTrack, tracks])
+
+  const handleCreatePlaylist = useCallback(async () => {
+    const name = playlistDraftName.trim()
+    if (!name) return
+    const currentStore = playlistStore ?? createDefaultPlaylistStore(tracks)
+    const nextStore = clonePlaylistStore(currentStore)
+    const now = new Date().toISOString()
+    const playlist: MusicPlaylistRecord = {
+      id: createPlaylistId(),
+      name,
+      trackFiles: [],
+      createdAt: now,
+      updatedAt: now,
+    }
+    nextStore.playlists = [...nextStore.playlists, playlist]
+    nextStore.activePlaylistId = playlist.id
+    await commitPlaylistStore(nextStore)
+    setSelectedTrack(null)
+    setTracks([])
+    setIsPlaylistMenuOpen(false)
+    setIsCreatingPlaylist(false)
+    setPlaylistDraftName('')
+  }, [commitPlaylistStore, playlistDraftName, playlistStore, tracks])
+
+  const closeTrackMenu = useCallback(() => {
+    setTrackMenu(null)
+  }, [])
+
+  const handleOpenTrackMenu = useCallback((event: MouseEvent<HTMLButtonElement>, fileName: string) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setIsPlaylistMenuOpen(false)
+    setIsCreatingPlaylist(false)
+    setTrackMenu({
+      fileName,
+      x: clampMenuCoordinate(event.clientX, 244, window.innerWidth),
+      y: clampMenuCoordinate(event.clientY, 280, window.innerHeight),
+      mode: 'actions',
+    })
+  }, [])
+
+  const handleOpenMoveTrackMenu = useCallback(() => {
+    setTrackMenu((current) => (current ? { ...current, mode: 'move' } : current))
+  }, [])
+
+  const handleMoveTrackToPlaylist = useCallback(async (targetPlaylistId: string) => {
+    if (!trackMenu) return
+    const sourceFile = trackMenu.fileName
+    const currentStore = playlistStore ?? createDefaultPlaylistStore(tracks)
+    const nextStore = clonePlaylistStore(currentStore)
+    const sourcePlaylistId = resolveActivePlaylistId(currentStore)
+    const sourcePlaylist = nextStore.playlists.find((item) => item.id === sourcePlaylistId)
+    const targetPlaylist = nextStore.playlists.find((item) => item.id === targetPlaylistId)
+    if (!sourcePlaylist || !targetPlaylist || sourcePlaylist.id === targetPlaylist.id) return
+    const moved = await moveMusicSound(sourcePlaylist.id, targetPlaylist.id, sourceFile)
+    if (!moved) return
+    const sourceTracks = await loadMusicSoundFiles(sourcePlaylist.id)
+    setTracks(sourceTracks)
+    const now = new Date().toISOString()
+    sourcePlaylist.trackFiles = sourceTracks
+    targetPlaylist.trackFiles = await loadMusicSoundFiles(targetPlaylist.id)
+    sourcePlaylist.updatedAt = now
+    targetPlaylist.updatedAt = now
+    await commitPlaylistStore(nextStore)
+    if (selectedTrack === sourceFile) {
+      setSelectedTrack(sourceTracks[0] ?? null)
+    }
+    closeTrackMenu()
+  }, [closeTrackMenu, commitPlaylistStore, playlistStore, selectedTrack, trackMenu, tracks])
+
+  const handleOpenCreatePlaylist = useCallback(() => {
+    setPlaylistDraftName('')
+    setIsCreatingPlaylist(true)
+  }, [])
+
+  const handleCancelCreatePlaylist = useCallback(() => {
+    setPlaylistDraftName('')
+    setIsCreatingPlaylist(false)
+  }, [])
+
   const handleImportTrack = useCallback(async () => {
     const chosen = await openDialog({
-      multiple: false,
+      multiple: true,
       directory: false,
-      title: locale === 'en-US' ? 'Choose music file' : '选择音乐文件',
+      title: locale === 'en-US' ? 'Choose music files' : '选择音乐文件',
       filters: [
         {
           name: locale === 'en-US' ? 'Audio files' : '音频文件',
@@ -89,14 +265,27 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
         },
       ],
     })
-    const sourcePath = Array.isArray(chosen) ? chosen[0] : chosen
-    if (!sourcePath || typeof sourcePath !== 'string') return
-    const fileName = await importMusicSound(sourcePath)
-    if (!fileName) return
+    const sourcePaths = (Array.isArray(chosen) ? chosen : [chosen]).filter(
+      (item): item is string => typeof item === 'string' && item.trim().length > 0,
+    )
+    if (sourcePaths.length === 0) return
+
+    const importedFileNames: string[] = []
+    let nextStore = playlistStore ?? createDefaultPlaylistStore(tracks)
+    for (const sourcePath of sourcePaths) {
+      const fileName = await importMusicSound(activePlaylistId, sourcePath)
+      if (!fileName) continue
+      importedFileNames.push(fileName)
+      const updatedStore = await handleAddTrackToActivePlaylist(fileName, nextStore)
+      if (updatedStore) {
+        nextStore = updatedStore
+      }
+    }
+    if (importedFileNames.length === 0) return
     hasInitializedSelectionRef.current = true
-    setSelectedTrack(fileName)
-    await syncTracks()
-  }, [locale, syncTracks])
+    setSelectedTrack(importedFileNames[0])
+    await syncLibrary()
+  }, [activePlaylistId, handleAddTrackToActivePlaylist, locale, syncLibrary])
 
   const handleSelectTrack = useCallback((fileName: string) => {
     setSelectedTrack(fileName)
@@ -104,7 +293,7 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
   }, [])
 
   const handlePlay = useCallback(async () => {
-    const track = selectedTrack ?? tracks[0]
+    const track = selectedTrack ?? activePlaylistTracks[0]
     if (!track) return
     if (playing && !paused) return
     if (paused) {
@@ -113,13 +302,13 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
       setPlaying(true)
       return
     }
-    await playMusicTrack(track)
+    await playMusicTrack(activePlaylistId, track)
     setPlaybackTrackName(track)
     setTrackPositionMs(0)
     setPlaying(true)
     setPaused(false)
     lastAutoAdvanceTrackRef.current = null
-  }, [paused, playing, selectedTrack, tracks])
+  }, [activePlaylistTracks, paused, playing, selectedTrack])
 
   const handlePause = useCallback(async () => {
     if (!playing || paused) return
@@ -139,10 +328,32 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
     lastAutoAdvanceTrackRef.current = null
   }, [setSeekingState])
 
+  const handleDeleteTrack = useCallback(async () => {
+    if (!trackMenu) return
+    const fileName = trackMenu.fileName
+    if (currentTrackName === fileName || selectedTrack === fileName) {
+      await handleStop()
+    }
+    const deleted = await deleteMusicSound(activePlaylistId, fileName)
+    if (!deleted) return
+    await syncLibrary()
+    closeTrackMenu()
+  }, [activePlaylistId, closeTrackMenu, currentTrackName, handleStop, selectedTrack, syncLibrary, trackMenu])
+
+  const handleToggleVolumePanel = useCallback(() => {
+    setIsVolumeOpen((current) => !current)
+  }, [])
+
+  const handleChangeVolume = useCallback(async (nextPercent: number) => {
+    const next = Math.max(0, Math.min(100, Math.round(nextPercent)))
+    setVolumePercent(next)
+    await setMusicTrackVolume(next / 100)
+  }, [])
+
   const playTrackAtIndex = useCallback(async (nextTrack: string, shouldPlay: boolean) => {
     setSelectedTrack(nextTrack)
     if (!shouldPlay) return
-    await playMusicTrack(nextTrack)
+    await playMusicTrack(activePlaylistId, nextTrack)
     setPlaybackTrackName(nextTrack)
     setTrackPositionMs(0)
     setPlaying(true)
@@ -150,14 +361,14 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
   }, [])
 
   const handleStepTrack = useCallback(async (direction: -1 | 1, shouldPlay = false) => {
-    if (tracks.length === 0) return
+    if (activePlaylistTracks.length === 0) return
     const nextIndex = currentIndex >= 0
-      ? (currentIndex + direction + tracks.length) % tracks.length
-      : (direction > 0 ? 0 : tracks.length - 1)
-    const nextTrack = tracks[nextIndex]
+      ? (currentIndex + direction + activePlaylistTracks.length) % activePlaylistTracks.length
+      : (direction > 0 ? 0 : activePlaylistTracks.length - 1)
+    const nextTrack = activePlaylistTracks[nextIndex]
     const shouldStart = shouldPlay || playing || paused
     await playTrackAtIndex(nextTrack, shouldStart)
-  }, [currentIndex, paused, playTrackAtIndex, playing, tracks])
+  }, [activePlaylistTracks, currentIndex, paused, playTrackAtIndex, playing])
 
   const commitSeek = useCallback(async (positionMs: number) => {
     const nextPosition = Math.max(0, Math.floor(positionMs))
@@ -174,15 +385,20 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
 
   useEffect(() => {
     if (!open) return
-    void syncTracks()
+    void syncLibrary()
     return () => {
       setHoveredTrack(null)
     }
-  }, [open, syncTracks])
+  }, [open, syncLibrary])
 
   useEffect(() => {
     if (open) return
     setHoveredTrack(null)
+    setIsVolumeOpen(false)
+    setIsPlaylistMenuOpen(false)
+    setIsCreatingPlaylist(false)
+    setPlaylistDraftName('')
+    setTrackMenu(null)
   }, [open])
 
   useEffect(() => {
@@ -198,7 +414,7 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
     }
     let cancelled = false
     void (async () => {
-      const duration = await getMusicTrackDuration(selectedTrack)
+      const duration = await getMusicTrackDuration(activePlaylistId, selectedTrack)
       if (cancelled) return
       setTrackDurationMs(duration)
       if (!playing && !paused) {
@@ -209,7 +425,7 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
     return () => {
       cancelled = true
     }
-  }, [open, paused, playing, selectedTrack])
+  }, [activePlaylistId, open, paused, playing, selectedTrack])
 
   useEffect(() => {
     if (!open) return
@@ -222,6 +438,7 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
       setPaused(state.paused)
       setTrackPositionMs(state.positionMs)
       setDraftSeekMs((current) => (isSeekingRef.current ? current : state.positionMs))
+      setVolumePercent(Math.round((state.volume ?? 1) * 100))
       if (state.durationMs != null) {
         setTrackDurationMs(state.durationMs)
       }
@@ -246,6 +463,68 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
       window.clearInterval(timer)
     }
   }, [handleStepTrack, open, selectedTrack])
+
+  useEffect(() => {
+    if (!open || !isVolumeOpen) return
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null
+      if (!target) return
+      if (volumeControlRef.current?.contains(target)) return
+      setIsVolumeOpen(false)
+    }
+    window.addEventListener('pointerdown', handlePointerDown)
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown)
+    }
+  }, [isVolumeOpen, open])
+
+  useEffect(() => {
+    if (!open || !isVolumeOpen) return
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault()
+      const delta = event.deltaY > 0 ? -5 : 5
+      void handleChangeVolume(currentVolume + delta)
+    }
+    window.addEventListener('wheel', handleWheel, { passive: false })
+    return () => {
+      window.removeEventListener('wheel', handleWheel)
+    }
+  }, [currentVolume, handleChangeVolume, isVolumeOpen, open])
+
+  useEffect(() => {
+    if (!open || !isPlaylistMenuOpen) return
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null
+      if (!target) return
+      if (playlistMenuRef.current?.contains(target)) return
+      setIsPlaylistMenuOpen(false)
+    }
+    window.addEventListener('pointerdown', handlePointerDown)
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown)
+    }
+  }, [isPlaylistMenuOpen, open])
+
+  useEffect(() => {
+    if (!open || !trackMenu) return
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null
+      if (!target) return
+      if (trackMenuRef.current?.contains(target)) return
+      closeTrackMenu()
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeTrackMenu()
+      }
+    }
+    window.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [closeTrackMenu, open, trackMenu])
 
   if (!open) return null
 
@@ -275,9 +554,9 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
         <div className="music-player-body">
           <section className="music-player-now-card">
             <div className="music-player-now-head">
-              <div className="music-player-now-title">
+              <span className="music-player-now-title">
                 {locale === 'en-US' ? 'Now Playing' : '当前曲目'}
-              </div>
+              </span>
               <div className="music-player-now-status">{statusLabel}</div>
             </div>
 
@@ -349,11 +628,20 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
 
             <div className="music-player-controls">
               <Button
+                variant="tertiary"
+                className="music-player-control-btn"
+                icon={<StopTrackIcon />}
+                onClick={() => { void handleStop() }}
+                disabled={!playing && !paused}
+                aria-label={locale === 'en-US' ? 'Stop' : '停止'}
+                title={locale === 'en-US' ? 'Stop' : '停止'}
+              />
+              <Button
                 variant="secondary"
                 className="music-player-control-btn"
                 icon={<PrevTrackIcon />}
                 onClick={() => { void handleStepTrack(-1) }}
-                disabled={tracks.length === 0}
+                disabled={activePlaylistTracks.length === 0}
                 aria-label={locale === 'en-US' ? 'Previous track' : '上一首'}
                 title={locale === 'en-US' ? 'Previous track' : '上一首'}
               />
@@ -363,7 +651,7 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
                   className="music-player-control-btn"
                   icon={<PauseTrackIcon />}
                   onClick={() => { void handlePause() }}
-                  disabled={tracks.length === 0}
+                  disabled={activePlaylistTracks.length === 0}
                   aria-label={locale === 'en-US' ? 'Pause' : '暂停'}
                   title={locale === 'en-US' ? 'Pause' : '暂停'}
                 />
@@ -372,7 +660,7 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
                   className="music-player-control-btn"
                   icon={<PlayTrackIcon />}
                   onClick={() => { void handlePlay() }}
-                  disabled={tracks.length === 0}
+                  disabled={activePlaylistTracks.length === 0}
                   aria-label={paused ? (locale === 'en-US' ? 'Resume' : '继续') : (locale === 'en-US' ? 'Play' : '播放')}
                   title={paused ? (locale === 'en-US' ? 'Resume' : '继续') : (locale === 'en-US' ? 'Play' : '播放')}
                 />
@@ -382,47 +670,140 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
                 className="music-player-control-btn"
                 icon={<NextTrackIcon />}
                 onClick={() => { void handleStepTrack(1) }}
-                disabled={tracks.length === 0}
+                disabled={activePlaylistTracks.length === 0}
                 aria-label={locale === 'en-US' ? 'Next track' : '下一首'}
                 title={locale === 'en-US' ? 'Next track' : '下一首'}
               />
-              <Button
-                variant="tertiary"
-                className="music-player-control-btn"
-                icon={<StopTrackIcon />}
-                onClick={() => { void handleStop() }}
-                disabled={!playing && !paused}
-                aria-label={locale === 'en-US' ? 'Stop' : '停止'}
-                title={locale === 'en-US' ? 'Stop' : '停止'}
-              />
+              <div className="music-player-volume-control" ref={volumeControlRef}>
+                <button
+                  type="button"
+                  className="music-player-volume-toggle"
+                  onClick={handleToggleVolumePanel}
+                  aria-label={locale === 'en-US' ? 'Volume' : '音量'}
+                  title={locale === 'en-US' ? 'Volume' : '音量'}
+                >
+                  {isMuted ? <MuteVolumeIcon /> : <VolumeIcon />}
+                </button>
+                {isVolumeOpen ? (
+                  <div className="music-player-volume-popover" role="dialog" aria-label={locale === 'en-US' ? 'Volume control' : '音量控制'}>
+                    <input
+                      className="music-player-volume-input"
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={currentVolume}
+                      onChange={(event) => {
+                        void handleChangeVolume(Number(event.currentTarget.value))
+                      }}
+                      aria-label={locale === 'en-US' ? 'Volume' : '音量'}
+                    />
+                  </div>
+                ) : null}
+              </div>
             </div>
           </section>
 
           <section className="music-player-library-card">
             <div className="music-player-library-header">
               <div className="music-player-library-title-row">
-                <div className="music-player-library-title">
-                  {locale === 'en-US' ? 'Library' : '播放列表'}
+                <div className="music-player-library-actions" ref={playlistMenuRef}>
+                  <button
+                    className="music-player-library-switcher"
+                    type="button"
+                    onClick={() => setIsPlaylistMenuOpen((current) => !current)}
+                    aria-haspopup="menu"
+                    aria-expanded={isPlaylistMenuOpen}
+                  >
+                    <span className="music-player-library-switcher-name">
+                      {activePlaylist?.name ?? (locale === 'en-US' ? 'Default Category' : '默认分类')}
+                    </span>
+                    <span className="music-player-library-switcher-caret" aria-hidden="true">▾</span>
+                  </button>
+                  <button
+                    className="music-player-library-add"
+                    type="button"
+                    onClick={() => { void handleImportTrack() }}
+                    aria-label={locale === 'en-US' ? 'Import track' : '导入音频'}
+                  >
+                    +
+                  </button>
+                  {isPlaylistMenuOpen ? (
+                    <div className="music-player-playlist-popover" role="menu" aria-label={locale === 'en-US' ? 'Categories' : '分类'}>
+                      <div className="music-player-playlist-list">
+                        {playlistItems.map((playlist) => {
+                          const isActive = playlist.id === activePlaylistId
+                          const count = playlist.trackFiles.length
+                          return (
+                            <button
+                              key={playlist.id}
+                              type="button"
+                              className={['music-player-playlist-item', isActive ? 'active' : ''].filter(Boolean).join(' ')}
+                              onClick={() => { void handleSelectPlaylist(playlist.id) }}
+                            >
+                              <span className="music-player-playlist-item-name">{playlist.name}</span>
+                              <span className="music-player-playlist-item-count">{count}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <button
+                        type="button"
+                        className="music-player-playlist-new"
+                        onClick={handleOpenCreatePlaylist}
+                      >
+                        + {locale === 'en-US' ? 'New playlist' : '新建列表'}
+                      </button>
+                      {isCreatingPlaylist ? (
+                        <div className="music-player-playlist-new-form">
+                          <input
+                            className="music-player-playlist-new-input"
+                            value={playlistDraftName}
+                            onChange={(event) => setPlaylistDraftName(event.currentTarget.value)}
+                            placeholder={locale === 'en-US' ? 'Playlist name' : '列表名称'}
+                            autoFocus
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') {
+                                event.preventDefault()
+                                void handleCreatePlaylist()
+                              } else if (event.key === 'Escape') {
+                                event.preventDefault()
+                                handleCancelCreatePlaylist()
+                              }
+                            }}
+                          />
+                          <div className="music-player-playlist-new-actions">
+                            <button
+                              type="button"
+                              className="music-player-playlist-new-confirm"
+                              onClick={() => { void handleCreatePlaylist() }}
+                            >
+                              {locale === 'en-US' ? 'Create' : '创建'}
+                            </button>
+                            <button
+                              type="button"
+                              className="music-player-playlist-new-cancel"
+                              onClick={handleCancelCreatePlaylist}
+                            >
+                              {locale === 'en-US' ? 'Cancel' : '取消'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
-                <button
-                  className="music-player-library-add"
-                  type="button"
-                  onClick={() => { void handleImportTrack() }}
-                  aria-label={locale === 'en-US' ? 'Import track' : '导入音频'}
-                >
-                  +
-                </button>
               </div>
             </div>
 
             <div className="music-player-library-list">
-              {tracks.length === 0 ? (
+              {activePlaylistTracks.length === 0 ? (
                 <div className="music-player-empty">
                   {locale === 'en-US'
                     ? 'No audio files yet. Import one to start.'
                     : '还没有音频文件，先导入一个开始播放。'}
                 </div>
-              ) : tracks.map((fileName) => {
+              ) : activePlaylistTracks.map((fileName) => {
                 const isActive = selectedTrack === fileName
                 const isHovered = hoveredTrack === fileName
                 return (
@@ -433,13 +814,65 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
                     onMouseEnter={() => setHoveredTrack(fileName)}
                     onMouseLeave={() => setHoveredTrack((current) => (current === fileName ? null : current))}
                     onClick={() => handleSelectTrack(fileName)}
-                    onDoubleClick={() => { void playMusicTrack(fileName); setSelectedTrack(fileName); setPlaying(true); setPaused(false) }}
+                    onContextMenu={(event) => handleOpenTrackMenu(event, fileName)}
+                    onDoubleClick={() => {
+                      void playMusicTrack(activePlaylistId, fileName)
+                      setSelectedTrack(fileName)
+                      setPlaybackTrackName(fileName)
+                      setTrackPositionMs(0)
+                      setPlaying(true)
+                      setPaused(false)
+                      lastAutoAdvanceTrackRef.current = null
+                    }}
                   >
                     <span className="music-player-track-name">{stripAudioExtension(fileName)}</span>
                   </button>
                 )
               })}
             </div>
+            {trackMenu && typeof document !== 'undefined' ? createPortal(
+              <div
+                ref={trackMenuRef}
+                className="music-player-track-menu"
+                style={{ left: `${trackMenu.x}px`, top: `${trackMenu.y}px` }}
+                role="menu"
+                aria-label={locale === 'en-US' ? 'Track actions' : '歌曲操作'}
+              >
+                {trackMenu.mode === 'actions' ? (
+                  <>
+                    <button type="button" className="music-player-track-menu-item" onClick={handleOpenMoveTrackMenu}>
+                      {locale === 'en-US' ? 'Move to another list' : '移动到其他列表'}
+                    </button>
+                    <button type="button" className="music-player-track-menu-item danger" onClick={() => { void handleDeleteTrack() }}>
+                      {locale === 'en-US' ? 'Delete track' : '删除歌曲'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="music-player-track-menu-targets">
+                      {playlistItems
+                        .filter((playlist) => playlist.id !== activePlaylistId)
+                        .map((playlist) => (
+                          <button
+                            key={playlist.id}
+                            type="button"
+                            className="music-player-track-menu-item"
+                            onClick={() => { void handleMoveTrackToPlaylist(playlist.id) }}
+                          >
+                            <span>{playlist.name}</span>
+                            <span className="music-player-track-menu-count">{playlist.trackFiles.length}</span>
+                          </button>
+                        ))}
+                    </div>
+                    {playlistItems.filter((playlist) => playlist.id !== activePlaylistId).length === 0 ? (
+                      <div className="music-player-track-menu-empty">
+                        {locale === 'en-US' ? 'No other list' : '没有其他列表'}
+                      </div>
+                    ) : null}
+                  </>
+                )}
+              </div>, document.body
+            ) : null}
           </section>
         </div>
       </div>
@@ -459,6 +892,59 @@ function formatTime(totalMs: number): string {
 
 function stripAudioExtension(fileName: string): string {
   return fileName.replace(/\.[^.]+$/, '')
+}
+
+function createPlaylistId(): string {
+  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `playlist-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function createDefaultPlaylistStore(trackFiles: string[]): MusicPlaylistStore {
+  const now = new Date().toISOString()
+  return {
+    activePlaylistId: 'default',
+    playlists: [{
+      id: 'default',
+      name: '默认列表',
+      trackFiles: [...trackFiles],
+      createdAt: now,
+      updatedAt: now,
+    }],
+  }
+}
+
+function clonePlaylistStore(store: MusicPlaylistStore): MusicPlaylistStore {
+  return {
+    activePlaylistId: store.activePlaylistId,
+    playlists: store.playlists.map((playlist) => ({
+      ...playlist,
+      trackFiles: [...playlist.trackFiles],
+    })),
+  }
+}
+
+function resolveActivePlaylistId(store: MusicPlaylistStore): string {
+  if (store.playlists.some((playlist) => playlist.id === store.activePlaylistId)) {
+    return store.activePlaylistId
+  }
+  return store.playlists[0]?.id ?? 'default'
+}
+
+function clampMenuCoordinate(value: number, menuSize: number, viewportSize: number): number {
+  const max = Math.max(8, viewportSize - menuSize - 8)
+  return Math.max(8, Math.min(value, max))
+}
+
+function normalizePlaylistStore(store: MusicPlaylistStore | null): MusicPlaylistStore {
+  if (!store || store.playlists.length === 0) {
+    return createDefaultPlaylistStore([])
+  }
+  const nextStore = clonePlaylistStore(store)
+  if (!nextStore.playlists.some((playlist) => playlist.id === nextStore.activePlaylistId)) {
+    nextStore.activePlaylistId = nextStore.playlists[0]?.id ?? 'default'
+  }
+  return nextStore
 }
 
 function PrevTrackIcon() {
@@ -497,6 +983,26 @@ function StopTrackIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M6 6h12v12H6z" />
+    </svg>
+  )
+}
+
+function VolumeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 9h4l5-4v14l-5-4H4z" />
+      <path d="M16.5 8.5a4 4 0 0 1 0 7" />
+      <path d="M18.8 6.2a7 7 0 0 1 0 11.6" />
+    </svg>
+  )
+}
+
+function MuteVolumeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 9h4l5-4v14l-5-4H4z" />
+      <path d="M16 9l5 6" />
+      <path d="M21 9l-5 6" />
     </svg>
   )
 }

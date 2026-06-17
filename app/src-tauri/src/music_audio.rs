@@ -1,7 +1,8 @@
 use crate::music_sound::ensure_music_sound_available;
+use crate::shared_audio::ensure_output_stream_handle;
 use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
 use once_cell::sync::Lazy;
-use rodio::{Decoder, OutputStream, Sink, Source};
+use rodio::{Decoder, Sink, Source};
 use serde::Serialize;
 use std::fs::File;
 use std::io::BufReader;
@@ -17,22 +18,30 @@ use tauri::AppHandle;
 #[derive(Debug, Clone, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicTrackState {
+    pub playlist_id: Option<String>,
     pub file_name: Option<String>,
     pub playing: bool,
     pub paused: bool,
+    pub paused_by_alarm: bool,
     pub position_ms: u64,
     pub duration_ms: Option<u64>,
+    pub volume: f32,
 }
 
 enum AudioCommand {
     Play {
+        playlist_id: String,
         sound_path: String,
         file_name: String,
     },
     Pause,
+    PauseByAlarm,
     Resume,
     Seek {
         position_ms: u64,
+    },
+    SetVolume {
+        volume: f32,
     },
     Stop,
     QueryState {
@@ -42,29 +51,38 @@ enum AudioCommand {
 
 struct PlaybackState {
     file_name: Option<String>,
+    playlist_id: Option<String>,
     sound_path: Option<String>,
     duration: Option<Duration>,
     position: Duration,
     started_at: Option<Instant>,
     playing: bool,
     paused: bool,
+    paused_by_alarm: bool,
+    volume: f32,
 }
 
 struct AudioRuntime {
     sink: Option<Sink>,
-    stream: Option<OutputStream>,
 }
 
 impl PlaybackState {
     fn new() -> Self {
+        Self::new_with_volume(1.0)
+    }
+
+    fn new_with_volume(volume: f32) -> Self {
         Self {
             file_name: None,
+            playlist_id: None,
             sound_path: None,
             duration: None,
             position: Duration::ZERO,
             started_at: None,
             playing: false,
             paused: false,
+            paused_by_alarm: false,
+            volume: clamp_volume(volume),
         }
     }
 
@@ -80,10 +98,13 @@ impl PlaybackState {
     fn snapshot(&self) -> MusicTrackState {
         MusicTrackState {
             file_name: self.file_name.clone(),
+            playlist_id: self.playlist_id.clone(),
             playing: self.playing,
             paused: self.paused,
+            paused_by_alarm: self.paused_by_alarm,
             position_ms: duration_to_millis(self.current_position()),
             duration_ms: self.duration.map(duration_to_millis),
+            volume: self.volume,
         }
     }
 }
@@ -99,20 +120,24 @@ fn millis_to_duration(position_ms: u64) -> Duration {
     Duration::from_millis(position_ms)
 }
 
+fn clamp_volume(volume: f32) -> f32 {
+    volume.clamp(0.0, 1.0)
+}
+
 fn load_duration(sound_path: &str) -> Option<Duration> {
     let file = File::open(sound_path).ok()?;
     let decoder = Decoder::new(BufReader::new(file)).ok()?;
     decoder.total_duration()
 }
 
-fn build_sink() -> std::io::Result<(OutputStream, Sink)> {
-    let (stream, handle) = OutputStream::try_default().map_err(|err| {
-        std::io::Error::new(std::io::ErrorKind::Other, format!("create output stream failed: {err}"))
+fn build_sink() -> std::io::Result<Sink> {
+    let handle = ensure_output_stream_handle().map_err(|err| {
+        std::io::Error::new(std::io::ErrorKind::Other, format!("create shared output stream failed: {err}"))
     })?;
     let sink = Sink::try_new(&handle).map_err(|err| {
         std::io::Error::new(std::io::ErrorKind::Other, format!("create sink failed: {err}"))
     })?;
-    Ok((stream, sink))
+    Ok(sink)
 }
 
 fn play_from_position(
@@ -135,9 +160,7 @@ fn play_from_position(
         active_sink.stop();
     }
     runtime.sink = None;
-    runtime.stream = None;
-
-    let (stream, sink) = build_sink()?;
+    let sink = build_sink()?;
     let file = File::open(sound_path)?;
     let decoder = Decoder::new(BufReader::new(file)).map_err(|err| {
         std::io::Error::new(std::io::ErrorKind::InvalidData, format!("decode track failed: {err}"))
@@ -147,12 +170,12 @@ fn play_from_position(
     if !play_now {
         sink.pause();
     }
+    sink.set_volume(state.volume);
     sink.append(skipped);
     if play_now {
         sink.play();
     }
 
-    runtime.stream = Some(stream);
     runtime.sink = Some(sink);
     state.position = position;
     state.started_at = if play_now { Some(Instant::now()) } else { None };
@@ -171,25 +194,26 @@ fn ensure_worker() -> Sender<AudioCommand> {
     thread::spawn(move || {
         let mut runtime = AudioRuntime {
             sink: None,
-            stream: None,
         };
         let mut state = PlaybackState::new();
 
         loop {
             match rx.recv_timeout(Duration::from_millis(200)) {
                 Ok(command) => match command {
-                AudioCommand::Play { sound_path, file_name } => {
+                AudioCommand::Play { playlist_id, sound_path, file_name } => {
                     state.file_name = Some(file_name);
+                    state.playlist_id = Some(playlist_id);
                     state.sound_path = Some(sound_path.clone());
                     state.position = Duration::ZERO;
                     state.started_at = Some(Instant::now());
                     state.playing = true;
                     state.paused = false;
+                    state.paused_by_alarm = false;
                     state.duration = load_duration(&sound_path);
                     if let Err(err) = play_from_position(&mut runtime, &mut state, Duration::ZERO, true) {
                         eprintln!("[music] play failed: {err}");
                         state = PlaybackState::new();
-                        runtime = AudioRuntime { sink: None, stream: None };
+                        runtime = AudioRuntime { sink: None };
                     }
                     if let Ok(mut snapshot) = PLAYBACK_STATE.lock() {
                         *snapshot = state.snapshot();
@@ -201,6 +225,19 @@ fn ensure_worker() -> Sender<AudioCommand> {
                         state.position = state.current_position();
                         state.started_at = None;
                         state.paused = true;
+                        state.paused_by_alarm = false;
+                    }
+                    if let Ok(mut snapshot) = PLAYBACK_STATE.lock() {
+                        *snapshot = state.snapshot();
+                    }
+                }
+                AudioCommand::PauseByAlarm => {
+                    if let Some(active_sink) = runtime.sink.as_ref() {
+                        active_sink.pause();
+                        state.position = state.current_position();
+                        state.started_at = None;
+                        state.paused = true;
+                        state.paused_by_alarm = true;
                     }
                     if let Ok(mut snapshot) = PLAYBACK_STATE.lock() {
                         *snapshot = state.snapshot();
@@ -210,16 +247,19 @@ fn ensure_worker() -> Sender<AudioCommand> {
                     if state.sound_path.is_some() {
                         if runtime.sink.is_some() {
                             if let Some(active_sink) = runtime.sink.as_ref() {
+                                active_sink.set_volume(state.volume);
                                 active_sink.play();
                             }
                             state.started_at = Some(Instant::now());
                             state.paused = false;
                             state.playing = true;
+                            state.paused_by_alarm = false;
                         } else {
                             let resume_position = state.position;
                             if let Err(err) = play_from_position(&mut runtime, &mut state, resume_position, true) {
                                 eprintln!("[music] resume failed: {err}");
                             }
+                            state.paused_by_alarm = false;
                         }
                     }
                     if let Ok(mut snapshot) = PLAYBACK_STATE.lock() {
@@ -276,12 +316,22 @@ fn ensure_worker() -> Sender<AudioCommand> {
                         *snapshot = state.snapshot();
                     }
                 }
+                AudioCommand::SetVolume { volume } => {
+                    state.volume = clamp_volume(volume);
+                    if let Some(active_sink) = runtime.sink.as_ref() {
+                        active_sink.set_volume(state.volume);
+                    }
+                    if let Ok(mut snapshot) = PLAYBACK_STATE.lock() {
+                        *snapshot = state.snapshot();
+                    }
+                }
                 AudioCommand::Stop => {
                     if let Some(active_sink) = runtime.sink.as_ref() {
                         active_sink.stop();
                     }
-                    state = PlaybackState::new();
-                    runtime = AudioRuntime { sink: None, stream: None };
+                    let volume = state.volume;
+                    state = PlaybackState::new_with_volume(volume);
+                    runtime = AudioRuntime { sink: None };
                     if let Ok(mut snapshot) = PLAYBACK_STATE.lock() {
                         *snapshot = state.snapshot();
                     }
@@ -305,7 +355,6 @@ fn ensure_worker() -> Sender<AudioCommand> {
                                 *snapshot = state.snapshot();
                             }
                             runtime.sink = None;
-                            runtime.stream = None;
                         }
                     }
                 }
@@ -319,7 +368,11 @@ fn ensure_worker() -> Sender<AudioCommand> {
 }
 
 #[tauri::command]
-pub async fn play_music_track(app: AppHandle, music_sound_file: String) -> ResultPayload<()> {
+pub async fn play_music_track(
+    app: AppHandle,
+    playlist_id: String,
+    music_sound_file: String,
+) -> ResultPayload<()> {
     let trace = new_trace_id();
     let file_name = music_sound_file.trim();
     if file_name.is_empty() {
@@ -327,7 +380,7 @@ pub async fn play_music_track(app: AppHandle, music_sound_file: String) -> Resul
     }
 
     let sender = ensure_worker();
-    let sound_path = match ensure_music_sound_available(&app, file_name).await {
+    let sound_path = match ensure_music_sound_available(&app, &playlist_id, file_name).await {
         Ok(path) => path.to_string_lossy().to_string(),
         Err(err) => {
             return err_payload(
@@ -339,6 +392,7 @@ pub async fn play_music_track(app: AppHandle, music_sound_file: String) -> Resul
     };
 
     if let Err(err) = sender.send(AudioCommand::Play {
+        playlist_id,
         sound_path,
         file_name: file_name.to_string(),
     }) {
@@ -360,6 +414,23 @@ pub async fn pause_music_track() -> ResultPayload<()> {
                 return err_payload(
                     ErrorCode::IoError,
                     format!("发送音乐暂停指令失败: {err}"),
+                    trace,
+                );
+            }
+        }
+    }
+    ok((), trace)
+}
+
+#[tauri::command]
+pub async fn pause_music_track_by_alarm() -> ResultPayload<()> {
+    let trace = new_trace_id();
+    if let Ok(guard) = AUDIO_WORKER.lock() {
+        if let Some(sender) = guard.as_ref() {
+            if let Err(err) = sender.send(AudioCommand::PauseByAlarm) {
+                return err_payload(
+                    ErrorCode::IoError,
+                    format!("发送音乐闹钟暂停指令失败: {err}"),
                     trace,
                 );
             }
@@ -394,6 +465,23 @@ pub async fn seek_music_track(position_ms: u64) -> ResultPayload<()> {
                 return err_payload(
                     ErrorCode::IoError,
                     format!("发送音乐定位指令失败: {err}"),
+                    trace,
+                );
+            }
+        }
+    }
+    ok((), trace)
+}
+
+#[tauri::command]
+pub async fn set_music_track_volume(volume: f32) -> ResultPayload<()> {
+    let trace = new_trace_id();
+    if let Ok(guard) = AUDIO_WORKER.lock() {
+        if let Some(sender) = guard.as_ref() {
+            if let Err(err) = sender.send(AudioCommand::SetVolume { volume }) {
+                return err_payload(
+                    ErrorCode::IoError,
+                    format!("发送音乐音量指令失败: {err}"),
                     trace,
                 );
             }
@@ -450,6 +538,7 @@ pub async fn get_music_track_state() -> ResultPayload<MusicTrackState> {
 #[tauri::command]
 pub async fn get_music_track_duration(
     app: AppHandle,
+    playlist_id: String,
     music_sound_file: String,
 ) -> ResultPayload<Option<u64>> {
     let trace = new_trace_id();
@@ -458,7 +547,7 @@ pub async fn get_music_track_duration(
         return ok(None, trace);
     }
 
-    let sound_path = match ensure_music_sound_available(&app, file_name).await {
+    let sound_path = match ensure_music_sound_available(&app, &playlist_id, file_name).await {
         Ok(path) => path,
         Err(err) => {
             return err_payload(
