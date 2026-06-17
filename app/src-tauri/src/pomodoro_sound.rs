@@ -1,4 +1,6 @@
-use crate::alarm_sound::{ensure_alarm_sound_available, import_alarm_sound, list_alarm_sound_files};
+use crate::alarm_sound::{
+    ensure_alarm_sound_available, import_alarm_sound, list_alarm_sound_files,
+};
 use crate::ResultPayload;
 use serde::Serialize;
 use std::path::PathBuf;

@@ -1,5 +1,5 @@
-use crate::haomd_paths::haomd_config_subdir;
 use super::*;
+use crate::haomd_paths::haomd_config_subdir;
 use std::process::Command;
 
 pub(crate) const WORD_TEMPLATE_JSON_FILE: &str = "template.json";

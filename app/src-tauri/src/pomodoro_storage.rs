@@ -1,5 +1,7 @@
+use crate::pomodoro_paths::{
+    ensure_pomodoro_root_dir, legacy_pomodoro_root_dir, pomodoro_root_dir,
+};
 use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
-use crate::pomodoro_paths::{ensure_pomodoro_root_dir, legacy_pomodoro_root_dir, pomodoro_root_dir};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tauri::AppHandle;
@@ -85,7 +87,10 @@ where
     fs::write(path, json).await
 }
 
-async fn ensure_legacy_state_migrated(app: &AppHandle, current_path: &PathBuf) -> std::io::Result<()> {
+async fn ensure_legacy_state_migrated(
+    app: &AppHandle,
+    current_path: &PathBuf,
+) -> std::io::Result<()> {
     if fs::metadata(current_path).await.is_ok() {
         return Ok(());
     }
@@ -144,10 +149,7 @@ pub async fn load_pomodoro_state(app: AppHandle) -> ResultPayload<PomodoroStateR
 }
 
 #[tauri::command]
-pub async fn save_pomodoro_state(
-    app: AppHandle,
-    state: PomodoroStateRecord,
-) -> ResultPayload<()> {
+pub async fn save_pomodoro_state(app: AppHandle, state: PomodoroStateRecord) -> ResultPayload<()> {
     let trace = new_trace_id();
     let _root = match ensure_pomodoro_root_dir(&app).await {
         Ok(root) => root,

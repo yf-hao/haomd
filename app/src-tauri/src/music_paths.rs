@@ -25,13 +25,19 @@ pub async fn ensure_music_root_dir(app: &AppHandle) -> std::io::Result<PathBuf> 
     Ok(root)
 }
 
-pub async fn ensure_music_playlist_dir(app: &AppHandle, playlist_id: &str) -> std::io::Result<PathBuf> {
+pub async fn ensure_music_playlist_dir(
+    app: &AppHandle,
+    playlist_id: &str,
+) -> std::io::Result<PathBuf> {
     let dir = music_playlist_dir(app, playlist_id)?;
     fs::create_dir_all(&dir).await?;
     Ok(dir)
 }
 
-pub async fn ensure_music_playlist_tracks_dir(app: &AppHandle, playlist_id: &str) -> std::io::Result<PathBuf> {
+pub async fn ensure_music_playlist_tracks_dir(
+    app: &AppHandle,
+    playlist_id: &str,
+) -> std::io::Result<PathBuf> {
     let dir = music_playlist_tracks_dir(app, playlist_id)?;
     fs::create_dir_all(&dir).await?;
     Ok(dir)

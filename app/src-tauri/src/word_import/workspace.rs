@@ -1,6 +1,4 @@
-use super::types::{
-    FinalizedImportedWordDocument, ImportedWordDocument, ImportedWordImageAsset,
-};
+use super::types::{FinalizedImportedWordDocument, ImportedWordDocument, ImportedWordImageAsset};
 use rand::Rng;
 use std::path::{Path, PathBuf};
 
@@ -50,11 +48,14 @@ pub fn finalize_workspace(
 
     let temp_images_dir = temp_dir.join("images");
     let target_assets_dir = parent.join("images").join(base_name);
-    std::fs::create_dir_all(&target_assets_dir).map_err(|e| format!("创建目标图片目录失败: {e}"))?;
+    std::fs::create_dir_all(&target_assets_dir)
+        .map_err(|e| format!("创建目标图片目录失败: {e}"))?;
 
     let mut final_markdown = markdown.replace("\r\n", "\n");
     if temp_images_dir.is_dir() {
-        for entry in std::fs::read_dir(&temp_images_dir).map_err(|e| format!("读取临时图片目录失败: {e}"))? {
+        for entry in
+            std::fs::read_dir(&temp_images_dir).map_err(|e| format!("读取临时图片目录失败: {e}"))?
+        {
             let entry = entry.map_err(|e| format!("读取临时图片目录项失败: {e}"))?;
             if !entry.path().is_file() {
                 continue;
@@ -69,7 +70,8 @@ pub fn finalize_workspace(
         }
     }
 
-    std::fs::write(output_path, &final_markdown).map_err(|e| format!("写入 Markdown 文件失败: {e}"))?;
+    std::fs::write(output_path, &final_markdown)
+        .map_err(|e| format!("写入 Markdown 文件失败: {e}"))?;
     cleanup_workspace(temp_dir)?;
 
     Ok(FinalizedImportedWordDocument {
@@ -91,7 +93,8 @@ pub fn cleanup_all_workspaces() -> Result<(), String> {
     if !root.exists() {
         return Ok(());
     }
-    for entry in std::fs::read_dir(&root).map_err(|e| format!("读取 Word 导入临时目录失败: {e}"))? {
+    for entry in std::fs::read_dir(&root).map_err(|e| format!("读取 Word 导入临时目录失败: {e}"))?
+    {
         let entry = entry.map_err(|e| format!("读取 Word 导入临时目录项失败: {e}"))?;
         let path = entry.path();
         if path.is_dir() {

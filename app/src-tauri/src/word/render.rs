@@ -1903,8 +1903,7 @@ pub(crate) fn build_content_types_xml_with_template(
             "{}",
             r#"</Types>"#
         ),
-        defaults_xml,
-        overrides_xml
+        defaults_xml, overrides_xml
     )
 }
 

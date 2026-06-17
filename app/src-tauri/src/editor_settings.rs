@@ -1,8 +1,8 @@
+use crate::haomd_paths::{haomd_config_file, haomd_config_subdir};
 use crate::{
     err_payload, new_trace_id, ok, word::WordExportStyleSettingsCfg,
     word::WordExportStyleSettingsResolved, ErrorCode, ResultPayload,
 };
-use crate::haomd_paths::{haomd_config_file, haomd_config_subdir};
 use image::ImageFormat;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

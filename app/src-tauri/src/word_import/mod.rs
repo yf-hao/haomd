@@ -6,7 +6,9 @@ mod workspace;
 pub use types::{FinalizedImportedWordDocument, ImportedWordDocument};
 
 #[tauri::command]
-pub async fn import_word_docx_to_temp_markdown(path: String) -> Result<ImportedWordDocument, String> {
+pub async fn import_word_docx_to_temp_markdown(
+    path: String,
+) -> Result<ImportedWordDocument, String> {
     let source_path = std::path::PathBuf::from(path);
     let parsed = docx::import_docx(&source_path)?;
     let markdown = markdown::render_markdown(&parsed.blocks);

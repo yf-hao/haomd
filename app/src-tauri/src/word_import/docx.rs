@@ -37,7 +37,10 @@ impl ImageRegistry {
             .unwrap_or("png");
         let file_name = format!("image-{}.{}", self.counter, ext.to_ascii_lowercase());
         self.assigned.insert(normalized, file_name.clone());
-        self.emitted.push(ImportedWordImageAsset { file_name: file_name.clone(), bytes });
+        self.emitted.push(ImportedWordImageAsset {
+            file_name: file_name.clone(),
+            bytes,
+        });
         Some(file_name)
     }
 }
@@ -58,7 +61,13 @@ pub fn import_docx(path: &Path) -> Result<ParsedImportedWordDocument, String> {
         media,
         ..Default::default()
     };
-    let blocks = parse_document(&document_xml, &relationships, &numbering, &mut image_registry, &mut warnings)?;
+    let blocks = parse_document(
+        &document_xml,
+        &relationships,
+        &numbering,
+        &mut image_registry,
+        &mut warnings,
+    )?;
 
     Ok(ParsedImportedWordDocument {
         blocks,
@@ -85,8 +94,13 @@ fn parse_document(
                 if local_name(event.name().as_ref()) == b"body" {
                     in_body = true;
                 } else if in_body && local_name(event.name().as_ref()) == b"p" {
-                    let paragraph =
-                        parse_paragraph(&mut reader, relationships, numbering, image_registry, warnings)?;
+                    let paragraph = parse_paragraph(
+                        &mut reader,
+                        relationships,
+                        numbering,
+                        image_registry,
+                        warnings,
+                    )?;
                     blocks.push(ImportedWordBlock::Paragraph(paragraph));
                 } else if in_body && local_name(event.name().as_ref()) == b"tbl" {
                     let table = parse_table(&mut reader, relationships, image_registry, warnings)?;
@@ -122,12 +136,20 @@ fn parse_paragraph(
     loop {
         match reader.read_event() {
             Ok(Event::Start(event)) => match local_name(event.name().as_ref()) {
-                b"pPr" => parse_paragraph_properties(reader, &mut style_id, &mut num_id, &mut level)?,
+                b"pPr" => {
+                    parse_paragraph_properties(reader, &mut style_id, &mut num_id, &mut level)?
+                }
                 b"r" => {
                     inlines.extend(parse_run(reader, relationships, image_registry, warnings)?);
                 }
                 b"hyperlink" => {
-                    inlines.extend(parse_hyperlink(reader, &event, relationships, image_registry, warnings)?);
+                    inlines.extend(parse_hyperlink(
+                        reader,
+                        &event,
+                        relationships,
+                        image_registry,
+                        warnings,
+                    )?);
                 }
                 _ => {}
             },
@@ -307,12 +329,14 @@ fn parse_run_properties(
 ) -> Result<(), String> {
     loop {
         match reader.read_event() {
-            Ok(Event::Start(event)) | Ok(Event::Empty(event)) => match local_name(event.name().as_ref()) {
-                b"b" => *bold = true,
-                b"i" => *italic = true,
-                b"strike" | b"dstrike" => *strike = true,
-                _ => {}
-            },
+            Ok(Event::Start(event)) | Ok(Event::Empty(event)) => {
+                match local_name(event.name().as_ref()) {
+                    b"b" => *bold = true,
+                    b"i" => *italic = true,
+                    b"strike" | b"dstrike" => *strike = true,
+                    _ => {}
+                }
+            }
             Ok(Event::End(event)) => {
                 if local_name(event.name().as_ref()) == b"rPr" {
                     break;
@@ -351,7 +375,9 @@ fn parse_drawing(
         }
     }
 
-    let Some(embed_id) = embed_id else { return Ok(None) };
+    let Some(embed_id) = embed_id else {
+        return Ok(None);
+    };
     let Some(rel) = relationships.get(&embed_id) else {
         warnings.push(format!("忽略未解析的图片关系: {embed_id}"));
         return Ok(None);
@@ -432,7 +458,12 @@ fn parse_table(
         match reader.read_event() {
             Ok(Event::Start(event)) => {
                 if local_name(event.name().as_ref()) == b"tr" {
-                    rows.push(parse_table_row(reader, relationships, image_registry, warnings)?);
+                    rows.push(parse_table_row(
+                        reader,
+                        relationships,
+                        image_registry,
+                        warnings,
+                    )?);
                 }
             }
             Ok(Event::End(event)) => {
@@ -460,7 +491,12 @@ fn parse_table_row(
         match reader.read_event() {
             Ok(Event::Start(event)) => {
                 if local_name(event.name().as_ref()) == b"tc" {
-                    cells.push(parse_table_cell(reader, relationships, image_registry, warnings)?);
+                    cells.push(parse_table_cell(
+                        reader,
+                        relationships,
+                        image_registry,
+                        warnings,
+                    )?);
                 }
             }
             Ok(Event::End(event)) => {
@@ -487,8 +523,13 @@ fn parse_table_cell(
         match reader.read_event() {
             Ok(Event::Start(event)) => {
                 if local_name(event.name().as_ref()) == b"p" {
-                    let paragraph =
-                        parse_paragraph(reader, relationships, &HashMap::new(), image_registry, warnings)?;
+                    let paragraph = parse_paragraph(
+                        reader,
+                        relationships,
+                        &HashMap::new(),
+                        image_registry,
+                        warnings,
+                    )?;
                     let text = flatten_inlines(&paragraph.inlines).trim().to_string();
                     if !text.is_empty() {
                         parts.push(text);
@@ -575,24 +616,28 @@ fn read_numbering_map<R: Read + Seek>(
 
     loop {
         match reader.read_event() {
-            Ok(Event::Start(event)) | Ok(Event::Empty(event)) => match local_name(event.name().as_ref()) {
-                b"abstractNum" => current_abstract = read_named_attr(&event, &reader, b"abstractNumId")?,
-                b"num" => current_num = read_named_attr(&event, &reader, b"numId")?,
-                b"numFmt" => {
-                    if let Some(abstract_id) = current_abstract.clone() {
-                        let value = read_val_attr(&event, &reader)?.unwrap_or_default();
-                        abstract_map.insert(abstract_id, value != "bullet");
+            Ok(Event::Start(event)) | Ok(Event::Empty(event)) => {
+                match local_name(event.name().as_ref()) {
+                    b"abstractNum" => {
+                        current_abstract = read_named_attr(&event, &reader, b"abstractNumId")?
                     }
-                }
-                b"abstractNumId" => {
-                    if let Some(num_id) = current_num.clone() {
-                        if let Some(value) = read_val_attr(&event, &reader)? {
-                            num_map.insert(num_id, value);
+                    b"num" => current_num = read_named_attr(&event, &reader, b"numId")?,
+                    b"numFmt" => {
+                        if let Some(abstract_id) = current_abstract.clone() {
+                            let value = read_val_attr(&event, &reader)?.unwrap_or_default();
+                            abstract_map.insert(abstract_id, value != "bullet");
                         }
                     }
+                    b"abstractNumId" => {
+                        if let Some(num_id) = current_num.clone() {
+                            if let Some(value) = read_val_attr(&event, &reader)? {
+                                num_map.insert(num_id, value);
+                            }
+                        }
+                    }
+                    _ => {}
                 }
-                _ => {}
-            },
+            }
             Ok(Event::End(event)) => match local_name(event.name().as_ref()) {
                 b"abstractNum" => current_abstract = None,
                 b"num" => current_num = None,
@@ -606,7 +651,12 @@ fn read_numbering_map<R: Read + Seek>(
 
     Ok(num_map
         .into_iter()
-        .filter_map(|(num_id, abstract_id)| abstract_map.get(&abstract_id).copied().map(|ordered| (num_id, ordered)))
+        .filter_map(|(num_id, abstract_id)| {
+            abstract_map
+                .get(&abstract_id)
+                .copied()
+                .map(|ordered| (num_id, ordered))
+        })
         .collect())
 }
 
@@ -638,8 +688,7 @@ fn read_required_string<R: Read + Seek>(
     archive: &mut zip::ZipArchive<R>,
     path: &str,
 ) -> Result<String, String> {
-    read_optional_string(archive, path)?
-        .ok_or_else(|| format!("Word 文档缺少必需条目: {path}"))
+    read_optional_string(archive, path)?.ok_or_else(|| format!("Word 文档缺少必需条目: {path}"))
 }
 
 fn read_optional_string<R: Read + Seek>(
@@ -744,10 +793,7 @@ fn read_text_node(reader: &mut Reader<&[u8]>, end_name: &[u8]) -> Result<String,
     Ok(out)
 }
 
-fn read_val_attr(
-    event: &BytesStart<'_>,
-    reader: &Reader<&[u8]>,
-) -> Result<Option<String>, String> {
+fn read_val_attr(event: &BytesStart<'_>, reader: &Reader<&[u8]>) -> Result<Option<String>, String> {
     read_named_attr(event, reader, b"val")
 }
 

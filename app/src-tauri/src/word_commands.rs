@@ -1,8 +1,8 @@
 use crate::{
-    build_template_replacements, build_word_export_workspace, build_word_export_workspace_with_template,
-    load_word_template_docx_overlay, new_trace_id, package_docx_workspace,
-    resolve_word_template_docx_path, resolve_word_template_paths, rewrite_docx_template,
-    WordBlockCfg, WordDocPayloadCfg, WordTemplateConfigCfg,
+    build_template_replacements, build_word_export_workspace,
+    build_word_export_workspace_with_template, load_word_template_docx_overlay, new_trace_id,
+    package_docx_workspace, resolve_word_template_docx_path, resolve_word_template_paths,
+    rewrite_docx_template, WordBlockCfg, WordDocPayloadCfg, WordTemplateConfigCfg,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

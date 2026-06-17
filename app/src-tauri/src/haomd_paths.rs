@@ -14,11 +14,17 @@ pub fn haomd_config_root_dir<R: Runtime>(app: &AppHandle<R>) -> std::io::Result<
     Ok(dir)
 }
 
-pub fn haomd_config_file<R: Runtime>(app: &AppHandle<R>, file_name: &str) -> std::io::Result<PathBuf> {
+pub fn haomd_config_file<R: Runtime>(
+    app: &AppHandle<R>,
+    file_name: &str,
+) -> std::io::Result<PathBuf> {
     Ok(haomd_config_root_dir(app)?.join(file_name))
 }
 
-pub fn haomd_config_subdir<R: Runtime>(app: &AppHandle<R>, subdir: &str) -> std::io::Result<PathBuf> {
+pub fn haomd_config_subdir<R: Runtime>(
+    app: &AppHandle<R>,
+    subdir: &str,
+) -> std::io::Result<PathBuf> {
     let dir = haomd_config_root_dir(app)?.join(subdir);
     std::fs::create_dir_all(&dir)?;
     Ok(dir)

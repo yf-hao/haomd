@@ -109,10 +109,8 @@ fn backup_root_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
 }
 
 fn backup_temp_dir(prefix: &str) -> std::io::Result<PathBuf> {
-    let dir = std::env::temp_dir().join(format!(
-        "{prefix}-{}",
-        new_trace_id().replace("trace_", "")
-    ));
+    let dir =
+        std::env::temp_dir().join(format!("{prefix}-{}", new_trace_id().replace("trace_", "")));
     std::fs::create_dir_all(&dir)?;
     Ok(dir)
 }
@@ -179,11 +177,10 @@ fn copy_tree_contents(
         return Ok(());
     }
 
-    std::fs::create_dir_all(target_dir)
-        .map_err(|err| format!("创建备份暂存目录失败: {err}"))?;
+    std::fs::create_dir_all(target_dir).map_err(|err| format!("创建备份暂存目录失败: {err}"))?;
 
-    for entry in std::fs::read_dir(source_dir)
-        .map_err(|err| format!("读取备份来源目录失败: {err}"))?
+    for entry in
+        std::fs::read_dir(source_dir).map_err(|err| format!("读取备份来源目录失败: {err}"))?
     {
         let entry = entry.map_err(|err| format!("读取备份来源目录失败: {err}"))?;
         let entry_path = entry.path();
@@ -221,15 +218,16 @@ fn copy_tree_contents(
 }
 
 fn read_notes_directory(app: &AppHandle) -> Result<Option<PathBuf>, String> {
-    let path = notes_config_path(app).map_err(|err| format!("获取 notes_config 路径失败: {err}"))?;
+    let path =
+        notes_config_path(app).map_err(|err| format!("获取 notes_config 路径失败: {err}"))?;
     let bytes = match std::fs::read(&path) {
         Ok(bytes) => bytes,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(err) => return Err(format!("读取 notes_config 失败: {err}")),
     };
 
-    let config: crate::notes_config::NotesConfigData = serde_json::from_slice(&bytes)
-        .map_err(|err| format!("解析 notes_config 失败: {err}"))?;
+    let config: crate::notes_config::NotesConfigData =
+        serde_json::from_slice(&bytes).map_err(|err| format!("解析 notes_config 失败: {err}"))?;
     let Some(notes_directory) = config.notes_directory.as_deref() else {
         return Ok(None);
     };
@@ -240,7 +238,10 @@ fn read_notes_directory(app: &AppHandle) -> Result<Option<PathBuf>, String> {
     Ok(Some(target))
 }
 
-fn build_backup_manifest(app: &AppHandle, scope_settings: &BackupScopeSettingsCfg) -> Result<BackupManifest, String> {
+fn build_backup_manifest(
+    app: &AppHandle,
+    scope_settings: &BackupScopeSettingsCfg,
+) -> Result<BackupManifest, String> {
     let mut scopes = Vec::new();
 
     if scope_settings.music {
@@ -270,10 +271,7 @@ fn build_backup_manifest(app: &AppHandle, scope_settings: &BackupScopeSettingsCf
         }
     }
 
-    Ok(BackupManifest {
-        version: 1,
-        scopes,
-    })
+    Ok(BackupManifest { version: 1, scopes })
 }
 
 fn build_document_root_entries(document_roots: &[String]) -> Vec<DocumentRootIndexEntry> {
@@ -298,8 +296,8 @@ async fn build_backup_package(
     document_roots: &[String],
 ) -> Result<BackupPackage, String> {
     let config_root = backup_root_dir(app).map_err(|err| format!("获取备份根目录失败: {err}"))?;
-    let temp_dir = backup_temp_dir("haomd-backup")
-        .map_err(|err| format!("创建备份暂存目录失败: {err}"))?;
+    let temp_dir =
+        backup_temp_dir("haomd-backup").map_err(|err| format!("创建备份暂存目录失败: {err}"))?;
     let package_root = temp_dir.clone();
     let result = (|| -> Result<BackupPackage, String> {
         copy_tree_contents(
@@ -395,7 +393,9 @@ fn matches_backup_scope(relative: &Path, manifest: Option<&BackupManifest>) -> b
     })
 }
 
-fn read_manifest_from_zip<R: Read + Seek>(archive: &mut ZipArchive<R>) -> Result<Option<BackupManifest>, String> {
+fn read_manifest_from_zip<R: Read + Seek>(
+    archive: &mut ZipArchive<R>,
+) -> Result<Option<BackupManifest>, String> {
     let Ok(mut entry) = archive.by_name(BACKUP_MANIFEST_FILE) else {
         return Ok(None);
     };
@@ -801,7 +801,15 @@ async fn sync_directory_to_webdav(
     remote_root: &str,
     skip_relative: Option<fn(&Path) -> bool>,
 ) -> Result<WebDavBackupUploadSummary, String> {
-    upload_directory_to_webdav(root, base_url, username, password, remote_root, skip_relative).await
+    upload_directory_to_webdav(
+        root,
+        base_url,
+        username,
+        password,
+        remote_root,
+        skip_relative,
+    )
+    .await
 }
 
 async fn delete_scope_remote_tree(
@@ -811,7 +819,9 @@ async fn delete_scope_remote_tree(
     remote_root: &str,
 ) -> Result<(), String> {
     let client = Client::new();
-    let Some(index) = fetch_remote_sync_index(&client, base_url, username, password, remote_root).await? else {
+    let Some(index) =
+        fetch_remote_sync_index(&client, base_url, username, password, remote_root).await?
+    else {
         return Ok(());
     };
 
@@ -890,8 +900,8 @@ async fn save_document_root_index(
         base_url,
         &join_remote_relative(&remote_prefix, ".haomd-root-index.json"),
     );
-    let bytes = serde_json::to_vec_pretty(index)
-        .map_err(|err| format!("序列化文档根索引失败: {err}"))?;
+    let bytes =
+        serde_json::to_vec_pretty(index).map_err(|err| format!("序列化文档根索引失败: {err}"))?;
     let response = webdav_request(&client, Method::PUT, &target, username, password)
         .header(
             reqwest::header::CONTENT_TYPE,
@@ -915,7 +925,15 @@ async fn sync_single_scope_to_webdav(
     remote_root: &str,
     skip_relative: Option<fn(&Path) -> bool>,
 ) -> Result<WebDavBackupUploadSummary, String> {
-    sync_directory_to_webdav(local_root, base_url, username, password, remote_root, skip_relative).await
+    sync_directory_to_webdav(
+        local_root,
+        base_url,
+        username,
+        password,
+        remote_root,
+        skip_relative,
+    )
+    .await
 }
 
 fn build_sync_plan(local: &WebDavSyncIndex, remote: Option<&WebDavSyncIndex>) -> WebDavSyncPlan {
@@ -1070,7 +1088,8 @@ async fn download_directory_from_webdav(
     let index = fetch_remote_sync_index(&client, base_url, username, password, remote_root)
         .await?
         .ok_or_else(|| "读取同步索引失败: 远端未找到索引文件".to_string())?;
-    let manifest = fetch_remote_manifest(&client, base_url, username, password, remote_root).await?;
+    let manifest =
+        fetch_remote_manifest(&client, base_url, username, password, remote_root).await?;
 
     for entry in index.files {
         let relative = entry.path;
@@ -1369,10 +1388,11 @@ pub async fn export_settings_backup_to_webdav(
             .iter()
             .map(|entry| entry.id.clone())
             .collect::<std::collections::HashSet<_>>();
-        let remote_index = match load_document_root_index(&base_url, &username, &password, &remote_root).await {
-            Ok(index) => index,
-            Err(message) => return err_payload(ErrorCode::UNKNOWN, message, trace),
-        };
+        let remote_index =
+            match load_document_root_index(&base_url, &username, &password, &remote_root).await {
+                Ok(index) => index,
+                Err(message) => return err_payload(ErrorCode::UNKNOWN, message, trace),
+            };
 
         if let Some(remote_index) = remote_index.as_ref() {
             incremental = true;
@@ -1380,12 +1400,11 @@ pub async fn export_settings_backup_to_webdav(
                 if current_ids.contains(&entry.id) {
                     continue;
                 }
-                let stale_remote_root = build_remote_prefix(
-                    &build_remote_prefix(&remote_root, "documents"),
-                    &entry.id,
-                );
+                let stale_remote_root =
+                    build_remote_prefix(&build_remote_prefix(&remote_root, "documents"), &entry.id);
                 if let Err(message) =
-                    delete_scope_remote_tree(&base_url, &username, &password, &stale_remote_root).await
+                    delete_scope_remote_tree(&base_url, &username, &password, &stale_remote_root)
+                        .await
                 {
                     return err_payload(ErrorCode::UNKNOWN, message, trace);
                 }
@@ -1400,10 +1419,8 @@ pub async fn export_settings_backup_to_webdav(
             if !local_root.exists() {
                 continue;
             }
-            let docs_remote_root = build_remote_prefix(
-                &build_remote_prefix(&remote_root, "documents"),
-                &entry.id,
-            );
+            let docs_remote_root =
+                build_remote_prefix(&build_remote_prefix(&remote_root, "documents"), &entry.id);
             match sync_single_scope_to_webdav(
                 &local_root,
                 &base_url,
@@ -1573,28 +1590,51 @@ pub async fn import_settings_backup_from_webdav(
             )
         }
     };
-        if let Err(message) =
-            download_directory_from_webdav(&music_root, &base_url, &username, &password, &music_remote_root, None).await
-        {
-            return err_payload(ErrorCode::UNKNOWN, message, trace);
-        }
+    if let Err(message) = download_directory_from_webdav(
+        &music_root,
+        &base_url,
+        &username,
+        &password,
+        &music_remote_root,
+        None,
+    )
+    .await
+    {
+        return err_payload(ErrorCode::UNKNOWN, message, trace);
+    }
 
     if let Ok(Some(notes_root)) = read_notes_directory(&app) {
         let notes_remote_root = build_remote_prefix(&remote_root, "notes");
-        if let Err(message) =
-            download_directory_from_webdav(&notes_root, &base_url, &username, &password, &notes_remote_root, None).await
+        if let Err(message) = download_directory_from_webdav(
+            &notes_root,
+            &base_url,
+            &username,
+            &password,
+            &notes_remote_root,
+            None,
+        )
+        .await
         {
             return err_payload(ErrorCode::UNKNOWN, message, trace);
         }
     }
 
-    if let Ok(Some(index)) = load_document_root_index(&base_url, &username, &password, &remote_root).await {
+    if let Ok(Some(index)) =
+        load_document_root_index(&base_url, &username, &password, &remote_root).await
+    {
         let docs_remote_root = build_remote_prefix(&remote_root, "documents");
         for entry in index.roots {
             if let Some(target_root) = decode_path_key(&entry.id) {
                 let scope_remote_root = build_remote_prefix(&docs_remote_root, &entry.id);
-                if let Err(message) =
-                    download_directory_from_webdav(&target_root, &base_url, &username, &password, &scope_remote_root, None).await
+                if let Err(message) = download_directory_from_webdav(
+                    &target_root,
+                    &base_url,
+                    &username,
+                    &password,
+                    &scope_remote_root,
+                    None,
+                )
+                .await
                 {
                     return err_payload(ErrorCode::UNKNOWN, message, trace);
                 }

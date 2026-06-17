@@ -20,7 +20,10 @@ pub async fn ensure_pomodoro_root_dir(app: &AppHandle) -> std::io::Result<PathBu
     Ok(root)
 }
 
-async fn migrate_legacy_pomodoro_root(app: &AppHandle, target_root: &PathBuf) -> std::io::Result<()> {
+async fn migrate_legacy_pomodoro_root(
+    app: &AppHandle,
+    target_root: &PathBuf,
+) -> std::io::Result<()> {
     let legacy_root = legacy_pomodoro_root_dir(app)?;
     if legacy_root == *target_root {
         return Ok(());

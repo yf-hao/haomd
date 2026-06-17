@@ -60,6 +60,28 @@ export function AlarmDialog({ open, onClose }: AlarmDialogProps) {
     })
   }, [rules])
 
+  function resetDraft() {
+    const today = toDateKey(new Date())
+    setSelectedRuleId(null)
+    setDraftTitle('')
+    setDraftType('single')
+    setDraftDate(today)
+    setDraftStartDate(today)
+    setDraftTime('08:00')
+    setDraftFrequency('weekly')
+    setDraftWeekdays([new Date().getDay()])
+    setDraftUntilDate('')
+    setDraftEnabled(true)
+    setDraftSoundFile(null)
+    setSoundPickerOpen(false)
+    setHoveredSoundFile(null)
+    void loadLatestAlarmSoundFile().then((fileName) => {
+      if (selectedRuleIdRef.current === null) {
+        setDraftSoundFile(fileName)
+      }
+    })
+  }
+
   useEffect(() => {
     if (!open) return
     queueMicrotask(() => titleInputRef.current?.focus())
@@ -98,28 +120,6 @@ export function AlarmDialog({ open, onClose }: AlarmDialogProps) {
   function persistRules(next: AlarmRule[]) {
     setRules(next)
     void saveAlarmRules(next)
-  }
-
-  function resetDraft() {
-    const today = toDateKey(new Date())
-    setSelectedRuleId(null)
-    setDraftTitle('')
-    setDraftType('single')
-    setDraftDate(today)
-    setDraftStartDate(today)
-    setDraftTime('08:00')
-    setDraftFrequency('weekly')
-    setDraftWeekdays([new Date().getDay()])
-    setDraftUntilDate('')
-    setDraftEnabled(true)
-    setDraftSoundFile(null)
-    setSoundPickerOpen(false)
-    setHoveredSoundFile(null)
-    void loadLatestAlarmSoundFile().then((fileName) => {
-      if (selectedRuleIdRef.current === null) {
-        setDraftSoundFile(fileName)
-      }
-    })
   }
 
   function handleSelectRule(rule: AlarmRule) {

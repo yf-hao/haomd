@@ -1,9 +1,9 @@
 use super::super::*;
 use super::model::*;
 use super::render::*;
-use std::collections::HashMap;
 use quick_xml::events::Event;
 use quick_xml::Reader;
+use std::collections::HashMap;
 
 pub(crate) fn resolve_word_template_paths(
     app: &AppHandle,
@@ -149,19 +149,15 @@ pub(crate) fn load_word_template_docx_overlay(
     let styles_xml = read_optional_docx_entry_as_string(&mut archive, "word/styles.xml")?;
     let document_xml = read_optional_docx_entry_as_string(&mut archive, "word/document.xml")?;
     let document_relationships = read_document_relationships(&mut archive)?;
-    let (content_type_defaults, content_type_overrides) =
-        read_content_type_maps(&mut archive)?;
+    let (content_type_defaults, content_type_overrides) = read_content_type_maps(&mut archive)?;
     let additional_parts = collect_template_additional_parts(&mut archive)?;
     let available_style_ids = styles_xml
         .as_deref()
         .map(parse_style_ids_from_styles_xml)
         .transpose()?
         .unwrap_or_default();
-    let (
-        styles_relationship_id,
-        numbering_relationship_id,
-        next_available_relationship_id,
-    ) = reserve_relationship_ids(&document_relationships);
+    let (styles_relationship_id, numbering_relationship_id, next_available_relationship_id) =
+        reserve_relationship_ids(&document_relationships);
 
     Ok(WordTemplateDocxOverlay {
         styles_xml,
@@ -271,7 +267,8 @@ fn read_optional_docx_entry_as_string<R: Read + std::io::Seek>(
 fn read_document_relationships<R: Read + std::io::Seek>(
     archive: &mut zip::ZipArchive<R>,
 ) -> Result<Vec<WordTemplateDocxRelationship>, String> {
-    let Some(xml) = read_optional_docx_entry_as_string(archive, "word/_rels/document.xml.rels")? else {
+    let Some(xml) = read_optional_docx_entry_as_string(archive, "word/_rels/document.xml.rels")?
+    else {
         return Ok(Vec::new());
     };
 
@@ -437,9 +434,7 @@ fn should_copy_template_part(path: &str) -> bool {
         || path.starts_with("word/media/")
 }
 
-fn reserve_relationship_ids(
-    relationships: &[WordTemplateDocxRelationship],
-) -> (u32, u32, u32) {
+fn reserve_relationship_ids(relationships: &[WordTemplateDocxRelationship]) -> (u32, u32, u32) {
     let mut used = std::collections::BTreeSet::new();
     for rel in relationships {
         if let Some(id) = parse_relationship_numeric_id(&rel.id) {
@@ -455,10 +450,7 @@ fn reserve_relationship_ids(
     (styles_id, numbering_id, next_available.max(3))
 }
 
-fn first_unused_relationship_id(
-    used: &std::collections::BTreeSet<u32>,
-    start: u32,
-) -> u32 {
+fn first_unused_relationship_id(used: &std::collections::BTreeSet<u32>, start: u32) -> u32 {
     let mut candidate = start.max(1);
     while used.contains(&candidate) {
         candidate += 1;
@@ -529,7 +521,13 @@ fn resolve_template_convention_styles(
         ),
         code_block_style_id: select_first_style_id(
             available_style_ids,
-            &["CodeBlock", "Code", "HTMLPreformatted", "BodyText", "Normal"],
+            &[
+                "CodeBlock",
+                "Code",
+                "HTMLPreformatted",
+                "BodyText",
+                "Normal",
+            ],
         ),
         formula_block_style_id: select_first_style_id(
             available_style_ids,

@@ -80,7 +80,13 @@ pub async fn load_alarm_rules(app: AppHandle) -> ResultPayload<Vec<AlarmRuleReco
     let trace = new_trace_id();
     let path = match rules_store_path(&app).await {
         Ok(path) => path,
-        Err(err) => return err_payload(ErrorCode::IoError, format!("获取闹钟路径失败: {err}"), trace),
+        Err(err) => {
+            return err_payload(
+                ErrorCode::IoError,
+                format!("获取闹钟路径失败: {err}"),
+                trace,
+            )
+        }
     };
     match read_json_vec::<AlarmRuleRecord>(&path).await {
         Ok(rules) => ok(sort_rules(rules), trace),
@@ -93,7 +99,13 @@ pub async fn save_alarm_rules(app: AppHandle, rules: Vec<AlarmRuleRecord>) -> Re
     let trace = new_trace_id();
     let path = match rules_store_path(&app).await {
         Ok(path) => path,
-        Err(err) => return err_payload(ErrorCode::IoError, format!("获取闹钟路径失败: {err}"), trace),
+        Err(err) => {
+            return err_payload(
+                ErrorCode::IoError,
+                format!("获取闹钟路径失败: {err}"),
+                trace,
+            )
+        }
     };
     let sorted = sort_rules(rules);
     match write_json_vec(&path, &sorted).await {

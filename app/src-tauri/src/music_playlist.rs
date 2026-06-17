@@ -26,7 +26,9 @@ pub struct MusicPlaylistStore {
 }
 
 fn playlist_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
-    Ok(crate::haomd_paths::haomd_data_root_dir(app)?.join("music").join("playlists.json"))
+    Ok(crate::haomd_paths::haomd_data_root_dir(app)?
+        .join("music")
+        .join("playlists.json"))
 }
 
 async fn read_json<T>(path: &Path) -> std::io::Result<T>
@@ -80,7 +82,11 @@ fn normalize_store(mut store: MusicPlaylistStore) -> MusicPlaylistStore {
 pub async fn load_music_playlist_store_impl(app: &AppHandle) -> ResultPayload<MusicPlaylistStore> {
     let trace = new_trace_id();
     if let Err(err) = ensure_music_root_dir(app).await {
-        return err_payload(ErrorCode::IoError, format!("准备音乐目录失败: {err}"), trace);
+        return err_payload(
+            ErrorCode::IoError,
+            format!("准备音乐目录失败: {err}"),
+            trace,
+        );
     }
     let path = match playlist_store_path(app) {
         Ok(path) => path,
@@ -94,8 +100,14 @@ pub async fn load_music_playlist_store_impl(app: &AppHandle) -> ResultPayload<Mu
     };
     match read_json::<MusicPlaylistStore>(&path).await {
         Ok(store) => ok(normalize_store(store), trace),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => ok(default_playlist_store(), trace),
-        Err(err) => err_payload(ErrorCode::IoError, format!("读取播放列表失败: {err}"), trace),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            ok(default_playlist_store(), trace)
+        }
+        Err(err) => err_payload(
+            ErrorCode::IoError,
+            format!("读取播放列表失败: {err}"),
+            trace,
+        ),
     }
 }
 
@@ -105,7 +117,11 @@ pub async fn save_music_playlist_store_impl(
 ) -> ResultPayload<()> {
     let trace = new_trace_id();
     if let Err(err) = ensure_music_root_dir(app).await {
-        return err_payload(ErrorCode::IoError, format!("准备音乐目录失败: {err}"), trace);
+        return err_payload(
+            ErrorCode::IoError,
+            format!("准备音乐目录失败: {err}"),
+            trace,
+        );
     }
     let path = match playlist_store_path(app) {
         Ok(path) => path,
@@ -120,7 +136,11 @@ pub async fn save_music_playlist_store_impl(
     let normalized = normalize_store(store);
     match write_json(&path, &normalized).await {
         Ok(_) => ok((), trace),
-        Err(err) => err_payload(ErrorCode::IoError, format!("保存播放列表失败: {err}"), trace),
+        Err(err) => err_payload(
+            ErrorCode::IoError,
+            format!("保存播放列表失败: {err}"),
+            trace,
+        ),
     }
 }
 
@@ -137,7 +157,11 @@ pub async fn update_music_playlist_tracks_impl(
             return ResultPayload::Err { error };
         }
     };
-    let Some(playlist) = store.playlists.iter_mut().find(|item| item.id == playlist_id) else {
+    let Some(playlist) = store
+        .playlists
+        .iter_mut()
+        .find(|item| item.id == playlist_id)
+    else {
         return err_payload(
             ErrorCode::InvalidPath,
             format!("未找到播放列表: {playlist_id}"),

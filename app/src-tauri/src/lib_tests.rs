@@ -768,9 +768,8 @@ fn should_normalize_songti_font_to_word_cjk_font() {
         code_font_size_half_points: 21,
     });
 
-    assert!(run_xml.contains(
-        r#"<w:rFonts w:ascii="宋体" w:hAnsi="宋体" w:cs="宋体" w:eastAsia="宋体"/>"#
-    ));
+    assert!(run_xml
+        .contains(r#"<w:rFonts w:ascii="宋体" w:hAnsi="宋体" w:cs="宋体" w:eastAsia="宋体"/>"#));
 }
 
 #[test]

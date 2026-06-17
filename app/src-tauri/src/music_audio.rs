@@ -12,8 +12,8 @@ use std::sync::{
 };
 use std::thread;
 use std::time::{Duration, Instant};
-use tokio::sync::oneshot;
 use tauri::AppHandle;
+use tokio::sync::oneshot;
 
 #[derive(Debug, Clone, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -110,7 +110,8 @@ impl PlaybackState {
 }
 
 static AUDIO_WORKER: Lazy<Mutex<Option<Sender<AudioCommand>>>> = Lazy::new(|| Mutex::new(None));
-static PLAYBACK_STATE: Lazy<Mutex<MusicTrackState>> = Lazy::new(|| Mutex::new(MusicTrackState::default()));
+static PLAYBACK_STATE: Lazy<Mutex<MusicTrackState>> =
+    Lazy::new(|| Mutex::new(MusicTrackState::default()));
 
 fn duration_to_millis(duration: Duration) -> u64 {
     duration.as_millis().min(u128::from(u64::MAX)) as u64
@@ -132,10 +133,16 @@ fn load_duration(sound_path: &str) -> Option<Duration> {
 
 fn build_sink() -> std::io::Result<Sink> {
     let handle = ensure_output_stream_handle().map_err(|err| {
-        std::io::Error::new(std::io::ErrorKind::Other, format!("create shared output stream failed: {err}"))
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("create shared output stream failed: {err}"),
+        )
     })?;
     let sink = Sink::try_new(&handle).map_err(|err| {
-        std::io::Error::new(std::io::ErrorKind::Other, format!("create sink failed: {err}"))
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("create sink failed: {err}"),
+        )
     })?;
     Ok(sink)
 }
@@ -163,7 +170,10 @@ fn play_from_position(
     let sink = build_sink()?;
     let file = File::open(sound_path)?;
     let decoder = Decoder::new(BufReader::new(file)).map_err(|err| {
-        std::io::Error::new(std::io::ErrorKind::InvalidData, format!("decode track failed: {err}"))
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("decode track failed: {err}"),
+        )
     })?;
     let skipped = decoder.skip_duration(position);
 
@@ -185,164 +195,178 @@ fn play_from_position(
 }
 
 fn ensure_worker() -> Sender<AudioCommand> {
-    let mut guard = AUDIO_WORKER.lock().expect("music audio worker mutex poisoned");
+    let mut guard = AUDIO_WORKER
+        .lock()
+        .expect("music audio worker mutex poisoned");
     if let Some(sender) = guard.as_ref() {
         return sender.clone();
     }
 
     let (tx, rx) = mpsc::channel::<AudioCommand>();
     thread::spawn(move || {
-        let mut runtime = AudioRuntime {
-            sink: None,
-        };
+        let mut runtime = AudioRuntime { sink: None };
         let mut state = PlaybackState::new();
 
         loop {
             match rx.recv_timeout(Duration::from_millis(200)) {
                 Ok(command) => match command {
-                AudioCommand::Play { playlist_id, sound_path, file_name } => {
-                    state.file_name = Some(file_name);
-                    state.playlist_id = Some(playlist_id);
-                    state.sound_path = Some(sound_path.clone());
-                    state.position = Duration::ZERO;
-                    state.started_at = Some(Instant::now());
-                    state.playing = true;
-                    state.paused = false;
-                    state.paused_by_alarm = false;
-                    state.duration = load_duration(&sound_path);
-                    if let Err(err) = play_from_position(&mut runtime, &mut state, Duration::ZERO, true) {
-                        eprintln!("[music] play failed: {err}");
-                        state = PlaybackState::new();
-                        runtime = AudioRuntime { sink: None };
-                    }
-                    if let Ok(mut snapshot) = PLAYBACK_STATE.lock() {
-                        *snapshot = state.snapshot();
-                    }
-                }
-                AudioCommand::Pause => {
-                    if let Some(active_sink) = runtime.sink.as_ref() {
-                        active_sink.pause();
-                        state.position = state.current_position();
-                        state.started_at = None;
-                        state.paused = true;
+                    AudioCommand::Play {
+                        playlist_id,
+                        sound_path,
+                        file_name,
+                    } => {
+                        state.file_name = Some(file_name);
+                        state.playlist_id = Some(playlist_id);
+                        state.sound_path = Some(sound_path.clone());
+                        state.position = Duration::ZERO;
+                        state.started_at = Some(Instant::now());
+                        state.playing = true;
+                        state.paused = false;
                         state.paused_by_alarm = false;
-                    }
-                    if let Ok(mut snapshot) = PLAYBACK_STATE.lock() {
-                        *snapshot = state.snapshot();
-                    }
-                }
-                AudioCommand::PauseByAlarm => {
-                    if let Some(active_sink) = runtime.sink.as_ref() {
-                        active_sink.pause();
-                        state.position = state.current_position();
-                        state.started_at = None;
-                        state.paused = true;
-                        state.paused_by_alarm = true;
-                    }
-                    if let Ok(mut snapshot) = PLAYBACK_STATE.lock() {
-                        *snapshot = state.snapshot();
-                    }
-                }
-                AudioCommand::Resume => {
-                    if state.sound_path.is_some() {
-                        if runtime.sink.is_some() {
-                            if let Some(active_sink) = runtime.sink.as_ref() {
-                                active_sink.set_volume(state.volume);
-                                active_sink.play();
-                            }
-                            state.started_at = Some(Instant::now());
-                            state.paused = false;
-                            state.playing = true;
-                            state.paused_by_alarm = false;
-                        } else {
-                            let resume_position = state.position;
-                            if let Err(err) = play_from_position(&mut runtime, &mut state, resume_position, true) {
-                                eprintln!("[music] resume failed: {err}");
-                            }
-                            state.paused_by_alarm = false;
+                        state.duration = load_duration(&sound_path);
+                        if let Err(err) =
+                            play_from_position(&mut runtime, &mut state, Duration::ZERO, true)
+                        {
+                            eprintln!("[music] play failed: {err}");
+                            state = PlaybackState::new();
+                            runtime = AudioRuntime { sink: None };
+                        }
+                        if let Ok(mut snapshot) = PLAYBACK_STATE.lock() {
+                            *snapshot = state.snapshot();
                         }
                     }
-                    if let Ok(mut snapshot) = PLAYBACK_STATE.lock() {
-                        *snapshot = state.snapshot();
+                    AudioCommand::Pause => {
+                        if let Some(active_sink) = runtime.sink.as_ref() {
+                            active_sink.pause();
+                            state.position = state.current_position();
+                            state.started_at = None;
+                            state.paused = true;
+                            state.paused_by_alarm = false;
+                        }
+                        if let Ok(mut snapshot) = PLAYBACK_STATE.lock() {
+                            *snapshot = state.snapshot();
+                        }
                     }
-                }
-                AudioCommand::Seek { position_ms } => {
-                    let next_position = millis_to_duration(position_ms);
-                    let was_playing = state.playing && !state.paused;
-                    if state.sound_path.is_some() {
-                        let seek_result = runtime.sink.as_ref().map(|sink| sink.try_seek(next_position));
-                        match seek_result {
-                            Some(Ok(())) => {
+                    AudioCommand::PauseByAlarm => {
+                        if let Some(active_sink) = runtime.sink.as_ref() {
+                            active_sink.pause();
+                            state.position = state.current_position();
+                            state.started_at = None;
+                            state.paused = true;
+                            state.paused_by_alarm = true;
+                        }
+                        if let Ok(mut snapshot) = PLAYBACK_STATE.lock() {
+                            *snapshot = state.snapshot();
+                        }
+                    }
+                    AudioCommand::Resume => {
+                        if state.sound_path.is_some() {
+                            if runtime.sink.is_some() {
                                 if let Some(active_sink) = runtime.sink.as_ref() {
-                                    if was_playing {
-                                        active_sink.play();
+                                    active_sink.set_volume(state.volume);
+                                    active_sink.play();
+                                }
+                                state.started_at = Some(Instant::now());
+                                state.paused = false;
+                                state.playing = true;
+                                state.paused_by_alarm = false;
+                            } else {
+                                let resume_position = state.position;
+                                if let Err(err) = play_from_position(
+                                    &mut runtime,
+                                    &mut state,
+                                    resume_position,
+                                    true,
+                                ) {
+                                    eprintln!("[music] resume failed: {err}");
+                                }
+                                state.paused_by_alarm = false;
+                            }
+                        }
+                        if let Ok(mut snapshot) = PLAYBACK_STATE.lock() {
+                            *snapshot = state.snapshot();
+                        }
+                    }
+                    AudioCommand::Seek { position_ms } => {
+                        let next_position = millis_to_duration(position_ms);
+                        let was_playing = state.playing && !state.paused;
+                        if state.sound_path.is_some() {
+                            let seek_result = runtime
+                                .sink
+                                .as_ref()
+                                .map(|sink| sink.try_seek(next_position));
+                            match seek_result {
+                                Some(Ok(())) => {
+                                    if let Some(active_sink) = runtime.sink.as_ref() {
+                                        if was_playing {
+                                            active_sink.play();
+                                        } else {
+                                            active_sink.pause();
+                                        }
+                                    }
+                                    state.position = next_position;
+                                    state.started_at = if was_playing {
+                                        Some(Instant::now())
                                     } else {
-                                        active_sink.pause();
+                                        None
+                                    };
+                                    state.playing = true;
+                                    state.paused = !was_playing;
+                                }
+                                Some(Err(err)) => {
+                                    eprintln!("[music] seek failed, fallback to rebuild: {err}");
+                                    if let Err(err) = play_from_position(
+                                        &mut runtime,
+                                        &mut state,
+                                        next_position,
+                                        was_playing,
+                                    ) {
+                                        eprintln!("[music] seek fallback failed: {err}");
                                     }
                                 }
-                                state.position = next_position;
-                                state.started_at = if was_playing {
-                                    Some(Instant::now())
-                                } else {
-                                    None
-                                };
-                                state.playing = true;
-                                state.paused = !was_playing;
-                            }
-                            Some(Err(err)) => {
-                                eprintln!("[music] seek failed, fallback to rebuild: {err}");
-                                if let Err(err) = play_from_position(
-                                    &mut runtime,
-                                    &mut state,
-                                    next_position,
-                                    was_playing,
-                                ) {
-                                    eprintln!("[music] seek fallback failed: {err}");
-                                }
-                            }
-                            None => {
-                                if let Err(err) = play_from_position(
-                                    &mut runtime,
-                                    &mut state,
-                                    next_position,
-                                    was_playing,
-                                ) {
-                                    eprintln!("[music] seek failed: {err}");
+                                None => {
+                                    if let Err(err) = play_from_position(
+                                        &mut runtime,
+                                        &mut state,
+                                        next_position,
+                                        was_playing,
+                                    ) {
+                                        eprintln!("[music] seek failed: {err}");
+                                    }
                                 }
                             }
                         }
+                        if let Ok(mut snapshot) = PLAYBACK_STATE.lock() {
+                            *snapshot = state.snapshot();
+                        }
                     }
-                    if let Ok(mut snapshot) = PLAYBACK_STATE.lock() {
-                        *snapshot = state.snapshot();
+                    AudioCommand::SetVolume { volume } => {
+                        state.volume = clamp_volume(volume);
+                        if let Some(active_sink) = runtime.sink.as_ref() {
+                            active_sink.set_volume(state.volume);
+                        }
+                        if let Ok(mut snapshot) = PLAYBACK_STATE.lock() {
+                            *snapshot = state.snapshot();
+                        }
                     }
-                }
-                AudioCommand::SetVolume { volume } => {
-                    state.volume = clamp_volume(volume);
-                    if let Some(active_sink) = runtime.sink.as_ref() {
-                        active_sink.set_volume(state.volume);
+                    AudioCommand::Stop => {
+                        if let Some(active_sink) = runtime.sink.as_ref() {
+                            active_sink.stop();
+                        }
+                        let volume = state.volume;
+                        state = PlaybackState::new_with_volume(volume);
+                        runtime = AudioRuntime { sink: None };
+                        if let Ok(mut snapshot) = PLAYBACK_STATE.lock() {
+                            *snapshot = state.snapshot();
+                        }
                     }
-                    if let Ok(mut snapshot) = PLAYBACK_STATE.lock() {
-                        *snapshot = state.snapshot();
+                    AudioCommand::QueryState { respond_to } => {
+                        let snapshot = state.snapshot();
+                        let _ = respond_to.send(snapshot.clone());
+                        if let Ok(mut cached) = PLAYBACK_STATE.lock() {
+                            *cached = snapshot;
+                        }
                     }
-                }
-                AudioCommand::Stop => {
-                    if let Some(active_sink) = runtime.sink.as_ref() {
-                        active_sink.stop();
-                    }
-                    let volume = state.volume;
-                    state = PlaybackState::new_with_volume(volume);
-                    runtime = AudioRuntime { sink: None };
-                    if let Ok(mut snapshot) = PLAYBACK_STATE.lock() {
-                        *snapshot = state.snapshot();
-                    }
-                }
-                AudioCommand::QueryState { respond_to } => {
-                    let snapshot = state.snapshot();
-                    let _ = respond_to.send(snapshot.clone());
-                    if let Ok(mut cached) = PLAYBACK_STATE.lock() {
-                        *cached = snapshot;
-                    }
-                }
                 },
                 Err(RecvTimeoutError::Timeout) => {
                     if let Some(active_sink) = runtime.sink.as_ref() {
@@ -525,7 +549,10 @@ pub async fn get_music_track_state() -> ResultPayload<MusicTrackState> {
     };
 
     let (respond_to, receive_from) = oneshot::channel::<MusicTrackState>();
-    if sender.send(AudioCommand::QueryState { respond_to }).is_err() {
+    if sender
+        .send(AudioCommand::QueryState { respond_to })
+        .is_err()
+    {
         return ok(fallback_snapshot, trace);
     }
 

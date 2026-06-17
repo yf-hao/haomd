@@ -57,7 +57,9 @@ fn build_word_export_workspace_internal(
     if let Some(template_overlay) = template_overlay {
         write_template_additional_parts(dir, template_overlay)?;
         for (ext, mime) in &template_overlay.content_type_defaults {
-            content_type_defaults.entry(ext.clone()).or_insert_with(|| mime.clone());
+            content_type_defaults
+                .entry(ext.clone())
+                .or_insert_with(|| mime.clone());
         }
     }
 

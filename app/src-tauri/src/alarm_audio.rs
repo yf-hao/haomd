@@ -21,7 +21,9 @@ enum AudioCommand {
 static AUDIO_WORKER: Lazy<Mutex<Option<Sender<AudioCommand>>>> = Lazy::new(|| Mutex::new(None));
 
 fn ensure_worker() -> Sender<AudioCommand> {
-    let mut guard = AUDIO_WORKER.lock().expect("alarm audio worker mutex poisoned");
+    let mut guard = AUDIO_WORKER
+        .lock()
+        .expect("alarm audio worker mutex poisoned");
     if let Some(sender) = guard.as_ref() {
         return sender.clone();
     }
@@ -104,16 +106,18 @@ pub async fn play_alarm_sound(
     let trace = new_trace_id();
     let sender = ensure_worker();
     let sound_path = match alarm_sound_file.as_deref() {
-        Some(file_name) if !file_name.trim().is_empty() => match ensure_alarm_sound_available(&app, file_name).await {
-            Ok(path) => Some(path.to_string_lossy().to_string()),
-            Err(err) => {
-                return err_payload(
-                    ErrorCode::IoError,
-                    format!("获取闹钟音频路径失败: {err}"),
-                    trace,
-                )
+        Some(file_name) if !file_name.trim().is_empty() => {
+            match ensure_alarm_sound_available(&app, file_name).await {
+                Ok(path) => Some(path.to_string_lossy().to_string()),
+                Err(err) => {
+                    return err_payload(
+                        ErrorCode::IoError,
+                        format!("获取闹钟音频路径失败: {err}"),
+                        trace,
+                    )
+                }
             }
-        },
+        }
         _ => None,
     };
 

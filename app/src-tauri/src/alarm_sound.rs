@@ -32,24 +32,17 @@ fn legacy_pomodoro_sound_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
 }
 
 const AUDIO_EXTENSIONS: &[&str] = &[
-    "wav",
-    "mp3",
-    "ogg",
-    "oga",
-    "flac",
-    "aac",
-    "m4a",
-    "m4b",
-    "aiff",
-    "aif",
-    "webm",
-    "wma",
+    "wav", "mp3", "ogg", "oga", "flac", "aac", "m4a", "m4b", "aiff", "aif", "webm", "wma",
 ];
 
 fn is_audio_file(path: &Path) -> bool {
     path.extension()
         .and_then(|ext| ext.to_str())
-        .map(|ext| AUDIO_EXTENSIONS.iter().any(|candidate| ext.eq_ignore_ascii_case(candidate)))
+        .map(|ext| {
+            AUDIO_EXTENSIONS
+                .iter()
+                .any(|candidate| ext.eq_ignore_ascii_case(candidate))
+        })
         .unwrap_or(false)
 }
 
@@ -79,12 +72,18 @@ fn normalize_sound_file_name(source_path: &Path) -> std::io::Result<String> {
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "音频文件名无效"))?;
     let file_name = file_name.to_string_lossy().trim().to_string();
     if file_name.is_empty() {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "音频文件名无效"));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "音频文件名无效",
+        ));
     }
     Ok(file_name)
 }
 
-pub async fn ensure_alarm_sound_available(app: &AppHandle, file_name: &str) -> std::io::Result<PathBuf> {
+pub async fn ensure_alarm_sound_available(
+    app: &AppHandle,
+    file_name: &str,
+) -> std::io::Result<PathBuf> {
     let dir = sound_dir(app)?;
     fs::create_dir_all(&dir).await?;
     let target = dir.join(file_name);
@@ -107,14 +106,23 @@ pub async fn ensure_alarm_sound_available(app: &AppHandle, file_name: &str) -> s
 pub async fn list_alarm_sound_files(app: AppHandle) -> ResultPayload<Vec<String>> {
     let trace = new_trace_id();
     if let Err(err) = ensure_alarm_root_dir(&app).await {
-        return err_payload(ErrorCode::IoError, format!("准备闹钟目录失败: {err}"), trace);
+        return err_payload(
+            ErrorCode::IoError,
+            format!("准备闹钟目录失败: {err}"),
+            trace,
+        );
     }
 
-    let mut entries = collect_sound_files(&sound_dir(&app).unwrap_or_default()).await.unwrap_or_default();
-    let mut legacy_entries = collect_sound_files(&legacy_sound_dir(&app).unwrap_or_default()).await.unwrap_or_default();
-    let mut legacy_pomodoro_entries = collect_sound_files(&legacy_pomodoro_sound_dir(&app).unwrap_or_default())
+    let mut entries = collect_sound_files(&sound_dir(&app).unwrap_or_default())
         .await
         .unwrap_or_default();
+    let mut legacy_entries = collect_sound_files(&legacy_sound_dir(&app).unwrap_or_default())
+        .await
+        .unwrap_or_default();
+    let mut legacy_pomodoro_entries =
+        collect_sound_files(&legacy_pomodoro_sound_dir(&app).unwrap_or_default())
+            .await
+            .unwrap_or_default();
     entries.append(&mut legacy_entries);
     entries.append(&mut legacy_pomodoro_entries);
     entries.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| b.0.cmp(&a.0)));
@@ -129,7 +137,9 @@ pub async fn list_alarm_sound_files(app: AppHandle) -> ResultPayload<Vec<String>
     ok(deduped, trace)
 }
 
-async fn collect_sound_files(dir: &PathBuf) -> std::io::Result<Vec<(String, std::time::SystemTime)>> {
+async fn collect_sound_files(
+    dir: &PathBuf,
+) -> std::io::Result<Vec<(String, std::time::SystemTime)>> {
     let mut list = Vec::new();
     let Ok(mut reader) = fs::read_dir(dir).await else {
         return Ok(list);
@@ -161,7 +171,11 @@ pub async fn import_alarm_sound(
 ) -> ResultPayload<AlarmSoundRecord> {
     let trace = new_trace_id();
     if let Err(err) = ensure_alarm_root_dir(&app).await {
-        return err_payload(ErrorCode::IoError, format!("准备闹钟目录失败: {err}"), trace);
+        return err_payload(
+            ErrorCode::IoError,
+            format!("准备闹钟目录失败: {err}"),
+            trace,
+        );
     }
     let source = match normalize_source_path(&source_path) {
         Ok(path) => path,
@@ -178,18 +192,38 @@ pub async fn import_alarm_sound(
     }
     let file_name = match normalize_sound_file_name(&source) {
         Ok(name) => name,
-        Err(err) => return err_payload(ErrorCode::InvalidPath, format!("音频文件名无效: {err}"), trace),
+        Err(err) => {
+            return err_payload(
+                ErrorCode::InvalidPath,
+                format!("音频文件名无效: {err}"),
+                trace,
+            )
+        }
     };
     let dir = match sound_dir(&app) {
         Ok(dir) => dir,
-        Err(err) => return err_payload(ErrorCode::IoError, format!("获取闹钟音频目录失败: {err}"), trace),
+        Err(err) => {
+            return err_payload(
+                ErrorCode::IoError,
+                format!("获取闹钟音频目录失败: {err}"),
+                trace,
+            )
+        }
     };
     if let Err(err) = fs::create_dir_all(&dir).await {
-        return err_payload(ErrorCode::IoError, format!("创建闹钟音频目录失败: {err}"), trace);
+        return err_payload(
+            ErrorCode::IoError,
+            format!("创建闹钟音频目录失败: {err}"),
+            trace,
+        );
     }
     let target = dir.join(&file_name);
     if let Err(err) = fs::copy(&source, &target).await {
-        return err_payload(ErrorCode::IoError, format!("导入闹钟音频失败: {err}"), trace);
+        return err_payload(
+            ErrorCode::IoError,
+            format!("导入闹钟音频失败: {err}"),
+            trace,
+        );
     }
     ok(
         AlarmSoundRecord {

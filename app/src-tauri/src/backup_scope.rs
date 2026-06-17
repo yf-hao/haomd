@@ -24,13 +24,18 @@ pub fn default_backup_scope_settings() -> BackupScopeSettingsCfg {
     BackupScopeSettingsCfg::default()
 }
 
-pub async fn load_backup_scope_settings_cfg(app: &AppHandle) -> Result<BackupScopeSettingsCfg, String> {
+pub async fn load_backup_scope_settings_cfg(
+    app: &AppHandle,
+) -> Result<BackupScopeSettingsCfg, String> {
     let path = backup_scope_settings_path(app)
         .map_err(|err| format!("获取 backup_scope 路径失败: {err}"))?;
     match fs::read_to_string(&path).await {
-        Ok(content) => serde_json::from_str(&content)
-            .map_err(|err| format!("解析 backup_scope 失败: {err}")),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(default_backup_scope_settings()),
+        Ok(content) => {
+            serde_json::from_str(&content).map_err(|err| format!("解析 backup_scope 失败: {err}"))
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            Ok(default_backup_scope_settings())
+        }
         Err(err) => Err(format!("读取 backup_scope 失败: {err}")),
     }
 }
