@@ -294,14 +294,13 @@ fn parse_run(
                     break;
                 }
             }
-            Ok(Event::Text(text_node)) => {
-                text.push_str(
-                    &text_node
-                        .decode()
-                        .map_err(|e| format!("解析文本失败: {e}"))?
-                        .into_owned(),
-                );
-            }
+                Ok(Event::Text(text_node)) => {
+                    text.push_str(
+                        &text_node
+                            .decode()
+                            .map_err(|e| format!("解析文本失败: {e}"))?,
+                    );
+                }
             Ok(Event::Eof) => break,
             Err(err) => return Err(format!("解析文本运行失败: {err}")),
             _ => {}
@@ -768,16 +767,14 @@ fn read_text_node(reader: &mut Reader<&[u8]>, end_name: &[u8]) -> Result<String,
                 out.push_str(
                     &text
                         .decode()
-                        .map_err(|e| format!("解析文本节点失败: {e}"))?
-                        .into_owned(),
+                        .map_err(|e| format!("解析文本节点失败: {e}"))?,
                 );
             }
             Ok(Event::CData(text)) => {
                 out.push_str(
                     &text
                         .decode()
-                        .map_err(|e| format!("解析 CDATA 节点失败: {e}"))?
-                        .into_owned(),
+                        .map_err(|e| format!("解析 CDATA 节点失败: {e}"))?,
                 );
             }
             Ok(Event::End(event)) => {

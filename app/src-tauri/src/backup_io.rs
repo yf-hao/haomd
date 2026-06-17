@@ -307,7 +307,7 @@ async fn build_backup_package(
             Some(is_config_backup_artifact),
         )?;
 
-        let mut manifest = build_backup_manifest(app, &scope_settings)?;
+        let mut manifest = build_backup_manifest(app, scope_settings)?;
 
         if scope_settings.documents {
             let mut document_scopes = Vec::new();
