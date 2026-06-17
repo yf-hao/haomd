@@ -197,10 +197,11 @@ describe('createConversationCompressor', () => {
 
     const result = await compressor.compress(record, mockConfig)
 
-    // Should call summarizeBatch only once (for uncovered old messages 7,8,9,10)
+    // Should call summarizeBatch only once (for uncovered old messages; assistant messages
+    // are only included when they are needed as reference context)
     expect(provider.summarizeBatch).toHaveBeenCalledTimes(1)
     const callMessages = provider.summarizeBatch.mock.calls[0][0].messages
-    expect(callMessages.map((m: DocConversationMessage) => m.id)).toEqual(['7', '8', '9', '10'])
+    expect(callMessages.map((m: DocConversationMessage) => m.id)).toEqual(['7', '9'])
 
     // Result: prev_summary + new_summary + recent(11,12)
     expect(result.messages).toHaveLength(4) // 2 summaries + 2 recent
@@ -322,6 +323,7 @@ describe('createConversationCompressor', () => {
       createMsg('2', 'user', '按第二个方案实现', 110),
       createMsg('3', 'user', 'recent user', 1100),
       createMsg('4', 'assistant', 'recent assistant', 1200),
+      createMsg('5', 'assistant', 'recent assistant 2', 1300),
     ])
 
     const provider = {
