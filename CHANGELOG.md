@@ -2,6 +2,52 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.12.0] - 2026-06-18
+
+### 中文
+
+本次版本（v0.12.0）引入了提醒系统、音乐播放器歌单管理以及 Word 模板导出增强等功能，并优化了多项核心体验与系统稳定性。
+
+#### 💡 主要更新
+*   **日历与重复提醒系统**：
+    *   新增日历提醒模态对话框，支持设定日程及事件。
+    *   新增侧边栏重复提醒面板，方便管理周期性日常任务。
+*   **音乐播放器体验升级**：
+    *   支持自定义歌单的新建、重命名与删除操作，并通过 Rust 后端进行持久化存储。
+    *   新增底部状态栏播放指示器，并支持实时音频播放状态同步。
+*   **Word 导出模板系统增强**：
+    *   支持在编辑器中一键插入 Word 模板 Front Matter。
+    *   支持使用自定义 Word 模板文件填充导出 Markdown 文档。
+*   **系统与体验优化**：
+    *   重构打平了文件导入/导出菜单，提升操作直观度。
+    *   修复了所见即所得 (WYSIWYG) 编辑器的脏状态同步问题。
+    *   移除了不稳定且体验欠佳的原生 PDF 打印临时功能。
+    *   优化了 CI 自动化流程，在构建时自动安装 ALSA 开发库支持。
+
+---
+
+### English
+
+Version v0.12.0 introduces a comprehensive reminder system, custom playlist management for the music player, enhanced Word template export, and various optimization improvements.
+
+#### 💡 Key Updates
+*   **Calendar & Repeat Reminders**:
+    *   Added a calendar reminder dialog for configuring schedules and notifications.
+    *   Introduced a dedicated repeat reminders drawer in the workspace sidebar.
+*   **Music Player Playlist Management**:
+    *   Supported creating, renaming, and deleting custom music playlists with Rust-backend persistence.
+    *   Added a live music playback indicator in the workspace status bar with real-time state synchronization.
+*   **Word Export & Templates**:
+    *   Supported inserting custom Word template front matter inside the editor.
+    *   Enabled exporting documents wrapped inside custom Word templates.
+*   **UX Refinements & Bug Fixes**:
+    *   Flattened the import/export file menus for simpler interactions.
+    *   Resolved dirty-state checking bugs in the WYSIWYG editor.
+    *   Removed the legacy/unstable PDF printing implementation.
+    *   Optimized CI builds by ensuring ALSA dependencies are correctly configured.
+
+---
+
 ## [v0.11.0] - 2026-05-17
 
 ### 中文
