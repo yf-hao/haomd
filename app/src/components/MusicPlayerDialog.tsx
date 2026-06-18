@@ -32,6 +32,7 @@ export type MusicPlayerDialogProps = {
 
 export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
   const { resolvedLanguage: locale } = useI18n()
+  const AUTO_ADVANCE_GUARD_MS = 300
   const dialogRef = useRef<HTMLDivElement | null>(null)
   const playlistMenuRef = useRef<HTMLDivElement | null>(null)
   const playlistMenuPopoverRef = useRef<HTMLDivElement | null>(null)
@@ -595,7 +596,10 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
       if (state.fileName && !selectedTrack) {
         setSelectedTrack(state.fileName)
       }
-      const finishedTrack = state.fileName && !state.playing && !state.paused && state.durationMs != null && state.positionMs >= state.durationMs
+      const finishedTrack = state.fileName
+        && !state.paused
+        && state.durationMs != null
+        && state.positionMs >= Math.max(0, state.durationMs - AUTO_ADVANCE_GUARD_MS)
       if (finishedTrack && state.fileName !== lastAutoAdvanceTrackRef.current) {
         lastAutoAdvanceTrackRef.current = state.fileName
         void handleStepTrack(1, true)
