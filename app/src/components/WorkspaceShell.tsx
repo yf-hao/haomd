@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { EditorView } from '@codemirror/view'
 import { invoke } from '@tauri-apps/api/core'
@@ -203,6 +203,7 @@ export function WorkspaceShell({
   const { t } = useI18n()
   const { themeSettings } = useThemeContext()
   const [markdown, setMarkdown] = useState(seed)
+  const [editorMarkdown, setEditorMarkdown] = useState(seed)
   const [previewValue, setPreviewValue] = useState(seed)
   const [activeLine, setActiveLine] = useState(1)
   // 预览专用的行号：对 activeLine 做轻量节流后再驱动 Preview，降低重渲染频率
@@ -286,7 +287,7 @@ export function WorkspaceShell({
   const wysiwygMarkdownGetterRef = useRef<(() => string) | null>(null)
   const wysiwygOutlineNavigatorRef = useRef<((target: { headingIndex: number; text: string; level: 1 | 2 | 3 | 4 | 5 | 6 }) => boolean) | null>(null)
   const wysiwygFormatActionsRef = useRef<WysiwygFormatActions | null>(null)
-  type MarkdownSyncOptions = { markDirty?: boolean }
+  type MarkdownSyncOptions = { markDirty?: boolean; immediate?: boolean; syncEditor?: boolean }
   const syncWysiwygMarkdownRef = useRef<((markdown: string, options?: MarkdownSyncOptions) => void) | null>(null)
   const skipWysiwygUnmountFlushRef = useRef(false)
   const guardedSaveRef = useRef<(() => Promise<any>) | null>(null)
@@ -634,10 +635,12 @@ export function WorkspaceShell({
     return view.state.doc.sliceString(view.state.selection.main.from, view.state.selection.main.to)
   }, [editMode, isPdfActive, previewSelectionText])
 
+  const isOutlinePanelVisible = activeLeftPanel === 'outline'
   const outlineItems = useOutlineModel({
     mode: editMode,
     markdown,
     wysiwygHeadings: wysiwygOutlineHeadings,
+    enabled: isOutlinePanelVisible,
   })
 
   const handleWysiwygOutlineItemsChange = useCallback((items: OutlineHeading[]) => {
@@ -754,6 +757,7 @@ export function WorkspaceShell({
     // 只有在切换标签页，或者外部强制更新了标签内容（且与当前编辑器不一致）时，才同步回编辑器
     // 这样避免了「输入 -> 更新 tabs -> tabs 触发 effect -> effect 用旧 tab.content 回滚输入」的循环
     if (isTabSwitch || tab.content !== markdownRef.current) {
+      setEditorMarkdown(tab.content)
       setMarkdown(tab.content)
       if (isTabSwitch && isPreviewVisible) {
         clearPreviewSyncTimer()
@@ -909,6 +913,11 @@ export function WorkspaceShell({
 
   const handleMarkdownChange = useCallback((val: string, options?: MarkdownSyncOptions) => {
     const shouldMarkDirty = options?.markDirty ?? true
+    const shouldSyncEditor = options?.syncEditor ?? true
+    const syncContent = (next: string) => {
+      setMarkdown(next)
+      updateActiveContent(next, { markDirty: shouldMarkDirty })
+    }
 
     const patchedDoc = applyChunkEdit(val)
     if (patchedDoc !== null) {
@@ -916,9 +925,15 @@ export function WorkspaceShell({
         return
       }
       markdownRef.current = patchedDoc
-      setMarkdown(patchedDoc)
+      if (shouldSyncEditor) {
+        setEditorMarkdown(patchedDoc)
+      }
+      if (options?.immediate) {
+        syncContent(patchedDoc)
+      } else {
+        startTransition(() => syncContent(patchedDoc))
+      }
       if (shouldMarkDirty) markDirty()
-      updateActiveContent(patchedDoc, { markDirty: shouldMarkDirty })
       return
     }
 
@@ -927,9 +942,15 @@ export function WorkspaceShell({
       return
     }
     markdownRef.current = val
-    setMarkdown(val)
+    if (shouldSyncEditor) {
+      setEditorMarkdown(val)
+    }
+    if (options?.immediate) {
+      syncContent(val)
+    } else {
+      startTransition(() => syncContent(val))
+    }
     if (shouldMarkDirty) markDirty()
-    updateActiveContent(val, { markDirty: shouldMarkDirty })
   }, [applyChunkEdit, markDirty, updateActiveContent])
 
   const handleWysiwygChange = useCallback((sourceTabId: string, val: string) => {
@@ -941,7 +962,7 @@ export function WorkspaceShell({
     } else {
       textColorTargetRef.current = null
     }
-    handleMarkdownChange(val)
+    handleMarkdownChange(val, { syncEditor: false })
   }, [handleMarkdownChange])
   syncWysiwygMarkdownRef.current = handleMarkdownChange
 
@@ -968,7 +989,7 @@ export function WorkspaceShell({
     const latest = getLatestWysiwygMarkdown()
     if (latest === null) return null
     flushSync(() => {
-      handleMarkdownChange(latest, { markDirty: false })
+      handleMarkdownChange(latest, { markDirty: false, immediate: true })
     })
     return latest
   }, [getLatestWysiwygMarkdown, handleMarkdownChange])
@@ -984,21 +1005,26 @@ export function WorkspaceShell({
   // 统一决定编辑器里展示的内容：
   // - Markdown 标签：走原来的 hugeDoc/markdown 逻辑
   // - PDF 标签：按路径从 pdfNotes 中取笔记
-  const editorMarkdown = useMemo(() => {
+  const editorContent = useMemo(() => {
     if (isPdfActive) {
       if (!activePdfPath) return ''
       return pdfNotes[activePdfPath] ?? ''
     }
 
-    return getChunkContent() ?? markdown
-  }, [isPdfActive, activePdfPath, pdfNotes, getChunkContent, markdown])
+    return getChunkContent() ?? editorMarkdown
+  }, [isPdfActive, activePdfPath, pdfNotes, getChunkContent, editorMarkdown])
 
   const wysiwygMarkdown = useMemo(() => {
-    if (isPdfActive) return ''
+    if (isPdfActive || editMode !== 'wysiwyg') return ''
     return activeTab?.content ?? markdown
-  }, [isPdfActive, activeTab?.content, markdown])
+  }, [editMode, isPdfActive, activeTab?.content, markdown])
 
-  const wysiwygDocument = useMemo(() => extractFrontMatter(wysiwygMarkdown), [wysiwygMarkdown])
+  const wysiwygDocument = useMemo(() => {
+    if (editMode !== 'wysiwyg') {
+      return { rawBlock: '', body: '' }
+    }
+    return extractFrontMatter(wysiwygMarkdown)
+  }, [editMode, wysiwygMarkdown])
   const wysiwygFrontMatterBlock = wysiwygDocument.rawBlock
   const wysiwygBodyMarkdown = wysiwygDocument.body
 
@@ -1839,6 +1865,7 @@ export function WorkspaceShell({
   }, [markdown, isPdfActive, onDocumentStatsChange])
 
   const applyOpenedContent = useCallback((content: string) => {
+    setEditorMarkdown(content)
     setMarkdown(content)
     if (isPreviewVisible) {
       clearPreviewSyncTimer()
@@ -3754,7 +3781,7 @@ export function WorkspaceShell({
                         />
                       )}
                       <EditorPaneLazy
-                        markdown={editorMarkdown}
+                        markdown={editorContent}
                         onChange={handleEditorChange}
                         onCursorChange={handleCursorChange}
                         showPreview={showPreview}

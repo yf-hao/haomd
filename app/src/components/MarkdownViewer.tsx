@@ -6,9 +6,7 @@ import rehypeRaw from 'rehype-raw'
 import 'github-markdown-css/github-markdown.css'
 import './MarkdownViewer.css'
 import { getRenderer } from '../modules/markdown/plugins'
-import { extractFrontMatter } from '../modules/markdown/frontMatter'
-import { replaceTextColorSyntaxWithHtml } from '../modules/markdown/extensions/colorMark'
-import { normalizeLatexDelimiters } from '../modules/markdown/normalizeLatexDelimiters'
+import { preparePreviewMarkdown, type PreviewMarkdownResult } from '../modules/markdown/previewPipeline'
 import { remarkToc } from '../modules/markdown/remarkToc'
 import { splitAlignedTabInlineNodes } from '../modules/markdown/alignedTab'
 import { DownloadOnClickUseCase, TauriWebviewOpener } from '../modules/download/handleMarkdownLinkClick'
@@ -45,12 +43,92 @@ type LineRange = {
   end?: number
 }
 
+type LineRangeIndexEntry = {
+  start: number
+  end: number
+  element: HTMLElement
+}
+
 const LineRangeContext = React.createContext<LineRange | undefined>(undefined)
 const FoldContext = React.createContext<FoldRegion[]>([])
 const FilePathContext = React.createContext<string | null>(null)
 
 const useLineRange = () => React.useContext(LineRangeContext)
 const useFoldRegions = () => React.useContext(FoldContext)
+
+function findLastRangeStartIndex(entries: LineRangeIndexEntry[], line: number): number {
+  let left = 0
+  let right = entries.length - 1
+  let result = -1
+
+  while (left <= right) {
+    const mid = (left + right) >> 1
+    const current = entries[mid]
+    if (current.start <= line) {
+      result = mid
+      left = mid + 1
+    } else {
+      right = mid - 1
+    }
+  }
+
+  return result
+}
+
+function findActiveLineRangeEntry(
+  entries: LineRangeIndexEntry[],
+  line: number,
+  preferredIndex: number | null,
+): { entry: LineRangeIndexEntry; index: number } | null {
+  const searchAround = (center: number, radius: number) => {
+    if (center < 0 || entries.length === 0) return null
+    const start = Math.max(0, center - radius)
+    const end = Math.min(entries.length - 1, center + radius)
+
+    for (let offset = 0; offset <= radius; offset += 1) {
+      const left = center - offset
+      const right = center + offset
+
+      if (left >= start) {
+        const entry = entries[left]
+        if (line >= entry.start && line <= entry.end) {
+          return { entry, index: left }
+        }
+      }
+
+      if (offset === 0) continue
+
+      if (right <= end) {
+        const entry = entries[right]
+        if (line >= entry.start && line <= entry.end) {
+          return { entry, index: right }
+        }
+      }
+    }
+
+    return null
+  }
+
+  if (preferredIndex != null) {
+    const local = searchAround(preferredIndex, 12)
+    if (local) return local
+  }
+
+  const insertionIndex = findLastRangeStartIndex(entries, line)
+  if (insertionIndex < 0) return null
+
+  const local = searchAround(insertionIndex, 12)
+  if (local) return local
+
+  for (let index = insertionIndex - 1; index >= 0; index -= 1) {
+    const entry = entries[index]
+    if (line >= entry.start && line <= entry.end) {
+      return { entry, index }
+    }
+  }
+
+  return null
+}
 
 // KaTeX 按需加载：单例 Promise + Context
 type KatexModule = { renderToString: (tex: string, options?: any) => string }
@@ -537,17 +615,77 @@ function MarkdownViewerComponent(
   props: Readonly<MarkdownViewerProps>
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const activeLineIndexRef = useRef<LineRangeIndexEntry[]>([])
+  const activeLineEntryRef = useRef<{ entry: LineRangeIndexEntry; index: number } | null>(null)
+  const previewWorkerRef = useRef<Worker | null>(null)
+  const previewRequestIdRef = useRef(0)
+  const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const { value, activeLine, previewWidth, filePath, foldRegions, mode = 'rendered', onLineClick, onSelectionChange } = props
   const plainTextMode = isPlainTextFile(filePath)
-  const renderedMarkdownBody = useMemo(() => extractFrontMatter(value).body, [value])
-  const renderedValue = useMemo(
-    () => replaceTextColorSyntaxWithHtml(normalizeLatexDelimiters(renderedMarkdownBody)),
-    [renderedMarkdownBody],
-  )
+  const [previewResult, setPreviewResult] = useState<PreviewMarkdownResult>(() => preparePreviewMarkdown(value))
+
+  useEffect(() => {
+    if (mode !== 'rendered') return
+    if (typeof Worker === 'undefined') return
+
+    const worker = new Worker(new URL('../workers/markdownPreview.worker.ts', import.meta.url), { type: 'module' })
+    previewWorkerRef.current = worker
+    worker.onmessage = (event: MessageEvent<{ id: number; processedMarkdown: string; hasMath: boolean }>) => {
+      if (event.data.id !== previewRequestIdRef.current) return
+      setPreviewResult({
+        processedMarkdown: event.data.processedMarkdown,
+        hasMath: event.data.hasMath,
+      })
+    }
+
+    return () => {
+      worker.terminate()
+      if (previewWorkerRef.current === worker) {
+        previewWorkerRef.current = null
+      }
+    }
+  }, [mode])
+
+  useEffect(() => {
+    if (mode !== 'rendered') return
+
+    if (previewTimerRef.current) {
+      clearTimeout(previewTimerRef.current)
+    }
+
+    const requestId = ++previewRequestIdRef.current
+    previewTimerRef.current = setTimeout(() => {
+      const worker = previewWorkerRef.current
+      if (!worker) {
+        setPreviewResult(preparePreviewMarkdown(value))
+        return
+      }
+      worker.postMessage({ id: requestId, value })
+    }, 160)
+
+    return () => {
+      if (previewTimerRef.current) {
+        clearTimeout(previewTimerRef.current)
+        previewTimerRef.current = null
+      }
+    }
+  }, [mode, value])
+
+  useEffect(() => {
+    return () => {
+      if (previewTimerRef.current) {
+        clearTimeout(previewTimerRef.current)
+      }
+      previewWorkerRef.current?.terminate()
+      previewWorkerRef.current = null
+    }
+  }, [])
+
+  const renderedValue = previewResult.processedMarkdown
 
   // KaTeX 按需加载：检测文档是否包含数学公式
-  const hasMath = useMemo(() => /\$/.test(renderedValue), [renderedValue])
+  const hasMath = previewResult.hasMath
   const [katexLib, setKatexLib] = useState<KatexModule | null>(null)
   useEffect(() => {
     if (hasMath && !katexLib) {
@@ -638,6 +776,35 @@ function MarkdownViewerComponent(
     [plainTextMode],
   )
 
+  useLayoutEffect(() => {
+    const container = containerRef.current
+    const currentActive = activeLineEntryRef.current
+    if (currentActive) {
+      currentActive.entry.element.classList.remove('active-block')
+      activeLineEntryRef.current = null
+    }
+
+    if (!container || mode !== 'rendered') {
+      activeLineIndexRef.current = []
+      return
+    }
+
+    const index = Array.from(container.querySelectorAll<HTMLElement>('[data-line-start]'))
+      .map((element) => {
+        const start = Number(element.dataset.lineStart)
+        const end = Number(element.dataset.lineEnd ?? element.dataset.lineStart)
+        if (Number.isNaN(start)) return null
+        return {
+          start,
+          end: Number.isNaN(end) ? start : end,
+          element,
+        }
+      })
+      .filter((entry): entry is LineRangeIndexEntry => entry !== null)
+
+    activeLineIndexRef.current = index
+  }, [renderedValue, foldRegions, mode])
+
   // 保存和恢复滚动位置
   useLayoutEffect(() => {
     const container = containerRef.current
@@ -662,18 +829,19 @@ function MarkdownViewerComponent(
     if (!container || typeof activeLine !== 'number' || activeLine < 1) return
 
     const rafId = requestAnimationFrame(() => {
-      const anchors = Array.from(
-        container.querySelectorAll<HTMLElement>('[data-line-start]')
-      )
-      const target = anchors.find((el) => {
-        const start = Number(el.dataset.lineStart)
-        const end = Number(el.dataset.lineEnd ?? el.dataset.lineStart)
-        if (Number.isNaN(start)) return false
-        return activeLine >= start && activeLine <= (Number.isNaN(end) ? start : end)
-      })
+      const entries = activeLineIndexRef.current
+      const current = activeLineEntryRef.current
 
-      anchors.forEach((el) => el.classList.remove('active-block'))
+      if (current && activeLine >= current.entry.start && activeLine <= current.entry.end) {
+        return
+      }
+
+      const target = findActiveLineRangeEntry(entries, activeLine, current?.index ?? null)
       if (!target) {
+        if (current) {
+          current.entry.element.classList.remove('active-block')
+          activeLineEntryRef.current = null
+        }
         // 如果找不到目标元素（新增的最后一行还未渲染）
         const scrollParent = container.closest('.preview-body') as HTMLElement | null
         if (scrollParent) {
@@ -688,13 +856,19 @@ function MarkdownViewerComponent(
         return
       }
 
-      target.classList.add('active-block')
+      if (current && current.entry.element !== target.entry.element) {
+        current.entry.element.classList.remove('active-block')
+      }
+      if (!target.entry.element.classList.contains('active-block')) {
+        target.entry.element.classList.add('active-block')
+      }
+      activeLineEntryRef.current = target
 
       const scrollParent = container.closest('.preview-body') as HTMLElement | null
       if (!scrollParent) return
 
       const parentRect = scrollParent.getBoundingClientRect()
-      const targetRect = target.getBoundingClientRect()
+      const targetRect = target.entry.element.getBoundingClientRect()
 
       // 判断目标元素是否在可视区域内
       const isVisible =
@@ -714,7 +888,7 @@ function MarkdownViewerComponent(
     return () => {
       if (rafId) cancelAnimationFrame(rafId)
     }
-  }, [activeLine])
+  }, [activeLine, mode])
 
   useEffect(() => {
     const container = containerRef.current

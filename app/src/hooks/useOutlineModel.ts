@@ -6,23 +6,33 @@ export function useOutlineModel(args: {
   mode: 'source' | 'wysiwyg'
   markdown: string
   wysiwygHeadings: OutlineHeading[]
+  enabled?: boolean
   debounceMs?: number
 }): OutlineItem[] {
-  const { mode, markdown, wysiwygHeadings, debounceMs = 300 } = args
+  const { mode, markdown, wysiwygHeadings, enabled = true, debounceMs = 300 } = args
   const [debouncedMarkdown, setDebouncedMarkdown] = useState(markdown)
 
   useEffect(() => {
+    if (!enabled) return
+    setDebouncedMarkdown(markdown)
+  }, [enabled, markdown])
+
+  useEffect(() => {
+    if (!enabled) return
     if (mode !== 'source') return
     const timer = setTimeout(() => {
       setDebouncedMarkdown(markdown)
     }, debounceMs)
     return () => clearTimeout(timer)
-  }, [markdown, debounceMs, mode])
+  }, [enabled, markdown, debounceMs, mode])
 
   return useMemo(() => {
+    if (!enabled) {
+      return []
+    }
     if (mode === 'wysiwyg') {
       return buildOutlineTreeFromHeadings(wysiwygHeadings)
     }
     return buildOutlineTreeFromHeadings(buildHeadingsFromMarkdown(debouncedMarkdown))
-  }, [debouncedMarkdown, mode, wysiwygHeadings])
+  }, [enabled, debouncedMarkdown, mode, wysiwygHeadings])
 }

@@ -1,4 +1,4 @@
-import { useMemo, forwardRef } from 'react'
+import { useEffect, useMemo, useState, forwardRef } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import type { Extension } from '@codemirror/state'
 import type { EditorView } from '@codemirror/view'
@@ -24,6 +24,12 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
 ) {
   const { value, onChange, onCursorChange, readOnly, extensions, className, placeholder, onViewReady, onFoldRegionsChange, editorZoom } = props
   const themeMode = useResolvedThemeMode()
+  const [editorValue, setEditorValue] = useState(value)
+
+  useEffect(() => {
+    if (value === editorValue) return
+    setEditorValue(value)
+  }, [value, editorValue])
 
   const mergedExtensions = useMemo(() => {
     if (extensions && extensions.length) return extensions
@@ -54,7 +60,6 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
       } as React.CSSProperties}
     >
       <CodeMirror
-        value={value}
         height="100%"
         basicSetup={false}
         theme={themeMode}
@@ -62,7 +67,11 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
         readOnly={readOnly}
         placeholder={placeholder}
         extensions={mergedExtensions}
-        onChange={(val) => onChange(val)}
+        value={editorValue}
+        onChange={(val) => {
+          setEditorValue(val)
+          onChange(val)
+        }}
         onCreateEditor={(view) => {
           onViewReady?.(view)
         }}

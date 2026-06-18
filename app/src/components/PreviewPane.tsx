@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties } from 'react'
+import { memo, useEffect, useRef, type CSSProperties } from 'react'
 import type { LayoutType } from '../hooks/useWorkspaceLayout'
 import { MarkdownViewer, type FoldRegion } from './MarkdownViewer'
 import './PreviewPane.css'
@@ -47,7 +47,7 @@ function HtmlPreview({ html }: HtmlPreviewProps) {
   return <iframe ref={iframeRef} className="html-preview-frame" />
 }
 
-export function PreviewPane({
+function PreviewPaneComponent({
   value,
   activeLine,
   previewWidth,
@@ -196,3 +196,20 @@ export function PreviewPane({
     </section>
   )
 }
+
+export const PreviewPane = memo(
+  PreviewPaneComponent,
+  (prev, next) => (
+    prev.value === next.value &&
+    prev.activeLine === next.activeLine &&
+    prev.previewWidth === next.previewWidth &&
+    prev.effectiveLayout === next.effectiveLayout &&
+    prev.loading === next.loading &&
+    prev.loadingLabel === next.loadingLabel &&
+    prev.filePath === next.filePath &&
+    prev.foldRegions === next.foldRegions &&
+    prev.onPreviewLineClick === next.onPreviewLineClick &&
+    prev.onSelectionChange === next.onSelectionChange
+  ),
+)
+PreviewPane.displayName = 'PreviewPane'
