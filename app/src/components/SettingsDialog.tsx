@@ -26,6 +26,7 @@ import {
 import {
   DEFAULT_WEBDAV_REMOTE_PATH,
   getDefaultLanguageSetting,
+  getDefaultPerformanceSettings,
   getDefaultSearchSettings,
   getDefaultThemeSettings,
   getDefaultUiTypographySettings,
@@ -38,6 +39,7 @@ import {
   loadEditorSettings,
   saveEditorSettings,
   type EditorSettings,
+  type PerformanceSettings,
   type SearchSettings,
   type ThemeBackgroundSettings,
   type ThemeBackgroundSize,
@@ -45,6 +47,7 @@ import {
   type UiTypographySettings,
   type WordExportStyleSettings,
 } from '../modules/settings/editorSettings'
+import { emitPerformanceSettingsChanged } from '../modules/settings/performanceRuntime'
 import { getWorkspaceMountedRoots } from '../modules/workspace/workspaceMountedRoots'
 import { resolveManagedBackgroundImageUrl } from '../modules/theme/backgroundImageRuntime'
 import type { ThemeMode } from '../modules/theme/schema'
@@ -60,7 +63,7 @@ export type SettingsDialogProps = {
   onUiTypographyChange?: (settings: UiTypographySettings) => void
 }
 
-type SettingsSectionId = 'theme' | 'typography' | 'word-export' | 'search' | 'backup'
+type SettingsSectionId = 'theme' | 'typography' | 'performance' | 'word-export' | 'search' | 'backup'
 type ThemePanelTabId = 'theme-preset' | 'backgrounds'
 type WordExportTabId = 'document' | 'layout' | 'diagrams' | 'templates'
 type BackupPanelTabId = 'sync' | 'settings'
@@ -103,6 +106,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const [webdavBackup, setWebdavBackup] = useState<WebDavBackupSettings>(getDefaultWebDavBackupSettings())
   const [backupScope, setBackupScope] = useState<BackupScopeSettings>(getDefaultBackupScopeSettings())
   const [searchSettings, setSearchSettings] = useState<SearchSettings>(getDefaultSearchSettings())
+  const [performanceSettings, setPerformanceSettings] = useState<PerformanceSettings>(getDefaultPerformanceSettings())
   const [uiTypography, setUiTypography] = useState<UiTypographySettings>(getDefaultUiTypographySettings())
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('theme')
   const [activeThemeTab, setActiveThemeTab] = useState<ThemePanelTabId>('theme-preset')
@@ -204,6 +208,10 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
         setWebdavBackup(loadedBackupSettings)
         setBackupScope(loadedBackupScopeSettings)
         setSearchSettings(loadedSearchSettings)
+        setPerformanceSettings({
+          ...getDefaultPerformanceSettings(),
+          ...(loadedSettings.performance ?? {}),
+        })
         setWorkspaceBackgroundOpacityInput(String(loadedTheme.workspaceBackground?.opacity ?? getDefaultThemeSettings().workspaceBackground?.opacity ?? 0.22))
         setWorkspaceBackgroundOverlayOpacityInput(String(loadedTheme.workspaceBackground?.overlayOpacity ?? getDefaultThemeSettings().workspaceBackground?.overlayOpacity ?? 0.12))
         setWorkspaceBackgroundBlurInput(String(loadedTheme.workspaceBackground?.blurPx ?? getDefaultThemeSettings().workspaceBackground?.blurPx ?? 0))
@@ -760,6 +768,10 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
       setSearchSettings(getDefaultSearchSettings())
       return
     }
+    if (activeSection === 'performance') {
+      setPerformanceSettings(getDefaultPerformanceSettings())
+      return
+    }
     if (activeSection === 'backup') {
       if (activeBackupTab === 'settings') {
         setBackupScope(getDefaultBackupScopeSettings())
@@ -781,12 +793,14 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
         uiTypography,
         wordExport,
         search: searchSettings,
+        performance: performanceSettings,
       }
       await Promise.all([
         saveEditorSettings(nextSettings),
         saveBackupSettings(webdavBackup),
         saveBackupScopeSettings(backupScope),
       ])
+      emitPerformanceSettingsChanged(performanceSettings)
       setSettings(nextSettings)
       originalThemeRef.current = theme
       originalLanguageRef.current = languageMode
@@ -973,6 +987,13 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                 className={`settings-sidebar-item ${activeSection === 'word-export' ? 'active' : ''}`}
               >
                 {t('settings.wordExport')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveSection('performance')}
+                className={`settings-sidebar-item ${activeSection === 'performance' ? 'active' : ''}`}
+              >
+                {t('settings.performance')}
               </button>
               <button
                 type="button"
@@ -1470,6 +1491,36 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                           <div className="settings-field-label">{t('typography.aiChatInputFontSize')}</div>
                           <input className="field-input settings-number-input" type="number" min={10} max={24} step={1} value={uiTypography.aiChatInputFontSize} onChange={updateTypographyNumber('aiChatInputFontSize')} />
                         </div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {activeSection === 'performance' && (
+                <>
+                  <div className="settings-panel-header">
+                    <div className="settings-panel-title">{t('performance.title')}</div>
+                    <div className="settings-panel-description">{t('performance.description')}</div>
+                  </div>
+
+                  <div className="settings-subgroup">
+                    <div style={{ display: 'grid', gap: 14 }}>
+                      <label className="settings-checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={performanceSettings.experimentalPreviewOptimization}
+                          onChange={(event) =>
+                            setPerformanceSettings((prev) => ({
+                              ...prev,
+                              experimentalPreviewOptimization: event.target.checked,
+                            }))
+                          }
+                        />
+                        <span>{t('performance.experimentalPreviewOptimization')}</span>
+                      </label>
+                      <div className="settings-panel-description">
+                        {t('performance.experimentalPreviewOptimizationHint')}
                       </div>
                     </div>
                   </div>
@@ -2027,7 +2078,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
           </div>
         </div>
         <div className="modal-actions">
-          {activeSection === 'word-export' || activeSection === 'typography' || (activeSection === 'theme' && activeThemeTab !== 'theme-preset') ? (
+          {activeSection === 'word-export' || activeSection === 'typography' || activeSection === 'performance' || (activeSection === 'theme' && activeThemeTab !== 'theme-preset') ? (
             <Button variant="tertiary" type="button" onClick={handleReset} disabled={isSaving}>
               {t('common.reset')}
             </Button>

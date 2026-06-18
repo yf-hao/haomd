@@ -3,6 +3,7 @@ import {
   getAiCompressionSettings,
   getHugeDocSettings,
   getLanguageSetting,
+  getPerformanceSettings,
   getThemeSettings,
   getUiTypographySettings,
   getWordExportStyleSettings,
@@ -54,6 +55,13 @@ describe('editorSettings', () => {
         const settings = await getHugeDocSettings()
         expect(settings.enabled).toBe(true)
         expect(settings.lineThreshold).toBe(1000)
+    })
+
+    it('should return default performance settings if backend is empty', async () => {
+        vi.mocked(mockInvoke).mockResolvedValue({ Ok: { data: {} } })
+
+        const settings = await getPerformanceSettings()
+        expect(settings.experimentalPreviewOptimization).toBe(false)
     })
 
     it('should merge word export settings with defaults', async () => {

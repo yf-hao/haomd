@@ -11,6 +11,7 @@ import { onMenuAction } from '../modules/platform/menuEvents'
 import type { IAiClient } from '../modules/ai/client'
 import { createDefaultAiClient } from '../modules/ai/client'
 import {
+  getDefaultPerformanceSettings,
   getUiTypographySettings,
   loadEditorSettings,
   saveEditorSettings,
@@ -201,6 +202,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     const settings = await loadEditorSettings()
     await saveEditorSettings({
       ...settings,
+      performance: settings.performance ?? getDefaultPerformanceSettings(),
       uiTypography: {
         ...(settings.uiTypography ?? {}),
         wysiwygFontSize: next,

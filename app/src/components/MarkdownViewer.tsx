@@ -7,6 +7,8 @@ import 'github-markdown-css/github-markdown.css'
 import './MarkdownViewer.css'
 import { getRenderer } from '../modules/markdown/plugins'
 import { preparePreviewMarkdown, type PreviewMarkdownResult } from '../modules/markdown/previewPipeline'
+import { getDefaultPerformanceSettings, getPerformanceSettings, type PerformanceSettings } from '../modules/settings/editorSettings'
+import { subscribePerformanceSettingsChanged } from '../modules/settings/performanceRuntime'
 import { remarkToc } from '../modules/markdown/remarkToc'
 import { splitAlignedTabInlineNodes } from '../modules/markdown/alignedTab'
 import { DownloadOnClickUseCase, TauriWebviewOpener } from '../modules/download/handleMarkdownLinkClick'
@@ -623,11 +625,35 @@ function MarkdownViewerComponent(
 
   const { value, activeLine, previewWidth, filePath, foldRegions, mode = 'rendered', onLineClick, onSelectionChange } = props
   const plainTextMode = isPlainTextFile(filePath)
+  const [performanceSettings, setPerformanceSettings] = useState<PerformanceSettings>(getDefaultPerformanceSettings())
   const [previewResult, setPreviewResult] = useState<PreviewMarkdownResult>(() => preparePreviewMarkdown(value))
 
   useEffect(() => {
-    if (mode !== 'rendered') return
-    if (typeof Worker === 'undefined') return
+    let cancelled = false
+    void getPerformanceSettings().then((settings) => {
+      if (!cancelled) setPerformanceSettings(settings)
+    })
+    const unsubscribe = subscribePerformanceSettingsChanged((settings) => {
+      setPerformanceSettings(settings)
+    })
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!performanceSettings.experimentalPreviewOptimization || mode !== 'rendered' || typeof Worker === 'undefined') {
+      previewWorkerRef.current?.terminate()
+      previewWorkerRef.current = null
+      if (previewTimerRef.current) {
+        clearTimeout(previewTimerRef.current)
+        previewTimerRef.current = null
+      }
+      return
+    }
+
+    if (previewWorkerRef.current) return
 
     const worker = new Worker(new URL('../workers/markdownPreview.worker.ts', import.meta.url), { type: 'module' })
     previewWorkerRef.current = worker
@@ -645,7 +671,7 @@ function MarkdownViewerComponent(
         previewWorkerRef.current = null
       }
     }
-  }, [mode])
+  }, [mode, performanceSettings.experimentalPreviewOptimization])
 
   useEffect(() => {
     if (mode !== 'rendered') return
@@ -655,6 +681,11 @@ function MarkdownViewerComponent(
     }
 
     const requestId = ++previewRequestIdRef.current
+    if (!performanceSettings.experimentalPreviewOptimization) {
+      setPreviewResult(preparePreviewMarkdown(value))
+      return
+    }
+
     previewTimerRef.current = setTimeout(() => {
       const worker = previewWorkerRef.current
       if (!worker) {
@@ -670,7 +701,7 @@ function MarkdownViewerComponent(
         previewTimerRef.current = null
       }
     }
-  }, [mode, value])
+  }, [mode, value, performanceSettings.experimentalPreviewOptimization])
 
   useEffect(() => {
     return () => {

@@ -148,6 +148,13 @@ pub struct SearchSettingsCfg {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct PerformanceSettingsCfg {
+    #[serde(default)]
+    pub experimental_preview_optimization: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct EditorSettingsCfg {
     #[serde(default)]
     pub ai_compression: Option<AiCompressionCfg>,
@@ -167,6 +174,8 @@ pub struct EditorSettingsCfg {
     pub backup: Option<BackupSettingsCfg>,
     #[serde(default)]
     pub search: Option<SearchSettingsCfg>,
+    #[serde(default)]
+    pub performance: Option<PerformanceSettingsCfg>,
     #[serde(flatten)]
     pub extra: HashMap<String, serde_json::Value>,
 }
@@ -206,6 +215,9 @@ pub fn default_editor_settings() -> EditorSettingsCfg {
             fts5_enabled: Some(false),
             parallel_scan_enabled: Some(true),
             parallel_scan_workers: None,
+        }),
+        performance: Some(PerformanceSettingsCfg {
+            experimental_preview_optimization: Some(false),
         }),
         extra: HashMap::new(),
     }
@@ -535,6 +547,10 @@ async fn load_editor_settings_cfg(app: &AppHandle) -> Result<EditorSettingsCfg, 
             }
             if cfg.search.is_none() {
                 cfg.search = default_cfg.search.clone();
+                changed = true;
+            }
+            if cfg.performance.is_none() {
+                cfg.performance = default_cfg.performance.clone();
                 changed = true;
             }
 
@@ -948,6 +964,16 @@ async fn load_editor_settings_cfg(app: &AppHandle) -> Result<EditorSettingsCfg, 
                     }
                     if search.parallel_scan_workers.is_none() {
                         search.parallel_scan_workers = default_search.parallel_scan_workers;
+                        changed = true;
+                    }
+                }
+            }
+
+            if let Some(ref mut performance) = cfg.performance {
+                if let Some(ref default_performance) = default_cfg.performance {
+                    if performance.experimental_preview_optimization.is_none() {
+                        performance.experimental_preview_optimization =
+                            default_performance.experimental_preview_optimization;
                         changed = true;
                     }
                 }

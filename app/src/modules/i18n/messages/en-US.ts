@@ -23,6 +23,7 @@ export const enUSMessages: MessageDictionary = {
     categories: 'Categories',
     theme: 'Theme',
     typography: 'Typography',
+    performance: 'Performance',
     wordExport: 'Word',
     search: 'Search',
     backup: 'Backup',
@@ -33,6 +34,12 @@ export const enUSMessages: MessageDictionary = {
     english: 'English',
     themeSections: 'Theme settings sections',
     appearanceDescription: 'Choose how HaoMD should appear. `System` follows the OS appearance.',
+  },
+  performance: {
+    title: 'Performance',
+    description: 'Tune experimental performance behavior for large documents.',
+    experimentalPreviewOptimization: 'Enable experimental preview optimization',
+    experimentalPreviewOptimizationHint: 'Uses a worker and deferred refresh for Markdown preview processing. It can improve typing responsiveness on large documents, but preview updates may feel a little delayed.',
   },
   searchSettings: {
     title: 'Search',

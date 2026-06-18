@@ -23,6 +23,7 @@ export const zhCNMessages: MessageDictionary = {
     categories: '分类',
     theme: '主题',
     typography: '字体',
+    performance: '性能',
     wordExport: 'Word',
     search: '搜索',
     backup: '备份',
@@ -33,6 +34,12 @@ export const zhCNMessages: MessageDictionary = {
     english: 'English',
     themeSections: '主题设置分区',
     appearanceDescription: '选择 HaoMD 的界面主题。`System` 会跟随系统外观。',
+  },
+  performance: {
+    title: '性能',
+    description: '调节大文档相关的实验性性能行为。',
+    experimentalPreviewOptimization: '启用实验性预览优化',
+    experimentalPreviewOptimizationHint: '使用 worker 和延迟刷新来处理 Markdown 预览。它能提升大文档输入流畅度，但预览更新可能会稍微延迟。',
   },
   searchSettings: {
     title: '搜索',

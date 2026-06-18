@@ -102,6 +102,10 @@ export type SearchSettings = {
   parallelScanWorkers: number | null
 }
 
+export type PerformanceSettings = {
+  experimentalPreviewOptimization: boolean
+}
+
 export type NotesConfig = {
   /** 随笔文件保存目录的绝对路径，null 表示尚未配置 */
   notesDirectory: string | null
@@ -117,6 +121,7 @@ export type EditorSettings = {
   wordExport?: Partial<WordExportStyleSettings>
   backup?: Partial<BackupSettings>
   search?: Partial<SearchSettings>
+  performance?: Partial<PerformanceSettings>
   notes?: Partial<NotesConfig>
 }
 
@@ -245,6 +250,10 @@ const defaultSearchSettings: SearchSettings = {
   fts5Enabled: false,
   parallelScanEnabled: true,
   parallelScanWorkers: null,
+}
+
+const defaultPerformanceSettings: PerformanceSettings = {
+  experimentalPreviewOptimization: false,
 }
 
 let cachedSettings: EditorSettings | null = null
@@ -425,6 +434,15 @@ export async function getSearchSettings(): Promise<SearchSettings> {
   }
 }
 
+export async function getPerformanceSettings(): Promise<PerformanceSettings> {
+  const settings = await loadEditorSettings()
+  const cfg = settings.performance ?? {}
+  return {
+    experimentalPreviewOptimization:
+      cfg.experimentalPreviewOptimization ?? defaultPerformanceSettings.experimentalPreviewOptimization,
+  }
+}
+
 export async function saveEditorSettings(settings: EditorSettings): Promise<void> {
   const resp = await invoke<BackendResult<null>>('save_editor_settings', { cfg: settings })
   if ('Err' in resp) {
@@ -443,6 +461,10 @@ export function getDefaultWebDavBackupSettings(): WebDavBackupSettings {
 
 export function getDefaultSearchSettings(): SearchSettings {
   return { ...defaultSearchSettings }
+}
+
+export function getDefaultPerformanceSettings(): PerformanceSettings {
+  return { ...defaultPerformanceSettings }
 }
 
 export function getDefaultThemeSettings(): ThemeSettings {
