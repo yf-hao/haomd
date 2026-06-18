@@ -276,7 +276,11 @@ pub async fn delete_music_playlist_impl(app: &AppHandle, playlist_id: &str) -> R
             return ResultPayload::Err { error };
         }
     };
-    let Some(index) = store.playlists.iter().position(|item| item.id == playlist_id) else {
+    let Some(index) = store
+        .playlists
+        .iter()
+        .position(|item| item.id == playlist_id)
+    else {
         return err_payload(
             ErrorCode::InvalidPath,
             format!("未找到播放列表: {playlist_id}"),
