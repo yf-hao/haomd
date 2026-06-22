@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.12.1] - 2026-06-22
+
+### 中文
+
+本次更新为 v0.12.1 补丁版本，主要引入了实验性 Markdown 预览性能优化，并修复了音乐播放器及部分安全配置问题。
+
+#### 💡 主要更新
+*   **性能优化**：
+    *   新增基于 Web Worker 的异步 Markdown 解析与预渲染模块，大幅减轻超长文档编辑时的渲染卡顿。
+    *   在全局设置中新增“实验性预览性能优化”开关，支持自主开启多线程渲染。
+*   **音乐播放器修复**：
+    *   修复了自动切歌（auto advance）的定时机制与播放间隙。
+    *   优化并规范了播放列表的格式化存储。
+*   **安全与配置优化**：
+    *   移除了内置网页会话中残留的网页聊天 (web chat) 硬编码 API Key。
+    *   移除了默认的 AI 基础请求 URL，并统一替换为安全的占位符以引导用户自定义配置。
+
+---
+
+### English
+
+Version v0.12.1 is a patch release introducing experimental Markdown preview performance rendering optimizations, alongside music player bug fixes and configuration cleanups.
+
+#### 💡 Key Updates
+*   **Performance Optimizations**:
+    *   Introduced Web Worker-based asynchronous Markdown parsing and pre-rendering to eliminate main-thread stuttering on massive documents.
+    *   Added a toggle settings option for experimental preview performance optimizations.
+*   **Music Player Fixes**:
+    *   Resolved timing bugs with automatic track switching (auto advance).
+    *   Polished formatting validations for music playlists.
+*   **Security & Config Cleans**:
+    *   Removed residual hardcoded API keys inside the web-chat packages.
+    *   Cleaned default AI Base URLs and replaced them with safe placeholder configs.
+
+---
+
 ## [v0.12.0] - 2026-06-18
 
 ### 中文
