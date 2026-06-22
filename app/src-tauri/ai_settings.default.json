@@ -3,7 +3,7 @@
     {
       "id": "1770434252163_bg8e4j",
       "name": "Dify-SIAS",
-      "base_url": "",
+      "base_url": "https://aigc.sias.edu.cn/v1",
       "api_key": "",
       "models": [
         {
