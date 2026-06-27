@@ -126,6 +126,11 @@ pub async fn list_music_sound_files(
     playlist_id: String,
 ) -> ResultPayload<Vec<String>> {
     let trace = new_trace_id();
+    log::info!(
+        "[music][sound][list] start trace={} playlist_id={}",
+        trace,
+        playlist_id
+    );
     let playlist_id = match normalize_playlist_id(&playlist_id) {
         Ok(id) => id,
         Err(err) => {
@@ -137,7 +142,13 @@ pub async fn list_music_sound_files(
         }
     };
     match ensure_music_playlist_record_exists_impl(&app, &playlist_id).await {
-        ResultPayload::Ok { .. } => {}
+        ResultPayload::Ok { .. } => {
+            log::info!(
+                "[music][sound][list] playlist ok trace={} playlist_id={}",
+                trace,
+                playlist_id
+            );
+        }
         ResultPayload::Err { error } => return ResultPayload::Err { error },
     }
     if let Err(err) = ensure_music_playlist_dir(&app, &playlist_id).await {
@@ -158,6 +169,12 @@ pub async fn list_music_sound_files(
             deduped.push(file_name);
         }
     }
+    log::info!(
+        "[music][sound][list] ok trace={} playlist_id={} count={}",
+        trace,
+        playlist_id,
+        deduped.len()
+    );
     ok(deduped, trace)
 }
 
@@ -168,6 +185,12 @@ pub async fn import_music_sound(
     source_path: String,
 ) -> ResultPayload<MusicSoundRecord> {
     let trace = new_trace_id();
+    log::info!(
+        "[music][sound][import] start trace={} playlist_id={} source_path={}",
+        trace,
+        playlist_id,
+        source_path
+    );
     let playlist_id = match normalize_playlist_id(&playlist_id) {
         Ok(id) => id,
         Err(err) => {
@@ -179,7 +202,13 @@ pub async fn import_music_sound(
         }
     };
     match ensure_music_playlist_record_exists_impl(&app, &playlist_id).await {
-        ResultPayload::Ok { .. } => {}
+        ResultPayload::Ok { .. } => {
+            log::info!(
+                "[music][sound][import] playlist ok trace={} playlist_id={}",
+                trace,
+                playlist_id
+            );
+        }
         ResultPayload::Err { error } => return ResultPayload::Err { error },
     }
     if let Err(err) = ensure_music_playlist_dir(&app, &playlist_id).await {
@@ -234,13 +263,21 @@ pub async fn import_music_sound(
         );
     }
     match sync_playlist_tracks(&app, &playlist_id).await {
-        ResultPayload::Ok { .. } => ok(
-            MusicSoundRecord {
-                file_name,
-                target_path: target.to_string_lossy().into_owned(),
-            },
-            trace,
-        ),
+        ResultPayload::Ok { .. } => {
+            log::info!(
+                "[music][sound][import] ok trace={} playlist_id={} file_name={}",
+                trace,
+                playlist_id,
+                file_name
+            );
+            ok(
+                MusicSoundRecord {
+                    file_name,
+                    target_path: target.to_string_lossy().into_owned(),
+                },
+                trace,
+            )
+        }
         ResultPayload::Err { error } => ResultPayload::Err { error },
     }
 }
@@ -252,6 +289,12 @@ pub async fn delete_music_sound(
     file_name: String,
 ) -> ResultPayload<()> {
     let trace = new_trace_id();
+    log::info!(
+        "[music][sound][delete] start trace={} playlist_id={} file_name={}",
+        trace,
+        playlist_id,
+        file_name
+    );
     let playlist_id = match normalize_playlist_id(&playlist_id) {
         Ok(id) => id,
         Err(err) => {
@@ -263,7 +306,13 @@ pub async fn delete_music_sound(
         }
     };
     match ensure_music_playlist_record_exists_impl(&app, &playlist_id).await {
-        ResultPayload::Ok { .. } => {}
+        ResultPayload::Ok { .. } => {
+            log::info!(
+                "[music][sound][delete] playlist ok trace={} playlist_id={}",
+                trace,
+                playlist_id
+            );
+        }
         ResultPayload::Err { error } => return ResultPayload::Err { error },
     }
     let dir = match ensure_music_playlist_tracks_dir(&app, &playlist_id).await {
@@ -289,7 +338,15 @@ pub async fn delete_music_sound(
         }
     }
     match sync_playlist_tracks(&app, &playlist_id).await {
-        ResultPayload::Ok { .. } => ok((), trace),
+        ResultPayload::Ok { .. } => {
+            log::info!(
+                "[music][sound][delete] ok trace={} playlist_id={} file_name={}",
+                trace,
+                playlist_id,
+                file_name
+            );
+            ok((), trace)
+        }
         ResultPayload::Err { error } => ResultPayload::Err { error },
     }
 }
@@ -302,6 +359,13 @@ pub async fn move_music_sound(
     file_name: String,
 ) -> ResultPayload<()> {
     let trace = new_trace_id();
+    log::info!(
+        "[music][sound][move] start trace={} source_playlist_id={} target_playlist_id={} file_name={}",
+        trace,
+        source_playlist_id,
+        target_playlist_id,
+        file_name
+    );
     let source_playlist_id = match normalize_playlist_id(&source_playlist_id) {
         Ok(id) => id,
         Err(err) => {
@@ -326,11 +390,23 @@ pub async fn move_music_sound(
         return ok((), trace);
     }
     match ensure_music_playlist_record_exists_impl(&app, &source_playlist_id).await {
-        ResultPayload::Ok { .. } => {}
+        ResultPayload::Ok { .. } => {
+            log::info!(
+                "[music][sound][move] source playlist ok trace={} playlist_id={}",
+                trace,
+                source_playlist_id
+            );
+        }
         ResultPayload::Err { error } => return ResultPayload::Err { error },
     }
     match ensure_music_playlist_record_exists_impl(&app, &target_playlist_id).await {
-        ResultPayload::Ok { .. } => {}
+        ResultPayload::Ok { .. } => {
+            log::info!(
+                "[music][sound][move] target playlist ok trace={} playlist_id={}",
+                trace,
+                target_playlist_id
+            );
+        }
         ResultPayload::Err { error } => return ResultPayload::Err { error },
     }
 
@@ -376,7 +452,16 @@ pub async fn move_music_sound(
     }
     let _ = sync_playlist_tracks(&app, &source_playlist_id).await;
     match sync_playlist_tracks(&app, &target_playlist_id).await {
-        ResultPayload::Ok { .. } => ok((), trace),
+        ResultPayload::Ok { .. } => {
+            log::info!(
+                "[music][sound][move] ok trace={} source_playlist_id={} target_playlist_id={} file_name={}",
+                trace,
+                source_playlist_id,
+                target_playlist_id,
+                file_name
+            );
+            ok((), trace)
+        }
         ResultPayload::Err { error } => ResultPayload::Err { error },
     }
 }

@@ -34,10 +34,15 @@
   color: inherit;
 }
 
-/* 预览虚拟化：浏览器自动跳过离屏块的渲染，大幅提升长文档滚动性能 */
+/* 块级渲染：浏览器自动跳过离屏块的渲染，降低长文档滚动开销 */
 .markdown-body.gh-markdown > * {
   content-visibility: auto;
   contain-intrinsic-size: auto 50px;
+}
+
+.markdown-body.gh-markdown .markdown-block-chunk {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 240px;
 }
 
 .markdown-body.gh-markdown .md-align-block {

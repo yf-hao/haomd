@@ -20,6 +20,10 @@ export async function loadMusicPlaylistStore(): Promise<MusicPlaylistStore | nul
   try {
     const resp = await invoke<BackendResult<MusicPlaylistStore>>('load_music_playlist_store')
     if ('Ok' in resp) {
+      console.log('[music][playlists][load] ok', {
+        activePlaylistId: resp.Ok.data.activePlaylistId,
+        playlistCount: resp.Ok.data.playlists.length,
+      })
       return resp.Ok.data
     }
     console.error('[music] load_music_playlist_store backend error', resp.Err.error)
@@ -33,9 +37,19 @@ export async function loadMusicPlaylistStore(): Promise<MusicPlaylistStore | nul
 export async function saveMusicPlaylistStore(store: MusicPlaylistStore): Promise<void> {
   if (!isTauriEnv()) return
   try {
+    console.log('[music][playlists][save] start', {
+      activePlaylistId: store.activePlaylistId,
+      playlistCount: store.playlists.length,
+      playlistIds: store.playlists.map((playlist) => playlist.id),
+    })
     const resp = await invoke<BackendResult<null>>('save_music_playlist_store', { store })
     if ('Err' in resp) {
       console.error('[music] save_music_playlist_store backend error', resp.Err.error)
+    } else {
+      console.log('[music][playlists][save] ok', {
+        activePlaylistId: store.activePlaylistId,
+        playlistCount: store.playlists.length,
+      })
     }
   } catch (error) {
     console.error('[music] save_music_playlist_store failed', error)
@@ -45,6 +59,7 @@ export async function saveMusicPlaylistStore(store: MusicPlaylistStore): Promise
 export async function renameMusicPlaylist(playlistId: string, newName: string): Promise<boolean> {
   if (!isTauriEnv()) return true
   try {
+    console.log('[music][playlists][rename] start', { playlistId, newName })
     const resp = await invoke<BackendResult<null>>('rename_music_playlist', { playlistId, newName })
     if ('Err' in resp) {
       console.error('[music] rename_music_playlist backend error', resp.Err.error)
@@ -60,6 +75,7 @@ export async function renameMusicPlaylist(playlistId: string, newName: string): 
 export async function deleteMusicPlaylist(playlistId: string): Promise<boolean> {
   if (!isTauriEnv()) return true
   try {
+    console.log('[music][playlists][delete] start', { playlistId })
     const resp = await invoke<BackendResult<null>>('delete_music_playlist', { playlistId })
     if ('Err' in resp) {
       console.error('[music] delete_music_playlist backend error', resp.Err.error)

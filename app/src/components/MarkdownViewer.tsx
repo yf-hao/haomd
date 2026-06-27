@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -6,7 +6,7 @@ import rehypeRaw from 'rehype-raw'
 import 'github-markdown-css/github-markdown.css'
 import './MarkdownViewer.css'
 import { getRenderer } from '../modules/markdown/plugins'
-import { preparePreviewMarkdown, type PreviewMarkdownResult } from '../modules/markdown/previewPipeline'
+import { preparePreviewMarkdown, type PreviewBlockChunk, type PreviewMarkdownResult } from '../modules/markdown/previewPipeline'
 import { getDefaultPerformanceSettings, getPerformanceSettings, type PerformanceSettings } from '../modules/settings/editorSettings'
 import { subscribePerformanceSettingsChanged } from '../modules/settings/performanceRuntime'
 import { remarkToc } from '../modules/markdown/remarkToc'
@@ -40,23 +40,17 @@ function isPlainTextFile(path: string | null | undefined): boolean {
   return path.toLowerCase().endsWith('.txt')
 }
 
-type LineRange = {
-  start?: number
-  end?: number
-}
-
 type LineRangeIndexEntry = {
   start: number
   end: number
   element: HTMLElement
 }
 
-const LineRangeContext = React.createContext<LineRange | undefined>(undefined)
 const FoldContext = React.createContext<FoldRegion[]>([])
 const FilePathContext = React.createContext<string | null>(null)
-
-const useLineRange = () => React.useContext(LineRangeContext)
 const useFoldRegions = () => React.useContext(FoldContext)
+
+type MarkdownBlockChunk = PreviewBlockChunk
 
 function findLastRangeStartIndex(entries: LineRangeIndexEntry[], line: number): number {
   let left = 0
@@ -133,7 +127,8 @@ function findActiveLineRangeEntry(
 }
 
 // KaTeX 按需加载：单例 Promise + Context
-type KatexModule = { renderToString: (tex: string, options?: any) => string }
+type KatexRenderOptions = Record<string, unknown>
+type KatexModule = { renderToString: (tex: string, options?: KatexRenderOptions) => string }
 const KatexContext = React.createContext<KatexModule | null>(null)
 
 let katexPromise: Promise<KatexModule> | null = null
@@ -381,16 +376,10 @@ const remarkRehypeOptions: any = {
     // 这里我们直接返回一个 plain 对象作为 HAST element，不再依赖 state.h
     math(_state: any, node: any) {
       const pos = node.position
-      const startLine = pos?.start?.line
-      const endLine = pos?.end?.line ?? startLine
       const props: any = { value: node.value }
-      if (typeof startLine === 'number') {
-        props['data-line-start'] = startLine
-        if (endLine != null) props['data-line-end'] = endLine
-      }
       return {
-        type: 'element',
-        tagName: 'math',
+       type: 'element',
+       tagName: 'math',
         properties: props,
         children: [],
         position: pos,
@@ -398,13 +387,7 @@ const remarkRehypeOptions: any = {
     },
     inlineMath(_state: any, node: any) {
       const pos = node.position
-      const startLine = pos?.start?.line
-      const endLine = pos?.end?.line ?? startLine
       const props: any = { value: node.value }
-      if (typeof startLine === 'number') {
-        props['data-line-start'] = startLine
-        if (endLine != null) props['data-line-end'] = endLine
-      }
       return {
         type: 'element',
         tagName: 'inlineMath',
@@ -427,23 +410,9 @@ const isBlockFolded = (regions: FoldRegion[], start?: number, end?: number): boo
   return regions.some((r) => !(e < r.fromLine || s > r.toLine))
 }
 
-// 稳定版的基础容器组件
-const FoldableBlock = memo(({ tag, hideOnFold, node, children, className, ...rest }: any) => {
-  const regions = useFoldRegions()
-  const start = node?.position?.start?.line as number | undefined
-  const end = (node?.position?.end?.line ?? start) as number | undefined
-
-  if (hideOnFold && isBlockFolded(regions, start, end)) return null
-
-  const dataProps = start ? { 'data-line-start': start, 'data-line-end': end } : undefined
-  const lineRange: LineRange = { start, end }
-
-  return (
-    <LineRangeContext.Provider value={lineRange}>
-      {React.createElement(tag, { className, ...dataProps, ...rest }, children)}
-    </LineRangeContext.Provider>
-  )
-})
+const MarkdownBlockElement = memo(({ tag, children, className, node: _node, ...rest }: any) => (
+  React.createElement(tag, { className, ...rest }, children)
+))
 
 type DiagramBlockProps = {
   lang: 'mermaid' | 'mind'
@@ -547,14 +516,9 @@ const DiagramBlock = memo(
 const LazyCodeBlock = React.lazy(() => import('./CodeBlockHighlighted'))
 
 const StableCode = memo(({ inline, className, children, node, ...rest }: any) => {
-  const regions = useFoldRegions()
   const content = String(children).trim()
   const match = /language-([\w]+)/.exec(className || '')
   const lang = match?.[1]
-
-  const start = (node as any)?.position?.start?.line as number | undefined
-  const end = (node as any)?.position?.end?.line ?? start
-  if (!inline && isBlockFolded(regions, start, end)) return null
 
   if (lang) {
     const renderer = getRenderer(lang)
@@ -573,45 +537,108 @@ const StableCode = memo(({ inline, className, children, node, ...rest }: any) =>
 })
 
 const StableMath = memo(({ node, value, ...rest }: any) => {
-  const regions = useFoldRegions()
   const katex = React.useContext(KatexContext)
-  const start = node?.position?.start?.line as number | undefined
-  const end = (node?.position?.end?.line ?? start) as number | undefined
-
-  if (isBlockFolded(regions, start, end)) return null
 
   const tex = (value ?? (node as any).value ?? '').trim()
   const html = renderBlockMathHtml(tex, katex)
-  const dataProps = start ? { 'data-line-start': start, 'data-line-end': end } : undefined
-  const lineRange: LineRange = { start, end }
-
-  return (
-    <LineRangeContext.Provider value={lineRange}>
-      <div {...rest} {...dataProps} dangerouslySetInnerHTML={{ __html: html }} />
-    </LineRangeContext.Provider>
-  )
+  return <div {...rest} dangerouslySetInnerHTML={{ __html: html }} />
 })
 
 const StableInlineMath = memo(({ node, value, ...rest }: any) => {
-  const regions = useFoldRegions()
   const katex = React.useContext(KatexContext)
-  const lineRange = useLineRange()
-  let start = lineRange?.start
-  let end = lineRange?.end ?? start
-
-  if (start == null) {
-    const pos = node?.position
-    start = pos?.start?.line as number | undefined
-    end = (pos?.end?.line ?? start) as number | undefined
-  }
-
-  if (isBlockFolded(regions, start, end)) return null
 
   const tex = (value ?? (node as any).value ?? '').trim()
   const html = renderInlineMathHtml(tex, katex)
-
   return <span {...rest} dangerouslySetInnerHTML={{ __html: html }} />
 })
+
+type MarkdownBlockChunkProps = {
+  chunk: MarkdownBlockChunk
+  components: any
+  remarkPlugins: any[]
+  rehypePlugins: any[]
+  filePath: string | null
+  onElementChange: (chunk: MarkdownBlockChunk, element: HTMLElement | null) => void
+}
+
+const MarkdownChunkContent = memo(({
+  markdown,
+  components,
+  remarkPlugins,
+  rehypePlugins,
+  filePath,
+}: {
+  markdown: string
+  components: any
+  remarkPlugins: any[]
+  rehypePlugins: any[]
+  filePath: string | null
+}) => (
+  <FilePathContext.Provider value={filePath}>
+    <ReactMarkdown
+      remarkPlugins={remarkPlugins}
+      remarkRehypeOptions={remarkRehypeOptions}
+      rehypePlugins={rehypePlugins}
+      components={components}
+    >
+      {markdown}
+    </ReactMarkdown>
+  </FilePathContext.Provider>
+), (prev, next) => (
+  prev.markdown === next.markdown &&
+  prev.filePath === next.filePath &&
+  prev.components === next.components &&
+  prev.remarkPlugins === next.remarkPlugins &&
+  prev.rehypePlugins === next.rehypePlugins
+))
+
+const MarkdownBlockChunkView = memo(({
+  chunk,
+  components,
+  remarkPlugins,
+  rehypePlugins,
+  filePath,
+  onElementChange,
+}: MarkdownBlockChunkProps) => {
+  const elementRef = useRef<HTMLDivElement | null>(null)
+  const regions = useFoldRegions()
+  const isFolded = isBlockFolded(regions, chunk.startLine, chunk.endLine)
+
+  useLayoutEffect(() => {
+    onElementChange(chunk, isFolded ? null : elementRef.current)
+    return () => {
+      onElementChange(chunk, null)
+    }
+  }, [chunk, isFolded, onElementChange])
+
+  if (isFolded) return null
+
+  return (
+    <div
+      ref={elementRef}
+      className="markdown-block-chunk"
+      data-line-start={chunk.startLine}
+      data-line-end={chunk.endLine}
+    >
+      <MarkdownChunkContent
+        markdown={chunk.markdown}
+        components={components}
+        remarkPlugins={remarkPlugins}
+        rehypePlugins={rehypePlugins}
+        filePath={filePath}
+      />
+    </div>
+  )
+}, (prev, next) =>
+  prev.chunk.id === next.chunk.id &&
+  prev.chunk.startLine === next.chunk.startLine &&
+  prev.chunk.endLine === next.chunk.endLine &&
+  prev.chunk.markdown === next.chunk.markdown &&
+  prev.filePath === next.filePath &&
+  prev.components === next.components &&
+  prev.remarkPlugins === next.remarkPlugins &&
+  prev.rehypePlugins === next.rehypePlugins,
+)
 
 function MarkdownViewerComponent(
   props: Readonly<MarkdownViewerProps>
@@ -619,6 +646,7 @@ function MarkdownViewerComponent(
   const containerRef = useRef<HTMLDivElement | null>(null)
   const activeLineIndexRef = useRef<LineRangeIndexEntry[]>([])
   const activeLineEntryRef = useRef<{ entry: LineRangeIndexEntry; index: number } | null>(null)
+  const chunkElementMapRef = useRef(new Map<string, HTMLElement>())
   const previewWorkerRef = useRef<Worker | null>(null)
   const previewRequestIdRef = useRef(0)
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -657,11 +685,23 @@ function MarkdownViewerComponent(
 
     const worker = new Worker(new URL('../workers/markdownPreview.worker.ts', import.meta.url), { type: 'module' })
     previewWorkerRef.current = worker
-    worker.onmessage = (event: MessageEvent<{ id: number; processedMarkdown: string; hasMath: boolean }>) => {
+    worker.onmessage = (
+      event: MessageEvent<{
+        id: number
+        processedMarkdown: string
+        hasMath: boolean
+        containsToc: boolean
+        lineCount: number
+        blockChunks: PreviewBlockChunk[]
+      }>,
+    ) => {
       if (event.data.id !== previewRequestIdRef.current) return
       setPreviewResult({
         processedMarkdown: event.data.processedMarkdown,
         hasMath: event.data.hasMath,
+        containsToc: event.data.containsToc,
+        lineCount: event.data.lineCount,
+        blockChunks: event.data.blockChunks,
       })
     }
 
@@ -724,20 +764,38 @@ function MarkdownViewerComponent(
     }
   }, [hasMath, katexLib])
 
+  const blockRenderingEnabled = useMemo(() => (
+    mode === 'rendered' &&
+    !plainTextMode &&
+    !previewResult.containsToc &&
+    previewResult.lineCount >= 120
+  ), [mode, plainTextMode, previewResult.containsToc, previewResult.lineCount])
+  const blockChunks = useMemo(() => (
+    blockRenderingEnabled ? previewResult.blockChunks : []
+  ), [blockRenderingEnabled, previewResult.blockChunks])
+  const rehypePlugins = useMemo(() => [rehypeAlignedTabBlocks, rehypeRaw], [])
+  const handleChunkElementChange = useCallback((chunk: MarkdownBlockChunk, element: HTMLElement | null) => {
+    if (element) {
+      chunkElementMapRef.current.set(chunk.id, element)
+    } else {
+      chunkElementMapRef.current.delete(chunk.id)
+    }
+  }, [])
+
   const components = useMemo(() => {
     return {
-      p: (p: any) => <FoldableBlock tag="p" hideOnFold={true} {...p} />,
-      h1: (p: any) => <FoldableBlock tag="h1" hideOnFold={false} {...p} />,
-      h2: (p: any) => <FoldableBlock tag="h2" hideOnFold={true} {...p} />,
-      h3: (p: any) => <FoldableBlock tag="h3" hideOnFold={true} {...p} />,
-      h4: (p: any) => <FoldableBlock tag="h4" hideOnFold={true} {...p} />,
-      h5: (p: any) => <FoldableBlock tag="h5" hideOnFold={true} {...p} />,
-      h6: (p: any) => <FoldableBlock tag="h6" hideOnFold={true} {...p} />,
-      ul: (p: any) => <FoldableBlock tag="ul" hideOnFold={true} {...p} />,
-      ol: (p: any) => <FoldableBlock tag="ol" hideOnFold={true} {...p} />,
-      li: (p: any) => <FoldableBlock tag="li" hideOnFold={true} {...p} />,
-      blockquote: (p: any) => <FoldableBlock tag="blockquote" hideOnFold={true} {...p} />,
-      div: (p: any) => <FoldableBlock tag="div" hideOnFold={true} {...p} />,
+      p: (p: any) => <MarkdownBlockElement tag="p" {...p} />,
+      h1: (p: any) => <MarkdownBlockElement tag="h1" {...p} />,
+      h2: (p: any) => <MarkdownBlockElement tag="h2" {...p} />,
+      h3: (p: any) => <MarkdownBlockElement tag="h3" {...p} />,
+      h4: (p: any) => <MarkdownBlockElement tag="h4" {...p} />,
+      h5: (p: any) => <MarkdownBlockElement tag="h5" {...p} />,
+      h6: (p: any) => <MarkdownBlockElement tag="h6" {...p} />,
+      ul: (p: any) => <MarkdownBlockElement tag="ul" {...p} />,
+      ol: (p: any) => <MarkdownBlockElement tag="ol" {...p} />,
+      li: (p: any) => <MarkdownBlockElement tag="li" {...p} />,
+      blockquote: (p: any) => <MarkdownBlockElement tag="blockquote" {...p} />,
+      div: (p: any) => <MarkdownBlockElement tag="div" {...p} />,
       span: ({ className, children, ...rest }: any) => <span className={className} {...rest}>{children}</span>,
       math: StableMath,
       inlinemath: StableInlineMath,
@@ -795,7 +853,7 @@ function MarkdownViewerComponent(
           {path => <MarkdownMedia {...innerProps} filePath={path} encodeMediaPath={encodeMediaPath} />}
         </FilePathContext.Consumer>
       ),
-      pre: (p: any) => <FoldableBlock tag="pre" hideOnFold={true} {...p} />,
+      pre: (p: any) => <MarkdownBlockElement tag="pre" {...p} />,
       code: StableCode,
     }
   }, []) // 稳定引用
@@ -820,21 +878,20 @@ function MarkdownViewerComponent(
       return
     }
 
-    const index = Array.from(container.querySelectorAll<HTMLElement>('[data-line-start]'))
-      .map((element) => {
-        const start = Number(element.dataset.lineStart)
-        const end = Number(element.dataset.lineEnd ?? element.dataset.lineStart)
-        if (Number.isNaN(start)) return null
+    const index = blockChunks
+      .map((chunk) => {
+        const element = chunkElementMapRef.current.get(chunk.id)
+        if (!element) return null
         return {
-          start,
-          end: Number.isNaN(end) ? start : end,
+          start: chunk.startLine,
+          end: chunk.endLine,
           element,
         }
       })
       .filter((entry): entry is LineRangeIndexEntry => entry !== null)
 
     activeLineIndexRef.current = index
-  }, [renderedValue, foldRegions, mode])
+  }, [blockChunks, foldRegions, mode])
 
   // 保存和恢复滚动位置
   useLayoutEffect(() => {
@@ -995,22 +1052,36 @@ function MarkdownViewerComponent(
     <FilePathContext.Provider value={filePath ?? null}>
       <FoldContext.Provider value={foldRegions ?? []}>
         <KatexContext.Provider value={katexLib}>
-        <div className="markdown-body gh-markdown" ref={containerRef} data-preview-width={previewWidth}>
-          {mode === 'rendered' ? (
-            <ReactMarkdown
-              remarkPlugins={activeRemarkPlugins}
-              remarkRehypeOptions={remarkRehypeOptions}
-              rehypePlugins={[rehypeAlignedTabBlocks, rehypeRaw]}
-              components={components}
-            >
-              {renderedValue}
-            </ReactMarkdown>
-          ) : (
-            <pre className="markdown-source">
-              <code>{value}</code>
-            </pre>
-          )}
-        </div>
+          <div className="markdown-body gh-markdown" ref={containerRef} data-preview-width={previewWidth}>
+            {mode === 'rendered' ? (
+              blockRenderingEnabled ? (
+                blockChunks.map((chunk) => (
+                  <MarkdownBlockChunkView
+                    key={chunk.id}
+                    chunk={chunk}
+                    components={components}
+                    remarkPlugins={activeRemarkPlugins}
+                    rehypePlugins={rehypePlugins}
+                    filePath={filePath ?? null}
+                    onElementChange={handleChunkElementChange}
+                  />
+                ))
+              ) : (
+                <ReactMarkdown
+                  remarkPlugins={activeRemarkPlugins}
+                  remarkRehypeOptions={remarkRehypeOptions}
+                  rehypePlugins={rehypePlugins}
+                  components={components}
+                >
+                  {renderedValue}
+                </ReactMarkdown>
+              )
+            ) : (
+              <pre className="markdown-source">
+                <code>{value}</code>
+              </pre>
+            )}
+          </div>
         </KatexContext.Provider>
       </FoldContext.Provider>
     </FilePathContext.Provider>

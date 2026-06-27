@@ -121,12 +121,27 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
 
   const commitPlaylistStore = useCallback(async (nextStore: MusicPlaylistStore) => {
     const normalized = normalizePlaylistStore(nextStore)
+    console.log('[music][dialog][commit] start', {
+      activePlaylistId: normalized.activePlaylistId,
+      playlistCount: normalized.playlists.length,
+      playlistIds: normalized.playlists.map((playlist) => playlist.id),
+    })
     setPlaylistStore(normalized)
     await saveMusicPlaylistStore(normalized)
+    console.log('[music][dialog][commit] done', {
+      activePlaylistId: normalized.activePlaylistId,
+      playlistCount: normalized.playlists.length,
+    })
     return normalized
   }, [])
 
   const syncLibrary = useCallback(async () => {
+    console.log('[music][dialog][sync] start', {
+      hasLocalStore: Boolean(playlistStore),
+      localPlaylistCount: playlistStore?.playlists.length ?? 0,
+      localActivePlaylistId: playlistStore?.activePlaylistId ?? null,
+      selectedTrack,
+    })
     const loadedStore = await loadMusicPlaylistStore()
     const loadedLooksLikeDefaultOnly = Boolean(
       loadedStore
@@ -150,6 +165,16 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
     const trackFilesChanged = Boolean(
       activePlaylist && !areStringArraysEqual(activePlaylist.trackFiles, nextTrackFiles),
     )
+    console.log('[music][dialog][sync] loaded', {
+      loadedStoreActivePlaylistId: loadedStore?.activePlaylistId ?? null,
+      loadedStorePlaylistCount: loadedStore?.playlists.length ?? 0,
+      loadedLooksLikeDefaultOnly,
+      localHasCustomPlaylists,
+      shouldPreferLocalStore,
+      nextActivePlaylistId,
+      nextTrackCount: nextTracks.length,
+      trackFilesChanged,
+    })
     if (activePlaylist) {
       if (trackFilesChanged) {
         activePlaylist.trackFiles = nextTrackFiles
@@ -157,7 +182,11 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
       }
     }
     setPlaylistStore(nextStore)
-    if ((loadedStore || !playlistStore) && trackFilesChanged) {
+    if (loadedStore && trackFilesChanged) {
+      console.log('[music][dialog][sync] persist trackFiles changes', {
+        activePlaylistId: nextActivePlaylistId,
+        playlistCount: nextStore.playlists.length,
+      })
       void saveMusicPlaylistStore(nextStore)
     }
     setTracks(nextTracks)
@@ -233,6 +262,11 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
   const handleCreatePlaylist = useCallback(async () => {
     const name = playlistDraftName.trim()
     if (!name) return
+    console.log('[music][dialog][create] start', {
+      name,
+      existingPlaylistCount: playlistStore?.playlists.length ?? 0,
+      activePlaylistId: playlistStore?.activePlaylistId ?? null,
+    })
     const currentStore = playlistStore ?? createDefaultPlaylistStore(tracks)
     const nextStore = clonePlaylistStore(currentStore)
     const now = new Date().toISOString()
@@ -245,6 +279,7 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
     }
     nextStore.playlists = [...nextStore.playlists, playlist]
     nextStore.activePlaylistId = playlist.id
+    console.log('[music][dialog][create] new playlist', playlist)
     await commitPlaylistStore(nextStore)
     setSelectedTrack(null)
     setTracks([])
@@ -431,6 +466,11 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
 
   const handleDeletePlaylist = useCallback(async () => {
     if (!playlistAction) return
+    console.log('[music][dialog][delete] start', {
+      playlistId: playlistAction.playlistId,
+      activePlaylistId,
+      localPlaylistCount: playlistStore?.playlists.length ?? 0,
+    })
     const currentStore = playlistStore ?? createDefaultPlaylistStore(tracks)
     const playlist = currentStore.playlists.find((item) => item.id === playlistAction.playlistId)
     if (!playlist) return
@@ -447,6 +487,10 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
     const deleted = await deleteMusicPlaylist(deletedPlaylistId)
     if (!deleted) return
     await saveMusicPlaylistStore(nextStore)
+    console.log('[music][dialog][delete] saved next store', {
+      activePlaylistId: nextStore.activePlaylistId,
+      playlistCount: nextStore.playlists.length,
+    })
     setPlaylistStore(nextStore)
     const nextActiveTracks = await loadMusicSoundFiles(nextStore.activePlaylistId)
     setTracks(nextActiveTracks)

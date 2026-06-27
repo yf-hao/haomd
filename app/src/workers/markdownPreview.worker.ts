@@ -11,6 +11,15 @@ type PreviewWorkerResponse = {
   id: number
   processedMarkdown: string
   hasMath: boolean
+  containsToc: boolean
+  lineCount: number
+  blockChunks: Array<{
+    id: string
+    startLine: number
+    endLine: number
+    markdown: string
+    signature: string
+  }>
 }
 
 const workerScope = self as DedicatedWorkerGlobalScope
@@ -22,6 +31,9 @@ workerScope.addEventListener('message', (event: MessageEvent<PreviewWorkerReques
     id,
     processedMarkdown: result.processedMarkdown,
     hasMath: result.hasMath,
+    containsToc: result.containsToc,
+    lineCount: result.lineCount,
+    blockChunks: result.blockChunks,
   }
   workerScope.postMessage(response)
 })
