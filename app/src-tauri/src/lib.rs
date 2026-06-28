@@ -186,7 +186,10 @@ macro_rules! app_invoke_handler {
             pause_music_track,
             pause_music_track_by_alarm,
             resume_music_track,
+            restore_music_track,
             seek_music_track,
+            save_music_session,
+            restore_music_session,
             get_music_track_state,
             get_music_track_duration,
             set_music_track_volume,
@@ -199,6 +202,7 @@ macro_rules! app_invoke_handler {
             import_pomodoro_alarm_sound,
             list_music_sound_files,
             import_music_sound,
+            import_music_sounds,
             delete_music_sound,
             move_music_sound,
             load_music_playlist_store,
@@ -276,9 +280,11 @@ fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::error:
     handle.plugin(tauri_plugin_dialog::init())?;
     handle.plugin(tauri_plugin_opener::init())?;
 
+    let _ = prepare_music_player_session(handle);
     tauri::async_runtime::block_on(async {
         let menu = build_app_menu(handle).await?;
         handle.set_menu(menu)?;
+        let _ = restore_music_session(handle.clone()).await;
         Ok::<(), tauri::Error>(())
     })?;
 

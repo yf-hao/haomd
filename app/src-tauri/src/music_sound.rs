@@ -110,6 +110,78 @@ async fn collect_sound_files(
     Ok(list)
 }
 
+async fn copy_music_sound_file(
+    app: &AppHandle,
+    playlist_id: &str,
+    source_path: &str,
+) -> ResultPayload<MusicSoundRecord> {
+    let source = match normalize_source_path(source_path) {
+        Ok(path) => path,
+        Err(err) => {
+            return err_payload(
+                ErrorCode::InvalidPath,
+                format!("缺少或无效的音频文件路径: {err}"),
+                new_trace_id(),
+            )
+        }
+    };
+    if !source.exists() {
+        return err_payload(
+            ErrorCode::InvalidPath,
+            "音频文件不存在".to_string(),
+            new_trace_id(),
+        );
+    }
+    if !is_audio_file(&source) {
+        return err_payload(
+            ErrorCode::InvalidPath,
+            "请选择音频文件".to_string(),
+            new_trace_id(),
+        );
+    }
+    let file_name = match normalize_sound_file_name(&source) {
+        Ok(name) => name,
+        Err(err) => {
+            return err_payload(
+                ErrorCode::InvalidPath,
+                format!("音频文件名无效: {err}"),
+                new_trace_id(),
+            )
+        }
+    };
+    let dir = match ensure_music_playlist_tracks_dir(app, playlist_id).await {
+        Ok(dir) => dir,
+        Err(err) => {
+            return err_payload(
+                ErrorCode::IoError,
+                format!("获取音乐音频目录失败: {err}"),
+                new_trace_id(),
+            )
+        }
+    };
+    let target = dir.join(&file_name);
+    if let Err(err) = fs::copy(&source, &target).await {
+        return err_payload(
+            ErrorCode::IoError,
+            format!("导入音乐音频失败: {err}"),
+            new_trace_id(),
+        );
+    }
+    ok(
+        MusicSoundRecord {
+            file_name,
+            target_path: target.to_string_lossy().into_owned(),
+        },
+        new_trace_id(),
+    )
+}
+
+async fn cleanup_imported_music_sound_files(imported: &[MusicSoundRecord]) {
+    for item in imported {
+        let _ = fs::remove_file(&item.target_path).await;
+    }
+}
+
 pub async fn ensure_music_sound_available(
     app: &AppHandle,
     playlist_id: &str,
@@ -218,67 +290,79 @@ pub async fn import_music_sound(
             trace,
         );
     }
-    let source = match normalize_source_path(&source_path) {
-        Ok(path) => path,
-        Err(err) => {
-            return err_payload(
-                ErrorCode::InvalidPath,
-                format!("缺少或无效的音频文件路径: {err}"),
-                trace,
-            )
-        }
+    let imported = match copy_music_sound_file(&app, &playlist_id, &source_path).await {
+        ResultPayload::Ok { data, .. } => data,
+        ResultPayload::Err { error } => return ResultPayload::Err { error },
     };
-    if !source.exists() {
-        return err_payload(ErrorCode::InvalidPath, "音频文件不存在".to_string(), trace);
-    }
-    if !is_audio_file(&source) {
-        return err_payload(ErrorCode::InvalidPath, "请选择音频文件".to_string(), trace);
-    }
-    let file_name = match normalize_sound_file_name(&source) {
-        Ok(name) => name,
-        Err(err) => {
-            return err_payload(
-                ErrorCode::InvalidPath,
-                format!("音频文件名无效: {err}"),
-                trace,
-            )
-        }
-    };
-    let dir = match ensure_music_playlist_tracks_dir(&app, &playlist_id).await {
-        Ok(dir) => dir,
-        Err(err) => {
-            return err_payload(
-                ErrorCode::IoError,
-                format!("获取音乐音频目录失败: {err}"),
-                trace,
-            )
-        }
-    };
-    let target = dir.join(&file_name);
-    if let Err(err) = fs::copy(&source, &target).await {
-        return err_payload(
-            ErrorCode::IoError,
-            format!("导入音乐音频失败: {err}"),
-            trace,
-        );
-    }
     match sync_playlist_tracks(&app, &playlist_id).await {
         ResultPayload::Ok { .. } => {
             log::info!(
                 "[music][sound][import] ok trace={} playlist_id={} file_name={}",
                 trace,
                 playlist_id,
-                file_name
+                imported.file_name
             );
-            ok(
-                MusicSoundRecord {
-                    file_name,
-                    target_path: target.to_string_lossy().into_owned(),
-                },
+            ok(imported, trace)
+        }
+        ResultPayload::Err { error } => ResultPayload::Err { error },
+    }
+}
+
+#[tauri::command]
+pub async fn import_music_sounds(
+    app: AppHandle,
+    playlist_id: String,
+    source_paths: Vec<String>,
+) -> ResultPayload<Vec<MusicSoundRecord>> {
+    let trace = new_trace_id();
+    log::info!(
+        "[music][sound][import-batch] start trace={} playlist_id={} source_count={}",
+        trace,
+        playlist_id,
+        source_paths.len()
+    );
+    let playlist_id = match normalize_playlist_id(&playlist_id) {
+        Ok(id) => id,
+        Err(err) => {
+            return err_payload(
+                ErrorCode::InvalidPath,
+                format!("播放列表 ID 无效: {err}"),
                 trace,
             )
         }
-        ResultPayload::Err { error } => ResultPayload::Err { error },
+    };
+    match ensure_music_playlist_record_exists_impl(&app, &playlist_id).await {
+        ResultPayload::Ok { .. } => {}
+        ResultPayload::Err { error } => return ResultPayload::Err { error },
+    }
+    if let Err(err) = ensure_music_playlist_dir(&app, &playlist_id).await {
+        return err_payload(
+            ErrorCode::IoError,
+            format!("准备音乐目录失败: {err}"),
+            trace,
+        );
+    }
+    if source_paths.is_empty() {
+        return err_payload(ErrorCode::InvalidPath, "请选择音频文件".to_string(), trace);
+    }
+
+    let mut imported = Vec::new();
+    for source_path in source_paths {
+        match copy_music_sound_file(&app, &playlist_id, &source_path).await {
+            ResultPayload::Ok { data, .. } => imported.push(data),
+            ResultPayload::Err { error } => {
+                cleanup_imported_music_sound_files(&imported).await;
+                return ResultPayload::Err { error };
+            }
+        }
+    }
+
+    match sync_playlist_tracks(&app, &playlist_id).await {
+        ResultPayload::Ok { .. } => ok(imported, trace),
+        ResultPayload::Err { error } => {
+            cleanup_imported_music_sound_files(&imported).await;
+            ResultPayload::Err { error }
+        }
     }
 }
 

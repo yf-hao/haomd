@@ -3,12 +3,13 @@ import { createPortal } from 'react-dom'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { Button } from './Button'
 import { useI18n } from '../modules/i18n/I18nContext'
-import { deleteMusicSound, importMusicSound, loadMusicSoundFiles, moveMusicSound } from '../modules/tools/music/musicSound'
+import { deleteMusicSound, importMusicSounds, loadMusicSoundFiles, moveMusicSound } from '../modules/tools/music/musicSound'
 import {
   deleteMusicPlaylist,
   loadMusicPlaylistStore,
   renameMusicPlaylist,
   saveMusicPlaylistStore,
+  type MusicPlaylistPlaybackState,
   type MusicPlaylistRecord,
   type MusicPlaylistStore,
 } from '../modules/tools/music/musicPlaylists'
@@ -18,6 +19,7 @@ import {
   pauseMusicTrack,
   playMusicTrack,
   resumeMusicTrack,
+  restoreMusicTrackState,
   seekMusicTrack,
   setMusicTrackVolume,
   stopMusicTrack,
@@ -72,6 +74,9 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
     mode: 'actions' | 'move'
   } | null>(null)
   const hasInitializedSelectionRef = useRef(false)
+  const hasSyncedLibraryOnOpenRef = useRef(false)
+  const playlistStoreRef = useRef<MusicPlaylistStore | null>(null)
+  const selectedTrackRef = useRef<string | null>(null)
   const isSeekingRef = useRef(false)
   const lastAutoAdvanceTrackRef = useRef<string | null>(null)
   const volumeControlRef = useRef<HTMLDivElement | null>(null)
@@ -119,6 +124,40 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
     setIsSeeking(next)
   }, [])
 
+  const toPlaylistPlaybackState = useCallback((state: MusicTrackState): MusicPlaylistPlaybackState | null => {
+    if (!state.playlistId || !state.fileName) return null
+    if (!state.playing && !state.paused && !state.pausedByAlarm) return null
+    return {
+      fileName: state.fileName,
+      positionMs: Math.max(0, Math.floor(state.positionMs)),
+      playing: state.playing,
+      paused: state.paused,
+      pausedByAlarm: state.pausedByAlarm,
+      volume: state.volume,
+    }
+  }, [])
+
+  const applyPlaylistPlaybackState = useCallback((
+    store: MusicPlaylistStore,
+    playlistId: string,
+    playbackState: MusicPlaylistPlaybackState | null,
+  ): MusicPlaylistStore => {
+    const nextStore = clonePlaylistStore(store)
+    const playlist = nextStore.playlists.find((item) => item.id === playlistId)
+    if (!playlist) return nextStore
+    playlist.playbackState = playbackState
+    playlist.updatedAt = new Date().toISOString()
+    return nextStore
+  }, [])
+
+  useEffect(() => {
+    playlistStoreRef.current = playlistStore
+  }, [playlistStore])
+
+  useEffect(() => {
+    selectedTrackRef.current = selectedTrack
+  }, [selectedTrack])
+
   const commitPlaylistStore = useCallback(async (nextStore: MusicPlaylistStore) => {
     const normalized = normalizePlaylistStore(nextStore)
     console.log('[music][dialog][commit] start', {
@@ -135,12 +174,25 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
     return normalized
   }, [])
 
+  const persistCurrentPlaylistPlaybackState = useCallback(async (): Promise<MusicPlaylistStore> => {
+    const currentStore = playlistStoreRef.current ?? playlistStore ?? createDefaultPlaylistStore(tracks)
+    const currentActivePlaylistId = resolveActivePlaylistId(currentStore)
+    const currentPlaybackState = await getMusicTrackState()
+    const currentSnapshot = currentPlaybackState && currentPlaybackState.playlistId === currentActivePlaylistId
+      ? toPlaylistPlaybackState(currentPlaybackState)
+      : null
+    if (!currentSnapshot) return currentStore
+    const nextStore = applyPlaylistPlaybackState(currentStore, currentActivePlaylistId, currentSnapshot)
+    await commitPlaylistStore(nextStore)
+    return nextStore
+  }, [applyPlaylistPlaybackState, commitPlaylistStore, playlistStore, toPlaylistPlaybackState, tracks])
+
   const syncLibrary = useCallback(async () => {
     console.log('[music][dialog][sync] start', {
-      hasLocalStore: Boolean(playlistStore),
-      localPlaylistCount: playlistStore?.playlists.length ?? 0,
-      localActivePlaylistId: playlistStore?.activePlaylistId ?? null,
-      selectedTrack,
+      hasLocalStore: Boolean(playlistStoreRef.current),
+      localPlaylistCount: playlistStoreRef.current?.playlists.length ?? 0,
+      localActivePlaylistId: playlistStoreRef.current?.activePlaylistId ?? null,
+      selectedTrack: selectedTrackRef.current,
     })
     const loadedStore = await loadMusicPlaylistStore()
     const loadedLooksLikeDefaultOnly = Boolean(
@@ -149,11 +201,11 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
       && loadedStore.playlists[0]?.id === 'default',
     )
     const localHasCustomPlaylists = Boolean(
-      playlistStore?.playlists.some((playlist) => playlist.id !== 'default'),
+      playlistStoreRef.current?.playlists.some((playlist) => playlist.id !== 'default'),
     )
     const shouldPreferLocalStore = !loadedStore || (loadedLooksLikeDefaultOnly && localHasCustomPlaylists)
     const baseStore = shouldPreferLocalStore
-      ? (playlistStore ?? createDefaultPlaylistStore([]))
+      ? (playlistStoreRef.current ?? createDefaultPlaylistStore([]))
       : loadedStore
     const nextActivePlaylistId = resolveActivePlaylistId(baseStore)
     const nextTracks = await loadMusicSoundFiles(nextActivePlaylistId)
@@ -182,6 +234,7 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
       }
     }
     setPlaylistStore(nextStore)
+    playlistStoreRef.current = nextStore
     if (loadedStore && trackFilesChanged) {
       console.log('[music][dialog][sync] persist trackFiles changes', {
         activePlaylistId: nextActivePlaylistId,
@@ -190,20 +243,57 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
       void saveMusicPlaylistStore(nextStore)
     }
     setTracks(nextTracks)
+    const activePlaylistRecord = nextStore.playlists.find((playlist) => playlist.id === nextActivePlaylistId)
+    const activePlaybackState = activePlaylistRecord?.playbackState ?? null
+    const activePlaybackTrack = activePlaybackState?.fileName && nextTracks.includes(activePlaybackState.fileName)
+      ? activePlaybackState.fileName
+      : null
     if (!hasInitializedSelectionRef.current) {
-      setSelectedTrack(nextTracks[0] ?? null)
+      const initialTrack = activePlaybackTrack ?? nextTracks[0] ?? null
+      setSelectedTrack(initialTrack)
+      selectedTrackRef.current = initialTrack
+      if (activePlaybackTrack && activePlaybackState) {
+        setPlaybackTrackName(activePlaybackTrack)
+        setTrackPositionMs(activePlaybackState.positionMs)
+        setDraftSeekMs(activePlaybackState.positionMs)
+        setVolumePercent(Math.round(activePlaybackState.volume * 100))
+        setPlaying(activePlaybackState.playing)
+        setPaused(activePlaybackState.paused)
+      }
       hasInitializedSelectionRef.current = true
       return
     }
 
-    if (selectedTrack && nextTracks.length > 0 && !nextTracks.includes(selectedTrack)) {
+    if (activePlaybackTrack && activePlaybackState) {
+      setSelectedTrack(activePlaybackTrack)
+      selectedTrackRef.current = activePlaybackTrack
+      setPlaybackTrackName(activePlaybackTrack)
+      setTrackPositionMs(activePlaybackState.positionMs)
+      setDraftSeekMs(activePlaybackState.positionMs)
+      setVolumePercent(Math.round(activePlaybackState.volume * 100))
+      setPlaying(activePlaybackState.playing)
+      setPaused(activePlaybackState.paused)
+    } else if (selectedTrackRef.current && nextTracks.length > 0 && !nextTracks.includes(selectedTrackRef.current)) {
       setSelectedTrack(nextTracks[0] ?? null)
-    } else if (selectedTrack && nextTracks.length === 0) {
+      selectedTrackRef.current = nextTracks[0] ?? null
+      setPlaybackTrackName(null)
+      setTrackPositionMs(0)
+      setDraftSeekMs(null)
+      setPlaying(false)
+      setPaused(false)
+    } else if (selectedTrackRef.current && nextTracks.length === 0) {
       setSelectedTrack(null)
-    } else if (!selectedTrack && nextTracks.length > 0) {
+      selectedTrackRef.current = null
+      setPlaybackTrackName(null)
+      setTrackPositionMs(0)
+      setDraftSeekMs(null)
+      setPlaying(false)
+      setPaused(false)
+    } else if (!selectedTrackRef.current && nextTracks.length > 0) {
       setSelectedTrack(nextTracks[0])
+      selectedTrackRef.current = nextTracks[0]
     }
-  }, [playlistStore, selectedTrack])
+  }, [])
 
   const updatePlaylistMenuGeometry = useCallback(() => {
     if (!playlistSwitcherRef.current || typeof window === 'undefined') return
@@ -223,27 +313,10 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
     })
   }, [playlistItems.length])
 
-  const handleAddTrackToActivePlaylist = useCallback(async (
-    fileName: string,
-    baseStore?: MusicPlaylistStore,
-  ): Promise<MusicPlaylistStore | null> => {
-    const currentStore = baseStore ?? playlistStore ?? createDefaultPlaylistStore(tracks)
-    const activePlaylistId = resolveActivePlaylistId(currentStore)
-    const nextStore = clonePlaylistStore(currentStore)
-    const playlist = nextStore.playlists.find((item) => item.id === activePlaylistId)
-    if (!playlist) return null
-    if (!playlist.trackFiles.includes(fileName)) {
-      playlist.trackFiles = [...playlist.trackFiles, fileName]
-      playlist.updatedAt = new Date().toISOString()
-    }
-    nextStore.activePlaylistId = playlist.id
-    await commitPlaylistStore(nextStore)
-    return nextStore
-  }, [commitPlaylistStore, playlistStore, tracks])
-
   const handleSelectPlaylist = useCallback(async (playlistId: string) => {
-    const currentStore = playlistStore ?? createDefaultPlaylistStore(tracks)
-    const nextStore = clonePlaylistStore(currentStore)
+    let nextStore = await persistCurrentPlaylistPlaybackState()
+    nextStore = clonePlaylistStore(nextStore)
+
     const playlist = nextStore.playlists.find((item) => item.id === playlistId)
     if (!playlist) return
     nextStore.activePlaylistId = playlist.id
@@ -254,10 +327,64 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
     playlist.trackFiles = [...nextTracks]
     playlist.updatedAt = new Date().toISOString()
     await saveMusicPlaylistStore(nextStore)
-    setSelectedTrack(selectedTrack && nextTracks.includes(selectedTrack) ? selectedTrack : (nextTracks[0] ?? null))
+    setPlaylistStore(nextStore)
+    playlistStoreRef.current = nextStore
+    const restoredPlaybackState = playlist.playbackState ?? null
+    const nextSelectedTrack = restoredPlaybackState?.fileName && nextTracks.includes(restoredPlaybackState.fileName)
+      ? restoredPlaybackState.fileName
+      : (nextTracks[0] ?? null)
+    setSelectedTrack(nextSelectedTrack)
+    selectedTrackRef.current = nextSelectedTrack
+
+    if (restoredPlaybackState?.fileName && nextTracks.includes(restoredPlaybackState.fileName)) {
+      const shouldRestorePlayback = restoredPlaybackState.playing || restoredPlaybackState.paused || restoredPlaybackState.pausedByAlarm
+      if (shouldRestorePlayback) {
+        await restoreMusicTrackState({
+          playlistId: playlist.id,
+          fileName: restoredPlaybackState.fileName,
+          playing: restoredPlaybackState.playing,
+          paused: restoredPlaybackState.paused,
+          pausedByAlarm: restoredPlaybackState.pausedByAlarm,
+          positionMs: restoredPlaybackState.positionMs,
+          durationMs: null,
+          volume: restoredPlaybackState.volume,
+        })
+        setPlaybackTrackName(restoredPlaybackState.fileName)
+        setTrackPositionMs(restoredPlaybackState.positionMs)
+        setDraftSeekMs(restoredPlaybackState.positionMs)
+        setTrackDurationMs(null)
+        setPlaying(restoredPlaybackState.playing)
+        setPaused(restoredPlaybackState.paused)
+        setVolumePercent(Math.round(restoredPlaybackState.volume * 100))
+      } else {
+        await stopMusicTrack()
+        setPlaybackTrackName(null)
+        setTrackPositionMs(0)
+        setDraftSeekMs(null)
+        setTrackDurationMs(null)
+        setPlaying(false)
+        setPaused(false)
+      }
+    } else {
+      await stopMusicTrack()
+      setPlaybackTrackName(null)
+      setTrackPositionMs(0)
+      setDraftSeekMs(null)
+      setTrackDurationMs(null)
+      setPlaying(false)
+      setPaused(false)
+    }
     setIsPlaylistMenuOpen(false)
     setPlaylistAction(null)
-  }, [commitPlaylistStore, playlistStore, selectedTrack, tracks])
+  }, [
+    applyPlaylistPlaybackState,
+    commitPlaylistStore,
+    playlistStore,
+    stopMusicTrack,
+    restoreMusicTrackState,
+    toPlaylistPlaybackState,
+    tracks,
+  ])
 
   const handleCreatePlaylist = useCallback(async () => {
     const name = playlistDraftName.trim()
@@ -406,22 +533,12 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
     )
     if (sourcePaths.length === 0) return
 
-    const importedFileNames: string[] = []
-    let nextStore = playlistStore ?? createDefaultPlaylistStore(tracks)
-    for (const sourcePath of sourcePaths) {
-      const fileName = await importMusicSound(activePlaylistId, sourcePath)
-      if (!fileName) continue
-      importedFileNames.push(fileName)
-      const updatedStore = await handleAddTrackToActivePlaylist(fileName, nextStore)
-      if (updatedStore) {
-        nextStore = updatedStore
-      }
-    }
+    const importedFileNames = await importMusicSounds(activePlaylistId, sourcePaths)
     if (importedFileNames.length === 0) return
     hasInitializedSelectionRef.current = true
     setSelectedTrack(importedFileNames[0])
     await syncLibrary()
-  }, [activePlaylistId, handleAddTrackToActivePlaylist, locale, syncLibrary])
+  }, [activePlaylistId, locale, syncLibrary])
 
   const handleSelectTrack = useCallback((fileName: string) => {
     setSelectedTrack(fileName)
@@ -492,11 +609,16 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
       playlistCount: nextStore.playlists.length,
     })
     setPlaylistStore(nextStore)
+    playlistStoreRef.current = nextStore
+    setIsPlaylistMenuOpen(false)
     const nextActiveTracks = await loadMusicSoundFiles(nextStore.activePlaylistId)
     setTracks(nextActiveTracks)
     setSelectedTrack((current) => (
       current && nextActiveTracks.includes(current) ? current : (nextActiveTracks[0] ?? null)
     ))
+    selectedTrackRef.current = selectedTrackRef.current && nextActiveTracks.includes(selectedTrackRef.current)
+      ? selectedTrackRef.current
+      : (nextActiveTracks[0] ?? null)
   }, [activePlaylistId, handleStop, loadMusicSoundFiles, playlistAction, playlistStore, saveMusicPlaylistStore, tracks])
 
   const handleDeleteTrack = useCallback(async () => {
@@ -555,12 +677,18 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
   }, [open])
 
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      hasSyncedLibraryOnOpenRef.current = false
+      return
+    }
+    if (hasSyncedLibraryOnOpenRef.current) return
+    hasSyncedLibraryOnOpenRef.current = true
     void syncLibrary()
     return () => {
       setHoveredTrack(null)
+      void persistCurrentPlaylistPlaybackState()
     }
-  }, [open, syncLibrary])
+  }, [open, persistCurrentPlaylistPlaybackState, syncLibrary])
 
   useEffect(() => {
     if (open) return
@@ -803,7 +931,7 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
                   }}
                   onMouseUp={() => {
                     if (!isSeekingRef.current || draftSeekMs == null) return
-                    void commitSeek(draftSeekMs)
+                      void commitSeek(draftSeekMs)
                   }}
                   onTouchEnd={() => {
                     if (!isSeekingRef.current || draftSeekMs == null) return
@@ -1224,6 +1352,7 @@ function clonePlaylistStore(store: MusicPlaylistStore): MusicPlaylistStore {
     activePlaylistId: store.activePlaylistId,
     playlists: store.playlists.map((playlist) => ({
       ...playlist,
+      playbackState: playlist.playbackState ? { ...playlist.playbackState } : playlist.playbackState,
       trackFiles: [...playlist.trackFiles],
     })),
   }

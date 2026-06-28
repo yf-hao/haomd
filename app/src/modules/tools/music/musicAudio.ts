@@ -13,6 +13,38 @@ export type MusicTrackState = {
   volume: number
 }
 
+export async function restoreMusicTrackState(state: MusicTrackState): Promise<void> {
+  if (!isTauriEnv()) return
+  if (!state.playlistId || !state.fileName) return
+  try {
+    const resp = await invoke<BackendResult<null>>('restore_music_track', {
+      playlistId: state.playlistId,
+      musicSoundFile: state.fileName,
+      positionMs: Math.max(0, Math.floor(state.positionMs)),
+      volume: state.volume,
+      shouldPlay: state.playing && !state.paused && !state.pausedByAlarm,
+      pausedByAlarm: state.pausedByAlarm,
+    })
+    if ('Err' in resp) {
+      console.error('[music] restore_music_track backend error', resp.Err.error)
+    }
+  } catch (error) {
+    console.error('[music] restore_music_track failed', error)
+  }
+}
+
+export async function saveMusicSession(state: MusicTrackState): Promise<void> {
+  if (!isTauriEnv()) return
+  try {
+    const resp = await invoke<BackendResult<null>>('save_music_session', { state })
+    if ('Err' in resp) {
+      console.error('[music] save_music_session backend error', resp.Err.error)
+    }
+  } catch (error) {
+    console.error('[music] save_music_session failed', error)
+  }
+}
+
 export async function playMusicTrack(playlistId: string, musicSoundFile: string): Promise<void> {
   if (!isTauriEnv()) return
   try {

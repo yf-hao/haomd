@@ -40,6 +40,24 @@ export async function importMusicSound(playlistId: string, sourcePath: string): 
   }
 }
 
+export async function importMusicSounds(playlistId: string, sourcePaths: string[]): Promise<string[]> {
+  if (!isTauriEnv()) return []
+  try {
+    const resp = await invoke<BackendResult<ImportedMusicSound[]>>('import_music_sounds', {
+      playlistId,
+      sourcePaths,
+    })
+    if ('Ok' in resp) {
+      return resp.Ok.data.map((item) => item.fileName)
+    }
+    console.error('[music] import_music_sounds backend error', resp.Err.error)
+    return []
+  } catch (error) {
+    console.error('[music] import_music_sounds failed', error)
+    return []
+  }
+}
+
 export async function deleteMusicSound(playlistId: string, fileName: string): Promise<boolean> {
   if (!isTauriEnv()) return false
   try {

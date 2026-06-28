@@ -41,7 +41,7 @@ import { ThemeModeProvider } from './modules/theme/ThemeContext'
 import { resolveActiveTheme } from './modules/theme/themeResolver'
 import { loadThemePreference } from './modules/theme/themePreferenceStore'
 import type { SearchScope } from './modules/search/types'
-import { getMusicTrackState } from './modules/tools/music/musicAudio'
+import { getMusicTrackState, saveMusicSession } from './modules/tools/music/musicAudio'
 
 const appStartTime = performance.now()
 
@@ -241,6 +241,37 @@ function App() {
       hasPreviewTypographyOverrideRef.current = true
       setUiTypography(settings)
     })
+  }, [])
+
+  useEffect(() => {
+    if (!isTauriEnv()) return
+
+    let cancelled = false
+    let timer: number | undefined
+
+    const saveCurrentMusicSession = async () => {
+      const state = await getMusicTrackState()
+      if (!state) return
+      await saveMusicSession(state)
+    }
+
+    const persistMusicSession = async () => {
+      if (cancelled) return
+      await saveCurrentMusicSession()
+    }
+
+    void persistMusicSession()
+    timer = window.setInterval(() => {
+      void persistMusicSession()
+    }, 5000)
+
+    return () => {
+      if (timer !== undefined) {
+        window.clearInterval(timer)
+      }
+      cancelled = true
+      void saveCurrentMusicSession()
+    }
   }, [])
 
   return (

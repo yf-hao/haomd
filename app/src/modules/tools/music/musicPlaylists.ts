@@ -6,8 +6,18 @@ export type MusicPlaylistRecord = {
   id: string
   name: string
   trackFiles: string[]
+  playbackState?: MusicPlaylistPlaybackState | null
   createdAt: string
   updatedAt: string
+}
+
+export type MusicPlaylistPlaybackState = {
+  fileName: string | null
+  positionMs: number
+  playing: boolean
+  paused: boolean
+  pausedByAlarm: boolean
+  volume: number
 }
 
 export type MusicPlaylistStore = {

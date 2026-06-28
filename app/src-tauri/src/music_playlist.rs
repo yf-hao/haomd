@@ -1,11 +1,13 @@
 use crate::music_paths::ensure_music_root_dir;
 use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
 use chrono::Utc;
+use once_cell::sync::Lazy;
 use rand::random;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tauri::AppHandle;
 use tokio::fs;
+use tokio::sync::Mutex;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -14,8 +16,21 @@ pub struct MusicPlaylistRecord {
     pub name: String,
     #[serde(default)]
     pub track_files: Vec<String>,
+    #[serde(default)]
+    pub playback_state: Option<MusicPlaylistPlaybackState>,
     pub created_at: String,
     pub updated_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicPlaylistPlaybackState {
+    pub file_name: Option<String>,
+    pub position_ms: u64,
+    pub playing: bool,
+    pub paused: bool,
+    pub paused_by_alarm: bool,
+    pub volume: f32,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -31,6 +46,8 @@ fn playlist_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
         .join("music")
         .join("playlists.json"))
 }
+
+static MUSIC_PLAYLIST_WRITE_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 async fn read_json<T>(path: &Path) -> std::io::Result<T>
 where
@@ -70,6 +87,7 @@ fn default_playlist_store() -> MusicPlaylistStore {
         id: "default".to_string(),
         name: "默认列表".to_string(),
         track_files: vec![],
+        playback_state: None,
         created_at: now.clone(),
         updated_at: now,
     };
@@ -191,7 +209,7 @@ pub async fn load_music_playlist_store_impl(app: &AppHandle) -> ResultPayload<Mu
     }
 }
 
-pub async fn save_music_playlist_store_impl(
+async fn save_music_playlist_store_impl_unlocked(
     app: &AppHandle,
     store: MusicPlaylistStore,
 ) -> ResultPayload<()> {
@@ -260,11 +278,20 @@ pub async fn save_music_playlist_store_impl(
     }
 }
 
+pub async fn save_music_playlist_store_impl(
+    app: &AppHandle,
+    store: MusicPlaylistStore,
+) -> ResultPayload<()> {
+    let _guard = MUSIC_PLAYLIST_WRITE_LOCK.lock().await;
+    save_music_playlist_store_impl_unlocked(app, store).await
+}
+
 pub async fn update_music_playlist_tracks_impl(
     app: &AppHandle,
     playlist_id: &str,
     track_files: Vec<String>,
 ) -> ResultPayload<()> {
+    let _guard = MUSIC_PLAYLIST_WRITE_LOCK.lock().await;
     let trace = new_trace_id();
     log::info!(
         "[music][playlist][update-tracks] start trace={} playlist_id={} track_count={}",
@@ -309,7 +336,7 @@ pub async fn update_music_playlist_tracks_impl(
         playlist_id,
         playlist.track_files.len()
     );
-    match save_music_playlist_store_impl(app, store).await {
+    match save_music_playlist_store_impl_unlocked(app, store).await {
         ResultPayload::Ok { .. } => {
             log::info!(
                 "[music][playlist][update-tracks] ok trace={} playlist_id={}",
@@ -370,6 +397,7 @@ pub async fn rename_music_playlist_impl(
     playlist_id: &str,
     new_name: &str,
 ) -> ResultPayload<()> {
+    let _guard = MUSIC_PLAYLIST_WRITE_LOCK.lock().await;
     let trace = new_trace_id();
     let new_name = new_name.trim();
     log::info!(
@@ -423,7 +451,7 @@ pub async fn rename_music_playlist_impl(
         playlist_id,
         new_name
     );
-    match save_music_playlist_store_impl(app, store).await {
+    match save_music_playlist_store_impl_unlocked(app, store).await {
         ResultPayload::Ok { .. } => {
             log::info!(
                 "[music][playlist][rename] ok trace={} playlist_id={}",
@@ -437,6 +465,7 @@ pub async fn rename_music_playlist_impl(
 }
 
 pub async fn delete_music_playlist_impl(app: &AppHandle, playlist_id: &str) -> ResultPayload<()> {
+    let _guard = MUSIC_PLAYLIST_WRITE_LOCK.lock().await;
     let trace = new_trace_id();
     let playlist_id = playlist_id.trim();
     log::info!(
@@ -498,7 +527,7 @@ pub async fn delete_music_playlist_impl(app: &AppHandle, playlist_id: &str) -> R
             .unwrap_or_else(|| "default".to_string());
     }
 
-    match save_music_playlist_store_impl(app, store).await {
+    match save_music_playlist_store_impl_unlocked(app, store).await {
         ResultPayload::Ok { .. } => {
             log::info!(
                 "[music][playlist][delete] store updated trace={} playlist_id={}",
