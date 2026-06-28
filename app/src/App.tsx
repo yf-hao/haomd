@@ -247,7 +247,9 @@ function App() {
     if (!isTauriEnv()) return
 
     let cancelled = false
-    let timer: number | undefined
+    const timer = window.setInterval(() => {
+      void persistMusicSession()
+    }, 5000)
 
     const saveCurrentMusicSession = async () => {
       const state = await getMusicTrackState()
@@ -261,14 +263,9 @@ function App() {
     }
 
     void persistMusicSession()
-    timer = window.setInterval(() => {
-      void persistMusicSession()
-    }, 5000)
 
     return () => {
-      if (timer !== undefined) {
-        window.clearInterval(timer)
-      }
+      window.clearInterval(timer)
       cancelled = true
       void saveCurrentMusicSession()
     }

@@ -15,7 +15,7 @@ jobs:
       is_new_version: ${{ steps.check.outputs.is_new_version }}
       changelog: ${{ steps.extract_changelog.outputs.body }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
       - name: Check if version is bumped
@@ -60,7 +60,7 @@ jobs:
 
     runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
 
