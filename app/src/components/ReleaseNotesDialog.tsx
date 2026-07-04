@@ -1,6 +1,7 @@
 import type { FC } from 'react'
 import changelogDocs from '../../../CHANGELOG.md?raw'
 import ReactMarkdown from 'react-markdown'
+import { Button } from './Button'
 
 export type ReleaseNotesDialogProps = {
   open: boolean
@@ -25,9 +26,9 @@ export const ReleaseNotesDialog: FC<ReleaseNotesDialogProps> = ({ open, onClose 
           </div>
         </div>
         <div className="modal-actions">
-          <button className="ghost primary" type="button" onClick={onClose}>
+          <Button variant="secondary" type="button" onClick={onClose}>
             关闭
-          </button>
+          </Button>
         </div>
       </div>
     </div>
