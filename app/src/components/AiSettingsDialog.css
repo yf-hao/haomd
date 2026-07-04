@@ -578,9 +578,12 @@
   margin-top: 4px;
   padding: 6px 8px;
   border-radius: 8px;
-  background: rgba(22, 163, 74, 0.2);
-  color: #bbf7d0;
+  border: 1px solid color-mix(in srgb, var(--theme-accent-success) 42%, var(--theme-border-subtle));
+  background: color-mix(in srgb, var(--theme-accent-success) 12%, var(--theme-surface-editor));
+  color: var(--theme-text-default);
   font-size: 12px;
+  white-space: pre-wrap;
+  box-shadow: inset 3px 0 0 var(--theme-accent-success);
 }
 
 .ai-settings-form-actions {
