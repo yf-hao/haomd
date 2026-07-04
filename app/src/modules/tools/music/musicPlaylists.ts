@@ -7,9 +7,12 @@ export type MusicPlaylistRecord = {
   name: string
   trackFiles: string[]
   playbackState?: MusicPlaylistPlaybackState | null
+  repeatMode?: MusicRepeatMode | null
   createdAt: string
   updatedAt: string
 }
+
+export type MusicRepeatMode = 'singleLoop' | 'listLoop' | 'shuffle'
 
 export type MusicPlaylistPlaybackState = {
   fileName: string | null

@@ -9,6 +9,7 @@ import {
   loadMusicPlaylistStore,
   renameMusicPlaylist,
   saveMusicPlaylistStore,
+  type MusicRepeatMode,
   type MusicPlaylistPlaybackState,
   type MusicPlaylistRecord,
   type MusicPlaylistStore,
@@ -32,6 +33,8 @@ export type MusicPlayerDialogProps = {
   onClose: () => void
 }
 
+const DEFAULT_REPEAT_MODE: MusicRepeatMode = 'listLoop'
+
 export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
   const { resolvedLanguage: locale } = useI18n()
   const AUTO_ADVANCE_GUARD_MS = 300
@@ -51,6 +54,7 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
   const [draftSeekMs, setDraftSeekMs] = useState<number | null>(null)
   const [volumePercent, setVolumePercent] = useState(100)
   const [isVolumeOpen, setIsVolumeOpen] = useState(false)
+  const [repeatMode, setRepeatMode] = useState<MusicRepeatMode>(DEFAULT_REPEAT_MODE)
   const [playlistStore, setPlaylistStore] = useState<MusicPlaylistStore | null>(null)
   const [isPlaylistMenuOpen, setIsPlaylistMenuOpen] = useState(false)
   const [playlistMenuGeometry, setPlaylistMenuGeometry] = useState<{
@@ -245,9 +249,11 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
     setTracks(nextTracks)
     const activePlaylistRecord = nextStore.playlists.find((playlist) => playlist.id === nextActivePlaylistId)
     const activePlaybackState = activePlaylistRecord?.playbackState ?? null
+    const activeRepeatMode = activePlaylistRecord?.repeatMode ?? DEFAULT_REPEAT_MODE
     const activePlaybackTrack = activePlaybackState?.fileName && nextTracks.includes(activePlaybackState.fileName)
       ? activePlaybackState.fileName
       : null
+    setRepeatMode(activeRepeatMode)
     if (!hasInitializedSelectionRef.current) {
       const initialTrack = activePlaybackTrack ?? nextTracks[0] ?? null
       setSelectedTrack(initialTrack)
@@ -330,11 +336,13 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
     setPlaylistStore(nextStore)
     playlistStoreRef.current = nextStore
     const restoredPlaybackState = playlist.playbackState ?? null
+    const restoredRepeatMode = playlist.repeatMode ?? DEFAULT_REPEAT_MODE
     const nextSelectedTrack = restoredPlaybackState?.fileName && nextTracks.includes(restoredPlaybackState.fileName)
       ? restoredPlaybackState.fileName
       : (nextTracks[0] ?? null)
     setSelectedTrack(nextSelectedTrack)
     selectedTrackRef.current = nextSelectedTrack
+    setRepeatMode(restoredRepeatMode)
 
     if (restoredPlaybackState?.fileName && nextTracks.includes(restoredPlaybackState.fileName)) {
       const shouldRestorePlayback = restoredPlaybackState.playing || restoredPlaybackState.paused || restoredPlaybackState.pausedByAlarm
@@ -401,6 +409,7 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
       id: createPlaylistId(),
       name,
       trackFiles: [],
+      repeatMode: DEFAULT_REPEAT_MODE,
       createdAt: now,
       updatedAt: now,
     }
@@ -408,6 +417,7 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
     nextStore.activePlaylistId = playlist.id
     console.log('[music][dialog][create] new playlist', playlist)
     await commitPlaylistStore(nextStore)
+    setRepeatMode(DEFAULT_REPEAT_MODE)
     setSelectedTrack(null)
     setTracks([])
     setIsPlaylistMenuOpen(false)
@@ -613,6 +623,8 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
     setIsPlaylistMenuOpen(false)
     const nextActiveTracks = await loadMusicSoundFiles(nextStore.activePlaylistId)
     setTracks(nextActiveTracks)
+    const nextActivePlaylist = nextStore.playlists.find((playlist) => playlist.id === nextStore.activePlaylistId)
+    setRepeatMode(nextActivePlaylist?.repeatMode ?? DEFAULT_REPEAT_MODE)
     setSelectedTrack((current) => (
       current && nextActiveTracks.includes(current) ? current : (nextActiveTracks[0] ?? null)
     ))
@@ -643,6 +655,23 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
     await setMusicTrackVolume(next / 100)
   }, [])
 
+  const persistRepeatMode = useCallback(async (nextMode: MusicRepeatMode) => {
+    setRepeatMode(nextMode)
+    const currentStore = playlistStoreRef.current ?? playlistStore ?? createDefaultPlaylistStore(tracks)
+    const currentActivePlaylistId = resolveActivePlaylistId(currentStore)
+    const nextStore = clonePlaylistStore(currentStore)
+    const currentPlaylist = nextStore.playlists.find((item) => item.id === currentActivePlaylistId)
+    if (!currentPlaylist) return
+    currentPlaylist.repeatMode = nextMode
+    currentPlaylist.updatedAt = new Date().toISOString()
+    await commitPlaylistStore(nextStore)
+  }, [commitPlaylistStore, playlistStore, tracks])
+
+  const handleToggleRepeatMode = useCallback(() => {
+    const nextMode = getNextRepeatMode(repeatMode)
+    void persistRepeatMode(nextMode)
+  }, [persistRepeatMode, repeatMode])
+
   const playTrackAtIndex = useCallback(async (nextTrack: string, shouldPlay: boolean) => {
     setSelectedTrack(nextTrack)
     if (!shouldPlay) return
@@ -662,6 +691,32 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
     const shouldStart = shouldPlay || playing || paused
     await playTrackAtIndex(nextTrack, shouldStart)
   }, [activePlaylistTracks, currentIndex, paused, playTrackAtIndex, playing])
+
+  const handleAutoAdvanceTrack = useCallback(async (currentTrack: string | null) => {
+    if (!currentTrack || activePlaylistTracks.length === 0) return
+
+    if (activePlaylistTracks.length === 1) {
+      await playTrackAtIndex(activePlaylistTracks[0], true)
+      return
+    }
+
+    if (repeatMode === 'singleLoop') {
+      await playTrackAtIndex(currentTrack, true)
+      return
+    }
+
+    if (repeatMode === 'shuffle') {
+      const shuffledTrack = pickRandomTrack(activePlaylistTracks, currentTrack)
+      await playTrackAtIndex(shuffledTrack, true)
+      return
+    }
+
+    const currentIndex = activePlaylistTracks.indexOf(currentTrack)
+    const nextIndex = currentIndex >= 0
+      ? (currentIndex + 1) % activePlaylistTracks.length
+      : 0
+    await playTrackAtIndex(activePlaylistTracks[nextIndex], true)
+  }, [activePlaylistTracks, playTrackAtIndex, repeatMode])
 
   const commitSeek = useCallback(async (positionMs: number) => {
     const nextPosition = Math.max(0, Math.floor(positionMs))
@@ -774,7 +829,7 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
         && state.positionMs >= Math.max(0, state.durationMs - AUTO_ADVANCE_GUARD_MS)
       if (finishedTrack && state.fileName !== lastAutoAdvanceTrackRef.current) {
         lastAutoAdvanceTrackRef.current = state.fileName
-        void handleStepTrack(1, true)
+        void handleAutoAdvanceTrack(state.fileName)
       }
       if (!finishedTrack && state.fileName) {
         lastAutoAdvanceTrackRef.current = null
@@ -788,7 +843,7 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [handleStepTrack, open, selectedTrack])
+  }, [handleAutoAdvanceTrack, open, selectedTrack])
 
   useEffect(() => {
     if (!open || !isVolumeOpen) return
@@ -1000,6 +1055,18 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
                 disabled={activePlaylistTracks.length === 0}
                 aria-label={locale === 'en-US' ? 'Next track' : '下一首'}
                 title={locale === 'en-US' ? 'Next track' : '下一首'}
+              />
+              <Button
+                variant="secondary"
+                className="music-player-control-btn music-player-repeat-mode-btn"
+                icon={repeatMode === 'singleLoop'
+                  ? <RepeatOneIcon />
+                  : repeatMode === 'shuffle'
+                    ? <ShuffleIcon />
+                    : <RepeatAllIcon />}
+                onClick={handleToggleRepeatMode}
+                aria-label={getRepeatModeTitle(repeatMode, locale)}
+                title={getRepeatModeTitle(repeatMode, locale)}
               />
               <div className="music-player-volume-control" ref={volumeControlRef}>
                 <button
@@ -1341,6 +1408,7 @@ function createDefaultPlaylistStore(trackFiles: string[]): MusicPlaylistStore {
       id: 'default',
       name: '默认列表',
       trackFiles: [...trackFiles],
+      repeatMode: DEFAULT_REPEAT_MODE,
       createdAt: now,
       updatedAt: now,
     }],
@@ -1386,6 +1454,42 @@ function normalizePlaylistStore(store: MusicPlaylistStore | null): MusicPlaylist
   return nextStore
 }
 
+function getNextRepeatMode(mode: MusicRepeatMode): MusicRepeatMode {
+  switch (mode) {
+    case 'singleLoop':
+      return 'listLoop'
+    case 'listLoop':
+      return 'shuffle'
+    case 'shuffle':
+      return 'singleLoop'
+  }
+}
+
+function getRepeatModeTitle(mode: MusicRepeatMode, locale: string): string {
+  const labels: Record<MusicRepeatMode, { en: string; zh: string }> = {
+    singleLoop: { en: 'Single loop', zh: '单曲循环' },
+    listLoop: { en: 'List loop', zh: '列表循环' },
+    shuffle: { en: 'Shuffle', zh: '随机播放' },
+  }
+  const label = labels[mode]
+  const current = locale === 'en-US' ? label.en : label.zh
+  const next = getNextRepeatMode(mode)
+  const nextLabel = locale === 'en-US'
+    ? labels[next].en
+    : labels[next].zh
+  return locale === 'en-US'
+    ? `Repeat mode: ${current} (click to ${nextLabel.toLowerCase()})`
+    : `播放模式：${current}（点击切换到${nextLabel}）`
+}
+
+function pickRandomTrack(tracks: string[], currentTrack: string): string {
+  if (tracks.length <= 1) return tracks[0] ?? currentTrack
+  const candidates = tracks.filter((track) => track !== currentTrack)
+  const pool = candidates.length > 0 ? candidates : tracks
+  const index = Math.floor(Math.random() * pool.length)
+  return pool[index] ?? currentTrack
+}
+
 function PrevTrackIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -1422,6 +1526,41 @@ function StopTrackIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M6 6h12v12H6z" />
+    </svg>
+  )
+}
+
+function RepeatAllIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7 7h9a3 3 0 0 1 3 3v1" />
+      <path d="M17 5l3 3-3 3" />
+      <path d="M17 17H8a3 3 0 0 1-3-3v-1" />
+      <path d="M7 19l-3-3 3-3" />
+    </svg>
+  )
+}
+
+function RepeatOneIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7 7h9a3 3 0 0 1 3 3v1" />
+      <path d="M17 5l3 3-3 3" />
+      <path d="M17 17H8a3 3 0 0 1-3-3v-1" />
+      <path d="M7 19l-3-3 3-3" />
+      <path d="M12.3 8.4v7.2" />
+      <path d="M11.1 9.7h1.2" />
+    </svg>
+  )
+}
+
+function ShuffleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 7h4.2c1.8 0 2.7 1.2 3.7 2.5l1.1 1.4c.9 1.1 1.7 2.1 3.2 2.1H20" />
+      <path d="M16 4l4 4-4 4" />
+      <path d="M4 17h4.2c1.8 0 2.7-1.2 3.7-2.5l1.1-1.4c.9-1.1 1.7-2.1 3.2-2.1H20" />
+      <path d="M16 20l4-4-4-4" />
     </svg>
   )
 }
