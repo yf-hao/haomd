@@ -561,7 +561,7 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
     setPlaying(true)
     setPaused(false)
     lastAutoAdvanceTrackRef.current = null
-  }, [activePlaylistTracks, paused, playing, selectedTrack])
+  }, [activePlaylistId, activePlaylistTracks, paused, playing, selectedTrack])
 
   const handlePause = useCallback(async () => {
     if (!playing || paused) return
@@ -651,7 +651,7 @@ export function MusicPlayerDialog({ open, onClose }: MusicPlayerDialogProps) {
     setTrackPositionMs(0)
     setPlaying(true)
     setPaused(false)
-  }, [])
+  }, [activePlaylistId])
 
   const handleStepTrack = useCallback(async (direction: -1 | 1, shouldPlay = false) => {
     if (activePlaylistTracks.length === 0) return
