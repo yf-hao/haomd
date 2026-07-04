@@ -2,6 +2,64 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.12.3] - 2026-07-04
+
+### 中文
+
+本次更新为 v0.12.3 补丁版本，主要增强音乐播放器的循环播放能力，并修复播放结束后的自动推进行为。
+
+#### 💡 主要更新
+*   **音乐播放器体验升级**：
+    *   新增单曲循环、列表循环与随机播放三种模式，可通过一个按钮循环切换。
+    *   优化播放结束后的自动切歌逻辑，按当前播放模式执行，避免单曲列表结束后无法继续播放的问题。
+    *   统一了播放模式的持久化与恢复流程，使不同歌单可记住自己的播放偏好。
+
+---
+
+### English
+
+Version v0.12.3 is a patch release that improves music player repeat behavior and fixes auto-advance after playback ends.
+
+#### 💡 Key Updates
+*   **Music Player Enhancements**:
+    *   Added single-loop, list-loop, and shuffle modes, switchable through one button.
+    *   Refined auto-advance behavior to follow the active repeat mode, preventing single-track playlists from stalling at the end.
+    *   Unified persistence and restoration for repeat mode so each playlist can remember its playback preference.
+
+---
+
+## [v0.12.2] - 2026-06-27
+
+### 中文
+
+本次更新为 v0.12.2 补丁版本，主要聚焦音乐播放器的播放状态、播放进度与歌单稳定性修复，并同步更新了构建与发布配置。
+
+#### 💡 主要更新
+*   **音乐播放器修复**：
+    *   优化了播放状态与进度恢复逻辑，支持重启后继续播放。
+    *   修复了切换歌单、增删歌曲后当前曲面与实际播放内容不同步的问题。
+    *   加强了播放列表的持久化与原子写入流程，减少列表名称异常回退与数据损坏风险。
+*   **发布与构建优化**：
+    *   将 GitHub Actions 中的 `actions/checkout` 升级到 `v5`，以适配新的 Node.js 运行时要求。
+    *   修正了部分 lint 与格式检查问题，提升 CI 稳定性。
+
+---
+
+### English
+
+Version v0.12.2 is a patch release focused on music player playback state, progress recovery, playlist stability, and build/release maintenance.
+
+#### 💡 Key Updates
+*   **Music Player Fixes**:
+    *   Improved playback state and progress restoration so playback can resume after restart.
+    *   Fixed synchronization issues between the displayed track and the actual playing track when switching playlists or editing songs.
+    *   Strengthened playlist persistence and atomic write behavior to reduce name regressions and data corruption risks.
+*   **Release & Build Maintenance**:
+    *   Upgraded `actions/checkout` to `v5` in GitHub Actions workflows to match the newer Node.js runtime requirements.
+    *   Cleaned up lint and formatting issues to improve CI reliability.
+
+---
+
 ## [v0.12.1] - 2026-06-22
 
 ### 中文
