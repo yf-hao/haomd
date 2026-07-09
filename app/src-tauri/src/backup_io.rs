@@ -6,7 +6,7 @@ use crate::webdav_change_tracker::{WebDavChangeScope, WebDavChangeTracker};
 use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
 use futures_util::stream::{self, StreamExt};
 use once_cell::sync::Lazy;
-use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, USER_AGENT};
+use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_LENGTH, USER_AGENT};
 use reqwest::StatusCode;
 use reqwest::{Body, Client, Method};
 use serde::{Deserialize, Serialize};
@@ -21,6 +21,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::UNIX_EPOCH;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::time::{sleep, Duration};
 use url::Url;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
@@ -48,6 +49,9 @@ const WEBDAV_PARALLEL_DOWNLOAD_LIMIT: usize = 4;
 const WEBDAV_PARALLEL_UPLOAD_LIMIT: usize = 4;
 const WEBDAV_PARALLEL_UPLOAD_MAX_SIZE: u64 = 512 * 1024;
 const WEBDAV_UPLOAD_CHUNK_SIZE: usize = 64 * 1024;
+const WEBDAV_UPLOAD_BUFFERED_MAX_SIZE: u64 = 64 * 1024 * 1024;
+const WEBDAV_UPLOAD_BUFFERED_RETRY_MAX_SIZE: u64 = 256 * 1024 * 1024;
+const WEBDAV_UPLOAD_SEND_RETRIES: usize = 3;
 static WEBDAV_IMPORT_RUNNING: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
 static WEBDAV_EXPORT_RUNNING: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
 
@@ -370,7 +374,14 @@ async fn save_webdav_local_index_cache(
         .map_err(|err| format!("写入 WebDAV 本地索引缓存失败: {err}"))
 }
 
-async fn upload_webdav_body_from_path(path: &Path) -> Result<Body, String> {
+async fn upload_webdav_body_from_path(path: &Path, buffered: bool) -> Result<Body, String> {
+    if buffered {
+        let bytes = tokio::fs::read(path)
+            .await
+            .map_err(|err| format!("读取本地文件失败 {}: {err}", path.display()))?;
+        return Ok(Body::from(bytes));
+    }
+
     let file = tokio::fs::File::open(path)
         .await
         .map_err(|err| format!("打开本地文件失败 {}: {err}", path.display()))?;
@@ -385,6 +396,18 @@ async fn upload_webdav_body_from_path(path: &Path) -> Result<Body, String> {
         }
     });
     Ok(Body::wrap_stream(stream))
+}
+
+fn webdav_upload_should_use_buffered_body(file_size: u64, attempt: usize) -> bool {
+    if file_size <= WEBDAV_UPLOAD_BUFFERED_MAX_SIZE {
+        return true;
+    }
+
+    attempt > 0 && file_size <= WEBDAV_UPLOAD_BUFFERED_RETRY_MAX_SIZE
+}
+
+fn webdav_upload_send_error_is_transient(err: &reqwest::Error) -> bool {
+    err.is_timeout() || err.is_connect() || err.is_request() || err.is_body()
 }
 
 async fn upload_webdav_file(
@@ -402,6 +425,9 @@ async fn upload_webdav_file(
     let relative = entry.path.clone();
     let path = root.join(&relative);
     let target = resolve_webdav_url(&base_url, &join_remote_relative(&remote_root, &relative));
+    let content_length = HeaderValue::from_str(&entry.size.to_string())
+        .map_err(|err| format!("设置上传文件长度失败 {relative}: {err}"))?;
+
     emit_webdav_export_progress(
         &app,
         WebDavExportProgressPhase::Uploading,
@@ -412,17 +438,44 @@ async fn upload_webdav_file(
         0,
         0,
     );
-    let body = upload_webdav_body_from_path(&path).await?;
-    let response = webdav_request(&client, Method::PUT, &target, &username, &password)
-        .body(body)
-        .send()
-        .await
-        .map_err(|err| format!("上传文件失败 {relative}: {err}"))?;
-    if !response.status().is_success() {
-        return Err(format!(
-            "上传文件失败 {relative}: HTTP {}",
-            response.status()
-        ));
+
+    for attempt in 0..WEBDAV_UPLOAD_SEND_RETRIES {
+        let buffered = webdav_upload_should_use_buffered_body(entry.size, attempt);
+        let body = upload_webdav_body_from_path(&path, buffered).await?;
+        let response = webdav_request(&client, Method::PUT, &target, &username, &password)
+            .header(CONTENT_LENGTH, content_length.clone())
+            .body(body)
+            .send()
+            .await;
+
+        match response {
+            Ok(response) => {
+                if response.status().is_success() {
+                    return Ok(());
+                }
+                return Err(format!(
+                    "上传文件失败 {relative}: HTTP {}",
+                    response.status()
+                ));
+            }
+            Err(err) => {
+                if attempt + 1 < WEBDAV_UPLOAD_SEND_RETRIES
+                    && webdav_upload_send_error_is_transient(&err)
+                {
+                    let delay_ms = 400_u64 * 2_u64.pow(attempt as u32);
+                    sleep(Duration::from_millis(delay_ms)).await;
+                    continue;
+                }
+                let suffix = if entry.size > WEBDAV_UPLOAD_BUFFERED_RETRY_MAX_SIZE {
+                    "；文件过大，无法继续切换为固定长度重试"
+                } else if attempt > 0 {
+                    "；已重试后仍失败"
+                } else {
+                    ""
+                };
+                return Err(format!("上传文件失败 {relative}: {err}{suffix}"));
+            }
+        }
     }
     Ok(())
 }
