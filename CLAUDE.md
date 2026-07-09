@@ -95,6 +95,53 @@ The AI system supports multiple providers with different capabilities:
 - Vision-enabled providers for image analysis
 - Local storage-based session management
 
+## AI Runtime Entry
+
+HaoMD's own AI entry layer should live in the user data directory, next to `recent.json`, not in the source tree.
+
+Final runtime layout:
+
+```text
+/Users/yfhao/Library/Application Support/haomd/
+├── recent.json
+└── ai/
+    ├── agent.md
+    ├── profile/
+    │   ├── user.md
+    │   └── communication.md
+    ├── workspace/
+    │   └── workspace.md
+    ├── skills/
+    │   ├── index.md
+    │   ├── builtin/
+    │   └── user/
+    ├── memory/
+    │   └── observations.md
+    ├── records/
+    │   └── daily/
+    └── jobs/
+        └── ai_heartbeat/
+```
+
+File responsibilities:
+
+- `agent.md` - The top-level AI entry file. It defines the operating rules, reading order, and how the rest of the `ai/` tree is interpreted.
+- `profile/user.md` - The user's identity, preferences, timezone, and communication constraints.
+- `profile/communication.md` - Reply style, interaction rules, default decision policy, and when the agent should pause for confirmation.
+- `workspace/workspace.md` - Project routing rules: where code, docs, memory, skills, and temporary files live.
+- `skills/index.md` - The skill catalog index. It lists available skills, their purpose, and whether they are enabled or trusted.
+- `skills/builtin/` - Built-in HaoMD skill specifications that ship with the app.
+- `skills/user/` - User-created or user-customized skills.
+- `memory/observations.md` - Long-term memory summary: recurring issues, confirmed preferences, and important decisions.
+- `records/daily/` - Daily records and lightweight operational notes.
+- `jobs/ai_heartbeat/` - Optional automation outputs for future observer / reflector style jobs.
+
+Implementation rule:
+
+- Keep the source of truth for the AI entry layer in markdown files.
+- Keep the files adjacent to `recent.json` in the runtime data directory.
+- Do not flatten everything into a single `ai.md`; use the directory split above so the responsibilities stay stable as the system grows.
+
 ## File Structure
 
 - `app/` - Main desktop application

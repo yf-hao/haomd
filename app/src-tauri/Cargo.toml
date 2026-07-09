@@ -46,3 +46,4 @@ regex = "1"
 rusqlite = { version = "0.32", features = ["bundled", "modern_sqlite"] }
 lopdf = "0.35"
 rodio = "0.20"
+notify = "6.1"

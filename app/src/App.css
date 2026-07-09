@@ -4707,6 +4707,38 @@ button:disabled {
   white-space: nowrap;
 }
 
+.status-bar-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-bar-message {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
+.status-bar-right-scanning .status-bar-message {
+  background: color-mix(in srgb, var(--theme-accent-primary) 14%, transparent);
+  border-color: color-mix(in srgb, var(--theme-accent-primary) 42%, transparent);
+  color: var(--theme-accent-primary);
+}
+
+.status-bar-right-uploading .status-bar-message {
+  background: color-mix(in srgb, var(--theme-surface-editor) 62%, transparent);
+  border-color: color-mix(in srgb, var(--theme-border-subtle) 84%, transparent);
+  color: var(--theme-text-default);
+}
+
+.status-bar-right-downloading .status-bar-message {
+  background: color-mix(in srgb, var(--theme-surface-editor) 62%, transparent);
+  border-color: color-mix(in srgb, var(--theme-border-subtle) 84%, transparent);
+  color: var(--theme-text-default);
+}
+
 .status-bar-center {
   min-width: 0;
   display: flex;

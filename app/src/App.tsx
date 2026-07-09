@@ -16,9 +16,13 @@ import type { LanguageMode, ResolvedLanguage } from './modules/i18n/schema'
 import { onMenuAction } from './modules/platform/menuEvents'
 import {
   onWebDavExportFinished,
+  onWebDavExportProgress,
   onWebDavExportStarted,
   onWebDavImportFinished,
   onWebDavImportStarted,
+  onWebDavImportProgress,
+  type WebDavImportProgressPayload,
+  type WebDavExportProgressPayload,
 } from './modules/platform/backupEvents'
 import { isTauriEnv } from './modules/platform/runtime'
 import {
@@ -44,6 +48,49 @@ import type { SearchScope } from './modules/search/types'
 import { getMusicTrackState, saveMusicSession } from './modules/tools/music/musicAudio'
 
 const appStartTime = performance.now()
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) {
+    return '0 B'
+  }
+  if (bytes < 1024) {
+    return `${bytes} B`
+  }
+  const units = ['KB', 'MB', 'GB', 'TB']
+  let value = bytes / 1024
+  let unitIndex = 0
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024
+    unitIndex += 1
+  }
+  return `${value >= 10 || unitIndex === 0 ? Math.round(value) : value.toFixed(1)} ${units[unitIndex]}`
+}
+
+function getDisplayFileName(path: string): string {
+  const normalized = path.replace(/\\/g, '/').replace(/\/+$/, '')
+  const parts = normalized.split('/').filter(Boolean)
+  return parts[parts.length - 1] || normalized || 'unknown'
+}
+
+function formatWebDavExportProgress(payload: WebDavExportProgressPayload): string {
+  if (payload.phase === 'scanning') {
+    if (payload.total > 0) {
+      return `WebDAV 扫描中 ${payload.current}/${payload.total} · ${getDisplayFileName(payload.path)} · ${payload.fileCount} files${payload.dirCount > 0 ? ` · ${payload.dirCount} dirs` : ''}`
+    }
+    return `WebDAV 扫描中 · ${getDisplayFileName(payload.path)} · ${payload.fileCount} files${payload.dirCount > 0 ? ` · ${payload.dirCount} dirs` : ''}`
+  }
+  return `WebDAV 上传中 ${payload.current}/${payload.total} · ${getDisplayFileName(payload.path)} · ${formatBytes(payload.size)}`
+}
+
+function formatWebDavImportProgress(payload: WebDavImportProgressPayload): string {
+  if (payload.phase === 'scanning') {
+    if (payload.total > 0) {
+      return `WebDAV 恢复扫描中 ${payload.current}/${payload.total}`
+    }
+    return 'WebDAV 恢复扫描中'
+  }
+  return `WebDAV 恢复中 ${payload.current}/${payload.total} · ${getDisplayFileName(payload.path)} · ${formatBytes(payload.size)}`
+}
 
 function App() {
   const [activeLeftPanel, setActiveLeftPanel] = useState<LeftPanelId>(null)
@@ -400,19 +447,31 @@ function AppShellContent({
   const { t, resolvedLanguage } = useI18n()
   const [toastMessage, setToastMessage] = useState('')
   const [backgroundStatusMessage, setBackgroundStatusMessage] = useState('')
+  const [backgroundStatusPhase, setBackgroundStatusPhase] = useState<'idle' | 'scanning' | 'uploading' | 'downloading'>('idle')
   const [musicTrackName, setMusicTrackName] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isTauriEnv()) return
 
     const unlistenStarted = onWebDavImportStarted(() => {
-      setBackgroundStatusMessage(t('backup.webdavImportRunningStatus'))
+      setBackgroundStatusPhase('scanning')
+      setBackgroundStatusMessage(t('backup.webdavImportPreparingStatus'))
+    })
+    const unlistenImportProgress = onWebDavImportProgress((payload) => {
+      setBackgroundStatusPhase(payload.phase)
+      setBackgroundStatusMessage(formatWebDavImportProgress(payload))
     })
     const unlistenExportStarted = onWebDavExportStarted(() => {
-      setBackgroundStatusMessage(t('backup.webdavExportRunningStatus'))
+      setBackgroundStatusPhase('scanning')
+      setBackgroundStatusMessage(t('backup.webdavExportPreparingStatus'))
+    })
+    const unlistenExportProgress = onWebDavExportProgress((payload) => {
+      setBackgroundStatusPhase(payload.phase)
+      setBackgroundStatusMessage(formatWebDavExportProgress(payload))
     })
 
     const unlistenImport = onWebDavImportFinished((payload) => {
+      setBackgroundStatusPhase('idle')
       setBackgroundStatusMessage('')
       if (payload.success) {
         setToastMessage(t('backup.webdavImportSuccess'))
@@ -421,9 +480,15 @@ function AppShellContent({
       }
     })
     const unlistenExport = onWebDavExportFinished((payload) => {
-      setBackgroundStatusMessage('')
+      setBackgroundStatusPhase('idle')
       if (payload.success) {
         const summary = payload.summary
+        if (payload.noUploads) {
+          setBackgroundStatusMessage(t('backup.webdavExportNoUploads'))
+          setToastMessage(t('backup.webdavExportNoUploads'))
+          return
+        }
+        setBackgroundStatusMessage('')
         setToastMessage(
           summary?.incremental
             ? t('backup.webdavExportSuccessIncremental', {
@@ -438,13 +503,16 @@ function AppShellContent({
               }),
         )
       } else {
-        setToastMessage(t('backup.webdavExportFailed', { message: payload.message ?? 'Unknown error' }))
+        setBackgroundStatusMessage('')
+          setToastMessage(t('backup.webdavExportFailed', { message: payload.message ?? 'Unknown error' }))
       }
     })
 
     return () => {
       unlistenStarted()
+      unlistenImportProgress()
       unlistenExportStarted()
+      unlistenExportProgress()
       unlistenImport()
       unlistenExport()
     }
@@ -735,13 +803,13 @@ function AppShellContent({
               </span>
             </button>
           </div>
-          <div className="status-bar-right">
+          <div className={`status-bar-right status-bar-right-${backgroundStatusPhase}`}>
             {docCharCount != null && (
               <span style={{ marginRight: displayedStatusMessage ? 12 : 0 }}>
                 {t('app.characters', { count: docCharCount.toLocaleString() })}
               </span>
             )}
-            <span>{displayedStatusMessage || '\u00A0'}</span>
+            <span className="status-bar-message">{displayedStatusMessage || '\u00A0'}</span>
           </div>
         </div>
       )}

@@ -88,6 +88,8 @@ export type WebDavBackupSettings = {
   username: string
   password: string
   remotePath: string
+  userAgentEnabled: boolean
+  userAgent: string
 }
 
 export const DEFAULT_WEBDAV_REMOTE_PATH = '/HaoMD'
@@ -244,6 +246,8 @@ const defaultWebDavBackup: WebDavBackupSettings = {
   username: '',
   password: '',
   remotePath: DEFAULT_WEBDAV_REMOTE_PATH,
+  userAgentEnabled: false,
+  userAgent: '',
 }
 
 const defaultSearchSettings: SearchSettings = {

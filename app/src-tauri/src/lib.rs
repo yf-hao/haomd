@@ -49,6 +49,7 @@ mod skill_scripts;
 mod skills;
 mod state_store;
 mod support;
+mod webdav_change_tracker;
 mod word;
 mod word_commands;
 mod word_import;
@@ -96,6 +97,7 @@ use skill_scripts::*;
 use skills::*;
 use state_store::*;
 pub(crate) use support::*;
+use webdav_change_tracker::*;
 use word::*;
 use word_commands::*;
 use word_import::*;
@@ -247,6 +249,10 @@ macro_rules! app_invoke_handler {
             test_webdav_connection,
             export_settings_backup_to_webdav,
             start_export_settings_backup_to_webdav,
+            backup_package_contains_documents,
+            backup_package_documents_root_count,
+            webdav_backup_contains_documents,
+            webdav_backup_documents_root_count,
             import_settings_backup,
             import_settings_backup_from_webdav,
             start_import_settings_backup_from_webdav,
@@ -272,7 +278,8 @@ macro_rules! app_invoke_handler {
 }
 
 fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::error::Error>> {
-    let handle = app.handle();
+    let handle = app.handle().clone();
+    app.manage(WebDavChangeTracker::new());
     let log_plugin = tauri_plugin_log::Builder::default()
         .level(log::LevelFilter::Info)
         .build();
@@ -280,11 +287,20 @@ fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::error:
     handle.plugin(tauri_plugin_dialog::init())?;
     handle.plugin(tauri_plugin_opener::init())?;
 
-    let _ = prepare_music_player_session(handle);
+    let _ = prepare_music_player_session(&handle);
     tauri::async_runtime::block_on(async {
-        let menu = build_app_menu(handle).await?;
+        let menu = build_app_menu(&handle).await?;
         handle.set_menu(menu)?;
         let _ = restore_music_session(handle.clone()).await;
+        if let Some(tracker) = handle.try_state::<WebDavChangeTracker>() {
+            let tracker = (*tracker).clone();
+            let handle = handle.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(err) = tracker.initialize(handle).await {
+                    eprintln!("[backup] WebDAV change tracker init failed: {err}");
+                }
+            });
+        }
         Ok::<(), tauri::Error>(())
     })?;
 

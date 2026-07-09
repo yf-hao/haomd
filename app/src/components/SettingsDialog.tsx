@@ -83,11 +83,63 @@ type BackgroundTarget =
   | 'aiChatBackground'
   | 'sidebarBackground'
 
+const DEFAULT_WEBDAV_USER_AGENT = 'Zotero/8.0'
+
+function normalizeWorkspaceRoot(root: string): string {
+  return root.trim().replace(/\\/g, '/').replace(/[\\/]+$/, '')
+}
+
+function getWorkspaceRootLabel(root: string): string {
+  const normalized = normalizeWorkspaceRoot(root)
+  const segments = normalized.split('/').filter(Boolean)
+  return segments[segments.length - 1] || normalized
+}
+
+function migrateLegacyDocumentsScope(
+  scope: BackupScopeSettings,
+  mountedRoots: string[],
+): BackupScopeSettings {
+  if (!scope.documents.enabled || scope.documents.selectedRoots.length > 0) {
+    return scope
+  }
+
+  return {
+    ...scope,
+    documents: {
+      ...scope.documents,
+      selectedRoots: mountedRoots,
+    },
+  }
+}
+
 const fieldGridStyle: React.CSSProperties = {
   display: 'grid',
   gridTemplateColumns: '180px minmax(0, 1fr)',
   gap: 12,
   alignItems: 'center',
+}
+
+const DOCUMENTS_RESTORE_ROOT_STORAGE_KEY = 'haomd:backup:documents-restore-root:v1'
+
+function loadRememberedDocumentsRestoreRoot(): string | null {
+  if (typeof localStorage === 'undefined') return null
+  try {
+    const raw = localStorage.getItem(DOCUMENTS_RESTORE_ROOT_STORAGE_KEY)
+    const value = raw?.trim() ?? ''
+    return value || null
+  } catch (err) {
+    console.warn('[SettingsDialog] load remembered documents restore root failed', err)
+    return null
+  }
+}
+
+function saveRememberedDocumentsRestoreRoot(root: string) {
+  if (typeof localStorage === 'undefined') return
+  try {
+    localStorage.setItem(DOCUMENTS_RESTORE_ROOT_STORAGE_KEY, normalizeWorkspaceRoot(root))
+  } catch (err) {
+    console.warn('[SettingsDialog] save remembered documents restore root failed', err)
+  }
 }
 
 export const SettingsDialog: FC<SettingsDialogProps> = ({
@@ -105,6 +157,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const [wordExport, setWordExport] = useState<WordExportStyleSettings>(getDefaultWordExportStyleSettings())
   const [webdavBackup, setWebdavBackup] = useState<WebDavBackupSettings>(getDefaultWebDavBackupSettings())
   const [backupScope, setBackupScope] = useState<BackupScopeSettings>(getDefaultBackupScopeSettings())
+  const [documentRootOptions, setDocumentRootOptions] = useState<string[]>([])
   const [searchSettings, setSearchSettings] = useState<SearchSettings>(getDefaultSearchSettings())
   const [performanceSettings, setPerformanceSettings] = useState<PerformanceSettings>(getDefaultPerformanceSettings())
   const [uiTypography, setUiTypography] = useState<UiTypographySettings>(getDefaultUiTypographySettings())
@@ -181,6 +234,8 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     setSearchBusy(null)
     setSearchStatus(null)
     hasLocalPreviewEditsRef.current = false
+    const mountedRoots = getWorkspaceMountedRoots().map(normalizeWorkspaceRoot)
+    setDocumentRootOptions(mountedRoots)
     let cancelled = false
     ;(async () => {
       try {
@@ -206,7 +261,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
         themePreviewReadyRef.current = true
         setWordExport(loadedWordExport)
         setWebdavBackup(loadedBackupSettings)
-        setBackupScope(loadedBackupScopeSettings)
+        setBackupScope(migrateLegacyDocumentsScope(loadedBackupScopeSettings, mountedRoots))
         setSearchSettings(loadedSearchSettings)
         setPerformanceSettings({
           ...getDefaultPerformanceSettings(),
@@ -391,6 +446,99 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     throw new Error(resp.Err.error.message)
   }
 
+  const validateBackupScope = (): string | null => {
+    if (backupScope.documents.enabled && backupScope.documents.selectedRoots.length === 0) {
+      return t('backup.scopeDocumentsRequired')
+    }
+    return null
+  }
+
+  const handleDocumentsScopeToggle = (checked: boolean) => {
+    setBackupScope((prev) => ({
+      ...prev,
+      documents: {
+        ...prev.documents,
+        enabled: checked,
+      },
+    }))
+  }
+
+  const handleDocumentRootToggle = (root: string, checked: boolean) => {
+    const normalizedRoot = normalizeWorkspaceRoot(root)
+    setBackupScope((prev) => {
+      const selected = new Set(prev.documents.selectedRoots.map(normalizeWorkspaceRoot))
+      if (checked) {
+        selected.add(normalizedRoot)
+      } else {
+        selected.delete(normalizedRoot)
+      }
+      return {
+        ...prev,
+        documents: {
+          ...prev.documents,
+          selectedRoots: Array.from(selected),
+        },
+      }
+    })
+  }
+
+  const selectAllDocumentRoots = () => {
+    setBackupScope((prev) => ({
+      ...prev,
+      documents: {
+        ...prev.documents,
+        selectedRoots: [...documentRootOptions],
+      },
+    }))
+  }
+
+  const clearDocumentRoots = () => {
+    setBackupScope((prev) => ({
+      ...prev,
+      documents: {
+        ...prev.documents,
+        selectedRoots: [],
+      },
+    }))
+  }
+
+  const chooseDocumentsRestoreRoot = async (): Promise<string | null> => {
+    const rememberedRoot = loadRememberedDocumentsRestoreRoot()
+    const selected = await openDialog({
+      title: t('backup.documentsRestoreDialogTitle'),
+      directory: true,
+      multiple: false,
+      defaultPath: rememberedRoot ?? undefined,
+    })
+    const restoreRoot = Array.isArray(selected) ? selected[0] : selected
+    if (typeof restoreRoot === 'string' && restoreRoot.trim()) {
+      saveRememberedDocumentsRestoreRoot(restoreRoot)
+      return restoreRoot
+    }
+    return null
+  }
+
+  const getWebDavUserAgent = (): string | null =>
+    webdavBackup.userAgentEnabled ? webdavBackup.userAgent.trim() || DEFAULT_WEBDAV_USER_AGENT : null
+
+  const getDocumentsRootCountFromZip = async (backupPath: string): Promise<number> => {
+    const resp = await invoke<BackendResult<number>>('backup_package_documents_root_count', {
+      backupPath,
+    })
+    return expectBackendOk(resp)
+  }
+
+  const getDocumentsRootCountFromWebDav = async (): Promise<number> => {
+    const resp = await invoke<BackendResult<number>>('webdav_backup_documents_root_count', {
+      url: webdavBackup.url,
+      username: webdavBackup.username,
+      password: webdavBackup.password,
+      remotePath: DEFAULT_WEBDAV_REMOTE_PATH,
+      userAgent: getWebDavUserAgent(),
+    })
+    return expectBackendOk(resp)
+  }
+
   const handleRebuildSearchIndex = async () => {
     if (!searchScope) {
       setSearchStatus({
@@ -423,6 +571,11 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const handleExportBackup = async () => {
     try {
       setBackupStatus(null)
+      const backupScopeError = validateBackupScope()
+      if (backupScopeError) {
+        setBackupStatus({ tone: 'error', message: backupScopeError })
+        return
+      }
       const now = new Date()
       const yyyy = now.getFullYear()
       const mm = String(now.getMonth() + 1).padStart(2, '0')
@@ -464,8 +617,17 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
       const backupPath = Array.isArray(selected) ? selected[0] : selected
       if (!backupPath || typeof backupPath !== 'string') return
 
+      const documentsRootCount = await getDocumentsRootCountFromZip(backupPath)
+      const documentRestoreRoot = documentsRootCount > 1 ? await chooseDocumentsRestoreRoot() : null
+      if (documentsRootCount > 1 && !documentRestoreRoot) {
+        return
+      }
+
       setBackupBusy('import')
-      const resp = await invoke<BackendResult<null>>('import_settings_backup', { backupPath })
+      const resp = await invoke<BackendResult<null>>('import_settings_backup', {
+        backupPath,
+        documentRestoreRoot: documentRestoreRoot ?? null,
+      })
       expectBackendOk(resp)
       setBackupStatus({ tone: 'success', message: t('backup.importSuccess') })
     } catch (err) {
@@ -478,6 +640,11 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const handleExportBackupToWebDav = async () => {
     try {
       setBackupStatus(null)
+      const backupScopeError = validateBackupScope()
+      if (backupScopeError) {
+        setBackupStatus({ tone: 'error', message: backupScopeError })
+        return
+      }
       setBackupBusy('webdav-export')
       const resp = await invoke<BackendResult<null>>('start_export_settings_backup_to_webdav', {
         url: webdavBackup.url,
@@ -486,6 +653,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
         remotePath: DEFAULT_WEBDAV_REMOTE_PATH,
         scopeSettings: backupScope,
         documentRoots: getWorkspaceMountedRoots(),
+        userAgent: getWebDavUserAgent(),
       })
       expectBackendOk(resp)
       setBackupStatus({ tone: 'success', message: t('backup.webdavExportStarted') })
@@ -504,6 +672,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
         url: webdavBackup.url,
         username: webdavBackup.username,
         password: webdavBackup.password,
+        userAgent: getWebDavUserAgent(),
       })
       expectBackendOk(resp)
       setBackupStatus({ tone: 'success', message: t('backup.webdavTestSuccess') })
@@ -517,12 +686,19 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const handleImportBackupFromWebDav = async () => {
     try {
       setBackupStatus(null)
+      const documentsRootCount = await getDocumentsRootCountFromWebDav()
+      const documentRestoreRoot = documentsRootCount > 1 ? await chooseDocumentsRestoreRoot() : null
+      if (documentsRootCount > 1 && !documentRestoreRoot) {
+        return
+      }
       setBackupBusy('webdav-import')
       const resp = await invoke<BackendResult<null>>('start_import_settings_backup_from_webdav', {
         url: webdavBackup.url,
         username: webdavBackup.username,
         password: webdavBackup.password,
         remotePath: DEFAULT_WEBDAV_REMOTE_PATH,
+        documentRestoreRoot: documentRestoreRoot ?? null,
+        userAgent: getWebDavUserAgent(),
       })
       expectBackendOk(resp)
       setBackupStatus({ tone: 'success', message: t('backup.webdavImportStarted') })
@@ -785,6 +961,11 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     setIsSaving(true)
     setError(null)
     try {
+      const backupScopeError = validateBackupScope()
+      if (backupScopeError) {
+        setError(backupScopeError)
+        return
+      }
       const { backup: _legacyBackup, ...settingsWithoutBackup } = settings
       const nextSettings: EditorSettings = {
         ...settingsWithoutBackup,
@@ -943,6 +1124,11 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     dialogDragRef.current.active = false
     dialogDragRef.current.pointerId = null
   }
+
+  const selectedDocumentRootSet = new Set(backupScope.documents.selectedRoots.map(normalizeWorkspaceRoot))
+  const missingDocumentRoots = backupScope.documents.selectedRoots
+    .map(normalizeWorkspaceRoot)
+    .filter((root) => !documentRootOptions.includes(root))
 
   return (
     <div className="modal-backdrop modal-backdrop-settings-plain">
@@ -1841,6 +2027,38 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                               </label>
                             </div>
                             <div style={fieldGridStyle}>
+                              <div className="settings-field-label">{t('backup.webdavUserAgent')}</div>
+                              <label className="settings-checkbox-label">
+                                <input
+                                  type="checkbox"
+                                  checked={webdavBackup.userAgentEnabled}
+                                  onChange={(event) =>
+                                    setWebdavBackup((prev) => ({
+                                      ...prev,
+                                      userAgentEnabled: event.target.checked,
+                                      userAgent: event.target.checked
+                                        ? prev.userAgent.trim() || DEFAULT_WEBDAV_USER_AGENT
+                                        : prev.userAgent,
+                                    }))}
+                                />
+                              </label>
+                            </div>
+                            {webdavBackup.userAgentEnabled ? (
+                              <div style={fieldGridStyle}>
+                                <div className="settings-field-label">{t('backup.webdavUserAgent')}</div>
+                                <div style={{ display: 'grid', gap: 6 }}>
+                                  <input
+                                    className="field-input"
+                                    value={webdavBackup.userAgent}
+                                    onChange={(event) =>
+                                      setWebdavBackup((prev) => ({ ...prev, userAgent: event.target.value }))}
+                                    placeholder={DEFAULT_WEBDAV_USER_AGENT}
+                                  />
+                                  <div className="settings-inline-help">{t('backup.webdavUserAgentHint')}</div>
+                                </div>
+                              </div>
+                            ) : null}
+                            <div style={fieldGridStyle}>
                               <div className="settings-field-label">{t('backup.webdavUrl')}</div>
                               <input
                                 ref={webdavUrlInputRef}
@@ -1950,19 +2168,88 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                           </div>
                         </div>
                         <div style={fieldGridStyle}>
+                          <div className="settings-field-label">{t('backup.scopeAlarm')}</div>
+                          <div className="settings-check-option">
+                            <label className="settings-checkbox-label">
+                              <input
+                                type="checkbox"
+                                checked={backupScope.alarm}
+                                onChange={(event) =>
+                                  setBackupScope((prev) => ({ ...prev, alarm: event.target.checked }))}
+                              />
+                            </label>
+                            <div className="settings-field-description">{t('backup.scopeAlarmHint')}</div>
+                          </div>
+                        </div>
+                        <div style={fieldGridStyle}>
                           <div className="settings-field-label">{t('backup.scopeDocuments')}</div>
                           <div className="settings-check-option">
                             <label className="settings-checkbox-label">
                               <input
                                 type="checkbox"
-                                checked={backupScope.documents}
+                                checked={backupScope.documents.enabled}
                                 onChange={(event) =>
-                                  setBackupScope((prev) => ({ ...prev, documents: event.target.checked }))}
+                                  handleDocumentsScopeToggle(event.target.checked)}
                               />
                             </label>
                             <div className="settings-field-description">{t('backup.scopeDocumentsHint')}</div>
                           </div>
                         </div>
+                        {backupScope.documents.enabled ? (
+                          <div style={{ ...fieldGridStyle, alignItems: 'start' }}>
+                            <div className="settings-field-label">{t('backup.scopeDocumentsRoots')}</div>
+                            <div style={{ display: 'grid', gap: 10 }}>
+                              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                <Button
+                                  variant="tertiary"
+                                  type="button"
+                                  onClick={selectAllDocumentRoots}
+                                  disabled={documentRootOptions.length === 0}
+                                >
+                                  {t('backup.scopeDocumentsSelectAll')}
+                                </Button>
+                                <Button
+                                  variant="tertiary"
+                                  type="button"
+                                  onClick={clearDocumentRoots}
+                                  disabled={backupScope.documents.selectedRoots.length === 0}
+                                >
+                                  {t('backup.scopeDocumentsClear')}
+                                </Button>
+                              </div>
+                              {documentRootOptions.length > 0 ? (
+                                <div style={{ display: 'grid', gap: 8 }}>
+                                  {documentRootOptions.map((root) => (
+                                    <label
+                                      key={root}
+                                      className="settings-checkbox-label"
+                                      style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', gap: 8, alignItems: 'start' }}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedDocumentRootSet.has(root)}
+                                        onChange={(event) => handleDocumentRootToggle(root, event.target.checked)}
+                                      />
+                                      <span style={{ minWidth: 0 }}>
+                                        <span>{getWorkspaceRootLabel(root)}</span>
+                                        <span className="settings-field-description" style={{ display: 'block', marginTop: 2 }}>
+                                          {root}
+                                        </span>
+                                      </span>
+                                    </label>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="settings-field-description">{t('backup.scopeDocumentsNoRoots')}</div>
+                              )}
+                              {missingDocumentRoots.length > 0 ? (
+                                <div className="settings-field-description">
+                                  {t('backup.scopeDocumentsMissing', { roots: missingDocumentRoots.join(', ') })}
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        ) : null}
                         <div style={fieldGridStyle}>
                           <div className="settings-field-label">{t('backup.scopeNotes')}</div>
                           <div className="settings-check-option">

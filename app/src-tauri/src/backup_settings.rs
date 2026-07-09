@@ -1,11 +1,12 @@
 use crate::haomd_paths::haomd_config_file;
+use crate::webdav_change_tracker::WebDavChangeTracker;
 use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
 use base64::{decode as base64_decode, encode as base64_encode};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tokio::fs;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -19,6 +20,10 @@ pub struct BackupSettingsCfg {
     pub username: Option<String>,
     #[serde(default)]
     pub password: Option<String>,
+    #[serde(default)]
+    pub user_agent_enabled: Option<bool>,
+    #[serde(default)]
+    pub user_agent: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -34,6 +39,10 @@ struct StoredBackupSettingsCfg {
     password_encrypted: Option<String>,
     #[serde(default)]
     password: Option<String>,
+    #[serde(default)]
+    user_agent_enabled: Option<bool>,
+    #[serde(default)]
+    user_agent: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -69,6 +78,50 @@ pub fn default_backup_settings() -> BackupSettingsCfg {
         url: Some(String::new()),
         username: Some(String::new()),
         password: Some(String::new()),
+        user_agent_enabled: Some(false),
+        user_agent: Some(String::new()),
+    }
+}
+
+pub async fn load_backup_settings_data(app: &AppHandle) -> std::io::Result<BackupSettingsCfg> {
+    let path = backup_settings_path(app)?;
+    match fs::read(&path).await {
+        Ok(bytes) => {
+            let stored: StoredBackupSettingsCfg =
+                serde_json::from_slice(&bytes).unwrap_or(StoredBackupSettingsCfg {
+                    enabled: Some(false),
+                    url: Some(String::new()),
+                    username: Some(String::new()),
+                    password_encrypted: None,
+                    password: Some(String::new()),
+                    user_agent_enabled: Some(false),
+                    user_agent: Some(String::new()),
+                });
+            let password = if let Some(encrypted) = stored.password_encrypted.as_deref() {
+                match load_or_create_backup_key(app).await {
+                    Ok(key) => decrypt_password(&key, encrypted).unwrap_or_default(),
+                    Err(_) => String::new(),
+                }
+            } else {
+                stored.password.unwrap_or_default()
+            };
+            Ok(BackupSettingsCfg {
+                enabled: stored.enabled,
+                url: stored.url,
+                username: stored.username,
+                password: Some(password),
+                user_agent_enabled: stored.user_agent_enabled,
+                user_agent: stored.user_agent,
+            })
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            if let Some(cfg) = load_legacy_backup_settings(app).await {
+                Ok(cfg)
+            } else {
+                Ok(default_backup_settings())
+            }
+        }
+        Err(err) => Err(err),
     }
 }
 
@@ -94,6 +147,8 @@ async fn load_legacy_backup_settings(app: &AppHandle) -> Option<BackupSettingsCf
         url: webdav.url,
         username: webdav.username,
         password: webdav.password,
+        user_agent_enabled: Some(false),
+        user_agent: Some(String::new()),
     })
 }
 
@@ -176,50 +231,8 @@ fn decrypt_password(key: &[u8], encoded: &str) -> Option<String> {
 #[tauri::command]
 pub async fn load_backup_settings(app: AppHandle) -> ResultPayload<BackupSettingsCfg> {
     let trace = new_trace_id();
-    let path = match backup_settings_path(&app) {
-        Ok(p) => p,
-        Err(err) => {
-            return err_payload(
-                ErrorCode::IoError,
-                format!("获取 backup_settings 路径失败: {err}"),
-                trace,
-            );
-        }
-    };
-
-    match fs::read(&path).await {
-        Ok(bytes) => {
-            let stored: StoredBackupSettingsCfg =
-                serde_json::from_slice(&bytes).unwrap_or(StoredBackupSettingsCfg {
-                    enabled: Some(false),
-                    url: Some(String::new()),
-                    username: Some(String::new()),
-                    password_encrypted: None,
-                    password: Some(String::new()),
-                });
-            let password = if let Some(encrypted) = stored.password_encrypted.as_deref() {
-                match load_or_create_backup_key(&app).await {
-                    Ok(key) => decrypt_password(&key, encrypted).unwrap_or_default(),
-                    Err(_) => String::new(),
-                }
-            } else {
-                stored.password.unwrap_or_default()
-            };
-            let cfg = BackupSettingsCfg {
-                enabled: stored.enabled,
-                url: stored.url,
-                username: stored.username,
-                password: Some(password),
-            };
-            ok(cfg, trace)
-        }
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            if let Some(cfg) = load_legacy_backup_settings(&app).await {
-                ok(cfg, trace)
-            } else {
-                ok(default_backup_settings(), trace)
-            }
-        }
+    match load_backup_settings_data(&app).await {
+        Ok(cfg) => ok(cfg, trace),
         Err(err) => err_payload(
             ErrorCode::IoError,
             format!("读取 backup_settings 失败: {err}"),
@@ -262,6 +275,8 @@ pub async fn save_backup_settings(app: AppHandle, cfg: BackupSettingsCfg) -> Res
             cfg.password.as_deref().unwrap_or_default(),
         )),
         password: None,
+        user_agent_enabled: cfg.user_agent_enabled,
+        user_agent: cfg.user_agent,
     };
 
     let bytes = match serde_json::to_vec_pretty(&stored) {
@@ -276,7 +291,18 @@ pub async fn save_backup_settings(app: AppHandle, cfg: BackupSettingsCfg) -> Res
     };
 
     match fs::write(&path, bytes).await {
-        Ok(()) => ok((), trace),
+        Ok(()) => {
+            if let Some(tracker) = app.try_state::<WebDavChangeTracker>() {
+                let tracker = (*tracker).clone();
+                let app_handle = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(err) = tracker.refresh_watch_roots(app_handle).await {
+                        eprintln!("[backup] WebDAV change tracker refresh failed: {err}");
+                    }
+                });
+            }
+            ok((), trace)
+        }
         Err(err) => err_payload(
             ErrorCode::IoError,
             format!("写入 backup_settings 失败: {err}"),

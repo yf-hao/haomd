@@ -6,6 +6,8 @@ export type WebDavBackupSettings = {
   url: string
   username: string
   password: string
+  userAgentEnabled: boolean
+  userAgent: string
 }
 
 const defaultWebDavBackup: WebDavBackupSettings = {
@@ -13,6 +15,8 @@ const defaultWebDavBackup: WebDavBackupSettings = {
   url: '',
   username: '',
   password: '',
+  userAgentEnabled: false,
+  userAgent: '',
 }
 
 let cachedBackupSettings: WebDavBackupSettings | null = null
@@ -27,6 +31,8 @@ export async function loadBackupSettings(): Promise<WebDavBackupSettings> {
         url: resp.Ok.data?.url ?? defaultWebDavBackup.url,
         username: resp.Ok.data?.username ?? defaultWebDavBackup.username,
         password: resp.Ok.data?.password ?? defaultWebDavBackup.password,
+        userAgentEnabled: resp.Ok.data?.userAgentEnabled ?? defaultWebDavBackup.userAgentEnabled,
+        userAgent: resp.Ok.data?.userAgent ?? defaultWebDavBackup.userAgent,
       }
       return cachedBackupSettings
     }
