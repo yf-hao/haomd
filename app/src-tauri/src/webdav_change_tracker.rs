@@ -76,6 +76,7 @@ struct WebDavChangeTrackerState {
     watcher: Option<notify::RecommendedWatcher>,
     watched_roots: HashSet<String>,
     watched_scopes: Vec<WebDavWatchedScopeRoot>,
+    mutation_suppression_depth: usize,
     pending_changes: PendingWebDavChanges,
     pending_event_revision: u64,
     pending_event_task: Option<tauri::async_runtime::JoinHandle<()>>,
@@ -407,6 +408,25 @@ impl WebDavChangeTracker {
         Self::default()
     }
 
+    pub fn begin_mutation_suppression(&self) {
+        let mut state = self.inner.lock().expect("WebDAV change tracker poisoned");
+        state.mutation_suppression_depth = state.mutation_suppression_depth.saturating_add(1);
+        state.pending_event_revision = state.pending_event_revision.saturating_add(1);
+        state.flush_revision = state.flush_revision.saturating_add(1);
+        if let Some(task) = state.pending_event_task.take() {
+            task.abort();
+        }
+        if let Some(task) = state.flush_task.take() {
+            task.abort();
+        }
+        state.pending_changes = PendingWebDavChanges::default();
+    }
+
+    pub fn end_mutation_suppression(&self) {
+        let mut state = self.inner.lock().expect("WebDAV change tracker poisoned");
+        state.mutation_suppression_depth = state.mutation_suppression_depth.saturating_sub(1);
+    }
+
     fn schedule_flush(&self, app: &AppHandle) {
         let tracker = self.clone();
         let app = app.clone();
@@ -415,11 +435,18 @@ impl WebDavChangeTracker {
                 .inner
                 .lock()
                 .expect("WebDAV change tracker poisoned");
-            state.flush_revision = state.flush_revision.saturating_add(1);
-            if let Some(task) = state.flush_task.take() {
-                task.abort();
+            if state.mutation_suppression_depth > 0 {
+                None
+            } else {
+                state.flush_revision = state.flush_revision.saturating_add(1);
+                if let Some(task) = state.flush_task.take() {
+                    task.abort();
+                }
+                Some(state.flush_revision)
             }
-            state.flush_revision
+        };
+        let Some(revision) = revision else {
+            return;
         };
 
         let task = tauri::async_runtime::spawn(async move {
@@ -466,11 +493,18 @@ impl WebDavChangeTracker {
                 .inner
                 .lock()
                 .expect("WebDAV change tracker poisoned");
-            state.pending_event_revision = state.pending_event_revision.saturating_add(1);
-            if let Some(task) = state.pending_event_task.take() {
-                task.abort();
+            if state.mutation_suppression_depth > 0 {
+                None
+            } else {
+                state.pending_event_revision = state.pending_event_revision.saturating_add(1);
+                if let Some(task) = state.pending_event_task.take() {
+                    task.abort();
+                }
+                Some(state.pending_event_revision)
             }
-            state.pending_event_revision
+        };
+        let Some(revision) = revision else {
+            return;
         };
 
         let task = tauri::async_runtime::spawn(async move {
@@ -512,6 +546,9 @@ impl WebDavChangeTracker {
         };
         {
             let mut state = self.inner.lock().expect("WebDAV change tracker poisoned");
+            if state.mutation_suppression_depth > 0 {
+                return;
+            }
             for path in paths {
                 if should_ignore_path(&path) {
                     continue;
@@ -638,6 +675,9 @@ impl WebDavChangeTracker {
 
         let should_flush = {
             let mut state = self.inner.lock().expect("WebDAV change tracker poisoned");
+            if state.mutation_suppression_depth > 0 {
+                return;
+            }
             let mut changed = false;
             for (scope, normalized) in normalized_paths {
                 let section = section_mut(&mut state.journal, scope);

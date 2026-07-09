@@ -694,6 +694,29 @@ fn build_backup_manifest(
     Ok(BackupManifest { version: 1, scopes })
 }
 
+fn backup_manifest_restore_scopes(manifest: Option<&BackupManifest>) -> Vec<WebDavChangeScope> {
+    let mut scopes = vec![WebDavChangeScope::Config];
+    let Some(manifest) = manifest else {
+        return scopes;
+    };
+
+    for scope in &manifest.scopes {
+        let maybe_scope = match scope.kind {
+            BackupManifestScopeKind::Music => Some(WebDavChangeScope::Music),
+            BackupManifestScopeKind::Alarm => Some(WebDavChangeScope::Alarm),
+            BackupManifestScopeKind::Notes => Some(WebDavChangeScope::Notes),
+            BackupManifestScopeKind::Documents => Some(WebDavChangeScope::Documents),
+        };
+        if let Some(scope) = maybe_scope {
+            if !scopes.contains(&scope) {
+                scopes.push(scope);
+            }
+        }
+    }
+
+    scopes
+}
+
 fn build_document_root_entries(document_roots: &[String]) -> Vec<DocumentRootIndexEntry> {
     document_roots
         .iter()
@@ -2407,10 +2430,11 @@ fn restore_backup_from_reader<R: Read + Seek>(
     reader: R,
     root: &Path,
     document_restore_root: Option<&Path>,
-) -> Result<(), String> {
+) -> Result<Vec<WebDavChangeScope>, String> {
     let mut archive =
         ZipArchive::new(reader).map_err(|err| format!("读取备份压缩包失败: {err}"))?;
     let manifest = read_manifest_from_zip(&mut archive)?;
+    let restore_scopes = backup_manifest_restore_scopes(manifest.as_ref());
 
     for index in 0..archive.len() {
         let mut entry = archive
@@ -2446,7 +2470,7 @@ fn restore_backup_from_reader<R: Read + Seek>(
         std::io::copy(&mut entry, &mut output).map_err(|err| format!("写入恢复文件失败: {err}"))?;
     }
 
-    Ok(())
+    Ok(restore_scopes)
 }
 
 #[tauri::command]
@@ -2927,8 +2951,28 @@ pub async fn import_settings_backup(
     };
 
     let document_restore_root = optional_restore_root(document_restore_root);
-    match restore_backup_from_reader(file, &root, document_restore_root.as_deref()) {
-        Ok(()) => ok((), trace),
+    let tracker = app
+        .try_state::<WebDavChangeTracker>()
+        .map(|tracker| (*tracker).clone());
+    if let Some(tracker) = tracker.as_ref() {
+        tracker.begin_mutation_suppression();
+    }
+    let result = restore_backup_from_reader(file, &root, document_restore_root.as_deref());
+    if let Some(tracker) = tracker.as_ref() {
+        tracker.end_mutation_suppression();
+    }
+
+    match result {
+        Ok(scopes) => {
+            if let Some(tracker) = tracker.as_ref() {
+                tracker.clear_synced_paths_for_scopes(&app, &scopes);
+                tracker.prune_seen_paths(&app);
+                if let Err(err) = tracker.flush_now(&app).await {
+                    eprintln!("[backup] ignore WebDAV change journal flush failure: {err}");
+                }
+            }
+            ok((), trace)
+        }
         Err(message) => err_payload(ErrorCode::IoError, message, trace),
     }
 }
@@ -3010,6 +3054,13 @@ pub async fn import_settings_backup_from_webdav(
         remote_root.clone(),
         0,
     );
+    let tracker = app
+        .try_state::<WebDavChangeTracker>()
+        .map(|tracker| (*tracker).clone());
+    if let Some(tracker) = tracker.as_ref() {
+        tracker.begin_mutation_suppression();
+    }
+
     let config_task = async move {
         let local_sync_index = load_local_sync_index(&root_for_config).await?;
         download_directory_from_webdav(
@@ -3024,7 +3075,8 @@ pub async fn import_settings_backup_from_webdav(
             None,
             local_sync_index.as_ref(),
         )
-        .await
+        .await?;
+        Ok::<Vec<WebDavChangeScope>, String>(vec![WebDavChangeScope::Config])
     };
     let music_task = async move {
         let music_remote_root = build_remote_prefix(&remote_root_for_music, "music");
@@ -3054,9 +3106,10 @@ pub async fn import_settings_backup_from_webdav(
                     None,
                     local_sync_index.as_ref(),
                 )
-                .await
+                .await?;
+                Ok(vec![WebDavChangeScope::Music])
             }
-            Ok(false) => Ok(()),
+            Ok(false) => Ok(Vec::new()),
             Err(message) => Err(message),
         }
     };
@@ -3092,15 +3145,16 @@ pub async fn import_settings_backup_from_webdav(
                     None,
                     local_sync_index.as_ref(),
                 )
-                .await
+                .await?;
+                Ok(vec![WebDavChangeScope::Alarm])
             }
-            Ok(false) => Ok(()),
+            Ok(false) => Ok(Vec::new()),
             Err(message) => Err(message),
         }
     };
     let notes_task = async move {
         let Some(notes_root) = notes_root else {
-            return Ok(());
+            return Ok(Vec::new());
         };
         let notes_remote_root = build_remote_prefix(&remote_root_for_notes, "notes");
         match remote_scope_sync_index_exists(
@@ -3126,9 +3180,10 @@ pub async fn import_settings_backup_from_webdav(
                     None,
                     local_sync_index.as_ref(),
                 )
-                .await
+                .await?;
+                Ok(vec![WebDavChangeScope::Notes])
             }
-            Ok(false) => Ok(()),
+            Ok(false) => Ok(Vec::new()),
             Err(message) => Err(message),
         }
     };
@@ -3142,7 +3197,7 @@ pub async fn import_settings_backup_from_webdav(
         )
         .await?
         else {
-            return Ok(());
+            return Ok(Vec::new());
         };
 
         let docs_remote_root = build_remote_prefix(&remote_root_for_docs, "documents");
@@ -3192,13 +3247,33 @@ pub async fn import_settings_backup_from_webdav(
                 .collect(),
             WEBDAV_PARALLEL_DOWNLOAD_LIMIT,
         )
-        .await
+        .await?;
+        Ok(vec![WebDavChangeScope::Documents])
     };
 
-    if let Err(message) =
-        tokio::try_join!(config_task, music_task, alarm_task, notes_task, docs_task)
-    {
-        return err_payload(ErrorCode::UNKNOWN, message, trace);
+    let result = tokio::try_join!(config_task, music_task, alarm_task, notes_task, docs_task);
+
+    if let Some(tracker) = tracker.as_ref() {
+        tracker.end_mutation_suppression();
+    }
+
+    let (config_scopes, music_scopes, alarm_scopes, notes_scopes, docs_scopes) = match result {
+        Ok(value) => value,
+        Err(message) => return err_payload(ErrorCode::UNKNOWN, message, trace),
+    };
+
+    if let Some(tracker) = tracker.as_ref() {
+        let mut restored_scopes = Vec::new();
+        restored_scopes.extend(config_scopes);
+        restored_scopes.extend(music_scopes);
+        restored_scopes.extend(alarm_scopes);
+        restored_scopes.extend(notes_scopes);
+        restored_scopes.extend(docs_scopes);
+        tracker.clear_synced_paths_for_scopes(&app, &restored_scopes);
+        tracker.prune_seen_paths(&app);
+        if let Err(err) = tracker.flush_now(&app).await {
+            eprintln!("[backup] ignore WebDAV change journal flush failure: {err}");
+        }
     }
 
     ok((), trace)
