@@ -2790,7 +2790,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
                   aria-label={withShortcutLabel(t('pdf.annotationTypes.text'), 'N')}
                   aria-pressed={pendingNoteDraft !== null || isTextNoteArmed}
                   title={withShortcutLabel(t('pdf.annotationTypes.text'), 'N')}
-                  disabled={(!annotationDocument || isAnnotationBusy) || (!selectionDraftRef.current && !selectedAnnotatableAnnotation && !pendingNoteDraft)}
+                  disabled={!annotationDocument || isAnnotationBusy}
                 >
                   <svg className="pdf-markup-tool-icon pdf-markup-tool-icon--text-note" viewBox="0 0 20 20" aria-hidden="true">
                     <path
@@ -3061,6 +3061,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
             pageHeight={pageHeightForVirtual}
             previewHighlightColor={selectedHighlightColor}
             clearSelectionSignal={clearSelectionSignal}
+            clearSelectionOnBlankClick={isSelectTextToolActive}
             currentPage={currentPage}
             onCurrentPageChange={handleViewportCurrentPageChange}
             onRegisterSelectionGetter={onRegisterSelectionGetter}

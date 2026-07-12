@@ -19,12 +19,34 @@ import type { AnnotationType } from '../types/annotation'
 const MIN_STAMP_SIZE = 0.045 / 3
 const LINE_RECT_PADDING = 0.006
 
+type TextCaret = {
+  node: Node
+  offset: number
+}
+
+type VisualSpanLayout = { span: HTMLElement; rect: DOMRect }
+
+type VisualLine = {
+  spans: VisualSpanLayout[]
+  top: number
+  bottom: number
+  left: number
+  right: number
+  height: number
+}
+
+type VisualTextLayout = {
+  lines: VisualLine[]
+  lineBySpan: Map<HTMLElement, VisualLine>
+}
+
 export interface PdfOfficialPageViewProps {
   pdfDocument: PDFDocumentProxy
   pageNumber: number
   scale: number
   previewHighlightColor?: string
   clearSelectionSignal?: number
+  clearSelectionOnBlankClick?: boolean
   annotations?: Annotation[]
   onSelectionChange?: (selection: PdfSelectionDraft | null) => void
   activeShapeTool?: Extract<AnnotationType, 'square' | 'circle' | 'line' | 'arrow'> | null
@@ -100,6 +122,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
   scale,
   previewHighlightColor = '#f5d90a',
   clearSelectionSignal = 0,
+  clearSelectionOnBlankClick = false,
   annotations = [],
   onSelectionChange,
   activeShapeTool = null,
@@ -136,7 +159,10 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
   const pageHostRef = useRef<HTMLDivElement | null>(null)
   const textRectsRef = useRef<RectLike[]>([])
   const textRectsDirtyRef = useRef(true)
+  const visualTextLayoutRef = useRef<VisualTextLayout | null>(null)
   const isPointerSelectionActiveRef = useRef(false)
+  const selectionAnchorCaretRef = useRef<TextCaret | null>(null)
+  const lastValidSelectionCaretRef = useRef<TextCaret | null>(null)
   const assistRegionRef = useRef<{ left: number; top: number; right: number; bottom: number } | null>(null)
   const hasActiveSelectionRef = useRef(false)
   const shapeDraftStartRef = useRef<{ x: number; y: number } | null>(null)
@@ -502,6 +528,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
 
   const invalidateCachedTextRects = () => {
     textRectsDirtyRef.current = true
+    visualTextLayoutRef.current = null
   }
 
   const updateCachedTextRects = () => {
@@ -657,6 +684,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       }
       textRectsDirtyRef.current = true
       textRectsRef.current = []
+      visualTextLayoutRef.current = null
       pageView?.destroy()
       container.replaceChildren()
     }
@@ -754,6 +782,185 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       const x = Math.min(Math.max((event.clientX - pageRect.left) / pageRect.width, 0), 1)
       const y = Math.min(Math.max((event.clientY - pageRect.top) / pageRect.height, 0), 1)
       return { x, y }
+    }
+
+    const getSpanCaret = (span: HTMLElement, atEnd: boolean): TextCaret | null => {
+      const walker = document.createTreeWalker(span, NodeFilter.SHOW_TEXT)
+      let textNode = walker.nextNode()
+      if (!textNode) return null
+      if (atEnd) {
+        let nextNode = walker.nextNode()
+        while (nextNode) {
+          textNode = nextNode
+          nextNode = walker.nextNode()
+        }
+      }
+      return {
+        node: textNode,
+        offset: atEnd ? textNode.textContent?.length ?? 0 : 0,
+      }
+    }
+
+    const getTextSpanAtPoint = (x: number, y: number): HTMLElement | null => {
+      const element = document.elementFromPoint(x, y)
+      const span = element?.closest<HTMLElement>('.textLayer span') ?? null
+      return span && root.contains(span) ? span : null
+    }
+
+    const isTextLayerCaret = (caret: TextCaret, span: HTMLElement): boolean => {
+      const element = caret.node instanceof Element ? caret.node : caret.node.parentElement
+      return !!element && span.contains(element)
+    }
+
+    const getCaretAtPoint = (x: number, y: number): TextCaret | null => {
+      const hitSpan = getTextSpanAtPoint(x, y)
+      if (!hitSpan) return null
+
+      const position = document.caretPositionFromPoint?.(x, y)
+      if (position) {
+        const caret = { node: position.offsetNode, offset: position.offset }
+        if (isTextLayerCaret(caret, hitSpan)) return caret
+      }
+
+      const range = document.caretRangeFromPoint?.(x, y)
+      if (range) {
+        const caret = { node: range.startContainer, offset: range.startOffset }
+        if (isTextLayerCaret(caret, hitSpan)) return caret
+      }
+
+      return null
+    }
+
+    const getLineEdgeCaretAtPoint = (x: number, y: number): TextCaret | null => {
+      const spans = Array.from(root.querySelectorAll<HTMLElement>('.textLayer span'))
+        .map((span) => ({ span, rect: span.getBoundingClientRect() }))
+        .filter(({ span, rect }) => span.textContent?.trim() && rect.width > 0 && rect.height > 0)
+      const lineSpans = spans.filter(({ rect }) => y >= rect.top - 8 && y <= rect.bottom + 8)
+      if (lineSpans.length === 0) return null
+
+      const preceding = lineSpans.filter(({ rect }) => rect.left <= x)
+      if (preceding.length > 0) {
+        const target = preceding.reduce((rightmost, current) =>
+          current.rect.right > rightmost.rect.right ? current : rightmost,
+        )
+        return getSpanCaret(target.span, true)
+      }
+
+      const target = lineSpans.reduce((leftmost, current) =>
+        current.rect.left < leftmost.rect.left ? current : leftmost,
+      )
+      return getSpanCaret(target.span, false)
+    }
+
+    const restoreSelectionFromCarets = (anchor: TextCaret | null, focus: TextCaret | null) => {
+      if (!anchor || !focus) return
+      try {
+        const selection = window.getSelection()
+        if (!selection) return
+        selection.removeAllRanges()
+        selection.setBaseAndExtent(anchor.node, anchor.offset, focus.node, focus.offset)
+      } catch {
+        // pdf.js 可能在虚拟页卸载时移除 text layer；此时保留浏览器原生选区。
+      }
+    }
+
+    const getVisualTextLayout = (): VisualTextLayout | null => {
+      const cached = visualTextLayoutRef.current
+      if (cached) return cached
+      const spans = Array.from(root.querySelectorAll<HTMLElement>('.textLayer span'))
+        .map((span) => ({ span, rect: span.getBoundingClientRect() }))
+        .filter(({ span, rect }) => span.textContent?.trim() && rect.width > 0 && rect.height > 0)
+        .sort((left, right) => left.rect.top - right.rect.top || left.rect.left - right.rect.left)
+      if (spans.length === 0) return null
+
+      const rows: VisualSpanLayout[][] = []
+      for (const item of spans) {
+        const row = rows.at(-1)
+        const rowCenter = row
+          ? row.reduce((total, current) => total + (current.rect.top + current.rect.bottom) / 2, 0) / row.length
+          : 0
+        const itemCenter = (item.rect.top + item.rect.bottom) / 2
+        const rowHeight = row
+          ? row.reduce((total, current) => total + current.rect.height, 0) / row.length
+          : 0
+        if (!row || Math.abs(itemCenter - rowCenter) > Math.max(3, Math.min(rowHeight, item.rect.height) * 0.6)) {
+          rows.push([item])
+        } else {
+          row.push(item)
+        }
+      }
+
+      const lines: VisualLine[] = []
+      for (const row of rows) {
+        const ordered = [...row].sort((left, right) => left.rect.left - right.rect.left)
+        let lineSpans: VisualSpanLayout[] = []
+        const appendLine = () => {
+          if (lineSpans.length === 0) return
+          const rects = lineSpans.map(({ rect }) => rect)
+          lines.push({
+            spans: lineSpans,
+            top: Math.min(...rects.map((rect) => rect.top)),
+            bottom: Math.max(...rects.map((rect) => rect.bottom)),
+            left: Math.min(...rects.map((rect) => rect.left)),
+            right: Math.max(...rects.map((rect) => rect.right)),
+            height: rects.reduce((total, rect) => total + rect.height, 0) / rects.length,
+          })
+          lineSpans = []
+        }
+
+        for (const item of ordered) {
+          const previous = lineSpans.at(-1)
+          const gap = previous ? item.rect.left - previous.rect.right : 0
+          const gapLimit = previous ? Math.max(24, Math.max(previous.rect.height, item.rect.height) * 3) : 0
+          if (previous && gap > gapLimit) appendLine()
+          lineSpans.push(item)
+        }
+        appendLine()
+      }
+
+      const lineBySpan = new Map<HTMLElement, VisualLine>()
+      for (const line of lines) {
+        for (const { span } of line.spans) {
+          lineBySpan.set(span, line)
+        }
+      }
+      const layout = { lines, lineBySpan }
+      visualTextLayoutRef.current = layout
+      return layout
+    }
+
+    const selectVisualParagraph = (targetSpan: HTMLElement) => {
+      const layout = getVisualTextLayout()
+      if (!layout) return
+      const targetLine = layout.lineBySpan.get(targetSpan)
+      if (!targetLine) return
+      const columnTolerance = Math.max(24, targetLine.height * 2)
+      const columnLines = layout.lines
+        .filter((line) => Math.abs(line.left - targetLine.left) <= columnTolerance)
+        .sort((left, right) => left.top - right.top)
+      const targetIndex = columnLines.indexOf(targetLine)
+      if (targetIndex < 0) return
+
+      let firstIndex = targetIndex
+      let lastIndex = targetIndex
+      const canJoin = (previous: VisualLine, next: VisualLine) => {
+        const verticalGap = next.top - previous.bottom
+        const lineHeight = Math.max(previous.height, next.height)
+        const beginsIndentedBlock = next.left - previous.left > Math.max(12, lineHeight * 0.75)
+        return verticalGap <= Math.max(8, lineHeight * 0.9) && !beginsIndentedBlock
+      }
+
+      while (firstIndex > 0 && canJoin(columnLines[firstIndex - 1], columnLines[firstIndex])) {
+        firstIndex -= 1
+      }
+      while (lastIndex < columnLines.length - 1 && canJoin(columnLines[lastIndex], columnLines[lastIndex + 1])) {
+        lastIndex += 1
+      }
+
+      const firstSpan = columnLines[firstIndex].spans[0]?.span
+      const lastSpan = columnLines[lastIndex].spans.at(-1)?.span
+      if (!firstSpan || !lastSpan) return
+      restoreSelectionFromCarets(getSpanCaret(firstSpan, false), getSpanCaret(lastSpan, true))
     }
 
     const buildDraftRect = (
@@ -1006,6 +1213,16 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         }
         return
       }
+      if (!targetElement?.closest('.textLayer') && clearSelectionOnBlankClick) {
+        window.getSelection()?.removeAllRanges()
+        selectionAnchorCaretRef.current = null
+        lastValidSelectionCaretRef.current = null
+        clearSelectionBlocks()
+        publishSelection(null)
+        setSelectionAssistRegionDefaults()
+        setPointerSelectingState(false)
+        return
+      }
       if (activeFreeTextTool || activeNoteTool) {
         const point = getPageRelativePoint(event)
         if (!point) return
@@ -1099,11 +1316,27 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         return
       }
       onClearAnnotationSelection?.()
+      const anchorCaret =
+        getCaretAtPoint(event.clientX, event.clientY) ??
+        getLineEdgeCaretAtPoint(event.clientX, event.clientY)
+      selectionAnchorCaretRef.current = anchorCaret
+      lastValidSelectionCaretRef.current = anchorCaret
       setPointerSelectingState(true)
       clearSelectionBlocks()
     }
 
-    const handlePointerFinish = () => {
+    const handleTextSelectionClick = (event: MouseEvent) => {
+      if (!clearSelectionOnBlankClick || event.button !== 0 || event.detail < 2) return
+      const target = event.target
+      if (!(target instanceof Element)) return
+      const span = target.closest<HTMLElement>('.textLayer span')
+      if (!span || !root.contains(span)) return
+
+      if (event.detail >= 3) selectVisualParagraph(span)
+      scheduleUpdate()
+    }
+
+    const handlePointerFinish = (event: PointerEvent) => {
       const movingFreeText = movingFreeTextStateRef.current
       if (movingFreeText) {
         const draft = freeTextResizeDraftRef.current
@@ -1216,10 +1449,28 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       }
       if (!isPointerSelectionActiveRef.current) return
       setPointerSelectingState(false)
+      const pointerCaret = getCaretAtPoint(event.clientX, event.clientY)
+      const lastValidCaret = lastValidSelectionCaretRef.current
+      const anchorCaret = selectionAnchorCaretRef.current
+      const movedFromAnchor =
+        !!anchorCaret &&
+        !!lastValidCaret &&
+        (anchorCaret.node !== lastValidCaret.node || anchorCaret.offset !== lastValidCaret.offset)
+      const focusCaret =
+        pointerCaret ??
+        (movedFromAnchor
+          ? lastValidCaret
+          : getLineEdgeCaretAtPoint(event.clientX, event.clientY) ?? lastValidCaret)
+      if (event.detail < 2) {
+        restoreSelectionFromCarets(anchorCaret, focusCaret)
+      }
+      selectionAnchorCaretRef.current = null
+      lastValidSelectionCaretRef.current = null
       if (frame) {
         window.cancelAnimationFrame(frame)
         frame = 0
       }
+      if (event.detail >= 3) return
       updateSelectionBlocks()
     }
 
@@ -1400,6 +1651,10 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         return
       }
       if (!isPointerSelectionActiveRef.current) return
+      const caret = getCaretAtPoint(event.clientX, event.clientY)
+      if (caret) {
+        lastValidSelectionCaretRef.current = caret
+      }
       const root = rootRef.current
       if (!root) return
       const pageEl = root.querySelector('.page') as HTMLElement | null
@@ -1446,6 +1701,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     }
 
     root.addEventListener('pointerdown', handlePointerDown)
+    root.addEventListener('click', handleTextSelectionClick)
     document.addEventListener('pointermove', handlePointerMove)
     document.addEventListener('pointerup', handlePointerFinish)
     document.addEventListener('pointercancel', handlePointerFinish)
@@ -1461,11 +1717,14 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
 
     return () => {
       root.removeEventListener('pointerdown', handlePointerDown)
+      root.removeEventListener('click', handleTextSelectionClick)
       document.removeEventListener('pointermove', handlePointerMove)
       document.removeEventListener('pointerup', handlePointerFinish)
       document.removeEventListener('pointercancel', handlePointerFinish)
       document.removeEventListener('selectionchange', handleSelectionChange)
       setPointerSelectingState(false)
+      selectionAnchorCaretRef.current = null
+      lastValidSelectionCaretRef.current = null
       shapeDraftStartRef.current = null
       isShapeDrawingActiveRef.current = false
       applyShapeDraftRect(null)
@@ -1486,7 +1745,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         window.cancelAnimationFrame(frame)
       }
     }
-  }, [annotations, selectedAnnotationId, onSelectionChange, pageNumber, pdfDocument, scale, clearSelectionSignal, activeShapeTool, onShapeCreate, activeFreeTextTool, activeNoteTool, activeTextBoxDraft, onFreeTextCreate, onNoteCreate, activeStampKind, activeStampLabel, activeStampSize, onStampCreate, onStampResize, onLineResize, onFreeTextResize, onNoteResize, onClearAnnotationSelection])
+  }, [annotations, selectedAnnotationId, onSelectionChange, pageNumber, pdfDocument, scale, clearSelectionSignal, clearSelectionOnBlankClick, activeShapeTool, onShapeCreate, activeFreeTextTool, activeNoteTool, activeTextBoxDraft, onFreeTextCreate, onNoteCreate, activeStampKind, activeStampLabel, activeStampSize, onStampCreate, onStampResize, onLineResize, onFreeTextResize, onNoteResize, onClearAnnotationSelection])
 
   useEffect(() => {
     clearSelectionBlocks()
