@@ -1852,7 +1852,6 @@ button:disabled {
 
 .pdf-official-page-view .textLayer {
   pointer-events: none;
-  translate: calc(var(--scale-factor, 1) * -2px) 0;
 }
 
 .pdf-official-page-view .textLayer span {
