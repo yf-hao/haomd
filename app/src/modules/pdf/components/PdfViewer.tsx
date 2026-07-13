@@ -48,6 +48,7 @@ import {
   type StampKind,
   type AnnotationType,
 } from '../types/annotation'
+import { translatePdfSelection } from '../translationService'
 
 type PdfReadingState = {
   page: number
@@ -104,10 +105,38 @@ type AnnotationRect = {
   y2: number
 }
 
+type PdfTranslationStatus = 'idle' | 'loading' | 'success' | 'error'
+
+type PdfTranslationSettings = {
+  sourceLanguage: string
+  targetLanguage: string
+}
+
 const PDF_CSS_UNITS = 96 / 72
 const DEFAULT_STAMP_SIZE = 0.045
 const MIN_STAMP_SIZE = DEFAULT_STAMP_SIZE / 3
 const MAX_STAMP_SIZE = 0.2
+const MAX_TRANSLATION_SELECTION_LENGTH = 8000
+const PDF_TRANSLATION_SETTINGS_STORAGE_KEY = 'pdf-translation-settings-v1'
+const DEFAULT_PDF_TRANSLATION_SETTINGS: PdfTranslationSettings = {
+  sourceLanguage: '英语',
+  targetLanguage: '简体中文',
+}
+const EMPTY_ANNOTATIONS: Annotation[] = []
+
+function loadPdfTranslationSettings(): PdfTranslationSettings {
+  if (typeof window === 'undefined') return DEFAULT_PDF_TRANSLATION_SETTINGS
+  try {
+    const raw = window.localStorage.getItem(PDF_TRANSLATION_SETTINGS_STORAGE_KEY)
+    const parsed = raw ? JSON.parse(raw) as Partial<PdfTranslationSettings> : null
+    return {
+      sourceLanguage: parsed?.sourceLanguage || DEFAULT_PDF_TRANSLATION_SETTINGS.sourceLanguage,
+      targetLanguage: parsed?.targetLanguage || DEFAULT_PDF_TRANSLATION_SETTINGS.targetLanguage,
+    }
+  } catch {
+    return DEFAULT_PDF_TRANSLATION_SETTINGS
+  }
+}
 const HIGHLIGHT_COLOR_OPTIONS = [
   { value: '#f5d90a', key: 'yellow' },
   { value: '#7ccf00', key: 'green' },
@@ -852,7 +881,18 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
   const [basePageWidth, setBasePageWidth] = useState<number | null>(null)
   const [basePageHeight, setBasePageHeight] = useState<number | null>(null)
   const [annotationDocument, setAnnotationDocument] = useState<DocumentAnnotations | null>(null)
-  const [, setSelectionDraft] = useState<PdfSelectionDraft | null>(null)
+  const [selectionDraft, setSelectionDraft] = useState<PdfSelectionDraft | null>(null)
+  const [translationSelectionDraft, setTranslationSelectionDraft] = useState<PdfSelectionDraft | null>(null)
+  const translationAbortRef = useRef<AbortController | null>(null)
+  const translationRequestIdRef = useRef(0)
+  const [translationOpen, setTranslationOpen] = useState(false)
+  const [translationStatus, setTranslationStatus] = useState<PdfTranslationStatus>('idle')
+  const [translationText, setTranslationText] = useState('')
+  const [translationError, setTranslationError] = useState<string | null>(null)
+  const [translationPosition, setTranslationPosition] = useState<NoteEditorPosition | null>(null)
+  const [translationDismissed, setTranslationDismissed] = useState(false)
+  const [translationSettings, setTranslationSettings] = useState<PdfTranslationSettings>(loadPdfTranslationSettings)
+  const [translationSettingsOpen, setTranslationSettingsOpen] = useState(false)
   const [annotationMessage, setAnnotationMessage] = useState<string | null>(null)
   const [isAnnotationBusy, setAnnotationBusy] = useState(false)
   const [selectedHighlightColor, setSelectedHighlightColor] = useState<string>('#ff0000')
@@ -1044,6 +1084,73 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
       pulseTimerRef.current = null
     }, 1400)
   }, [])
+
+  const closeTranslation = useCallback(() => {
+    translationRequestIdRef.current += 1
+    translationAbortRef.current?.abort()
+    translationAbortRef.current = null
+    setTranslationOpen(false)
+    setTranslationStatus('idle')
+    setTranslationText('')
+    setTranslationError(null)
+    setTranslationPosition(null)
+    setTranslationSelectionDraft(null)
+    setTranslationDismissed(true)
+    setTranslationSettingsOpen(false)
+  }, [])
+
+  const startTranslation = useCallback(async () => {
+    const selection = selectionDraftRef.current
+    if (!selection) return
+    if (selection.text.length > MAX_TRANSLATION_SELECTION_LENGTH) {
+      setTranslationSelectionDraft(selection)
+      setTranslationOpen(true)
+      setTranslationStatus('error')
+      setTranslationError(t('pdf.translationTooLong'))
+      return
+    }
+
+    translationAbortRef.current?.abort()
+    const controller = new AbortController()
+    translationAbortRef.current = controller
+    const requestId = ++translationRequestIdRef.current
+    setTranslationSelectionDraft(selection)
+    setTranslationOpen(true)
+    setTranslationDismissed(false)
+    setTranslationStatus('loading')
+    setTranslationText('')
+    setTranslationError(null)
+
+    try {
+      const result = await translatePdfSelection({
+        text: selection.text,
+        sourceLanguage: translationSettings.sourceLanguage,
+        targetLanguage: translationSettings.targetLanguage,
+        signal: controller.signal,
+        onDelta: (value) => {
+          if (translationRequestIdRef.current === requestId) {
+            setTranslationText(value)
+          }
+        },
+      })
+      if (translationRequestIdRef.current !== requestId) return
+      setTranslationText(result)
+      setTranslationStatus('success')
+    } catch (error) {
+      if (controller.signal.aborted || translationRequestIdRef.current !== requestId) return
+      const message = error instanceof Error ? error.message : String(error)
+      setTranslationStatus('error')
+      setTranslationError(t('pdf.translationFailed', { message }))
+    } finally {
+      if (translationRequestIdRef.current === requestId) {
+        translationAbortRef.current = null
+      }
+    }
+  }, [t, translationSettings])
+
+  useEffect(() => {
+    window.localStorage.setItem(PDF_TRANSLATION_SETTINGS_STORAGE_KEY, JSON.stringify(translationSettings))
+  }, [translationSettings])
 
   useEffect(() => {
     if (!pageCount || pageCount <= 0) {
@@ -1460,7 +1567,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
     }
   }
 
-  const handleResizeStamp = async (stamp: {
+  const handleResizeStamp = useCallback(async (stamp: {
     annotationId: string
     rect: AnnotationRect
   }) => {
@@ -1508,9 +1615,9 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
     } finally {
       setAnnotationBusy(false)
     }
-  }
+  }, [annotationDocument, isAnnotationBusy, t])
 
-  const handleResizeFreeText = async (freeText: {
+  const handleResizeFreeText = useCallback(async (freeText: {
     annotationId: string
     rect: AnnotationRect
   }) => {
@@ -1543,9 +1650,9 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
     } finally {
       setAnnotationBusy(false)
     }
-  }
+  }, [annotationDocument, isAnnotationBusy, t])
 
-  const handleResizeLine = async (shape: {
+  const handleResizeLine = useCallback(async (shape: {
     annotationId: string
     rect: AnnotationRect
     linePoints: AnnotationRect
@@ -1580,7 +1687,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
     } finally {
       setAnnotationBusy(false)
     }
-  }
+  }, [annotationDocument, isAnnotationBusy, t])
 
   const handleUpdateSelectedStampKind = async (stampKind: StampKind) => {
     if (!annotationDocument || !selectedStampAnnotation) return
@@ -2116,6 +2223,8 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
   }, [])
 
   const handleViewportSelectionChange = useCallback((selection: PdfSelectionDraft | null) => {
+    if (translationOpen) return
+    setTranslationDismissed(false)
     if (pendingNoteDraft) {
       return
     }
@@ -2148,6 +2257,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
       }
   }, [
     pendingNoteDraft,
+    translationOpen,
     isTextNoteArmed,
     handleAnnotationPreviewOpen,
     activeMarkupTool,
@@ -2195,7 +2305,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
     if (annotationDocument && !isAnnotationBusy) {
       void handleResizeStamp(stamp)
     }
-  }, [annotationDocument, isAnnotationBusy, handleAnnotationPreviewOpen])
+  }, [annotationDocument, isAnnotationBusy, handleAnnotationPreviewOpen, handleResizeStamp])
 
   const handleViewportLineResize = useCallback((shape: {
     annotationId: string
@@ -2206,11 +2316,12 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
     if (annotationDocument && !isAnnotationBusy) {
       void handleResizeLine(shape)
     }
-  }, [annotationDocument, isAnnotationBusy, handleAnnotationPreviewOpen])
+  }, [annotationDocument, isAnnotationBusy, handleAnnotationPreviewOpen, handleResizeLine])
 
   const activeStampOption = activeStampKey
     ? STAMP_OPTIONS.find((option) => option.key === activeStampKey) ?? null
     : null
+  const documentAnnotations = annotationDocument?.annotations ?? EMPTY_ANNOTATIONS
   const withShortcutLabel = useCallback((label: string, shortcut: string) => `${label} (${shortcut})`, [])
   const markupToolOptions = useMemo(
     () => TEXT_MARKUP_TOOL_OPTIONS.map((option) => ({
@@ -2485,6 +2596,37 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
     handleAnnotationPreviewOpen(null)
   }, [handleAnnotationPreviewOpen])
 
+  const clearTextSelection = useCallback(() => {
+    if (translationOpen) {
+      closeTranslation()
+    }
+    setSelectionDraft(null)
+    setTranslationSelectionDraft(null)
+    selectionDraftRef.current = null
+    setClearSelectionSignal((prev) => prev + 1)
+    if (typeof window !== 'undefined') {
+      window.getSelection()?.removeAllRanges()
+    }
+  }, [closeTranslation, translationOpen])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      const target = event.target
+      if (target instanceof HTMLElement && (target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+        return
+      }
+      if (!selectionDraft && !translationOpen) return
+      event.preventDefault()
+      clearTextSelection()
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [clearTextSelection, selectionDraft, translationOpen])
+
   const handlePanelAnnotationDoubleClick = useCallback((annotation: Annotation) => {
     if (annotation.type === 'freeText') {
       setPendingFreeTextDraft({
@@ -2650,6 +2792,42 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
       window.cancelAnimationFrame(frame)
     }
   }, [openedNoteAnnotation, pendingNoteDraft, currentPage, scale])
+
+  useEffect(() => {
+    return () => {
+      translationAbortRef.current?.abort()
+    }
+  }, [])
+
+  useEffect(() => {
+    const activeSelectionDraft = translationOpen ? translationSelectionDraft : selectionDraft
+    if (!activeSelectionDraft || !isSelectTextToolActive) {
+      setTranslationPosition(null)
+      return
+    }
+
+    const updatePosition = () => {
+      const metrics = viewportRef.current?.getRenderedPageMetrics(activeSelectionDraft.page)
+      const anchorRect = getAnchorRect(activeSelectionDraft.rects)
+      if (!metrics || !anchorRect) {
+        setTranslationPosition(null)
+        return
+      }
+      const mainWidth = viewportRef.current?.getContainerWidth() ?? metrics.width
+      const popupWidth = translationOpen ? 360 : 80
+      const anchorLeft = metrics.left + anchorRect.x2 * metrics.width
+      const anchorTop = metrics.viewportTop + anchorRect.y2 * metrics.height
+      const top = Math.min(
+        Math.max(8, anchorTop + 10),
+        Math.max(8, (viewportRef.current?.getContainerHeight() ?? metrics.height) - 120),
+      )
+      const left = Math.min(Math.max(8, anchorLeft - popupWidth), Math.max(8, mainWidth - popupWidth - 8))
+      setTranslationPosition({ top, left })
+    }
+
+    const frame = window.requestAnimationFrame(updatePosition)
+    return () => window.cancelAnimationFrame(frame)
+  }, [selectionDraft, translationSelectionDraft, isSelectTextToolActive, translationOpen, currentPage, scale])
 
   useEffect(() => {
     if (!shortcutHelpOpen) return
@@ -3061,11 +3239,11 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
             pageHeight={pageHeightForVirtual}
             previewHighlightColor={selectedHighlightColor}
             clearSelectionSignal={clearSelectionSignal}
-            clearSelectionOnBlankClick={isSelectTextToolActive}
+            clearSelectionOnBlankClick={false}
             currentPage={currentPage}
             onCurrentPageChange={handleViewportCurrentPageChange}
             onRegisterSelectionGetter={onRegisterSelectionGetter}
-            annotations={annotationDocument?.annotations ?? []}
+            annotations={documentAnnotations}
             onSelectionChange={handleViewportSelectionChange}
             activeShapeTool={activeShapeTool}
             onShapeCreate={handleViewportShapeCreate}
@@ -3099,6 +3277,91 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
             onAnnotationDoubleClick={handleViewportAnnotationDoubleClick}
             onClearAnnotationSelection={handleViewportClearAnnotationSelection}
           />
+          {selectionDraft && translationPosition && !translationOpen && !translationDismissed ? (
+            <button
+              type="button"
+              className="pdf-translation-trigger"
+              style={{ top: `${translationPosition.top}px`, left: `${translationPosition.left}px` }}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => void startTranslation()}
+            >
+              <span aria-hidden="true">🌐</span>
+              {t('pdf.translateSelection')}
+            </button>
+          ) : null}
+          {translationSelectionDraft && translationOpen && translationPosition ? (
+            <div
+              className="pdf-translation-popover"
+              role="dialog"
+              aria-label={t('pdf.translateSelection')}
+              style={{ top: `${translationPosition.top}px`, left: `${translationPosition.left}px` }}
+            >
+              <div className="pdf-translation-header">
+                <span>{translationSettings.sourceLanguage} → {translationSettings.targetLanguage}</span>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setTranslationSettingsOpen((previous) => !previous)}
+                    aria-label={t('pdf.translationSettings')}
+                    title={t('pdf.translationSettings')}
+                  >
+                    ⚙
+                  </button>
+                  <button type="button" onClick={closeTranslation} aria-label={t('common.close')}>×</button>
+                </div>
+              </div>
+              {translationSettingsOpen ? (
+                <div className="pdf-translation-settings">
+                  <label>
+                    {t('pdf.translationSourceLanguage')}
+                    <select
+                      value={translationSettings.sourceLanguage}
+                      onChange={(event) => setTranslationSettings((current) => ({ ...current, sourceLanguage: event.target.value }))}
+                    >
+                      <option value="自动检测">自动检测</option>
+                      <option value="英语">英语</option>
+                      <option value="中文">中文</option>
+                      <option value="日语">日语</option>
+                      <option value="法语">法语</option>
+                      <option value="德语">德语</option>
+                    </select>
+                  </label>
+                  <label>
+                    {t('pdf.translationTargetLanguage')}
+                    <select
+                      value={translationSettings.targetLanguage}
+                      onChange={(event) => setTranslationSettings((current) => ({ ...current, targetLanguage: event.target.value }))}
+                    >
+                      <option value="简体中文">简体中文</option>
+                      <option value="英语">英语</option>
+                      <option value="日语">日语</option>
+                      <option value="法语">法语</option>
+                      <option value="德语">德语</option>
+                    </select>
+                  </label>
+                </div>
+              ) : null}
+              <div className="pdf-translation-source">{translationSelectionDraft.text}</div>
+              {translationStatus === 'loading' ? <div className="pdf-translation-status">{t('pdf.translatingSelection')}</div> : null}
+              {translationText ? <div className="pdf-translation-result">{translationText}</div> : null}
+              {translationStatus === 'error' && translationError ? <div className="pdf-translation-error">{translationError}</div> : null}
+              <div className="pdf-translation-actions">
+                {translationStatus === 'loading' ? (
+                  <button type="button" onClick={closeTranslation}>{t('pdf.translationStop')}</button>
+                ) : (
+                  <button type="button" onClick={() => void startTranslation()}>{t('pdf.translationRetry')}</button>
+                )}
+                {translationText ? (
+                  <button
+                    type="button"
+                    onClick={() => void navigator.clipboard?.writeText(translationText)}
+                  >
+                    {t('pdf.translationCopy')}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           {openedNoteAnnotation && notePreviewPosition && !pendingNoteDraft ? (
             <div
               className="pdf-note-preview pdf-note-preview-popover"
@@ -3153,7 +3416,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
             </div>
             {activeSidePanel === 'annotations' ? (
               <PdfAnnotationPanel
-                annotations={annotationDocument?.annotations ?? []}
+                annotations={documentAnnotations}
                 selectedAnnotationId={selectedAnnotationId}
                 onAnnotationClick={handleAnnotationItemClick}
                 onAnnotationDoubleClick={handlePanelAnnotationDoubleClick}

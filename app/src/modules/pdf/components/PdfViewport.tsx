@@ -22,6 +22,8 @@ export interface PdfViewportHandle {
   getRenderedPageMetrics: (page: number) => { top: number; viewportTop: number; left: number; width: number; height: number } | null
 }
 
+const EMPTY_ANNOTATIONS: Annotation[] = []
+
 export interface PdfViewportProps {
   pdfDocument: PDFDocumentProxy
   pageCount: number
@@ -104,7 +106,7 @@ const PdfViewportInner = forwardRef<PdfViewportHandle, PdfViewportProps>(functio
     currentPage,
     onCurrentPageChange,
     onRegisterSelectionGetter,
-    annotations = [],
+    annotations = EMPTY_ANNOTATIONS,
     onSelectionChange,
     activeShapeTool = null,
     onShapeCreate,
@@ -265,7 +267,7 @@ const PdfViewportInner = forwardRef<PdfViewportHandle, PdfViewportProps>(functio
             previewHighlightColor={previewHighlightColor}
             clearSelectionSignal={clearSelectionSignal}
             clearSelectionOnBlankClick={clearSelectionOnBlankClick}
-            annotations={annotationsByPage.get(pageNumber) ?? []}
+            annotations={annotationsByPage.get(pageNumber) ?? EMPTY_ANNOTATIONS}
             onSelectionChange={onSelectionChange}
             activeShapeTool={activeShapeTool}
             onShapeCreate={onShapeCreate}

@@ -1582,9 +1582,137 @@ button:disabled {
 }
 
 .pdf-viewer-main {
+  position: relative;
   flex: 1;
   min-width: 0;
   min-height: 0;
+}
+
+.pdf-translation-trigger,
+.pdf-translation-popover {
+  position: absolute;
+  z-index: var(--z-popover);
+  box-shadow: var(--theme-shadow-modal);
+}
+
+.pdf-translation-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 10px;
+  border: 1px solid var(--theme-border-subtle);
+  border-radius: 8px;
+  background: var(--theme-surface-modal);
+  color: var(--theme-text-default);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.pdf-translation-trigger:hover {
+  border-color: var(--theme-accent-primary);
+  color: var(--theme-accent-primary);
+}
+
+.pdf-translation-popover {
+  width: min(360px, calc(100% - 16px));
+  padding: 12px;
+  border: 1px solid var(--theme-border-subtle);
+  border-radius: 12px;
+  background: var(--theme-surface-modal);
+  box-sizing: border-box;
+}
+
+.pdf-translation-header,
+.pdf-translation-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pdf-translation-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--theme-text-default);
+}
+
+.pdf-translation-header button,
+.pdf-translation-actions button {
+  border: 0;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--theme-accent-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.pdf-translation-source,
+.pdf-translation-result,
+.pdf-translation-error,
+.pdf-translation-status {
+  margin-top: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.pdf-translation-settings {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--theme-surface-editor) 82%, transparent);
+}
+
+.pdf-translation-settings label {
+  display: grid;
+  gap: 4px;
+  color: var(--theme-text-subtle);
+  font-size: 11px;
+}
+
+.pdf-translation-settings select {
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--theme-border-subtle);
+  border-radius: 6px;
+  background: var(--theme-surface-modal);
+  color: var(--theme-text-default);
+  font: inherit;
+  font-size: 12px;
+}
+
+.pdf-translation-source {
+  max-height: 72px;
+  overflow: auto;
+  padding-bottom: 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--theme-border-subtle) 78%, transparent);
+  color: var(--theme-text-subtle);
+}
+
+.pdf-translation-result {
+  max-height: 220px;
+  overflow: auto;
+  color: var(--theme-text-default);
+}
+
+.pdf-translation-error {
+  color: var(--theme-danger, #c23b4b);
+}
+
+.pdf-translation-status {
+  color: var(--theme-text-subtle);
+}
+
+.pdf-translation-actions {
+  justify-content: flex-end;
+  margin-top: 10px;
 }
 
 .pdf-scroll-container {
