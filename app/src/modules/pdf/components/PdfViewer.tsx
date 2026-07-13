@@ -48,7 +48,7 @@ import {
   type StampKind,
   type AnnotationType,
 } from '../types/annotation'
-import { translatePdfSelection } from '../translationService'
+import { translatePdfSelection, type PdfTranslationEntry } from '../translationService'
 
 type PdfReadingState = {
   page: number
@@ -110,6 +110,27 @@ type PdfTranslationStatus = 'idle' | 'loading' | 'success' | 'error'
 type PdfTranslationSettings = {
   sourceLanguage: string
   targetLanguage: string
+}
+
+function formatPdfTranslationEntry(entry: PdfTranslationEntry) {
+  const lines = [entry.sourceText, entry.translation]
+  if (entry.partOfSpeech || entry.phonetic) {
+    lines.push([entry.partOfSpeech, entry.phonetic].filter(Boolean).join('  '))
+  }
+  if (entry.definition) {
+    lines.push(entry.definition)
+  }
+  if (entry.example) {
+    lines.push(entry.example)
+  }
+  return lines.filter((line) => line.trim()).join('\n')
+}
+
+function getPdfTranslationVoiceLang(entry: PdfTranslationEntry, sourceLanguage: string) {
+  if (sourceLanguage === '英语') return 'en-US'
+  if (sourceLanguage === '中文') return 'zh-CN'
+  if (/[A-Za-z]/.test(entry.sourceText)) return 'en-US'
+  return 'zh-CN'
 }
 
 const PDF_CSS_UNITS = 96 / 72
@@ -887,12 +908,14 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
   const translationRequestIdRef = useRef(0)
   const [translationOpen, setTranslationOpen] = useState(false)
   const [translationStatus, setTranslationStatus] = useState<PdfTranslationStatus>('idle')
-  const [translationText, setTranslationText] = useState('')
+  const [translationEntry, setTranslationEntry] = useState<PdfTranslationEntry | null>(null)
   const [translationError, setTranslationError] = useState<string | null>(null)
   const [translationPosition, setTranslationPosition] = useState<NoteEditorPosition | null>(null)
   const [translationDismissed, setTranslationDismissed] = useState(false)
   const [translationSettings, setTranslationSettings] = useState<PdfTranslationSettings>(loadPdfTranslationSettings)
   const [translationSettingsOpen, setTranslationSettingsOpen] = useState(false)
+  const [translationPronouncing, setTranslationPronouncing] = useState(false)
+  const translationPopoverRef = useRef<HTMLDivElement | null>(null)
   const [annotationMessage, setAnnotationMessage] = useState<string | null>(null)
   const [isAnnotationBusy, setAnnotationBusy] = useState(false)
   const [selectedHighlightColor, setSelectedHighlightColor] = useState<string>('#ff0000')
@@ -1089,9 +1112,11 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
     translationRequestIdRef.current += 1
     translationAbortRef.current?.abort()
     translationAbortRef.current = null
+    window.speechSynthesis?.cancel()
+    setTranslationPronouncing(false)
     setTranslationOpen(false)
     setTranslationStatus('idle')
-    setTranslationText('')
+    setTranslationEntry(null)
     setTranslationError(null)
     setTranslationPosition(null)
     setTranslationSelectionDraft(null)
@@ -1118,8 +1143,9 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
     setTranslationOpen(true)
     setTranslationDismissed(false)
     setTranslationStatus('loading')
-    setTranslationText('')
+    setTranslationEntry(null)
     setTranslationError(null)
+    setTranslationPronouncing(false)
 
     try {
       const result = await translatePdfSelection({
@@ -1127,14 +1153,9 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
         sourceLanguage: translationSettings.sourceLanguage,
         targetLanguage: translationSettings.targetLanguage,
         signal: controller.signal,
-        onDelta: (value) => {
-          if (translationRequestIdRef.current === requestId) {
-            setTranslationText(value)
-          }
-        },
       })
       if (translationRequestIdRef.current !== requestId) return
-      setTranslationText(result)
+      setTranslationEntry(result)
       setTranslationStatus('success')
     } catch (error) {
       if (controller.signal.aborted || translationRequestIdRef.current !== requestId) return
@@ -1148,9 +1169,34 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
     }
   }, [t, translationSettings])
 
+  const handleTranslationPronunciationPlay = useEffectEvent(() => {
+    const entry = translationEntry
+    if (!entry) return
+    const utteranceText = entry.sourceText.trim()
+    if (!utteranceText) return
+
+    window.speechSynthesis?.cancel()
+    const synth = window.speechSynthesis
+    if (!synth) return
+    const utterance = new SpeechSynthesisUtterance(utteranceText)
+    utterance.lang = getPdfTranslationVoiceLang(entry, translationSettings.sourceLanguage)
+    utterance.rate = 0.95
+    utterance.pitch = 1
+    utterance.onstart = () => setTranslationPronouncing(true)
+    utterance.onend = () => setTranslationPronouncing(false)
+    utterance.onerror = () => setTranslationPronouncing(false)
+    synth.speak(utterance)
+  })
+
   useEffect(() => {
     window.localStorage.setItem(PDF_TRANSLATION_SETTINGS_STORAGE_KEY, JSON.stringify(translationSettings))
   }, [translationSettings])
+
+  useEffect(() => {
+    return () => {
+      window.speechSynthesis?.cancel()
+    }
+  }, [])
 
   useEffect(() => {
     if (!pageCount || pageCount <= 0) {
@@ -2814,20 +2860,40 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
         return
       }
       const mainWidth = viewportRef.current?.getContainerWidth() ?? metrics.width
-      const popupWidth = translationOpen ? 360 : 80
+      const popupWidth = translationOpen ? 520 : 80
       const anchorLeft = metrics.left + anchorRect.x2 * metrics.width
       const anchorTop = metrics.viewportTop + anchorRect.y2 * metrics.height
-      const top = Math.min(
-        Math.max(8, anchorTop + 10),
-        Math.max(8, (viewportRef.current?.getContainerHeight() ?? metrics.height) - 120),
-      )
+      const containerHeight = viewportRef.current?.getContainerHeight() ?? metrics.height
+      const measuredPopupHeight = translationOpen
+        ? Math.ceil(translationPopoverRef.current?.getBoundingClientRect().height || 0)
+        : 80
+      const popupHeight = Math.max(80, measuredPopupHeight)
+      const belowTop = anchorTop + 10
+      const aboveTop = anchorTop - popupHeight - 12
+      const maxTop = Math.max(8, containerHeight - popupHeight - 8)
+      const hasSpaceBelow = belowTop + popupHeight <= containerHeight - 8
+      const hasSpaceAbove = aboveTop >= 8
+      const top = hasSpaceBelow
+        ? Math.min(belowTop, maxTop)
+        : hasSpaceAbove
+          ? Math.min(aboveTop, maxTop)
+          : Math.min(Math.max(8, belowTop), maxTop)
       const left = Math.min(Math.max(8, anchorLeft - popupWidth), Math.max(8, mainWidth - popupWidth - 8))
       setTranslationPosition({ top, left })
     }
 
     const frame = window.requestAnimationFrame(updatePosition)
     return () => window.cancelAnimationFrame(frame)
-  }, [selectionDraft, translationSelectionDraft, isSelectTextToolActive, translationOpen, currentPage, scale])
+  }, [
+    selectionDraft,
+    translationSelectionDraft,
+    isSelectTextToolActive,
+    translationOpen,
+    translationSettingsOpen,
+    translationEntry,
+    currentPage,
+    scale,
+  ])
 
   useEffect(() => {
     if (!shortcutHelpOpen) return
@@ -3291,6 +3357,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
           ) : null}
           {translationSelectionDraft && translationOpen && translationPosition ? (
             <div
+              ref={translationPopoverRef}
               className="pdf-translation-popover"
               role="dialog"
               aria-label={t('pdf.translateSelection')}
@@ -3341,20 +3408,61 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
                   </label>
                 </div>
               ) : null}
-              <div className="pdf-translation-source">{translationSelectionDraft.text}</div>
-              {translationStatus === 'loading' ? <div className="pdf-translation-status">{t('pdf.translatingSelection')}</div> : null}
-              {translationText ? <div className="pdf-translation-result">{translationText}</div> : null}
+              <div className="pdf-translation-body">
+                <div className="pdf-translation-column pdf-translation-column--left">
+                  <div className="pdf-translation-headword">
+                    {translationEntry?.sourceText ?? translationSelectionDraft.text}
+                  </div>
+                  <div className="pdf-translation-meaning">
+                    {translationStatus === 'loading'
+                      ? t('pdf.translatingSelection')
+                      : translationEntry?.translation ?? ''}
+                  </div>
+                  <div className="pdf-translation-meta">
+                    {translationEntry?.partOfSpeech ? (
+                      <span className="pdf-translation-part-of-speech">{translationEntry.partOfSpeech}</span>
+                    ) : null}
+                    {translationEntry?.phonetic ? (
+                      <button
+                        type="button"
+                        className="pdf-translation-pronunciation"
+                        onClick={() => void handleTranslationPronunciationPlay()}
+                        aria-label={t('pdf.translationPronunciation')}
+                        title={t('pdf.translationPronunciation')}
+                        disabled={translationPronouncing}
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                        <span>{translationEntry.phonetic}</span>
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="pdf-translation-column pdf-translation-column--right">
+                  {translationEntry?.definition ? (
+                    <div className="pdf-translation-block">
+                      <div className="pdf-translation-label">{t('pdf.translationDefinition')}</div>
+                      <div className="pdf-translation-block-text">{translationEntry.definition}</div>
+                    </div>
+                  ) : null}
+                  {translationEntry?.example ? (
+                    <div className="pdf-translation-block">
+                      <div className="pdf-translation-label">{t('pdf.translationExample')}</div>
+                      <div className="pdf-translation-example">{translationEntry.example}</div>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
               {translationStatus === 'error' && translationError ? <div className="pdf-translation-error">{translationError}</div> : null}
               <div className="pdf-translation-actions">
                 {translationStatus === 'loading' ? (
                   <button type="button" onClick={closeTranslation}>{t('pdf.translationStop')}</button>
-                ) : (
-                  <button type="button" onClick={() => void startTranslation()}>{t('pdf.translationRetry')}</button>
-                )}
-                {translationText ? (
+                ) : null}
+                {translationEntry ? (
                   <button
                     type="button"
-                    onClick={() => void navigator.clipboard?.writeText(translationText)}
+                    onClick={() => void navigator.clipboard?.writeText(formatPdfTranslationEntry(translationEntry))}
                   >
                     {t('pdf.translationCopy')}
                   </button>
