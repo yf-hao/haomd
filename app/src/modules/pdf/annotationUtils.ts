@@ -18,44 +18,6 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
-function mergePageRelativeRects(rects: RectLike[]): RectLike[] {
-  if (rects.length === 0) return []
-
-  const sorted = [...rects].sort((a, b) => {
-    if (Math.abs(a.top - b.top) > 3) return a.top - b.top
-    return a.left - b.left
-  })
-
-  const merged: RectLike[] = []
-
-  for (const rect of sorted) {
-    const last = merged[merged.length - 1]
-    if (!last) {
-      merged.push({ ...rect })
-      continue
-    }
-
-    const lineThreshold = Math.max(3, Math.min(last.height, rect.height) * 0.35)
-    const horizontalGap = Math.max(8, Math.min(last.height, rect.height) * 0.6)
-    const sameLine = Math.abs(last.top - rect.top) <= lineThreshold
-    const closeEnough = rect.left <= last.right + horizontalGap
-
-    if (sameLine && closeEnough) {
-      last.left = Math.min(last.left, rect.left)
-      last.top = Math.min(last.top, rect.top)
-      last.right = Math.max(last.right, rect.right)
-      last.bottom = Math.max(last.bottom, rect.bottom)
-      last.width = last.right - last.left
-      last.height = last.bottom - last.top
-      continue
-    }
-
-    merged.push({ ...rect })
-  }
-
-  return merged
-}
-
 export function getPdfFileName(filePath: string) {
   const parts = filePath.split(/[\\/]/)
   return parts[parts.length - 1] || filePath
@@ -144,7 +106,10 @@ export function selectionRectsToAnnotationRects(
     })
     .filter((rect) => rect.width > 0 && rect.height > 0)
 
-  return mergePageRelativeRects(pageRelativeRects)
+  // Range#getClientRects() 已经按浏览器实际绘制的选区拆成视觉行。
+  // 此处不能按“相邻”再合并，否则会把字距、分栏或 PDF 内部的分段
+  // 擅自补齐，导致持久化高亮与原生选区出现新的几何偏差。
+  return pageRelativeRects
     .map((rect) => ({
       x1: clamp(rect.left / pageRect.width, 0, 1),
       y1: clamp(rect.top / pageRect.height, 0, 1),

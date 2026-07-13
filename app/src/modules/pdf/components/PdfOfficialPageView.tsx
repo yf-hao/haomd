@@ -736,21 +736,16 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       const pageEl = root.querySelector('.page') as HTMLElement | null
       if (!pageEl) return [] as RectLike[]
 
-      const pageRect = pageEl.getBoundingClientRect()
       return Array.from(rawRects)
         .filter((rect) => rect.width > 0 && rect.height > 0)
-        .map((rect) => {
-          const offsetY = rect.height * 0.06
-          const top = Math.max(pageRect.top, rect.top - offsetY)
-          return {
-            left: rect.left,
-            top,
-            right: rect.right,
-            bottom: top + rect.height,
-            width: rect.width,
-            height: rect.height,
-          }
-        })
+        .map((rect) => ({
+          left: rect.left,
+          top: rect.top,
+          right: rect.right,
+          bottom: rect.bottom,
+          width: rect.width,
+          height: rect.height,
+        }))
     }
 
     const publishSelection = (selection: PdfSelectionDraft | null) => {

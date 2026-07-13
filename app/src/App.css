@@ -1841,6 +1841,19 @@ button:disabled {
 .pdf-official-page-view .page {
   margin: 0;
   border: none;
+  box-sizing: content-box;
+  isolation: isolate;
+}
+
+.pdf-official-page-view .canvasWrapper,
+.pdf-official-page-view .textLayer {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+}
+
+.pdf-official-page-view .canvasWrapper {
+  z-index: 0;
 }
 
 .pdf-official-page-view .textLayer,
@@ -1852,6 +1865,9 @@ button:disabled {
 
 .pdf-official-page-view .textLayer {
   pointer-events: none;
+  line-height: 1;
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
 }
 
 .pdf-official-page-view .textLayer span {

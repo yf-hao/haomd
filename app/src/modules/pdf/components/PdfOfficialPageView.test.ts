@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { selectionRectsToAnnotationRects } from '../annotationUtils'
 import { areSelectionBlocksEqual, buildSelectionBlocks } from './pdfSelectionOverlay'
 
 function createRect(left: number, top: number, width: number, height: number) {
@@ -77,5 +78,18 @@ describe('PdfOfficialPageView selection overlay', () => {
         [{ left: 10, top: 21, width: 30, height: 40 }],
       ),
     ).toBe(false)
+  })
+
+  it('preserves each native selection rectangle when converting to annotation coordinates', () => {
+    const pageRect = createRect(100, 200, 600, 800)
+    const selectionRects = [
+      createRect(140, 260, 90, 24),
+      createRect(238, 260, 80, 24),
+    ]
+
+    expect(selectionRectsToAnnotationRects(selectionRects, pageRect)).toEqual([
+      { x1: 40 / 600, y1: 60 / 800, x2: 130 / 600, y2: 84 / 800 },
+      { x1: 138 / 600, y1: 60 / 800, x2: 218 / 600, y2: 84 / 800 },
+    ])
   })
 })
