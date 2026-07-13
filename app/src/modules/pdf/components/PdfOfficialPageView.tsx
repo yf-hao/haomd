@@ -40,6 +40,13 @@ type VisualTextLayout = {
   lineBySpan: Map<HTMLElement, VisualLine>
 }
 
+const PDF_TEXT_LAYER_DEBUG = false
+
+type SelectionPublicationSnapshot = {
+  text: string
+  rectsKey: string
+}
+
 export interface PdfOfficialPageViewProps {
   pdfDocument: PDFDocumentProxy
   pageNumber: number
@@ -212,6 +219,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
   const [stampResizeDraft, setStampResizeDraft] = useState<{ annotationId: string; rect: Rect } | null>(null)
   const [lineResizeDraft, setLineResizeDraft] = useState<{ annotationId: string; rect: Rect; linePoints: Rect } | null>(null)
   const [freeTextResizeDraft, setFreeTextResizeDraft] = useState<{ annotationId: string; rect: Rect } | null>(null)
+  const lastPublishedSelectionSnapshotRef = useRef<SelectionPublicationSnapshot | null>(null)
   const freeTextResizeDraftRef = useRef<{ annotationId: string; rect: Rect } | null>(null)
   const freeTextLiveAnnotationIdRef = useRef<string | null>(null)
   const [lineDraftOrigin, setLineDraftOrigin] = useState<{ x: number; y: number } | null>(null)
@@ -695,7 +703,35 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     if (!root) return
 
     let frame = 0
-
+    let selectionChangeFrame = 0
+    let settledSelectionFrame = 0
+    let settledSelectionInnerFrame = 0
+    let selectionMoveFrame = 0
+    let pendingSelectionMove: { clientX: number; clientY: number } | null = null
+    let pendingSelectionPreview:
+      | {
+          pageRect: DOMRect
+          normalizedRawRects: RectLike[]
+          text: string
+        }
+      | null = null
+    let lastSelectionCaretSample:
+      | {
+          clientX: number
+          clientY: number
+          time: number
+        }
+      | null = null
+    let lastNativeSelectionSnapshot:
+      | {
+          anchorNode: Node | null
+          anchorOffset: number
+          focusNode: Node | null
+          focusOffset: number
+          text: string
+          collapsed: boolean
+        }
+      | null = null
     const normalizeSelectionRects = (rawRects: DOMRectList | DOMRect[]) => {
       const pageEl = root.querySelector('.page') as HTMLElement | null
       if (!pageEl) return [] as RectLike[]
@@ -704,7 +740,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       return Array.from(rawRects)
         .filter((rect) => rect.width > 0 && rect.height > 0)
         .map((rect) => {
-          const offsetY = rect.height * 0.14
+          const offsetY = rect.height * 0.06
           const top = Math.max(pageRect.top, rect.top - offsetY)
           return {
             left: rect.left,
@@ -731,32 +767,54 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       onSelectionChange(null)
     }
 
-    const updateSelectionBlocks = () => {
-      frame = 0
-
+    const readSelectionPreview = () => {
       const selection = window.getSelection()
       if (!selection || !selectionBelongsToCurrentPage(selection)) {
+        pendingSelectionPreview = null
         clearSelectionBlocks()
         setSelectionAssistRegionDefaults()
-        publishSelection(null)
-        return
+        lastPublishedSelectionSnapshotRef.current = null
+        if (!isPointerSelectionActiveRef.current) {
+          publishSelection(null)
+        }
+        return null
       }
 
       const pageEl = root.querySelector('.page') as HTMLElement | null
       if (!pageEl) {
+        pendingSelectionPreview = null
         clearSelectionBlocks()
-        return
+        lastPublishedSelectionSnapshotRef.current = null
+        if (!isPointerSelectionActiveRef.current) {
+          publishSelection(null)
+        }
+        return null
       }
 
       const pageRect = pageEl.getBoundingClientRect()
       const normalizedRawRects = normalizeSelectionRects(selection.getRangeAt(0).getClientRects())
       setSelectionAssistRegionFromRects(pageRect, normalizedRawRects)
+      return {
+        pageRect,
+        normalizedRawRects,
+        text: selection.toString().trim(),
+      }
+    }
+
+    const updateSelectionBlocks = () => {
+      frame = 0
+
+      const shouldDeferSelectionPublish = isPointerSelectionActiveRef.current
+      const preview = pendingSelectionPreview ?? readSelectionPreview()
+      pendingSelectionPreview = null
+      if (!preview) return
+
+      const { pageRect, normalizedRawRects, text } = preview
       if (textRectsDirtyRef.current || textRectsRef.current.length === 0) {
-        updateCachedTextRects()
+        return
       }
       const textRects = textRectsRef.current
 
-      const text = selection.toString().trim()
       const rects = selectionRectsToAnnotationRects(normalizedRawRects, {
         left: pageRect.left,
         top: pageRect.top,
@@ -770,7 +828,32 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
           ? annotationRectsToSelectionBlocks(rects, pageRect.width, pageRect.height)
           : buildSelectionBlocks(normalizedRawRects, pageRect, textRects)
 
+      const rectsKey = rects
+        .map((rect) =>
+          [
+            rect.x1.toFixed(4),
+            rect.y1.toFixed(4),
+            rect.x2.toFixed(4),
+            rect.y2.toFixed(4),
+          ].join(','),
+        )
+        .join('|')
+      const nextSelectionSnapshot = {
+        text,
+        rectsKey,
+      }
+      const lastPublishedSelectionSnapshot = lastPublishedSelectionSnapshotRef.current
+      if (
+        lastPublishedSelectionSnapshot &&
+        lastPublishedSelectionSnapshot.text === nextSelectionSnapshot.text &&
+        lastPublishedSelectionSnapshot.rectsKey === nextSelectionSnapshot.rectsKey
+      ) {
+        applySelectionBlocks(nextBlocks)
+        return
+      }
+      lastPublishedSelectionSnapshotRef.current = nextSelectionSnapshot
       applySelectionBlocks(nextBlocks)
+      if (shouldDeferSelectionPublish) return
       publishSelection(text && rects.length > 0 ? { page: pageNumber, text, rects } : null)
     }
 
@@ -819,13 +902,35 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       const position = document.caretPositionFromPoint?.(x, y)
       if (position) {
         const caret = { node: position.offsetNode, offset: position.offset }
-        if (isTextLayerCaret(caret, hitSpan)) return caret
+        if (isTextLayerCaret(caret, hitSpan)) {
+          if (PDF_TEXT_LAYER_DEBUG) {
+            console.log('[pdf-text-layer]', 'getCaretAtPoint(caretPositionFromPoint)', {
+              x,
+              y,
+              hitText: hitSpan.textContent,
+              caretOffset: caret.offset,
+              caretNodeText: caret.node.textContent,
+            })
+          }
+          return caret
+        }
       }
 
       const range = document.caretRangeFromPoint?.(x, y)
       if (range) {
         const caret = { node: range.startContainer, offset: range.startOffset }
-        if (isTextLayerCaret(caret, hitSpan)) return caret
+        if (isTextLayerCaret(caret, hitSpan)) {
+          if (PDF_TEXT_LAYER_DEBUG) {
+            console.log('[pdf-text-layer]', 'getCaretAtPoint(caretRangeFromPoint)', {
+              x,
+              y,
+              hitText: hitSpan.textContent,
+              caretOffset: caret.offset,
+              caretNodeText: caret.node.textContent,
+            })
+          }
+          return caret
+        }
       }
 
       return null
@@ -843,13 +948,35 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         const target = preceding.reduce((rightmost, current) =>
           current.rect.right > rightmost.rect.right ? current : rightmost,
         )
-        return getSpanCaret(target.span, true)
+        const caret = getSpanCaret(target.span, true)
+        if (PDF_TEXT_LAYER_DEBUG) {
+          console.log('[pdf-text-layer]', 'getLineEdgeCaretAtPoint(end)', {
+            x,
+            y,
+            spanText: target.span.textContent,
+            rectRight: target.rect.right,
+            caretOffset: caret?.offset ?? null,
+            caretNodeText: caret?.node.textContent ?? null,
+          })
+        }
+        return caret
       }
 
       const target = lineSpans.reduce((leftmost, current) =>
         current.rect.left < leftmost.rect.left ? current : leftmost,
       )
-      return getSpanCaret(target.span, false)
+      const caret = getSpanCaret(target.span, false)
+      if (PDF_TEXT_LAYER_DEBUG) {
+        console.log('[pdf-text-layer]', 'getLineEdgeCaretAtPoint(start)', {
+          x,
+          y,
+          spanText: target.span.textContent,
+          rectLeft: target.rect.left,
+          caretOffset: caret?.offset ?? null,
+          caretNodeText: caret?.node.textContent ?? null,
+        })
+      }
+      return caret
     }
 
     const restoreSelectionFromCarets = (anchor: TextCaret | null, focus: TextCaret | null) => {
@@ -1032,6 +1159,123 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     const scheduleUpdate = () => {
       if (frame) return
       frame = window.requestAnimationFrame(updateSelectionBlocks)
+    }
+
+    const scheduleSettledSelectionUpdate = () => {
+      if (settledSelectionFrame || settledSelectionInnerFrame) return
+      settledSelectionFrame = window.requestAnimationFrame(() => {
+        settledSelectionFrame = 0
+        settledSelectionInnerFrame = window.requestAnimationFrame(() => {
+          settledSelectionInnerFrame = 0
+          if (frame) {
+            window.cancelAnimationFrame(frame)
+            frame = 0
+          }
+          updateSelectionBlocks()
+        })
+      })
+    }
+
+    const processSelectionChange = () => {
+      selectionChangeFrame = 0
+      if (isPointerSelectionActiveRef.current) {
+        return
+      }
+      if (activeShapeTool || activeStampLabel || activeFreeTextTool || activeNoteTool) {
+        return
+      }
+
+      const selection = window.getSelection()
+      const nextNativeSelectionSnapshot = selection
+        ? {
+            anchorNode: selection.anchorNode,
+            anchorOffset: selection.anchorOffset,
+            focusNode: selection.focusNode,
+            focusOffset: selection.focusOffset,
+            text: selection.toString(),
+            collapsed: selection.isCollapsed,
+          }
+        : null
+      if (
+        lastNativeSelectionSnapshot &&
+        nextNativeSelectionSnapshot &&
+        lastNativeSelectionSnapshot.anchorNode === nextNativeSelectionSnapshot.anchorNode &&
+        lastNativeSelectionSnapshot.anchorOffset === nextNativeSelectionSnapshot.anchorOffset &&
+        lastNativeSelectionSnapshot.focusNode === nextNativeSelectionSnapshot.focusNode &&
+        lastNativeSelectionSnapshot.focusOffset === nextNativeSelectionSnapshot.focusOffset &&
+        lastNativeSelectionSnapshot.text === nextNativeSelectionSnapshot.text &&
+        lastNativeSelectionSnapshot.collapsed === nextNativeSelectionSnapshot.collapsed
+      ) {
+        return
+      }
+      lastNativeSelectionSnapshot = nextNativeSelectionSnapshot
+      pendingSelectionPreview = readSelectionPreview()
+      if (!pendingSelectionPreview) {
+        return
+      }
+      scheduleUpdate()
+    }
+
+    const flushSelectionPointerMove = () => {
+      selectionMoveFrame = 0
+      const latest = pendingSelectionMove
+      if (!latest) return
+      pendingSelectionMove = null
+      if (!isPointerSelectionActiveRef.current) return
+
+      const now = window.performance.now()
+      const lastSample = lastSelectionCaretSample
+      const shouldSampleCaret =
+        !lastSample ||
+        now - lastSample.time >= 24 ||
+        Math.hypot(latest.clientX - lastSample.clientX, latest.clientY - lastSample.clientY) >= 2
+
+      if (shouldSampleCaret) {
+        lastSelectionCaretSample = {
+          clientX: latest.clientX,
+          clientY: latest.clientY,
+          time: now,
+        }
+        const caret = getCaretAtPoint(latest.clientX, latest.clientY)
+        if (caret) {
+          lastValidSelectionCaretRef.current = caret
+        }
+      }
+      const rootNode = rootRef.current
+      if (!rootNode) return
+      const pageEl = rootNode.querySelector('.page') as HTMLElement | null
+      const region = assistRegionRef.current
+      if (!pageEl || !region) {
+        rootNode.classList.remove('is-selection-assist-active')
+        return
+      }
+
+      const pageRect = pageEl.getBoundingClientRect()
+      const x = latest.clientX - pageRect.left
+      const y = latest.clientY - pageRect.top
+      const active =
+        x >= region.left &&
+        x <= region.right &&
+        y >= region.top &&
+        y <= region.bottom
+
+      if (active) {
+        const assistLeft = Math.max(region.left, x - 24)
+        rootNode.style.setProperty('--pdf-text-selection-assist-left', `${assistLeft}px`)
+      } else {
+        rootNode.style.setProperty('--pdf-text-selection-assist-left', `${region.left}px`)
+      }
+
+      rootNode.classList.toggle('is-selection-assist-active', active)
+    }
+
+    const scheduleSelectionPointerMove = (event: PointerEvent) => {
+      pendingSelectionMove = {
+        clientX: event.clientX,
+        clientY: event.clientY,
+      }
+      if (selectionMoveFrame) return
+      selectionMoveFrame = window.requestAnimationFrame(flushSelectionPointerMove)
     }
 
     const handlePointerDown = (event: PointerEvent) => {
@@ -1321,6 +1565,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         getLineEdgeCaretAtPoint(event.clientX, event.clientY)
       selectionAnchorCaretRef.current = anchorCaret
       lastValidSelectionCaretRef.current = anchorCaret
+      lastSelectionCaretSample = null
       setPointerSelectingState(true)
       clearSelectionBlocks()
     }
@@ -1449,6 +1694,12 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       }
       if (!isPointerSelectionActiveRef.current) return
       setPointerSelectingState(false)
+      if (selectionMoveFrame) {
+        window.cancelAnimationFrame(selectionMoveFrame)
+        selectionMoveFrame = 0
+      }
+      pendingSelectionMove = null
+      lastSelectionCaretSample = null
       const pointerCaret = getCaretAtPoint(event.clientX, event.clientY)
       const lastValidCaret = lastValidSelectionCaretRef.current
       const anchorCaret = selectionAnchorCaretRef.current
@@ -1471,7 +1722,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         frame = 0
       }
       if (event.detail >= 3) return
-      updateSelectionBlocks()
+      scheduleSettledSelectionUpdate()
     }
 
     const handlePointerMove = (event: PointerEvent) => {
@@ -1651,53 +1902,12 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         return
       }
       if (!isPointerSelectionActiveRef.current) return
-      const caret = getCaretAtPoint(event.clientX, event.clientY)
-      if (caret) {
-        lastValidSelectionCaretRef.current = caret
-      }
-      const root = rootRef.current
-      if (!root) return
-      const pageEl = root.querySelector('.page') as HTMLElement | null
-      const region = assistRegionRef.current
-      if (!pageEl || !region) {
-        root.classList.remove('is-selection-assist-active')
-        return
-      }
-
-      const pageRect = pageEl.getBoundingClientRect()
-      const x = event.clientX - pageRect.left
-      const y = event.clientY - pageRect.top
-      const active =
-        x >= region.left &&
-        x <= region.right &&
-        y >= region.top &&
-        y <= region.bottom
-
-      if (active) {
-        const assistLeft = Math.max(region.left, x - 24)
-        root.style.setProperty('--pdf-text-selection-assist-left', `${assistLeft}px`)
-      } else {
-        root.style.setProperty('--pdf-text-selection-assist-left', `${region.left}px`)
-      }
-
-      root.classList.toggle('is-selection-assist-active', active)
+      scheduleSelectionPointerMove(event)
     }
 
     const handleSelectionChange = () => {
-      if (isPointerSelectionActiveRef.current) {
-        return
-      }
-      if (activeShapeTool || activeStampLabel || activeFreeTextTool || activeNoteTool) {
-        return
-      }
-      const selection = window.getSelection()
-      if (!selectionBelongsToCurrentPage(selection)) {
-        clearSelectionBlocks()
-        setSelectionAssistRegionDefaults()
-        publishSelection(null)
-        return
-      }
-      scheduleUpdate()
+      if (selectionChangeFrame) return
+      selectionChangeFrame = window.requestAnimationFrame(processSelectionChange)
     }
 
     root.addEventListener('pointerdown', handlePointerDown)
@@ -1722,9 +1932,20 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       document.removeEventListener('pointerup', handlePointerFinish)
       document.removeEventListener('pointercancel', handlePointerFinish)
       document.removeEventListener('selectionchange', handleSelectionChange)
+      if (selectionChangeFrame) {
+        window.cancelAnimationFrame(selectionChangeFrame)
+      }
+      if (settledSelectionFrame) {
+        window.cancelAnimationFrame(settledSelectionFrame)
+      }
+      if (settledSelectionInnerFrame) {
+        window.cancelAnimationFrame(settledSelectionInnerFrame)
+      }
+      pendingSelectionPreview = null
       setPointerSelectingState(false)
       selectionAnchorCaretRef.current = null
       lastValidSelectionCaretRef.current = null
+      lastSelectionCaretSample = null
       shapeDraftStartRef.current = null
       isShapeDrawingActiveRef.current = false
       applyShapeDraftRect(null)
@@ -1741,9 +1962,15 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       applyLineResizeDraft(null)
       setSelectionAssistRegionDefaults()
       publishSelection(null)
+      lastPublishedSelectionSnapshotRef.current = null
+      lastNativeSelectionSnapshot = null
       if (frame) {
         window.cancelAnimationFrame(frame)
       }
+      if (selectionMoveFrame) {
+        window.cancelAnimationFrame(selectionMoveFrame)
+      }
+      lastNativeSelectionSnapshot = null
     }
   }, [annotations, selectedAnnotationId, onSelectionChange, pageNumber, pdfDocument, scale, clearSelectionSignal, clearSelectionOnBlankClick, activeShapeTool, onShapeCreate, activeFreeTextTool, activeNoteTool, activeTextBoxDraft, onFreeTextCreate, onNoteCreate, activeStampKind, activeStampLabel, activeStampSize, onStampCreate, onStampResize, onLineResize, onFreeTextResize, onNoteResize, onClearAnnotationSelection])
 
