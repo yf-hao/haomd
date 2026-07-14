@@ -1,9 +1,10 @@
 import type { FC, FormEvent, KeyboardEvent, MouseEventHandler, MouseEvent as ReactMouseEvent } from 'react'
-import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { getAiChatUiSettings } from '../../settings/editorSettings'
 import type { ChatEntryMode, ChatMessageView, EntryContext } from '../domain/chatSession'
 import { getDirKeyFromDocPath, normalizePersistableDocPath } from '../domain/docPathUtils'
 import { AiChatBody } from './AiChatBody'
+import type { AiChatComposerHandle } from './AiChatComposer'
 import { buildDisplayMessages } from './displayMessageOrder'
 import { useAiChatSession } from './hooks/useAiChatSession'
 import { getAiInputHistory, appendAiInputHistory } from '../application/localStorageAiChatInputHistory'
@@ -49,6 +50,7 @@ const EMPTY_MESSAGES: ChatMessageView[] = []
 const AI_CHAT_AGENT_STORAGE_KEY = 'haomd_ai_chat_selected_agent_id'
 const EMPTY_AGENT_OPTION = { id: '', name: 'Agent' }
 const DOC_PATH_SWITCH_DELAY_MS = 800
+const AI_INPUT_DEBUG_FLAG = 'haomd-debug-ai-input'
 const DELETE_CONFIRM_TOKENS = new Set(['确认', '确认删除', '是', '确定', 'ok', 'okay', 'yes', 'y', 'confirm'])
 const DELETE_CANCEL_TOKENS = new Set(['取消', '算了', '否', '不用了', 'cancel', 'no', 'n'])
 
@@ -60,6 +62,7 @@ export type AiChatDialogProps = {
   currentFilePath?: string | null
   currentFolderPath?: string | null
   currentDirectoryPath?: string | null
+  docPathOverride?: string | null
   getCurrentMarkdown?: () => string
   getCurrentFileName?: () => string | null
   getCurrentFilePath?: () => string | null
@@ -100,6 +103,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
   currentFilePath,
   currentFolderPath,
   currentDirectoryPath,
+  docPathOverride,
   getCurrentMarkdown,
   getCurrentFileName,
   getCurrentFilePath,
@@ -119,7 +123,26 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
   tabId,
 }) => {
   const { themeSettings } = useThemeContext()
-  const [input, setInput] = useState('')
+  const inputDebugEnabled = typeof window !== 'undefined'
+    && window.localStorage.getItem(AI_INPUT_DEBUG_FLAG) === '1'
+  const renderCountRef = useRef(0)
+  const inputChangeCountRef = useRef(0)
+  const debugSnapshotRef = useRef<{
+    inputLength: number
+    messagesLength: number
+    loading: boolean
+    activeAgentId: string | null
+    attachedImageDataUrl: string | null
+    pendingAttachmentsLength: number
+    ephemeralMessagesLength: number
+    localFeedbackMessagesLength: number
+    historyDialogOpen: boolean
+    slashModalMessage: string | null
+    contextPrefix: string | null
+    contextPrefixUsed: boolean
+    historyRecallEnabled: boolean
+    open: boolean
+  } | null>(null)
   const [contextPrefix, setContextPrefix] = useState<string | null>(null)
   const [contextPrefixUsed, setContextPrefixUsed] = useState(false)
   const [contextPlaceholderMode, setContextPlaceholderMode] = useState<'none' | 'selection' | 'file'>('none')
@@ -140,16 +163,20 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
   // 仅在通过 /list 打开输入历史弹窗时，才允许使用 `!n` 本地历史回填命令
   const [historyRecallEnabled, setHistoryRecallEnabled] = useState(false)
   const commandBridge = useContext(AiChatCommandBridgeContext)
-  const [isComposing, setIsComposing] = useState(false)
-  const [compositionEndTime, setCompositionEndTime] = useState(0)
+  const isComposingRef = useRef(false)
+  const compositionCommitLockUntilRef = useRef(0)
   const historyCursorRef = useRef<number | null>(null)
-  const [, setHistoryCursor] = useState<number | null>(null)
+  const composerHandleRef = useRef<AiChatComposerHandle | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const messagesContainerRef = useRef<HTMLDivElement | null>(null)
   const docPathStabilizeTimerRef = useRef<number | null>(null)
   const previousBusyRef = useRef(false)
   const selectedAgent = agents.find((agent) => agent.id === activeAgentId) ?? null
   const activeAgentMode = selectedAgent?.kind === 'image_generation' ? 'image_generation' : 'chat'
+
+  if (inputDebugEnabled) {
+    renderCountRef.current += 1
+  }
 
   const autoResizeInput = () => {
     const el = inputRef.current
@@ -160,10 +187,18 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
     el.style.height = `${next}px`
   }
 
-  const clearHistoryBrowse = () => {
+  const clearHistoryBrowse = useCallback(() => {
+    if (historyCursorRef.current == null) return
     historyCursorRef.current = null
-    setHistoryCursor(null)
-  }
+  }, [])
+
+  const getDraft = useCallback(() => composerHandleRef.current?.getDraft() ?? '', [])
+  const setDraft = useCallback((value: string, caret?: number | null) => {
+    composerHandleRef.current?.setDraft(value, caret)
+  }, [])
+  const clearDraft = useCallback(() => {
+    composerHandleRef.current?.clearDraft()
+  }, [])
 
   const findImplicitPendingDeleteRequest = () => {
     const candidates = [...localFeedbackMessages, ...(state?.viewMessages ?? [])]
@@ -205,7 +240,10 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
   }
 
   const persistableFilePath = normalizePersistableDocPath(currentFilePath)
-  const rawDocPath = normalizePersistableDocPath(currentFolderPath) ?? (persistableFilePath ? getDirKeyFromDocPath(persistableFilePath) : undefined)
+  const rawDocPath =
+    docPathOverride ??
+    normalizePersistableDocPath(currentFolderPath) ??
+    (persistableFilePath ? getDirKeyFromDocPath(persistableFilePath) : undefined)
   const [stableDocPath, setStableDocPath] = useState<string | undefined>(rawDocPath)
   const [docPathReady, setDocPathReady] = useState<boolean>(open)
   const [docPathFreezeUntil, setDocPathFreezeUntil] = useState<number>(0)
@@ -464,7 +502,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
       const value = el.value
       const next = value.slice(0, start) + text + value.slice(end)
       el.value = next
-      setInput(next)
+      setDraft(next, start + text.length)
       clearHistoryBrowse()
       const pos = start + text.length
       el.setSelectionRange(pos, pos)
@@ -529,13 +567,8 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
     autoResizeInput()
   }, [open, providerType, entryMode, initialContext])
 
-  useLayoutEffect(() => {
-    if (!open) return
-    autoResizeInput()
-  }, [input, open])
-
   const doSend = async () => {
-    const contentToSend = input
+    const contentToSend = getDraft()
     const directoryKey = activeDirectoryKey ?? '/'
 
     if (activeAgentMode === 'image_generation') {
@@ -547,7 +580,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
       if (!imageAgent) return
 
       clearHistoryBrowse()
-      setInput('')
+      clearDraft()
 
       const promptMessageId = createEphemeralId('image_prompt')
       const resultMessageId = createEphemeralId('image_result')
@@ -616,7 +649,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
     if (effectivePendingDeleteRequest) {
       clearHistoryBrowse()
       if (DELETE_CONFIRM_TOKENS.has(trimmedInput) || DELETE_CONFIRM_TOKENS.has(normalizedInput)) {
-        setInput('')
+        clearDraft()
         const result =
           effectivePendingDeleteRequest.target === 'folder'
             ? onConfirmDeleteCurrentFolder
@@ -638,7 +671,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
         return
       }
       if (DELETE_CANCEL_TOKENS.has(trimmedInput) || DELETE_CANCEL_TOKENS.has(normalizedInput)) {
-        setInput('')
+        clearDraft()
         setPendingDeleteRequest(null)
         setStatusMessage?.('已取消删除。')
         pushLocalFeedback('已取消删除。')
@@ -657,7 +690,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
         return
       }
       clearHistoryBrowse()
-      setInput('')
+      clearDraft()
       setPendingDeleteRequest({ path: currentPath, target: 'document' })
       const prompt = buildDeleteConfirmationPrompt('当前文档')
       setStatusMessage?.(prompt)
@@ -674,7 +707,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
         return
       }
       clearHistoryBrowse()
-      setInput('')
+      clearDraft()
       setPendingDeleteRequest({ path: currentFolder, target: 'folder' })
       const prompt = buildDeleteConfirmationPrompt('当前文件夹')
       setStatusMessage?.(prompt)
@@ -686,7 +719,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
     const deleteWorkspaceEntryRequest = matchDeleteWorkspaceEntry(trimmedInput)
     if (deleteWorkspaceEntryRequest) {
       clearHistoryBrowse()
-      setInput('')
+      clearDraft()
       setPendingDeleteRequest({
         path: deleteWorkspaceEntryRequest.targetPath,
         target: 'workspace-entry',
@@ -706,7 +739,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
     const renameRequest = matchRenameCurrentDocument(trimmedInput)
     if (renameRequest) {
       clearHistoryBrowse()
-      setInput('')
+      clearDraft()
       const result = onRenameCurrentDocument
         ? await onRenameCurrentDocument(renameRequest.fileName)
         : { ok: false, message: '当前重命名能力不可用。' }
@@ -718,7 +751,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
     const renameWorkspaceRequest = matchRenameWorkspaceEntry(trimmedInput)
     if (renameWorkspaceRequest) {
       clearHistoryBrowse()
-      setInput('')
+      clearDraft()
       const result = onRenameWorkspaceEntry
         ? await onRenameWorkspaceEntry(
           renameWorkspaceRequest.targetPath,
@@ -734,7 +767,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
     const createDirectoryRequest = matchCreateDirectoryUnderSelection(trimmedInput)
     if (createDirectoryRequest) {
       clearHistoryBrowse()
-      setInput('')
+      clearDraft()
       const result = onCreateDirectoryUnderSelection
         ? await onCreateDirectoryUnderSelection(createDirectoryRequest.directoryName)
         : { ok: false, message: '当前创建目录能力不可用。' }
@@ -746,7 +779,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
     const createWorkspaceDirectoryRequest = matchCreateDirectoryInWorkspace(trimmedInput)
     if (createWorkspaceDirectoryRequest) {
       clearHistoryBrowse()
-      setInput('')
+      clearDraft()
       const result = onCreateDirectoryInWorkspace
         ? await onCreateDirectoryInWorkspace(
           createWorkspaceDirectoryRequest.parentPath,
@@ -760,7 +793,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
 
     if (shouldRevealCurrentDirectory(trimmedInput)) {
       clearHistoryBrowse()
-      setInput('')
+      clearDraft()
       const activeDirectory = (currentDirectoryPath ?? getCurrentDirectoryPath?.() ?? '').trim()
       const message = activeDirectory
         ? `当前目录是：${activeDirectory}`
@@ -781,21 +814,20 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
       if (entry && entry.text.trim()) {
         const nextText = entry.text
         historyCursorRef.current = null
-        setHistoryCursor(null)
-        setInput(nextText)
+        setDraft(nextText, nextText.length)
         requestAnimationFrame(() => {
           const el = inputRef.current
           if (!el) return
           const len = el.value.length
           el.setSelectionRange(len, len)
-          autoResizeInput()
+          window.requestAnimationFrame(autoResizeInput)
         })
       }
       return
     }
 
     clearHistoryBrowse()
-    setInput('')
+    clearDraft()
 
     const handled = await tryHandleSlashCommand(contentToSend, {
       // slash 命令与文档会话保持一致：按目录共享会话
@@ -831,22 +863,21 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
     })
   }
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = useCallback(async (e: FormEvent) => {
     e.preventDefault()
     await doSend()
-  }
+  }, [doSend])
 
-  const handleCompositionStart = () => {
-    setIsComposing(true)
-  }
+  const handleCompositionStart = useCallback(() => {
+    isComposingRef.current = true
+  }, [])
 
-  const handleCompositionEnd = () => {
-    const now = Date.now()
-    setIsComposing(false)
-    setCompositionEndTime(now)
-  }
+  const handleCompositionEnd = useCallback(() => {
+    isComposingRef.current = false
+    compositionCommitLockUntilRef.current = Date.now() + 300
+  }, [])
 
-  const handleInputKeyDown = async (e: KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleInputKeyDown = useCallback(async (e: KeyboardEvent<HTMLTextAreaElement>) => {
     const currentHistoryCursor = historyCursorRef.current
     const isHistoryMode = currentHistoryCursor != null
 
@@ -858,9 +889,9 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
       !e.ctrlKey &&
       !e.altKey
     ) {
-      if (isComposing || e.nativeEvent.isComposing) return
+      if (isComposingRef.current || e.nativeEvent.isComposing) return
 
-      if (!isHistoryMode && input.trim().length > 0) {
+      if (!isHistoryMode && getDraft().trim().length > 0) {
         // 非历史模式且当前输入非空：不进入历史浏览，交给默认光标逻辑
       } else {
         const directoryKey = activeDirectoryKey ?? '/'
@@ -897,8 +928,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
 
         e.preventDefault()
         historyCursorRef.current = nextCursor
-        setHistoryCursor(nextCursor)
-        setInput(entry.text)
+        setDraft(entry.text, entry.text.length)
         // 将光标移动到末尾
         requestAnimationFrame(() => {
           const target = inputRef.current
@@ -912,63 +942,62 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
     }
 
     if (e.key === 'Enter' && !e.shiftKey) {
-      if (isComposing || e.nativeEvent.isComposing) return
+      if (isComposingRef.current || e.nativeEvent.isComposing) return
       const now = Date.now()
-      const timeDiff = now - compositionEndTime
-      if (timeDiff < 50) return
+      if (now < compositionCommitLockUntilRef.current) return
       e.preventDefault()
       if (loading) return
       await doSend()
     }
-  }
+  }, [activeDirectoryKey, autoResizeInput, doSend, getDraft, historyCursorRef, inputRef, loading])
 
-  const handleCopy = async (content: string) => {
+  const handleCopy = useCallback(async (content: string) => {
     await copyTextToClipboard(content)
-  }
+  }, [])
 
-  const handleInsert = async (content: string) => {
+  const handleInsert = useCallback(async (content: string) => {
     await insertMarkdownAtCursorBelow({ text: content, sourceTabId: tabId })
-  }
+  }, [tabId])
 
-  const handleReplace = async (content: string) => {
+  const handleReplace = useCallback(async (content: string) => {
     await replaceSelectionWithText({ text: content, sourceTabId: tabId })
-  }
+  }, [tabId])
 
-  const handleSave = async (content: string) => {
+  const handleSave = useCallback(async (content: string) => {
     await createTabAndInsertContent(content)
-  }
+  }, [])
 
-  const handleChangeRole = async (roleId: string) => {
+  const handleChangeRole = useCallback(async (roleId: string) => {
     if (!roleId) return
     await changeRole(roleId)
-  }
+  }, [changeRole])
 
-  const handleModelChange = async (modelId: string) => {
+  const handleModelChange = useCallback(async (modelId: string) => {
     if (!modelId) return
     await changeModel(modelId)
-  }
+  }, [changeModel])
 
-  const handleCopyImageUrl = async (message: EphemeralImageGenerationResultMessage) => {
+  const handleCopyImageUrl = useCallback(async (message: EphemeralImageGenerationResultMessage) => {
     if (!message.imageUrl) return
     await copyTextToClipboard(message.imageUrl)
-  }
+  }, [])
 
-  const handleCopyImageMarkdown = async (message: EphemeralImageGenerationResultMessage) => {
+  const handleCopyImageMarkdown = useCallback(async (message: EphemeralImageGenerationResultMessage) => {
     if (!message.imageUrl) return
     await copyTextToClipboard(buildImageMarkdown({ imageUrl: message.imageUrl, prompt: message.prompt }))
-  }
+  }, [])
 
-  const handleSaveGeneratedImage = async (message: EphemeralImageGenerationResultMessage) => {
+  const handleSaveGeneratedImage = useCallback(async (message: EphemeralImageGenerationResultMessage) => {
     if (!message.imageUrl) return
     await saveRemoteImageWithDialog({ imageUrl: message.imageUrl, prompt: message.prompt })
-  }
+  }, [])
 
-  const handleInsertGeneratedImage = async (message: EphemeralImageGenerationResultMessage) => {
+  const handleInsertGeneratedImage = useCallback(async (message: EphemeralImageGenerationResultMessage) => {
     if (!message.imageUrl) return
     await insertGeneratedImageIntoEditor({ imageUrl: message.imageUrl, prompt: message.prompt })
-  }
+  }, [])
 
-  const handleSaveGeneratedImageToNotes = async (message: EphemeralImageGenerationResultMessage) => {
+  const handleSaveGeneratedImageToNotes = useCallback(async (message: EphemeralImageGenerationResultMessage) => {
     if (!message.imageUrl) return
     const agent =
       agents.find((candidate) => candidate.id === message.agentId && candidate.kind === 'image_generation') ?? null
@@ -981,7 +1010,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
         taskId: message.taskId ?? '',
       },
     })
-  }
+  }, [agents])
 
   const handleDialogClick: MouseEventHandler<HTMLDivElement> = (e) => {
     e.stopPropagation()
@@ -1017,6 +1046,68 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
       ? allMessages.slice(-limit)
       : allMessages
   const messages = buildDisplayMessages(persistedMessages, localFeedbackMessages)
+
+  useEffect(() => {
+    if (!inputDebugEnabled) return
+    const nextSnapshot = {
+      inputLength: getDraft().length,
+      messagesLength: messages.length,
+      loading: loading,
+      activeAgentId,
+      attachedImageDataUrl,
+      pendingAttachmentsLength: pendingAttachments?.length ?? 0,
+      ephemeralMessagesLength: ephemeralMessages.length,
+      localFeedbackMessagesLength: localFeedbackMessages.length,
+      historyDialogOpen,
+      slashModalMessage,
+      contextPrefix,
+      contextPrefixUsed,
+      historyRecallEnabled,
+      open,
+    }
+    const prev = debugSnapshotRef.current
+    const changes = prev
+      ? (Object.entries(nextSnapshot) as Array<[keyof typeof nextSnapshot, unknown]>)
+        .filter(([key, value]) => prev[key] !== value)
+        .map(([key, value]) => ({
+          key,
+          from: prev[key],
+          to: value,
+        }))
+      : Object.entries(nextSnapshot).map(([key, value]) => ({ key, from: undefined, to: value }))
+
+    if (changes.length > 0 || renderCountRef.current > 0 || inputChangeCountRef.current > 0) {
+      console.log('[ai-input-debug][dialog]', {
+        tabId,
+        renders: renderCountRef.current,
+        inputChanges: inputChangeCountRef.current,
+        activeAgentMode,
+        changes,
+      })
+    }
+    debugSnapshotRef.current = nextSnapshot
+    renderCountRef.current = 0
+    inputChangeCountRef.current = 0
+  }, [
+    activeAgentId,
+    activeAgentMode,
+    attachedImageDataUrl,
+    contextPrefix,
+    contextPrefixUsed,
+    ephemeralMessages.length,
+    historyDialogOpen,
+    historyRecallEnabled,
+    getDraft().length,
+    inputDebugEnabled,
+    loading,
+    localFeedbackMessages.length,
+    messages.length,
+    open,
+    pendingAttachments?.length,
+    slashModalMessage,
+    tabId,
+  ])
+
   const [visibleLengths, setVisibleLengths] = useState<Record<string, number>>({})
   const [activeTypewriterId, setActiveTypewriterId] = useState<string | null>(null)
 
@@ -1178,7 +1269,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
     })
   }, [open, isDifyProvider, animationKey, messages, visibleLengths])
 
-  const getDisplayContent = (msgId: string, full: string) => {
+  const getDisplayContent = useCallback((msgId: string, full: string) => {
     if (!isDifyProvider || full.length === 0 || !state) return full
 
     // 只有当前打字目标参与截断，其他消息一律显示全文，避免重复播放
@@ -1196,7 +1287,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
 
     const length = Math.max(0, Math.min(full.length, visible ?? 0))
     return full.slice(0, length)
-  }
+  }, [activeTypewriterId, isDifyProvider, messages, state, visibleLengths])
 
   const handleDragStart: MouseEventHandler<HTMLDivElement> = (e: ReactMouseEvent<HTMLDivElement>) => {
     if (e.button !== 0) return
@@ -1284,8 +1375,16 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
     },
   ].filter((group) => group.options.length > 0)
 
-  const handleStop = () => {
-    // 找到当前正在“吐出”的消息（无论是网络流还是打字机补齐阶段）
+  const roles = systemPromptInfo?.roles ?? []
+  const activeRoleId = systemPromptInfo?.activeRoleId
+  const lastMessage = messages[messages.length - 1]
+  const lastMessageDisplayLength =
+    lastMessage && lastMessage.role === 'assistant'
+      ? getDisplayContent(lastMessage.id, lastMessage.content).length
+      : lastMessage?.content.length ?? 0
+  const lastMessageKey = lastMessage ? `${lastMessage.id}:${lastMessageDisplayLength}` : ''
+
+  const handleStop = useCallback(() => {
     const activeMsg = messages.find((m) =>
       m.role === 'assistant' && (
         m.streaming || (visibleLengths[m.id] !== undefined && visibleLengths[m.id] < m.content.length)
@@ -1298,19 +1397,10 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
       } else {
         stop()
       }
-    } else {
-      stop()
+      return
     }
-  }
-
-  const roles = systemPromptInfo?.roles ?? []
-  const activeRoleId = systemPromptInfo?.activeRoleId
-  const lastMessage = messages[messages.length - 1]
-  const lastMessageDisplayLength =
-    lastMessage && lastMessage.role === 'assistant'
-      ? getDisplayContent(lastMessage.id, lastMessage.content).length
-      : lastMessage?.content.length ?? 0
-  const lastMessageKey = lastMessage ? `${lastMessage.id}:${lastMessageDisplayLength}` : ''
+    stop()
+  }, [isDifyProvider, messages, stop, stopAndTruncate, visibleLengths])
 
   useEffect(() => {
     const el = messagesContainerRef.current
@@ -1384,17 +1474,13 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
           agentMode={activeAgentMode}
           loading={isProcessing}
           error={error}
-          input={input}
-          onInputChange={(value) => {
-            setInput(value)
-            autoResizeInput()
-          }}
-          onManualInputChange={clearHistoryBrowse}
+          onDraftChange={clearHistoryBrowse}
           onSubmit={handleSubmit}
           onInputKeyDown={handleInputKeyDown}
           onCompositionStart={handleCompositionStart}
           onCompositionEnd={handleCompositionEnd}
           inputRef={inputRef as React.RefObject<HTMLTextAreaElement>}
+          composerHandleRef={composerHandleRef}
           messagesContainerRef={messagesContainerRef as React.RefObject<HTMLDivElement>}
           getDisplayContent={getDisplayContent}
           onCopy={handleCopy}

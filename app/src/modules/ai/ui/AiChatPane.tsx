@@ -1,5 +1,5 @@
 import type { FC, FormEvent, KeyboardEvent } from 'react'
-import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { ChatEntryMode, ChatMessageView, EntryContext } from '../domain/chatSession'
 import { getDirKeyFromDocPath, normalizePersistableDocPath } from '../domain/docPathUtils'
 import type { AiChatSessionKey } from '../application/aiChatSessionService'
@@ -46,11 +46,13 @@ import {
 } from '../agents/imageGeneration/imageGenerationResultService'
 import { saveImageGenerationToNotes } from '../agents/imageGeneration/imageGenerationNotesBridge'
 import { resolveWorkspaceEntryByName, type WorkspaceEntryKind } from '../../workspace/workspaceEntryResolver'
+import type { AiChatComposerHandle } from './AiChatComposer'
 
 const EMPTY_MESSAGES = [] as const
 const AI_CHAT_AGENT_STORAGE_KEY = 'haomd_ai_chat_selected_agent_id'
 const EMPTY_AGENT_OPTION = { id: '', name: 'Agent' }
 const DOC_PATH_SWITCH_DELAY_MS = 800
+const AI_INPUT_DEBUG_FLAG = 'haomd-debug-ai-input'
 const DELETE_CONFIRM_TOKENS = new Set(['确认', '确认删除', '是', '确定', 'ok', 'okay', 'yes', 'y', 'confirm'])
 const DELETE_CANCEL_TOKENS = new Set(['取消', '算了', '否', '不用了', 'cancel', 'no', 'n'])
 
@@ -77,6 +79,7 @@ export interface AiChatPaneProps {
   currentFilePath?: string | null
   currentFolderPath?: string | null
   currentDirectoryPath?: string | null
+  docPathOverride?: string | null
   getCurrentMarkdown?: () => string
   getCurrentFileName?: () => string | null
   getCurrentFilePath?: () => string | null
@@ -117,6 +120,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
   currentFilePath,
   currentFolderPath,
   currentDirectoryPath,
+  docPathOverride,
   getCurrentMarkdown,
   getCurrentFileName,
   getCurrentFilePath,
@@ -137,7 +141,25 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
   fullPage = false,
 }) => {
   const { themeSettings } = useThemeContext()
-  const [input, setInput] = useState('')
+  const inputDebugEnabled = typeof window !== 'undefined'
+    && window.localStorage.getItem(AI_INPUT_DEBUG_FLAG) === '1'
+  const renderCountRef = useRef(0)
+  const inputChangeCountRef = useRef(0)
+  const debugSnapshotRef = useRef<{
+    inputLength: number
+    messagesLength: number
+    loading: boolean
+    activeAgentId: string | null
+    attachedImageDataUrl: string | null
+    pendingAttachmentsLength: number
+    ephemeralMessagesLength: number
+    localFeedbackMessagesLength: number
+    historyDialogOpen: boolean
+    slashModalMessage: string | null
+    contextPrefix: string | null
+    contextPrefixUsed: boolean
+    historyRecallEnabled: boolean
+  } | null>(null)
   const [contextPrefix, setContextPrefix] = useState<string | null>(null)
   const [contextPrefixUsed, setContextPrefixUsed] = useState(false)
   const [contextPlaceholderMode, setContextPlaceholderMode] = useState<'none' | 'selection' | 'file'>('none')
@@ -159,6 +181,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
   const [historyRecallEnabled, setHistoryRecallEnabled] = useState(false)
   const commandBridge = useContext(AiChatCommandBridgeContext)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const composerHandleRef = useRef<AiChatComposerHandle | null>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const paneRootRef = useRef<HTMLElement>(null)
   const shouldAutoScrollRef = useRef(true)
@@ -169,9 +192,12 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
   const isComposingRef = useRef(false)
   const lockEnterRef = useRef(false)
   const historyCursorRef = useRef<number | null>(null)
-  const [, setHistoryCursor] = useState<number | null>(null)
   const docPathStabilizeTimerRef = useRef<number | null>(null)
   const previousBusyRef = useRef(false)
+
+  if (inputDebugEnabled) {
+    renderCountRef.current += 1
+  }
 
   const autoResizeInput = () => {
     const el = inputRef.current
@@ -182,10 +208,18 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
     el.style.height = `${next}px`
   }
 
-  const clearHistoryBrowse = () => {
+  const clearHistoryBrowse = useCallback(() => {
+    if (historyCursorRef.current == null) return
     historyCursorRef.current = null
-    setHistoryCursor(null)
-  }
+  }, [])
+
+  const getDraft = useCallback(() => composerHandleRef.current?.getDraft() ?? '', [])
+  const setDraft = useCallback((value: string, caret?: number | null) => {
+    composerHandleRef.current?.setDraft(value, caret)
+  }, [])
+  const clearDraft = useCallback(() => {
+    composerHandleRef.current?.clearDraft()
+  }, [])
 
   const findImplicitPendingDeleteRequest = () => {
     const candidates = [...localFeedbackMessages, ...(state?.viewMessages ?? [])]
@@ -226,7 +260,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
     ])
   }
 
-  const rawDocPath = resolveAiChatDocPath(currentFolderPath ?? currentFilePath)
+  const rawDocPath = docPathOverride ?? resolveAiChatDocPath(currentFolderPath ?? currentFilePath)
   const isPersistedSession = sessionKey.startsWith('session:')
   const [stableDocPath, setStableDocPath] = useState<string | undefined>(() =>
     isPersistedSession ? rawDocPath : undefined,
@@ -389,10 +423,6 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
     autoResizeInput()
   }, [entryMode, initialContext])
 
-  useLayoutEffect(() => {
-    autoResizeInput()
-  }, [input])
-
   useEffect(() => {
     if (!entryMode || !initialContext) {
       setContextPrefix(null)
@@ -499,7 +529,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
       const value = el.value
       const next = value.slice(0, start) + text + value.slice(end)
       el.value = next
-      setInput(next)
+      setDraft(next, start + text.length)
       clearHistoryBrowse()
       const pos = start + text.length
       el.setSelectionRange(pos, pos)
@@ -559,7 +589,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
   }, [currentFilePath, providerType, uploadFiles])
 
   const doSend = async () => {
-    const contentToSend = input
+    const contentToSend = getDraft()
     const directoryKey = historyDirectoryKey
 
     if (activeAgentMode === 'image_generation') {
@@ -571,7 +601,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
       if (!imageAgent) return
 
       clearHistoryBrowse()
-      setInput('')
+      clearDraft()
 
       const promptMessageId = createEphemeralId('image_prompt')
       const resultMessageId = createEphemeralId('image_result')
@@ -642,7 +672,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
     if (effectivePendingDeleteRequest) {
       clearHistoryBrowse()
       if (DELETE_CONFIRM_TOKENS.has(trimmedInput) || DELETE_CONFIRM_TOKENS.has(normalizedInput)) {
-        setInput('')
+        clearDraft()
         const result =
           effectivePendingDeleteRequest.target === 'folder'
             ? onConfirmDeleteCurrentFolder
@@ -664,7 +694,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
         return
       }
       if (DELETE_CANCEL_TOKENS.has(trimmedInput) || DELETE_CANCEL_TOKENS.has(normalizedInput)) {
-        setInput('')
+        clearDraft()
         setPendingDeleteRequest(null)
         setStatusMessage?.('已取消删除。')
         pushLocalFeedback('已取消删除。')
@@ -682,7 +712,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
         return
       }
       clearHistoryBrowse()
-      setInput('')
+      clearDraft()
       setPendingDeleteRequest({ path: currentPath, target: 'document' })
       const prompt = buildDeleteConfirmationPrompt('当前文档')
       setStatusMessage?.(prompt)
@@ -699,7 +729,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
         return
       }
       clearHistoryBrowse()
-      setInput('')
+      clearDraft()
       setPendingDeleteRequest({ path: currentFolder, target: 'folder' })
       const prompt = buildDeleteConfirmationPrompt('当前文件夹')
       setStatusMessage?.(prompt)
@@ -711,7 +741,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
     const deleteWorkspaceEntryRequest = matchDeleteWorkspaceEntry(trimmedInput)
     if (deleteWorkspaceEntryRequest) {
       clearHistoryBrowse()
-      setInput('')
+      clearDraft()
       setPendingDeleteRequest({
         path: deleteWorkspaceEntryRequest.targetPath,
         target: 'workspace-entry',
@@ -731,7 +761,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
     const renameRequest = matchRenameCurrentDocument(trimmedInput)
     if (renameRequest) {
       clearHistoryBrowse()
-      setInput('')
+      clearDraft()
       const result = onRenameCurrentDocument
         ? await onRenameCurrentDocument(renameRequest.fileName)
         : { ok: false, message: '当前重命名能力不可用。' }
@@ -743,7 +773,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
     const renameWorkspaceRequest = matchRenameWorkspaceEntry(trimmedInput)
     if (renameWorkspaceRequest) {
       clearHistoryBrowse()
-      setInput('')
+      clearDraft()
       const result = onRenameWorkspaceEntry
         ? await onRenameWorkspaceEntry(
           renameWorkspaceRequest.targetPath,
@@ -759,7 +789,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
     const createDirectoryRequest = matchCreateDirectoryUnderSelection(trimmedInput)
     if (createDirectoryRequest) {
       clearHistoryBrowse()
-      setInput('')
+      clearDraft()
       const result = onCreateDirectoryUnderSelection
         ? await onCreateDirectoryUnderSelection(createDirectoryRequest.directoryName)
         : { ok: false, message: '当前创建目录能力不可用。' }
@@ -771,7 +801,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
     const createWorkspaceDirectoryRequest = matchCreateDirectoryInWorkspace(trimmedInput)
     if (createWorkspaceDirectoryRequest) {
       clearHistoryBrowse()
-      setInput('')
+      clearDraft()
       const result = onCreateDirectoryInWorkspace
         ? await onCreateDirectoryInWorkspace(
           createWorkspaceDirectoryRequest.parentPath,
@@ -785,7 +815,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
 
     if (shouldRevealCurrentDirectory(trimmedInput)) {
       clearHistoryBrowse()
-      setInput('')
+      clearDraft()
       const activeDirectory = (currentDirectoryPath ?? getCurrentDirectoryPath?.() ?? '').trim()
       const message = activeDirectory
         ? `当前目录是：${activeDirectory}`
@@ -806,8 +836,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
       if (entry && entry.text.trim()) {
         const nextText = entry.text
         historyCursorRef.current = null
-        setHistoryCursor(null)
-        setInput(nextText)
+        setDraft(nextText, nextText.length)
         requestAnimationFrame(() => {
           const el = inputRef.current
           if (!el) return
@@ -820,7 +849,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
     }
 
     clearHistoryBrowse()
-    setInput('')
+    clearDraft()
     shouldAutoScrollRef.current = true
 
     const handled = await tryHandleSlashCommand(contentToSend, {
@@ -857,11 +886,11 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
     })
   }
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = useCallback(async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (isComposingRef.current) return
     await doSend()
-  }
+  }, [doSend])
 
 
   const handleInputKeyDown = async (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -869,7 +898,21 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
 
     if (e.key === 'Escape' && isProcessing) {
       e.preventDefault()
-      handleStop()
+      const activeMsg = messages.find((m) =>
+        m.role === 'assistant' && (
+          m.streaming || (visibleLengths[m.id] !== undefined && visibleLengths[m.id] < m.content.length)
+        ),
+      )
+      if (activeMsg) {
+        if (isDifyProvider) {
+          const currentLen = visibleLengths[activeMsg.id] ?? activeMsg.content.length
+          stopAndTruncate(activeMsg.id, currentLen)
+        } else {
+          stop()
+        }
+      } else {
+        stop()
+      }
       return
     }
 
@@ -884,7 +927,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
       !e.ctrlKey &&
       !e.altKey
     ) {
-      if (!isHistoryMode && input.trim()) {
+      if (!isHistoryMode && getDraft().trim()) {
         // 非历史模式且当前输入非空：不进入历史浏览，交给默认光标逻辑
       } else {
         const directoryKey = historyDirectoryKey
@@ -918,8 +961,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
             if (el) {
               e.preventDefault()
               historyCursorRef.current = nextCursor
-              setHistoryCursor(nextCursor)
-              setInput(entry.text)
+              setDraft(entry.text, entry.text.length)
               requestAnimationFrame(() => {
                 const target = inputRef.current
                 if (!target) return
@@ -943,37 +985,37 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
     }
   }
 
-  const handleCompositionStart = () => {
+  const handleCompositionStart = useCallback(() => {
     isComposingRef.current = true
-  }
+  }, [])
 
-  const handleCompositionEnd = () => {
+  const handleCompositionEnd = useCallback(() => {
     isComposingRef.current = false
     lockEnterRef.current = true
     setTimeout(() => {
       lockEnterRef.current = false
-    }, 100)
-  }
+    }, 300)
+  }, [])
 
-  const handleCopy = async (content: string) => {
+  const handleCopy = useCallback(async (content: string) => {
     await copyTextToClipboard(content)
-  }
+  }, [])
 
-  const handleInsert = async (content: string) => {
+  const handleInsert = useCallback(async (content: string) => {
     const effectiveSourceTabId = sourceTabId ?? sessionKey
     await insertMarkdownAtCursorBelow({ text: content, sourceTabId: effectiveSourceTabId })
-  }
+  }, [sessionKey, sourceTabId])
 
-  const handleReplace = async (content: string) => {
+  const handleReplace = useCallback(async (content: string) => {
     const effectiveSourceTabId = sourceTabId ?? sessionKey
     await replaceSelectionWithText({ text: content, sourceTabId: effectiveSourceTabId })
-  }
+  }, [sessionKey, sourceTabId])
 
-  const handleSave = async (content: string) => {
+  const handleSave = useCallback(async (content: string) => {
     await createTabAndInsertContent(content)
-  }
+  }, [])
 
-  const handleSaveToNotes = async (content: string) => {
+  const handleSaveToNotes = useCallback(async (content: string) => {
     const cfg = await getNotesConfig()
     if (!cfg.notesDirectory) {
       // TODO: show toast when toast service is accessible
@@ -981,39 +1023,39 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
       return
     }
     await createNote(cfg.notesDirectory, content)
-  }
+  }, [])
 
-  const handleChangeRole = async (roleId: string) => {
+  const handleChangeRole = useCallback(async (roleId: string) => {
     if (!roleId) return
     await changeRole(roleId)
-  }
+  }, [changeRole])
 
-  const handleModelChange = async (modelId: string) => {
+  const handleModelChange = useCallback(async (modelId: string) => {
     if (!modelId) return
     await changeModel(modelId)
-  }
+  }, [changeModel])
 
-  const handleCopyImageUrl = async (message: EphemeralImageGenerationResultMessage) => {
+  const handleCopyImageUrl = useCallback(async (message: EphemeralImageGenerationResultMessage) => {
     if (!message.imageUrl) return
     await copyTextToClipboard(message.imageUrl)
-  }
+  }, [])
 
-  const handleCopyImageMarkdown = async (message: EphemeralImageGenerationResultMessage) => {
+  const handleCopyImageMarkdown = useCallback(async (message: EphemeralImageGenerationResultMessage) => {
     if (!message.imageUrl) return
     await copyTextToClipboard(buildImageMarkdown({ imageUrl: message.imageUrl, prompt: message.prompt }))
-  }
+  }, [])
 
-  const handleSaveGeneratedImage = async (message: EphemeralImageGenerationResultMessage) => {
+  const handleSaveGeneratedImage = useCallback(async (message: EphemeralImageGenerationResultMessage) => {
     if (!message.imageUrl) return
     await saveRemoteImageWithDialog({ imageUrl: message.imageUrl, prompt: message.prompt })
-  }
+  }, [])
 
-  const handleInsertGeneratedImage = async (message: EphemeralImageGenerationResultMessage) => {
+  const handleInsertGeneratedImage = useCallback(async (message: EphemeralImageGenerationResultMessage) => {
     if (!message.imageUrl) return
     await insertGeneratedImageIntoEditor({ imageUrl: message.imageUrl, prompt: message.prompt })
-  }
+  }, [])
 
-  const handleSaveGeneratedImageToNotes = async (message: EphemeralImageGenerationResultMessage) => {
+  const handleSaveGeneratedImageToNotes = useCallback(async (message: EphemeralImageGenerationResultMessage) => {
     if (!message.imageUrl) return
     const agent =
       agents.find((candidate) => candidate.id === message.agentId && candidate.kind === 'image_generation') ?? null
@@ -1026,7 +1068,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
         taskId: message.taskId ?? '',
       },
     })
-  }
+  }, [agents])
 
   const messageSource = state?.viewMessages ?? EMPTY_MESSAGES
   const allMessages = messageSource.filter((m) => !m.hidden)
@@ -1182,7 +1224,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
   }, [animationKey, messageSource])
 
 
-  const getDisplayContent = (msgId: string, full: string) => {
+  const getDisplayContent = useCallback((msgId: string, full: string) => {
     if (!isDifyProvider || full.length === 0 || !state) return full
 
     // 只有当前打字目标参与截断，其他消息一律显示全文，避免重复播放
@@ -1200,7 +1242,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
 
     const length = Math.max(0, Math.min(full.length, visible ?? 0))
     return full.slice(0, length)
-  }
+  }, [activeTypewriterId, isDifyProvider, messages, state, visibleLengths])
 
   const isStreamingUI = isDifyProvider && !!activeTypewriterId && messages.some(
     (msg) => msg.id === activeTypewriterId && msg.role === 'assistant' && (
@@ -1208,6 +1250,83 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
     ),
   )
   const isProcessing = loading || isStreamingUI
+
+  const handleStop = useCallback(() => {
+    const activeMsg = messages.find((m) =>
+      m.role === 'assistant' && (
+        m.streaming || (visibleLengths[m.id] !== undefined && visibleLengths[m.id] < m.content.length)
+      ),
+    )
+    if (activeMsg) {
+      if (isDifyProvider) {
+        const currentLen = visibleLengths[activeMsg.id] ?? activeMsg.content.length
+        stopAndTruncate(activeMsg.id, currentLen)
+      } else {
+        stop()
+      }
+      return
+    }
+    stop()
+  }, [isDifyProvider, messages, stop, stopAndTruncate, visibleLengths])
+
+  useEffect(() => {
+    if (!inputDebugEnabled) return
+    const nextSnapshot = {
+      inputLength: getDraft().length,
+      messagesLength: messages.length,
+      loading: isProcessing,
+      activeAgentId,
+      attachedImageDataUrl,
+      pendingAttachmentsLength: pendingAttachments?.length ?? 0,
+      ephemeralMessagesLength: ephemeralMessages.length,
+      localFeedbackMessagesLength: localFeedbackMessages.length,
+      historyDialogOpen,
+      slashModalMessage,
+      contextPrefix,
+      contextPrefixUsed,
+      historyRecallEnabled,
+    }
+    const prev = debugSnapshotRef.current
+    const changes = prev
+      ? (Object.entries(nextSnapshot) as Array<[keyof typeof nextSnapshot, unknown]>)
+        .filter(([key, value]) => prev[key] !== value)
+        .map(([key, value]) => ({
+          key,
+          from: prev[key],
+          to: value,
+        }))
+      : Object.entries(nextSnapshot).map(([key, value]) => ({ key, from: undefined, to: value }))
+
+    if (changes.length > 0 || renderCountRef.current > 0 || inputChangeCountRef.current > 0) {
+      console.log('[ai-input-debug][pane]', {
+        sessionKey,
+        renders: renderCountRef.current,
+        inputChanges: inputChangeCountRef.current,
+        activeAgentMode,
+        changes,
+      })
+    }
+    debugSnapshotRef.current = nextSnapshot
+    renderCountRef.current = 0
+    inputChangeCountRef.current = 0
+  }, [
+    activeAgentId,
+    activeAgentMode,
+    attachedImageDataUrl,
+    contextPrefix,
+    contextPrefixUsed,
+    ephemeralMessages.length,
+    historyDialogOpen,
+    historyRecallEnabled,
+    getDraft().length,
+    inputDebugEnabled,
+    isProcessing,
+    localFeedbackMessages.length,
+    messages.length,
+    pendingAttachments?.length,
+    sessionKey,
+    slashModalMessage,
+  ])
   const agentGroups = [
     {
       id: 'chat',
@@ -1233,25 +1352,6 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
       : contextPlaceholderMode === 'file'
         ? 'Current file content will be used as context for the answer.'
         : 'Ask anything to AI'
-
-  const handleStop = () => {
-    // 找到当前正在“吐出”的消息（无论是网络流还是打字机补齐阶段）
-    const activeMsg = messages.find((m) =>
-      m.role === 'assistant' && (
-        m.streaming || (visibleLengths[m.id] !== undefined && visibleLengths[m.id] < m.content.length)
-      ),
-    )
-    if (activeMsg) {
-      if (isDifyProvider) {
-        const currentLen = visibleLengths[activeMsg.id] ?? activeMsg.content.length
-        stopAndTruncate(activeMsg.id, currentLen)
-      } else {
-        stop()
-      }
-    } else {
-      stop()
-    }
-  }
 
   useEffect(() => {
     if (!isProcessing) return
@@ -1460,17 +1560,13 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
           historyIdentity={`${sessionKey}:${fullPage ? 'full' : 'dock'}`}
           loading={isProcessing}
           error={error}
-          input={input}
-          onInputChange={(value) => {
-            setInput(value)
-            autoResizeInput()
-          }}
-          onManualInputChange={clearHistoryBrowse}
+          onDraftChange={clearHistoryBrowse}
           onSubmit={handleSubmit}
           onInputKeyDown={handleInputKeyDown}
           onCompositionStart={handleCompositionStart}
           onCompositionEnd={handleCompositionEnd}
           inputRef={inputRef as React.RefObject<HTMLTextAreaElement>}
+          composerHandleRef={composerHandleRef}
           messagesContainerRef={messagesContainerRef as React.RefObject<HTMLDivElement>}
           getDisplayContent={getDisplayContent}
           onCopy={handleCopy}

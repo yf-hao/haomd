@@ -171,6 +171,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
   const selectionAnchorCaretRef = useRef<TextCaret | null>(null)
   const lastValidSelectionCaretRef = useRef<TextCaret | null>(null)
   const assistRegionRef = useRef<{ left: number; top: number; right: number; bottom: number } | null>(null)
+  const assistRegionSnapshotRef = useRef<string | null>(null)
   const hasActiveSelectionRef = useRef(false)
   const shapeDraftStartRef = useRef<{ x: number; y: number } | null>(null)
   const isShapeDrawingActiveRef = useRef(false)
@@ -443,6 +444,8 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
   const setSelectionAssistRegionDefaults = () => {
     const root = rootRef.current
     if (!root) return
+    if (assistRegionSnapshotRef.current === 'defaults') return
+    assistRegionSnapshotRef.current = 'defaults'
     assistRegionRef.current = null
     root.classList.remove('is-selection-assist-active')
     root.style.setProperty('--pdf-text-right-edge', '100%')
@@ -510,6 +513,15 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       lineBottomFromRects + effectiveLineHeight * 0.12,
     )
     const lineRight = Math.min(pageRect.width, Math.max(...effectiveLineRects.map((rect) => rect.right)))
+    const nextSnapshot = [
+      lineRight.toFixed(2),
+      paddedLineTop.toFixed(2),
+      paddedLineBottom.toFixed(2),
+      pageRect.width.toFixed(2),
+      pageRect.height.toFixed(2),
+    ].join('|')
+    if (assistRegionSnapshotRef.current === nextSnapshot) return
+    assistRegionSnapshotRef.current = nextSnapshot
     assistRegionRef.current = {
       left: lineRight,
       top: paddedLineTop,

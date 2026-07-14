@@ -36,6 +36,7 @@ mod music_sound;
 mod notes_config;
 mod openai_compat;
 mod pdf_export;
+mod pdf_sessions;
 mod platform;
 mod pomodoro_audio;
 mod pomodoro_paths;
@@ -86,6 +87,7 @@ use music_sound::*;
 use notes_config::*;
 use openai_compat::*;
 use pdf_export::*;
+use pdf_sessions::*;
 use platform::*;
 use pomodoro_audio::*;
 use pomodoro_sound::*;
@@ -220,6 +222,10 @@ macro_rules! app_invoke_handler {
             load_ai_session,
             save_ai_session,
             delete_ai_session,
+            load_pdf_sessions,
+            load_pdf_session,
+            save_pdf_session,
+            delete_pdf_session,
             load_ai_naming_conv,
             save_ai_naming_conv,
             gemini_generate_content,

@@ -1001,6 +1001,7 @@ export function WorkspaceShell({
   // - Markdown 标签：使用当前文本文件的路径（filePath）
   // - PDF 标签：使用当前激活的 PDF 文件路径（activePdfPath）
   const aiChatFilePath = isPdfActive ? activePdfPath : filePath
+  const aiChatDocPathOverride = isPdfActive && activePdfPath ? `pdf:${activePdfPath}` : null
 
   // 统一决定编辑器里展示的内容：
   // - Markdown 标签：走原来的 hugeDoc/markdown 逻辑
@@ -3591,7 +3592,7 @@ export function WorkspaceShell({
           <div className="workspace-column-content">
           {aiChatSessionKey.startsWith('session:') ? (
             <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13, height: '100%' }}>{t('workspace.loadingAiPane')}</div>}>
-              <AiChatPaneLazy
+                <AiChatPaneLazy
                 key={aiChatSessionKey}
                 sessionKey={aiChatSessionKey}
                 entryMode="chat"
@@ -3599,6 +3600,7 @@ export function WorkspaceShell({
                 currentFilePath={aiChatFilePath}
                 currentFolderPath={selectedFolderPath}
                 currentDirectoryPath={getCurrentAiDirectoryPath()}
+                docPathOverride={aiChatDocPathOverride}
                 getCurrentMarkdown={getCurrentMarkdown}
                 getCurrentFileName={getCurrentFileName}
                 getCurrentFilePath={getCurrentFilePath}
@@ -3651,6 +3653,7 @@ export function WorkspaceShell({
                           currentFilePath={aiChatFilePath}
                           currentFolderPath={selectedFolderPath}
                           currentDirectoryPath={getCurrentAiDirectoryPath()}
+                          docPathOverride={aiChatDocPathOverride}
                           getCurrentMarkdown={getCurrentMarkdown}
                           getCurrentFileName={getCurrentFileName}
                           getCurrentFilePath={getCurrentFilePath}
@@ -3834,6 +3837,7 @@ export function WorkspaceShell({
                         currentFilePath={aiChatFilePath}
                         currentFolderPath={selectedFolderPath}
                         currentDirectoryPath={getCurrentAiDirectoryPath()}
+                        docPathOverride={aiChatDocPathOverride}
                         getCurrentMarkdown={getCurrentMarkdown}
                         getCurrentFileName={getCurrentFileName}
                         getCurrentFilePath={getCurrentFilePath}
@@ -3937,6 +3941,7 @@ export function WorkspaceShell({
               currentFilePath={aiChatFilePath}
               currentFolderPath={selectedFolderPath}
               currentDirectoryPath={getCurrentAiDirectoryPath()}
+              docPathOverride={aiChatDocPathOverride}
               getCurrentMarkdown={getCurrentMarkdown}
               getCurrentFileName={getCurrentFileName}
               getCurrentFilePath={getCurrentFilePath}

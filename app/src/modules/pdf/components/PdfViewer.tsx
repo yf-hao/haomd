@@ -139,6 +139,7 @@ const MIN_STAMP_SIZE = DEFAULT_STAMP_SIZE / 3
 const MAX_STAMP_SIZE = 0.2
 const MAX_TRANSLATION_SELECTION_LENGTH = 8000
 const PDF_TRANSLATION_SETTINGS_STORAGE_KEY = 'pdf-translation-settings-v1'
+const PDF_INPUT_DEBUG_FLAG = 'haomd-debug-pdf-input'
 const DEFAULT_PDF_TRANSLATION_SETTINGS: PdfTranslationSettings = {
   sourceLanguage: '英语',
   targetLanguage: '简体中文',
@@ -567,6 +568,24 @@ function getAnchorRect(rects: readonly AnnotationRect[]) {
   })[0] ?? null
 }
 
+function getSelectionBounds(rects: readonly AnnotationRect[]) {
+  if (rects.length === 0) return null
+  return rects.reduce(
+    (bounds, rect) => ({
+      x1: Math.min(bounds.x1, rect.x1),
+      y1: Math.min(bounds.y1, rect.y1),
+      x2: Math.max(bounds.x2, rect.x2),
+      y2: Math.max(bounds.y2, rect.y2),
+    }),
+    {
+      x1: rects[0]!.x1,
+      y1: rects[0]!.y1,
+      x2: rects[0]!.x2,
+      y2: rects[0]!.y2,
+    },
+  )
+}
+
 function areAnnotationRectsEqual(left: readonly AnnotationRect[], right: readonly AnnotationRect[]) {
   if (left.length !== right.length) return false
   return left.every((rect, index) => {
@@ -890,6 +909,15 @@ export interface PdfViewerProps {
 
 export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomActions, onRegisterShortcutActions }: PdfViewerProps) {
   const { t } = useI18n()
+  const inputDebugEnabled = typeof window !== 'undefined'
+    && window.localStorage.getItem(PDF_INPUT_DEBUG_FLAG) === '1'
+  const debugCountersRef = useRef({
+    viewportSelectionChange: 0,
+    selectionSnapshotHit: 0,
+    selectionSnapshotMiss: 0,
+    selectionPositionUpdate: 0,
+  })
+  const debugFlushTimerRef = useRef<number | null>(null)
   const persistedToolGroups = useMemo(() => loadPersistedPdfToolGroups(), [])
   const viewportRef = useRef<PdfViewportHandle | null>(null)
   const shortcutHelpButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -916,6 +944,8 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
   const [translationSettingsOpen, setTranslationSettingsOpen] = useState(false)
   const [translationPronouncing, setTranslationPronouncing] = useState(false)
   const translationPopoverRef = useRef<HTMLDivElement | null>(null)
+  const selectionSnapshotRef = useRef<string | null>(null)
+  const translationSelectionSnapshotRef = useRef<string | null>(null)
   const [annotationMessage, setAnnotationMessage] = useState<string | null>(null)
   const [isAnnotationBusy, setAnnotationBusy] = useState(false)
   const [selectedHighlightColor, setSelectedHighlightColor] = useState<string>('#ff0000')
@@ -1036,6 +1066,56 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
   const ZOOM_STEP = 0.25
   const zoomPercent = Math.round(scale * 100)
 
+  useEffect(() => {
+    return () => {
+      if (debugFlushTimerRef.current != null) {
+        window.cancelAnimationFrame(debugFlushTimerRef.current)
+        debugFlushTimerRef.current = null
+      }
+    }
+  }, [])
+
+  const flushPdfDebugCounters = useCallback(() => {
+    if (!inputDebugEnabled) return
+    if (debugFlushTimerRef.current != null) return
+    debugFlushTimerRef.current = window.requestAnimationFrame(() => {
+      debugFlushTimerRef.current = null
+      const snapshot = debugCountersRef.current
+      const hasChanges =
+        snapshot.viewportSelectionChange > 0 ||
+        snapshot.selectionSnapshotHit > 0 ||
+        snapshot.selectionSnapshotMiss > 0 ||
+        snapshot.selectionPositionUpdate > 0
+      if (hasChanges) {
+        console.log('[pdf-input-debug][viewer]', {
+          filePath,
+          ...snapshot,
+        })
+        debugCountersRef.current = {
+          viewportSelectionChange: 0,
+          selectionSnapshotHit: 0,
+          selectionSnapshotMiss: 0,
+          selectionPositionUpdate: 0,
+        }
+      }
+    })
+  }, [filePath, inputDebugEnabled])
+
+  const getSelectionSnapshotKey = useCallback((selection: PdfSelectionDraft | null) => {
+    if (!selection) return 'null'
+    const rectsKey = selection.rects
+      .map((rect) =>
+        [
+          rect.x1.toFixed(4),
+          rect.y1.toFixed(4),
+          rect.x2.toFixed(4),
+          rect.y2.toFixed(4),
+        ].join(','),
+      )
+      .join('|')
+    return `${selection.page}|${selection.text}|${rectsKey}`
+  }, [])
+
   const scrollToPageWithScale = useCallback((page: number, scaleForScroll: number) => {
     const baseHeight = basePageHeight ?? 800
     const estimatedPageHeight = Math.max(1, baseHeight * scaleForScroll)
@@ -1120,6 +1200,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
     setTranslationError(null)
     setTranslationPosition(null)
     setTranslationSelectionDraft(null)
+    translationSelectionSnapshotRef.current = null
     setTranslationDismissed(true)
     setTranslationSettingsOpen(false)
   }, [])
@@ -2269,7 +2350,40 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
   }, [])
 
   const handleViewportSelectionChange = useCallback((selection: PdfSelectionDraft | null) => {
-    if (translationOpen) return
+    if (inputDebugEnabled) {
+      debugCountersRef.current.viewportSelectionChange += 1
+      flushPdfDebugCounters()
+    }
+    const nextSnapshotKey = getSelectionSnapshotKey(selection)
+
+    if (translationOpen) {
+      if (!selection) return
+      if (translationSelectionSnapshotRef.current === nextSnapshotKey) {
+        if (inputDebugEnabled) {
+          debugCountersRef.current.selectionSnapshotHit += 1
+          flushPdfDebugCounters()
+        }
+        return
+      }
+      if (inputDebugEnabled) {
+        debugCountersRef.current.selectionSnapshotMiss += 1
+        flushPdfDebugCounters()
+      }
+      closeTranslation()
+    }
+
+    if (selectionSnapshotRef.current === nextSnapshotKey) {
+      if (inputDebugEnabled) {
+        debugCountersRef.current.selectionSnapshotHit += 1
+        flushPdfDebugCounters()
+      }
+      return
+    }
+    if (inputDebugEnabled) {
+      debugCountersRef.current.selectionSnapshotMiss += 1
+      flushPdfDebugCounters()
+    }
+    selectionSnapshotRef.current = nextSnapshotKey
     setTranslationDismissed(false)
     if (pendingNoteDraft) {
       return
@@ -2294,6 +2408,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
     }
     selectionDraftRef.current = selection
     setSelectionDraft(selection)
+    translationSelectionSnapshotRef.current = selection ? nextSnapshotKey : null
       if (selection) {
         setSelectedAnnotationId(null)
         handleAnnotationPreviewOpen(null)
@@ -2310,6 +2425,11 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
     annotationDocument,
     isAnnotationBusy,
     selectedHighlightColor,
+    closeTranslation,
+    flushPdfDebugCounters,
+    getSelectionSnapshotKey,
+    translationOpen,
+    inputDebugEnabled,
   ])
 
   const handleViewportShapeCreate = useCallback((shape: {
@@ -2649,6 +2769,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
     setSelectionDraft(null)
     setTranslationSelectionDraft(null)
     selectionDraftRef.current = null
+    selectionSnapshotRef.current = null
     setClearSelectionSignal((prev) => prev + 1)
     if (typeof window !== 'undefined') {
       window.getSelection()?.removeAllRanges()
@@ -2852,17 +2973,22 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
       return
     }
 
+    if (inputDebugEnabled) {
+      debugCountersRef.current.selectionPositionUpdate += 1
+      flushPdfDebugCounters()
+    }
+
     const updatePosition = () => {
       const metrics = viewportRef.current?.getRenderedPageMetrics(activeSelectionDraft.page)
-      const anchorRect = getAnchorRect(activeSelectionDraft.rects)
-      if (!metrics || !anchorRect) {
+      const selectionBounds = getSelectionBounds(activeSelectionDraft.rects)
+      if (!metrics || !selectionBounds) {
         setTranslationPosition(null)
         return
       }
       const mainWidth = viewportRef.current?.getContainerWidth() ?? metrics.width
       const popupWidth = translationOpen ? 520 : 80
-      const anchorLeft = metrics.left + anchorRect.x2 * metrics.width
-      const anchorTop = metrics.viewportTop + anchorRect.y2 * metrics.height
+      const anchorLeft = metrics.left + selectionBounds.x2 * metrics.width
+      const anchorTop = metrics.viewportTop + selectionBounds.y2 * metrics.height
       const containerHeight = viewportRef.current?.getContainerHeight() ?? metrics.height
       const measuredPopupHeight = translationOpen
         ? Math.ceil(translationPopoverRef.current?.getBoundingClientRect().height || 0)
@@ -2878,7 +3004,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
         : hasSpaceAbove
           ? Math.min(aboveTop, maxTop)
           : Math.min(Math.max(8, belowTop), maxTop)
-      const left = Math.min(Math.max(8, anchorLeft - popupWidth), Math.max(8, mainWidth - popupWidth - 8))
+      const left = Math.min(Math.max(8, anchorLeft + 8), Math.max(8, mainWidth - popupWidth - 8))
       setTranslationPosition({ top, left })
     }
 

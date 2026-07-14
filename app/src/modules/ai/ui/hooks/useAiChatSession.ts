@@ -19,6 +19,7 @@ import type { DocConversationRecord } from '../../domain/docConversations'
 import { normalizePersistableDocPath } from '../../domain/docPathUtils'
 import { appendAiInputHistory } from '../../application/localStorageAiChatInputHistory'
 import { loadSession, saveSession, type AiChatSessionCfg, type AiChatMessageCfg } from '../../config/aiSessionsRepo'
+import { loadPdfSession, savePdfSession, type PdfChatSessionCfg } from '../../../pdf/pdfSessionsRepo'
 import { mergePendingAttachments } from './attachmentDrafts'
 import type { WorkspaceEntryKind } from '../../../workspace/workspaceEntryResolver'
 
@@ -113,6 +114,10 @@ function isPersistedSessionKey(sessionKey: AiChatSessionKey): boolean {
   return sessionKey.startsWith('session:')
 }
 
+function isPdfDocSessionPath(docPath?: string): boolean {
+  return !!docPath && docPath.startsWith('pdf:')
+}
+
 function isPersistedEngineRole(role: string): role is EngineMessage['role'] {
   return role === 'system' || role === 'user' || role === 'assistant'
 }
@@ -140,6 +145,10 @@ function buildStateFromAiSessionRecord(record: AiChatSessionCfg, entryMode: Chat
     entryMode: (record.entryMode as ChatEntryMode | null | undefined) ?? entryMode,
     activeRoleId: record.activeRoleId ?? undefined,
   }
+}
+
+function buildStateFromPdfSessionRecord(record: PdfChatSessionCfg, entryMode: ChatEntryMode): ConversationState {
+  return buildStateFromAiSessionRecord(record as unknown as AiChatSessionCfg, entryMode)
 }
 
 export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatResult {
@@ -175,6 +184,7 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
       ? undefined
       : normalizePersistableDocPath(docPath)
   const shouldUseDocPersistence = !selectedAgentId
+  const shouldUsePdfDocPersistence = shouldUseDocPersistence && isPdfDocSessionPath(sanitizedDocPath)
 
   const [session, setSession] = useState<ChatSession | null>(null)
   const [loading, setLoading] = useState(false)
@@ -273,7 +283,7 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
   }, [t])
 
   useEffect(() => {
-    if (!sanitizedDocPath) return
+    if (!sanitizedDocPath || shouldUsePdfDocPersistence) return
 
     const unsubscribe = subscribeDocConversationEvents((event: DocConversationEvent) => {
       if (event.docPath !== sanitizedDocPath) return
@@ -296,7 +306,7 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
     return () => {
       unsubscribe()
     }
-  }, [sanitizedDocPath])
+  }, [sanitizedDocPath, shouldUsePdfDocPersistence])
 
   useEffect(() => {
     if (!open) return
@@ -317,21 +327,28 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
             initialState = buildStateFromAiSessionRecord(savedSession, entryMode)
           }
         } else if (sanitizedDocPath && shouldUseDocPersistence) {
-          let saved: DocConversationRecord | null = await docConversationService.getByDocPath(sanitizedDocPath)
-
-          // 懒迁移：如果目录级 docPath 下没有记录，且提供了旧版文件级 docPath，则尝试回退加载
-          if (!saved && sanitizedLegacyDocPath && sanitizedLegacyDocPath !== sanitizedDocPath) {
-            try {
-              saved = await docConversationService.getByDocPath(sanitizedLegacyDocPath)
-            } catch (e) {
-              console.warn('[useAiChatSession] failed to load legacy doc conversation', e)
+          if (shouldUsePdfDocPersistence) {
+            const savedSession = await loadPdfSession(sanitizedDocPath)
+            if (savedSession) {
+              initialState = buildStateFromPdfSessionRecord(savedSession, entryMode)
             }
-          }
+          } else {
+            let saved: DocConversationRecord | null = await docConversationService.getByDocPath(sanitizedDocPath)
 
-          if (saved) {
-            initialState = buildStateFromDocRecord(saved, entryMode)
-            initialDifyConversationId = saved.difyConversationId
-            initialDifyMapping = saved.difyProviderConversations
+            // 懒迁移：如果目录级 docPath 下没有记录，且提供了旧版文件级 docPath，则尝试回退加载
+            if (!saved && sanitizedLegacyDocPath && sanitizedLegacyDocPath !== sanitizedDocPath) {
+              try {
+                saved = await docConversationService.getByDocPath(sanitizedLegacyDocPath)
+              } catch (e) {
+                console.warn('[useAiChatSession] failed to load legacy doc conversation', e)
+              }
+            }
+
+            if (saved) {
+              initialState = buildStateFromDocRecord(saved, entryMode)
+              initialDifyConversationId = saved.difyConversationId
+              initialDifyMapping = saved.difyProviderConversations
+            }
           }
         }
 
@@ -506,7 +523,7 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
   ])
 
   useEffect(() => {
-    if (!session || !open || !shouldUseDocPersistence) return
+    if (!session || !open || !shouldUseDocPersistence || shouldUsePdfDocPersistence) return
     if (!sanitizedDocPath) return
     if (sanitizedDocPath === lastBoundDocPathRef.current) return
     pendingDocPathRef.current = sanitizedDocPath
@@ -547,15 +564,50 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
         migrationTimerRef.current = null
       }
     }
-  }, [session, open, shouldUseDocPersistence, loading, starting, state, sanitizedDocPath])
+  }, [session, open, shouldUseDocPersistence, shouldUsePdfDocPersistence, loading, starting, state, sanitizedDocPath])
 
   useEffect(() => {
-    if (!open || !isPersistedSessionKey(sessionKey) || !state) return
+    if (!open || !state) return
+    if (!isPersistedSessionKey(sessionKey) && !shouldUsePdfDocPersistence) return
     if (state.viewMessages.some((message) => message.streaming)) return
 
     const timeout = window.setTimeout(() => {
       const now = Date.now()
       void (async () => {
+        if (shouldUsePdfDocPersistence && sanitizedDocPath) {
+          const existing = await loadPdfSession(sanitizedDocPath)
+          const previousMessages = existing?.messages ?? []
+          const currentSourcePath = getCurrentFilePathRef.current?.() ?? existing?.sourcePath ?? null
+          const currentTitle = getCurrentFileNameRef.current?.() ?? existing?.title ?? null
+
+          const messages: AiChatMessageCfg[] = state.engineHistory.map((message, index) => {
+            const previous = previousMessages[index]
+            const reuseIdentity = previous && previous.role === message.role
+            return {
+              id: reuseIdentity ? previous.id : `${sanitizedDocPath}:${message.role}:${now + index}`,
+              role: message.role,
+              content: message.content,
+              timestamp: reuseIdentity ? previous.timestamp : now + index,
+            }
+          })
+
+          const sessionRecord: PdfChatSessionCfg = {
+            id: sanitizedDocPath,
+            sourcePath: currentSourcePath,
+            pdfHash: existing?.pdfHash ?? null,
+            title: currentTitle,
+            entryMode,
+            messages,
+            providerType,
+            activeRoleId: state.activeRoleId ?? existing?.activeRoleId ?? null,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+          }
+
+          await savePdfSession(sessionRecord)
+          return
+        }
+
         const existing = await loadSession(sessionKey)
         const previousMessages = existing?.messages ?? []
 
@@ -599,7 +651,7 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
     return () => {
       window.clearTimeout(timeout)
     }
-  }, [open, sessionKey, entryMode, state, providerType, session])
+  }, [open, sessionKey, entryMode, state, providerType, session, shouldUsePdfDocPersistence, sanitizedDocPath])
 
   // Load available models
   useEffect(() => {

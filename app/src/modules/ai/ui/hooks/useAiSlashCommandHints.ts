@@ -10,8 +10,8 @@ export type SlashCommandHintItem = {
 export interface UseAiSlashCommandHintsOptions {
   /** 当前输入框完整内容 */
   input: string
-  /** 当前光标位置（selectionStart） */
-  cursorIndex: number
+  /** 当前光标位置（selectionStart）；为 null 时表示当前无需计算 slash 提示 */
+  cursorIndex: number | null
 }
 
 export interface UseAiSlashCommandHintsResult {
@@ -44,7 +44,7 @@ export function useAiSlashCommandHints(options: UseAiSlashCommandHintsOptions): 
   const allCommands = useMemo(() => listAiSlashCommands(), [])
 
   const segment: SlashSegmentInfo | null = useMemo(() => {
-    if (!input) return null
+    if (!input || cursorIndex == null) return null
     const safeCursor = Math.max(0, Math.min(cursorIndex, input.length))
 
     // 仅考虑当前行（光标所在行）行首到光标之间的内容
