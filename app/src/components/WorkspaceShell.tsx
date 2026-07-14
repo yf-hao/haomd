@@ -188,6 +188,15 @@ const countDocumentChars = (text: string): number => {
 
 const seed = ''
 
+function findOutlineItemByPage(items: OutlineItem[], page: number): OutlineItem | null {
+  for (const item of items) {
+    const childMatch = item.children ? findOutlineItemByPage(item.children, page) : null
+    if (childMatch) return childMatch
+    if (item.page === page) return item
+  }
+  return null
+}
+
 export function WorkspaceShell({
   activeLeftPanel,
   toggleSidebarVisible,
@@ -258,6 +267,10 @@ export function WorkspaceShell({
   }, [editorZoom])
   const [activeOutlineId, setActiveOutlineId] = useState<string | null>(null)
   const [wysiwygOutlineHeadings, setWysiwygOutlineHeadings] = useState<OutlineHeading[]>([])
+  const [pdfOutlineItems, setPdfOutlineItems] = useState<OutlineItem[]>([])
+  const [pdfOutlineLoading, setPdfOutlineLoading] = useState(false)
+  const [pdfCurrentPage, setPdfCurrentPage] = useState<number | null>(null)
+  const [pdfOutlineRequestedPage, setPdfOutlineRequestedPage] = useState<{ page: number } | null>(null)
   const [isCreatingTab, setIsCreatingTab] = useState(false)
   const [foldRegions, setFoldRegions] = useState<{ fromLine: number; toLine: number }[]>([])
   const [inlineNewFileDir, setInlineNewFileDir] = useState<string | null>(null)
@@ -637,8 +650,22 @@ export function WorkspaceShell({
     mode: editMode,
     markdown,
     wysiwygHeadings: wysiwygOutlineHeadings,
-    enabled: isOutlinePanelVisible,
+    enabled: isOutlinePanelVisible && !isPdfActive,
   })
+
+  const activePdfOutlineId = useMemo(() => {
+    if (!isPdfActive || pdfCurrentPage == null) return null
+    return findOutlineItemByPage(pdfOutlineItems, pdfCurrentPage)?.id ?? null
+  }, [isPdfActive, pdfCurrentPage, pdfOutlineItems])
+
+  const outlineItemsForPanel = isPdfActive ? pdfOutlineItems : outlineItems
+  const outlineActiveId = isPdfActive ? activePdfOutlineId : activeOutlineId
+  const outlineEmptyTitle = isPdfActive
+    ? (pdfOutlineLoading ? t('pdf.loadingOutline') : t('pdf.noOutline'))
+    : t('outline.noHeadings')
+  const outlineEmptyHint = isPdfActive
+    ? (pdfOutlineLoading ? t('pdf.loadingOutlineHint') : t('pdf.noOutlineHint'))
+    : t('outline.noHeadingsHint')
 
   const handleWysiwygOutlineItemsChange = useCallback((items: OutlineHeading[]) => {
     setWysiwygOutlineHeadings((prev) => {
@@ -3162,6 +3189,10 @@ export function WorkspaceShell({
   }, [focusEditorOnGlobalLine])
 
   const handleOutlineSelect = useCallback((item: OutlineItem) => {
+    if (isPdfActive && item.source === 'pdf' && typeof item.page === 'number') {
+      setPdfOutlineRequestedPage({ page: item.page })
+      return
+    }
     setActiveOutlineId(item.id)
     if (effectiveLayout === 'preview-only') setLayout('preview-left')
     const wysiwygTarget = getWysiwygOutlineNavigationTarget(item)
@@ -3173,7 +3204,7 @@ export function WorkspaceShell({
     if (markdownTarget) {
       focusEditorOnGlobalLine(markdownTarget.line, markdownTarget.searchText)
     }
-  }, [effectiveLayout, setLayout, focusEditorOnGlobalLine])
+  }, [effectiveLayout, focusEditorOnGlobalLine, isPdfActive, setLayout])
 
   const handleSearchResultOpen = useCallback(async (params: {
     path: string
@@ -3302,7 +3333,14 @@ export function WorkspaceShell({
           />
         )}
         {activeLeftPanel === 'outline' && (
-          <OutlinePanel items={outlineItems} activeId={activeOutlineId} onSelect={handleOutlineSelect} panelWidth={sidebarWidth} />
+          <OutlinePanel
+            items={outlineItemsForPanel}
+            activeId={outlineActiveId}
+            onSelect={handleOutlineSelect}
+            panelWidth={sidebarWidth}
+            emptyTitle={outlineEmptyTitle}
+            emptyHint={outlineEmptyHint}
+          />
         )}
         {activeLeftPanel === 'pdf' && (
           <SidebarBackgroundShell as="div" className="pdf-panel" style={{ width: sidebarWidth }}>
@@ -3700,12 +3738,17 @@ export function WorkspaceShell({
                             onRegisterSelectionGetter={(getter) => {
                               pdfSelectionGetterRef.current = getter
                             }}
+                            onCurrentPageChange={setPdfCurrentPage}
                             onRegisterZoomActions={(actions) => {
                               pdfZoomActionsRef.current = actions
                             }}
                             onRegisterShortcutActions={(actions) => {
                               pdfShortcutActionsRef.current = actions
                             }}
+                            onOutlineItemsChange={setPdfOutlineItems}
+                            onOutlineLoadingChange={setPdfOutlineLoading}
+                            requestedOutlinePage={pdfOutlineRequestedPage?.page ?? null}
+                            onRequestedOutlinePageHandled={() => setPdfOutlineRequestedPage(null)}
                           />
                         )}
                       </Suspense>

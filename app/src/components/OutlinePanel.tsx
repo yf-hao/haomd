@@ -8,6 +8,8 @@ export type OutlinePanelProps = {
   activeId: string | null
   onSelect: (item: OutlineItem) => void
   panelWidth?: number
+  emptyTitle?: string
+  emptyHint?: string
 }
 
 type OutlineDepth = 1 | 2 | 3 | 4 | 5 | 6 | 'all'
@@ -44,7 +46,7 @@ function OutlineChevronIcon() {
   )
 }
 
-export const OutlinePanel = memo(function OutlinePanel({ items, activeId, onSelect, panelWidth }: OutlinePanelProps) {
+export const OutlinePanel = memo(function OutlinePanel({ items, activeId, onSelect, panelWidth, emptyTitle, emptyHint }: OutlinePanelProps) {
   const { t } = useI18n()
   const hasItems = items.length > 0
   const style = panelWidth ? { width: panelWidth } : undefined
@@ -136,14 +138,12 @@ export const OutlinePanel = memo(function OutlinePanel({ items, activeId, onSele
           {hasChildren ? (
             <button
               className={`outline-toggle ${collapsed ? 'collapsed' : 'expanded'} ${autoCollapsed ? 'limited' : ''}`}
-              onClick={(e) => {
-                toggleCollapse(e, item.id, !collapsed)
-              }}
+              onClick={(e) => toggleCollapse(e, item.id, !collapsed)}
               aria-label={collapsed ? t('outline.expand') : t('outline.collapse')}
               aria-expanded={!collapsed}
-              >
-                <span className="outline-toggle-icon" aria-hidden="true" />
-              </button>
+            >
+              <span className="outline-toggle-icon" aria-hidden="true" />
+            </button>
           ) : (
             <span className="outline-toggle-spacer" aria-hidden="true" />
           )}
@@ -205,8 +205,8 @@ export const OutlinePanel = memo(function OutlinePanel({ items, activeId, onSele
         </ul>
       ) : (
         <div className="outline-empty">
-          <div className="outline-empty-title">{t('outline.noHeadings')}</div>
-          <div className="outline-empty-sub">{t('outline.noHeadingsHint')}</div>
+          <div className="outline-empty-title">{emptyTitle ?? t('outline.noHeadings')}</div>
+          <div className="outline-empty-sub">{emptyHint ?? t('outline.noHeadingsHint')}</div>
         </div>
       )}
     </SidebarBackgroundShell>

@@ -18,6 +18,8 @@ import { usePdfDocument } from '../hooks/usePdfDocument'
 import { PdfViewport, type PdfViewportHandle } from './PdfViewport'
 import { PdfAnnotationPanel } from './PdfAnnotationPanel'
 import { PdfNotesPanel } from './PdfNotesPanel'
+import type { OutlineItem } from '../../outline/parser'
+import { loadPdfOutline } from '../pdfOutline'
 import { useI18n } from '../../i18n/I18nContext'
 import { isTauriEnv } from '../../platform/runtime'
 import { useResolvedThemeMode } from '../../theme/ThemeContext'
@@ -889,6 +891,7 @@ export interface PdfViewerProps {
   filePath: string
   onClose?: () => void
   onRegisterSelectionGetter?: (getter: (() => string | null) | null) => void
+  onCurrentPageChange?: (page: number) => void
   onRegisterZoomActions?: (actions: {
     zoomIn: () => number | null
     zoomOut: () => number | null
@@ -905,9 +908,23 @@ export interface PdfViewerProps {
     deleteSelected: () => void
     selectColorIndex: (index: number) => void
   } | null) => void
+  onOutlineItemsChange?: (items: OutlineItem[]) => void
+  onOutlineLoadingChange?: (loading: boolean) => void
+  requestedOutlinePage?: number | null
+  onRequestedOutlinePageHandled?: () => void
 }
 
-export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomActions, onRegisterShortcutActions }: PdfViewerProps) {
+export function PdfViewer({
+  filePath,
+  onRegisterSelectionGetter,
+  onCurrentPageChange,
+  onRegisterZoomActions,
+  onRegisterShortcutActions,
+  onOutlineItemsChange,
+  onOutlineLoadingChange,
+  requestedOutlinePage,
+  onRequestedOutlinePageHandled,
+}: PdfViewerProps) {
   const { t } = useI18n()
   const inputDebugEnabled = typeof window !== 'undefined'
     && window.localStorage.getItem(PDF_INPUT_DEBUG_FLAG) === '1'
@@ -1288,8 +1305,9 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
     if (currentPage > pageCount) {
       setCurrentPage(pageCount)
       setPageInput(String(pageCount))
+      onCurrentPageChange?.(pageCount)
     }
-  }, [pageCount, currentPage])
+  }, [pageCount, currentPage, onCurrentPageChange])
 
   useEffect(() => {
     if (!pdfDocument || !pageCount || pageCount <= 0) return
@@ -1303,6 +1321,7 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
       setScale(clampedScale)
       setCurrentPage(clampedPage)
       setPageInput(String(clampedPage))
+      onCurrentPageChange?.(clampedPage)
       scrollToPageWithScale(clampedPage, clampedScale)
       return
     }
@@ -1320,8 +1339,9 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
     setScale(clampedFit)
     setCurrentPage(1)
     setPageInput('1')
+    onCurrentPageChange?.(1)
     scrollToPageWithScale(1, clampedFit)
-  }, [pdfDocument, pageCount, filePath, basePageHeight, basePageWidth, scrollToPageWithScale])
+  }, [pdfDocument, pageCount, filePath, basePageHeight, basePageWidth, scrollToPageWithScale, onCurrentPageChange])
 
   useEffect(() => {
     if (!pageCount || pageCount <= 0) return
@@ -1467,13 +1487,21 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
 
   const pageHeightForVirtual = Math.max(1, (basePageHeight ?? 800) * scale)
 
-  const goToPage = (page: number, estimatedPageHeight?: number) => {
+  const goToPage = useCallback((page: number, estimatedPageHeight?: number) => {
     if (!pageCount || pageCount <= 0) return
     const clamped = Math.min(Math.max(page, 1), pageCount)
     setCurrentPage(clamped)
     setPageInput(String(clamped))
+    onCurrentPageChange?.(clamped)
     viewportRef.current?.scrollToPage(clamped, estimatedPageHeight)
-  }
+  }, [pageCount, pageHeightForVirtual, onCurrentPageChange])
+
+  useEffect(() => {
+    if (!requestedOutlinePage) return
+    if (!pageCount || pageCount <= 0) return
+    goToPage(requestedOutlinePage, pageHeightForVirtual)
+    onRequestedOutlinePageHandled?.()
+  }, [requestedOutlinePage, pageCount, pageHeightForVirtual, goToPage, onRequestedOutlinePageHandled])
 
   const handlePrev = () => {
     goToPage(currentPage - 1, pageHeightForVirtual)
@@ -2347,7 +2375,32 @@ export function PdfViewer({ filePath, onRegisterSelectionGetter, onRegisterZoomA
   const handleViewportCurrentPageChange = useCallback((page: number) => {
     setCurrentPage(page)
     setPageInput(String(page))
-  }, [])
+    onCurrentPageChange?.(page)
+  }, [onCurrentPageChange])
+
+  useEffect(() => {
+    if (!pdfDocument) {
+      onOutlineLoadingChange?.(false)
+      onOutlineItemsChange?.([])
+      return
+    }
+
+    let cancelled = false
+    onOutlineLoadingChange?.(true)
+    onOutlineItemsChange?.([])
+
+    void (async () => {
+      const outline = await loadPdfOutline(pdfDocument)
+      if (cancelled) return
+      onOutlineItemsChange?.(outline)
+      onOutlineLoadingChange?.(false)
+    })()
+
+    return () => {
+      cancelled = true
+      onOutlineLoadingChange?.(false)
+    }
+  }, [pdfDocument, onOutlineItemsChange, onOutlineLoadingChange])
 
   const handleViewportSelectionChange = useCallback((selection: PdfSelectionDraft | null) => {
     if (inputDebugEnabled) {
