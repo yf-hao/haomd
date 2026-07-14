@@ -375,6 +375,10 @@ export const zhCNMessages: MessageDictionary = {
     noHeadingsHint: '添加 #、## 这样的 Markdown 标题后，就会在这里显示大纲。',
     expand: '展开',
     collapse: '折叠',
+    viewDepth: '显示层级',
+    allLevels: '全部展开',
+    showToLevel: '展开到 {level} 级',
+    depthLimited: '当前已限制到 {level} 级',
   },
   pdf: {
     title: 'PDF',

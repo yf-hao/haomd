@@ -376,6 +376,10 @@ export const enUSMessages: MessageDictionary = {
     noHeadingsHint: 'Add Markdown headings like #, ## to see the outline.',
     expand: 'Expand',
     collapse: 'Collapse',
+    viewDepth: 'View depth',
+    allLevels: 'Show all',
+    showToLevel: 'Show to level {level}',
+    depthLimited: 'Limited to level {level}',
   },
   pdf: {
     title: 'PDF',
