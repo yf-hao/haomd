@@ -2,6 +2,78 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.12.4] - 2026-07-14
+
+### 中文
+
+本次更新为 v0.12.4 补丁版本，主要修复启动时语言切换闪烁，并完善目录与 PDF 相关体验。
+
+#### 💡 主要更新
+*   **启动体验优化**：
+    *   修复应用启动时先显示英文、随后切换为中文的闪烁问题。
+    *   优化语言初始化流程，避免未完成加载时错误显示翻译文案。
+    *   调整首帧背景，减少 reload 时的黑屏闪动。
+*   **WYSIWYG 渲染与同步优化**：
+    *   改善所见即所得编辑模式的内容同步与渲染稳定性。
+    *   修正代码块与数学块相关的显示和同步细节，减少编辑态与预览态差异。
+*   **目录面板增强**：
+    *   目录面板支持根据当前上下文显示 Markdown、WYSIWYG 或 PDF 目录内容。
+    *   新增目录深度筛选下拉，方便按标题层级查看大纲。
+    *   PDF 视图现在会加载文档 outline，并支持通过目录项跳转到对应页面。
+    *   当 PDF 没有目录时，空状态会显示更明确的提示文案。
+*   **AI Chat 联动**：
+    *   在 PDF 相关上下文中，AI Chat 会使用当前 PDF 文件作为文档上下文，便于按当前文档发起问答。
+    *   同步整理了 AI Chat、文档与 PDF 之间的路径传递逻辑，减少上下文切换时的歧义。
+    *   优化了 AI Chat 输入法组合输入处理，提升中文输入场景的稳定性。
+*   **备份与还原**：
+    *   优化还原时的内容比较逻辑，减少误判和不必要的同步变化。
+    *   完善原生粘贴处理，提升在恢复与编辑场景中的兼容性。
+    *   增强 WebDAV 备份同步流程，修复大文件上传问题，并在还原后重置同步状态。
+*   **PDF 交互体验**：
+    *   修复文本层对齐与偏移问题，提升选区和阅读坐标的一致性。
+    *   改善原生选区几何保留与文本选择手势，减少 PDF 交互偏差。
+    *   增加翻译浮层与弹窗布局优化，提升 PDF 翻译阅读体验。
+*   **本地化增强**：
+    *   补充目录面板的中文文案显示。
+    *   完善 PDF 相关界面的本地化文案与展示逻辑。
+
+---
+
+### English
+
+Version v0.12.4 is a patch release that fixes startup language flicker and improves the outline and PDF experience.
+
+#### 💡 Key Updates
+*   **Startup Experience**:
+    *   Fixed the startup flicker where English text appeared briefly before switching to Chinese.
+    *   Refined language initialization so untranslated text is not shown before loading completes.
+    *   Adjusted the initial frame background to reduce black flashes during reload.
+*   **WYSIWYG Rendering and Sync**:
+    *   Improved content synchronization and rendering stability in WYSIWYG mode.
+    *   Refined code block and math block behavior to reduce differences between edit and preview states.
+*   **Outline and PDF Improvements**:
+    *   The outline panel now switches between Markdown, WYSIWYG, and PDF outline content based on the active context.
+    *   Added an outline depth dropdown for easier heading-level filtering in large documents.
+    *   PDF views now load document outlines and allow jumping to the matching page from an outline item.
+    *   Improved empty-state messaging when a PDF does not provide an outline.
+*   **AI Chat Integration**:
+    *   In PDF-related contexts, AI Chat now uses the current PDF file as the document context for more accurate document-centric questions.
+    *   Clarified the path-passing logic between AI Chat, documents, and PDFs to reduce ambiguity when switching contexts.
+    *   Improved IME composition handling in AI Chat input for more reliable Chinese text entry.
+*   **Backup and Restore**:
+    *   Refined restore comparison logic to reduce false positives and unnecessary sync changes.
+    *   Improved native paste handling for better compatibility during restore and editing flows.
+    *   Strengthened WebDAV backup sync, fixed large file uploads, and reset sync state after restore.
+*   **PDF Interaction Experience**:
+    *   Fixed text layer alignment and offset issues to improve selection and reading-coordinate consistency.
+    *   Improved native selection geometry preservation and text-selection gestures for more accurate PDF interaction.
+    *   Added translation overlay and improved translation popover layout for a better reading workflow.
+*   **Localization Improvements**:
+    *   Added Chinese text coverage for the outline panel.
+    *   Improved localized wording and display behavior for PDF-related views.
+
+---
+
 ## [v0.12.3] - 2026-07-04
 
 ### 中文
