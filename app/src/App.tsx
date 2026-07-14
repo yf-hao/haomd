@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit } from '@tauri-apps/api/event'
 import './App.css'
@@ -117,9 +117,10 @@ function App() {
   const [searchScope, setSearchScope] = useState<SearchScope | null>(null)
   const [themeSettings, setThemeSettings] = useState<ThemeSettings>(getDefaultThemeSettings())
   const [languageMode, setLanguageMode] = useState<LanguageMode>(getDefaultLanguageSetting())
-  const [systemResolvedLanguage, setSystemResolvedLanguage] = useState<ResolvedLanguage>(() => getSystemResolvedLanguage())
+  const [systemResolvedLanguage, setSystemResolvedLanguage] = useState<ResolvedLanguage | null>(null)
   const [uiTypography, setUiTypography] = useState<UiTypographySettings>(getDefaultUiTypographySettings())
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => getSystemPrefersDark())
+  const [isBootstrapReady, setBootstrapReady] = useState(false)
   const hasPreviewThemeOverrideRef = useRef(false)
   const hasPreviewLanguageOverrideRef = useRef(false)
   const hasPreviewTypographyOverrideRef = useRef(false)
@@ -208,31 +209,6 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!isTauriEnv()) {
-      setSystemResolvedLanguage(getSystemResolvedLanguage())
-      return
-    }
-
-    let cancelled = false
-
-    void invoke<string>('get_system_language')
-      .then((language) => {
-        if (!cancelled) {
-          setSystemResolvedLanguage(normalizeLanguageTag(language))
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setSystemResolvedLanguage(getSystemResolvedLanguage())
-        }
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  useEffect(() => {
     if (import.meta.env.DEV) {
       console.log('[Perf] App first render cost:', performance.now() - appStartTime, 'ms')
     }
@@ -242,10 +218,17 @@ function App() {
     let cancelled = false
 
     ;(async () => {
-      const [settings, language, typography] = await Promise.all([
+      const systemLanguagePromise = isTauriEnv()
+        ? invoke<string>('get_system_language')
+            .then((language) => normalizeLanguageTag(language))
+            .catch(() => getSystemResolvedLanguage())
+        : Promise.resolve(getSystemResolvedLanguage())
+
+      const [settings, language, typography, systemLanguage] = await Promise.all([
         loadThemePreference(),
         getLanguageSetting(),
         getUiTypographySettings(),
+        systemLanguagePromise,
       ])
       if (cancelled) return
       if (!hasPreviewThemeOverrideRef.current) {
@@ -257,6 +240,8 @@ function App() {
       if (!hasPreviewTypographyOverrideRef.current) {
         setUiTypography(typography)
       }
+      setSystemResolvedLanguage(systemLanguage)
+      setBootstrapReady(true)
     })()
 
     return () => {
@@ -277,15 +262,15 @@ function App() {
     [themeSettings.mode, systemPrefersDark],
   )
   const resolvedLanguage = useMemo(
-    () => resolveLanguageMode(languageMode, systemResolvedLanguage),
+    () => resolveLanguageMode(languageMode, systemResolvedLanguage ?? getSystemResolvedLanguage()),
     [languageMode, systemResolvedLanguage],
   )
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     applyResolvedTheme(activeTheme, resolvedThemeMode)
   }, [activeTheme, resolvedThemeMode])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     applyUiTypography(uiTypography)
   }, [uiTypography])
 
@@ -329,6 +314,7 @@ function App() {
       value={{
         languageMode,
         resolvedLanguage,
+        ready: isBootstrapReady,
       }}
     >
       <ThemeModeProvider

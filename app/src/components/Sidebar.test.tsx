@@ -20,7 +20,7 @@ vi.mock('./FileContextMenu', () => ({
 
 function renderWithI18n(node: ReactNode) {
     return render(
-        <I18nProvider value={{ languageMode: 'zh-CN', resolvedLanguage: 'zh-CN' }}>
+        <I18nProvider value={{ languageMode: 'zh-CN', resolvedLanguage: 'zh-CN', ready: true }}>
             <ThemeModeProvider
                 value={{
                     selectedMode: 'system',

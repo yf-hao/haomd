@@ -5,6 +5,7 @@ import type { LanguageMode, MessageParams, ResolvedLanguage } from './schema'
 export type I18nContextValue = {
   languageMode: LanguageMode
   resolvedLanguage: ResolvedLanguage
+  ready: boolean
   t: (key: string, params?: MessageParams) => string
 }
 
@@ -19,7 +20,7 @@ export function I18nProvider({
 }>) {
   const contextValue: I18nContextValue = {
     ...value,
-    t: (key, params) => translateMessage(value.resolvedLanguage, key, params),
+    t: (key, params) => (value.ready ? translateMessage(value.resolvedLanguage, key, params) : ''),
   }
 
   return <I18nContext.Provider value={contextValue}>{children}</I18nContext.Provider>

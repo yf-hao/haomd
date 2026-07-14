@@ -6,7 +6,7 @@ import { I18nProvider } from '../modules/i18n/I18nContext'
 
 function renderWithI18n(node: ReactNode) {
     return render(
-        <I18nProvider value={{ languageMode: 'zh-CN', resolvedLanguage: 'zh-CN' }}>
+        <I18nProvider value={{ languageMode: 'zh-CN', resolvedLanguage: 'zh-CN', ready: true }}>
             {node}
         </I18nProvider>,
     )

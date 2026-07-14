@@ -24,7 +24,7 @@ describe('SettingsDialog', () => {
 
     const onThemeSettingsChange = vi.fn()
     render(
-      <I18nProvider value={{ languageMode: 'en-US', resolvedLanguage: 'en-US' }}>
+      <I18nProvider value={{ languageMode: 'en-US', resolvedLanguage: 'en-US', ready: true }}>
         <SettingsDialog
           open
           onClose={() => {}}
