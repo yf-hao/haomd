@@ -4,6 +4,7 @@
  */
 import { memo, useEffect, useRef, useState } from 'react'
 import { useNodeViewContext } from '@prosemirror-adapter/react'
+import { useInViewport } from '../hooks/useInViewport'
 
 let katexInstance: typeof import('katex').default | null = null
 let katexLoadPromise: Promise<void> | null = null
@@ -28,9 +29,11 @@ export const MathBlockView = memo(function MathBlockView() {
   const [editing, setEditing] = useState(false)
   const contentDivRef = useRef<HTMLDivElement>(null)
   const renderTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const { ref: viewportRef, isVisible } = useInViewport('250px')
   const tex = node.textContent || ''
 
   useEffect(() => {
+    if (!isVisible) return
     if (!tex) {
       setHtml('')
       setError(null)
@@ -68,7 +71,7 @@ export const MathBlockView = memo(function MathBlockView() {
     return () => {
       if (renderTimer.current) clearTimeout(renderTimer.current)
     }
-  }, [tex])
+  }, [isVisible, tex])
 
   // Toggle editing on double-click
   const handleDoubleClick = () => setEditing(true)
@@ -78,6 +81,7 @@ export const MathBlockView = memo(function MathBlockView() {
     // Show raw LaTeX source (editable ProseMirror content)
     return (
       <div
+        ref={viewportRef}
         className={`wysiwyg-math-block editing ${selected ? 'selected' : ''}`}
         onBlur={handleBlur}
       >
@@ -91,11 +95,14 @@ export const MathBlockView = memo(function MathBlockView() {
   // Show rendered KaTeX
   return (
     <div
+      ref={viewportRef}
       className={`wysiwyg-math-block ${selected ? 'selected' : ''}`}
       onDoubleClick={handleDoubleClick}
       contentEditable={false}
     >
-      {error ? (
+      {!isVisible ? (
+        <div className="wysiwyg-diagram-loading">公式加载中…</div>
+      ) : error ? (
         <div className="wysiwyg-math-error">{error}</div>
       ) : (
         <div

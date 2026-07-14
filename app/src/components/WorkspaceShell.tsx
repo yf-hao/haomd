@@ -337,6 +337,7 @@ export function WorkspaceShell({
     return (localStorage.getItem(STORAGE_EDIT_MODE) as EditMode) || 'source'
   })
   const editModeRef = useRef<EditMode>(editMode)
+  const editorMarkdownRef = useRef(markdownRef.current)
   useEffect(() => {
     editModeRef.current = editMode
     if (typeof localStorage !== 'undefined') {
@@ -347,7 +348,7 @@ export function WorkspaceShell({
   const setEditModeWithFlush = useCallback((next: EditMode) => {
     if (editMode === 'source' && next === 'wysiwyg') {
       // Save original markdown and reset dirty flag when entering WYSIWYG
-      wysiwygEntryMarkdownRef.current = markdownRef.current
+      wysiwygEntryMarkdownRef.current = editorMarkdownRef.current
       wysiwygIsDirtyRef.current = false
     }
     if (editMode === 'wysiwyg' && next === 'source') {
@@ -511,10 +512,6 @@ export function WorkspaceShell({
   const activeIdRef = useRef<string | null>(null)
   useEffect(() => {
     activeIdRef.current = activeId
-    // Reset WYSIWYG dirty tracking when the active tab changes —
-    // each tab starts fresh with the source it was loaded from.
-    wysiwygEntryMarkdownRef.current = markdownRef.current
-    wysiwygIsDirtyRef.current = false
   }, [activeId])
 
   const getActiveTextColorDocKey = useCallback(() => activeIdRef.current ?? null, [])
@@ -757,6 +754,8 @@ export function WorkspaceShell({
     // 只有在切换标签页，或者外部强制更新了标签内容（且与当前编辑器不一致）时，才同步回编辑器
     // 这样避免了「输入 -> 更新 tabs -> tabs 触发 effect -> effect 用旧 tab.content 回滚输入」的循环
     if (isTabSwitch || tab.content !== markdownRef.current) {
+      markdownRef.current = tab.content
+      editorMarkdownRef.current = tab.content
       setEditorMarkdown(tab.content)
       setMarkdown(tab.content)
       if (isTabSwitch && isPreviewVisible) {
@@ -916,18 +915,20 @@ export function WorkspaceShell({
     const shouldSyncEditor = options?.syncEditor ?? true
     const syncContent = (next: string) => {
       setMarkdown(next)
+      editorMarkdownRef.current = next
       updateActiveContent(next, { markDirty: shouldMarkDirty })
     }
 
     const patchedDoc = applyChunkEdit(val)
-    if (patchedDoc !== null) {
-      if (patchedDoc === markdownRef.current) {
-        return
-      }
-      markdownRef.current = patchedDoc
-      if (shouldSyncEditor) {
-        setEditorMarkdown(patchedDoc)
-      }
+      if (patchedDoc !== null) {
+        if (patchedDoc === markdownRef.current) {
+          return
+        }
+        markdownRef.current = patchedDoc
+        if (shouldSyncEditor) {
+          editorMarkdownRef.current = patchedDoc
+          setEditorMarkdown(patchedDoc)
+        }
       if (options?.immediate) {
         syncContent(patchedDoc)
       } else {
@@ -943,6 +944,7 @@ export function WorkspaceShell({
     }
     markdownRef.current = val
     if (shouldSyncEditor) {
+      editorMarkdownRef.current = val
       setEditorMarkdown(val)
     }
     if (options?.immediate) {
@@ -1017,8 +1019,8 @@ export function WorkspaceShell({
 
   const wysiwygMarkdown = useMemo(() => {
     if (isPdfActive || editMode !== 'wysiwyg') return ''
-    return activeTab?.content ?? markdown
-  }, [editMode, isPdfActive, activeTab?.content, markdown])
+    return editorMarkdown
+  }, [editMode, isPdfActive, editorMarkdown])
 
   const wysiwygDocument = useMemo(() => {
     if (editMode !== 'wysiwyg') {
@@ -1866,6 +1868,8 @@ export function WorkspaceShell({
   }, [markdown, isPdfActive, onDocumentStatsChange])
 
   const applyOpenedContent = useCallback((content: string) => {
+    markdownRef.current = content
+    editorMarkdownRef.current = content
     setEditorMarkdown(content)
     setMarkdown(content)
     if (isPreviewVisible) {

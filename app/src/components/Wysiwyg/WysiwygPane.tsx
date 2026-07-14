@@ -446,6 +446,8 @@ function WysiwygEditor({
   const idleCallbackRef = useRef<IdleHandle | null>(null)
   const delayedSyncTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null)
   const outlineEmitFrameRef = useRef<number | null>(null)
+  const initialCacheBuildIdleRef = useRef<IdleHandle | null>(null)
+  const initialOutlineEmitIdleRef = useRef<IdleHandle | null>(null)
 
   // Block-level incremental serialization cache
   const blockCacheRef = useRef(new BlockCacheManager())
@@ -511,6 +513,34 @@ function WysiwygEditor({
       outlineEmitFrameRef.current = null
       emitOutlineItems()
     })
+  }, [emitOutlineItems])
+
+  const scheduleInitialCacheBuild = useCallback(() => {
+    if (initialCacheBuildIdleRef.current !== null) {
+      cancelIdleWork(initialCacheBuildIdleRef.current)
+      initialCacheBuildIdleRef.current = null
+    }
+    initialCacheBuildIdleRef.current = requestIdleWork(() => {
+      initialCacheBuildIdleRef.current = null
+      const editor = editorRef.current
+      if (!editor) return
+      editor.action((ctx) => {
+        const view = ctx.get(editorViewCtx)
+        const ser = ctx.get(serializerCtx)
+        blockCacheRef.current.buildFull(view.state.doc, ser)
+      })
+    }, 250)
+  }, [])
+
+  const scheduleInitialOutlineEmit = useCallback(() => {
+    if (initialOutlineEmitIdleRef.current !== null) {
+      cancelIdleWork(initialOutlineEmitIdleRef.current)
+      initialOutlineEmitIdleRef.current = null
+    }
+    initialOutlineEmitIdleRef.current = requestIdleWork(() => {
+      initialOutlineEmitIdleRef.current = null
+      emitOutlineItems()
+    }, 250)
   }, [emitOutlineItems])
 
   const getEffectiveTextColorTarget = useCallback((from: number, to: number): TextColorTarget | null => {
@@ -814,14 +844,9 @@ function WysiwygEditor({
     editorRef.current?.destroy()
     editorRef.current = editor
 
-    // Initialize block cache from the initial document
-    editor.action((ctx) => {
-      const view = ctx.get(editorViewCtx)
-      const ser = ctx.get(serializerCtx)
-      blockCacheRef.current.buildFull(view.state.doc, ser)
-    })
-    emitOutlineItems()
-  }, [scheduleDelayedSync, serializeAndPush, incrementalSerializeAndPush])
+    scheduleInitialCacheBuild()
+    scheduleInitialOutlineEmit()
+  }, [scheduleDelayedSync, scheduleInitialCacheBuild, scheduleInitialOutlineEmit, serializeAndPush, incrementalSerializeAndPush])
 
   useEffect(() => {
     onFlushReadyRef.current?.(flushPending)
@@ -1033,6 +1058,14 @@ function WysiwygEditor({
       if (outlineEmitFrameRef.current !== null) {
         cancelAnimationFrame(outlineEmitFrameRef.current)
         outlineEmitFrameRef.current = null
+      }
+      if (initialCacheBuildIdleRef.current !== null) {
+        cancelIdleWork(initialCacheBuildIdleRef.current)
+        initialCacheBuildIdleRef.current = null
+      }
+      if (initialOutlineEmitIdleRef.current !== null) {
+        cancelIdleWork(initialOutlineEmitIdleRef.current)
+        initialOutlineEmitIdleRef.current = null
       }
       lastOutlineItemsRef.current = []
       onOutlineItemsChangeRef.current?.([])

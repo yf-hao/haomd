@@ -346,6 +346,7 @@ export const CodeBlockView = memo(function CodeBlockView() {
   if (!isSpecial && !showSource) {
     return (
       <div
+        ref={viewportRef}
         className={`wysiwyg-codeblock ${selected ? 'selected' : ''}`}
         contentEditable={false}
       >
@@ -380,13 +381,19 @@ export const CodeBlockView = memo(function CodeBlockView() {
             </button>
           </div>
         </div>
-        <div
-          className="wysiwyg-codeblock-preview"
-          onClick={() => setShowSource(true)}
-          title="点击编辑源码"
-        >
-          <CodeBlockHighlighted lang={selectedLanguage || undefined} content={code} showCopyButton={false} />
-        </div>
+        {!isVisible ? (
+          <pre className="wysiwyg-codeblock-preview" title="点击编辑源码">
+            <code>{code}</code>
+          </pre>
+        ) : (
+          <div
+            className="wysiwyg-codeblock-preview"
+            onClick={() => setShowSource(true)}
+            title="点击编辑源码"
+          >
+            <CodeBlockHighlighted lang={selectedLanguage || undefined} content={code} showCopyButton={false} />
+          </div>
+        )}
       </div>
     )
   }
