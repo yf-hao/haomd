@@ -89,7 +89,13 @@ function formatWebDavImportProgress(payload: WebDavImportProgressPayload): strin
     }
     return 'WebDAV 恢复扫描中'
   }
-  return `WebDAV 恢复中 ${payload.current}/${payload.total} · ${getDisplayFileName(payload.path)} · ${formatBytes(payload.size)}`
+  if (payload.phase === 'comparing') {
+    if (payload.total > 0) {
+      return `WebDAV 恢复比对中 ${payload.current}/${payload.total} · 已跳过 ${payload.skippedCount} · ${getDisplayFileName(payload.path)} · ${formatBytes(payload.size)}`
+    }
+    return `WebDAV 恢复比对中 · 已跳过 ${payload.skippedCount} · ${getDisplayFileName(payload.path)} · ${formatBytes(payload.size)}`
+  }
+  return `WebDAV 恢复中 ${payload.current}/${payload.total} · 已跳过 ${payload.skippedCount} · ${getDisplayFileName(payload.path)} · ${formatBytes(payload.size)}`
 }
 
 function App() {
@@ -447,7 +453,7 @@ function AppShellContent({
   const { t, resolvedLanguage } = useI18n()
   const [toastMessage, setToastMessage] = useState('')
   const [backgroundStatusMessage, setBackgroundStatusMessage] = useState('')
-  const [backgroundStatusPhase, setBackgroundStatusPhase] = useState<'idle' | 'scanning' | 'uploading' | 'downloading'>('idle')
+  const [backgroundStatusPhase, setBackgroundStatusPhase] = useState<'idle' | 'scanning' | 'comparing' | 'uploading' | 'downloading'>('idle')
   const [musicTrackName, setMusicTrackName] = useState<string | null>(null)
 
   useEffect(() => {

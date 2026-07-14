@@ -8,11 +8,12 @@ export type WebDavImportFinishedPayload = {
 }
 
 export type WebDavImportProgressPayload = {
-  phase: 'scanning' | 'downloading'
+  phase: 'scanning' | 'comparing' | 'downloading'
   current: number
   total: number
   path: string
   size: number
+  skippedCount: number
 }
 
 export type WebDavExportFinishedPayload = {

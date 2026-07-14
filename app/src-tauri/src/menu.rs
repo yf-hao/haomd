@@ -608,12 +608,8 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         .separator()
         .item(&PredefinedMenuItem::cut(app, None)?)
         .item(&PredefinedMenuItem::copy(app, None)?)
-        .item(
-            &MenuItemBuilder::new(texts.paste)
-                .id("paste")
-                .accelerator("CmdOrCtrl+v")
-                .build(app)?,
-        )
+        // Use the platform predefined Paste item so native dialogs keep Cmd/Ctrl+V.
+        .item(&PredefinedMenuItem::paste(app, Some(texts.paste))?)
         .separator()
         .item(
             &MenuItemBuilder::new(texts.find)

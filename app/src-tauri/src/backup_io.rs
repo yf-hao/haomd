@@ -18,6 +18,7 @@ use std::hash::{Hash, Hasher};
 use std::io::{Cursor, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -70,12 +71,14 @@ pub struct WebDavImportProgressEvent {
     pub total: usize,
     pub path: String,
     pub size: u64,
+    pub skipped_count: usize,
 }
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub enum WebDavImportProgressPhase {
     Scanning,
+    Comparing,
     Downloading,
 }
 
@@ -276,6 +279,7 @@ fn emit_webdav_import_progress(
     total: usize,
     path: String,
     size: u64,
+    skipped_count: usize,
 ) {
     let _ = app.emit(
         BACKUP_WEBDAV_IMPORT_PROGRESS_EVENT,
@@ -285,6 +289,7 @@ fn emit_webdav_import_progress(
             total,
             path,
             size,
+            skipped_count,
         },
     );
 }
@@ -512,6 +517,24 @@ where
         result?;
     }
     Ok(())
+}
+
+async fn run_bounded_webdav_tasks_collect<T, F, Fut>(
+    tasks: Vec<F>,
+    limit: usize,
+) -> Result<Vec<T>, String>
+where
+    F: FnOnce() -> Fut,
+    Fut: future::Future<Output = Result<Option<T>, String>>,
+{
+    let mut stream = stream::iter(tasks.into_iter().map(|task| task())).buffer_unordered(limit);
+    let mut collected = Vec::new();
+    while let Some(result) = stream.next().await {
+        if let Some(item) = result? {
+            collected.push(item);
+        }
+    }
+    Ok(collected)
 }
 
 fn backup_temp_dir(prefix: &str) -> std::io::Result<PathBuf> {
@@ -1564,6 +1587,31 @@ fn sha256_hex(bytes: &[u8]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+fn sha256_file_blocking(path: &Path) -> Result<String, String> {
+    let mut file = File::open(path)
+        .map_err(|err| format!("打开本地文件失败 {}: {err}", path.display()))?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 64 * 1024];
+
+    loop {
+        let read = file
+            .read(&mut buffer)
+            .map_err(|err| format!("读取本地文件失败 {}: {err}", path.display()))?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+async fn sha256_file(path: PathBuf) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || sha256_file_blocking(&path))
+        .await
+        .map_err(|err| format!("计算本地文件哈希任务失败: {err}"))?
+}
+
 fn metadata_modified_secs(metadata: &std::fs::Metadata) -> Result<u64, String> {
     let modified = metadata
         .modified()
@@ -1672,32 +1720,6 @@ async fn fetch_remote_sync_index(
         Err(err) => return Err(format!("解析同步索引失败: {err}")),
     };
     Ok(Some(normalize_remote_sync_index(index)))
-}
-
-async fn load_local_sync_index(root: &Path) -> Result<Option<WebDavSyncIndex>, String> {
-    if !local_sync_index_exists(root).await? {
-        return Ok(None);
-    }
-    let path = root.join(WEBDAV_SYNC_INDEX_FILE);
-    let bytes = match tokio::fs::read(&path).await {
-        Ok(bytes) => bytes,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(err) => return Err(format!("读取本地同步索引失败: {err}")),
-    };
-    let index: WebDavSyncIndexCompat = match serde_json::from_slice(&bytes) {
-        Ok(index) => index,
-        Err(err) => return Err(format!("解析本地同步索引失败: {err}")),
-    };
-    Ok(Some(normalize_remote_sync_index(index)))
-}
-
-async fn local_sync_index_exists(root: &Path) -> Result<bool, String> {
-    let path = root.join(WEBDAV_SYNC_INDEX_FILE);
-    match tokio::fs::metadata(&path).await {
-        Ok(metadata) => Ok(metadata.is_file()),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(false),
-        Err(err) => Err(format!("检查本地同步索引是否存在失败: {err}")),
-    }
 }
 
 async fn remote_scope_sync_index_exists(
@@ -2220,21 +2242,13 @@ async fn download_directory_from_webdav(
     remote_root: &str,
     skip_relative: Option<fn(&Path) -> bool>,
     document_restore_root: Option<&Path>,
-    local_sync_index: Option<&WebDavSyncIndex>,
 ) -> Result<(), String> {
     let index = fetch_remote_sync_index(&client, base_url, username, password, remote_root)
         .await?
         .ok_or_else(|| "读取同步索引失败: 远端未找到索引文件".to_string())?;
     let manifest =
         fetch_remote_manifest(&client, base_url, username, password, remote_root).await?;
-    let local_files = local_sync_index.map(|index| {
-        index
-            .files
-            .iter()
-            .map(|entry| (entry.path.as_str(), entry))
-            .collect::<HashMap<_, _>>()
-    });
-    let download_entries = index
+    let download_candidates = index
         .files
         .into_iter()
         .filter_map(|entry| {
@@ -2248,25 +2262,75 @@ async fn download_directory_from_webdav(
             {
                 return None;
             }
-            if let Some(local_files) = local_files.as_ref() {
-                if let Some(local_entry) = local_files.get(relative.as_str()) {
-                    if local_entry.size == entry.size
-                        && local_entry.modified == entry.modified
-                        && local_entry.sha256 == entry.sha256
-                    {
-                        return None;
-                    }
-                }
-            }
             let local_path = restore_target_for_relative(
                 relative_path,
                 root,
                 manifest.as_ref(),
                 document_restore_root,
             );
-            Some((relative, local_path, entry.size))
+            Some((relative, local_path, entry.size, entry.sha256))
         })
         .collect::<Vec<_>>();
+
+    let compare_total = download_candidates.len();
+    let compare_skipped = Arc::new(AtomicUsize::new(0));
+    let download_entries = run_bounded_webdav_tasks_collect(
+        download_candidates
+            .into_iter()
+            .enumerate()
+            .map(|(index, (relative, local_path, size, remote_sha256))| {
+                let app = app.clone();
+                let compare_skipped = Arc::clone(&compare_skipped);
+                move || async move {
+                    let local_hash_matches = match tokio::fs::metadata(&local_path).await {
+                        Ok(metadata) if metadata.is_file() && metadata.len() == size => {
+                            match sha256_file(local_path.clone()).await {
+                                Ok(local_sha256) => local_sha256 == remote_sha256,
+                                Err(err) => {
+                                    eprintln!(
+                                        "[backup] ignore local hash check failure for {relative}: {err}"
+                                    );
+                                    false
+                                }
+                            }
+                        }
+                        Ok(_) => false,
+                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => false,
+                        Err(err) => {
+                            eprintln!(
+                                "[backup] ignore local metadata check failure for {relative}: {err}"
+                            );
+                            false
+                        }
+                    };
+
+                    let skipped_count = if local_hash_matches {
+                        compare_skipped.fetch_add(1, Ordering::Relaxed) + 1
+                    } else {
+                        compare_skipped.load(Ordering::Relaxed)
+                    };
+                    emit_webdav_import_progress(
+                        &app,
+                        WebDavImportProgressPhase::Comparing,
+                        index + 1,
+                        compare_total,
+                        relative.clone(),
+                        size,
+                        skipped_count,
+                    );
+                    if local_hash_matches {
+                        return Ok(None);
+                    }
+                    Ok(Some((index, relative, local_path, size)))
+                }
+            })
+            .collect(),
+        WEBDAV_PARALLEL_DOWNLOAD_LIMIT,
+    )
+    .await?;
+
+    let mut download_entries = download_entries;
+    download_entries.sort_by_key(|(index, _, _, _)| *index);
 
     let total = download_entries.len();
     if total == 0 {
@@ -2283,14 +2347,14 @@ async fn download_directory_from_webdav(
     run_bounded_webdav_tasks(
         download_entries
             .into_iter()
-            .enumerate()
-            .map(|(index, (relative, local_path, size))| {
+            .map(|(index, relative, local_path, size)| {
                 let app = app.clone();
                 let client = client.clone();
                 let base_url = base_url.clone();
                 let username = username.clone();
                 let password = password.clone();
                 let remote_root = remote_root.clone();
+                let compare_skipped = Arc::clone(&compare_skipped);
                 move || async move {
                     emit_webdav_import_progress(
                         &app,
@@ -2299,6 +2363,7 @@ async fn download_directory_from_webdav(
                         total,
                         relative.clone(),
                         size,
+                        compare_skipped.load(Ordering::Relaxed),
                     );
 
                     let local_path = if let Some(parent) = local_path.parent() {
@@ -2318,7 +2383,7 @@ async fn download_directory_from_webdav(
                         webdav_request(&client, Method::GET, &file_url, &username, &password)
                             .send()
                             .await
-                            .map_err(|err| format!("下载文件失败 {relative}: {err}"))?;
+                        .map_err(|err| format!("下载文件失败 {relative}: {err}"))?;
 
                     if !resp.status().is_success() {
                         return Err(format!("下载文件失败 {relative}: HTTP {}", resp.status()));
@@ -3053,6 +3118,7 @@ pub async fn import_settings_backup_from_webdav(
         1,
         remote_root.clone(),
         0,
+        0,
     );
     let tracker = app
         .try_state::<WebDavChangeTracker>()
@@ -3062,7 +3128,6 @@ pub async fn import_settings_backup_from_webdav(
     }
 
     let config_task = async move {
-        let local_sync_index = load_local_sync_index(&root_for_config).await?;
         download_directory_from_webdav(
             &app_for_config,
             &client_for_config,
@@ -3073,7 +3138,6 @@ pub async fn import_settings_backup_from_webdav(
             &remote_root_for_config,
             Some(should_skip_config_backup_relative),
             None,
-            local_sync_index.as_ref(),
         )
         .await?;
         Ok::<Vec<WebDavChangeScope>, String>(vec![WebDavChangeScope::Config])
@@ -3093,7 +3157,6 @@ pub async fn import_settings_backup_from_webdav(
                 let music_root = crate::music_paths::ensure_music_root_dir(&app_for_music)
                     .await
                     .map_err(|err| format!("获取 music 目录失败: {err}"))?;
-                let local_sync_index = load_local_sync_index(&music_root).await?;
                 download_directory_from_webdav(
                     &app_for_music,
                     &client_for_music,
@@ -3104,7 +3167,6 @@ pub async fn import_settings_backup_from_webdav(
                     &music_remote_root,
                     None,
                     None,
-                    local_sync_index.as_ref(),
                 )
                 .await?;
                 Ok(vec![WebDavChangeScope::Music])
@@ -3132,7 +3194,6 @@ pub async fn import_settings_backup_from_webdav(
                     .await
                     .map_err(|err| format!("获取闹钟音频目录失败: {err}"))?
                     .join("sounds");
-                let local_sync_index = load_local_sync_index(&alarm_root).await?;
                 download_directory_from_webdav(
                     &app_for_alarm,
                     &client_for_alarm,
@@ -3143,7 +3204,6 @@ pub async fn import_settings_backup_from_webdav(
                     &alarm_remote_root,
                     None,
                     None,
-                    local_sync_index.as_ref(),
                 )
                 .await?;
                 Ok(vec![WebDavChangeScope::Alarm])
@@ -3167,7 +3227,6 @@ pub async fn import_settings_backup_from_webdav(
         .await
         {
             Ok(true) => {
-                let local_sync_index = load_local_sync_index(&notes_root).await?;
                 download_directory_from_webdav(
                     &app_for_notes,
                     &client_for_notes,
@@ -3178,7 +3237,6 @@ pub async fn import_settings_backup_from_webdav(
                     &notes_remote_root,
                     None,
                     None,
-                    local_sync_index.as_ref(),
                 )
                 .await?;
                 Ok(vec![WebDavChangeScope::Notes])
@@ -3228,7 +3286,6 @@ pub async fn import_settings_backup_from_webdav(
                     let docs_remote_root = docs_remote_root.clone();
                     move || async move {
                         let scope_remote_root = build_remote_prefix(&docs_remote_root, &entry_id);
-                        let local_sync_index = load_local_sync_index(&target_root).await?;
                         download_directory_from_webdav(
                             &app,
                             &client,
@@ -3239,7 +3296,6 @@ pub async fn import_settings_backup_from_webdav(
                             &scope_remote_root,
                             None,
                             None,
-                            local_sync_index.as_ref(),
                         )
                         .await
                     }
@@ -3423,6 +3479,24 @@ mod tests {
         assert_eq!(normalized.files[0].size, 0);
         assert_eq!(normalized.files[0].modified, 0);
         assert!(normalized.files[0].sha256.is_empty());
+    }
+
+    #[test]
+    fn should_compute_sha256_for_file_contents() {
+        let path = backup_temp_dir("haomd-webdav-sha256-test")
+            .unwrap()
+            .join("hello.txt");
+        std::fs::write(&path, b"hello").unwrap();
+
+        let hash = sha256_file_blocking(&path).unwrap();
+
+        assert_eq!(
+            hash,
+            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        );
+
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
     #[test]
