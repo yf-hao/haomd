@@ -1,3 +1,10 @@
+#![allow(
+    clippy::derivable_impls,
+    clippy::double_ended_iterator_last,
+    clippy::wildcard_in_or_patterns,
+    clippy::if_same_then_else
+)]
+
 use crate::alarm_paths::alarm_root_dir;
 use crate::backup_scope::load_backup_scope_settings_cfg;
 use crate::backup_settings::load_backup_settings_data;

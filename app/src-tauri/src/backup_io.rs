@@ -1,3 +1,9 @@
+#![allow(
+    clippy::too_many_arguments,
+    clippy::needless_borrow,
+    clippy::incompatible_msrv
+)]
+
 use crate::alarm_paths::alarm_root_dir;
 use crate::backup_scope::BackupScopeSettingsCfg;
 use crate::haomd_paths::{haomd_config_root_dir, haomd_data_root_dir};
