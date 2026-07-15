@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { selectionRectsToAnnotationRects } from '../annotationUtils'
 import { areSelectionBlocksEqual, buildSelectionBlocks } from './pdfSelectionOverlay'
+import { shouldIgnoreSelectionChangeFromEditableOutsideRoot } from './pdfSelectionGuards'
 
 function createRect(left: number, top: number, width: number, height: number) {
   return {
@@ -91,5 +92,13 @@ describe('PdfOfficialPageView selection overlay', () => {
       { x1: 40 / 600, y1: 60 / 800, x2: 130 / 600, y2: 84 / 800 },
       { x1: 138 / 600, y1: 60 / 800, x2: 218 / 600, y2: 84 / 800 },
     ])
+  })
+
+  it('ignores selection updates when focus is in an editable element outside the pdf root', () => {
+    const root = document.createElement('div')
+    const textarea = document.createElement('textarea')
+
+    expect(shouldIgnoreSelectionChangeFromEditableOutsideRoot(root, textarea)).toBe(true)
+    expect(shouldIgnoreSelectionChangeFromEditableOutsideRoot(root, root)).toBe(false)
   })
 })

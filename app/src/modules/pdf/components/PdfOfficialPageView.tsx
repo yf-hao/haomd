@@ -15,6 +15,9 @@ import {
 } from '../annotationUtils'
 import type { Annotation, Rect, StampKind } from '../types/annotation'
 import type { AnnotationType } from '../types/annotation'
+import { isInputDebugEnabled, logInputDebug } from '../../debug/inputDebug'
+import { shouldIgnoreSelectionChangeFromEditableOutsideRoot } from './pdfSelectionGuards'
+import { registerPdfSelectionChangeHandler } from './pdfSelectionChangeDispatcher'
 
 const MIN_STAMP_SIZE = 0.045 / 3
 const LINE_RECT_PADDING = 0.006
@@ -1184,11 +1187,33 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     }
 
     const processSelectionChange = () => {
+      const startedAt = window.performance.now()
       selectionChangeFrame = 0
       if (isPointerSelectionActiveRef.current) {
+        if (isInputDebugEnabled()) {
+          logInputDebug('pdf-selection', 'process-skip-pointer-selection', {
+            durationMs: Number((window.performance.now() - startedAt).toFixed(2)),
+          })
+        }
         return
       }
       if (activeShapeTool || activeStampLabel || activeFreeTextTool || activeNoteTool) {
+        if (isInputDebugEnabled()) {
+          logInputDebug('pdf-selection', 'process-skip-tool-active', {
+            durationMs: Number((window.performance.now() - startedAt).toFixed(2)),
+          })
+        }
+        return
+      }
+
+      const activeElement = typeof document !== 'undefined' ? document.activeElement : null
+      if (shouldIgnoreSelectionChangeFromEditableOutsideRoot(root, activeElement)) {
+        if (isInputDebugEnabled()) {
+          logInputDebug('pdf-selection', 'process-skip-editable-outside-root', {
+            durationMs: Number((window.performance.now() - startedAt).toFixed(2)),
+            activeTag: activeElement?.tagName ?? null,
+          })
+        }
         return
       }
 
@@ -1213,14 +1238,29 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         lastNativeSelectionSnapshot.text === nextNativeSelectionSnapshot.text &&
         lastNativeSelectionSnapshot.collapsed === nextNativeSelectionSnapshot.collapsed
       ) {
+        if (isInputDebugEnabled()) {
+          logInputDebug('pdf-selection', 'process-skip-duplicate', {
+            durationMs: Number((window.performance.now() - startedAt).toFixed(2)),
+          })
+        }
         return
       }
       lastNativeSelectionSnapshot = nextNativeSelectionSnapshot
       pendingSelectionPreview = readSelectionPreview()
       if (!pendingSelectionPreview) {
+        if (isInputDebugEnabled()) {
+          logInputDebug('pdf-selection', 'process-skip-no-preview', {
+            durationMs: Number((window.performance.now() - startedAt).toFixed(2)),
+          })
+        }
         return
       }
       scheduleUpdate()
+      if (isInputDebugEnabled()) {
+        logInputDebug('pdf-selection', 'process-scheduled', {
+          durationMs: Number((window.performance.now() - startedAt).toFixed(2)),
+        })
+      }
     }
 
     const flushSelectionPointerMove = () => {
@@ -1913,6 +1953,10 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     }
 
     const handleSelectionChange = () => {
+      const activeElement = typeof document !== 'undefined' ? document.activeElement : null
+      if (shouldIgnoreSelectionChangeFromEditableOutsideRoot(root, activeElement)) {
+        return
+      }
       if (selectionChangeFrame) return
       selectionChangeFrame = window.requestAnimationFrame(processSelectionChange)
     }
@@ -1922,7 +1966,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     document.addEventListener('pointermove', handlePointerMove)
     document.addEventListener('pointerup', handlePointerFinish)
     document.addEventListener('pointercancel', handlePointerFinish)
-    document.addEventListener('selectionchange', handleSelectionChange)
+    const unregisterSelectionChange = registerPdfSelectionChangeHandler(root, handleSelectionChange)
     const selection = window.getSelection()
     if (selectionBelongsToCurrentPage(selection)) {
       scheduleUpdate()
@@ -1938,7 +1982,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       document.removeEventListener('pointermove', handlePointerMove)
       document.removeEventListener('pointerup', handlePointerFinish)
       document.removeEventListener('pointercancel', handlePointerFinish)
-      document.removeEventListener('selectionchange', handleSelectionChange)
+      unregisterSelectionChange()
       if (selectionChangeFrame) {
         window.cancelAnimationFrame(selectionChangeFrame)
       }

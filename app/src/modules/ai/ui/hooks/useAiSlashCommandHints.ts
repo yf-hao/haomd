@@ -52,6 +52,8 @@ export function useAiSlashCommandHints(options: UseAiSlashCommandHintsOptions): 
     const lineStart = lastNewline === -1 ? 0 : lastNewline + 1
     const prefix = input.slice(lineStart, safeCursor)
 
+    if (!prefix.startsWith('/')) return null
+
     // 只识别形如 "/" 或 "/cmd" 的行首命令片段
     const match = /^\/(\S*)$/.exec(prefix)
     if (!match) return null
