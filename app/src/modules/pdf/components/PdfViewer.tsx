@@ -23,6 +23,7 @@ import { loadPdfOutline } from '../pdfOutline'
 import { useI18n } from '../../i18n/I18nContext'
 import { isTauriEnv } from '../../platform/runtime'
 import { useResolvedThemeMode } from '../../theme/ThemeContext'
+import { loadPdfAnnotationPanelOpen, savePdfAnnotationPanelOpen } from './pdfAnnotationPanelState'
 import {
   appendAnnotation,
   createFreeTextAnnotation,
@@ -976,7 +977,7 @@ function PdfViewerInner({
   const [stampSize, setStampSize] = useState(DEFAULT_STAMP_SIZE)
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null)
   const [pulsingAnnotationId, setPulsingAnnotationId] = useState<string | null>(null)
-  const [annotationPanelOpen, setAnnotationPanelOpen] = useState(true)
+  const [annotationPanelOpen, setAnnotationPanelOpen] = useState(() => loadPdfAnnotationPanelOpen(filePath))
   const [activeSidePanel, setActiveSidePanel] = useState<'annotations' | 'notes'>('annotations')
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false)
   const [shortcutHelpPosition, setShortcutHelpPosition] = useState<NoteEditorPosition | null>(null)
@@ -1341,6 +1342,14 @@ function PdfViewerInner({
       }
     }
   }, [])
+
+  useEffect(() => {
+    setAnnotationPanelOpen(loadPdfAnnotationPanelOpen(filePath))
+  }, [filePath])
+
+  useEffect(() => {
+    savePdfAnnotationPanelOpen(filePath, annotationPanelOpen)
+  }, [filePath, annotationPanelOpen])
 
   useEffect(() => {
     if (!pdfDocument || pageCount <= 0) {
