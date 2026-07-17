@@ -52,7 +52,6 @@ const EMPTY_MESSAGES = [] as const
 const AI_CHAT_AGENT_STORAGE_KEY = 'haomd_ai_chat_selected_agent_id'
 const EMPTY_AGENT_OPTION = { id: '', name: 'Agent' }
 const DOC_PATH_SWITCH_DELAY_MS = 800
-const AI_INPUT_DEBUG_FLAG = 'haomd-debug-ai-input'
 const DELETE_CONFIRM_TOKENS = new Set(['确认', '确认删除', '是', '确定', 'ok', 'okay', 'yes', 'y', 'confirm'])
 const DELETE_CANCEL_TOKENS = new Set(['取消', '算了', '否', '不用了', 'cancel', 'no', 'n'])
 
@@ -141,25 +140,6 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
   fullPage = false,
 }) => {
   const { themeSettings } = useThemeContext()
-  const inputDebugEnabled = typeof window !== 'undefined'
-    && window.localStorage.getItem(AI_INPUT_DEBUG_FLAG) === '1'
-  const renderCountRef = useRef(0)
-  const inputChangeCountRef = useRef(0)
-  const debugSnapshotRef = useRef<{
-    inputLength: number
-    messagesLength: number
-    loading: boolean
-    activeAgentId: string | null
-    attachedImageDataUrl: string | null
-    pendingAttachmentsLength: number
-    ephemeralMessagesLength: number
-    localFeedbackMessagesLength: number
-    historyDialogOpen: boolean
-    slashModalMessage: string | null
-    contextPrefix: string | null
-    contextPrefixUsed: boolean
-    historyRecallEnabled: boolean
-  } | null>(null)
   const [contextPrefix, setContextPrefix] = useState<string | null>(null)
   const [contextPrefixUsed, setContextPrefixUsed] = useState(false)
   const [contextPlaceholderMode, setContextPlaceholderMode] = useState<'none' | 'selection' | 'file'>('none')
@@ -191,13 +171,10 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
   const lastTouchYRef = useRef<number | null>(null)
   const isComposingRef = useRef(false)
   const lockEnterRef = useRef(false)
+  const unlockEnterFrameRef = useRef<number | null>(null)
   const historyCursorRef = useRef<number | null>(null)
   const docPathStabilizeTimerRef = useRef<number | null>(null)
   const previousBusyRef = useRef(false)
-
-  if (inputDebugEnabled) {
-    renderCountRef.current += 1
-  }
 
   const autoResizeInput = () => {
     const el = inputRef.current
@@ -986,15 +963,23 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
   }
 
   const handleCompositionStart = useCallback(() => {
+    if (unlockEnterFrameRef.current != null) {
+      window.cancelAnimationFrame(unlockEnterFrameRef.current)
+      unlockEnterFrameRef.current = null
+    }
     isComposingRef.current = true
   }, [])
 
   const handleCompositionEnd = useCallback(() => {
     isComposingRef.current = false
     lockEnterRef.current = true
-    setTimeout(() => {
+    if (unlockEnterFrameRef.current != null) {
+      window.cancelAnimationFrame(unlockEnterFrameRef.current)
+    }
+    unlockEnterFrameRef.current = window.requestAnimationFrame(() => {
+      unlockEnterFrameRef.current = null
       lockEnterRef.current = false
-    }, 300)
+    })
   }, [])
 
   const handleCopy = useCallback(async (content: string) => {
@@ -1269,64 +1254,6 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
     stop()
   }, [isDifyProvider, messages, stop, stopAndTruncate, visibleLengths])
 
-  useEffect(() => {
-    if (!inputDebugEnabled) return
-    const nextSnapshot = {
-      inputLength: getDraft().length,
-      messagesLength: messages.length,
-      loading: isProcessing,
-      activeAgentId,
-      attachedImageDataUrl,
-      pendingAttachmentsLength: pendingAttachments?.length ?? 0,
-      ephemeralMessagesLength: ephemeralMessages.length,
-      localFeedbackMessagesLength: localFeedbackMessages.length,
-      historyDialogOpen,
-      slashModalMessage,
-      contextPrefix,
-      contextPrefixUsed,
-      historyRecallEnabled,
-    }
-    const prev = debugSnapshotRef.current
-    const changes = prev
-      ? (Object.entries(nextSnapshot) as Array<[keyof typeof nextSnapshot, unknown]>)
-        .filter(([key, value]) => prev[key] !== value)
-        .map(([key, value]) => ({
-          key,
-          from: prev[key],
-          to: value,
-        }))
-      : Object.entries(nextSnapshot).map(([key, value]) => ({ key, from: undefined, to: value }))
-
-    if (changes.length > 0 || renderCountRef.current > 0 || inputChangeCountRef.current > 0) {
-      console.log('[ai-input-debug][pane]', {
-        sessionKey,
-        renders: renderCountRef.current,
-        inputChanges: inputChangeCountRef.current,
-        activeAgentMode,
-        changes,
-      })
-    }
-    debugSnapshotRef.current = nextSnapshot
-    renderCountRef.current = 0
-    inputChangeCountRef.current = 0
-  }, [
-    activeAgentId,
-    activeAgentMode,
-    attachedImageDataUrl,
-    contextPrefix,
-    contextPrefixUsed,
-    ephemeralMessages.length,
-    historyDialogOpen,
-    historyRecallEnabled,
-    getDraft().length,
-    inputDebugEnabled,
-    isProcessing,
-    localFeedbackMessages.length,
-    messages.length,
-    pendingAttachments?.length,
-    sessionKey,
-    slashModalMessage,
-  ])
   const agentGroups = [
     {
       id: 'chat',

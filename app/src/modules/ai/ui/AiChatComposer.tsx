@@ -14,7 +14,6 @@ import type { AiChatAgentMode } from './imageGenerationEphemeral'
 import type { UploadedFileRef, VisionMode } from '../domain/types'
 import { useI18n } from '../../i18n/I18nContext'
 import { inferAttachmentKind, isPreviewableImage } from '../application/attachmentKind'
-import { isInputDebugEnabled, logInputDebug } from '../../debug/inputDebug'
 
 const FILE_INPUT_ACCEPT =
   'image/*,audio/*,.pdf,application/pdf,.txt,text/plain,.md,text/markdown,.csv,text/csv,.json,application/json,.doc,.docx,.xls,.xlsx,.ppt,.pptx'
@@ -237,12 +236,9 @@ export const AiChatComposer = memo(function AiChatComposer({
   const { t } = useI18n()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const autoResizeFrameRef = useRef<number | null>(null)
+  const autoResizeHeightRef = useRef<number | null>(null)
   const isComposingRef = useRef(false)
   const compositionEndFlushTokenRef = useRef(0)
-  const inputDebugEnabled = isInputDebugEnabled()
-  const inputSequenceRef = useRef(0)
-  const pendingInputDebugRef = useRef<{ seq: number; startedAt: number } | null>(null)
-  const paintDebugFrameRef = useRef<number | null>(null)
   const draftSelectionRef = useRef<{ start: number; end: number } | null>(null)
   const textareaValueRef = useRef('')
   const [composerState, setComposerState] = useState<ComposerState>({ draft: '', cursorIndex: null })
@@ -252,25 +248,20 @@ export const AiChatComposer = memo(function AiChatComposer({
   const autoResizeInput = () => {
     const el = inputRef?.current
     if (!el) return
-    const startedAt = window.performance.now()
-    el.style.height = 'auto'
     const maxHeight = 120
     const next = Math.min(maxHeight, el.scrollHeight)
-    el.style.height = `${next}px`
-    if (inputDebugEnabled) {
-      logInputDebug('composer', 'auto-resize', {
-        durationMs: Number((window.performance.now() - startedAt).toFixed(2)),
-        scrollHeight: el.scrollHeight,
-        nextHeight: next,
-        draftLength: textareaValueRef.current.length,
-      })
+    if (autoResizeHeightRef.current === next) {
+      return
     }
+    el.style.height = `${next}px`
+    autoResizeHeightRef.current = next
   }
 
   useEffect(() => {
     setComposerState({ draft: '', cursorIndex: null })
     draftSelectionRef.current = null
     textareaValueRef.current = ''
+    autoResizeHeightRef.current = null
     if (inputRef?.current) {
       inputRef.current.value = ''
     }
@@ -300,6 +291,7 @@ export const AiChatComposer = memo(function AiChatComposer({
         inputRef.current.value = value
       }
       setComposerState({ draft: value, cursorIndex: resolveSlashCursorIndex(value, caret ?? value.length) })
+      autoResizeHeightRef.current = null
       if (caret == null) {
         draftSelectionRef.current = null
         return
@@ -312,6 +304,7 @@ export const AiChatComposer = memo(function AiChatComposer({
       if (inputRef?.current) {
         inputRef.current.value = ''
       }
+      autoResizeHeightRef.current = null
       setComposerState({ draft: '', cursorIndex: null })
       draftSelectionRef.current = null
     },
@@ -329,41 +322,9 @@ export const AiChatComposer = memo(function AiChatComposer({
     draftSelectionRef.current = null
   }, [draft, inputRef])
 
-  useLayoutEffect(() => {
-    const pending = pendingInputDebugRef.current
-    if (!inputDebugEnabled || !pending) return
-    if (paintDebugFrameRef.current != null) {
-      window.cancelAnimationFrame(paintDebugFrameRef.current)
-    }
-    const commitElapsedMs = Number((window.performance.now() - pending.startedAt).toFixed(2))
-    logInputDebug('composer', 'draft-committed', {
-      seq: pending.seq,
-      draftLength: draft.length,
-      commitElapsedMs,
-    })
-    paintDebugFrameRef.current = window.requestAnimationFrame(() => {
-      const paintElapsedMs = Number((window.performance.now() - pending.startedAt).toFixed(2))
-      logInputDebug('composer', 'draft-painted', {
-        seq: pending.seq,
-        draftLength: draft.length,
-        paintElapsedMs,
-      })
-      paintDebugFrameRef.current = null
-    })
-    pendingInputDebugRef.current = null
-    return () => {
-      if (paintDebugFrameRef.current != null) {
-        window.cancelAnimationFrame(paintDebugFrameRef.current)
-        paintDebugFrameRef.current = null
-      }
-    }
-  }, [draft, inputDebugEnabled])
-
   const slashHints = useAiSlashCommandHints({ input: draft, cursorIndex })
 
   const commitDraftFromInput = useCallback((target: HTMLTextAreaElement) => {
-    const startedAt = window.performance.now()
-    const seq = inputSequenceRef.current
     const nextDraft = target.value
     textareaValueRef.current = nextDraft
     const nextCursor = resolveSlashCursorIndex(nextDraft, target.selectionStart)
@@ -373,23 +334,14 @@ export const AiChatComposer = memo(function AiChatComposer({
         ? prev
         : { draft: nextDraft, cursorIndex: nextCursor }
     ))
-    if (inputDebugEnabled) {
-      pendingInputDebugRef.current = { seq, startedAt }
-      logInputDebug('composer', 'commit-draft', {
-        durationMs: Number((window.performance.now() - startedAt).toFixed(2)),
-        seq,
-        draftLength: nextDraft.length,
-        cursorIndex: target.selectionStart,
-        slashCursorIndex: nextCursor,
-      })
-    }
-  }, [inputDebugEnabled, onDraftChange])
+  }, [onDraftChange])
 
   const applyComposerState = useCallback((value: string, caret: number | null) => {
     textareaValueRef.current = value
     if (inputRef?.current) {
       inputRef.current.value = value
     }
+    autoResizeHeightRef.current = null
     setComposerState({
       draft: value,
       cursorIndex: resolveSlashCursorIndex(value, caret == null ? value.length : caret),
@@ -433,19 +385,12 @@ export const AiChatComposer = memo(function AiChatComposer({
   }, [])
 
   const handleCompositionStart = () => {
-    const startedAt = window.performance.now()
     compositionEndFlushTokenRef.current += 1
     isComposingRef.current = true
     onCompositionStart?.()
-    if (inputDebugEnabled) {
-      logInputDebug('composer', 'composition-start', {
-        durationMs: Number((window.performance.now() - startedAt).toFixed(2)),
-      })
-    }
   }
 
   const handleCompositionEnd = () => {
-    const startedAt = window.performance.now()
     isComposingRef.current = false
     onCompositionEnd?.()
     const flushToken = ++compositionEndFlushTokenRef.current
@@ -453,21 +398,6 @@ export const AiChatComposer = memo(function AiChatComposer({
       if (flushToken !== compositionEndFlushTokenRef.current) return
       const target = inputRef?.current
       if (!target) return
-      if (target.value === textareaValueRef.current) {
-        if (inputDebugEnabled) {
-          logInputDebug('composer', 'composition-end-flush-skip-unchanged', {
-            delayMs: Number((window.performance.now() - startedAt).toFixed(2)),
-            draftLength: target.value.length,
-          })
-        }
-        return
-      }
-      if (inputDebugEnabled) {
-        logInputDebug('composer', 'composition-end-flush', {
-          delayMs: Number((window.performance.now() - startedAt).toFixed(2)),
-          draftLength: target.value.length,
-        })
-      }
       commitDraftFromInput(target)
     })
   }
@@ -594,39 +524,12 @@ export const AiChatComposer = memo(function AiChatComposer({
           ref={inputRef}
           defaultValue={draft}
           onInput={(e) => {
-            const startedAt = window.performance.now()
             const nativeIsComposing = Boolean((e.nativeEvent as unknown as { isComposing?: boolean }).isComposing)
-            if (nativeIsComposing || isComposingRef.current) {
-              if (inputDebugEnabled) {
-                logInputDebug('composer', 'input-skip-composing', {
-                  durationMs: Number((window.performance.now() - startedAt).toFixed(2)),
-                  nativeIsComposing,
-                  refIsComposing: isComposingRef.current,
-                  draftLength: e.currentTarget.value.length,
-                })
-              }
-              return
-            }
+            if (nativeIsComposing || isComposingRef.current) return
             if (e.currentTarget.value === textareaValueRef.current) {
-              if (inputDebugEnabled) {
-                logInputDebug('composer', 'input-skip-unchanged', {
-                  durationMs: Number((window.performance.now() - startedAt).toFixed(2)),
-                  draftLength: e.currentTarget.value.length,
-                })
-              }
               return
             }
-            inputSequenceRef.current += 1
             commitDraftFromInput(e.currentTarget)
-            if (inputDebugEnabled) {
-              logInputDebug('composer', 'input', {
-                durationMs: Number((window.performance.now() - startedAt).toFixed(2)),
-                seq: inputSequenceRef.current,
-                draftLength: e.currentTarget.value.length,
-                selectionStart: e.currentTarget.selectionStart,
-                slashHintsOpen: slashHints.isOpen,
-              })
-            }
           }}
           onClick={(e) => {
             const nextCursor = resolveSlashCursorIndex(e.currentTarget.value, e.currentTarget.selectionStart)

@@ -1,5 +1,3 @@
-import { isInputDebugEnabled, logInputDebug } from '../../debug/inputDebug'
-
 type SelectionChangeHandler = () => void
 
 type SelectionChangeEntry = {
@@ -18,31 +16,13 @@ function isEditableOutsideRegisteredRoots(activeElement: Element | null) {
 }
 
 const handleSelectionChange = () => {
-  const startedAt = typeof window !== 'undefined' ? window.performance.now() : 0
   const activeElement = typeof document !== 'undefined' ? document.activeElement : null
   if (isEditableOutsideRegisteredRoots(activeElement)) {
-    if (isInputDebugEnabled()) {
-      logInputDebug('pdf-selection', 'dispatch-skip-editable-outside-root', {
-        durationMs: typeof window !== 'undefined'
-          ? Number((window.performance.now() - startedAt).toFixed(2))
-          : 0,
-        handlerCount: handlers.size,
-        activeTag: activeElement?.tagName ?? null,
-      })
-    }
     return
   }
 
   for (const entry of handlers) {
     entry.handler()
-  }
-  if (isInputDebugEnabled()) {
-    logInputDebug('pdf-selection', 'dispatch', {
-      durationMs: typeof window !== 'undefined'
-        ? Number((window.performance.now() - startedAt).toFixed(2))
-        : 0,
-      handlerCount: handlers.size,
-    })
   }
 }
 

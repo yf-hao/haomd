@@ -50,7 +50,6 @@ const EMPTY_MESSAGES: ChatMessageView[] = []
 const AI_CHAT_AGENT_STORAGE_KEY = 'haomd_ai_chat_selected_agent_id'
 const EMPTY_AGENT_OPTION = { id: '', name: 'Agent' }
 const DOC_PATH_SWITCH_DELAY_MS = 800
-const AI_INPUT_DEBUG_FLAG = 'haomd-debug-ai-input'
 const DELETE_CONFIRM_TOKENS = new Set(['确认', '确认删除', '是', '确定', 'ok', 'okay', 'yes', 'y', 'confirm'])
 const DELETE_CANCEL_TOKENS = new Set(['取消', '算了', '否', '不用了', 'cancel', 'no', 'n'])
 
@@ -123,26 +122,6 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
   tabId,
 }) => {
   const { themeSettings } = useThemeContext()
-  const inputDebugEnabled = typeof window !== 'undefined'
-    && window.localStorage.getItem(AI_INPUT_DEBUG_FLAG) === '1'
-  const renderCountRef = useRef(0)
-  const inputChangeCountRef = useRef(0)
-  const debugSnapshotRef = useRef<{
-    inputLength: number
-    messagesLength: number
-    loading: boolean
-    activeAgentId: string | null
-    attachedImageDataUrl: string | null
-    pendingAttachmentsLength: number
-    ephemeralMessagesLength: number
-    localFeedbackMessagesLength: number
-    historyDialogOpen: boolean
-    slashModalMessage: string | null
-    contextPrefix: string | null
-    contextPrefixUsed: boolean
-    historyRecallEnabled: boolean
-    open: boolean
-  } | null>(null)
   const [contextPrefix, setContextPrefix] = useState<string | null>(null)
   const [contextPrefixUsed, setContextPrefixUsed] = useState(false)
   const [contextPlaceholderMode, setContextPlaceholderMode] = useState<'none' | 'selection' | 'file'>('none')
@@ -165,6 +144,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
   const commandBridge = useContext(AiChatCommandBridgeContext)
   const isComposingRef = useRef(false)
   const compositionCommitLockUntilRef = useRef(0)
+  const compositionUnlockFrameRef = useRef<number | null>(null)
   const historyCursorRef = useRef<number | null>(null)
   const composerHandleRef = useRef<AiChatComposerHandle | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
@@ -173,10 +153,6 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
   const previousBusyRef = useRef(false)
   const selectedAgent = agents.find((agent) => agent.id === activeAgentId) ?? null
   const activeAgentMode = selectedAgent?.kind === 'image_generation' ? 'image_generation' : 'chat'
-
-  if (inputDebugEnabled) {
-    renderCountRef.current += 1
-  }
 
   const autoResizeInput = () => {
     const el = inputRef.current
@@ -869,12 +845,23 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
   }, [doSend])
 
   const handleCompositionStart = useCallback(() => {
+    if (compositionUnlockFrameRef.current != null) {
+      window.cancelAnimationFrame(compositionUnlockFrameRef.current)
+      compositionUnlockFrameRef.current = null
+    }
     isComposingRef.current = true
   }, [])
 
   const handleCompositionEnd = useCallback(() => {
     isComposingRef.current = false
-    compositionCommitLockUntilRef.current = Date.now() + 300
+    compositionCommitLockUntilRef.current = Date.now() + 16
+    if (compositionUnlockFrameRef.current != null) {
+      window.cancelAnimationFrame(compositionUnlockFrameRef.current)
+    }
+    compositionUnlockFrameRef.current = window.requestAnimationFrame(() => {
+      compositionUnlockFrameRef.current = null
+      compositionCommitLockUntilRef.current = 0
+    })
   }, [])
 
   const handleInputKeyDown = useCallback(async (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1046,67 +1033,6 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
       ? allMessages.slice(-limit)
       : allMessages
   const messages = buildDisplayMessages(persistedMessages, localFeedbackMessages)
-
-  useEffect(() => {
-    if (!inputDebugEnabled) return
-    const nextSnapshot = {
-      inputLength: getDraft().length,
-      messagesLength: messages.length,
-      loading: loading,
-      activeAgentId,
-      attachedImageDataUrl,
-      pendingAttachmentsLength: pendingAttachments?.length ?? 0,
-      ephemeralMessagesLength: ephemeralMessages.length,
-      localFeedbackMessagesLength: localFeedbackMessages.length,
-      historyDialogOpen,
-      slashModalMessage,
-      contextPrefix,
-      contextPrefixUsed,
-      historyRecallEnabled,
-      open,
-    }
-    const prev = debugSnapshotRef.current
-    const changes = prev
-      ? (Object.entries(nextSnapshot) as Array<[keyof typeof nextSnapshot, unknown]>)
-        .filter(([key, value]) => prev[key] !== value)
-        .map(([key, value]) => ({
-          key,
-          from: prev[key],
-          to: value,
-        }))
-      : Object.entries(nextSnapshot).map(([key, value]) => ({ key, from: undefined, to: value }))
-
-    if (changes.length > 0 || renderCountRef.current > 0 || inputChangeCountRef.current > 0) {
-      console.log('[ai-input-debug][dialog]', {
-        tabId,
-        renders: renderCountRef.current,
-        inputChanges: inputChangeCountRef.current,
-        activeAgentMode,
-        changes,
-      })
-    }
-    debugSnapshotRef.current = nextSnapshot
-    renderCountRef.current = 0
-    inputChangeCountRef.current = 0
-  }, [
-    activeAgentId,
-    activeAgentMode,
-    attachedImageDataUrl,
-    contextPrefix,
-    contextPrefixUsed,
-    ephemeralMessages.length,
-    historyDialogOpen,
-    historyRecallEnabled,
-    getDraft().length,
-    inputDebugEnabled,
-    loading,
-    localFeedbackMessages.length,
-    messages.length,
-    open,
-    pendingAttachments?.length,
-    slashModalMessage,
-    tabId,
-  ])
 
   const [visibleLengths, setVisibleLengths] = useState<Record<string, number>>({})
   const [activeTypewriterId, setActiveTypewriterId] = useState<string | null>(null)

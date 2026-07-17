@@ -141,7 +141,6 @@ const MIN_STAMP_SIZE = DEFAULT_STAMP_SIZE / 3
 const MAX_STAMP_SIZE = 0.2
 const MAX_TRANSLATION_SELECTION_LENGTH = 8000
 const PDF_TRANSLATION_SETTINGS_STORAGE_KEY = 'pdf-translation-settings-v1'
-const PDF_INPUT_DEBUG_FLAG = 'haomd-debug-pdf-input'
 const DEFAULT_PDF_TRANSLATION_SETTINGS: PdfTranslationSettings = {
   sourceLanguage: '英语',
   targetLanguage: '简体中文',
@@ -926,15 +925,6 @@ export function PdfViewer({
   onRequestedOutlinePageHandled,
 }: PdfViewerProps) {
   const { t } = useI18n()
-  const inputDebugEnabled = typeof window !== 'undefined'
-    && window.localStorage.getItem(PDF_INPUT_DEBUG_FLAG) === '1'
-  const debugCountersRef = useRef({
-    viewportSelectionChange: 0,
-    selectionSnapshotHit: 0,
-    selectionSnapshotMiss: 0,
-    selectionPositionUpdate: 0,
-  })
-  const debugFlushTimerRef = useRef<number | null>(null)
   const persistedToolGroups = useMemo(() => loadPersistedPdfToolGroups(), [])
   const viewportRef = useRef<PdfViewportHandle | null>(null)
   const shortcutHelpButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -1082,41 +1072,6 @@ export function PdfViewer({
   const ZOOM_MAX = 3
   const ZOOM_STEP = 0.25
   const zoomPercent = Math.round(scale * 100)
-
-  useEffect(() => {
-    return () => {
-      if (debugFlushTimerRef.current != null) {
-        window.cancelAnimationFrame(debugFlushTimerRef.current)
-        debugFlushTimerRef.current = null
-      }
-    }
-  }, [])
-
-  const flushPdfDebugCounters = useCallback(() => {
-    if (!inputDebugEnabled) return
-    if (debugFlushTimerRef.current != null) return
-    debugFlushTimerRef.current = window.requestAnimationFrame(() => {
-      debugFlushTimerRef.current = null
-      const snapshot = debugCountersRef.current
-      const hasChanges =
-        snapshot.viewportSelectionChange > 0 ||
-        snapshot.selectionSnapshotHit > 0 ||
-        snapshot.selectionSnapshotMiss > 0 ||
-        snapshot.selectionPositionUpdate > 0
-      if (hasChanges) {
-        console.log('[pdf-input-debug][viewer]', {
-          filePath,
-          ...snapshot,
-        })
-        debugCountersRef.current = {
-          viewportSelectionChange: 0,
-          selectionSnapshotHit: 0,
-          selectionSnapshotMiss: 0,
-          selectionPositionUpdate: 0,
-        }
-      }
-    })
-  }, [filePath, inputDebugEnabled])
 
   const getSelectionSnapshotKey = useCallback((selection: PdfSelectionDraft | null) => {
     if (!selection) return 'null'
@@ -2403,38 +2358,18 @@ export function PdfViewer({
   }, [pdfDocument, onOutlineItemsChange, onOutlineLoadingChange])
 
   const handleViewportSelectionChange = useCallback((selection: PdfSelectionDraft | null) => {
-    if (inputDebugEnabled) {
-      debugCountersRef.current.viewportSelectionChange += 1
-      flushPdfDebugCounters()
-    }
     const nextSnapshotKey = getSelectionSnapshotKey(selection)
 
     if (translationOpen) {
       if (!selection) return
       if (translationSelectionSnapshotRef.current === nextSnapshotKey) {
-        if (inputDebugEnabled) {
-          debugCountersRef.current.selectionSnapshotHit += 1
-          flushPdfDebugCounters()
-        }
         return
-      }
-      if (inputDebugEnabled) {
-        debugCountersRef.current.selectionSnapshotMiss += 1
-        flushPdfDebugCounters()
       }
       closeTranslation()
     }
 
     if (selectionSnapshotRef.current === nextSnapshotKey) {
-      if (inputDebugEnabled) {
-        debugCountersRef.current.selectionSnapshotHit += 1
-        flushPdfDebugCounters()
-      }
       return
-    }
-    if (inputDebugEnabled) {
-      debugCountersRef.current.selectionSnapshotMiss += 1
-      flushPdfDebugCounters()
     }
     selectionSnapshotRef.current = nextSnapshotKey
     setTranslationDismissed(false)
@@ -2479,10 +2414,8 @@ export function PdfViewer({
     isAnnotationBusy,
     selectedHighlightColor,
     closeTranslation,
-    flushPdfDebugCounters,
     getSelectionSnapshotKey,
     translationOpen,
-    inputDebugEnabled,
   ])
 
   const handleViewportShapeCreate = useCallback((shape: {
@@ -3024,11 +2957,6 @@ export function PdfViewer({
     if (!activeSelectionDraft || !isSelectTextToolActive) {
       setTranslationPosition(null)
       return
-    }
-
-    if (inputDebugEnabled) {
-      debugCountersRef.current.selectionPositionUpdate += 1
-      flushPdfDebugCounters()
     }
 
     const updatePosition = () => {

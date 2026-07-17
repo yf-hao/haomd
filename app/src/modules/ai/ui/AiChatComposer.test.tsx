@@ -94,4 +94,62 @@ describe('AiChatComposer', () => {
     expect(onDraftChange).toHaveBeenCalledTimes(1)
     expect(composerHandleRef.current?.getDraft()).toBe('你')
   })
+
+  it('traces the events triggered by a normal key press and a composition commit', async () => {
+    const inputRef = createRef<HTMLTextAreaElement>() as RefObject<HTMLTextAreaElement>
+    const composerHandleRef = createRef<AiChatComposerHandle>()
+    const onDraftChange = vi.fn()
+    const onInputKeyDown = vi.fn()
+    const trace: string[] = []
+
+    renderWithI18n(
+      <AiChatComposer
+        loading={false}
+        onSubmit={() => {}}
+        onInputKeyDown={onInputKeyDown}
+        inputRef={inputRef}
+        composerHandleRef={composerHandleRef}
+        onDraftChange={onDraftChange}
+        pendingAttachmentsLength={0}
+        onStop={() => {}}
+      />,
+    )
+
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement
+    const eventTypes = ['keydown', 'keyup', 'compositionstart', 'compositionend', 'input']
+    for (const type of eventTypes) {
+      textarea.addEventListener(type, () => {
+        trace.push(type)
+      })
+    }
+
+    await act(async () => {
+      fireEvent.keyDown(textarea, { key: 'a', code: 'KeyA' })
+      fireEvent.input(textarea, { target: { value: 'a', selectionStart: 1 } })
+      fireEvent.keyUp(textarea, { key: 'a', code: 'KeyA' })
+    })
+
+    expect(onInputKeyDown).toHaveBeenCalledTimes(1)
+    expect(onDraftChange).toHaveBeenCalledTimes(1)
+    expect(composerHandleRef.current?.getDraft()).toBe('a')
+
+    await act(async () => {
+      fireEvent.compositionStart(textarea)
+      fireEvent.input(textarea, { target: { value: 'ni', selectionStart: 2 } })
+      fireEvent.compositionEnd(textarea, { data: '你' })
+      fireEvent.input(textarea, { target: { value: '你', selectionStart: 1 } })
+    })
+
+    expect(composerHandleRef.current?.getDraft()).toBe('你')
+    expect(onDraftChange).toHaveBeenCalledTimes(2)
+    expect(trace).toEqual([
+      'keydown',
+      'input',
+      'keyup',
+      'compositionstart',
+      'input',
+      'compositionend',
+      'input',
+    ])
+  })
 })
