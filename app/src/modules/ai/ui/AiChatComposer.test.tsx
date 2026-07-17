@@ -46,10 +46,10 @@ describe('AiChatComposer', () => {
     })
 
     await act(async () => {
-      fireEvent.change(textarea, {
+      fireEvent.input(textarea, {
         target: { value: 'hello world', selectionStart: 11 },
       })
-      await vi.advanceTimersByTimeAsync(50)
+      await vi.advanceTimersByTimeAsync(150)
     })
 
     expect(textarea.style.height).toBe('120px')
@@ -89,6 +89,7 @@ describe('AiChatComposer', () => {
       fireEvent.input(textarea, {
         target: { value: '你', selectionStart: 1 },
       })
+      await Promise.resolve()
     })
 
     expect(onDraftChange).toHaveBeenCalledTimes(1)
@@ -127,6 +128,7 @@ describe('AiChatComposer', () => {
       fireEvent.keyDown(textarea, { key: 'a', code: 'KeyA' })
       fireEvent.input(textarea, { target: { value: 'a', selectionStart: 1 } })
       fireEvent.keyUp(textarea, { key: 'a', code: 'KeyA' })
+      await vi.advanceTimersByTimeAsync(50)
     })
 
     expect(onInputKeyDown).toHaveBeenCalledTimes(1)
@@ -138,6 +140,7 @@ describe('AiChatComposer', () => {
       fireEvent.input(textarea, { target: { value: 'ni', selectionStart: 2 } })
       fireEvent.compositionEnd(textarea, { data: '你' })
       fireEvent.input(textarea, { target: { value: '你', selectionStart: 1 } })
+      await Promise.resolve()
     })
 
     expect(composerHandleRef.current?.getDraft()).toBe('你')
@@ -151,5 +154,32 @@ describe('AiChatComposer', () => {
       'compositionend',
       'input',
     ])
+  })
+
+  it('notifies focus state changes from the textarea', async () => {
+    const inputRef = createRef<HTMLTextAreaElement>() as RefObject<HTMLTextAreaElement>
+    const onInputFocusChange = vi.fn()
+
+    renderWithI18n(
+      <AiChatComposer
+        loading={false}
+        onSubmit={() => {}}
+        onInputKeyDown={() => {}}
+        inputRef={inputRef}
+        onInputFocusChange={onInputFocusChange}
+        pendingAttachmentsLength={0}
+        onStop={() => {}}
+      />,
+    )
+
+    const textarea = screen.getByRole('textbox')
+
+    await act(async () => {
+      fireEvent.focus(textarea)
+      fireEvent.blur(textarea)
+    })
+
+    expect(onInputFocusChange).toHaveBeenNthCalledWith(1, true)
+    expect(onInputFocusChange).toHaveBeenNthCalledWith(2, false)
   })
 })

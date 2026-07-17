@@ -29,6 +29,7 @@ export interface PdfViewportProps {
   pageCount: number
   scale: number
   pageHeight: number
+  isSuspended?: boolean
   previewHighlightColor?: string
   clearSelectionSignal?: number
   clearSelectionOnBlankClick?: boolean
@@ -100,6 +101,7 @@ const PdfViewportInner = forwardRef<PdfViewportHandle, PdfViewportProps>(functio
     pageCount,
     scale,
     pageHeight,
+    isSuspended = false,
     previewHighlightColor,
     clearSelectionSignal = 0,
     clearSelectionOnBlankClick = false,
@@ -229,6 +231,7 @@ const PdfViewportInner = forwardRef<PdfViewportHandle, PdfViewportProps>(functio
   }, [annotations])
 
   const handleScroll: UIEventHandler<HTMLDivElement> = (e) => {
+    if (isSuspended) return
     handleVirtualScroll()
 
     const container = e.currentTarget
@@ -264,6 +267,7 @@ const PdfViewportInner = forwardRef<PdfViewportHandle, PdfViewportProps>(functio
             pdfDocument={pdfDocument}
             pageNumber={pageNumber}
             scale={scale}
+            isSuspended={isSuspended}
             previewHighlightColor={previewHighlightColor}
             clearSelectionSignal={clearSelectionSignal}
             clearSelectionOnBlankClick={clearSelectionOnBlankClick}
@@ -307,7 +311,7 @@ const PdfViewportInner = forwardRef<PdfViewportHandle, PdfViewportProps>(functio
     <div
       ref={containerRef}
       className="pdf-scroll-container"
-      onScroll={handleScroll}
+      onScroll={isSuspended ? undefined : handleScroll}
     >
       <div
         style={{

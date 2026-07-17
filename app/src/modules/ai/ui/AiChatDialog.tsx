@@ -88,6 +88,7 @@ export type AiChatDialogProps = {
   ) => Promise<{ ok: boolean; message: string }>
   setStatusMessage?: (message: string) => void
   t?: (key: string, params?: Record<string, string | number>) => string
+  onInputFocusChange?: (focused: boolean) => void
   /**
    * 用于在本地持久化与恢复会话的 key，一般为 tabId。
    */
@@ -119,6 +120,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
   onCreateDirectoryInWorkspace,
   setStatusMessage,
   t,
+  onInputFocusChange,
   tabId,
 }) => {
   const { themeSettings } = useThemeContext()
@@ -1403,6 +1405,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
           onDraftChange={clearHistoryBrowse}
           onSubmit={handleSubmit}
           onInputKeyDown={handleInputKeyDown}
+          onInputFocusChange={onInputFocusChange}
           onCompositionStart={handleCompositionStart}
           onCompositionEnd={handleCompositionEnd}
           inputRef={inputRef as React.RefObject<HTMLTextAreaElement>}

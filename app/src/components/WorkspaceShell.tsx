@@ -111,6 +111,7 @@ import { createDirectoryFromSelection } from '../modules/document/application/cr
 import { createDirectoryInWorkspace } from '../modules/document/application/createDirectoryInWorkspaceService'
 import { renameWorkspaceEntry } from '../modules/document/application/renameWorkspaceEntryService'
 import type { WysiwygFormatActions } from './Wysiwyg/WysiwygPane'
+import { buildPdfAiChatDocPathKey } from '../modules/ai/domain/aiChatDocPathKey'
 // 改为从内部动态加载，优化编辑性能
 // import { exportToHtml } from '../modules/export/html'
 
@@ -500,6 +501,8 @@ export function WorkspaceShell({
   const activeImportedWordState = activeId ? (importedWordTabs[activeId] ?? null) : null
 
   const isPdfActive = !!activeTab?.path && activeTab.path.toLowerCase().endsWith('.pdf')
+  const [isAiChatInputFocused, setIsAiChatInputFocused] = useState(false)
+  const shouldSuspendPdfViewer = isPdfActive && isAiChatInputFocused
 
   // AI Chat hook
   const {
@@ -521,6 +524,38 @@ export function WorkspaceShell({
     outerGridTemplateColumns,
     aiChatWidth,
   } = useAiChatPanel({ activeTabId: activeTab?.id })
+
+  useEffect(() => {
+    if (aiChatOpen || aiChatSessionKey.startsWith('session:')) return
+    setIsAiChatInputFocused(false)
+  }, [aiChatOpen, aiChatSessionKey])
+
+  const handlePdfRegisterSelectionGetter = useCallback((getter: (() => string | null) | null) => {
+    pdfSelectionGetterRef.current = getter
+  }, [])
+  const handlePdfRegisterZoomActions = useCallback((actions: {
+    zoomIn: () => number | null
+    zoomOut: () => number | null
+    zoomReset: () => number | null
+  } | null) => {
+    pdfZoomActionsRef.current = actions
+  }, [])
+  const handlePdfRegisterShortcutActions = useCallback((actions: {
+    selectTool: () => void
+    activateMarkupTool: (tool: 'highlight' | 'underline' | 'strikeout' | 'squiggly') => void
+    activateShapeTool: (tool: 'square' | 'circle' | 'line' | 'arrow') => void
+    activateStampTool: () => void
+    activateFreeTextTool: () => void
+    addNote: () => void
+    addDetachedNote: () => void
+    deleteSelected: () => void
+    selectColorIndex: (index: number) => void
+  } | null) => {
+    pdfShortcutActionsRef.current = actions
+  }, [])
+  const handlePdfRequestedOutlinePageHandled = useCallback(() => {
+    setPdfOutlineRequestedPage(null)
+  }, [])
 
   const activeIdRef = useRef<string | null>(null)
   useEffect(() => {
@@ -1028,9 +1063,9 @@ export function WorkspaceShell({
 
   // AI Chat 使用的“文档路径”：
   // - Markdown 标签：使用当前文本文件的路径（filePath）
-  // - PDF 标签：使用当前激活的 PDF 文件路径（activePdfPath）
+  // - PDF 标签：使用编码后的稳定 key，避免把 PDF 真实路径写入持久化链路
   const aiChatFilePath = isPdfActive ? activePdfPath : filePath
-  const aiChatDocPathOverride = isPdfActive && activePdfPath ? `pdf:${activePdfPath}` : null
+  const aiChatDocPathOverride = isPdfActive ? buildPdfAiChatDocPathKey(activePdfPath) : null
 
   // 统一决定编辑器里展示的内容：
   // - Markdown 标签：走原来的 hugeDoc/markdown 逻辑
@@ -3660,6 +3695,7 @@ export function WorkspaceShell({
                 setStatusMessage={setStatusMessage}
                 t={t}
                 sourceTabId={null}
+                onInputFocusChange={setIsAiChatInputFocused}
                 fullPage
               />
             </Suspense>
@@ -3713,6 +3749,7 @@ export function WorkspaceShell({
                           setStatusMessage={setStatusMessage}
                           t={t}
                           sourceTabId={activeTab?.id ?? null}
+                          onInputFocusChange={setIsAiChatInputFocused}
                         />
                       </Suspense>
                     )}
@@ -3735,20 +3772,15 @@ export function WorkspaceShell({
                         {activeTab?.path && (
                           <PdfViewerLazy
                             filePath={activeTab.path}
-                            onRegisterSelectionGetter={(getter) => {
-                              pdfSelectionGetterRef.current = getter
-                            }}
+                            isSuspended={shouldSuspendPdfViewer}
+                            onRegisterSelectionGetter={handlePdfRegisterSelectionGetter}
                             onCurrentPageChange={setPdfCurrentPage}
-                            onRegisterZoomActions={(actions) => {
-                              pdfZoomActionsRef.current = actions
-                            }}
-                            onRegisterShortcutActions={(actions) => {
-                              pdfShortcutActionsRef.current = actions
-                            }}
+                            onRegisterZoomActions={handlePdfRegisterZoomActions}
+                            onRegisterShortcutActions={handlePdfRegisterShortcutActions}
                             onOutlineItemsChange={setPdfOutlineItems}
                             onOutlineLoadingChange={setPdfOutlineLoading}
                             requestedOutlinePage={pdfOutlineRequestedPage?.page ?? null}
-                            onRequestedOutlinePageHandled={() => setPdfOutlineRequestedPage(null)}
+                            onRequestedOutlinePageHandled={handlePdfRequestedOutlinePageHandled}
                           />
                         )}
                       </Suspense>
@@ -3902,6 +3934,7 @@ export function WorkspaceShell({
                         setStatusMessage={setStatusMessage}
                         t={t}
                         sourceTabId={activeTab?.id ?? null}
+                        onInputFocusChange={setIsAiChatInputFocused}
                       />
                   </Suspense>
                 )}
@@ -4005,6 +4038,7 @@ export function WorkspaceShell({
               onCreateDirectoryInWorkspace={handleAiCreateDirectoryInWorkspace}
               setStatusMessage={setStatusMessage}
               t={t}
+              onInputFocusChange={setIsAiChatInputFocused}
               tabId={aiChatState.tabId}
             />
           </Suspense>

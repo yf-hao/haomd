@@ -43,6 +43,7 @@ type VisualTextLayout = {
 }
 
 const PDF_TEXT_LAYER_DEBUG = false
+const ENABLE_PDF_SELECTION_LATENCY_DEBUG = true
 
 type SelectionPublicationSnapshot = {
   text: string
@@ -53,6 +54,7 @@ export interface PdfOfficialPageViewProps {
   pdfDocument: PDFDocumentProxy
   pageNumber: number
   scale: number
+  isSuspended?: boolean
   previewHighlightColor?: string
   clearSelectionSignal?: number
   clearSelectionOnBlankClick?: boolean
@@ -129,6 +131,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
   pdfDocument,
   pageNumber,
   scale,
+  isSuspended = false,
   previewHighlightColor = '#f5d90a',
   clearSelectionSignal = 0,
   clearSelectionOnBlankClick = false,
@@ -166,6 +169,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
 }: PdfOfficialPageViewProps) {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const pageHostRef = useRef<HTMLDivElement | null>(null)
+  const isSuspendedRef = useRef(isSuspended)
   const textRectsRef = useRef<RectLike[]>([])
   const textRectsDirtyRef = useRef(true)
   const visualTextLayoutRef = useRef<VisualTextLayout | null>(null)
@@ -244,6 +248,10 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         ? annotations.find((annotation) => annotation.id === activeTextBoxEditingAnnotationId)?.color
         : null
     ) ?? previewHighlightColor
+
+  useEffect(() => {
+    isSuspendedRef.current = isSuspended
+  }, [isSuspended])
 
   const updateFreeTextEditorHeight = (input: HTMLTextAreaElement, force = false) => {
     const computed = window.getComputedStyle(input)
@@ -588,7 +596,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
   }
 
   useEffect(() => {
-    if (!activeTextBoxDraft) return
+    if (isSuspended || !activeTextBoxDraft) return
     const frame = window.requestAnimationFrame(() => {
       const input = freeTextEditorRef.current
       if (!input) return
@@ -606,7 +614,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     return () => {
       window.cancelAnimationFrame(frame)
     }
-  }, [activeTextBoxDraft, activeTextBoxInitialValue, activeTextBoxEditorKey])
+  }, [isSuspended, activeTextBoxDraft, activeTextBoxInitialValue, activeTextBoxEditorKey])
 
   const selectionBelongsToCurrentPage = (selection: Selection | null) => {
     const root = rootRef.current
@@ -636,6 +644,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     let resizeObserver: ResizeObserver | null = null
 
     const scheduleTextRectRefresh = () => {
+      if (isSuspendedRef.current) return
       invalidateCachedTextRects()
       if (textRectFrame) {
         window.cancelAnimationFrame(textRectFrame)
@@ -680,6 +689,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
           const pageEl = rootRef.current?.querySelector('.page')
           if (pageEl) {
             resizeObserver = new ResizeObserver(() => {
+              if (isSuspendedRef.current) return
               scheduleTextRectRefresh()
             })
             resizeObserver.observe(pageEl)
@@ -713,6 +723,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
   }, [pdfDocument, pageNumber, scale])
 
   useEffect(() => {
+    if (isSuspended) return
     const root = rootRef.current
     if (!root) return
 
@@ -812,11 +823,20 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
 
     const updateSelectionBlocks = () => {
       frame = 0
+      const debugStart = ENABLE_PDF_SELECTION_LATENCY_DEBUG ? window.performance.now() : 0
 
       const shouldDeferSelectionPublish = isPointerSelectionActiveRef.current
       const preview = pendingSelectionPreview ?? readSelectionPreview()
       pendingSelectionPreview = null
-      if (!preview) return
+      if (!preview) {
+        if (ENABLE_PDF_SELECTION_LATENCY_DEBUG) {
+          console.debug('[input-debug][pdf-page] update-selection-skip-preview-missing', {
+            durationMs: Math.round(window.performance.now() - debugStart),
+            pageNumber,
+          })
+        }
+        return
+      }
 
       const { pageRect, normalizedRawRects, text } = preview
       if (textRectsDirtyRef.current || textRectsRef.current.length === 0) {
@@ -858,12 +878,28 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         lastPublishedSelectionSnapshot.rectsKey === nextSelectionSnapshot.rectsKey
       ) {
         applySelectionBlocks(nextBlocks)
+        if (ENABLE_PDF_SELECTION_LATENCY_DEBUG) {
+          console.debug('[input-debug][pdf-page] update-selection-skip-unchanged', {
+            durationMs: Math.round(window.performance.now() - debugStart),
+            pageNumber,
+            textLength: text.length,
+          })
+        }
         return
       }
       lastPublishedSelectionSnapshotRef.current = nextSelectionSnapshot
       applySelectionBlocks(nextBlocks)
       if (shouldDeferSelectionPublish) return
       publishSelection(text && rects.length > 0 ? { page: pageNumber, text, rects } : null)
+      if (ENABLE_PDF_SELECTION_LATENCY_DEBUG) {
+        console.debug('[input-debug][pdf-page] update-selection', {
+          durationMs: Math.round(window.performance.now() - debugStart),
+          pageNumber,
+          textLength: text.length,
+          rectCount: rects.length,
+          deferred: shouldDeferSelectionPublish,
+        })
+      }
     }
 
     const getPageRelativePoint = (event: PointerEvent) => {
@@ -1186,16 +1222,36 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     }
 
     const processSelectionChange = () => {
+      const debugStart = ENABLE_PDF_SELECTION_LATENCY_DEBUG ? window.performance.now() : 0
       selectionChangeFrame = 0
       if (isPointerSelectionActiveRef.current) {
+        if (ENABLE_PDF_SELECTION_LATENCY_DEBUG) {
+          console.debug('[input-debug][pdf-page] selectionchange-skip-pointer', {
+            durationMs: Math.round(window.performance.now() - debugStart),
+            pageNumber,
+          })
+        }
         return
       }
       if (activeShapeTool || activeStampLabel || activeFreeTextTool || activeNoteTool) {
+        if (ENABLE_PDF_SELECTION_LATENCY_DEBUG) {
+          console.debug('[input-debug][pdf-page] selectionchange-skip-tool-active', {
+            durationMs: Math.round(window.performance.now() - debugStart),
+            pageNumber,
+          })
+        }
         return
       }
 
       const activeElement = typeof document !== 'undefined' ? document.activeElement : null
       if (shouldIgnoreSelectionChangeFromEditableOutsideRoot(root, activeElement)) {
+        if (ENABLE_PDF_SELECTION_LATENCY_DEBUG) {
+          console.debug('[input-debug][pdf-page] selectionchange-skip-editable-outside-root', {
+            durationMs: Math.round(window.performance.now() - debugStart),
+            pageNumber,
+            activeTag: activeElement?.tagName ?? null,
+          })
+        }
         return
       }
 
@@ -1220,14 +1276,32 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         lastNativeSelectionSnapshot.text === nextNativeSelectionSnapshot.text &&
         lastNativeSelectionSnapshot.collapsed === nextNativeSelectionSnapshot.collapsed
       ) {
+        if (ENABLE_PDF_SELECTION_LATENCY_DEBUG) {
+          console.debug('[input-debug][pdf-page] selectionchange-skip-unchanged', {
+            durationMs: Math.round(window.performance.now() - debugStart),
+            pageNumber,
+          })
+        }
         return
       }
       lastNativeSelectionSnapshot = nextNativeSelectionSnapshot
       pendingSelectionPreview = readSelectionPreview()
       if (!pendingSelectionPreview) {
+        if (ENABLE_PDF_SELECTION_LATENCY_DEBUG) {
+          console.debug('[input-debug][pdf-page] selectionchange-skip-no-preview', {
+            durationMs: Math.round(window.performance.now() - debugStart),
+            pageNumber,
+          })
+        }
         return
       }
       scheduleUpdate()
+      if (ENABLE_PDF_SELECTION_LATENCY_DEBUG) {
+        console.debug('[input-debug][pdf-page] selectionchange', {
+          durationMs: Math.round(window.performance.now() - debugStart),
+          pageNumber,
+        })
+      }
     }
 
     const flushSelectionPointerMove = () => {
@@ -1990,9 +2064,10 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       }
       lastNativeSelectionSnapshot = null
     }
-  }, [annotations, selectedAnnotationId, onSelectionChange, pageNumber, pdfDocument, scale, clearSelectionSignal, clearSelectionOnBlankClick, activeShapeTool, onShapeCreate, activeFreeTextTool, activeNoteTool, activeTextBoxDraft, onFreeTextCreate, onNoteCreate, activeStampKind, activeStampLabel, activeStampSize, onStampCreate, onStampResize, onLineResize, onFreeTextResize, onNoteResize, onClearAnnotationSelection])
+  }, [isSuspended, annotations, selectedAnnotationId, onSelectionChange, pageNumber, pdfDocument, scale, clearSelectionSignal, clearSelectionOnBlankClick, activeShapeTool, onShapeCreate, activeFreeTextTool, activeNoteTool, activeTextBoxDraft, onFreeTextCreate, onNoteCreate, activeStampKind, activeStampLabel, activeStampSize, onStampCreate, onStampResize, onLineResize, onFreeTextResize, onNoteResize, onClearAnnotationSelection])
 
   useEffect(() => {
+    if (isSuspended) return
     clearSelectionBlocks()
     hasActiveSelectionRef.current = false
     applyShapeDraftRect(null)
@@ -2008,7 +2083,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     applyFreeTextResizeDraft(null)
     setSelectionAssistRegionDefaults()
     onSelectionChange?.(null)
-  }, [clearSelectionSignal, onSelectionChange, activeShapeTool, activeFreeTextTool, activeNoteTool])
+  }, [isSuspended, clearSelectionSignal, onSelectionChange, activeShapeTool, activeFreeTextTool, activeNoteTool])
 
   useEffect(() => {
     const draft = freeTextResizeDraft
@@ -2088,7 +2163,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
   return (
     <div
       ref={rootRef}
-      className="pdf-official-page-view pdfViewer"
+      className={`pdf-official-page-view pdfViewer ${isSuspended ? 'is-suspended' : ''}`.trim()}
       style={{
         '--scale-factor': String(scale),
         '--pdf-selection-preview-color': previewHighlightColor,

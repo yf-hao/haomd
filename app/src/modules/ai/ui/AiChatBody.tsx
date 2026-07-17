@@ -36,6 +36,7 @@ export interface AiChatBodyProps {
   onDraftChange?: () => void
   onSubmit: (e: FormEvent<HTMLFormElement>) => void
   onInputKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => void
+  onInputFocusChange?: (focused: boolean) => void
   onCompositionStart?: () => void
   onCompositionEnd?: () => void
   inputRef?: RefObject<HTMLTextAreaElement>
@@ -100,6 +101,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
   onDraftChange,
   onSubmit,
   onInputKeyDown,
+  onInputFocusChange,
   onCompositionStart,
   onCompositionEnd,
   inputRef,
@@ -275,6 +277,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
         agentMode={agentMode}
         onSubmit={onSubmit}
         onInputKeyDown={onInputKeyDown}
+        onInputFocusChange={onInputFocusChange}
         onCompositionStart={onCompositionStart}
         onCompositionEnd={onCompositionEnd}
         inputRef={inputRef}

@@ -7,21 +7,50 @@ type SelectionChangeEntry = {
 
 const handlers = new Set<SelectionChangeEntry>()
 let listening = false
+const ENABLE_PDF_SELECTION_DEBUG = true
 
-function isEditableOutsideRegisteredRoots(activeElement: Element | null) {
+function isEditableElement(activeElement: Element | null) {
   if (!(activeElement instanceof HTMLElement)) return false
-  const insideRegisteredRoot = [...handlers].some((entry) => entry.root?.contains(activeElement))
-  if (insideRegisteredRoot) return false
   return activeElement.isContentEditable || activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'SELECT'
+}
+
+export function shouldIgnorePdfSelectionChangeForEditableOutsideRoots(
+  root: HTMLElement | null,
+  activeElement: Element | null,
+) {
+  if (!(activeElement instanceof HTMLElement)) return false
+  if (activeElement.closest('[data-pdf-selection-skip="true"]')) return false
+  if (root?.contains(activeElement)) return false
+  return isEditableElement(activeElement)
 }
 
 const handleSelectionChange = () => {
   const activeElement = typeof document !== 'undefined' ? document.activeElement : null
-  if (isEditableOutsideRegisteredRoots(activeElement)) {
+  if (!(activeElement instanceof HTMLElement)) return
+  if (activeElement.closest('[data-pdf-selection-skip="true"]')) return
+
+  const handlersSnapshot = [...handlers]
+  if (!handlersSnapshot.length) return
+
+  const insideRegisteredRoot = handlersSnapshot.some((entry) => entry.root?.contains(activeElement))
+  if (!insideRegisteredRoot && isEditableElement(activeElement)) {
+    if (ENABLE_PDF_SELECTION_DEBUG) {
+      console.debug('[input-debug][pdf-selection] dispatch-skip-editable-outside-root', {
+        handlerCount: handlersSnapshot.length,
+        activeTag: activeElement.tagName,
+      })
+    }
     return
   }
 
-  for (const entry of handlers) {
+  if (ENABLE_PDF_SELECTION_DEBUG) {
+    console.debug('[input-debug][pdf-selection] dispatch', {
+      handlerCount: handlersSnapshot.length,
+      activeTag: activeElement.tagName,
+    })
+  }
+
+  for (const entry of handlersSnapshot) {
     entry.handler()
   }
 }

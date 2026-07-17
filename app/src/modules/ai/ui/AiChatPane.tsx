@@ -107,6 +107,8 @@ export interface AiChatPaneProps {
   t?: (key: string, params?: Record<string, string | number>) => string
   /** 触发 AI 操作的编辑器标签 ID，用于避免内容串到其他标签 */
   sourceTabId?: string | null
+  /** 输入框聚焦状态，用于让父层按需卸载重型视图 */
+  onInputFocusChange?: (focused: boolean) => void
   /** Full-page mode: centered input when empty, messages above input when not */
   fullPage?: boolean
 }
@@ -137,6 +139,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
   setStatusMessage,
   t,
   sourceTabId,
+  onInputFocusChange,
   fullPage = false,
 }) => {
   const { themeSettings } = useThemeContext()
@@ -1490,6 +1493,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
           onDraftChange={clearHistoryBrowse}
           onSubmit={handleSubmit}
           onInputKeyDown={handleInputKeyDown}
+          onInputFocusChange={onInputFocusChange}
           onCompositionStart={handleCompositionStart}
           onCompositionEnd={handleCompositionEnd}
           inputRef={inputRef as React.RefObject<HTMLTextAreaElement>}

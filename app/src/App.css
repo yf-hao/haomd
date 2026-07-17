@@ -1913,6 +1913,15 @@ button:disabled {
   background: color-mix(in srgb, var(--pdf-selection-preview-color, var(--theme-accent-primary)) 28%, transparent);
 }
 
+.pdf-official-page-view.is-suspended {
+  pointer-events: none;
+}
+
+.pdf-official-page-view.is-suspended .textLayer,
+.pdf-official-page-view.is-suspended .pdf-annotation-overlay {
+  display: none;
+}
+
 .pdf-annotation-overlay {
   position: absolute;
   inset: 0;

@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { registerPdfSelectionChangeHandler } from './pdfSelectionChangeDispatcher'
+import {
+  registerPdfSelectionChangeHandler,
+  shouldIgnorePdfSelectionChangeForEditableOutsideRoots,
+} from './pdfSelectionChangeDispatcher'
 
 describe('pdfSelectionChangeDispatcher', () => {
   afterEach(() => {
@@ -44,5 +47,16 @@ describe('pdfSelectionChangeDispatcher', () => {
 
     unregister()
     textarea.remove()
+  })
+
+  it('skips dispatching when focus is inside a pdf selection skip region', () => {
+    const root = document.createElement('div')
+    const skipRegion = document.createElement('div')
+    skipRegion.setAttribute('data-pdf-selection-skip', 'true')
+    const textarea = document.createElement('textarea')
+    skipRegion.append(textarea)
+    document.body.append(skipRegion)
+    expect(shouldIgnorePdfSelectionChangeForEditableOutsideRoots(root, textarea)).toBe(false)
+    skipRegion.remove()
   })
 })

@@ -888,6 +888,7 @@ const DetachedNoteEditorOverlay = memo(function DetachedNoteEditorOverlay({
 
 export interface PdfViewerProps {
   filePath: string
+  isSuspended?: boolean
   onClose?: () => void
   onRegisterSelectionGetter?: (getter: (() => string | null) | null) => void
   onCurrentPageChange?: (page: number) => void
@@ -913,8 +914,9 @@ export interface PdfViewerProps {
   onRequestedOutlinePageHandled?: () => void
 }
 
-export function PdfViewer({
+function PdfViewerInner({
   filePath,
+  isSuspended = false,
   onRegisterSelectionGetter,
   onCurrentPageChange,
   onRegisterZoomActions,
@@ -3064,7 +3066,7 @@ export function PdfViewer({
   }
 
   return (
-    <div className="pdf-viewer">
+    <div className="pdf-viewer" aria-hidden={isSuspended || undefined}>
       <div className="pdf-viewer-sidebar">
         <div className="pdf-toolbar">
           <div className="pdf-toolbar-group pdf-toolbar-group-annotations">
@@ -3410,6 +3412,7 @@ export function PdfViewer({
             pageCount={pageCount}
             scale={scale}
             pageHeight={pageHeightForVirtual}
+            isSuspended={isSuspended}
             previewHighlightColor={selectedHighlightColor}
             clearSelectionSignal={clearSelectionSignal}
             clearSelectionOnBlankClick={false}
@@ -3675,3 +3678,5 @@ export function PdfViewer({
     </div>
   )
 }
+
+export const PdfViewer = memo(PdfViewerInner)

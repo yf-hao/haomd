@@ -45,21 +45,18 @@ export function useAiSlashCommandHints(options: UseAiSlashCommandHintsOptions): 
 
   const segment: SlashSegmentInfo | null = useMemo(() => {
     if (!input || cursorIndex == null) return null
+    if (input[0] !== '/') return null
     const safeCursor = Math.max(0, Math.min(cursorIndex, input.length))
 
-    // 仅考虑当前行（光标所在行）行首到光标之间的内容
-    const lastNewline = input.lastIndexOf('\n', safeCursor - 1)
-    const lineStart = lastNewline === -1 ? 0 : lastNewline + 1
-    const prefix = input.slice(lineStart, safeCursor)
-
+    const prefix = input.slice(0, safeCursor)
     if (!prefix.startsWith('/')) return null
 
-    // 只识别形如 "/" 或 "/cmd" 的行首命令片段
+    // 只识别形如 "/" 或 "/cmd" 的输入开头命令片段
     const match = /^\/(\S*)$/.exec(prefix)
     if (!match) return null
 
     const query = match[1].toLowerCase()
-    return { start: lineStart, end: safeCursor, query }
+    return { start: 0, end: safeCursor, query }
   }, [input, cursorIndex])
 
   // 每次检测到新的命令片段时，重置手动关闭状态
