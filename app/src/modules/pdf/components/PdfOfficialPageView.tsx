@@ -55,6 +55,7 @@ export interface PdfOfficialPageViewProps {
   pageNumber: number
   scale: number
   isSuspended?: boolean
+  selectionDispatchSuppressed?: boolean
   previewHighlightColor?: string
   clearSelectionSignal?: number
   clearSelectionOnBlankClick?: boolean
@@ -132,6 +133,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
   pageNumber,
   scale,
   isSuspended = false,
+  selectionDispatchSuppressed = false,
   previewHighlightColor = '#f5d90a',
   clearSelectionSignal = 0,
   clearSelectionOnBlankClick = false,
@@ -170,6 +172,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
   const rootRef = useRef<HTMLDivElement | null>(null)
   const pageHostRef = useRef<HTMLDivElement | null>(null)
   const isSuspendedRef = useRef(isSuspended)
+  const selectionDispatchSuppressedRef = useRef(selectionDispatchSuppressed)
   const textRectsRef = useRef<RectLike[]>([])
   const textRectsDirtyRef = useRef(true)
   const visualTextLayoutRef = useRef<VisualTextLayout | null>(null)
@@ -252,6 +255,10 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
   useEffect(() => {
     isSuspendedRef.current = isSuspended
   }, [isSuspended])
+
+  useEffect(() => {
+    selectionDispatchSuppressedRef.current = selectionDispatchSuppressed
+  }, [selectionDispatchSuppressed])
 
   const updateFreeTextEditorHeight = (input: HTMLTextAreaElement, force = false) => {
     const computed = window.getComputedStyle(input)
@@ -1995,6 +2002,9 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
 
     const handleSelectionChange = () => {
       const activeElement = typeof document !== 'undefined' ? document.activeElement : null
+      if (selectionDispatchSuppressedRef.current) {
+        return
+      }
       if (shouldIgnoreSelectionChangeFromEditableOutsideRoot(root, activeElement)) {
         return
       }

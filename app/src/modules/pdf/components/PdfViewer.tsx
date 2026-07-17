@@ -52,6 +52,7 @@ import {
   type AnnotationType,
 } from '../types/annotation'
 import { translatePdfSelection, type PdfTranslationEntry } from '../translationService'
+import { suppressPdfSelectionChangeDispatch } from './pdfSelectionChangeDispatcher'
 
 type PdfReadingState = {
   page: number
@@ -950,12 +951,15 @@ function PdfViewerInner({
   const [translationError, setTranslationError] = useState<string | null>(null)
   const [translationPosition, setTranslationPosition] = useState<NoteEditorPosition | null>(null)
   const [translationDismissed, setTranslationDismissed] = useState(false)
+  const [translationSelectionDispatchSuppressed, setTranslationSelectionDispatchSuppressed] = useState(false)
   const [translationSettings, setTranslationSettings] = useState<PdfTranslationSettings>(loadPdfTranslationSettings)
   const [translationSettingsOpen, setTranslationSettingsOpen] = useState(false)
   const [translationPronouncing, setTranslationPronouncing] = useState(false)
   const translationPopoverRef = useRef<HTMLDivElement | null>(null)
   const selectionSnapshotRef = useRef<string | null>(null)
   const translationSelectionSnapshotRef = useRef<string | null>(null)
+  const translationSelectionLockRef = useRef(false)
+  const translationSelectionDispatchTimerRef = useRef<number | null>(null)
   const [annotationMessage, setAnnotationMessage] = useState<string | null>(null)
   const [isAnnotationBusy, setAnnotationBusy] = useState(false)
   const [selectedHighlightColor, setSelectedHighlightColor] = useState<string>('#ff0000')
@@ -1163,7 +1167,21 @@ function PdfViewerInner({
     }, 1400)
   }, [])
 
+  const suppressTranslationSelectionDispatch = useCallback((durationMs = 300) => {
+    suppressPdfSelectionChangeDispatch(durationMs)
+    setTranslationSelectionDispatchSuppressed(true)
+    if (translationSelectionDispatchTimerRef.current) {
+      window.clearTimeout(translationSelectionDispatchTimerRef.current)
+    }
+    translationSelectionDispatchTimerRef.current = window.setTimeout(() => {
+      setTranslationSelectionDispatchSuppressed(false)
+      translationSelectionDispatchTimerRef.current = null
+    }, durationMs)
+  }, [])
+
   const closeTranslation = useCallback(() => {
+    suppressTranslationSelectionDispatch()
+    translationSelectionLockRef.current = false
     translationRequestIdRef.current += 1
     translationAbortRef.current?.abort()
     translationAbortRef.current = null
@@ -1183,6 +1201,10 @@ function PdfViewerInner({
   const startTranslation = useCallback(async () => {
     const selection = selectionDraftRef.current
     if (!selection) return
+    suppressTranslationSelectionDispatch()
+    const selectionSnapshotKey = getSelectionSnapshotKey(selection)
+    translationSelectionSnapshotRef.current = selectionSnapshotKey
+    translationSelectionLockRef.current = true
     if (selection.text.length > MAX_TRANSLATION_SELECTION_LENGTH) {
       setTranslationSelectionDraft(selection)
       setTranslationOpen(true)
@@ -1223,7 +1245,7 @@ function PdfViewerInner({
         translationAbortRef.current = null
       }
     }
-  }, [t, translationSettings])
+  }, [getSelectionSnapshotKey, suppressTranslationSelectionDispatch, t, translationSettings])
 
   const handleTranslationPronunciationPlay = useEffectEvent(() => {
     const entry = translationEntry
@@ -2369,6 +2391,9 @@ function PdfViewerInner({
   }, [pdfDocument, onOutlineItemsChange, onOutlineLoadingChange])
 
   const handleViewportSelectionChange = useCallback((selection: PdfSelectionDraft | null) => {
+    if (translationSelectionLockRef.current) {
+      return
+    }
     const nextSnapshotKey = getSelectionSnapshotKey(selection)
 
     if (translationOpen) {
@@ -2964,6 +2989,14 @@ function PdfViewerInner({
   }, [])
 
   useEffect(() => {
+    return () => {
+      if (translationSelectionDispatchTimerRef.current) {
+        window.clearTimeout(translationSelectionDispatchTimerRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
     const activeSelectionDraft = translationOpen ? translationSelectionDraft : selectionDraft
     if (!activeSelectionDraft || !isSelectTextToolActive) {
       setTranslationPosition(null)
@@ -3422,6 +3455,7 @@ function PdfViewerInner({
             scale={scale}
             pageHeight={pageHeightForVirtual}
             isSuspended={isSuspended}
+            selectionDispatchSuppressed={translationSelectionDispatchSuppressed}
             previewHighlightColor={selectedHighlightColor}
             clearSelectionSignal={clearSelectionSignal}
             clearSelectionOnBlankClick={false}
@@ -3466,7 +3500,9 @@ function PdfViewerInner({
             <button
               type="button"
               className="pdf-translation-trigger"
+              data-pdf-selection-skip="true"
               style={{ top: `${translationPosition.top}px`, left: `${translationPosition.left}px` }}
+              onPointerDownCapture={() => suppressTranslationSelectionDispatch()}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => void startTranslation()}
             >
@@ -3478,9 +3514,11 @@ function PdfViewerInner({
             <div
               ref={translationPopoverRef}
               className="pdf-translation-popover"
+              data-pdf-selection-skip="true"
               role="dialog"
               aria-label={t('pdf.translateSelection')}
               style={{ top: `${translationPosition.top}px`, left: `${translationPosition.left}px` }}
+              onPointerDownCapture={() => suppressTranslationSelectionDispatch()}
             >
               <div className="pdf-translation-header">
                 <span>{translationSettings.sourceLanguage} → {translationSettings.targetLanguage}</span>

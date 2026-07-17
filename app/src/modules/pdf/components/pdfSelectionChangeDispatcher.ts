@@ -8,6 +8,7 @@ type SelectionChangeEntry = {
 const handlers = new Set<SelectionChangeEntry>()
 let listening = false
 const ENABLE_PDF_SELECTION_DEBUG = true
+let selectionChangeSuppressedUntil = 0
 
 function isEditableElement(activeElement: Element | null) {
   if (!(activeElement instanceof HTMLElement)) return false
@@ -24,7 +25,14 @@ export function shouldIgnorePdfSelectionChangeForEditableOutsideRoots(
   return isEditableElement(activeElement)
 }
 
+export function suppressPdfSelectionChangeDispatch(durationMs = 250) {
+  selectionChangeSuppressedUntil = Math.max(selectionChangeSuppressedUntil, Date.now() + durationMs)
+}
+
 const handleSelectionChange = () => {
+  if (Date.now() < selectionChangeSuppressedUntil) {
+    return
+  }
   const activeElement = typeof document !== 'undefined' ? document.activeElement : null
   if (!(activeElement instanceof HTMLElement)) return
   if (activeElement.closest('[data-pdf-selection-skip="true"]')) return

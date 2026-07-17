@@ -30,6 +30,7 @@ export interface PdfViewportProps {
   scale: number
   pageHeight: number
   isSuspended?: boolean
+  selectionDispatchSuppressed?: boolean
   previewHighlightColor?: string
   clearSelectionSignal?: number
   clearSelectionOnBlankClick?: boolean
@@ -102,6 +103,7 @@ const PdfViewportInner = forwardRef<PdfViewportHandle, PdfViewportProps>(functio
     scale,
     pageHeight,
     isSuspended = false,
+    selectionDispatchSuppressed = false,
     previewHighlightColor,
     clearSelectionSignal = 0,
     clearSelectionOnBlankClick = false,
@@ -268,6 +270,7 @@ const PdfViewportInner = forwardRef<PdfViewportHandle, PdfViewportProps>(functio
             pageNumber={pageNumber}
             scale={scale}
             isSuspended={isSuspended}
+            selectionDispatchSuppressed={selectionDispatchSuppressed}
             previewHighlightColor={previewHighlightColor}
             clearSelectionSignal={clearSelectionSignal}
             clearSelectionOnBlankClick={clearSelectionOnBlankClick}
