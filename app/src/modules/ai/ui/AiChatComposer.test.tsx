@@ -96,6 +96,37 @@ describe('AiChatComposer', () => {
     expect(composerHandleRef.current?.getDraft()).toBe('你')
   })
 
+  it('uploads pasted image files from the clipboard', async () => {
+    const inputRef = createRef<HTMLTextAreaElement>() as RefObject<HTMLTextAreaElement>
+    const onUploadFiles = vi.fn()
+    const imageFile = new File(['fake-image'], 'clipboard.png', { type: 'image/png' })
+
+    renderWithI18n(
+      <AiChatComposer
+        loading={false}
+        onSubmit={() => {}}
+        onInputKeyDown={() => {}}
+        inputRef={inputRef}
+        pendingAttachmentsLength={0}
+        onUploadFiles={onUploadFiles}
+        onStop={() => {}}
+      />,
+    )
+
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement
+
+    await act(async () => {
+      fireEvent.paste(textarea, {
+        clipboardData: {
+          files: [imageFile],
+          getData: () => '',
+        },
+      })
+    })
+
+    expect(onUploadFiles).toHaveBeenCalledWith([imageFile])
+  })
+
   it('traces the events triggered by a normal key press and a composition commit', async () => {
     const inputRef = createRef<HTMLTextAreaElement>() as RefObject<HTMLTextAreaElement>
     const composerHandleRef = createRef<AiChatComposerHandle>()

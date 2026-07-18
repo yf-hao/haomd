@@ -402,9 +402,54 @@ export const AiChatComposer = memo(function AiChatComposer({
     e.target.value = ''
   }, [onAttachImage, onUploadFiles])
 
+  const handleImagePasteFiles = useCallback((files: File[]) => {
+    const imageFiles = files.filter((file) => file.type.startsWith('image/'))
+    if (imageFiles.length === 0) return false
+
+    if (onUploadFiles) {
+      const supportedFiles = imageFiles.filter((file) => inferAttachmentKind(file))
+      if (supportedFiles.length === 0) return true
+      onUploadFiles(supportedFiles)
+      return true
+    }
+
+    const file = imageFiles.find((candidate) => isPreviewableImage(candidate))
+    if (!file) return true
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result
+      if (typeof result === 'string') {
+        onAttachImage?.(result)
+      }
+    }
+    reader.readAsDataURL(file)
+    return true
+  }, [onAttachImage, onUploadFiles])
+
   const handlePaste = useCallback((e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(e.clipboardData.files || [])
+    if (handleImagePasteFiles(files)) {
+      e.preventDefault()
+      onDraftChange?.()
+      return
+    }
+
+    const text = e.clipboardData.getData('text/plain') || e.clipboardData.getData('text')
+    if (!text) return
+
     e.preventDefault()
-  }, [])
+
+    const el = e.currentTarget
+    const start = el.selectionStart ?? el.value.length
+    const end = el.selectionEnd ?? start
+    const next = el.value.slice(0, start) + text + el.value.slice(end)
+    const caret = start + text.length
+
+    applyComposerState(next, caret)
+    onDraftChange?.()
+    el.setSelectionRange(caret, caret)
+  }, [applyComposerState, handleImagePasteFiles, onDraftChange])
 
   const handleCompositionStart = () => {
     compositionEndFlushTokenRef.current += 1
