@@ -138,7 +138,6 @@
   background: var(--theme-component-sidebar-active);
   color: var(--theme-text-default);
 }
-}
 
 .outline-list {
   list-style: none;
