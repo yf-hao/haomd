@@ -39,7 +39,7 @@ export interface AiChatBodyProps {
   onInputFocusChange?: (focused: boolean) => void
   onCompositionStart?: () => void
   onCompositionEnd?: () => void
-  inputRef?: RefObject<HTMLTextAreaElement>
+  inputRef?: RefObject<HTMLTextAreaElement | null>
   composerHandleRef?: import('react').Ref<AiChatComposerHandle>
   messagesContainerRef: RefObject<HTMLDivElement>
   getDisplayContent: (msgId: string, full: string, streaming?: boolean) => string

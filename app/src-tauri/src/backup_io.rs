@@ -1594,8 +1594,8 @@ fn sha256_hex(bytes: &[u8]) -> String {
 }
 
 fn sha256_file_blocking(path: &Path) -> Result<String, String> {
-    let mut file = File::open(path)
-        .map_err(|err| format!("打开本地文件失败 {}: {err}", path.display()))?;
+    let mut file =
+        File::open(path).map_err(|err| format!("打开本地文件失败 {}: {err}", path.display()))?;
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 64 * 1024];
 
@@ -2389,7 +2389,7 @@ async fn download_directory_from_webdav(
                         webdav_request(&client, Method::GET, &file_url, &username, &password)
                             .send()
                             .await
-                        .map_err(|err| format!("下载文件失败 {relative}: {err}"))?;
+                            .map_err(|err| format!("下载文件失败 {relative}: {err}"))?;
 
                     if !resp.status().is_success() {
                         return Err(format!("下载文件失败 {relative}: HTTP {}", resp.status()));
@@ -3540,9 +3540,9 @@ mod tests {
         std::fs::write(nested.join("b.txt"), b"world").unwrap();
 
         let (first_dirs, first_index, cache_root) =
-            build_local_sync_index(&root, None, None, None).unwrap();
+            build_local_sync_index(&root, None, None, None, None).unwrap();
         let (second_dirs, second_index, second_cache_root) =
-            build_local_sync_index(&root, None, Some(&cache_root), None).unwrap();
+            build_local_sync_index(&root, None, Some(&cache_root), None, None).unwrap();
 
         assert_eq!(first_dirs, second_dirs);
         assert_eq!(first_index.files, second_index.files);

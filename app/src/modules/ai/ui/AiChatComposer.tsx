@@ -44,7 +44,7 @@ export interface AiChatComposerProps {
   onInputFocusChange?: (focused: boolean) => void
   onCompositionStart?: () => void
   onCompositionEnd?: () => void
-  inputRef?: RefObject<HTMLTextAreaElement>
+  inputRef?: RefObject<HTMLTextAreaElement | null>
   composerHandleRef?: Ref<AiChatComposerHandle>
   onDraftChange?: () => void
   inputPlaceholder?: string
@@ -245,12 +245,13 @@ export const AiChatComposer = memo(function AiChatComposer({
   const compositionEndCommitPendingRef = useRef(false)
   const draftSelectionRef = useRef<{ start: number; end: number } | null>(null)
   const textareaValueRef = useRef('')
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const [composerState, setComposerState] = useState<ComposerState>({ draft: '', cursorIndex: null })
   const draft = composerState.draft
   const cursorIndex = composerState.cursorIndex
 
   const autoResizeInput = useCallback(() => {
-    const el = inputRef?.current
+    const el = textareaRef.current
     if (!el) return
     const maxHeight = 120
     const next = Math.min(maxHeight, el.scrollHeight)
@@ -286,8 +287,8 @@ export const AiChatComposer = memo(function AiChatComposer({
     draftSelectionRef.current = null
     textareaValueRef.current = ''
     autoResizeHeightRef.current = null
-    if (inputRef?.current) {
-      inputRef.current.value = ''
+    if (textareaRef.current) {
+      textareaRef.current.value = ''
     }
     scheduleAutoResize(true)
   }, [historyIdentity, scheduleAutoResize])
@@ -296,8 +297,8 @@ export const AiChatComposer = memo(function AiChatComposer({
     getDraft: () => textareaValueRef.current,
     setDraft: (value: string, caret?: number | null) => {
       textareaValueRef.current = value
-      if (inputRef?.current) {
-        inputRef.current.value = value
+      if (textareaRef.current) {
+        textareaRef.current.value = value
       }
       setComposerState({ draft: value, cursorIndex: resolveSlashCursorIndex(value, caret ?? value.length) })
       autoResizeHeightRef.current = null
@@ -311,8 +312,8 @@ export const AiChatComposer = memo(function AiChatComposer({
     },
     clearDraft: () => {
       textareaValueRef.current = ''
-      if (inputRef?.current) {
-        inputRef.current.value = ''
+      if (textareaRef.current) {
+        textareaRef.current.value = ''
       }
       autoResizeHeightRef.current = null
       scheduleAutoResize(true)
@@ -320,18 +321,18 @@ export const AiChatComposer = memo(function AiChatComposer({
       draftSelectionRef.current = null
     },
     focus: () => {
-      inputRef?.current?.focus()
+      textareaRef.current?.focus()
     },
-  }), [draft, inputRef, composerHandleRef])
+  }), [composerHandleRef])
 
   useLayoutEffect(() => {
     const pending = draftSelectionRef.current
     if (!pending) return
-    const el = inputRef?.current
+    const el = textareaRef.current
     if (!el) return
     el.setSelectionRange(pending.start, pending.end)
     draftSelectionRef.current = null
-  }, [draft, inputRef])
+  }, [draft])
 
   const commitDraftFromInput = useCallback((target: HTMLTextAreaElement, syncState = false) => {
     const nextDraft = target.value
@@ -450,6 +451,13 @@ export const AiChatComposer = memo(function AiChatComposer({
     onDraftChange?.()
     el.setSelectionRange(caret, caret)
   }, [applyComposerState, handleImagePasteFiles, onDraftChange])
+
+  const setTextareaRef = useCallback((node: HTMLTextAreaElement | null) => {
+    textareaRef.current = node
+    if (inputRef) {
+      inputRef.current = node
+    }
+  }, [inputRef])
 
   const handleCompositionStart = () => {
     compositionEndFlushTokenRef.current += 1
@@ -595,7 +603,7 @@ export const AiChatComposer = memo(function AiChatComposer({
           id="ai-chat-input"
           className="field-textarea"
           rows={1}
-          ref={inputRef}
+          ref={setTextareaRef}
           defaultValue={draft}
           onInput={(e) => {
             const debugStart = ENABLE_INPUT_LATENCY_DEBUG ? performance.now() : 0

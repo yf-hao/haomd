@@ -39,13 +39,18 @@ fn pdf_sessions_path(app: &AppHandle) -> std::io::Result<PathBuf> {
 async fn read_pdf_sessions(app: &AppHandle) -> std::io::Result<Vec<PdfChatSessionCfg>> {
     let path = pdf_sessions_path(app)?;
     match fs::read(&path).await {
-        Ok(bytes) => Ok(serde_json::from_slice::<Vec<PdfChatSessionCfg>>(&bytes).unwrap_or_default()),
+        Ok(bytes) => {
+            Ok(serde_json::from_slice::<Vec<PdfChatSessionCfg>>(&bytes).unwrap_or_default())
+        }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(vec![]),
         Err(err) => Err(err),
     }
 }
 
-async fn write_pdf_sessions(app: &AppHandle, sessions: &[PdfChatSessionCfg]) -> std::io::Result<()> {
+async fn write_pdf_sessions(
+    app: &AppHandle,
+    sessions: &[PdfChatSessionCfg],
+) -> std::io::Result<()> {
     let path = pdf_sessions_path(app)?;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).await?;

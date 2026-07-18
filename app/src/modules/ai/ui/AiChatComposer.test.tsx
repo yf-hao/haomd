@@ -1,4 +1,4 @@
-import { createRef, type ReactNode, type RefObject } from 'react'
+import { createRef, type ReactNode } from 'react'
 import { fireEvent, render, screen, act } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AiChatComposer, type AiChatComposerHandle } from './AiChatComposer'
@@ -22,7 +22,7 @@ describe('AiChatComposer', () => {
   })
 
   it('exposes the textarea through ref and auto-resizes it on input', async () => {
-    const inputRef = createRef<HTMLTextAreaElement>() as RefObject<HTMLTextAreaElement>
+    const inputRef = createRef<HTMLTextAreaElement | null>()
     const onSubmit = vi.fn()
     const onInputKeyDown = vi.fn()
 
@@ -56,7 +56,7 @@ describe('AiChatComposer', () => {
   })
 
   it('commits the finalized composition text after composition ends', async () => {
-    const inputRef = createRef<HTMLTextAreaElement>() as RefObject<HTMLTextAreaElement>
+    const inputRef = createRef<HTMLTextAreaElement | null>()
     const composerHandleRef = createRef<AiChatComposerHandle>()
     const onDraftChange = vi.fn()
 
@@ -97,7 +97,7 @@ describe('AiChatComposer', () => {
   })
 
   it('uploads pasted image files from the clipboard', async () => {
-    const inputRef = createRef<HTMLTextAreaElement>() as RefObject<HTMLTextAreaElement>
+    const inputRef = createRef<HTMLTextAreaElement | null>()
     const onUploadFiles = vi.fn()
     const imageFile = new File(['fake-image'], 'clipboard.png', { type: 'image/png' })
 
@@ -128,7 +128,7 @@ describe('AiChatComposer', () => {
   })
 
   it('traces the events triggered by a normal key press and a composition commit', async () => {
-    const inputRef = createRef<HTMLTextAreaElement>() as RefObject<HTMLTextAreaElement>
+    const inputRef = createRef<HTMLTextAreaElement | null>()
     const composerHandleRef = createRef<AiChatComposerHandle>()
     const onDraftChange = vi.fn()
     const onInputKeyDown = vi.fn()
@@ -188,7 +188,7 @@ describe('AiChatComposer', () => {
   })
 
   it('notifies focus state changes from the textarea', async () => {
-    const inputRef = createRef<HTMLTextAreaElement>() as RefObject<HTMLTextAreaElement>
+    const inputRef = createRef<HTMLTextAreaElement | null>()
     const onInputFocusChange = vi.fn()
 
     renderWithI18n(
