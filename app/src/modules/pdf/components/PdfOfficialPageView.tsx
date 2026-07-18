@@ -172,10 +172,10 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
   onAnnotationDoubleClick,
   onClearAnnotationSelection,
 }: PdfOfficialPageViewProps) {
-  const rootRef = useRef<HTMLDivElement | null>(null)
-  const pageHostRef = useRef<HTMLDivElement | null>(null)
-  const isSuspendedRef = useRef(isSuspended)
-  const selectionDispatchSuppressedRef = useRef(selectionDispatchSuppressed)
+    const rootRef = useRef<HTMLDivElement | null>(null)
+    const pageHostRef = useRef<HTMLDivElement | null>(null)
+    const isSuspendedRef = useRef(isSuspended)
+    const selectionDispatchSuppressedRef = useRef(selectionDispatchSuppressed)
   const textRectsRef = useRef<RectLike[]>([])
   const textRectsDirtyRef = useRef(true)
   const visualTextLayoutRef = useRef<VisualTextLayout | null>(null)
@@ -187,8 +187,9 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
   const hasActiveSelectionRef = useRef(false)
   const shapeDraftStartRef = useRef<{ x: number; y: number } | null>(null)
   const isShapeDrawingActiveRef = useRef(false)
-  const shapeDraftRectRef = useRef<Rect | null>(null)
-  const stampResizeDraftRef = useRef<{ annotationId: string; rect: Rect } | null>(null)
+    const shapeDraftRectRef = useRef<Rect | null>(null)
+    const selectionAssistRegionFrameRef = useRef(0)
+    const stampResizeDraftRef = useRef<{ annotationId: string; rect: Rect } | null>(null)
   const lineResizeDraftRef = useRef<{ annotationId: string; rect: Rect; linePoints: Rect } | null>(null)
   const movingStampStateRef = useRef<{
     annotationId: string
@@ -558,6 +559,19 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     root.style.setProperty('--pdf-text-selection-assist-left', `${lineRight}px`)
   }
 
+  const scheduleSelectionAssistRegionUpdate = (
+    pageRect: DOMRect,
+    selectionRects: readonly RectLike[],
+  ) => {
+    if (selectionAssistRegionFrameRef.current) {
+      window.cancelAnimationFrame(selectionAssistRegionFrameRef.current)
+    }
+    selectionAssistRegionFrameRef.current = window.requestAnimationFrame(() => {
+      selectionAssistRegionFrameRef.current = 0
+      setSelectionAssistRegionFromRects(pageRect, selectionRects)
+    })
+  }
+
   const setPointerSelectingState = (active: boolean) => {
     isPointerSelectionActiveRef.current = active
     rootRef.current?.classList.toggle('is-pointer-selecting', active)
@@ -763,7 +777,6 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
           anchorOffset: number
           focusNode: Node | null
           focusOffset: number
-          text: string
           collapsed: boolean
         }
       | null = null
@@ -837,7 +850,6 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
 
       const pageRect = pageEl.getBoundingClientRect()
       const normalizedRawRects = normalizeSelectionRects(selection.getRangeAt(0).getClientRects())
-      setSelectionAssistRegionFromRects(pageRect, normalizedRawRects)
       return {
         pageRect,
         normalizedRawRects,
@@ -875,6 +887,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         }
         return
       }
+      scheduleSelectionAssistRegionUpdate(pageRect, normalizedRawRects)
       if (textRectsDirtyRef.current || textRectsRef.current.length === 0) {
         return
       }
@@ -1283,7 +1296,6 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
             anchorOffset: selection.anchorOffset,
             focusNode: selection.focusNode,
             focusOffset: selection.focusOffset,
-            text: selection.toString(),
             collapsed: selection.isCollapsed,
           }
         : null
@@ -1294,7 +1306,6 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         lastNativeSelectionSnapshot.anchorOffset === nextNativeSelectionSnapshot.anchorOffset &&
         lastNativeSelectionSnapshot.focusNode === nextNativeSelectionSnapshot.focusNode &&
         lastNativeSelectionSnapshot.focusOffset === nextNativeSelectionSnapshot.focusOffset &&
-        lastNativeSelectionSnapshot.text === nextNativeSelectionSnapshot.text &&
         lastNativeSelectionSnapshot.collapsed === nextNativeSelectionSnapshot.collapsed
       ) {
         if (ENABLE_PDF_SELECTION_LATENCY_DEBUG) {
@@ -2075,6 +2086,9 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       }
       if (settledSelectionInnerFrame) {
         window.cancelAnimationFrame(settledSelectionInnerFrame)
+      }
+      if (selectionAssistRegionFrameRef.current) {
+        window.cancelAnimationFrame(selectionAssistRegionFrameRef.current)
       }
       pendingSelectionPreview = null
       setPointerSelectingState(false)

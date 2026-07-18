@@ -9,6 +9,7 @@ const handlers = new Set<SelectionChangeEntry>()
 let listening = false
 const ENABLE_PDF_SELECTION_DEBUG = true
 let selectionChangeSuppressedUntil = 0
+let selectionChangeFrame = 0
 
 function isEditableElement(activeElement: Element | null) {
   if (!(activeElement instanceof HTMLElement)) return false
@@ -29,7 +30,8 @@ export function suppressPdfSelectionChangeDispatch(durationMs = 250) {
   selectionChangeSuppressedUntil = Math.max(selectionChangeSuppressedUntil, Date.now() + durationMs)
 }
 
-const handleSelectionChange = () => {
+const flushSelectionChange = () => {
+  selectionChangeFrame = 0
   if (Date.now() < selectionChangeSuppressedUntil) {
     return
   }
@@ -63,6 +65,17 @@ const handleSelectionChange = () => {
   }
 }
 
+const handleSelectionChange = () => {
+  if (selectionChangeFrame) {
+    return
+  }
+  if (typeof window === 'undefined') {
+    flushSelectionChange()
+    return
+  }
+  selectionChangeFrame = window.requestAnimationFrame(flushSelectionChange)
+}
+
 function ensureListening() {
   if (listening || typeof document === 'undefined') return
   document.addEventListener('selectionchange', handleSelectionChange)
@@ -73,6 +86,10 @@ function stopListening() {
   if (!listening || typeof document === 'undefined') return
   document.removeEventListener('selectionchange', handleSelectionChange)
   listening = false
+  if (selectionChangeFrame) {
+    window.cancelAnimationFrame(selectionChangeFrame)
+    selectionChangeFrame = 0
+  }
 }
 
 export function registerPdfSelectionChangeHandler(root: HTMLElement | null, handler: SelectionChangeHandler) {
