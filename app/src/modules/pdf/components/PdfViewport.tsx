@@ -270,6 +270,7 @@ const PdfViewportInner = forwardRef<PdfViewportHandle, PdfViewportProps>(functio
             pageNumber={pageNumber}
             scale={scale}
             isSuspended={isSuspended}
+            selectionChangeActive={pageNumber === currentPage}
             selectionDispatchSuppressed={selectionDispatchSuppressed}
             previewHighlightColor={previewHighlightColor}
             clearSelectionSignal={clearSelectionSignal}

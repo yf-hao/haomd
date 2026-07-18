@@ -48,6 +48,7 @@ const ENABLE_PDF_SELECTION_LATENCY_DEBUG = true
 type SelectionPublicationSnapshot = {
   text: string
   rectsKey: string
+  previewKey: string
 }
 
 export interface PdfOfficialPageViewProps {
@@ -55,6 +56,7 @@ export interface PdfOfficialPageViewProps {
   pageNumber: number
   scale: number
   isSuspended?: boolean
+  selectionChangeActive?: boolean
   selectionDispatchSuppressed?: boolean
   previewHighlightColor?: string
   clearSelectionSignal?: number
@@ -133,6 +135,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
   pageNumber,
   scale,
   isSuspended = false,
+  selectionChangeActive = false,
   selectionDispatchSuppressed = false,
   previewHighlightColor = '#f5d90a',
   clearSelectionSignal = 0,
@@ -780,6 +783,20 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         }))
     }
 
+    const buildSelectionPreviewKey = (text: string, rawRects: readonly RectLike[]) =>
+      `${text}\u0000${rawRects
+        .map((rect) =>
+          [
+            rect.left.toFixed(4),
+            rect.top.toFixed(4),
+            rect.right.toFixed(4),
+            rect.bottom.toFixed(4),
+            rect.width.toFixed(4),
+            rect.height.toFixed(4),
+          ].join(','),
+        )
+        .join('|')}`
+
     const publishSelection = (selection: PdfSelectionDraft | null) => {
       if (!onSelectionChange) return
 
@@ -846,6 +863,18 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       }
 
       const { pageRect, normalizedRawRects, text } = preview
+      const previewKey = buildSelectionPreviewKey(text, normalizedRawRects)
+      const lastPublishedSelectionSnapshot = lastPublishedSelectionSnapshotRef.current
+      if (lastPublishedSelectionSnapshot?.previewKey === previewKey) {
+        if (ENABLE_PDF_SELECTION_LATENCY_DEBUG) {
+          console.debug('[input-debug][pdf-page] update-selection-skip-unchanged-preview', {
+            durationMs: Math.round(window.performance.now() - debugStart),
+            pageNumber,
+            textLength: text.length,
+          })
+        }
+        return
+      }
       if (textRectsDirtyRef.current || textRectsRef.current.length === 0) {
         return
       }
@@ -877,22 +906,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       const nextSelectionSnapshot = {
         text,
         rectsKey,
-      }
-      const lastPublishedSelectionSnapshot = lastPublishedSelectionSnapshotRef.current
-      if (
-        lastPublishedSelectionSnapshot &&
-        lastPublishedSelectionSnapshot.text === nextSelectionSnapshot.text &&
-        lastPublishedSelectionSnapshot.rectsKey === nextSelectionSnapshot.rectsKey
-      ) {
-        applySelectionBlocks(nextBlocks)
-        if (ENABLE_PDF_SELECTION_LATENCY_DEBUG) {
-          console.debug('[input-debug][pdf-page] update-selection-skip-unchanged', {
-            durationMs: Math.round(window.performance.now() - debugStart),
-            pageNumber,
-            textLength: text.length,
-          })
-        }
-        return
+        previewKey,
       }
       lastPublishedSelectionSnapshotRef.current = nextSelectionSnapshot
       applySelectionBlocks(nextBlocks)
@@ -2017,6 +2031,25 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     document.addEventListener('pointermove', handlePointerMove)
     document.addEventListener('pointerup', handlePointerFinish)
     document.addEventListener('pointercancel', handlePointerFinish)
+    if (!selectionChangeActive) {
+      return () => {
+        root.removeEventListener('pointerdown', handlePointerDown)
+        root.removeEventListener('click', handleTextSelectionClick)
+        document.removeEventListener('pointermove', handlePointerMove)
+        document.removeEventListener('pointerup', handlePointerFinish)
+        document.removeEventListener('pointercancel', handlePointerFinish)
+        if (selectionChangeFrame) {
+          window.cancelAnimationFrame(selectionChangeFrame)
+        }
+        if (settledSelectionFrame) {
+          window.cancelAnimationFrame(settledSelectionFrame)
+        }
+        if (settledSelectionInnerFrame) {
+          window.cancelAnimationFrame(settledSelectionInnerFrame)
+        }
+      }
+    }
+
     const unregisterSelectionChange = registerPdfSelectionChangeHandler(root, handleSelectionChange)
     const selection = window.getSelection()
     if (selectionBelongsToCurrentPage(selection)) {
