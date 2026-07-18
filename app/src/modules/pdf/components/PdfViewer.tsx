@@ -137,6 +137,24 @@ function getPdfTranslationVoiceLang(entry: PdfTranslationEntry, sourceLanguage: 
   return 'zh-CN'
 }
 
+function getCenteredTranslationPosition(
+  containerWidth: number,
+  containerHeight: number,
+  popupWidth: number,
+  popupHeight: number,
+): NoteEditorPosition {
+  const left = Math.min(
+    Math.max(8, Math.round((containerWidth - popupWidth) / 2)),
+    Math.max(8, containerWidth - popupWidth - 8),
+  )
+  const preferredTop = Math.round(containerHeight * 0.34 - popupHeight / 2)
+  const top = Math.min(
+    Math.max(8, preferredTop),
+    Math.max(8, containerHeight - popupHeight - 8),
+  )
+  return { top, left }
+}
+
 const PDF_CSS_UNITS = 96 / 72
 const DEFAULT_STAMP_SIZE = 0.045
 const MIN_STAMP_SIZE = DEFAULT_STAMP_SIZE / 3
@@ -3011,14 +3029,21 @@ function PdfViewerInner({
         return
       }
       const mainWidth = viewportRef.current?.getContainerWidth() ?? metrics.width
-      const popupWidth = translationOpen ? 520 : 80
-      const anchorLeft = metrics.left + selectionBounds.x2 * metrics.width
-      const anchorTop = metrics.viewportTop + selectionBounds.y2 * metrics.height
       const containerHeight = viewportRef.current?.getContainerHeight() ?? metrics.height
       const measuredPopupHeight = translationOpen
         ? Math.ceil(translationPopoverRef.current?.getBoundingClientRect().height || 0)
         : 80
       const popupHeight = Math.max(80, measuredPopupHeight)
+      if (translationOpen) {
+        const popupWidth = Math.min(520, Math.max(80, mainWidth - 16))
+        setTranslationPosition(
+          getCenteredTranslationPosition(mainWidth, containerHeight, popupWidth, popupHeight),
+        )
+        return
+      }
+      const popupWidth = 80
+      const anchorLeft = metrics.left + selectionBounds.x2 * metrics.width
+      const anchorTop = metrics.viewportTop + selectionBounds.y2 * metrics.height
       const belowTop = anchorTop + 10
       const aboveTop = anchorTop - popupHeight - 12
       const maxTop = Math.max(8, containerHeight - popupHeight - 8)

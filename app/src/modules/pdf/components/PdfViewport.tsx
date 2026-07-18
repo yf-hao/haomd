@@ -216,7 +216,7 @@ const PdfViewportInner = forwardRef<PdfViewportHandle, PdfViewportProps>(functio
     pageCount,
     pageHeight,
     containerRef,
-    bufferPages: 2,
+    bufferPages: 1,
   })
 
   const annotationsByPage = useMemo(() => {

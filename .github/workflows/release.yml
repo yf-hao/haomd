@@ -7,7 +7,6 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:
 
 jobs:
   check-version:
@@ -25,11 +24,6 @@ jobs:
       - name: Check if version is bumped
         id: check
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "Manual release requested."
-            echo "is_new_version=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
           VERSION=$(node -p "require('./app/package.json').version")
           TAG="v$VERSION"
           if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
