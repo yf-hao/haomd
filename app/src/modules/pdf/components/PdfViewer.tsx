@@ -961,6 +961,7 @@ function PdfViewerInner({
   const [annotationDocument, setAnnotationDocument] = useState<DocumentAnnotations | null>(null)
   const [selectionDraft, setSelectionDraft] = useState<PdfSelectionDraft | null>(null)
   const [translationSelectionDraft, setTranslationSelectionDraft] = useState<PdfSelectionDraft | null>(null)
+  const [pendingHighlightDraft, setPendingHighlightDraft] = useState<PdfSelectionDraft | null>(null)
   const translationAbortRef = useRef<AbortController | null>(null)
   const translationRequestIdRef = useRef(0)
   const [translationOpen, setTranslationOpen] = useState(false)
@@ -1553,6 +1554,7 @@ function PdfViewerInner({
     const currentSelectionDraft = draft
     if (!annotationDocument || !currentSelectionDraft) return
 
+    setPendingHighlightDraft(currentSelectionDraft)
     setSelectionDraft(null)
     selectionDraftRef.current = null
     setSelectedAnnotationId(null)
@@ -1578,6 +1580,7 @@ function PdfViewerInner({
       setAnnotationMessage(t('pdf.annotationSaveFailed', { message }))
     } finally {
       setAnnotationBusy(false)
+      setPendingHighlightDraft(null)
     }
   }
 
@@ -3484,6 +3487,7 @@ function PdfViewerInner({
             previewHighlightColor={selectedHighlightColor}
             clearSelectionSignal={clearSelectionSignal}
             clearSelectionOnBlankClick={false}
+            highlightDraft={pendingHighlightDraft}
             currentPage={currentPage}
             onCurrentPageChange={handleViewportCurrentPageChange}
             onRegisterSelectionGetter={onRegisterSelectionGetter}

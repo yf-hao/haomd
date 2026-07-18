@@ -34,6 +34,7 @@ export interface PdfViewportProps {
   previewHighlightColor?: string
   clearSelectionSignal?: number
   clearSelectionOnBlankClick?: boolean
+  highlightDraft?: PdfSelectionDraft | null
   currentPage: number
   onCurrentPageChange: (page: number) => void
   onRegisterSelectionGetter?: (getter: (() => string | null) | null) => void
@@ -107,6 +108,7 @@ const PdfViewportInner = forwardRef<PdfViewportHandle, PdfViewportProps>(functio
     previewHighlightColor,
     clearSelectionSignal = 0,
     clearSelectionOnBlankClick = false,
+    highlightDraft = null,
     currentPage,
     onCurrentPageChange,
     onRegisterSelectionGetter,
@@ -275,6 +277,7 @@ const PdfViewportInner = forwardRef<PdfViewportHandle, PdfViewportProps>(functio
             previewHighlightColor={previewHighlightColor}
             clearSelectionSignal={clearSelectionSignal}
             clearSelectionOnBlankClick={clearSelectionOnBlankClick}
+            highlightDraft={highlightDraft}
             annotations={annotationsByPage.get(pageNumber) ?? EMPTY_ANNOTATIONS}
             onSelectionChange={onSelectionChange}
             activeShapeTool={activeShapeTool}

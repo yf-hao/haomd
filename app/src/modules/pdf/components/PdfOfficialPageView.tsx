@@ -61,6 +61,7 @@ export interface PdfOfficialPageViewProps {
   previewHighlightColor?: string
   clearSelectionSignal?: number
   clearSelectionOnBlankClick?: boolean
+  highlightDraft?: PdfSelectionDraft | null
   annotations?: Annotation[]
   onSelectionChange?: (selection: PdfSelectionDraft | null) => void
   activeShapeTool?: Extract<AnnotationType, 'square' | 'circle' | 'line' | 'arrow'> | null
@@ -140,6 +141,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
   previewHighlightColor = '#f5d90a',
   clearSelectionSignal = 0,
   clearSelectionOnBlankClick = false,
+  highlightDraft = null,
   annotations = [],
   onSelectionChange,
   activeShapeTool = null,
@@ -2659,6 +2661,19 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
             />
           )
         ) : null}
+        {(highlightDraft?.page === pageNumber ? highlightDraft.rects : []).map((rect, index) => (
+          <div
+            key={`${pageNumber}-highlight-draft-${index}`}
+            className="pdf-selection-block pdf-selection-block--highlight-draft"
+            style={{
+              left: `${rect.x1 * 100}%`,
+              top: `${rect.y1 * 100}%`,
+              width: `${(rect.x2 - rect.x1) * 100}%`,
+              height: `${(rect.y2 - rect.y1) * 100}%`,
+              '--pdf-selection-preview-color': previewHighlightColor,
+            } as React.CSSProperties}
+          />
+        ))}
         {selectionBlocks.map((block, index) => (
           <div
             key={`${pageNumber}-${index}`}
