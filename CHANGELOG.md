@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.12.5] - 2026-07-19
+
+### 中文
+
+本次更新为 v0.12.5 补丁版本，主要围绕 PDF 选区、翻译浮层、注释高亮和发布流程做了稳定性修复与体验优化。
+
+#### 💡 主要更新
+*   **PDF 选区与分发**：修复文本选区几何偏移与文本层对齐问题，改善空白区域和页面边缘的选区处理；压低 `selectionchange` 分发频率，并减少事件 fanout，降低 PDF 场景下的卡顿和抖动。
+*   **PDF 高亮与注释**：调整高亮选区渲染方式，修复高亮块重叠导致的视觉污染，并保持高亮与普通选区的体验一致性。
+*   **PDF 翻译浮层**：优化翻译弹层定位流程，避免点击后先闪到选区附近再跳转，提升首次展示的稳定性。
+*   **发布与 CI**：调整 GitHub Actions checkout 配置，增强发布流程重试能力，并清理遗留 workspace 元数据文件，减少发布干扰。
+
+---
+
+### English
+
+Version v0.12.5 is a patch release focused on PDF selection handling, translation popover positioning, annotation rendering stability, and release workflow reliability.
+
+#### 💡 Key Updates
+*   **PDF Selection and Dispatch**: Fixed selection geometry alignment, improved blank-area and page-edge handling, reduced `selectionchange` dispatch frequency, and lowered event fanout across registered pages.
+*   **PDF Highlight and Annotation Rendering**: Refined highlight rendering, fixed block overlap artifacts, and improved consistency between native selection and annotation highlights.
+*   **PDF Translation Popover**: Refined the popup positioning flow so it no longer flashes near the selection trigger before settling into place.
+*   **Release and CI Stability**: Improved GitHub Actions checkout reliability, added retry support to the release workflow, and removed stale workspace metadata files.
+
+---
+
 ## [v0.12.4] - 2026-07-14
 
 ### 中文
