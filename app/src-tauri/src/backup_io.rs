@@ -981,7 +981,8 @@ async fn build_backup_package(
         backup_temp_dir("haomd-backup").map_err(|err| format!("创建备份暂存目录失败: {err}"))?;
     let package_root = temp_dir.clone();
     let result = (|| -> Result<BackupPackage, String> {
-        let skip_relative = |relative: &Path| should_skip_local_backup_relative(relative, scope_settings);
+        let skip_relative =
+            |relative: &Path| should_skip_local_backup_relative(relative, scope_settings);
         copy_tree_contents(
             &config_root,
             &config_root,
