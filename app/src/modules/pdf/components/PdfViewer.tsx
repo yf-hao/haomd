@@ -1223,6 +1223,7 @@ function PdfViewerInner({
     const selectionSnapshotKey = getSelectionSnapshotKey(selection)
     translationSelectionSnapshotRef.current = selectionSnapshotKey
     translationSelectionLockRef.current = true
+    setTranslationPosition(null)
     if (selection.text.length > MAX_TRANSLATION_SELECTION_LENGTH) {
       setTranslationSelectionDraft(selection)
       setTranslationOpen(true)
