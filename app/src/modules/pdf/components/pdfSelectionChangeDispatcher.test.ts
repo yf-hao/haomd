@@ -12,6 +12,10 @@ describe('pdfSelectionChangeDispatcher', () => {
   it('attaches only one document selectionchange listener for all handlers', () => {
     const addSpy = vi.spyOn(document, 'addEventListener')
     const removeSpy = vi.spyOn(document, 'removeEventListener')
+    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      callback(0)
+      return 1
+    })
     const root = document.createElement('div')
     const first = vi.fn()
     const second = vi.fn()
@@ -31,9 +35,14 @@ describe('pdfSelectionChangeDispatcher', () => {
 
     expect(removeSpy).toHaveBeenCalledTimes(1)
     expect(removeSpy).toHaveBeenCalledWith('selectionchange', expect.any(Function))
+    rafSpy.mockRestore()
   })
 
   it('skips dispatching when focus is in an editable element outside every registered pdf root', () => {
+    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      callback(0)
+      return 1
+    })
     const root = document.createElement('div')
     const first = vi.fn()
     const unregister = registerPdfSelectionChangeHandler(root, first)
@@ -47,6 +56,7 @@ describe('pdfSelectionChangeDispatcher', () => {
 
     unregister()
     textarea.remove()
+    rafSpy.mockRestore()
   })
 
   it('skips dispatching when focus is inside a pdf selection skip region', () => {
