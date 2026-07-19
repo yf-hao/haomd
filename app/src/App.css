@@ -1937,13 +1937,6 @@ button:disabled {
   transition: box-shadow 0.15s ease, outline-color 0.15s ease, opacity 0.15s ease;
 }
 
-.pdf-annotation-highlight-fill {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-}
-
 .pdf-annotation-block--underline,
 .pdf-annotation-block--strikeout,
 .pdf-annotation-block--squiggly,
@@ -2442,13 +2435,13 @@ button:disabled {
 .pdf-selection-block {
   position: absolute;
   border-radius: 4px;
-  background: color-mix(in srgb, var(--pdf-selection-preview-color, var(--theme-accent-primary)) 28%, transparent);
+  background: color-mix(in srgb, var(--pdf-selection-preview-color, var(--theme-accent-primary)) 22%, transparent);
 }
 
 .pdf-selection-shape-draft {
   position: absolute;
   border: 2px solid color-mix(in srgb, var(--pdf-selection-preview-color, var(--theme-accent-primary)) 82%, white 18%);
-  background: color-mix(in srgb, var(--pdf-selection-preview-color, var(--theme-accent-primary)) 14%, transparent);
+  background: color-mix(in srgb, var(--pdf-selection-preview-color, var(--theme-accent-primary)) 10%, transparent);
   pointer-events: none;
 }
 

@@ -10,6 +10,7 @@ import {
   type SelectionBlock,
 } from './pdfSelectionOverlay'
 import {
+  selectionBlocksToAnnotationRects,
   selectionRectsToAnnotationRects,
   type PdfSelectionDraft,
 } from '../annotationUtils'
@@ -20,6 +21,7 @@ import { registerPdfSelectionChangeHandler } from './pdfSelectionChangeDispatche
 
 const MIN_STAMP_SIZE = 0.045 / 3
 const LINE_RECT_PADDING = 0.006
+const ANNOTATION_RENDER_COORDINATE_SIZE = 1000
 
 type TextCaret = {
   node: Node
@@ -61,7 +63,6 @@ export interface PdfOfficialPageViewProps {
   previewHighlightColor?: string
   clearSelectionSignal?: number
   clearSelectionOnBlankClick?: boolean
-  highlightDraft?: PdfSelectionDraft | null
   annotations?: Annotation[]
   onSelectionChange?: (selection: PdfSelectionDraft | null) => void
   activeShapeTool?: Extract<AnnotationType, 'square' | 'circle' | 'line' | 'arrow'> | null
@@ -141,7 +142,6 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
   previewHighlightColor = '#f5d90a',
   clearSelectionSignal = 0,
   clearSelectionOnBlankClick = false,
-  highlightDraft = null,
   annotations = [],
   onSelectionChange,
   activeShapeTool = null,
@@ -375,6 +375,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
   const applySelectionBlocks = (nextBlocks: SelectionBlock[]) => {
     setSelectionBlocks((prev) => (areSelectionBlocksEqual(prev, nextBlocks) ? prev : nextBlocks))
   }
+
 
   const applyShapeDraftRect = (nextRect: Rect | null) => {
     shapeDraftRectRef.current = nextRect
@@ -895,7 +896,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       }
       const textRects = textRectsRef.current
 
-      const rects = selectionRectsToAnnotationRects(normalizedRawRects, {
+      const rawRects = selectionRectsToAnnotationRects(normalizedRawRects, {
         left: pageRect.left,
         top: pageRect.top,
         right: pageRect.right,
@@ -904,9 +905,10 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         height: pageRect.height,
       })
       const nextBlocks =
-        rects.length > 0
-          ? annotationRectsToSelectionBlocks(rects, pageRect.width, pageRect.height)
+        rawRects.length > 0
+          ? annotationRectsToSelectionBlocks(rawRects, pageRect.width, pageRect.height)
           : buildSelectionBlocks(normalizedRawRects, pageRect, textRects)
+      const rects = selectionBlocksToAnnotationRects(nextBlocks, pageRect.width, pageRect.height)
 
       const rectsKey = rects
         .map((rect) =>
@@ -1414,6 +1416,22 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       if (activeTextBoxDraft) {
         return
       }
+      const existingSelectionAnchorCaret = selectionAnchorCaretRef.current
+      if (event.shiftKey && existingSelectionAnchorCaret) {
+        const focusCaret =
+          getCaretAtPoint(event.clientX, event.clientY) ??
+          getLineEdgeCaretAtPoint(event.clientX, event.clientY)
+        if (focusCaret) {
+          event.preventDefault()
+          event.stopPropagation()
+          onClearAnnotationSelection?.()
+          restoreSelectionFromCarets(existingSelectionAnchorCaret, focusCaret)
+          lastValidSelectionCaretRef.current = focusCaret
+          setPointerSelectingState(false)
+          scheduleUpdate()
+          return
+        }
+      }
       const lineHandle = targetElement?.closest<SVGElement | HTMLElement>('[data-line-handle]') ?? null
       if (lineHandle) {
         const annotationId = lineHandle.dataset.annotationId
@@ -1837,7 +1855,6 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       if (event.detail < 2) {
         restoreSelectionFromCarets(anchorCaret, focusCaret)
       }
-      selectionAnchorCaretRef.current = null
       lastValidSelectionCaretRef.current = null
       if (frame) {
         window.cancelAnimationFrame(frame)
@@ -2127,6 +2144,10 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
 
   useEffect(() => {
     if (isSuspended) return
+  }, [annotations, pageNumber, scale, isSuspended])
+
+  useEffect(() => {
+    if (isSuspended) return
     clearSelectionBlocks()
     hasActiveSelectionRef.current = false
     applyShapeDraftRect(null)
@@ -2294,24 +2315,39 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
             }
 
             if (annotation.type === 'highlight') {
+              if (index > 0) return []
+              const highlightBlocks = annotationRectsToSelectionBlocks(
+                annotation.rects,
+                ANNOTATION_RENDER_COORDINATE_SIZE,
+                ANNOTATION_RENDER_COORDINATE_SIZE,
+              )
               return (
-                <div
-                  key={annotationKey}
-                  {...sharedProps}
-                  style={{
-                    ...sharedProps.style,
-                    opacity: 1,
-                  }}
-                >
-                  <div
-                    className="pdf-annotation-highlight-fill"
-                    style={{
-                      background: annotation.color,
-                      opacity: annotation.opacity,
-                    }}
-                  />
-                  {noteMarker}
-                </div>
+                <Fragment key={annotation.id}>
+                  {highlightBlocks.map((block, blockIndex) => (
+                    <div
+                      key={`${annotation.id}-${blockIndex}`}
+                      className={sharedClassName}
+                      style={{
+                        left: `${(block.left / ANNOTATION_RENDER_COORDINATE_SIZE) * 100}%`,
+                        top: `${(block.top / ANNOTATION_RENDER_COORDINATE_SIZE) * 100}%`,
+                        width: `${(block.width / ANNOTATION_RENDER_COORDINATE_SIZE) * 100}%`,
+                        height: `${(block.height / ANNOTATION_RENDER_COORDINATE_SIZE) * 100}%`,
+                        background: annotation.color,
+                        opacity: annotation.opacity,
+                        '--pdf-annotation-color': annotation.color,
+                      } as React.CSSProperties}
+                      data-annotation-id={annotation.id}
+                      onClick={() => {
+                        onAnnotationClick?.(annotation.id)
+                      }}
+                      onDoubleClick={() => {
+                        onAnnotationDoubleClick?.(annotation.id)
+                      }}
+                    >
+                      {blockIndex === 0 ? noteMarker : null}
+                    </div>
+                  ))}
+                </Fragment>
               )
             }
 
@@ -2661,19 +2697,6 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
             />
           )
         ) : null}
-        {(highlightDraft?.page === pageNumber ? highlightDraft.rects : []).map((rect, index) => (
-          <div
-            key={`${pageNumber}-highlight-draft-${index}`}
-            className="pdf-selection-block pdf-selection-block--highlight-draft"
-            style={{
-              left: `${rect.x1 * 100}%`,
-              top: `${rect.y1 * 100}%`,
-              width: `${(rect.x2 - rect.x1) * 100}%`,
-              height: `${(rect.y2 - rect.y1) * 100}%`,
-              '--pdf-selection-preview-color': previewHighlightColor,
-            } as React.CSSProperties}
-          />
-        ))}
         {selectionBlocks.map((block, index) => (
           <div
             key={`${pageNumber}-${index}`}

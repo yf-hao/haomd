@@ -53,6 +53,7 @@ describe('pdf/annotationUtils', () => {
       page: 2,
       type: 'highlight',
       color: '#4da3ff',
+      opacity: 0.36,
       content: 'sample',
     })
     expect(nextDocument.annotations).toHaveLength(1)

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { selectionRectsToAnnotationRects } from '../annotationUtils'
-import { areSelectionBlocksEqual, buildSelectionBlocks } from './pdfSelectionOverlay'
+import {
+  annotationRectsToSelectionBlocks,
+  areSelectionBlocksEqual,
+  buildSelectionBlocks,
+} from './pdfSelectionOverlay'
 import { shouldIgnoreSelectionChangeFromEditableOutsideRoot } from './pdfSelectionGuards'
 
 function createRect(left: number, top: number, width: number, height: number) {
@@ -92,6 +96,40 @@ describe('PdfOfficialPageView selection overlay', () => {
       { x1: 40 / 600, y1: 60 / 800, x2: 130 / 600, y2: 84 / 800 },
       { x1: 138 / 600, y1: 60 / 800, x2: 218 / 600, y2: 84 / 800 },
     ])
+  })
+
+  it('merges duplicate and overlapping annotation rects into one visual block', () => {
+    expect(
+      annotationRectsToSelectionBlocks(
+        [
+          { x1: 0.1, y1: 0.2, x2: 0.4, y2: 0.24 },
+          { x1: 0.1, y1: 0.2, x2: 0.4, y2: 0.24 },
+          { x1: 0.35, y1: 0.201, x2: 0.6, y2: 0.245 },
+        ],
+        1000,
+        1000,
+      ),
+    ).toEqual([
+      {
+        left: 100,
+        top: 200,
+        width: 500,
+        height: 45,
+      },
+    ])
+  })
+
+  it('keeps annotation rects on separate visual lines apart', () => {
+    expect(
+      annotationRectsToSelectionBlocks(
+        [
+          { x1: 0.1, y1: 0.2, x2: 0.4, y2: 0.24 },
+          { x1: 0.1, y1: 0.25, x2: 0.4, y2: 0.29 },
+        ],
+        1000,
+        1000,
+      ),
+    ).toHaveLength(2)
   })
 
   it('ignores selection updates when focus is in an editable element outside the pdf root', () => {

@@ -961,7 +961,6 @@ function PdfViewerInner({
   const [annotationDocument, setAnnotationDocument] = useState<DocumentAnnotations | null>(null)
   const [selectionDraft, setSelectionDraft] = useState<PdfSelectionDraft | null>(null)
   const [translationSelectionDraft, setTranslationSelectionDraft] = useState<PdfSelectionDraft | null>(null)
-  const [pendingHighlightDraft, setPendingHighlightDraft] = useState<PdfSelectionDraft | null>(null)
   const translationAbortRef = useRef<AbortController | null>(null)
   const translationRequestIdRef = useRef(0)
   const [translationOpen, setTranslationOpen] = useState(false)
@@ -1554,15 +1553,6 @@ function PdfViewerInner({
     const currentSelectionDraft = draft
     if (!annotationDocument || !currentSelectionDraft) return
 
-    setPendingHighlightDraft(currentSelectionDraft)
-    setSelectionDraft(null)
-    selectionDraftRef.current = null
-    setSelectedAnnotationId(null)
-    setClearSelectionSignal((prev) => prev + 1)
-    if (typeof window !== 'undefined') {
-      window.getSelection()?.removeAllRanges()
-    }
-
     setAnnotationBusy(true)
     setAnnotationMessage(t('pdf.savingAnnotation'))
 
@@ -1575,12 +1565,18 @@ function PdfViewerInner({
       await saveAnnotations(nextDocument.pdfHash, nextDocument)
       setAnnotationDocument(nextDocument)
       setAnnotationMessage(null)
+      setSelectionDraft(null)
+      selectionDraftRef.current = null
+      setSelectedAnnotationId(null)
+      setClearSelectionSignal((prev) => prev + 1)
+      if (typeof window !== 'undefined') {
+        window.getSelection()?.removeAllRanges()
+      }
     } catch (saveError) {
       const message = saveError instanceof Error ? saveError.message : String(saveError)
       setAnnotationMessage(t('pdf.annotationSaveFailed', { message }))
     } finally {
       setAnnotationBusy(false)
-      setPendingHighlightDraft(null)
     }
   }
 
@@ -3487,7 +3483,6 @@ function PdfViewerInner({
             previewHighlightColor={selectedHighlightColor}
             clearSelectionSignal={clearSelectionSignal}
             clearSelectionOnBlankClick={false}
-            highlightDraft={pendingHighlightDraft}
             currentPage={currentPage}
             onCurrentPageChange={handleViewportCurrentPageChange}
             onRegisterSelectionGetter={onRegisterSelectionGetter}

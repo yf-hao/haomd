@@ -37,10 +37,14 @@ function mergeSelectionRects(rects: SelectionBlock[]): SelectionBlock[] {
     const closeEnough = rect.left <= last.left + last.width + horizontalGap
 
     if (sameLine && closeEnough) {
+      const left = Math.min(last.left, rect.left)
       const right = Math.max(last.left + last.width, rect.left + rect.width)
-      last.top = Math.min(last.top, rect.top)
-      last.height = Math.max(last.height, rect.height)
-      last.width = right - last.left
+      const top = Math.min(last.top, rect.top)
+      const bottom = Math.max(last.top + last.height, rect.top + rect.height)
+      last.left = left
+      last.top = top
+      last.width = right - left
+      last.height = bottom - top
       continue
     }
 
