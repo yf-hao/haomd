@@ -602,11 +602,21 @@ fn is_config_backup_artifact(relative: &Path) -> bool {
         == Some(".haomd-backup-extra")
 }
 
+fn should_skip_local_backup_relative(
+    relative: &Path,
+    scope_settings: &BackupScopeSettingsCfg,
+) -> bool {
+    is_config_backup_artifact(relative)
+        || (!scope_settings.music && relative.starts_with(Path::new("music")))
+        || (!scope_settings.alarm && relative.starts_with(Path::new("alarm").join("sounds")))
+        || !should_include_backup_relative(relative)
+}
+
 fn copy_tree_contents(
     source_root: &Path,
     source_dir: &Path,
     target_dir: &Path,
-    skip_relative: Option<fn(&Path) -> bool>,
+    skip_relative: Option<&dyn Fn(&Path) -> bool>,
 ) -> Result<(), String> {
     if !source_dir.exists() {
         return Ok(());
@@ -971,11 +981,12 @@ async fn build_backup_package(
         backup_temp_dir("haomd-backup").map_err(|err| format!("创建备份暂存目录失败: {err}"))?;
     let package_root = temp_dir.clone();
     let result = (|| -> Result<BackupPackage, String> {
+        let skip_relative = |relative: &Path| should_skip_local_backup_relative(relative, scope_settings);
         copy_tree_contents(
             &config_root,
             &config_root,
             &package_root,
-            Some(is_config_backup_artifact),
+            Some(&skip_relative),
         )?;
 
         let mut manifest = build_backup_manifest(app, scope_settings)?;
@@ -3529,6 +3540,32 @@ mod tests {
         assert!(!should_skip_config_backup_relative(Path::new(
             "alarm/alarm_rules.json"
         )));
+    }
+
+    #[test]
+    fn should_skip_music_and_alarm_only_when_not_enabled_in_local_backup() {
+        let mut scope_settings = BackupScopeSettingsCfg::default();
+
+        assert!(should_skip_local_backup_relative(
+            Path::new("music/song.mp3"),
+            &scope_settings
+        ));
+        assert!(should_skip_local_backup_relative(
+            Path::new("alarm/sounds/beep.mp3"),
+            &scope_settings
+        ));
+
+        scope_settings.music = true;
+        scope_settings.alarm = true;
+
+        assert!(!should_skip_local_backup_relative(
+            Path::new("music/song.mp3"),
+            &scope_settings
+        ));
+        assert!(!should_skip_local_backup_relative(
+            Path::new("alarm/sounds/beep.mp3"),
+            &scope_settings
+        ));
     }
 
     #[test]
