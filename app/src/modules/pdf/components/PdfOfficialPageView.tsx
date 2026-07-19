@@ -759,6 +759,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     let settledSelectionFrame = 0
     let settledSelectionInnerFrame = 0
     let selectionMoveFrame = 0
+    let isControlledTextDrag = false
     let pendingSelectionMove: { clientX: number; clientY: number } | null = null
     let pendingSelectionPreview:
       | {
@@ -1020,13 +1021,45 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     }
 
     const getLineEdgeCaretAtPoint = (x: number, y: number): TextCaret | null => {
-      const spans = Array.from(root.querySelectorAll<HTMLElement>('.textLayer span'))
-        .map((span) => ({ span, rect: span.getBoundingClientRect() }))
-        .filter(({ span, rect }) => span.textContent?.trim() && rect.width > 0 && rect.height > 0)
-      const lineSpans = spans.filter(({ rect }) => y >= rect.top - 8 && y <= rect.bottom + 8)
-      if (lineSpans.length === 0) return null
+      const layout = getVisualTextLayout(true)
+      if (!layout) return null
 
-      const preceding = lineSpans.filter(({ rect }) => rect.left <= x)
+      const anchorCaret = selectionAnchorCaretRef.current
+      const anchorElement =
+        anchorCaret?.node instanceof Element
+          ? anchorCaret.node
+          : anchorCaret?.node.parentElement
+      const anchorSpan = anchorElement?.closest<HTMLElement>('.textLayer span') ?? null
+      const anchorLine = anchorSpan ? layout.lineBySpan.get(anchorSpan) ?? null : null
+      const anchorLineContainsY =
+        !!anchorLine && y >= anchorLine.top - 8 && y <= anchorLine.bottom + 8
+      const nearbyLines = layout.lines.filter(
+        (line) => y >= line.top - 8 && y <= line.bottom + 8,
+      )
+      const targetLine = anchorLineContainsY
+        ? anchorLine
+        : nearbyLines.reduce<VisualLine | null>((closest, line) => {
+            if (!closest) return line
+            const distanceToLine = (candidate: VisualLine) => {
+              const verticalDistance =
+                y < candidate.top
+                  ? candidate.top - y
+                  : y > candidate.bottom
+                    ? y - candidate.bottom
+                    : 0
+              const horizontalDistance =
+                x < candidate.left
+                  ? candidate.left - x
+                  : x > candidate.right
+                    ? x - candidate.right
+                    : 0
+              return verticalDistance * 1000 + horizontalDistance
+            }
+            return distanceToLine(line) < distanceToLine(closest) ? line : closest
+          }, null)
+      if (!targetLine) return null
+
+      const preceding = targetLine.spans.filter(({ rect }) => rect.left <= x)
       if (preceding.length > 0) {
         const target = preceding.reduce((rightmost, current) =>
           current.rect.right > rightmost.rect.right ? current : rightmost,
@@ -1045,7 +1078,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         return caret
       }
 
-      const target = lineSpans.reduce((leftmost, current) =>
+      const target = targetLine.spans.reduce((leftmost, current) =>
         current.rect.left < leftmost.rect.left ? current : leftmost,
       )
       const caret = getSpanCaret(target.span, false)
@@ -1074,9 +1107,9 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       }
     }
 
-    const getVisualTextLayout = (): VisualTextLayout | null => {
+    const getVisualTextLayout = (refresh = false): VisualTextLayout | null => {
       const cached = visualTextLayoutRef.current
-      if (cached) return cached
+      if (!refresh && cached) return cached
       const spans = Array.from(root.querySelectorAll<HTMLElement>('.textLayer span'))
         .map((span) => ({ span, rect: span.getBoundingClientRect() }))
         .filter(({ span, rect }) => span.textContent?.trim() && rect.width > 0 && rect.height > 0)
@@ -1363,6 +1396,12 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         const caret = getCaretAtPoint(latest.clientX, latest.clientY)
         if (caret) {
           lastValidSelectionCaretRef.current = caret
+        } else {
+          const lineEdgeCaret = getLineEdgeCaretAtPoint(latest.clientX, latest.clientY)
+          if (lineEdgeCaret) {
+            lastValidSelectionCaretRef.current = lineEdgeCaret
+            restoreSelectionFromCarets(selectionAnchorCaretRef.current, lineEdgeCaret)
+          }
         }
       }
       const rootNode = rootRef.current
@@ -1406,6 +1445,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       if (event.button !== 0) return
       const target = event.target
       if (!(target instanceof Node) || !root.contains(target)) return
+      isControlledTextDrag = false
       const targetElement = target instanceof Element ? target : null
       if (
         targetElement?.closest('.pdf-annotation-free-text-editor') ||
@@ -1710,6 +1750,20 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       clearSelectionBlocks()
     }
 
+    const handleTextSelectionMouseDown = (event: MouseEvent) => {
+      if (event.button !== 0 || event.detail !== 1) return
+      if (!isPointerSelectionActiveRef.current) return
+      const target = event.target
+      if (!(target instanceof Element)) return
+      const span = target.closest<HTMLElement>('.textLayer span')
+      if (!span || !root.contains(span)) return
+
+      event.preventDefault()
+      isControlledTextDrag = true
+      const anchorCaret = selectionAnchorCaretRef.current
+      restoreSelectionFromCarets(anchorCaret, anchorCaret)
+    }
+
     const handleTextSelectionClick = (event: MouseEvent) => {
       if (!clearSelectionOnBlankClick || event.button !== 0 || event.detail < 2) return
       const target = event.target
@@ -1855,6 +1909,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       if (event.detail < 2) {
         restoreSelectionFromCarets(anchorCaret, focusCaret)
       }
+      isControlledTextDrag = false
       lastValidSelectionCaretRef.current = null
       if (frame) {
         window.cancelAnimationFrame(frame)
@@ -1862,6 +1917,50 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       }
       if (event.detail >= 3) return
       scheduleSettledSelectionUpdate()
+    }
+
+    const controlSelectionAtPoint = (
+      x: number,
+      y: number,
+      event: PointerEvent | MouseEvent,
+      force = false,
+    ) => {
+      const textCaret = getCaretAtPoint(x, y)
+      if (!force && textCaret) return false
+      if (event.cancelable) {
+        event.preventDefault()
+      }
+      const now = window.performance.now()
+      const lastSample = lastSelectionCaretSample
+      if (
+        lastSample &&
+        lastSample.clientX === x &&
+        lastSample.clientY === y &&
+        now - lastSample.time < 8
+      ) {
+        return true
+      }
+      const focusCaret = textCaret ?? getLineEdgeCaretAtPoint(x, y)
+      if (focusCaret) {
+        lastValidSelectionCaretRef.current = focusCaret
+        lastSelectionCaretSample = {
+          clientX: x,
+          clientY: y,
+          time: now,
+        }
+        restoreSelectionFromCarets(selectionAnchorCaretRef.current, focusCaret)
+      }
+      return true
+    }
+
+    const handleSelectionMouseMove = (event: MouseEvent) => {
+      if (!isPointerSelectionActiveRef.current) return
+      controlSelectionAtPoint(
+        event.clientX,
+        event.clientY,
+        event,
+        isControlledTextDrag,
+      )
     }
 
     const handlePointerMove = (event: PointerEvent) => {
@@ -2041,6 +2140,12 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         return
       }
       if (!isPointerSelectionActiveRef.current) return
+      controlSelectionAtPoint(
+        event.clientX,
+        event.clientY,
+        event,
+        isControlledTextDrag,
+      )
       scheduleSelectionPointerMove(event)
     }
 
@@ -2057,15 +2162,19 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     }
 
     root.addEventListener('pointerdown', handlePointerDown)
+    root.addEventListener('mousedown', handleTextSelectionMouseDown, { capture: true })
     root.addEventListener('click', handleTextSelectionClick)
-    document.addEventListener('pointermove', handlePointerMove)
+    document.addEventListener('pointermove', handlePointerMove, { capture: true })
+    document.addEventListener('mousemove', handleSelectionMouseMove, { capture: true })
     document.addEventListener('pointerup', handlePointerFinish)
     document.addEventListener('pointercancel', handlePointerFinish)
     if (!selectionChangeActive) {
       return () => {
         root.removeEventListener('pointerdown', handlePointerDown)
+        root.removeEventListener('mousedown', handleTextSelectionMouseDown, true)
         root.removeEventListener('click', handleTextSelectionClick)
-        document.removeEventListener('pointermove', handlePointerMove)
+        document.removeEventListener('pointermove', handlePointerMove, true)
+        document.removeEventListener('mousemove', handleSelectionMouseMove, true)
         document.removeEventListener('pointerup', handlePointerFinish)
         document.removeEventListener('pointercancel', handlePointerFinish)
         if (selectionChangeFrame) {
@@ -2092,8 +2201,10 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
 
     return () => {
       root.removeEventListener('pointerdown', handlePointerDown)
+      root.removeEventListener('mousedown', handleTextSelectionMouseDown, true)
       root.removeEventListener('click', handleTextSelectionClick)
-      document.removeEventListener('pointermove', handlePointerMove)
+      document.removeEventListener('pointermove', handlePointerMove, true)
+      document.removeEventListener('mousemove', handleSelectionMouseMove, true)
       document.removeEventListener('pointerup', handlePointerFinish)
       document.removeEventListener('pointercancel', handlePointerFinish)
       unregisterSelectionChange()
