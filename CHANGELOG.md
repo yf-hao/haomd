@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.12.6] - 2026-07-20
+
+### 中文
+
+本次更新为 v0.12.6 补丁版本，主要修复 Windows 下外部打开文件时的重复标签问题，并完善跨平台发布检查。
+
+#### 主要更新
+* **Windows 文件打开稳定性**：优化 Windows 单实例打开请求处理，避免从文件浏览器重复点击同一文件时创建多个标签页。
+* **路径一致性**：统一文件路径分隔符和比较逻辑，减少 Windows 路径格式差异导致的重复打开问题。
+* **发布与 CI**：修复 Linux 严格 Clippy 检查下外部打开功能的未使用代码错误，提升跨平台发布稳定性。
+
+---
+
+### English
+
+Version v0.12.6 is a patch release focused on preventing duplicate tabs when opening files on Windows and improving cross-platform release checks.
+
+#### Key Updates
+* **Windows File Opening Stability**: Improved Windows single-instance open-request handling to prevent repeated clicks on the same file in the file browser from creating duplicate tabs.
+* **Path Consistency**: Unified path separator and comparison behavior to avoid duplicate opens caused by Windows path-format differences.
+* **Release and CI**: Fixed the unused external-open code reported by strict Clippy checks on Linux, improving cross-platform release reliability.
+
+---
+
 ## [v0.12.5] - 2026-07-19
 
 ### 中文
