@@ -61,6 +61,8 @@ import { useAlarmMusicPauseSync } from '../modules/tools/alarm/useAlarmMusicPaus
 import { onNativePasteImage } from '../modules/platform/clipboardEvents'
 import { openTerminalAt } from '../modules/platform/terminalService'
 import { openInFileManager } from '../modules/platform/fileExplorerService'
+import { getFilePathIdentity } from '../modules/files/filePathState'
+import { FileOpenCoordinator } from '../modules/files/fileOpenCoordinator'
 import { loadDefaultImagePathStrategyConfig, resolveImageTarget } from '../modules/images/imagePasteStrategy'
 import {
   buildImportedWordTabTitle,
@@ -467,6 +469,14 @@ export function WorkspaceShell({
       }
     },
   })
+
+  const openingPathsRef = useRef(new FileOpenCoordinator())
+  const tabIdsByPathRef = useRef(new Map<string, string>())
+  tabIdsByPathRef.current = new Map(
+    tabs
+      .filter((tab) => tab.path && tab.path !== 'untitled')
+      .map((tab) => [getFilePathIdentity(tab.path), tab.id]),
+  )
 
   const [importedWordTabs, setImportedWordTabs] = useState<Record<string, ImportedWordState>>({})
   const importedWordTabsRef = useRef<Record<string, ImportedWordState>>({})
@@ -2123,46 +2133,52 @@ export function WorkspaceShell({
   const openFileInNewTab = useCallback(async (path: string) => {
     if (isCreatingTab) return { ok: false } as any
 
-    const isPdf = path.toLowerCase().endsWith('.pdf')
-    const isDocx = isWordDocxPath(path)
-
-    if (isPdf) {
-      // PDF 文件：不通过文本读取管线，直接新建只读标签，由 PdfViewer 负责展示
-      const tab = createTab({ path, content: '' })
-      // 对于 PDF，不更新 markdown/preview 内容，保持当前文档内容不变
-      setActiveTab(tab.id)
+    const pathKey = getFilePathIdentity(path)
+    const existingTabId = tabIdsByPathRef.current.get(pathKey)
+    if (existingTabId) {
+      setActiveTab(existingTabId)
       return { ok: true, data: { path } } as any
     }
 
-    if (isDocx) {
-      return await openImportedWordDocument(path)
-    }
+    return await openingPathsRef.current.run(path, async () => {
+      const existingTabIdBeforeOpen = tabIdsByPathRef.current.get(pathKey)
+      if (existingTabIdBeforeOpen) {
+        setActiveTab(existingTabIdBeforeOpen)
+        return { ok: true, data: { path } } as any
+      }
 
-    const resp = await openFromPath(path)
-    if (resp.ok) {
-      const tab = createTab({ path: resp.data.path, content: '' })
-      updateTabContent(tab.id, resp.data.content, { markDirty: false })
-      applyOpenedContent(resp.data.content)
-      // 标记该标签页需要在编辑器就绪时恢复光标位置
-      markPendingRestoreRef.current?.(tab.id)
-    }
-    return resp
+      const isPdf = path.toLowerCase().endsWith('.pdf')
+      const isDocx = isWordDocxPath(path)
+
+      if (isPdf) {
+        const tab = createTab({ path, content: '' })
+        tabIdsByPathRef.current.set(pathKey, tab.id)
+        setActiveTab(tab.id)
+        return { ok: true, data: { path } } as any
+      }
+
+      if (isDocx) {
+        return await openImportedWordDocument(path)
+      }
+
+      const resp = await openFromPath(path)
+      if (resp.ok) {
+        const tab = createTab({ path: resp.data.path, content: '' })
+        tabIdsByPathRef.current.set(getFilePathIdentity(resp.data.path), tab.id)
+        updateTabContent(tab.id, resp.data.content, { markDirty: false })
+        applyOpenedContent(resp.data.content)
+        markPendingRestoreRef.current?.(tab.id)
+      }
+      return resp
+    })
   }, [isCreatingTab, openFromPath, createTab, updateTabContent, setActiveTab, applyOpenedContent, openImportedWordDocument])
 
   const openFileFromSidebar = useCallback(async (path: string) => {
     if (isCreatingTab) return { ok: false } as any
     // 点击文件时，清空文件夹选中状态
     setSelectedFolderPath(null)
-    if (isWordDocxPath(path)) {
-      return await openImportedWordDocument(path)
-    }
-    const existing = tabs.find(t => t.path === path)
-    if (existing) {
-      setActiveTab(existing.id)
-      return { ok: true, data: { path: existing.path } } as any
-    }
     return await openFileInNewTab(path)
-  }, [isCreatingTab, tabs, setActiveTab, openFileInNewTab])
+  }, [isCreatingTab, setSelectedFolderPath, openFileInNewTab])
 
   const openRecentFileInNewTab = useCallback(async (path: string) => {
     // 复用 Sidebar 打开逻辑：如果已存在同路径标签，只激活，不新建

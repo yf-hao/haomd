@@ -1,8 +1,9 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { onOpenRecentFile } from '../modules/platform/menuEvents'
 import { onExternalOpenFile, type ExternalOpenPayload } from '../modules/platform/externalOpenEvents'
 import type { EditorTab } from '../types/tabs'
+import { getFilePathIdentity } from '../modules/files/filePathState'
 
 export type NativeBridgeOptions = {
     activeTab: EditorTab | null
@@ -18,6 +19,7 @@ export function useNativeBridge(options: NativeBridgeOptions) {
         sidebar,
         openRecentFileInNewTab,
     } = options
+    const recentExternalOpenRef = useRef(new Map<string, number>())
 
     // Window Title：不在标题栏显示任何文字
     useEffect(() => {
@@ -42,15 +44,14 @@ export function useNativeBridge(options: NativeBridgeOptions) {
     useEffect(() => {
         if (!isTauriEnv()) return
 
-        const recentHandled = new Map<string, number>()
         const dedupeWindowMs = 1500
 
         const handleExternalOpen = async ({ path, isFolder }: ExternalOpenPayload) => {
             const now = Date.now()
-            const key = `${isFolder ? 'dir' : 'file'}:${path}`
-            const lastHandledAt = recentHandled.get(key)
+            const key = `${isFolder ? 'dir' : 'file'}:${getFilePathIdentity(path)}`
+            const lastHandledAt = recentExternalOpenRef.current.get(key)
             if (lastHandledAt && now - lastHandledAt < dedupeWindowMs) return
-            recentHandled.set(key, now)
+            recentExternalOpenRef.current.set(key, now)
 
             if (isFolder) {
                 await sidebar.openFolderAsRoot(path)

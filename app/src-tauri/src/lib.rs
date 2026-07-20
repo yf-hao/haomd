@@ -324,7 +324,24 @@ fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::error:
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default();
+
+    #[cfg(target_os = "windows")]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+        let items = external_open_items_from_args(args.into_iter().skip(1));
+        if !items.is_empty() {
+            queue_external_open_items(items.clone());
+            emit_external_open_items(app, &items);
+        }
+
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    }));
+
+    let app = builder
         .manage(McpProcessManager::new())
         .register_uri_scheme_protocol("haomd", handle_haomd_protocol)
         .setup(setup_app)

@@ -1,10 +1,7 @@
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use tauri::AppHandle;
-
-#[cfg(target_os = "macos")]
-use tauri::Emitter;
+use tauri::{AppHandle, Emitter};
 
 #[cfg(target_os = "macos")]
 use tauri::RunEvent;
@@ -46,25 +43,50 @@ pub fn queue_external_open_items(items: Vec<ExternalOpenItem>) {
     pending.extend(items);
 }
 
-pub fn queue_external_open_items_from_cli_args() {
-    for arg in std::env::args().skip(1) {
-        if arg.starts_with('-') {
-            continue;
-        }
-        let path = PathBuf::from(&arg);
-        if let Ok(metadata) = std::fs::metadata(&path) {
-            queue_external_open_items(vec![ExternalOpenItem {
+pub fn external_open_items_from_args<I>(args: I) -> Vec<ExternalOpenItem>
+where
+    I: IntoIterator<Item = String>,
+{
+    args.into_iter()
+        .filter(|arg| !arg.starts_with('-'))
+        .filter_map(|arg| {
+            let path = PathBuf::from(arg);
+            let metadata = std::fs::metadata(&path).ok()?;
+            Some(ExternalOpenItem {
                 path: path.to_string_lossy().to_string(),
                 is_folder: metadata.is_dir(),
-            }]);
-        }
-    }
+            })
+        })
+        .collect()
 }
 
-#[cfg(target_os = "macos")]
+pub fn queue_external_open_items_from_cli_args() {
+    let items = external_open_items_from_args(std::env::args().skip(1));
+    queue_external_open_items(items);
+}
+
 pub fn emit_external_open_items(app: &AppHandle, items: &[ExternalOpenItem]) {
     for item in items {
         let _ = app.emit("native://open_external_file", item);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ignores_flags_and_missing_paths_from_cli_args() {
+        let existing = std::env::current_exe().unwrap();
+        let items = external_open_items_from_args(vec![
+            "--flag".to_string(),
+            existing.to_string_lossy().to_string(),
+            "missing-file-for-external-open-test".to_string(),
+        ]);
+
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].path, existing.to_string_lossy());
+        assert!(!items[0].is_folder);
     }
 }
 
