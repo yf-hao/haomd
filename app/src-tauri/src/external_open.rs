@@ -65,6 +65,7 @@ pub fn queue_external_open_items_from_cli_args() {
     queue_external_open_items(items);
 }
 
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 pub fn emit_external_open_items(app: &AppHandle, items: &[ExternalOpenItem]) {
     for item in items {
         let _ = app.emit("native://open_external_file", item);
