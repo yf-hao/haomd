@@ -1,7 +1,10 @@
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use tauri::Emitter;
 
 #[cfg(target_os = "macos")]
 use tauri::RunEvent;
