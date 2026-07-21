@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.12.7] - 2026-07-22
+
+### 中文
+
+本次更新修复编辑器和所见即所得模式下的图片粘贴问题。
+
+#### 主要更新
+* **图片粘贴修复**：修复 Windows 和 macOS 下使用 Ctrl/Cmd+V 粘贴图片无响应的问题。
+* **所见即所得图片粘贴**：图片通过原生剪贴板读取，并使用统一的图片保存流程写入文档图片目录。
+* **剪贴板识别优化**：当剪贴板同时包含图片和文本时，优先粘贴图片。
+
+---
+
+### English
+
+Version v0.12.7 fixes image pasting in the source editor and WYSIWYG mode.
+
+#### Key Updates
+* **Image Paste Fix**: Fixed image paste failures when using Ctrl/Cmd+V on Windows and macOS.
+* **WYSIWYG Image Paste**: Reused the native clipboard image saving flow for WYSIWYG image insertion.
+* **Clipboard Detection**: Images now take priority when clipboard data contains both image and text.
+
+---
+
 ## [v0.12.6] - 2026-07-20
 
 ### 中文

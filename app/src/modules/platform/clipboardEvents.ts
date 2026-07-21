@@ -1,4 +1,4 @@
-import { listen } from '@tauri-apps/api/event'
+import { emit, listen } from '@tauri-apps/api/event'
 import { isTauriEnv } from './runtime'
 
 export type Unlisten = () => void
@@ -94,4 +94,9 @@ export function onNativePasteImage(handler: () => void): Unlisten {
     },
     '[clipboardEvents] listen native://paste_image failed',
   )
+}
+
+export async function dispatchNativePasteImage(): Promise<void> {
+  if (!isTauriEnv()) return
+  await emit('native://paste_image')
 }

@@ -36,7 +36,9 @@ import { ImageView } from './views/ImageView'
 import { normalizeCodeBlockLanguage } from './codeLanguage'
 import { BlockCacheManager } from './blockCache'
 import { composeMarkdownWithFrontMatter } from '../../modules/markdown/frontMatter'
-import { onNativePaste } from '../../modules/platform/clipboardEvents'
+import { dispatchNativePasteImage, onNativePaste } from '../../modules/platform/clipboardEvents'
+import { readClipboardForPaste } from '../../modules/platform/clipboardPasteService'
+import { isTauriEnv } from '../../modules/platform/runtime'
 import { buildHeadingsFromWysiwygDoc } from '../../modules/outline/wysiwygOutline'
 import type { OutlineHeading } from '../../modules/outline/outlineSource'
 import './WysiwygPane.css'
@@ -73,6 +75,7 @@ export interface WysiwygFormatActions {
   applyTextColorToTarget: (color: string | null, target: TextColorTarget) => boolean
   applyTextColor: (color: string) => void
   clearTextColor: () => void
+  insertImage: (src: string, alt?: string) => boolean
   insertCodeBlock: () => void
   insertTable: (rows: number, cols: number) => void
 }
@@ -1019,6 +1022,24 @@ function WysiwygEditor({
           })
         })
       },
+      insertImage: (src, alt = '图片') => {
+        if (!src) return false
+
+        let inserted = false
+        runAction((editor) => {
+          editor.action((ctx) => {
+            const view = ctx.get(editorViewCtx)
+            const imageType = imageSchema.type(ctx)
+            const image = imageType.create({ src, alt, title: '' })
+            const tr = view.state.tr.replaceSelectionWith(image, false).scrollIntoView()
+            if (!tr.docChanged) return
+            view.dispatch(tr)
+            view.focus()
+            inserted = true
+          })
+        })
+        return inserted
+      },
       insertCodeBlock: () => {
         runAction((editor) => {
           insertCodeBlockWithInheritedLanguage(editor)
@@ -1152,16 +1173,39 @@ function WysiwygEditor({
       }
     }
 
+    const handlePaste = (event: ClipboardEvent) => {
+      markUserInteracted()
+      if (!isTauriEnv()) return
+
+      const hasImage = Array.from(event.clipboardData?.items ?? []).some(
+        (item) => item.kind === 'file' && item.type.startsWith('image/'),
+      )
+      if (!hasImage) return
+
+      event.preventDefault()
+      event.stopPropagation()
+      void readClipboardForPaste()
+        .then((content) => {
+          if (content.kind === 'image') {
+            return dispatchNativePasteImage()
+          }
+          return undefined
+        })
+        .catch((error) => {
+          console.error('[WysiwygPane] native image paste failed:', error)
+        })
+    }
+
     container.addEventListener('beforeinput', markUserInteracted)
     container.addEventListener('keydown', handleKeydown, true)
-    container.addEventListener('paste', markUserInteracted)
+    container.addEventListener('paste', handlePaste, true)
     container.addEventListener('drop', markUserInteracted)
     container.addEventListener('compositionstart', markUserInteracted)
 
     return () => {
       container.removeEventListener('beforeinput', markUserInteracted)
       container.removeEventListener('keydown', handleKeydown, true)
-      container.removeEventListener('paste', markUserInteracted)
+      container.removeEventListener('paste', handlePaste, true)
       container.removeEventListener('drop', markUserInteracted)
       container.removeEventListener('compositionstart', markUserInteracted)
     }

@@ -3114,15 +3114,24 @@ export function WorkspaceShell({
     const unlisten = onNativePasteImage(async () => {
       console.log('[WorkspaceShell] onNativePasteImage fired')
       const view = editorViewRef.current
-      if (!view) {
+      const isWysiwyg = editMode === 'wysiwyg' && !isPdfActive
+      const active = typeof document !== 'undefined' ? document.activeElement : null
+      const wysiwygFocused = Boolean(active?.closest('.wysiwyg-editor'))
+
+      if (isWysiwyg && !wysiwygFocused) {
+        console.warn('[WorkspaceShell] onNativePasteImage: WYSIWYG is not focused')
+        return
+      }
+      if (!isWysiwyg && !view) {
         console.warn('[WorkspaceShell] onNativePasteImage: no editor view')
         return
       }
 
       // 仅当焦点在编辑器内部时才处理粘贴，避免与其他输入框冲突
       if (typeof document !== 'undefined') {
-        const active = document.activeElement
-        const contains = active ? view.dom.contains(active) : false
+        const contains = active
+          ? (isWysiwyg ? wysiwygFocused : Boolean(view?.dom.contains(active)))
+          : false
         console.log('[WorkspaceShell] onNativePasteImage: active in editor =', contains)
         if (active && !contains) {
           return
@@ -3176,6 +3185,17 @@ export function WorkspaceShell({
         }
 
         const relPath = `${relDir}/${fileName}`
+
+        if (isWysiwyg) {
+          const inserted = wysiwygFormatActionsRef.current?.insertImage(relPath) ?? false
+          if (!inserted) {
+            setStatusMessage(t('workspace.pasteImageFailed', { message: '无法插入图片' }))
+          }
+          return
+        }
+
+        if (!view) return
+
         const snippet = `
 ![图片](${relPath})
 `
@@ -3197,7 +3217,7 @@ export function WorkspaceShell({
     return () => {
       unlisten()
     }
-  }, [editorViewRef, filePath, setStatusMessage, t])
+  }, [editMode, editorViewRef, filePath, isPdfActive, setStatusMessage, t])
 
   const saveCursorPositionRef = useRef<((globalLine: number) => void) | null>(null)
 

@@ -15,6 +15,47 @@ pub struct ClipboardImageResult {
     pub file_name: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(tag = "kind", content = "text", rename_all = "snake_case")]
+pub enum ClipboardPasteContent {
+    Image,
+    Text(String),
+    Empty,
+}
+
+#[tauri::command]
+pub async fn read_clipboard_for_paste() -> ResultPayload<ClipboardPasteContent> {
+    let trace = new_trace_id();
+    let mut clipboard = match Clipboard::new() {
+        Ok(clipboard) => clipboard,
+        Err(err) => {
+            return err_payload(ErrorCode::IoError, format!("访问剪贴板失败: {err}"), trace);
+        }
+    };
+
+    // Some clipboard producers expose both an image and fallback text/URL.
+    // Prefer the image so screenshot and browser-image paste keep working.
+    if let Ok(image) = clipboard.get_image() {
+        log::info!(
+            "[tauri] read_clipboard_for_paste: image {}x{}",
+            image.width,
+            image.height
+        );
+        return ok(ClipboardPasteContent::Image, trace);
+    }
+
+    match clipboard.get_text() {
+        Ok(text) if !text.is_empty() => {
+            log::info!("[tauri] read_clipboard_for_paste: text len={}", text.len());
+            ok(ClipboardPasteContent::Text(text), trace)
+        }
+        _ => {
+            log::info!("[tauri] read_clipboard_for_paste: empty");
+            ok(ClipboardPasteContent::Empty, trace)
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn save_clipboard_image_to_dir(
     target_dir: String,
@@ -185,4 +226,20 @@ pub async fn read_clipboard_image_as_base64() -> ResultPayload<String> {
     );
 
     ok(encoded, trace)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ClipboardPasteContent;
+
+    #[test]
+    fn clipboard_paste_content_uses_the_frontend_contract() {
+        let image = serde_json::to_value(ClipboardPasteContent::Image).unwrap();
+        let text = serde_json::to_value(ClipboardPasteContent::Text("hello".into())).unwrap();
+        let empty = serde_json::to_value(ClipboardPasteContent::Empty).unwrap();
+
+        assert_eq!(image, serde_json::json!({ "kind": "image" }));
+        assert_eq!(text, serde_json::json!({ "kind": "text", "text": "hello" }));
+        assert_eq!(empty, serde_json::json!({ "kind": "empty" }));
+    }
 }

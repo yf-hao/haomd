@@ -373,8 +373,8 @@ function createLayoutCommands(ctx: LayoutCommandContext): CommandRegistry {
       ctx.setEditMode(next)
       ctx.setStatusMessage(
         next === 'wysiwyg'
-          ? tr(ctx, 'commands.editModeWysiwyg', '编辑模式：所见即所得')
-          : tr(ctx, 'commands.editModeSource', '编辑模式：源码'),
+          ? tr(ctx, 'commands.editModeWysiwyg', '所见即所得模式')
+          : tr(ctx, 'commands.editModeSource', '编辑器模式'),
       )
     },
     pdf_tool_select: () => {

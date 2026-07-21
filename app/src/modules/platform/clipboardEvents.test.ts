@@ -1,9 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { onNativePaste, onNativePasteError, onNativePasteImage } from './clipboardEvents'
-import { listen } from '@tauri-apps/api/event'
+import {
+    dispatchNativePasteImage,
+    onNativePaste,
+    onNativePasteError,
+    onNativePasteImage,
+} from './clipboardEvents'
+import { emit, listen } from '@tauri-apps/api/event'
 
 vi.mock('@tauri-apps/api/event', () => ({
-    listen: vi.fn()
+    emit: vi.fn(),
+    listen: vi.fn(),
 }))
 
 describe('clipboardEvents', () => {
@@ -67,6 +73,14 @@ describe('clipboardEvents', () => {
 
         unlisten()
         expect(unlistenMock).toHaveBeenCalled()
+    })
+
+    it('should dispatch native paste image events', async () => {
+        vi.mocked(emit).mockResolvedValue(undefined)
+
+        await dispatchNativePasteImage()
+
+        expect(emit).toHaveBeenCalledWith('native://paste_image')
     })
 
     it('should handle early unlisten (disposed before setup finishes)', async () => {

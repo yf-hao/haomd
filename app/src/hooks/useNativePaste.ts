@@ -1,6 +1,11 @@
 import { useEffect, type RefObject } from 'react'
 import type { EditorView } from '@codemirror/view'
-import { onNativePaste, onNativePasteError } from '../modules/platform/clipboardEvents'
+import {
+  dispatchNativePasteImage,
+  onNativePaste,
+  onNativePasteError,
+} from '../modules/platform/clipboardEvents'
+import { readClipboardForPaste } from '../modules/platform/clipboardPasteService'
 import { isTauriEnv } from '../modules/platform/runtime'
 
 /**
@@ -20,21 +25,31 @@ export function useNativePaste(
         if (!active || !view.dom.contains(active)) return
         event.preventDefault()
         event.stopPropagation()
-      }
 
-      const handleBeforeInput = (event: InputEvent) => {
-        if (event.inputType !== 'insertFromPaste') return
-        const active = typeof document !== 'undefined' ? document.activeElement : null
-        if (!active || !view.dom.contains(active)) return
-        event.preventDefault()
-        event.stopPropagation()
+        void readClipboardForPaste()
+          .then((content) => {
+            if (content.kind === 'image') {
+              return dispatchNativePasteImage()
+            }
+            if (content.kind !== 'text' || !content.text) return
+
+            const currentView = editorViewRef.current
+            if (!currentView) return
+            const { state } = currentView
+            currentView.dispatch(state.update({
+              ...state.replaceSelection(content.text),
+              userEvent: 'input.paste',
+              scrollIntoView: true,
+            }))
+          })
+          .catch((err) => {
+            setStatusMessage(err instanceof Error ? err.message : String(err))
+          })
       }
 
       view.dom.addEventListener('paste', handlePaste, true)
-      view.dom.addEventListener('beforeinput', handleBeforeInput, true)
       detachPreventDefaultPaste = () => {
         view.dom.removeEventListener('paste', handlePaste, true)
-        view.dom.removeEventListener('beforeinput', handleBeforeInput, true)
       }
     }
 

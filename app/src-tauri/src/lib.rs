@@ -265,6 +265,7 @@ macro_rules! app_invoke_handler {
             is_inkscape_available,
             convert_svg_to_emf,
             convert_svg_to_plain_svg,
+            read_clipboard_for_paste,
             save_clipboard_image_to_dir,
             read_clipboard_image_as_base64,
             take_pending_external_open_items,
