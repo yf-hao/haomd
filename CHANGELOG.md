@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.12.8] - 2026-07-22
+
+### 中文
+
+本次更新修复 Windows 系统下的粘贴快捷键问题，并完善所见即所得编辑模式的菜单状态同步。
+
+#### 主要更新
+* **粘贴功能修复**：修复 Windows 下 Ctrl+V 快捷键无法正常粘贴的问题，补全了剪贴板操作的三个核心功能（复制、剪切、粘贴）。
+* **菜单状态同步**：所见即所得编辑模式切换时，菜单栏中的 WYSIWYG 选项会自动更新选中状态，提升用户体验。
+* **跨平台兼容**：在保持 Tauri 原生功能兼容的同时，为非 Tauri 环境提供了兜底支持。
+
+---
+
+### English
+
+Version v0.12.8 fixes the paste shortcut issue on Windows and improves menu state synchronization for WYSIWYG editing mode.
+
+#### Key Updates
+* **Paste Function Fix**: Fixed the issue where Ctrl+V shortcut didn't work on Windows, completing the three core clipboard operations (copy, cut, paste).
+* **Menu State Sync**: The WYSIWYG menu option now automatically updates its checked state when switching editing modes, improving user experience.
+* **Cross-platform Compatibility**: Maintains compatibility with Tauri native features while providing fallback support for non-Tauri environments.
+
+---
+
 ## [v0.12.7] - 2026-07-22
 
 ### 中文
