@@ -361,6 +361,13 @@ export function WorkspaceShell({
     }
   }, [editMode])
 
+  useEffect(() => {
+    if (!isTauriEnv()) return
+    void invoke('set_wysiwyg_menu_checked', { checked: editMode === 'wysiwyg' }).catch((error) => {
+      console.warn('[WorkspaceShell] failed to sync WYSIWYG menu state:', error)
+    })
+  }, [editMode, isTauriEnv])
+
   const setEditModeWithFlush = useCallback((next: EditMode) => {
     if (editMode === 'source' && next === 'wysiwyg') {
       // Save original markdown and reset dirty flag when entering WYSIWYG

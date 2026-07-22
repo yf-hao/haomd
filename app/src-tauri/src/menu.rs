@@ -6,8 +6,11 @@ use arboard::Clipboard;
 use once_cell::sync::Lazy;
 use serde::Serialize;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
+use tauri::menu::{
+    CheckMenuItemBuilder, Menu, MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder,
+};
 use tauri::{AppHandle, Emitter};
 
 const RECENT_PAGE_SIZE: usize = 20;
@@ -16,6 +19,7 @@ const RECENT_MENU_PREFIX: &str = "recent_item_";
 static RECENT_MENU_MAP: Lazy<Mutex<HashMap<String, RecentMenuPayload>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 static RECENT_PAGE: Lazy<Mutex<u32>> = Lazy::new(|| Mutex::new(0));
+static WYSIWYG_MENU_CHECKED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone, Debug, Serialize)]
 pub struct RecentMenuPayload {
@@ -873,8 +877,9 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new(texts.toggle_wysiwyg)
+            &CheckMenuItemBuilder::new(texts.toggle_wysiwyg)
                 .id("toggle_wysiwyg")
+                .checked(WYSIWYG_MENU_CHECKED.load(Ordering::Relaxed))
                 .accelerator("CmdOrCtrl+Alt+W")
                 .build(app)?,
         )
@@ -1075,4 +1080,10 @@ pub async fn refresh_app_menu(app: &AppHandle) {
     if let Ok(menu) = build_app_menu(app).await {
         let _ = app.set_menu(menu);
     }
+}
+
+#[tauri::command]
+pub async fn set_wysiwyg_menu_checked(app: AppHandle, checked: bool) {
+    WYSIWYG_MENU_CHECKED.store(checked, Ordering::Relaxed);
+    refresh_app_menu(&app).await;
 }
