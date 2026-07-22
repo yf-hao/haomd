@@ -820,6 +820,7 @@ export const enUSMessages: MessageDictionary = {
     quitPlaceholder: 'Placeholder: Quit is not implemented',
     copyFailed: 'Copy did not take effect',
     cutFailed: 'Cut did not take effect',
+    pasteFailed: 'Paste did not take effect',
     aboutPlaceholder: 'HaoMD · About (placeholder)',
     usageOpened: 'Usage guide opened',
     helpPlaceholder: 'HaoMD · Menu placeholder/help',

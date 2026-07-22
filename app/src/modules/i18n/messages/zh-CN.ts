@@ -813,6 +813,7 @@ export const zhCNMessages: MessageDictionary = {
     quitPlaceholder: '占位：Quit 未实现',
     copyFailed: '复制未生效',
     cutFailed: '剪切未生效',
+    pasteFailed: '粘贴未生效',
     aboutPlaceholder: 'HaoMD · 关于（占位）',
     usageOpened: '已打开使用说明',
     helpPlaceholder: 'HaoMD · 菜单占位/帮助',

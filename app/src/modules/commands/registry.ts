@@ -684,7 +684,17 @@ function createClipboardCommands(ctx: StatusContext): CommandRegistry {
 
   return {
     paste: () => {
-      // 粘贴由原生菜单 -> native://paste 事件负责，这里不再调用 execCommand
+      if (typeof document === 'undefined') {
+        ctx.setStatusMessage(tr(ctx, 'commands.pasteFailed', '粘贴未生效'))
+        return
+      }
+      try {
+        const ok = document.execCommand('paste')
+        if (!ok) ctx.setStatusMessage(tr(ctx, 'commands.pasteFailed', '粘贴未生效'))
+      } catch (err) {
+        console.warn('execCommand paste failed', err)
+        ctx.setStatusMessage(tr(ctx, 'commands.pasteFailed', '粘贴未生效'))
+      }
     },
     copy: () => {
       if (typeof document === 'undefined') {

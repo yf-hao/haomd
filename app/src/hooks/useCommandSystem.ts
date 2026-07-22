@@ -516,6 +516,15 @@ export function useCommandSystem(params: CommandSystemParams) {
         if (isEditableElement(active)) {
           void dispatchAction('cut')
         }
+      } else if (key === 'v') {
+        // Tauri 下的粘贴交给系统 / WebView 处理，避免与原生快捷键或菜单重复触发。
+        if (isTauri) return
+        const active = (typeof document !== 'undefined'
+          ? (document.activeElement as Element | null)
+          : null)
+        if (isEditableElement(active)) {
+          void dispatchAction('paste')
+        }
       } else if (key === 'k') {
         e.preventDefault()
         e.stopPropagation()
