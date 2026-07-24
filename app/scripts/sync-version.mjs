@@ -1,9 +1,10 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 function main() {
   // 1. 读取 app/package.json 的 version
-  const appRoot = resolve(new URL('../', import.meta.url).pathname)
+  const appRoot = resolve(fileURLToPath(new URL('../', import.meta.url)))
   const pkgPath = resolve(appRoot, 'package.json')
   const pkgJson = JSON.parse(readFileSync(pkgPath, 'utf8'))
   const version = pkgJson.version

@@ -97,6 +97,11 @@ export function onNativePasteImage(handler: () => void): Unlisten {
 }
 
 export async function dispatchNativePasteImage(): Promise<void> {
-  if (!isTauriEnv()) return
+  if (!isTauriEnv()) {
+    console.warn('[clipboardEvents] dispatchNativePasteImage: not in Tauri env')
+    return
+  }
+  console.log('[clipboardEvents] emitting native://paste_image')
   await emit('native://paste_image')
+  console.log('[clipboardEvents] emit native://paste_image done')
 }

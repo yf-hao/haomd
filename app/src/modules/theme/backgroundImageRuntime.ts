@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react'
 import type { ThemeBackgroundSettings, ThemeSettings } from '../settings/editorSettings'
 import { getBuiltinBackgroundPresetUrl } from './backgroundPresets'
+import { convertFileSrc } from '@tauri-apps/api/core'
 
 const backgroundImageUrlCache = new Map<string, string>()
 
@@ -13,18 +14,11 @@ export function resolveManagedBackgroundImageUrl(path: string | null | undefined
   }
   if (/^(data:|blob:|https?:)/i.test(normalizedPath)) return normalizedPath
 
-  const isWindows = normalizedPath.includes('\\') || navigator.userAgent.includes('Windows')
-  const cacheKey = `${isWindows ? 'win' : 'unix'}|${normalizedPath}`
+  const cacheKey = `unix|${normalizedPath}`
   const cached = backgroundImageUrlCache.get(cacheKey)
   if (cached) return cached
 
-  const pathParts = normalizedPath.split(/([/\\])/)
-  const encodedParts = pathParts.map((part) => {
-    if (part === '/' || part === '\\') return part
-    return encodeURIComponent(part)
-  })
-  const encoded = encodedParts.join('')
-  const finalUrl = isWindows ? `https://haomd.localhost${encoded}` : `haomd://localhost${encoded}`
+  const finalUrl = convertFileSrc(normalizedPath.replace(/\\/g, '/'), 'haomd')
   backgroundImageUrlCache.set(cacheKey, finalUrl)
   return finalUrl
 }

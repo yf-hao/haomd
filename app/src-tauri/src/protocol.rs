@@ -25,6 +25,17 @@ pub fn handle_haomd_protocol(
     }
     log::info!("[tauri] haomd protocol: fully decoded path={}", decoded);
 
+    // Windows: remove leading slash before drive letter (e.g. /C:/... -> C:/...)
+    if decoded.starts_with('/') {
+        let rest = &decoded[1..];
+        if rest.len() >= 2 && rest.as_bytes()[1] == b':' {
+            let first_char = rest.chars().next().unwrap();
+            if first_char.is_ascii_alphabetic() {
+                decoded = rest.to_string();
+            }
+        }
+    }
+
     let path = PathBuf::from(&decoded);
     log::info!(
         "[tauri] haomd protocol: final path={:?}, exists={}",

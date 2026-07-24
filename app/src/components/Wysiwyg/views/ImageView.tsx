@@ -4,9 +4,10 @@
  */
 import { memo, useEffect, useMemo, useState } from 'react'
 import { useNodeViewContext } from '@prosemirror-adapter/react'
+import { convertFileSrc } from '@tauri-apps/api/core'
 
 /**
- * Resolve a relative image path to a haomd:// or https://haomd.localhost URL.
+ * Resolve a relative image path to a haomd:// URL via convertFileSrc.
  */
 function resolveImageSrc(src: string, filePath?: string | null): string {
   if (!src) return src
@@ -31,13 +32,7 @@ function resolveImageSrc(src: string, filePath?: string | null): string {
     absPath = fileDir + sep + src
   }
 
-  const pathParts = absPath.split(/([/\\])/)
-  const encodedParts = pathParts.map((part: string) =>
-    part === '/' || part === '\\' ? part : encodeURIComponent(part),
-  )
-  const encoded = encodedParts.join('')
-  const isWindows = filePath.includes('\\') || navigator.userAgent.includes('Windows')
-  return isWindows ? `https://haomd.localhost${encoded}` : `haomd://localhost${encoded}`
+  return convertFileSrc(absPath.replace(/\\/g, '/'), 'haomd')
 }
 
 interface ImageViewProps {

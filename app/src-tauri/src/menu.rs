@@ -409,33 +409,28 @@ pub fn handle_menu_action(app: &AppHandle, action: &str) -> bool {
         let app_handle = app.clone();
         tauri::async_runtime::spawn(async move {
             match Clipboard::new() {
-                Ok(mut cb) => match cb.get_text() {
-                    Ok(text) if !text.is_empty() => {
-                        log::info!("[tauri] paste: clipboard has text, len={}", text.len());
-                        let _ = app_handle.emit("native://paste", text);
-                    }
-                    _ => {
-                        log::info!("[tauri] paste: no text, check image");
-                        match cb.get_image() {
-                            Ok(img) => {
-                                log::info!(
-                                    "[tauri] paste: clipboard image detected, size={}x{}",
-                                    img.width,
-                                    img.height
-                                );
-                                let _ = app_handle.emit("native://paste_image", "");
-                            }
-                            Err(err) => {
-                                log::error!(
-                                    "[tauri] paste: clipboard has no usable text or image: {}",
-                                    err
-                                );
-                                let _ = app_handle
-                                    .emit("native://paste_error", format!("读取剪贴板失败: {err}"));
-                            }
+                Ok(mut cb) => {
+                    // Prefer image over text to stay consistent with read_clipboard_for_paste().
+                    match cb.get_image() {
+                        Ok(img) => {
+                            log::info!(
+                                "[tauri] paste: clipboard image detected, size={}x{}",
+                                img.width,
+                                img.height
+                            );
+                            let _ = app_handle.emit("native://paste_image", "");
                         }
+                        Err(_) => match cb.get_text() {
+                            Ok(text) if !text.is_empty() => {
+                                log::info!("[tauri] paste: clipboard has text, len={}", text.len());
+                                let _ = app_handle.emit("native://paste", text);
+                            }
+                            _ => {
+                                log::info!("[tauri] paste: clipboard empty");
+                            }
+                        },
                     }
-                },
+                }
                 Err(err) => {
                     log::error!("[tauri] paste: Clipboard::new() failed: {}", err);
                     let _ =
@@ -612,8 +607,8 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         .separator()
         .item(&PredefinedMenuItem::cut(app, None)?)
         .item(&PredefinedMenuItem::copy(app, None)?)
-        // Use the platform predefined Paste item so native dialogs keep Cmd/Ctrl+V.
         .item(&PredefinedMenuItem::paste(app, Some(texts.paste))?)
+        .separator()
         .separator()
         .item(
             &MenuItemBuilder::new(texts.find)

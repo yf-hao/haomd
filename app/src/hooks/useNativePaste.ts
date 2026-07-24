@@ -19,7 +19,68 @@ export function useNativePaste(
     const view = editorViewRef.current
     let detachPreventDefaultPaste: (() => void) | undefined
 
-    if (isTauriEnv() && view) {
+    // Windows WebView2 does not reliably fire paste events for images, and its
+    // built-in accelerator handling intercepts Ctrl+V before Tauri menu items
+    // receive it. We therefore intercept at the keydown level (which Chromium
+    // respects) and read the clipboard via Tauri invoke.
+    // macOS/Linux: the standard paste event works for both text and images.
+    const isWindows = typeof navigator !== 'undefined' && /Windows/i.test(navigator.userAgent)
+
+    const insertText = (text: string) => {
+      const currentView = editorViewRef.current
+      if (!currentView) return
+      const { state } = currentView
+      currentView.dispatch(state.update({
+        ...state.replaceSelection(text),
+        userEvent: 'input.paste',
+        scrollIntoView: true,
+      }))
+    }
+
+    if (isTauriEnv() && isWindows) {
+      const handleKeyDown = (event: KeyboardEvent) => {
+        const currentView = editorViewRef.current
+        console.log('[useNativePaste] keydown on document:', event.key, 'ctrl=', event.ctrlKey, 'view=', currentView)
+        if ((!event.ctrlKey && !event.metaKey) || (event.key !== 'v' && event.key !== 'V')) return
+
+        const active = typeof document !== 'undefined' ? document.activeElement : null
+        console.log('[useNativePaste] Ctrl+V, active=', active?.tagName, 'inEditor=', active ? currentView?.dom.contains(active) : false)
+        if (!active || !currentView || !currentView.dom.contains(active)) return
+
+        console.log('[useNativePaste] intercepting Ctrl+V in editor')
+        event.preventDefault()
+        event.stopPropagation()
+
+        console.log('[useNativePaste] calling readClipboardForPaste()...')
+        void readClipboardForPaste()
+          .then((content) => {
+            console.log('[useNativePaste] readClipboardForPaste returned:', JSON.stringify(content))
+            if (content.kind === 'image') {
+              console.log('[useNativePaste] dispatching native://paste_image')
+              return dispatchNativePasteImage()
+            }
+            if (content.kind !== 'text' || !content.text) {
+              console.warn('[useNativePaste] unexpected/empty clipboard content')
+              return
+            }
+            console.log('[useNativePaste] inserting text, len=', content.text.length)
+            insertText(content.text)
+          })
+          .catch((err) => {
+            console.error('[useNativePaste] readClipboardForPaste error:', err)
+            setStatusMessage(err instanceof Error ? err.message : String(err))
+          })
+      }
+
+      // Windows WebView2 dispatches Ctrl+V keydown only to document level,
+      // not to child DOM nodes. We must listen on document in capture phase.
+      document.addEventListener('keydown', handleKeyDown, true)
+      detachPreventDefaultPaste = () => {
+        document.removeEventListener('keydown', handleKeyDown, true)
+      }
+    }
+
+    if (isTauriEnv() && view && !isWindows) {
       const handlePaste = (event: ClipboardEvent) => {
         const active = typeof document !== 'undefined' ? document.activeElement : null
         if (!active || !view.dom.contains(active)) return
@@ -32,15 +93,7 @@ export function useNativePaste(
               return dispatchNativePasteImage()
             }
             if (content.kind !== 'text' || !content.text) return
-
-            const currentView = editorViewRef.current
-            if (!currentView) return
-            const { state } = currentView
-            currentView.dispatch(state.update({
-              ...state.replaceSelection(content.text),
-              userEvent: 'input.paste',
-              scrollIntoView: true,
-            }))
+            insertText(content.text)
           })
           .catch((err) => {
             setStatusMessage(err instanceof Error ? err.message : String(err))

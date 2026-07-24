@@ -15,6 +15,7 @@ import { DownloadOnClickUseCase, TauriWebviewOpener } from '../modules/download/
 import { ExamAttachmentLinkClassifier } from '../modules/download/linkClassifier'
 import { FetchTextDownloadService } from '../modules/download/downloadService'
 import { TauriFileSaveService } from '../modules/download/fileSaveService'
+import { convertFileSrc } from '@tauri-apps/api/core'
 
 export type Renderer = (code: string) => React.ReactNode
 
@@ -350,21 +351,15 @@ function renderInlineMathHtml(tex: string, katexInstance: KatexModule | null): s
   return html
 }
 
-// 图片/媒体路径编码缓存，避免重复计算 haomd:// / https://haomd.localhost 路径
+// 图片/媒体路径编码缓存，避免重复计算 convertFileSrc
 const mediaUrlCache = new Map<string, string>()
 
-function encodeMediaPath(absPath: string, isWindows: boolean): string {
-  const cacheKey = (isWindows ? 'win|' : 'unix|') + absPath
+function encodeMediaPath(absPath: string): string {
+  const cacheKey = 'unix|' + absPath
   const cached = mediaUrlCache.get(cacheKey)
   if (cached) return cached
 
-  const pathParts = absPath.split(/([/\\])/)
-  const encodedParts = pathParts.map((part: string) => {
-    if (part === '/' || part === '\\') return part
-    return encodeURIComponent(part)
-  })
-  const encoded = encodedParts.join('')
-  const finalUrl = isWindows ? `https://haomd.localhost${encoded}` : `haomd://localhost${encoded}`
+  const finalUrl = convertFileSrc(absPath.replace(/\\/g, '/'), 'haomd')
   mediaUrlCache.set(cacheKey, finalUrl)
   return finalUrl
 }
@@ -420,7 +415,7 @@ type DiagramBlockProps = {
 }
 
 // 提取稳定的媒体组件，避免受 foldRegions 变动影响导致视频重刷
-const MarkdownMedia = memo(({ node, filePath, encodeMediaPath, ...props }: any) => {
+const MarkdownMedia = memo(({ node, filePath, ...props }: any) => {
   const [loadFailed, setLoadFailed] = useState(false)
   const altText = props.alt || ''
   const widthMatch = /\(([\d.]+(?:px|%|rem|vw))\)$/.exec(altText)
@@ -445,11 +440,7 @@ const MarkdownMedia = memo(({ node, filePath, encodeMediaPath, ...props }: any) 
       absPath = fileDir + sep + src
     }
 
-    const pathParts = absPath.split(/([/\\])/)
-    const encodedParts = pathParts.map((part: string) => (part === '/' || part === '\\') ? part : encodeURIComponent(part))
-    const encoded = encodedParts.join('')
-    const isWindows = filePath.includes('\\') || navigator.userAgent.includes('Windows')
-    finalSrc = isWindows ? `https://haomd.localhost${encoded}` : `haomd://localhost${encoded}`
+    finalSrc = convertFileSrc(absPath.replace(/\\/g, '/'), 'haomd')
   }
 
   useEffect(() => {
@@ -850,7 +841,7 @@ function MarkdownViewerComponent(
       },
       img: (innerProps: any) => (
         <FilePathContext.Consumer>
-          {path => <MarkdownMedia {...innerProps} filePath={path} encodeMediaPath={encodeMediaPath} />}
+          {path => <MarkdownMedia {...innerProps} filePath={path} />}
         </FilePathContext.Consumer>
       ),
       pre: (p: any) => <MarkdownBlockElement tag="pre" {...p} />,

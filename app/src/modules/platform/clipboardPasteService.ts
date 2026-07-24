@@ -11,7 +11,10 @@ type ClipboardPasteResult = {
 }
 
 export async function readClipboardForPaste(): Promise<ClipboardPasteContent> {
+  console.log('[clipboardPasteService] invoking read_clipboard_for_paste...')
   const result = await invoke<ClipboardPasteResult>('read_clipboard_for_paste')
+  console.log('[clipboardPasteService] raw result:', JSON.stringify(result))
+
   const content = result?.Ok?.data
 
   if (content?.kind === 'image' || content?.kind === 'empty') {
@@ -22,5 +25,7 @@ export async function readClipboardForPaste(): Promise<ClipboardPasteContent> {
     return content
   }
 
-  throw new Error(result?.Err?.error?.message || '无法读取剪贴板内容')
+  const errMsg = result?.Err?.error?.message || '无法读取剪贴板内容'
+  console.error('[clipboardPasteService] failed:', errMsg)
+  throw new Error(errMsg)
 }
