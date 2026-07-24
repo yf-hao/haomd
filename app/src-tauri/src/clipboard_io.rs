@@ -10,6 +10,128 @@ use tokio::sync::Mutex;
 
 static CLIPBOARD_IMAGE_SAVE_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
+/// Windows fallback: read CF_DIBV5 or CF_DIB from clipboard directly via Win32 API.
+/// Many screenshot tools (Snipaste, PixPin, QQ, etc.) write DIBV5 format which arboard may not read.
+#[cfg(target_os = "windows")]
+fn try_read_clipboard_dib() -> Option<arboard::ImageData<'static>> {
+    use windows::Win32::Foundation::{HGLOBAL, HWND};
+    use windows::Win32::System::DataExchange::{
+        CloseClipboard, GetClipboardData, IsClipboardFormatAvailable, OpenClipboard,
+    };
+    use windows::Win32::System::Memory::{GlobalLock, GlobalUnlock};
+
+    unsafe {
+        let format = if IsClipboardFormatAvailable(17u32).is_ok() {
+            17u32 // CF_DIBV5
+        } else if IsClipboardFormatAvailable(8u32).is_ok() {
+            8u32 // CF_DIB
+        } else {
+            log::info!("[tauri] try_read_clipboard_dib: no DIB format available");
+            return None;
+        };
+
+        log::info!("[tauri] try_read_clipboard_dib: format={}", format);
+
+        if OpenClipboard(HWND(std::ptr::null_mut())).is_err() {
+            log::warn!("[tauri] try_read_clipboard_dib: OpenClipboard failed");
+            return None;
+        }
+
+        let handle = match GetClipboardData(format) {
+            Ok(h) => h,
+            Err(e) => {
+                log::warn!(
+                    "[tauri] try_read_clipboard_dib: GetClipboardData failed: {:?}",
+                    e
+                );
+                CloseClipboard();
+                return None;
+            }
+        };
+
+        let ptr = GlobalLock(HGLOBAL(handle.0));
+        if ptr.is_null() {
+            log::warn!("[tauri] try_read_clipboard_dib: GlobalLock returned null");
+            CloseClipboard();
+            return None;
+        }
+
+        // BITMAPINFOHEADER fields (first 40 bytes shared by all DIB headers)
+        let header_size = std::ptr::read(ptr as *const u32);
+        let width = std::ptr::read((ptr as *const u8).add(4) as *const i32);
+        let height = std::ptr::read((ptr as *const u8).add(8) as *const i32);
+        let planes = std::ptr::read((ptr as *const u8).add(12) as *const u16);
+        let bit_count = std::ptr::read((ptr as *const u8).add(14) as *const u16);
+        let compression = std::ptr::read((ptr as *const u8).add(16) as *const u32);
+
+        log::info!(
+            "[tauri] try_read_clipboard_dib: header_size={} width={} height={} planes={} bit_count={} compression={}",
+            header_size, width, height, planes, bit_count, compression
+        );
+
+        if planes != 1 || compression != 0 || (bit_count != 24 && bit_count != 32) {
+            log::warn!(
+                "[tauri] try_read_clipboard_dib: unsupported format planes={} bit_count={} compression={}",
+                planes, bit_count, compression
+            );
+            GlobalUnlock(HGLOBAL(handle.0));
+            CloseClipboard();
+            return None;
+        }
+
+        let abs_width = width.abs() as usize;
+        let abs_height = height.abs() as usize;
+        let is_top_down = height < 0;
+        let bytes_per_pixel = (bit_count / 8) as usize;
+        let stride = ((abs_width * bytes_per_pixel + 3) / 4) * 4;
+
+        let pixel_data_offset = header_size as usize;
+        let mut rgba = vec![0u8; abs_width * abs_height * 4];
+
+        for row in 0..abs_height {
+            let src_row = if is_top_down {
+                row
+            } else {
+                abs_height - 1 - row
+            };
+            let src_ptr = (ptr as *const u8).add(pixel_data_offset + src_row * stride);
+
+            for col in 0..abs_width {
+                let src_pixel = src_ptr.add(col * bytes_per_pixel);
+                let dst_idx = row * abs_width * 4 + col * 4;
+
+                if bit_count == 32 {
+                    // BGRA -> RGBA
+                    rgba[dst_idx + 0] = *src_pixel.add(2); // R
+                    rgba[dst_idx + 1] = *src_pixel.add(1); // G
+                    rgba[dst_idx + 2] = *src_pixel.add(0); // B
+                    rgba[dst_idx + 3] = *src_pixel.add(3); // A
+                } else {
+                    // 24-bit BGR -> RGBA
+                    rgba[dst_idx + 0] = *src_pixel.add(2); // R
+                    rgba[dst_idx + 1] = *src_pixel.add(1); // G
+                    rgba[dst_idx + 2] = *src_pixel.add(0); // B
+                    rgba[dst_idx + 3] = 255;               // A
+                }
+            }
+        }
+
+        GlobalUnlock(HGLOBAL(handle.0));
+        CloseClipboard();
+
+        log::info!(
+            "[tauri] try_read_clipboard_dib: success {}x{}",
+            abs_width, abs_height
+        );
+
+        Some(arboard::ImageData {
+            width: abs_width,
+            height: abs_height,
+            bytes: std::borrow::Cow::Owned(rgba),
+        })
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ClipboardImageResult {
     pub file_name: String,
@@ -26,34 +148,56 @@ pub enum ClipboardPasteContent {
 #[tauri::command]
 pub async fn read_clipboard_for_paste() -> ResultPayload<ClipboardPasteContent> {
     let trace = new_trace_id();
-    let mut clipboard = match Clipboard::new() {
-        Ok(clipboard) => clipboard,
-        Err(err) => {
-            return err_payload(ErrorCode::IoError, format!("访问剪贴板失败: {err}"), trace);
-        }
-    };
 
-    // Some clipboard producers expose both an image and fallback text/URL.
-    // Prefer the image so screenshot and browser-image paste keep working.
-    if let Ok(image) = clipboard.get_image() {
-        log::info!(
-            "[tauri] read_clipboard_for_paste: image {}x{}",
-            image.width,
-            image.height
-        );
-        return ok(ClipboardPasteContent::Image, trace);
+    // Try arboard first
+    let arboard_empty = {
+        let mut clipboard = match Clipboard::new() {
+            Ok(clipboard) => clipboard,
+            Err(err) => {
+                return err_payload(ErrorCode::IoError, format!("访问剪贴板失败: {err}"), trace);
+            }
+        };
+
+        // Some clipboard producers expose both an image and fallback text/URL.
+        // Prefer the image so screenshot and browser-image paste keep working.
+        if let Ok(image) = clipboard.get_image() {
+            log::info!(
+                "[tauri] read_clipboard_for_paste: image {}x{}",
+                image.width,
+                image.height
+            );
+            return ok(ClipboardPasteContent::Image, trace);
+        }
+
+        match clipboard.get_text() {
+            Ok(text) if !text.is_empty() => {
+                log::info!("[tauri] read_clipboard_for_paste: text len={}", text.len());
+                return ok(ClipboardPasteContent::Text(text), trace);
+            }
+            _ => {}
+        }
+
+        true // arboard found nothing
+    }; // clipboard dropped here, releasing any lock
+
+    // Fallback: Windows DIB/DIBV5 (Snipaste, PixPin, QQ screenshot, etc.)
+    #[cfg(target_os = "windows")]
+    {
+        if arboard_empty {
+            log::info!("[tauri] read_clipboard_for_paste: arboard empty, trying Windows DIB fallback");
+            if let Some(image) = try_read_clipboard_dib() {
+                log::info!(
+                    "[tauri] read_clipboard_for_paste: DIB fallback image {}x{}",
+                    image.width,
+                    image.height
+                );
+                return ok(ClipboardPasteContent::Image, trace);
+            }
+        }
     }
 
-    match clipboard.get_text() {
-        Ok(text) if !text.is_empty() => {
-            log::info!("[tauri] read_clipboard_for_paste: text len={}", text.len());
-            ok(ClipboardPasteContent::Text(text), trace)
-        }
-        _ => {
-            log::info!("[tauri] read_clipboard_for_paste: empty");
-            ok(ClipboardPasteContent::Empty, trace)
-        }
-    }
+    log::info!("[tauri] read_clipboard_for_paste: empty");
+    ok(ClipboardPasteContent::Empty, trace)
 }
 
 #[tauri::command]
@@ -81,32 +225,58 @@ pub async fn save_clipboard_image_to_dir(
         );
     }
 
-    let mut cb = match Clipboard::new() {
-        Ok(c) => c,
-        Err(err) => {
-            return err_payload(ErrorCode::IoError, format!("访问剪贴板失败: {err}"), trace);
-        }
-    };
+    let img = {
+        let mut cb = match Clipboard::new() {
+            Ok(c) => c,
+            Err(err) => {
+                return err_payload(ErrorCode::IoError, format!("访问剪贴板失败: {err}"), trace);
+            }
+        };
 
-    let img = match cb.get_image() {
-        Ok(img) => {
-            log::info!(
-                "[tauri] save_clipboard_image_to_dir: got image {}x{}",
-                img.width,
-                img.height
-            );
-            img
-        }
-        Err(err) => {
-            log::error!(
-                "[tauri] save_clipboard_image_to_dir: get_image failed: {}",
-                err
-            );
-            return err_payload(
-                ErrorCode::UNSUPPORTED,
-                format!("剪贴板中没有图片或格式不支持: {err}"),
-                trace,
-            );
+        match cb.get_image() {
+            Ok(img) => {
+                log::info!(
+                    "[tauri] save_clipboard_image_to_dir: got image {}x{}",
+                    img.width,
+                    img.height
+                );
+                img
+            }
+            Err(arboard_err) => {
+                log::warn!(
+                    "[tauri] save_clipboard_image_to_dir: arboard failed: {}, trying fallback",
+                    arboard_err
+                );
+                #[cfg(target_os = "windows")]
+                {
+                    drop(cb);
+                    match try_read_clipboard_dib() {
+                        Some(img) => {
+                            log::info!(
+                                "[tauri] save_clipboard_image_to_dir: DIB fallback {}x{}",
+                                img.width,
+                                img.height
+                            );
+                            img
+                        }
+                        None => {
+                            return err_payload(
+                                ErrorCode::UNSUPPORTED,
+                                format!("剪贴板中没有图片或格式不支持: {arboard_err}"),
+                                trace,
+                            );
+                        }
+                    }
+                }
+                #[cfg(not(target_os = "windows"))]
+                {
+                    return err_payload(
+                        ErrorCode::UNSUPPORTED,
+                        format!("剪贴板中没有图片或格式不支持: {arboard_err}"),
+                        trace,
+                    );
+                }
+            }
         }
     };
 
@@ -165,32 +335,58 @@ pub async fn read_clipboard_image_as_base64() -> ResultPayload<String> {
     let trace = new_trace_id();
     log::info!("[tauri] read_clipboard_image_as_base64: start");
 
-    let mut cb = match Clipboard::new() {
-        Ok(c) => c,
-        Err(err) => {
-            return err_payload(ErrorCode::IoError, format!("访问剪贴板失败: {err}"), trace);
-        }
-    };
+    let img = {
+        let mut cb = match Clipboard::new() {
+            Ok(c) => c,
+            Err(err) => {
+                return err_payload(ErrorCode::IoError, format!("访问剪贴板失败: {err}"), trace);
+            }
+        };
 
-    let img = match cb.get_image() {
-        Ok(img) => {
-            log::info!(
-                "[tauri] read_clipboard_image_as_base64: got image {}x{}",
-                img.width,
-                img.height
-            );
-            img
-        }
-        Err(err) => {
-            log::error!(
-                "[tauri] read_clipboard_image_as_base64: get_image failed: {}",
-                err
-            );
-            return err_payload(
-                ErrorCode::UNSUPPORTED,
-                format!("剪贴板中没有图片或格式不支持: {err}"),
-                trace,
-            );
+        match cb.get_image() {
+            Ok(img) => {
+                log::info!(
+                    "[tauri] read_clipboard_image_as_base64: got image {}x{}",
+                    img.width,
+                    img.height
+                );
+                img
+            }
+            Err(arboard_err) => {
+                log::warn!(
+                    "[tauri] read_clipboard_image_as_base64: arboard failed: {}, trying fallback",
+                    arboard_err
+                );
+                #[cfg(target_os = "windows")]
+                {
+                    drop(cb);
+                    match try_read_clipboard_dib() {
+                        Some(img) => {
+                            log::info!(
+                                "[tauri] read_clipboard_image_as_base64: DIB fallback {}x{}",
+                                img.width,
+                                img.height
+                            );
+                            img
+                        }
+                        None => {
+                            return err_payload(
+                                ErrorCode::UNSUPPORTED,
+                                format!("剪贴板中没有图片或格式不支持: {arboard_err}"),
+                                trace,
+                            );
+                        }
+                    }
+                }
+                #[cfg(not(target_os = "windows"))]
+                {
+                    return err_payload(
+                        ErrorCode::UNSUPPORTED,
+                        format!("剪贴板中没有图片或格式不支持: {arboard_err}"),
+                        trace,
+                    );
+                }
+            }
         }
     };
 

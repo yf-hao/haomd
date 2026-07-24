@@ -1177,9 +1177,22 @@ function WysiwygEditor({
       markUserInteracted()
       if (!isTauriEnv()) return
 
-      const hasImage = Array.from(event.clipboardData?.items ?? []).some(
-        (item) => item.kind === 'file' && item.type.startsWith('image/'),
-      )
+      const clipboardData = event.clipboardData
+      const hasImage = (() => {
+        if (!clipboardData) return false
+        // Standard file-based paste (Windows Snipping Tool, browser copy-image, etc.)
+        if (
+          Array.from(clipboardData.items).some(
+            (item) => item.kind === 'file' && item.type.startsWith('image/'),
+          )
+        ) {
+          return true
+        }
+        // Some screenshot tools (Snipaste, PixPin, QQ, WeChat) write HTML with base64 image
+        const html = clipboardData.getData('text/html')
+        if (html.includes('data:image/')) return true
+        return false
+      })()
       if (!hasImage) return
 
       event.preventDefault()
