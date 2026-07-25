@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.12.9] - 2026-07-25
+
+### 中文
+
+本次更新修复 Windows 系统下的本地媒体文件路径处理及第三方截图软件粘贴问题。
+
+#### 主要更新
+* **本地媒体路径修复**：统一使用 `convertFileSrc` 处理本地媒体文件路径，修复 Windows 下图片加载失败的问题。
+* **截图软件粘贴修复**：修复 Windows 第三方截图软件（Snipaste、PixPin、QQ 截图等）粘贴图片失败的问题，通过 Win32 API 读取 CF_DIBV5/CF_DIB 格式数据。
+* **代码清理**：删除残留的死代码，修复 Rust 格式化及未使用变量警告。
+
+---
+
+### English
+
+Version v0.12.9 fixes local media file path handling and third-party screenshot tool paste issues on Windows.
+
+#### Key Updates
+* **Local Media Path Fix**: Unified use of `convertFileSrc` for local media file paths, fixing image loading failures on Windows.
+* **Screenshot Tool Paste Fix**: Fixed paste failures from third-party screenshot tools (Snipaste, PixPin, QQ Screenshot, etc.) on Windows by reading CF_DIBV5/CF_DIB data via Win32 API.
+* **Code Cleanup**: Removed dead code, fixed Rust formatting and unused variable warnings.
+
+---
+
 ## [v0.12.8] - 2026-07-22
 
 ### 中文
