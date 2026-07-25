@@ -111,7 +111,7 @@ fn try_read_clipboard_dib() -> Option<arboard::ImageData<'static>> {
                     rgba[dst_idx + 0] = *src_pixel.add(2); // R
                     rgba[dst_idx + 1] = *src_pixel.add(1); // G
                     rgba[dst_idx + 2] = *src_pixel.add(0); // B
-                    rgba[dst_idx + 3] = 255;               // A
+                    rgba[dst_idx + 3] = 255; // A
                 }
             }
         }
@@ -121,7 +121,8 @@ fn try_read_clipboard_dib() -> Option<arboard::ImageData<'static>> {
 
         log::info!(
             "[tauri] try_read_clipboard_dib: success {}x{}",
-            abs_width, abs_height
+            abs_width,
+            abs_height
         );
 
         Some(arboard::ImageData {
@@ -150,7 +151,7 @@ pub async fn read_clipboard_for_paste() -> ResultPayload<ClipboardPasteContent> 
     let trace = new_trace_id();
 
     // Try arboard first
-    let arboard_empty = {
+    let _arboard_empty = {
         let mut clipboard = match Clipboard::new() {
             Ok(clipboard) => clipboard,
             Err(err) => {
@@ -183,8 +184,10 @@ pub async fn read_clipboard_for_paste() -> ResultPayload<ClipboardPasteContent> 
     // Fallback: Windows DIB/DIBV5 (Snipaste, PixPin, QQ screenshot, etc.)
     #[cfg(target_os = "windows")]
     {
-        if arboard_empty {
-            log::info!("[tauri] read_clipboard_for_paste: arboard empty, trying Windows DIB fallback");
+        if _arboard_empty {
+            log::info!(
+                "[tauri] read_clipboard_for_paste: arboard empty, trying Windows DIB fallback"
+            );
             if let Some(image) = try_read_clipboard_dib() {
                 log::info!(
                     "[tauri] read_clipboard_for_paste: DIB fallback image {}x{}",

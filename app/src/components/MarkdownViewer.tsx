@@ -351,19 +351,6 @@ function renderInlineMathHtml(tex: string, katexInstance: KatexModule | null): s
   return html
 }
 
-// 图片/媒体路径编码缓存，避免重复计算 convertFileSrc
-const mediaUrlCache = new Map<string, string>()
-
-function encodeMediaPath(absPath: string): string {
-  const cacheKey = 'unix|' + absPath
-  const cached = mediaUrlCache.get(cacheKey)
-  if (cached) return cached
-
-  const finalUrl = convertFileSrc(absPath.replace(/\\/g, '/'), 'haomd')
-  mediaUrlCache.set(cacheKey, finalUrl)
-  return finalUrl
-}
-
 // remark → rehype 阶段：将 math / inlineMath 映射为自定义标签，携带原始行号
 const remarkRehypeOptions: any = {
   handlers: {
