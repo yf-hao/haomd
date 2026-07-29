@@ -8,12 +8,18 @@ import {
 import { readClipboardForPaste } from '../modules/platform/clipboardPasteService'
 import { isTauriEnv } from '../modules/platform/runtime'
 
+export interface NativePasteHandlers {
+  /** 尝试粘贴剪贴板中的图片。如果成功返回 true，失败或剪贴板无图片返回 false */
+  tryPasteImage?: () => Promise<boolean>
+}
+
 /**
  * 将 Tauri 原生粘贴事件桥接到 CodeMirror 编辑器。
  */
 export function useNativePaste(
   editorViewRef: RefObject<EditorView | null>,
   setStatusMessage: (msg: string) => void,
+  handlers?: NativePasteHandlers,
 ) {
   useEffect(() => {
     const view = editorViewRef.current
@@ -38,7 +44,7 @@ export function useNativePaste(
     }
 
     if (isTauriEnv() && isWindows) {
-      const handleKeyDown = (event: KeyboardEvent) => {
+      const handleKeyDown = async (event: KeyboardEvent) => {
         const currentView = editorViewRef.current
         console.log('[useNativePaste] keydown on document:', event.key, 'ctrl=', event.ctrlKey, 'view=', currentView)
         if ((!event.ctrlKey && !event.metaKey) || (event.key !== 'v' && event.key !== 'V')) return
@@ -46,6 +52,23 @@ export function useNativePaste(
         const active = typeof document !== 'undefined' ? document.activeElement : null
         console.log('[useNativePaste] Ctrl+V, active=', active?.tagName, 'inEditor=', active ? currentView?.dom.contains(active) : false)
         if (!active || !currentView || !currentView.dom.contains(active)) return
+
+        // 优先尝试图片粘贴（合并路径：一次 IPC 完成检测+保存）
+        if (handlers?.tryPasteImage) {
+          console.log('[useNativePaste] trying tryPasteImage...')
+          try {
+            const pasted = await handlers.tryPasteImage()
+            if (pasted) {
+              console.log('[useNativePaste] tryPasteImage succeeded')
+              event.preventDefault()
+              event.stopPropagation()
+              return
+            }
+            console.log('[useNativePaste] tryPasteImage returned false, falling back to readClipboardForPaste')
+          } catch (err) {
+            console.error('[useNativePaste] tryPasteImage error:', err)
+          }
+        }
 
         console.log('[useNativePaste] intercepting Ctrl+V in editor')
         event.preventDefault()
@@ -168,5 +191,5 @@ export function useNativePaste(
       unPaste()
       unError()
     }
-  }, [editorViewRef, setStatusMessage])
+  }, [editorViewRef, setStatusMessage, handlers?.tryPasteImage])
 }

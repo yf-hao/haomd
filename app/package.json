@@ -29,6 +29,7 @@
     "@milkdown/kit": "^7.19.2",
     "@milkdown/theme-nord": "^7.19.2",
     "@prosemirror-adapter/react": "^0.5.2",
+    "@rolldown/binding-win32-x64-msvc": "^1.0.0-beta.50",
     "@rollup/plugin-strip": "^3.0.4",
     "@tauri-apps/api": "2.9.1",
     "@tauri-apps/plugin-dialog": "^2.6.0",

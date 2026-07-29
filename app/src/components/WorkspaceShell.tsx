@@ -58,7 +58,12 @@ import { useNativePaste } from '../hooks/useNativePaste'
 import { usePomodoroController } from '../modules/tools/pomodoro/usePomodoroController'
 import { useAlarmScheduler } from '../modules/tools/alarm/useAlarmScheduler'
 import { useAlarmMusicPauseSync } from '../modules/tools/alarm/useAlarmMusicPauseSync'
-import { onNativePasteImage } from '../modules/platform/clipboardEvents'
+import {
+  onClipboardImageReady,
+  onClipboardImageSaveError,
+  onNativePasteImage,
+} from '../modules/platform/clipboardEvents'
+import { pasteClipboardImage } from '../modules/platform/clipboardPasteService'
 import { openTerminalAt } from '../modules/platform/terminalService'
 import { openInFileManager } from '../modules/platform/fileExplorerService'
 import { getFilePathIdentity } from '../modules/files/filePathState'
@@ -3113,118 +3118,123 @@ export function WorkspaceShell({
     [dispatchAction],
   )
 
-  useNativePaste(editorViewRef, setStatusMessage)
+  const handlePasteImage = useCallback(async (): Promise<boolean> => {
+    const view = editorViewRef.current
+    const isWysiwyg = editMode === 'wysiwyg' && !isPdfActive
+    const active = typeof document !== 'undefined' ? document.activeElement : null
+    const wysiwygFocused = Boolean(active?.closest('.wysiwyg-editor'))
 
-  // 粘贴图片：通过 native://paste_image 事件桥接（Cmd/Ctrl+V），保存到 images 目录并插入 Markdown 链接
+    if (isWysiwyg && !wysiwygFocused) {
+      console.warn('[WorkspaceShell] handlePasteImage: WYSIWYG is not focused')
+      return false
+    }
+    if (!isWysiwyg && !view) {
+      console.warn('[WorkspaceShell] handlePasteImage: no editor view')
+      return false
+    }
+
+    if (typeof document !== 'undefined') {
+      const contains = active
+        ? (isWysiwyg ? wysiwygFocused : Boolean(view?.dom.contains(active)))
+        : false
+      console.log('[WorkspaceShell] handlePasteImage: active in editor =', contains)
+      if (active && !contains) {
+        return false
+      }
+    }
+
+    if (isTransientFilePath(filePath)) {
+      console.warn('[WorkspaceShell] handlePasteImage: no filePath, cannot determine images dir')
+      setConfirmDialogRef.current({
+        title: t('workspace.cannotInsertImageTitle'),
+        message: t('workspace.cannotInsertImageMessage'),
+        confirmText: t('workspace.ok'),
+        onConfirm: () => setConfirmDialogRef.current(null),
+      })
+      return true
+    }
+
+    const cfg = loadDefaultImagePathStrategyConfig()
+    const { targetDir, relDir } = resolveImageTarget(filePath, null, cfg)
+    console.log('[WorkspaceShell] handlePasteImage: resolved targetDir=', targetDir, 'relDir=', relDir)
+
+    const fileBaseName = (() => {
+      const pathPart = filePath.split(/[/\\]/).pop() || ''
+      const withoutExt = pathPart.replace(/\.[^./\\]+$/, '')
+      return withoutExt || 'untitled'
+    })()
+    const suggestedName = `image_${fileBaseName}`
+    console.log('[WorkspaceShell] handlePasteImage: suggestedName =', suggestedName)
+
+    try {
+      const fileName = await pasteClipboardImage(targetDir, suggestedName)
+      console.log('[WorkspaceShell] handlePasteImage: pasted fileName =', fileName)
+
+      const relPath = `${relDir}/${fileName}`
+
+      if (isWysiwyg) {
+        const inserted = wysiwygFormatActionsRef.current?.insertImage(relPath) ?? false
+        if (!inserted) {
+          setStatusMessage(t('workspace.pasteImageFailed', { message: '无法插入图片' }))
+        }
+        return inserted
+      }
+
+      if (!view) return false
+
+      const snippet = `
+![图片](${relPath})
+`
+      console.log('[WorkspaceShell] handlePasteImage: inserting snippet', snippet)
+
+      const { state } = view
+      const { from, to } = state.selection.main
+      view.dispatch(state.update({
+        changes: { from, to, insert: snippet },
+        selection: { anchor: from + snippet.length },
+        scrollIntoView: true,
+      }))
+      return true
+    } catch (err) {
+      console.error('[WorkspaceShell] handlePasteImage: paste failed', err)
+      return false
+    }
+  }, [editMode, editorViewRef, filePath, isPdfActive, setStatusMessage, t])
+
+  useNativePaste(editorViewRef, setStatusMessage, {
+    tryPasteImage: handlePasteImage,
+  })
+
+  // 监听剪贴板图片后台编码完成/失败事件（所有平台）
+  useEffect(() => {
+    const unlistenReady = onClipboardImageReady((payload) => {
+      console.log('[WorkspaceShell] clipboard image ready:', payload.fileName)
+    })
+    const unlistenError = onClipboardImageSaveError((payload) => {
+      console.error('[WorkspaceShell] clipboard image save error:', payload)
+      setStatusMessage(
+        t('workspace.pasteImageFailed', { message: payload.error || '编码失败' }),
+      )
+    })
+
+    return () => {
+      unlistenReady()
+      unlistenError()
+    }
+  }, [setStatusMessage, t])
+
+  // macOS/Linux：通过 native://paste_image 事件桥接图片粘贴
   useEffect(() => {
     console.log('[WorkspaceShell] image paste effect mounted')
     const unlisten = onNativePasteImage(async () => {
       console.log('[WorkspaceShell] onNativePasteImage fired')
-      const view = editorViewRef.current
-      const isWysiwyg = editMode === 'wysiwyg' && !isPdfActive
-      const active = typeof document !== 'undefined' ? document.activeElement : null
-      const wysiwygFocused = Boolean(active?.closest('.wysiwyg-editor'))
-
-      if (isWysiwyg && !wysiwygFocused) {
-        console.warn('[WorkspaceShell] onNativePasteImage: WYSIWYG is not focused')
-        return
-      }
-      if (!isWysiwyg && !view) {
-        console.warn('[WorkspaceShell] onNativePasteImage: no editor view')
-        return
-      }
-
-      // 仅当焦点在编辑器内部时才处理粘贴，避免与其他输入框冲突
-      if (typeof document !== 'undefined') {
-        const contains = active
-          ? (isWysiwyg ? wysiwygFocused : Boolean(view?.dom.contains(active)))
-          : false
-        console.log('[WorkspaceShell] onNativePasteImage: active in editor =', contains)
-        if (active && !contains) {
-          return
-        }
-      }
-
-      if (isTransientFilePath(filePath)) {
-        console.warn('[WorkspaceShell] onNativePasteImage: no filePath, cannot determine images dir')
-        setConfirmDialogRef.current({
-          title: t('workspace.cannotInsertImageTitle'),
-          message: t('workspace.cannotInsertImageMessage'),
-          confirmText: t('workspace.ok'),
-          onConfirm: () => setConfirmDialogRef.current(null),
-        })
-        return
-      }
-
-      const cfg = loadDefaultImagePathStrategyConfig()
-      const { targetDir, relDir } = resolveImageTarget(filePath, null, cfg)
-      console.log('[WorkspaceShell] onNativePasteImage: resolved targetDir=', targetDir, 'relDir=', relDir)
-
-      // 根据当前文件名构造图片命名前缀：image_当前文件名（去掉扩展名）
-      const fileBaseName = (() => {
-        const pathPart = filePath.split(/[/\\]/).pop() || ''
-        const withoutExt = pathPart.replace(/\.[^./\\]+$/, '')
-        return withoutExt || 'untitled'
-      })()
-      const suggestedName = `image_${fileBaseName}`
-      console.log('[WorkspaceShell] onNativePasteImage: suggestedName =', suggestedName)
-
-      try {
-        const result = await invoke('save_clipboard_image_to_dir', {
-          targetDir,
-          suggestedName,
-        }) as any
-        console.log('[WorkspaceShell] onNativePasteImage: invoke result =', result)
-
-        // 后端返回的是 ResultPayload<T>，形如 { Ok: { data: { file_name }, trace_id }, Err: { error } }
-        const okPart = result && 'Ok' in result ? result.Ok : null
-        if (!okPart) {
-          console.error('[WorkspaceShell] onNativePasteImage: backend returned Err', result?.Err)
-          setStatusMessage(result?.Err?.error?.message || t('workspace.pasteImageBackendError'))
-          return
-        }
-
-        const fileName = okPart?.data?.file_name as string | undefined
-        if (!fileName) {
-          console.error('[WorkspaceShell] onNativePasteImage: missing file_name in Ok.data')
-          setStatusMessage(t('workspace.pasteImageMissingFileName'))
-          return
-        }
-
-        const relPath = `${relDir}/${fileName}`
-
-        if (isWysiwyg) {
-          const inserted = wysiwygFormatActionsRef.current?.insertImage(relPath) ?? false
-          if (!inserted) {
-            setStatusMessage(t('workspace.pasteImageFailed', { message: '无法插入图片' }))
-          }
-          return
-        }
-
-        if (!view) return
-
-        const snippet = `
-![图片](${relPath})
-`
-        console.log('[WorkspaceShell] onNativePasteImage: inserting snippet', snippet)
-
-        const { state } = view
-        const { from, to } = state.selection.main
-        view.dispatch(state.update({
-          changes: { from, to, insert: snippet },
-          selection: { anchor: from + snippet.length },
-          scrollIntoView: true,
-        }))
-      } catch (err) {
-        console.error('[WorkspaceShell] onNativePasteImage: invoke failed', err)
-        setStatusMessage(t('workspace.pasteImageFailed', { message: String(err) }))
-      }
+      await handlePasteImage()
     })
 
     return () => {
       unlisten()
     }
-  }, [editMode, editorViewRef, filePath, isPdfActive, setStatusMessage, t])
+  }, [handlePasteImage])
 
   const saveCursorPositionRef = useRef<((globalLine: number) => void) | null>(null)
 

@@ -6,6 +6,7 @@ use once_cell::sync::Lazy;
 use rand::{distributions::Alphanumeric, Rng};
 use serde::{Deserialize, Serialize};
 use std::io::Cursor;
+use tauri::{AppHandle, Emitter};
 use tokio::sync::Mutex;
 
 static CLIPBOARD_IMAGE_SAVE_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
@@ -131,6 +132,103 @@ fn try_read_clipboard_dib() -> Option<arboard::ImageData<'static>> {
             bytes: std::borrow::Cow::Owned(rgba),
         })
     }
+}
+
+/// Windows fast fallback: read CF_DIBV5 or CF_DIB without per-pixel BGR→RGBA conversion.
+/// Returns a DynamicImage directly to avoid nested loop overhead.
+#[cfg(target_os = "windows")]
+unsafe fn try_read_clipboard_dib_fast() -> Option<DynamicImage> {
+    use windows::Win32::Foundation::{HGLOBAL, HWND};
+    use windows::Win32::System::DataExchange::{
+        CloseClipboard, GetClipboardData, IsClipboardFormatAvailable, OpenClipboard,
+    };
+    use windows::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
+
+    let format = if IsClipboardFormatAvailable(17u32).is_ok() {
+        17u32 // CF_DIBV5
+    } else if IsClipboardFormatAvailable(8u32).is_ok() {
+        8u32 // CF_DIB
+    } else {
+        return None;
+    };
+
+    if OpenClipboard(HWND(std::ptr::null_mut())).is_err() {
+        return None;
+    }
+
+    let handle = match GetClipboardData(format) {
+        Ok(h) => h,
+        Err(_) => {
+            let _ = CloseClipboard();
+            return None;
+        }
+    };
+
+    let ptr = GlobalLock(HGLOBAL(handle.0));
+    if ptr.is_null() {
+        let _ = CloseClipboard();
+        return None;
+    }
+
+    let header_size = std::ptr::read(ptr as *const u32);
+    let width = std::ptr::read((ptr as *const u8).add(4) as *const i32);
+    let height = std::ptr::read((ptr as *const u8).add(8) as *const i32);
+    let planes = std::ptr::read((ptr as *const u8).add(12) as *const u16);
+    let bit_count = std::ptr::read((ptr as *const u8).add(14) as *const u16);
+    let compression = std::ptr::read((ptr as *const u8).add(16) as *const u32);
+
+    if planes != 1 || compression != 0 || (bit_count != 24 && bit_count != 32) {
+        GlobalUnlock(HGLOBAL(handle.0));
+        let _ = CloseClipboard();
+        return None;
+    }
+
+    let abs_width = width.abs() as u32;
+    let abs_height = height.abs() as u32;
+    let is_top_down = height < 0;
+    let bytes_per_pixel = (bit_count / 8) as usize;
+    let stride = ((abs_width as usize * bytes_per_pixel + 3) / 4) * 4;
+
+    let pixel_data_offset = header_size as usize;
+    let data_size = GlobalSize(HGLOBAL(handle.0));
+    let pixel_data_size = data_size.saturating_sub(pixel_data_offset);
+
+    let mut rgba = vec![0u8; abs_width as usize * abs_height as usize * 4];
+
+    let src_slice = std::slice::from_raw_parts(
+        (ptr as *const u8).add(pixel_data_offset),
+        pixel_data_size,
+    );
+
+    for row in 0..abs_height as usize {
+        let src_row = if is_top_down { row } else { abs_height as usize - 1 - row };
+        let src_line = &src_slice[src_row * stride..src_row * stride + abs_width as usize * bytes_per_pixel];
+        let dst_line = &mut rgba[row * abs_width as usize * 4..(row + 1) * abs_width as usize * 4];
+
+        if bit_count == 32 {
+            // DIB 32-bit = BGRA; ImageBuffer<Rgba8> expects RGBA
+            for (src_pixel, dst_pixel) in src_line.chunks_exact(4).zip(dst_line.chunks_exact_mut(4)) {
+                dst_pixel[0] = src_pixel[2]; // R
+                dst_pixel[1] = src_pixel[1]; // G
+                dst_pixel[2] = src_pixel[0]; // B
+                dst_pixel[3] = src_pixel[3]; // A
+            }
+        } else {
+            // DIB 24-bit = BGR
+            for (src_pixel, dst_pixel) in src_line.chunks_exact(3).zip(dst_line.chunks_exact_mut(4)) {
+                dst_pixel[0] = src_pixel[2]; // R
+                dst_pixel[1] = src_pixel[1]; // G
+                dst_pixel[2] = src_pixel[0]; // B
+                dst_pixel[3] = 255;          // A
+            }
+        }
+    }
+
+    GlobalUnlock(HGLOBAL(handle.0));
+    let _ = CloseClipboard();
+
+    let buffer = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(abs_width, abs_height, rgba)?;
+    Some(DynamicImage::ImageRgba8(buffer))
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -328,6 +426,197 @@ pub async fn save_clipboard_image_to_dir(
 
     log::info!(
         "[tauri] save_clipboard_image_to_dir: ok, file_name={}",
+        file_name
+    );
+    ok(ClipboardImageResult { file_name }, trace)
+}
+
+/// 合并剪贴板图片读取与保存：只打开一次剪贴板，直接保存为 WebP。
+/// Windows 下使用 DIB fast 路径避免逐像素 BGR→RGBA 转换。
+///
+/// 本命令采用即发即返策略：
+/// 1. 同步阶段：读取剪贴板、分配唯一文件名、创建空文件、立即返回文件名
+/// 2. 异步阶段：在 spawn_blocking 中完成 WebP 编码与磁盘写入
+/// 3. 编码完成后通过 `clipboard://image_ready` / `clipboard://image_save_error` 事件通知前端
+#[tauri::command]
+pub async fn paste_clipboard_image(
+    app: AppHandle,
+    target_dir: String,
+    suggested_name: Option<String>,
+) -> ResultPayload<ClipboardImageResult> {
+    let trace = new_trace_id();
+    log::info!(
+        "[tauri] paste_clipboard_image: target_dir={}, suggested_name={:?}",
+        target_dir,
+        suggested_name
+    );
+
+    let normalized_dir = match normalize_path(&target_dir) {
+        Ok(p) => p,
+        Err(e) => return ResultPayload::Err { error: e },
+    };
+
+    if let Err(err) = std::fs::create_dir_all(&normalized_dir) {
+        return err_payload(
+            ErrorCode::IoError,
+            format!("创建图片目录失败: {err}"),
+            trace,
+        );
+    }
+
+    let img = {
+        let mut cb = match Clipboard::new() {
+            Ok(c) => c,
+            Err(err) => {
+                return err_payload(ErrorCode::IoError, format!("访问剪贴板失败: {err}"), trace);
+            }
+        };
+
+        match cb.get_image() {
+            Ok(img) => {
+                log::info!(
+                    "[tauri] paste_clipboard_image: got image {}x{}",
+                    img.width,
+                    img.height
+                );
+                let width = img.width as u32;
+                let height = img.height as u32;
+                match ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(
+                    width,
+                    height,
+                    img.bytes.into_owned(),
+                ) {
+                    Some(buf) => DynamicImage::ImageRgba8(buf),
+                    None => {
+                        return err_payload(ErrorCode::UNSUPPORTED, "图片数据无效", trace);
+                    }
+                }
+            }
+            Err(arboard_err) => {
+                log::warn!(
+                    "[tauri] paste_clipboard_image: arboard failed: {}, trying fallback",
+                    arboard_err
+                );
+                #[cfg(target_os = "windows")]
+                {
+                    drop(cb);
+                    unsafe {
+                        match try_read_clipboard_dib_fast() {
+                            Some(img) => {
+                                log::info!(
+                                    "[tauri] paste_clipboard_image: DIB fast fallback {}x{}",
+                                    img.width(),
+                                    img.height()
+                                );
+                                img
+                            }
+                            None => {
+                                return err_payload(
+                                    ErrorCode::UNSUPPORTED,
+                                    format!("剪贴板中没有图片或格式不支持: {arboard_err}"),
+                                    trace,
+                                );
+                            }
+                        }
+                    }
+                }
+                #[cfg(not(target_os = "windows"))]
+                {
+                    return err_payload(
+                        ErrorCode::UNSUPPORTED,
+                        format!("剪贴板中没有图片或格式不支持: {arboard_err}"),
+                        trace,
+                    );
+                }
+            }
+        }
+    };
+
+    let base_name = suggested_name.unwrap_or_else(|| "image".to_string());
+    let _guard = CLIPBOARD_IMAGE_SAVE_LOCK.lock().await;
+
+    let mut index: u32 = 1;
+    let file_name = loop {
+        let candidate = format!("{}_{}.webp", base_name, index);
+        let candidate_path = normalized_dir.join(&candidate);
+        if !candidate_path.exists() {
+            break candidate;
+        }
+        index += 1;
+        if index > 9999 {
+            let rand_suffix: String = rand::thread_rng()
+                .sample_iter(&Alphanumeric)
+                .take(6)
+                .map(char::from)
+                .collect();
+            let timestamp = Local::now().format("%Y%m%d-%H%M%S-%3f");
+            break format!("{}_{}_{}.webp", base_name, timestamp, rand_suffix);
+        }
+    };
+
+    let full_path = normalized_dir.join(&file_name);
+    log::info!(
+        "[tauri] paste_clipboard_image: will save to {:?}, returning immediately",
+        full_path
+    );
+
+    let mut file = match std::fs::File::create(&full_path) {
+        Ok(f) => f,
+        Err(err) => {
+            return err_payload(
+                ErrorCode::IoError,
+                format!("创建图片文件失败: {err}"),
+                trace,
+            );
+        }
+    };
+
+    // 释放锁：文件名已唯一确定，后续写入无需互斥
+    drop(_guard);
+
+    // 在后台线程完成 WebP 编码与写入，不阻塞异步事件循环
+    let file_name_for_event = file_name.clone();
+    tokio::spawn(async move {
+        let result = tokio::task::spawn_blocking(move || {
+            img.write_to(&mut file, ImageFormat::WebP)
+        }).await;
+
+        match result {
+            Ok(Ok(())) => {
+                log::info!(
+                    "[tauri] paste_clipboard_image: background encode ok, file_name={}",
+                    file_name_for_event
+                );
+                let payload = serde_json::json!({"fileName": file_name_for_event});
+                if let Err(err) = app.emit("clipboard://image_ready", payload) {
+                    log::warn!("[tauri] emit clipboard://image_ready failed: {}", err);
+                }
+            }
+            Ok(Err(write_err)) => {
+                log::error!(
+                    "[tauri] paste_clipboard_image: background encode failed: {}",
+                    write_err
+                );
+                let payload = serde_json::json!({"fileName": file_name_for_event, "error": format!("{}", write_err)});
+                if let Err(err) = app.emit("clipboard://image_save_error", payload) {
+                    log::warn!("[tauri] emit clipboard://image_save_error failed: {}", err);
+                }
+            }
+            Err(join_err) => {
+                log::error!(
+                    "[tauri] paste_clipboard_image: background task panicked: {}",
+                    join_err
+                );
+                let payload = serde_json::json!({"fileName": file_name_for_event, "error": format!("{}", join_err)});
+                if let Err(err) = app.emit("clipboard://image_save_error", payload) {
+                    log::warn!("[tauri] emit clipboard://image_save_error failed: {}", err);
+                }
+            }
+        }
+    });
+
+    log::info!(
+        "[tauri] paste_clipboard_image: returned immediately, file_name={}",
         file_name
     );
     ok(ClipboardImageResult { file_name }, trace)

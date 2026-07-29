@@ -105,3 +105,44 @@ export async function dispatchNativePasteImage(): Promise<void> {
   await emit('native://paste_image')
   console.log('[clipboardEvents] emit native://paste_image done')
 }
+
+export interface ClipboardImageReadyPayload {
+  fileName: string
+}
+
+export interface ClipboardImageSaveErrorPayload {
+  fileName: string
+  error?: string
+}
+
+/**
+ * 监听剪贴板图片编码完成事件（clipboard://image_ready）。
+ */
+export function onClipboardImageReady(
+  handler: (payload: ClipboardImageReadyPayload) => void,
+): Unlisten {
+  return createNativeClipboardListener<ClipboardImageReadyPayload>(
+    'clipboard://image_ready',
+    (payload) => {
+      console.log('[clipboardEvents] clipboard://image_ready:', payload.fileName)
+      handler(payload)
+    },
+    '[clipboardEvents] listen clipboard://image_ready failed',
+  )
+}
+
+/**
+ * 监听剪贴板图片编码失败事件（clipboard://image_save_error）。
+ */
+export function onClipboardImageSaveError(
+  handler: (payload: ClipboardImageSaveErrorPayload) => void,
+): Unlisten {
+  return createNativeClipboardListener<ClipboardImageSaveErrorPayload>(
+    'clipboard://image_save_error',
+    (payload) => {
+      console.error('[clipboardEvents] clipboard://image_save_error:', payload)
+      handler(payload)
+    },
+    '[clipboardEvents] listen clipboard://image_save_error failed',
+  )
+}
