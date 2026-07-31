@@ -378,6 +378,7 @@
   /* 允许 slash-panel 浮动在输入框上方，不被裁剪 */
   overflow: visible;
   font-size: var(--ui-font-ai-chat-input);
+  flex-shrink: 0;
 }
 
 .ai-chat-input-container:focus-within {
@@ -1071,6 +1072,7 @@ button.ghost.ghost-subtle:hover {
   flex-wrap: wrap;
   gap: 8px;
   min-height: 44px;
+  flex-shrink: 0;
 }
 
 .ai-chat-input-tools-left {

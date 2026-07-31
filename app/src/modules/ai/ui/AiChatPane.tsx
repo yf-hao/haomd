@@ -171,6 +171,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
   const programmaticScrollRef = useRef(false)
   const lastScrollTopRef = useRef(0)
   const pendingInitialScrollRef = useRef(true)
+  const pendingScrollRafRef = useRef<number | null>(null)
   const lastTouchYRef = useRef<number | null>(null)
   const isComposingRef = useRef(false)
   const lockEnterRef = useRef(false)
@@ -1325,13 +1326,17 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
   const hasLocalBackground = Boolean(themeSettings.aiChatBackground?.enabled && themeSettings.aiChatBackground?.path)
 
   const scrollMessagesToBottom = () => {
-    const el = messagesContainerRef.current
-    if (!el) return
-    programmaticScrollRef.current = true
-    el.scrollTop = el.scrollHeight
-    lastScrollTopRef.current = el.scrollTop
-    requestAnimationFrame(() => {
-      programmaticScrollRef.current = false
+    if (pendingScrollRafRef.current !== null) return
+    pendingScrollRafRef.current = requestAnimationFrame(() => {
+      pendingScrollRafRef.current = null
+      const el = messagesContainerRef.current
+      if (!el) return
+      programmaticScrollRef.current = true
+      el.scrollTop = el.scrollHeight
+      lastScrollTopRef.current = el.scrollTop
+      requestAnimationFrame(() => {
+        programmaticScrollRef.current = false
+      })
     })
   }
 
