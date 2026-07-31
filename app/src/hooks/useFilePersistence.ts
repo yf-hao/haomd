@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { unstable_batchedUpdates } from 'react-dom'
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 import { clearRecentRemote, deleteRecentRemote, logRecentFile, readFile, writeFile } from '../modules/files/service'
 import { UNTITLED_FILE_PATH, isTransientFilePath } from '../modules/files/filePathState'
@@ -126,15 +127,19 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
           expectedMtime: currentMtime,
         })
         if (resp.ok) {
-          // 先更新 ref，避免紧接着触发的下一次保存仍判断为“未命名”
+          // 先更新 ref，避免紧接着触发的下一次保存仍判断为"未命名"
           pathRef.current = pathToUse
-          setFilePath(pathToUse)
-          setDirty(false)
-          setSaveStatus('saved')
-          setStatusMessage('已保存')
-          setCurrentHash(resp.data.hash)
-          setCurrentMtime(resp.data.mtimeMs)
-          setLastSavedAt(Date.now())
+          // 用 batchedUpdates 将多个 setState 合并为一次渲染，避免 async 函数中
+          // 逐个 flush 导致多次布局重排（保存时抖动的根本原因）
+          unstable_batchedUpdates(() => {
+            setFilePath(pathToUse)
+            setDirty(false)
+            setSaveStatus('saved')
+            setStatusMessage('已保存')
+            setCurrentHash(resp.data.hash)
+            setCurrentMtime(resp.data.mtimeMs)
+            setLastSavedAt(Date.now())
+          })
 
           // 记录最近文件：保存成功后也写入后端 recent.json 和本地热缓存
           if (isTauri()) {
@@ -211,7 +216,7 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
         const lower = trimmedName.toLowerCase()
         // 通用规则：兼容系统对话框在 Markdown 过滤器下自动追加 .md 的情况。
         // 例如：用户输入 demo.html / demo.txt，最终路径可能变成 demo.html.md / demo.txt.md。
-        // 策略：如果文件名以 .md 结尾，且在此之前还包含一个点，则认为是“多加了一层 .md”，去掉最后的 .md。
+        // 策略：如果文件名以 .md 结尾，且在此之前还包含一个点，则认为是"多加了一层 .md"，去掉最后的 .md。
         if (lower.endsWith('.md')) {
           const withoutMd = trimmedName.slice(0, trimmedName.length - 3)
           const prevDot = withoutMd.lastIndexOf('.')
@@ -269,7 +274,7 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
   }, [handleSave, hasRealPathNow])
 
   const save = useCallback(async (contentOverride?: string) => {
-    // 关键：这里不要依赖渲染期的 memo/state，直接读 ref，避免“刚保存完又触发保存”时判断失真
+    // 关键：这里不要依赖渲染期的 memo/state，直接读 ref，避免"刚保存完又触发保存"时判断失真
     if (hasRealPathNow()) return await saveToPath(contentOverride)
     return await saveAs(contentOverride)
   }, [hasRealPathNow, saveAs, saveToPath])
@@ -288,12 +293,14 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
         setStatusMessage('自动保存中...')
       },
       onSuccess: (res) => {
-        setDirty(false)
-        setSaveStatus('saved')
-        setStatusMessage('自动保存完成')
-        setCurrentHash(res.hash)
-        setCurrentMtime(res.mtimeMs)
-        setLastSavedAt(Date.now())
+        unstable_batchedUpdates(() => {
+          setDirty(false)
+          setSaveStatus('saved')
+          setStatusMessage('自动保存完成')
+          setCurrentHash(res.hash)
+          setCurrentMtime(res.mtimeMs)
+          setLastSavedAt(Date.now())
+        })
         // 同步清除标签页脏标记（与手动保存保持一致）
         optionsRef.current?.onSaved?.(res.path)
       },
@@ -462,7 +469,7 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
   }, [dirty])
 
   const newDocument = useCallback(() => {
-    // 先重置文件元信息，避免后续保存/自动保存误判成“已有路径/可对比”
+    // 先重置文件元信息，避免后续保存/自动保存误判成"已有路径/可对比"
     pathRef.current = DEFAULT_PATH
     setFilePath(DEFAULT_PATH)
     setCurrentHash(undefined)
