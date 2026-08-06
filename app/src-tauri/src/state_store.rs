@@ -3,7 +3,7 @@ use crate::haomd_paths::{haomd_config_file, haomd_config_root_dir};
 use crate::{err_payload, new_trace_id, ok, refresh_app_menu, ErrorCode, ResultPayload};
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager};
 use tokio::fs;
@@ -38,6 +38,19 @@ fn legacy_recent_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
 
 fn legacy_root_recent_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
     Ok(app_config_root_dir(app)?.join("recent.json"))
+}
+
+fn is_internal_haomd_path(path: &str) -> bool {
+    Path::new(path).components().any(|component| {
+        matches!(component, Component::Normal(name) if name == ".haomd")
+    })
+}
+
+fn filter_internal_recent_entries(items: Vec<RecentFile>) -> Vec<RecentFile> {
+    items
+        .into_iter()
+        .filter(|item| !is_internal_haomd_path(&item.path))
+        .collect()
 }
 
 fn pdf_recent_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
@@ -146,7 +159,15 @@ pub(crate) async fn read_recent_store(app: &AppHandle) -> std::io::Result<Vec<Re
     let path = recent_store_path(app)?;
     match fs::read(&path).await {
         Ok(bytes) => {
-            let items: Vec<RecentFile> = serde_json::from_slice(&bytes).unwrap_or_default();
+            let stored_items: Vec<RecentFile> = serde_json::from_slice(&bytes).unwrap_or_default();
+            let has_internal_entries = stored_items
+                .iter()
+                .any(|item| is_internal_haomd_path(&item.path));
+            let items = filter_internal_recent_entries(stored_items);
+            if has_internal_entries {
+                let cleaned = serde_json::to_vec_pretty(&items)?;
+                fs::write(&path, cleaned).await?;
+            }
             Ok(items)
         }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -157,8 +178,9 @@ pub(crate) async fn read_recent_store(app: &AppHandle) -> std::io::Result<Vec<Re
             for legacy_path in legacy_paths {
                 match fs::read(&legacy_path).await {
                     Ok(bytes) => {
-                        let items: Vec<RecentFile> =
-                            serde_json::from_slice(&bytes).unwrap_or_default();
+                        let items = filter_internal_recent_entries(
+                            serde_json::from_slice(&bytes).unwrap_or_default(),
+                        );
                         let migrated = serde_json::to_vec_pretty(&items)?;
                         fs::write(&path, migrated).await?;
                         return Ok(items);
@@ -371,6 +393,10 @@ pub(crate) async fn update_recent(
     path: &str,
     is_folder: bool,
 ) -> std::io::Result<()> {
+    if is_internal_haomd_path(path) {
+        return Ok(());
+    }
+
     let mut list = read_recent_store(app).await?;
 
     let display_name = std::path::Path::new(path)
@@ -811,5 +837,41 @@ pub async fn save_sidebar_state(
             format!("写入侧边栏状态失败: {err}"),
             trace,
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{filter_internal_recent_entries, is_internal_haomd_path};
+    use crate::fs_types::RecentFile;
+
+    fn recent(path: &str) -> RecentFile {
+        RecentFile {
+            path: path.to_string(),
+            display_name: "entry".to_string(),
+            last_opened_at: 0,
+            is_folder: false,
+        }
+    }
+
+    #[test]
+    fn internal_haomd_paths_are_not_recent_files() {
+        assert!(is_internal_haomd_path(
+            "/Users/example/notes/.haomd/doc_conversations.json"
+        ));
+        assert!(!is_internal_haomd_path(
+            "/Users/example/notes/.haomd-workspace.json"
+        ));
+    }
+
+    #[test]
+    fn internal_haomd_entries_are_removed_from_recent_files() {
+        let entries = filter_internal_recent_entries(vec![
+            recent("/Users/example/notes/.haomd/workspace.json"),
+            recent("/Users/example/notes/document.md"),
+        ]);
+
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].path, "/Users/example/notes/document.md");
     }
 }

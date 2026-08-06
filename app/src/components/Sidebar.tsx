@@ -14,7 +14,15 @@ export type StandaloneFileItem = {
 
 export type SidebarContextTargetKind = 'standalone-file' | 'folder-root' | 'tree-file' | 'tree-dir'
 
-export type SidebarContextAction = 'open' | 'remove' | 'delete' | 'rename' | 'open-terminal' | 'open-in-file-manager'
+export type SidebarContextAction =
+  | 'open'
+  | 'remove'
+  | 'delete'
+  | 'rename'
+  | 'open-terminal'
+  | 'open-in-file-manager'
+  | 'new-file'
+  | 'new-folder'
 
 export type SidebarContextActionPayload = {
   path: string
@@ -1084,9 +1092,9 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
           items={(() => {
             const target = menuState.target!
             const items = [
-              { id: 'open', label: 'Open', onClick: () => triggerContextAction('open') },
-              { id: 'open-in-file-manager', label: 'Open in File Manager', onClick: () => triggerContextAction('open-in-file-manager') },
-              { id: 'open-terminal', label: 'Open in Terminal', onClick: () => triggerContextAction('open-terminal') },
+              { id: 'open', label: t('sidebar.open'), onClick: () => triggerContextAction('open') },
+              { id: 'open-in-file-manager', label: t('sidebar.openInFileManager'), onClick: () => triggerContextAction('open-in-file-manager') },
+              { id: 'open-terminal', label: t('sidebar.openInTerminal'), onClick: () => triggerContextAction('open-terminal') },
             ] as { id: string; label: string; onClick: () => void }[]
 
             const isStandaloneFile = target.kind === 'standalone-file'
@@ -1094,10 +1102,23 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
             const isTreeDir = target.kind === 'tree-dir'
             const isFolderRoot = target.kind === 'folder-root'
 
+            if (isTreeDir || isFolderRoot) {
+              items.push({
+                id: 'new-file',
+                label: t('sidebar.newFile'),
+                onClick: () => triggerContextAction('new-file'),
+              })
+              items.push({
+                id: 'new-folder',
+                label: t('sidebar.newFolder'),
+                onClick: () => triggerContextAction('new-folder'),
+              })
+            }
+
             if (isStandaloneFile && fileVirtualFolders.length > 0) {
               items.push({
                 id: 'move-to-virtual-folder',
-                label: 'Move to Virtual Folder…',
+                label: t('sidebar.moveToVirtualFolder'),
                 onClick: () => {
                   const offsetX = 180
                   setFileFolderMenuState({
@@ -1112,14 +1133,14 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
             }
 
             if (isFileTarget || isTreeDir) {
-              items.push({ id: 'rename', label: 'Rename', onClick: () => triggerContextAction('rename') })
-              items.push({ id: 'delete', label: 'Delete…', onClick: () => triggerContextAction('delete') })
+              items.push({ id: 'rename', label: t('sidebar.rename'), onClick: () => triggerContextAction('rename') })
+              items.push({ id: 'delete', label: t('sidebar.deleteEntry'), onClick: () => triggerContextAction('delete') })
             }
             if (isStandaloneFile) {
-              items.push({ id: 'remove', label: 'Remove from File List', onClick: () => triggerContextAction('remove') })
+              items.push({ id: 'remove', label: t('sidebar.removeFromFileList'), onClick: () => triggerContextAction('remove') })
             }
             if (isFolderRoot) {
-              items.push({ id: 'remove-folder', label: 'Remove Folder', onClick: () => triggerContextAction('remove') })
+              items.push({ id: 'remove-folder', label: t('sidebar.removeFolder'), onClick: () => triggerContextAction('remove') })
             }
 
             return items

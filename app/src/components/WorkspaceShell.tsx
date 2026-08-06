@@ -308,7 +308,12 @@ export function WorkspaceShell({
   const wysiwygMarkdownGetterRef = useRef<(() => string) | null>(null)
   const wysiwygOutlineNavigatorRef = useRef<((target: { headingIndex: number; text: string; level: 1 | 2 | 3 | 4 | 5 | 6 }) => boolean) | null>(null)
   const wysiwygFormatActionsRef = useRef<WysiwygFormatActions | null>(null)
-  type MarkdownSyncOptions = { markDirty?: boolean; immediate?: boolean; syncEditor?: boolean }
+  type MarkdownSyncOptions = {
+    markDirty?: boolean
+    immediate?: boolean
+    syncEditor?: boolean
+    force?: boolean
+  }
   const syncWysiwygMarkdownRef = useRef<((markdown: string, options?: MarkdownSyncOptions) => void) | null>(null)
   const skipWysiwygUnmountFlushRef = useRef(false)
   const guardedSaveRef = useRef<(() => Promise<any>) | null>(null)
@@ -385,15 +390,23 @@ export function WorkspaceShell({
         // No edits were made — restore the original source to avoid
         // serializer escaping side effects (e.g. \= for lines starting with =)
         flushSync(() => {
-          syncWysiwygMarkdownRef.current?.(wysiwygEntryMarkdownRef.current!, { markDirty: false })
+          syncWysiwygMarkdownRef.current?.(wysiwygEntryMarkdownRef.current!, {
+            markDirty: false,
+            immediate: true,
+            force: true,
+          })
         })
       } else {
         const latest = wysiwygMarkdownGetterRef.current?.()
         if (latest !== undefined) {
           // Read directly from the WYSIWYG instance before source mode mounts,
-          // so the source editor never boots from stale React state.
+          // then force every source-facing state to this same snapshot.
           flushSync(() => {
-            syncWysiwygMarkdownRef.current?.(latest, { markDirty: false })
+            syncWysiwygMarkdownRef.current?.(latest, {
+              markDirty: false,
+              immediate: true,
+              force: true,
+            })
           })
         } else if (wysiwygFlushRef.current) {
           flushSync(() => {
@@ -1023,7 +1036,11 @@ export function WorkspaceShell({
     }
 
     // 普通模式：直接用整篇文档更新
-    if (val === markdownRef.current) {
+    if (val === markdownRef.current && !options?.force) {
+      if (shouldSyncEditor && editorMarkdownRef.current !== val) {
+        editorMarkdownRef.current = val
+        setEditorMarkdown(val)
+      }
       return
     }
     markdownRef.current = val
@@ -2776,6 +2793,23 @@ export function WorkspaceShell({
     const { path, kind, action } = payload
     if (action === 'open') {
       await openFileFromSidebar(path)
+    } else if (action === 'new-file' || action === 'new-folder') {
+      if (kind !== 'tree-dir' && kind !== 'folder-root') return
+      if (isCreatingTab) {
+        setStatusMessage(t('workspace.creatingTabPleaseWait'))
+        return
+      }
+
+      setSelectedFolderPath(path)
+      setActiveWorkspaceDirectoryPath(path)
+      sidebar.expandPath(path)
+      if (action === 'new-file') {
+        setInlineNewFolderDir(null)
+        setInlineNewFileDir(path)
+      } else {
+        setInlineNewFileDir(null)
+        setInlineNewFolderDir(path)
+      }
     } else if (action === 'remove') {
       if (kind === 'standalone-file') sidebar.removeStandaloneFile(path)
       else sidebar.removeFolderRoot(path)
@@ -2829,6 +2863,9 @@ export function WorkspaceShell({
     inlineNewFolderDir,
     setSelectedFolderPath,
     setInlineRenamePath,
+    isCreatingTab,
+    t,
+    setActiveWorkspaceDirectoryPath,
   ])
 
   useEffect(() => {

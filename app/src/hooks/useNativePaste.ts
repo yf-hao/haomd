@@ -22,7 +22,6 @@ export function useNativePaste(
   handlers?: NativePasteHandlers,
 ) {
   useEffect(() => {
-    const view = editorViewRef.current
     let detachPreventDefaultPaste: (() => void) | undefined
 
     // Windows WebView2 does not reliably fire paste events for images, and its
