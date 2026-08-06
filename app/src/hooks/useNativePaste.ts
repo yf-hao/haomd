@@ -103,10 +103,11 @@ export function useNativePaste(
       }
     }
 
-    if (isTauriEnv() && view && !isWindows) {
+    if (isTauriEnv() && !isWindows) {
       const handlePaste = (event: ClipboardEvent) => {
+        const currentView = editorViewRef.current
         const active = typeof document !== 'undefined' ? document.activeElement : null
-        if (!active || !view.dom.contains(active)) return
+        if (!active || !currentView || !currentView.dom.contains(active)) return
         event.preventDefault()
         event.stopPropagation()
 
@@ -123,9 +124,9 @@ export function useNativePaste(
           })
       }
 
-      view.dom.addEventListener('paste', handlePaste, true)
+      document.addEventListener('paste', handlePaste, true)
       detachPreventDefaultPaste = () => {
-        view.dom.removeEventListener('paste', handlePaste, true)
+        document.removeEventListener('paste', handlePaste, true)
       }
     }
 

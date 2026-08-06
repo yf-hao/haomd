@@ -46,18 +46,27 @@ describe('useNativePaste', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     document.body.innerHTML = ''
+    Object.defineProperty(navigator, 'userAgent', {
+      configurable: true,
+      value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+    })
     vi.mocked(onNativePaste).mockReturnValue(vi.fn())
     vi.mocked(onNativePasteError).mockReturnValue(vi.fn())
   })
 
-  it('reads and inserts clipboard text when paste occurs inside the editor', async () => {
+  it('reads and inserts clipboard text on Windows Ctrl+V inside the editor', async () => {
     vi.mocked(readClipboardForPaste).mockResolvedValue({ kind: 'text', text: 'hello' })
     const editor = createEditorView()
     editor.content.focus()
 
     renderHook(() => useNativePaste({ current: editor.view }, vi.fn()))
 
-    const event = new Event('paste', { bubbles: true, cancelable: true })
+    const event = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'v',
+      ctrlKey: true,
+    })
     act(() => {
       editor.content.dispatchEvent(event)
     })
@@ -71,7 +80,7 @@ describe('useNativePaste', () => {
     }))
   })
 
-  it('dispatches the native image event when the clipboard contains an image', async () => {
+  it('dispatches the native image event on Windows Ctrl+V', async () => {
     vi.mocked(readClipboardForPaste).mockResolvedValue({ kind: 'image' })
     const editor = createEditorView()
     editor.content.focus()
@@ -79,7 +88,12 @@ describe('useNativePaste', () => {
     renderHook(() => useNativePaste({ current: editor.view }, vi.fn()))
 
     act(() => {
-      editor.content.dispatchEvent(new Event('paste', { bubbles: true, cancelable: true }))
+      editor.content.dispatchEvent(new KeyboardEvent('keydown', {
+        bubbles: true,
+        cancelable: true,
+        key: 'v',
+        ctrlKey: true,
+      }))
     })
 
     await waitFor(() => expect(dispatchNativePasteImage).toHaveBeenCalledTimes(1))

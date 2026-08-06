@@ -236,6 +236,30 @@ pub struct ClipboardImageResult {
     pub file_name: String,
 }
 
+fn sanitize_clipboard_image_base_name(name: &str) -> String {
+    let sanitized: String = name
+        .trim()
+        .chars()
+        .map(|ch| {
+            if ch.is_whitespace()
+                || matches!(ch, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*')
+                || ch.is_control()
+            {
+                '_'
+            } else {
+                ch
+            }
+        })
+        .collect();
+
+    let trimmed = sanitized.trim_matches(|ch: char| ch == ' ' || ch == '.');
+    if trimmed.is_empty() {
+        "image".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(tag = "kind", content = "text", rename_all = "snake_case")]
 pub enum ClipboardPasteContent {
@@ -392,7 +416,9 @@ pub async fn save_clipboard_image_to_dir(
             }
         };
 
-    let base_name = suggested_name.unwrap_or_else(|| "image".to_string());
+    let base_name = sanitize_clipboard_image_base_name(
+        &suggested_name.unwrap_or_else(|| "image".to_string()),
+    );
     let _guard = CLIPBOARD_IMAGE_SAVE_LOCK.lock().await;
 
     let mut index: u32 = 1;
@@ -718,7 +744,24 @@ pub async fn read_clipboard_image_as_base64() -> ResultPayload<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::ClipboardPasteContent;
+    use super::{sanitize_clipboard_image_base_name, ClipboardPasteContent};
+
+    #[test]
+    fn clipboard_image_base_name_is_safe_across_platforms() {
+        assert_eq!(
+            sanitize_clipboard_image_base_name("image_M01 AI开发基础"),
+            "image_M01_AI开发基础"
+        );
+        assert_eq!(
+            sanitize_clipboard_image_base_name(r#"image:bad/name?"#),
+            "image_bad_name_"
+        );
+    }
+
+    #[test]
+    fn empty_clipboard_image_base_name_uses_default() {
+        assert_eq!(sanitize_clipboard_image_base_name(" . "), "image");
+    }
 
     #[test]
     fn clipboard_paste_content_uses_the_frontend_contract() {

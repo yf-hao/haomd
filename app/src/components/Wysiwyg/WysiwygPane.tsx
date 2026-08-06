@@ -1195,8 +1195,11 @@ function WysiwygEditor({
       })()
       if (!hasImage) return
 
+      // Prevent WebView from inserting a transient blob URL before the native
+      // clipboard reader saves the image and inserts its path.
       event.preventDefault()
       event.stopPropagation()
+
       void readClipboardForPaste()
         .then((content) => {
           if (content.kind === 'image') {
