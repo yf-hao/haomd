@@ -2,7 +2,7 @@
  * React node view for block math ($$...$$).
  * Renders the LaTeX content via KaTeX.
  */
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState, type FocusEvent } from 'react'
 import { useNodeViewContext } from '@prosemirror-adapter/react'
 import { useInViewport } from '../hooks/useInViewport'
 
@@ -28,6 +28,7 @@ export const MathBlockView = memo(function MathBlockView() {
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
   const contentDivRef = useRef<HTMLDivElement>(null)
+  const editingContainerRef = useRef<HTMLDivElement>(null)
   const renderTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { ref: viewportRef, isVisible } = useInViewport('250px')
   const tex = node.textContent || ''
@@ -73,15 +74,43 @@ export const MathBlockView = memo(function MathBlockView() {
     }
   }, [isVisible, tex])
 
-  // Toggle editing on double-click
-  const handleDoubleClick = () => setEditing(true)
-  const handleBlur = () => setEditing(false)
+  useEffect(() => {
+    if (!editing) return
+
+    const frame = requestAnimationFrame(() => {
+      editingContainerRef.current
+        ?.querySelector<HTMLElement>('.wysiwyg-math-source')
+        ?.focus()
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [editing])
+
+  useEffect(() => {
+    if (!editing) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!editingContainerRef.current?.contains(event.target as Node)) {
+        setEditing(false)
+      }
+    }
+    document.addEventListener('pointerdown', handlePointerDown, true)
+    return () => document.removeEventListener('pointerdown', handlePointerDown, true)
+  }, [editing])
+
+  const handleClick = () => setEditing(true)
+  const handleBlur = (event: FocusEvent<HTMLDivElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget)) {
+      setEditing(false)
+    }
+  }
 
   if (editing || !tex) {
     // Show raw LaTeX source (editable ProseMirror content)
     return (
       <div
-        ref={viewportRef}
+        ref={(element) => {
+          editingContainerRef.current = element
+        }}
         className={`wysiwyg-math-block editing ${selected ? 'selected' : ''}`}
         onBlur={handleBlur}
       >
@@ -97,7 +126,7 @@ export const MathBlockView = memo(function MathBlockView() {
     <div
       ref={viewportRef}
       className={`wysiwyg-math-block ${selected ? 'selected' : ''}`}
-      onDoubleClick={handleDoubleClick}
+      onClick={handleClick}
       contentEditable={false}
     >
       {!isVisible ? (

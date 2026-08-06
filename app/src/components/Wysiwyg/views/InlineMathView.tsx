@@ -2,7 +2,7 @@
  * React node view for inline math ($...$).
  * Renders the LaTeX content via KaTeX inline.
  */
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState, type FocusEvent } from 'react'
 import { useNodeViewContext } from '@prosemirror-adapter/react'
 
 let katexInstance: typeof import('katex').default | null = null
@@ -27,6 +27,7 @@ export const InlineMathView = memo(function InlineMathView() {
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
   const renderTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const editingContainerRef = useRef<HTMLSpanElement>(null)
   const tex = node.textContent || ''
 
   useEffect(() => {
@@ -69,12 +70,40 @@ export const InlineMathView = memo(function InlineMathView() {
     }
   }, [tex])
 
-  const handleDoubleClick = () => setEditing(true)
-  const handleBlur = () => setEditing(false)
+  useEffect(() => {
+    if (!editing) return
+
+    const frame = requestAnimationFrame(() => {
+      editingContainerRef.current
+        ?.querySelector<HTMLElement>('.wysiwyg-math-source-inline')
+        ?.focus()
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [editing])
+
+  useEffect(() => {
+    if (!editing) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!editingContainerRef.current?.contains(event.target as Node)) {
+        setEditing(false)
+      }
+    }
+    document.addEventListener('pointerdown', handlePointerDown, true)
+    return () => document.removeEventListener('pointerdown', handlePointerDown, true)
+  }, [editing])
+
+  const handleClick = () => setEditing(true)
+  const handleBlur = (event: FocusEvent<HTMLSpanElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget)) {
+      setEditing(false)
+    }
+  }
 
   if (editing || !tex) {
     return (
       <span
+        ref={editingContainerRef}
         className={`wysiwyg-math-inline editing ${selected ? 'selected' : ''}`}
         onBlur={handleBlur}
       >
@@ -88,7 +117,7 @@ export const InlineMathView = memo(function InlineMathView() {
   return (
     <span
       className={`wysiwyg-math-inline ${selected ? 'selected' : ''}`}
-      onDoubleClick={handleDoubleClick}
+      onClick={handleClick}
       contentEditable={false}
     >
       {error ? (
