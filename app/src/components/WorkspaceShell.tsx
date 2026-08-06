@@ -397,7 +397,13 @@ export function WorkspaceShell({
           })
         })
       } else {
-        const latest = wysiwygMarkdownGetterRef.current?.()
+        let latest: string | undefined
+        try {
+          latest = wysiwygMarkdownGetterRef.current?.()
+        } catch (error) {
+          console.warn('[WorkspaceShell] WYSIWYG markdown snapshot unavailable', error)
+          latest = markdownRef.current
+        }
         if (latest !== undefined) {
           // Read directly from the WYSIWYG instance before source mode mounts,
           // then force every source-facing state to this same snapshot.

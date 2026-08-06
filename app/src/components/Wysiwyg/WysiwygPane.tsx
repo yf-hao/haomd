@@ -451,6 +451,10 @@ function WysiwygEditor({
   const outlineEmitFrameRef = useRef<number | null>(null)
   const initialCacheBuildIdleRef = useRef<IdleHandle | null>(null)
   const initialOutlineEmitIdleRef = useRef<IdleHandle | null>(null)
+  const isEditorReadyRef = useRef(false)
+  const lastValidMarkdownRef = useRef(
+    composeMarkdownWithFrontMatter(frontMatterBlock ?? '', value),
+  )
 
   // Block-level incremental serialization cache
   const blockCacheRef = useRef(new BlockCacheManager())
@@ -461,12 +465,27 @@ function WysiwygEditor({
 
   const getCurrentMarkdownBody = useCallback(() => {
     const editor = editorRef.current
-    if (!editor) return valueRef.current
-    return editor.action(getMarkdown())
+    if (!editor || !isEditorReadyRef.current) {
+      return lastSyncedValueRef.current
+    }
+    try {
+      return editor.action(getMarkdown())
+    } catch (error) {
+      console.warn('[WysiwygPane] markdown serialization unavailable', error)
+      return lastSyncedValueRef.current
+    }
   }, [])
 
   const getCurrentMarkdown = useCallback(() => {
-    return composeMarkdownWithFrontMatter(frontMatterBlockRef.current, getCurrentMarkdownBody())
+    if (!isEditorReadyRef.current) {
+      return lastValidMarkdownRef.current
+    }
+    const markdown = composeMarkdownWithFrontMatter(
+      frontMatterBlockRef.current,
+      getCurrentMarkdownBody(),
+    )
+    lastValidMarkdownRef.current = markdown
+    return markdown
   }, [getCurrentMarkdownBody])
 
   const emitOutlineItems = useCallback(() => {
@@ -587,6 +606,7 @@ function WysiwygEditor({
     }
 
     const nextMarkdown = composeMarkdownWithFrontMatter(frontMatterBlockRef.current, md)
+    lastValidMarkdownRef.current = nextMarkdown
     const currentMarkdown = composeMarkdownWithFrontMatter(frontMatterBlockRef.current, valueRef.current)
     if (nextMarkdown !== currentMarkdown) {
       isInternalUpdate.current = true
@@ -613,6 +633,7 @@ function WysiwygEditor({
     })
 
     const nextMarkdown = composeMarkdownWithFrontMatter(frontMatterBlockRef.current, md)
+    lastValidMarkdownRef.current = nextMarkdown
     const currentMarkdown = composeMarkdownWithFrontMatter(frontMatterBlockRef.current, valueRef.current)
     if (nextMarkdown !== currentMarkdown) {
       isInternalUpdate.current = true
@@ -747,6 +768,7 @@ function WysiwygEditor({
   const initEditor = useCallback(async () => {
     if (!containerRef.current) return
     const runId = ++initRunIdRef.current
+    isEditorReadyRef.current = false
 
     const nvFactory = nodeViewFactoryRef.current
 
@@ -844,8 +866,10 @@ function WysiwygEditor({
       return
     }
 
+    isEditorReadyRef.current = false
     editorRef.current?.destroy()
     editorRef.current = editor
+    isEditorReadyRef.current = true
 
     scheduleInitialCacheBuild()
     scheduleInitialOutlineEmit()
@@ -865,7 +889,12 @@ function WysiwygEditor({
 
   const handleFrontMatterChange = useCallback((event: ChangeEvent<HTMLTextAreaElement>) => {
     frontMatterBlockRef.current = event.target.value.replace(/\r\n/g, '\n')
-    onChangeRef.current(composeMarkdownWithFrontMatter(frontMatterBlockRef.current, getCurrentMarkdownBody()))
+    const markdown = composeMarkdownWithFrontMatter(
+      frontMatterBlockRef.current,
+      getCurrentMarkdownBody(),
+    )
+    lastValidMarkdownRef.current = markdown
+    onChangeRef.current(markdown)
   }, [getCurrentMarkdownBody])
 
   useEffect(() => {
@@ -1094,6 +1123,7 @@ function WysiwygEditor({
       onMarkdownGetterReadyRef.current?.(null)
       onFormatActionsReadyRef.current?.(null)
       onOutlineNavigatorReadyRef.current?.(null)
+      isEditorReadyRef.current = false
       editorRef.current?.destroy()
       editorRef.current = null
     }
