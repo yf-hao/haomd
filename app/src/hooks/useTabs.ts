@@ -4,6 +4,7 @@ import type { EditorTab } from '../types/tabs'
 
 export type UseTabsOptions = {
   onRequestCloseCurrentTab?: () => void
+  onBeforeActiveTabChange?: (nextTabId: string) => void
 }
 
 const DEFAULT_UNTITLED = UNTITLED_FILE_PATH
@@ -35,6 +36,13 @@ export function useTabs(options?: UseTabsOptions) {
     return []
   })
   const [activeId, setActiveId] = useState<string | null>(() => null)
+  const onBeforeActiveTabChangeRef = useRef(options?.onBeforeActiveTabChange)
+  onBeforeActiveTabChangeRef.current = options?.onBeforeActiveTabChange
+
+  const activateTab = useCallback((id: string) => {
+    onBeforeActiveTabChangeRef.current?.(id)
+    setActiveId(id)
+  }, [])
 
   const activeTab = useMemo(
     () => tabs.find((t) => t.id === activeId) ?? null,
@@ -63,18 +71,18 @@ export function useTabs(options?: UseTabsOptions) {
         }
         return newTabs
       })
-      setActiveId(nextId)
+      activateTab(nextId)
       if (import.meta.env.DEV) {
         console.log('[createTab] 设置 activeId 为:', nextId)
       }
       return tab
     },
-    [],
+    [activateTab],
   )
 
   const setActiveTab = useCallback((id: string) => {
-    setActiveId(id)
-  }, [])
+    activateTab(id)
+  }, [activateTab])
 
   const closeTab = useCallback(
     (id: string) => {
@@ -89,12 +97,12 @@ export function useTabs(options?: UseTabsOptions) {
         if (id === activeId) {
           const closedIndex = prev.findIndex((t) => t.id === id)
           const fallback = next[Math.max(0, closedIndex - 1)] ?? next[0]
-          setActiveId(fallback.id)
+          activateTab(fallback.id)
         }
         return next
       })
     },
-    [activeId],
+    [activeId, activateTab],
   )
 
   const updateTabContent = useCallback(

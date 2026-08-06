@@ -73,17 +73,6 @@ export const InlineMathView = memo(function InlineMathView() {
   useEffect(() => {
     if (!editing) return
 
-    const frame = requestAnimationFrame(() => {
-      editingContainerRef.current
-        ?.querySelector<HTMLElement>('.wysiwyg-math-source-inline')
-        ?.focus()
-    })
-    return () => cancelAnimationFrame(frame)
-  }, [editing])
-
-  useEffect(() => {
-    if (!editing) return
-
     const handlePointerDown = (event: PointerEvent) => {
       if (!editingContainerRef.current?.contains(event.target as Node)) {
         setEditing(false)

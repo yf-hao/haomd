@@ -54,6 +54,7 @@ export interface WysiwygPaneProps {
   onSelectionGetterReady?: (getter: (() => string | null) | null) => void
   onFormatActionsReady?: (actions: WysiwygFormatActions | null) => void
   onMarkdownGetterReady?: (getter: (() => string) | null) => void
+  onSaveSnapshotReady?: (getter: (() => string) | null) => void
   onOutlineNavigatorReady?: (navigator: ((target: { headingIndex: number; text: string; level: 1 | 2 | 3 | 4 | 5 | 6 }) => boolean) | null) => void
   onOutlineItemsChange?: (items: OutlineHeading[]) => void
   skipUnmountFlushRef?: { current: boolean } | null
@@ -226,6 +227,7 @@ function PlainTextWysiwyg({
   onSelectionGetterReady,
   onFormatActionsReady,
   onMarkdownGetterReady,
+  onSaveSnapshotReady,
   onOutlineNavigatorReady,
   onOutlineItemsChange,
 }: WysiwygPaneProps) {
@@ -289,6 +291,12 @@ function PlainTextWysiwyg({
     onMarkdownGetterReady?.(getter)
     return () => onMarkdownGetterReady?.(null)
   }, [frontMatterBlock, onMarkdownGetterReady, value])
+
+  useEffect(() => {
+    const getter = () => composeMarkdownWithFrontMatter(frontMatterBlock, textareaRef.current?.value ?? value)
+    onSaveSnapshotReady?.(getter)
+    return () => onSaveSnapshotReady?.(null)
+  }, [frontMatterBlock, onSaveSnapshotReady, value])
 
   const style: CSSProperties & { '--wysiwyg-zoom'?: string } = {}
   if (effectiveLayout === 'preview-only') {
@@ -362,6 +370,7 @@ function WysiwygEditor({
   onSelectionGetterReady,
   onFormatActionsReady,
   onMarkdownGetterReady,
+  onSaveSnapshotReady,
   onOutlineNavigatorReady,
   onOutlineItemsChange,
   skipUnmountFlushRef,
@@ -381,6 +390,7 @@ function WysiwygEditor({
         editorZoom={editorZoom}
         onSelectionGetterReady={onSelectionGetterReady}
         onMarkdownGetterReady={onMarkdownGetterReady}
+        onSaveSnapshotReady={onSaveSnapshotReady}
         onOutlineNavigatorReady={onOutlineNavigatorReady}
         onOutlineItemsChange={onOutlineItemsChange}
       />
@@ -432,6 +442,8 @@ function WysiwygEditor({
   onSelectionGetterReadyRef.current = onSelectionGetterReady
   const onMarkdownGetterReadyRef = useRef(onMarkdownGetterReady)
   onMarkdownGetterReadyRef.current = onMarkdownGetterReady
+  const onSaveSnapshotReadyRef = useRef(onSaveSnapshotReady)
+  onSaveSnapshotReadyRef.current = onSaveSnapshotReady
   const onFormatActionsReadyRef = useRef(onFormatActionsReady)
   onFormatActionsReadyRef.current = onFormatActionsReady
   const onOutlineNavigatorReadyRef = useRef(onOutlineNavigatorReady)
@@ -448,6 +460,7 @@ function WysiwygEditor({
   const hasUserInteractedRef = useRef(false)
   const idleCallbackRef = useRef<IdleHandle | null>(null)
   const delayedSyncTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null)
+  const serializationEpochRef = useRef(0)
   const outlineEmitFrameRef = useRef<number | null>(null)
   const initialCacheBuildIdleRef = useRef<IdleHandle | null>(null)
   const initialOutlineEmitIdleRef = useRef<IdleHandle | null>(null)
@@ -644,6 +657,7 @@ function WysiwygEditor({
   }, [getCurrentMarkdownBody])
 
   const flushPending = useCallback(() => {
+    serializationEpochRef.current += 1
     if (idleCallbackRef.current !== null) {
       cancelIdleWork(idleCallbackRef.current)
       idleCallbackRef.current = null
@@ -656,6 +670,7 @@ function WysiwygEditor({
   }, [serializeAndPush])
 
   const scheduleDelayedSync = useCallback((delayMs = 180) => {
+    const epoch = ++serializationEpochRef.current
     if (delayedSyncTimerRef.current !== null) {
       window.clearTimeout(delayedSyncTimerRef.current)
       delayedSyncTimerRef.current = null
@@ -666,9 +681,23 @@ function WysiwygEditor({
     }
     delayedSyncTimerRef.current = window.setTimeout(() => {
       delayedSyncTimerRef.current = null
+      if (epoch !== serializationEpochRef.current) return
       serializeAndPush()
     }, delayMs)
   }, [serializeAndPush])
+
+  const getSaveSnapshot = useCallback(() => {
+    serializationEpochRef.current += 1
+    if (idleCallbackRef.current !== null) {
+      cancelIdleWork(idleCallbackRef.current)
+      idleCallbackRef.current = null
+    }
+    if (delayedSyncTimerRef.current !== null) {
+      window.clearTimeout(delayedSyncTimerRef.current)
+      delayedSyncTimerRef.current = null
+    }
+    return getCurrentMarkdown()
+  }, [getCurrentMarkdown])
 
   const runAction = useCallback((runner: (editor: Editor) => void) => {
     const editor = editorRef.current
@@ -835,8 +864,10 @@ function WysiwygEditor({
             cancelIdleWork(idleCallbackRef.current)
             idleCallbackRef.current = null
           }
+          const epoch = ++serializationEpochRef.current
           idleCallbackRef.current = requestIdleWork(() => {
             idleCallbackRef.current = null
+            if (epoch !== serializationEpochRef.current) return
             // Use incremental serialization: only re-serialize changed blocks
             incrementalSerializeAndPush(doc, prevDoc, serializer)
           }, 2000)
@@ -886,6 +917,11 @@ function WysiwygEditor({
     onMarkdownGetterReadyRef.current?.(getCurrentMarkdown)
     return () => onMarkdownGetterReadyRef.current?.(null)
   }, [getCurrentMarkdown])
+
+  useEffect(() => {
+    onSaveSnapshotReadyRef.current?.(getSaveSnapshot)
+    return () => onSaveSnapshotReadyRef.current?.(null)
+  }, [getSaveSnapshot])
 
   const handleFrontMatterChange = useCallback((event: ChangeEvent<HTMLTextAreaElement>) => {
     frontMatterBlockRef.current = event.target.value.replace(/\r\n/g, '\n')

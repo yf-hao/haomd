@@ -77,17 +77,6 @@ export const MathBlockView = memo(function MathBlockView() {
   useEffect(() => {
     if (!editing) return
 
-    const frame = requestAnimationFrame(() => {
-      editingContainerRef.current
-        ?.querySelector<HTMLElement>('.wysiwyg-math-source')
-        ?.focus()
-    })
-    return () => cancelAnimationFrame(frame)
-  }, [editing])
-
-  useEffect(() => {
-    if (!editing) return
-
     const handlePointerDown = (event: PointerEvent) => {
       if (!editingContainerRef.current?.contains(event.target as Node)) {
         setEditing(false)

@@ -306,8 +306,10 @@ export function WorkspaceShell({
   } | null>(null)
   const wysiwygSelectionGetterRef = useRef<(() => string | null) | null>(null)
   const wysiwygMarkdownGetterRef = useRef<(() => string) | null>(null)
+  const wysiwygSaveSnapshotRef = useRef<(() => string) | null>(null)
   const wysiwygOutlineNavigatorRef = useRef<((target: { headingIndex: number; text: string; level: 1 | 2 | 3 | 4 | 5 | 6 }) => boolean) | null>(null)
   const wysiwygFormatActionsRef = useRef<WysiwygFormatActions | null>(null)
+  const beforeActiveTabChangeRef = useRef<(nextTabId: string) => void>(() => {})
   type MarkdownSyncOptions = {
     markDirty?: boolean
     immediate?: boolean
@@ -424,6 +426,33 @@ export function WorkspaceShell({
     setEditMode(next)
   }, [editMode])
 
+  beforeActiveTabChangeRef.current = (nextTabId) => {
+    const previousTabId = activeIdRef.current
+    if (previousTabId === nextTabId) return
+
+    // A keyed WYSIWYG pane unmounts when its tab changes. Persist its snapshot
+    // to the outgoing tab before that happens, without touching global content.
+    if (editModeRef.current === 'wysiwyg' && previousTabId) {
+      const previousTab = tabs.find((tab) => tab.id === previousTabId)
+      let snapshot = wysiwygEntryMarkdownRef.current ?? previousTab?.content
+      if (wysiwygIsDirtyRef.current) {
+        try {
+          snapshot = wysiwygMarkdownGetterRef.current?.() ?? snapshot
+        } catch (error) {
+          console.warn('[WorkspaceShell] WYSIWYG tab snapshot unavailable', error)
+        }
+      }
+
+      if (previousTab && snapshot !== undefined && snapshot !== previousTab.content) {
+        updateTabContent(previousTabId, snapshot)
+      }
+      skipWysiwygUnmountFlushRef.current = true
+    }
+
+    // Invalidate callbacks from the outgoing WYSIWYG instance synchronously.
+    activeIdRef.current = nextTabId
+  }
+
   const isPreviewVisible = effectiveLayout !== 'editor-only'
   const prevIsPreviewVisibleRef = useRef(isPreviewVisible)
   const previewSyncTimerRef = useRef<number | null>(null)
@@ -498,6 +527,9 @@ export function WorkspaceShell({
       if (closeCurrentTabRef.current) {
         closeCurrentTabRef.current()
       }
+    },
+    onBeforeActiveTabChange: (nextTabId) => {
+      beforeActiveTabChangeRef.current(nextTabId)
     },
   })
 
@@ -599,9 +631,7 @@ export function WorkspaceShell({
   }, [])
 
   const activeIdRef = useRef<string | null>(null)
-  useEffect(() => {
-    activeIdRef.current = activeId
-  }, [activeId])
+  activeIdRef.current = activeId
 
   const getActiveTextColorDocKey = useCallback(() => activeIdRef.current ?? null, [])
 
@@ -1095,13 +1125,20 @@ export function WorkspaceShell({
   }, [getLatestWysiwygMarkdown, handleMarkdownChange, isPdfActive, setStatusMessage, t])
 
   const syncLatestWysiwygToReact = useCallback(() => {
-    const latest = getLatestWysiwygMarkdown()
+    if (editMode !== 'wysiwyg' || isPdfActive) return null
+    const latest = wysiwygSaveSnapshotRef.current?.() ?? getLatestWysiwygMarkdown()
     if (latest === null) return null
     flushSync(() => {
-      handleMarkdownChange(latest, { markDirty: false, immediate: true })
+      // Saving persists the current Milkdown snapshot. Do not feed it back
+      // into this same instance as an external value update.
+      handleMarkdownChange(latest, {
+        markDirty: false,
+        immediate: true,
+        syncEditor: false,
+      })
     })
     return latest
-  }, [getLatestWysiwygMarkdown, handleMarkdownChange])
+  }, [editMode, getLatestWysiwygMarkdown, handleMarkdownChange, isPdfActive])
 
   // 当前激活的 PDF 文件路径（仅在 isPdfActive 时有值）
   const activePdfPath = isPdfActive ? activeTab?.path ?? null : null
@@ -3908,6 +3945,9 @@ export function WorkspaceShell({
                           }}
                           onMarkdownGetterReady={(getter) => {
                             wysiwygMarkdownGetterRef.current = getter
+                          }}
+                          onSaveSnapshotReady={(getter) => {
+                            wysiwygSaveSnapshotRef.current = getter
                           }}
                           onOutlineNavigatorReady={(navigator) => {
                             wysiwygOutlineNavigatorRef.current = navigator
