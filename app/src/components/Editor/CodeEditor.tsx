@@ -4,7 +4,6 @@ import type { Extension } from '@codemirror/state'
 import type { EditorView } from '@codemirror/view'
 import { createExtensions, type EditorOptions } from './extensions'
 import { useResolvedThemeMode } from '../../modules/theme/ThemeContext'
-import { logInputPerformance, measureInputPerformance } from '../../modules/debug/inputPerformance'
 
 export type CodeEditorProps = {
   value: string
@@ -33,10 +32,6 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
   useEffect(() => {
     if (value === editorValue) return
     if (isComposingRef.current || editorViewRef.current?.composing) return
-    logInputPerformance('CodeEditor.external-value-sync', {
-      valueLength: value.length,
-      editorValueLength: editorValue.length,
-    })
     setEditorValue(value)
     lastForwardedValueRef.current = value
   }, [value, editorValue])
@@ -102,25 +97,13 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
         extensions={mergedExtensions}
         value={editorValue}
         onChange={(val) => {
-          measureInputPerformance(
-            'CodeEditor.onChange',
-            () => {
-              setEditorValue(val)
-              if (!isComposingRef.current && !editorViewRef.current?.composing) {
-                forwardChange(val)
-              }
-            },
-            { valueLength: val.length },
-          )
+          setEditorValue(val)
+          if (!isComposingRef.current && !editorViewRef.current?.composing) {
+            forwardChange(val)
+          }
         }}
         onUpdate={(update) => {
           isComposingRef.current = update.view.compositionStarted
-          if (!update.docChanged) return
-          logInputPerformance('CodeMirror.update', {
-            docLength: update.state.doc.length,
-            transactionCount: update.transactions.length,
-            selectionSet: update.selectionSet,
-          })
         }}
         onCreateEditor={(view) => {
           editorViewRef.current = view

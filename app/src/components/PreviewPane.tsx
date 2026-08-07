@@ -1,8 +1,7 @@
-import { memo, useEffect, useRef, type CSSProperties } from 'react'
+import { memo, useEffect, useLayoutEffect, useRef, type CSSProperties } from 'react'
 import type { LayoutType } from '../hooks/useWorkspaceLayout'
-import { MarkdownViewer, type FoldRegion } from './MarkdownViewer'
+import { MarkdownViewer, type FoldRegion, type MarkdownViewerHandle } from './MarkdownViewer'
 import './PreviewPane.css'
-import type { PreviewTrace } from '../modules/debug/inputPerformance'
 import { useThemeContext } from '../modules/theme/ThemeContext'
 import {
   buildBackgroundImageVars,
@@ -18,7 +17,6 @@ export type PreviewPaneProps = {
   loadingLabel?: string
   filePath?: string | null
   foldRegions?: FoldRegion[]
-  previewTrace?: PreviewTrace | null
   /** 点击预览中的块时回调对应的源行号 */
   onPreviewLineClick?: (line: number) => void
   /** 预览区域文字选中变更回调 */
@@ -58,13 +56,17 @@ function PreviewPaneComponent({
   loadingLabel,
   filePath,
   foldRegions,
-  previewTrace,
   onPreviewLineClick,
   onSelectionChange,
 }: PreviewPaneProps) {
   const style: CSSProperties = {}
   const { themeSettings } = useThemeContext()
   const previewRootRef = useRef<HTMLElement | null>(null)
+  const markdownViewerRef = useRef<MarkdownViewerHandle | null>(null)
+
+  useLayoutEffect(() => {
+    markdownViewerRef.current?.updateActiveLine(activeLine)
+  }, [activeLine])
 
   if (effectiveLayout === 'preview-only') {
     style.gridColumn = '1 / -1'
@@ -182,11 +184,10 @@ function PreviewPaneComponent({
         ) : (
           <MarkdownViewer
             value={value}
-            activeLine={activeLine}
+            ref={markdownViewerRef}
             previewWidth={previewWidth}
             filePath={filePath}
             foldRegions={foldRegions}
-            previewTrace={previewTrace}
             onLineClick={onPreviewLineClick}
             onSelectionChange={onSelectionChange}
           />
@@ -212,7 +213,6 @@ export const PreviewPane = memo(
     prev.loadingLabel === next.loadingLabel &&
     prev.filePath === next.filePath &&
     prev.foldRegions === next.foldRegions &&
-    prev.previewTrace === next.previewTrace &&
     prev.onPreviewLineClick === next.onPreviewLineClick &&
     prev.onSelectionChange === next.onSelectionChange
   ),

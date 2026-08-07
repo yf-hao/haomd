@@ -9,10 +9,6 @@ import { getRenderer } from '../modules/markdown/plugins'
 import { preparePreviewMarkdown, type PreviewBlockChunk, type PreviewMarkdownResult } from '../modules/markdown/previewPipeline'
 import { getDefaultPerformanceSettings, getPerformanceSettings, type PerformanceSettings } from '../modules/settings/editorSettings'
 import { subscribePerformanceSettingsChanged } from '../modules/settings/performanceRuntime'
-import {
-  logPreviewPerformance,
-  type PreviewTrace,
-} from '../modules/debug/inputPerformance'
 import { remarkToc } from '../modules/markdown/remarkToc'
 import { splitAlignedTabInlineNodes } from '../modules/markdown/alignedTab'
 import {
@@ -35,7 +31,6 @@ export type MarkdownViewerMode = 'rendered' | 'source'
 
 export interface MarkdownViewerProps {
   value: string
-  activeLine?: number
   previewWidth?: number
   filePath?: string | null
   foldRegions?: FoldRegion[]
@@ -44,7 +39,10 @@ export interface MarkdownViewerProps {
   onLineClick?: (line: number) => void
   /** 预览区域文字选中变更回调 */
   onSelectionChange?: (text: string | null) => void
-  previewTrace?: PreviewTrace | null
+}
+
+export interface MarkdownViewerHandle {
+  updateActiveLine: (line: number) => void
 }
 
 function isPlainTextFile(path: string | null | undefined): boolean {
@@ -87,16 +85,6 @@ type ActiveSourceLine = {
 type PreviewWorkerRequest = {
   id: number
   value: string
-  traceId: number | null
-  inputAt: number | null
-  debounceAt: number | null
-}
-
-type PreviewWorkerTiming = {
-  traceId: number | null
-  inputAt: number | null
-  debounceAt: number | null
-  postedAt: number
 }
 
 const FoldContext = React.createContext<FoldRegion[]>([])
@@ -224,18 +212,47 @@ function scrollPreviewTarget(scrollParent: HTMLElement, targetElement: HTMLEleme
   }
 }
 
-// KaTeX 按需加载：单例 Promise + Context
+// KaTeX 按需加载：单例 Promise + 独立订阅，避免加载完成时重渲染整个预览树
 type KatexRenderOptions = Record<string, unknown>
 type KatexModule = { renderToString: (tex: string, options?: KatexRenderOptions) => string }
-const KatexContext = React.createContext<KatexModule | null>(null)
 
+let katexInstance: KatexModule | null = null
 let katexPromise: Promise<KatexModule> | null = null
+const katexListeners = new Set<() => void>()
+
+function subscribeKatex(listener: () => void): () => void {
+  katexListeners.add(listener)
+  return () => {
+    katexListeners.delete(listener)
+  }
+}
+
+function getKatexSnapshot(): KatexModule | null {
+  return katexInstance
+}
+
+function useKatex(): KatexModule | null {
+  return React.useSyncExternalStore(subscribeKatex, getKatexSnapshot, getKatexSnapshot)
+}
+
 function loadKatex(): Promise<KatexModule> {
+  if (katexInstance) return Promise.resolve(katexInstance)
   if (!katexPromise) {
     katexPromise = Promise.all([
       import('katex'),
       import('katex/dist/katex.min.css'),
-    ]).then(([mod]) => mod.default)
+    ])
+      .then(([mod]) => {
+        katexInstance = mod.default
+        for (const listener of katexListeners) {
+          listener()
+        }
+        return katexInstance
+      })
+      .catch((error) => {
+        katexPromise = null
+        throw error
+      })
   }
   return katexPromise
 }
@@ -651,7 +668,7 @@ const StableCode = memo(({ inline, className, children, node, ...rest }: any) =>
 })
 
 const StableMath = memo(({ node, value, ...rest }: any) => {
-  const katex = React.useContext(KatexContext)
+  const katex = useKatex()
 
   const tex = (value ?? (node as any).value ?? '').trim()
   const html = renderBlockMathHtml(tex, katex)
@@ -659,7 +676,7 @@ const StableMath = memo(({ node, value, ...rest }: any) => {
 })
 
 const StableInlineMath = memo(({ node, value, ...rest }: any) => {
-  const katex = React.useContext(KatexContext)
+  const katex = useKatex()
 
   const tex = (value ?? (node as any).value ?? '').trim()
   const html = renderInlineMathHtml(tex, katex)
@@ -896,62 +913,31 @@ const areMarkdownDocumentPropsEqual = (
 const MemoizedMarkdownDocument = memo(MarkdownDocument, areMarkdownDocumentPropsEqual)
 MemoizedMarkdownDocument.displayName = 'MemoizedMarkdownDocument'
 
-function MarkdownViewerComponent(
-  props: Readonly<MarkdownViewerProps>
-) {
+const MarkdownViewerComponent = React.forwardRef<
+  MarkdownViewerHandle,
+  Readonly<MarkdownViewerProps>
+>(function MarkdownViewerComponent(props, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const previewLineIndexRef = useRef<ChunkLineIndex[]>([])
   const activeLineEntryRef = useRef<ActiveLineEntry | null>(null)
   const activeSourceLineRef = useRef<ActiveSourceLine | null>(null)
+  const activeLineRef = useRef<number | undefined>(undefined)
+  const activeLineRafRef = useRef<number | null>(null)
   const chunkLineIndexMapRef = useRef(new Map<string, ChunkLineIndex>())
   const sourceLineOffsetRef = useRef(0)
   const previewWorkerRef = useRef<Worker | null>(null)
   const previewRequestIdRef = useRef(0)
   const previewWorkerBusyRef = useRef(false)
   const pendingPreviewWorkerRequestRef = useRef<PreviewWorkerRequest | null>(null)
-  const previewWorkerTimingRef = useRef(new Map<number, PreviewWorkerTiming>())
-
-  const sendPreviewWorkerRequest = useCallback((
-    worker: Worker,
-    request: PreviewWorkerRequest,
-  ) => {
-    const postedAt = performance.now()
-    previewWorkerTimingRef.current.set(request.id, {
-      traceId: request.traceId,
-      inputAt: request.inputAt,
-      debounceAt: request.debounceAt,
-      postedAt,
-    })
-    if (previewWorkerTimingRef.current.size > 32) {
-      const oldestId = previewWorkerTimingRef.current.keys().next().value
-      if (oldestId !== undefined) {
-        previewWorkerTimingRef.current.delete(oldestId)
-      }
-    }
-
-    logPreviewPerformance('worker-post', {
-      traceId: request.traceId,
-      requestId: request.id,
-      sinceInputMs: request.inputAt == null
-        ? undefined
-        : Number((postedAt - request.inputAt).toFixed(2)),
-      sinceDebounceMs: request.debounceAt == null
-        ? undefined
-        : Number((postedAt - request.debounceAt).toFixed(2)),
-    })
-    worker.postMessage(request)
-  }, [])
 
   const {
     value,
-    activeLine,
     previewWidth,
     filePath,
     foldRegions,
     mode = 'rendered',
     onLineClick,
     onSelectionChange,
-    previewTrace,
   } = props
   const plainTextMode = isPlainTextFile(filePath)
   const [performanceSettings, setPerformanceSettings] = useState<PerformanceSettings>(getDefaultPerformanceSettings())
@@ -977,7 +963,6 @@ function MarkdownViewerComponent(
       previewWorkerRef.current = null
       previewWorkerBusyRef.current = false
       pendingPreviewWorkerRequestRef.current = null
-      previewWorkerTimingRef.current.clear()
       return
     }
 
@@ -994,30 +979,14 @@ function MarkdownViewerComponent(
         sourceLineOffset: number
         lineCount: number
         blockChunks: PreviewBlockChunk[]
-        traceId: number | null
       }>,
     ) => {
-      const responseAt = performance.now()
-      const timing = previewWorkerTimingRef.current.get(event.data.id)
-      previewWorkerTimingRef.current.delete(event.data.id)
       const stale = event.data.id !== previewRequestIdRef.current
-      logPreviewPerformance('worker-response', {
-        traceId: event.data.traceId ?? timing?.traceId ?? null,
-        requestId: event.data.id,
-        stale,
-        workerMs: timing ? Number((responseAt - timing.postedAt).toFixed(2)) : undefined,
-        sinceInputMs: timing?.inputAt == null
-          ? undefined
-          : Number((responseAt - timing.inputAt).toFixed(2)),
-        sinceDebounceMs: timing?.debounceAt == null
-          ? undefined
-          : Number((responseAt - timing.debounceAt).toFixed(2)),
-      })
 
       const pendingRequest = pendingPreviewWorkerRequestRef.current
       if (pendingRequest) {
         pendingPreviewWorkerRequestRef.current = null
-        sendPreviewWorkerRequest(worker, pendingRequest)
+        worker.postMessage(pendingRequest)
       } else {
         previewWorkerBusyRef.current = false
       }
@@ -1041,21 +1010,18 @@ function MarkdownViewerComponent(
         previewWorkerRef.current = null
         previewWorkerBusyRef.current = false
         pendingPreviewWorkerRequestRef.current = null
-        previewWorkerTimingRef.current.clear()
       }
     }
-  }, [mode, performanceSettings.experimentalPreviewOptimization, sendPreviewWorkerRequest])
+  }, [
+    mode,
+    performanceSettings.experimentalPreviewOptimization,
+  ])
 
   useEffect(() => {
     if (mode !== 'rendered') return
 
     const requestId = ++previewRequestIdRef.current
     if (!performanceSettings.experimentalPreviewOptimization) {
-      logPreviewPerformance('worker-unavailable', {
-        traceId: previewTrace?.id ?? null,
-        requestId,
-        reason: 'disabled',
-      })
       startTransition(() => {
         setPreviewResult(preparePreviewMarkdown(value))
       })
@@ -1064,11 +1030,6 @@ function MarkdownViewerComponent(
 
     const worker = previewWorkerRef.current
     if (!worker) {
-      logPreviewPerformance('worker-unavailable', {
-        traceId: previewTrace?.id ?? null,
-        requestId,
-        reason: 'not-ready',
-      })
       startTransition(() => {
         setPreviewResult(preparePreviewMarkdown(value))
       })
@@ -1078,9 +1039,6 @@ function MarkdownViewerComponent(
     const request: PreviewWorkerRequest = {
       id: requestId,
       value,
-      traceId: previewTrace?.id ?? null,
-      inputAt: previewTrace?.inputAt ?? null,
-      debounceAt: previewTrace?.debounceAt ?? null,
     }
     if (previewWorkerBusyRef.current) {
       pendingPreviewWorkerRequestRef.current = request
@@ -1088,13 +1046,11 @@ function MarkdownViewerComponent(
     }
 
     previewWorkerBusyRef.current = true
-    sendPreviewWorkerRequest(worker, request)
+    worker.postMessage(request)
   }, [
     mode,
     value,
-    previewTrace,
     performanceSettings.experimentalPreviewOptimization,
-    sendPreviewWorkerRequest,
   ])
 
   useEffect(() => {
@@ -1110,14 +1066,156 @@ function MarkdownViewerComponent(
     sourceLineOffsetRef.current = sourceLineOffset
   }, [sourceLineOffset])
 
+  const applyActiveLine = useCallback((nextActiveLine: number | undefined) => {
+    if (activeLineRafRef.current != null) {
+      cancelAnimationFrame(activeLineRafRef.current)
+      activeLineRafRef.current = null
+    }
+
+    const container = containerRef.current
+    clearSourceLineHighlight(activeSourceLineRef.current)
+    activeSourceLineRef.current = null
+    const currentActive = activeLineEntryRef.current
+    if (currentActive) {
+      currentActive.entry.element.classList.remove('active-block')
+      activeLineEntryRef.current = null
+    }
+
+    if (!container || mode !== 'rendered' || typeof nextActiveLine !== 'number' || nextActiveLine < 1) {
+      if (!container || mode !== 'rendered') {
+        previewLineIndexRef.current = []
+      }
+      return
+    }
+
+    activeLineRafRef.current = requestAnimationFrame(() => {
+      activeLineRafRef.current = null
+      const chunks = previewLineIndexRef.current
+      const chunk = findChunkForLine(chunks, nextActiveLine)
+      let sourceLineElements: HTMLElement[] = []
+      let localLine = 0
+
+      if (chunk) {
+        localLine = getChunkLocalLine(chunk, nextActiveLine)
+        sourceLineElements = chunk.sourceLineIndex.get(localLine) ?? []
+        if (sourceLineElements.length === 0 && chunk.element.isConnected) {
+          chunk.sourceLineIndex = collectSourceLineIndex(chunk.element)
+          chunk.lineRanges = collectLineRangeIndex(chunk.element)
+          sourceLineElements = chunk.sourceLineIndex.get(localLine) ?? []
+        }
+      }
+      const currentSourceLine = activeSourceLineRef.current
+
+      if (sourceLineElements.length > 0) {
+        if (
+          currentSourceLine?.line === nextActiveLine &&
+          currentSourceLine.elements.every((element) => container.contains(element))
+        ) {
+          return
+        }
+
+        clearSourceLineHighlight(currentSourceLine)
+        if (activeLineEntryRef.current) {
+          activeLineEntryRef.current.entry.element.classList.remove('active-block')
+          activeLineEntryRef.current = null
+        }
+
+        sourceLineElements.forEach((element) => element.classList.add('active-source-line'))
+        activeSourceLineRef.current = {
+          line: nextActiveLine,
+          elements: sourceLineElements,
+        }
+
+        const scrollParent = container.closest('.preview-body') as HTMLElement | null
+        if (scrollParent) {
+          scrollPreviewTarget(scrollParent, sourceLineElements[0])
+        }
+        return
+      }
+
+      clearSourceLineHighlight(currentSourceLine)
+      activeSourceLineRef.current = null
+
+      const current = activeLineEntryRef.current
+
+      if (current && nextActiveLine >= current.entry.start && nextActiveLine <= current.entry.end) {
+        return
+      }
+
+      const localTarget = chunk
+        ? findActiveLineRangeEntry(
+          chunk.lineRanges,
+          localLine,
+          current?.chunkId === chunk.id ? current.index : null,
+        )
+        : null
+
+      if (!chunk || !localTarget) {
+        if (current) {
+          current.entry.element.classList.remove('active-block')
+          activeLineEntryRef.current = null
+        }
+        // 如果找不到目标元素（新增的最后一行还未渲染）
+        const scrollParent = container.closest('.preview-body') as HTMLElement | null
+        if (scrollParent) {
+          // 判断是否在底部区域（滚动位置在最后 100px）
+          const isNearBottom = scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight < 100
+
+          // 如果在底部，滚动到文档末尾
+          if (isNearBottom) {
+            scrollParent.scrollTo({ top: scrollParent.scrollHeight, behavior: 'smooth' })
+          }
+        }
+        return
+      }
+
+      const target: ActiveLineEntry = {
+        entry: {
+          start: chunk.startLine + localTarget.entry.start - 1,
+          end: chunk.startLine + localTarget.entry.end - 1,
+          element: localTarget.entry.element,
+        },
+        index: localTarget.index,
+        chunkId: chunk.id,
+      }
+
+      if (current && current.entry.element !== target.entry.element) {
+        current.entry.element.classList.remove('active-block')
+      }
+      if (!target.entry.element.classList.contains('active-block')) {
+        target.entry.element.classList.add('active-block')
+      }
+      activeLineEntryRef.current = target
+
+      const scrollParent = container.closest('.preview-body') as HTMLElement | null
+      if (!scrollParent) return
+
+      scrollPreviewTarget(scrollParent, target.entry.element)
+    })
+  }, [
+    mode,
+  ])
+
+  React.useImperativeHandle(ref, () => ({
+    updateActiveLine: (line: number) => {
+      activeLineRef.current = line
+      applyActiveLine(line)
+    },
+  }), [applyActiveLine])
+
   // KaTeX 按需加载：检测文档是否包含数学公式
   const hasMath = previewResult.hasMath
-  const [katexLib, setKatexLib] = useState<KatexModule | null>(null)
+  const shouldLoadKatex = hasMath || (
+    mode === 'rendered' &&
+    !plainTextMode &&
+    /\$/.test(value)
+  )
   useEffect(() => {
-    if (hasMath && !katexLib) {
-      loadKatex().then(setKatexLib)
-    }
-  }, [hasMath, katexLib])
+    if (!shouldLoadKatex) return
+    void loadKatex().catch((error) => {
+      console.error('[MarkdownViewer] failed to load KaTeX', error)
+    })
+  }, [shouldLoadKatex])
 
   const blockRenderingEnabled = useMemo(() => (
     mode === 'rendered' &&
@@ -1177,6 +1275,8 @@ function MarkdownViewerComponent(
       span: ({ className, children, ...rest }: any) => <span className={className} {...rest}>{children}</span>,
       math: StableMath,
       inlineMath: StableInlineMath,
+      // rehypeRaw follows HTML parsing rules and lowercases custom tag names.
+      inlinemath: StableInlineMath,
       a: ({ href, children, ...props }: any) => {
         const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
           if (!href) return
@@ -1294,7 +1394,6 @@ function MarkdownViewerComponent(
     blockChunks,
     blockRenderingEnabled,
     foldRegions,
-    katexLib,
     mode,
     previewResult.lineCount,
     renderedValue,
@@ -1321,125 +1420,26 @@ function MarkdownViewerComponent(
     }
   }, [renderedValue])
 
-  // 高亮当前行逻辑
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container || typeof activeLine !== 'number' || activeLine < 1) return
-
-    const rafId = requestAnimationFrame(() => {
-      const chunks = previewLineIndexRef.current
-      const chunk = findChunkForLine(chunks, activeLine)
-      let sourceLineElements: HTMLElement[] = []
-      let localLine = 0
-
-      if (chunk) {
-        localLine = getChunkLocalLine(chunk, activeLine)
-        sourceLineElements = chunk.sourceLineIndex.get(localLine) ?? []
-        if (sourceLineElements.length === 0 && chunk.element.isConnected) {
-          chunk.sourceLineIndex = collectSourceLineIndex(chunk.element)
-          chunk.lineRanges = collectLineRangeIndex(chunk.element)
-          sourceLineElements = chunk.sourceLineIndex.get(localLine) ?? []
-        }
-      }
-      const currentSourceLine = activeSourceLineRef.current
-
-      if (sourceLineElements.length > 0) {
-        if (
-          currentSourceLine?.line === activeLine &&
-          currentSourceLine.elements.every((element) => container.contains(element))
-        ) {
-          return
-        }
-
-        clearSourceLineHighlight(currentSourceLine)
-        if (activeLineEntryRef.current) {
-          activeLineEntryRef.current.entry.element.classList.remove('active-block')
-          activeLineEntryRef.current = null
-        }
-
-        sourceLineElements.forEach((element) => element.classList.add('active-source-line'))
-        activeSourceLineRef.current = {
-          line: activeLine,
-          elements: sourceLineElements,
-        }
-
-        const scrollParent = container.closest('.preview-body') as HTMLElement | null
-        if (scrollParent) {
-          scrollPreviewTarget(scrollParent, sourceLineElements[0])
-        }
-        return
-      }
-
-      clearSourceLineHighlight(currentSourceLine)
-      activeSourceLineRef.current = null
-
-      const current = activeLineEntryRef.current
-
-      if (current && activeLine >= current.entry.start && activeLine <= current.entry.end) {
-        return
-      }
-
-      const localTarget = chunk
-        ? findActiveLineRangeEntry(
-          chunk.lineRanges,
-          localLine,
-          current?.chunkId === chunk.id ? current.index : null,
-        )
-        : null
-
-      if (!chunk || !localTarget) {
-        if (current) {
-          current.entry.element.classList.remove('active-block')
-          activeLineEntryRef.current = null
-        }
-        // 如果找不到目标元素（新增的最后一行还未渲染）
-        const scrollParent = container.closest('.preview-body') as HTMLElement | null
-        if (scrollParent) {
-          // 判断是否在底部区域（滚动位置在最后 100px）
-          const isNearBottom = scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight < 100
-
-          // 如果在底部，滚动到文档末尾
-          if (isNearBottom) {
-            scrollParent.scrollTo({ top: scrollParent.scrollHeight, behavior: 'smooth' })
-          }
-        }
-        return
-      }
-
-      const target: ActiveLineEntry = {
-        entry: {
-          start: chunk.startLine + localTarget.entry.start - 1,
-          end: chunk.startLine + localTarget.entry.end - 1,
-          element: localTarget.entry.element,
-        },
-        index: localTarget.index,
-        chunkId: chunk.id,
-      }
-
-      if (current && current.entry.element !== target.entry.element) {
-        current.entry.element.classList.remove('active-block')
-      }
-      if (!target.entry.element.classList.contains('active-block')) {
-        target.entry.element.classList.add('active-block')
-      }
-      activeLineEntryRef.current = target
-
-      const scrollParent = container.closest('.preview-body') as HTMLElement | null
-      if (!scrollParent) return
-
-      scrollPreviewTarget(scrollParent, target.entry.element)
-    })
-
+  // 内容树更新后，重新应用最近一次的行高亮，不触发 Markdown 组件树重渲染。
+  useLayoutEffect(() => {
+    if (activeLineRef.current !== undefined) {
+      applyActiveLine(activeLineRef.current)
+    }
     return () => {
-      if (rafId) cancelAnimationFrame(rafId)
+      if (activeLineRafRef.current != null) {
+        cancelAnimationFrame(activeLineRafRef.current)
+        activeLineRafRef.current = null
+      }
     }
   }, [
-    activeLine,
+    activeRemarkPlugins,
+    applyActiveLine,
     blockChunks,
     blockRenderingEnabled,
     foldRegions,
-    katexLib,
     mode,
+    previewResult.lineCount,
+    rehypePlugins,
     renderedValue,
     sourceLineOffset,
   ])
@@ -1538,37 +1538,33 @@ function MarkdownViewerComponent(
   return (
     <FilePathContext.Provider value={filePath ?? null}>
       <FoldContext.Provider value={foldRegions ?? []}>
-        <KatexContext.Provider value={katexLib}>
-          <div className="markdown-body gh-markdown" ref={containerRef} data-preview-width={previewWidth}>
-            <MemoizedMarkdownDocument
-              mode={mode}
-              blockRenderingEnabled={blockRenderingEnabled}
-              blockChunks={blockChunks}
-              renderedValue={renderedValue}
-              sourceValue={value}
-              sourceLineOffset={previewResult.sourceLineOffset}
-              components={components}
-              remarkPlugins={activeRemarkPlugins}
-              rehypePlugins={rehypePlugins}
-              filePath={filePath ?? null}
-              onElementChange={handleChunkElementChange}
-            />
-          </div>
-        </KatexContext.Provider>
+        <div className="markdown-body gh-markdown" ref={containerRef} data-preview-width={previewWidth}>
+          <MemoizedMarkdownDocument
+            mode={mode}
+            blockRenderingEnabled={blockRenderingEnabled}
+            blockChunks={blockChunks}
+            renderedValue={renderedValue}
+            sourceValue={value}
+            sourceLineOffset={previewResult.sourceLineOffset}
+            components={components}
+            remarkPlugins={activeRemarkPlugins}
+            rehypePlugins={rehypePlugins}
+            filePath={filePath ?? null}
+            onElementChange={handleChunkElementChange}
+          />
+        </div>
       </FoldContext.Provider>
     </FilePathContext.Provider>
   )
-}
+})
 
 export const MarkdownViewer = memo(
   MarkdownViewerComponent,
   (prev, next) => (
     prev.value === next.value &&
-    prev.activeLine === next.activeLine &&
     prev.filePath === next.filePath &&
     prev.mode === next.mode &&
-    prev.foldRegions === next.foldRegions &&
-    prev.previewTrace === next.previewTrace
+    prev.foldRegions === next.foldRegions
   ),
 )
 MarkdownViewer.displayName = 'MarkdownViewer'

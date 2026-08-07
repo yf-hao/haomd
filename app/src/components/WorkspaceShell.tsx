@@ -1,4 +1,4 @@
-import { lazy, Profiler, Suspense, startTransition, useCallback, useEffect, useMemo, useRef, useState, type ProfilerOnRenderCallback } from 'react'
+import { lazy, Suspense, startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { EditorView } from '@codemirror/view'
 import { invoke } from '@tauri-apps/api/core'
@@ -64,13 +64,6 @@ import {
   onNativePasteImage,
 } from '../modules/platform/clipboardEvents'
 import { pasteClipboardImage } from '../modules/platform/clipboardPasteService'
-import {
-  beginInputPerformanceTrace,
-  endInputPerformanceTrace,
-  logInputPerformance,
-  logPreviewPerformance,
-  type PreviewTrace,
-} from '../modules/debug/inputPerformance'
 import { openTerminalAt } from '../modules/platform/terminalService'
 import { openInFileManager } from '../modules/platform/fileExplorerService'
 import { getFilePathIdentity } from '../modules/files/filePathState'
@@ -204,22 +197,6 @@ const countDocumentChars = (text: string): number => {
 const seed = ''
 const PREVIEW_SYNC_DELAY_MS = 300
 
-const handleInputProfilerRender: ProfilerOnRenderCallback = (
-  id,
-  phase,
-  actualDuration,
-  baseDuration,
-) => {
-  logInputPerformance(
-    `React render:${id}`,
-    {
-      phase,
-      baseDurationMs: Number(baseDuration.toFixed(2)),
-    },
-    actualDuration,
-  )
-}
-
 function findOutlineItemByPage(items: OutlineItem[], page: number): OutlineItem | null {
   for (const item of items) {
     const childMatch = item.children ? findOutlineItemByPage(item.children, page) : null
@@ -246,7 +223,6 @@ export function WorkspaceShell({
   const [markdown, setMarkdown] = useState(seed)
   const [editorMarkdown, setEditorMarkdown] = useState(seed)
   const [previewValue, setPreviewValue] = useState(seed)
-  const [previewTrace, setPreviewTrace] = useState<PreviewTrace | null>(null)
   const [activeLine, setActiveLine] = useState(1)
   // 预览专用的行号：对 activeLine 做轻量节流后再驱动 Preview，降低重渲染频率
   const [previewActiveLine, setPreviewActiveLine] = useState(1)
@@ -254,9 +230,6 @@ export function WorkspaceShell({
   const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null)
   const [activeWorkspaceDirectoryPath, setActiveWorkspaceDirectoryPath] = useState<string | null>(null)
   const markdownRef = useRef(markdown)
-  const previewTraceIdRef = useRef(0)
-  const lastPreviewInputAtRef = useRef<number | null>(null)
-  const previewTraceMapRef = useRef(new Map<number, PreviewTrace>())
   const lastActiveIdForPreviewRef = useRef<string | null>(null)
   const textColorTargetRef = useRef<TextColorTarget | null>(null)
   const preserveTextColorTargetOnNextChangeRef = useRef(false)
@@ -486,70 +459,8 @@ export function WorkspaceShell({
   const previewSyncTimerRef = useRef<number | null>(null)
   const skipNextPreviewThrottleRef = useRef(false)
 
-  const commitPreviewValue = useCallback((
-    nextValue: string,
-    stage: 'debounce-trigger' | 'preview-sync',
-  ) => {
-    const timestamp = performance.now()
-    const inputAt = stage === 'debounce-trigger'
-      ? lastPreviewInputAtRef.current ?? timestamp
-      : timestamp
-    const trace: PreviewTrace = {
-      id: ++previewTraceIdRef.current,
-      inputAt,
-      debounceAt: timestamp,
-    }
-    previewTraceMapRef.current.set(trace.id, trace)
-    if (previewTraceMapRef.current.size > 32) {
-      const oldestId = previewTraceMapRef.current.keys().next().value
-      if (oldestId !== undefined) {
-        previewTraceMapRef.current.delete(oldestId)
-      }
-    }
-
-    logPreviewPerformance(stage, {
-      traceId: trace.id,
-      inputToSyncMs: Number((timestamp - inputAt).toFixed(2)),
-    })
-    setPreviewTrace(trace)
+  const commitPreviewValue = useCallback((nextValue: string) => {
     setPreviewValue(nextValue)
-  }, [])
-
-  const handlePreviewProfilerRender: ProfilerOnRenderCallback = useCallback((
-    id,
-    phase,
-    actualDuration,
-    baseDuration,
-  ) => {
-    const traceIdText = id.startsWith('source-preview:')
-      ? id.slice('source-preview:'.length)
-      : ''
-    const parsedTraceId = Number(traceIdText)
-    const traceId = Number.isInteger(parsedTraceId) && parsedTraceId > 0 ? parsedTraceId : null
-    const trace = traceId == null ? null : previewTraceMapRef.current.get(traceId)
-    const renderedAt = performance.now()
-
-    logPreviewPerformance('react-render', {
-      traceId,
-      phase,
-      actualDurationMs: Number(actualDuration.toFixed(2)),
-      baseDurationMs: Number(baseDuration.toFixed(2)),
-      sinceInputMs: trace == null
-        ? undefined
-        : Number((renderedAt - trace.inputAt).toFixed(2)),
-      sinceDebounceMs: trace == null
-        ? undefined
-        : Number((renderedAt - trace.debounceAt).toFixed(2)),
-    })
-    logInputPerformance(
-      'React render:source-preview',
-      {
-        phase,
-        baseDurationMs: Number(baseDuration.toFixed(2)),
-        previewTraceId: traceId,
-      },
-      actualDuration,
-    )
   }, [])
 
   const clearPreviewSyncTimer = useCallback(() => {
@@ -992,12 +903,12 @@ export function WorkspaceShell({
         requestAnimationFrame(() => {
           previewSyncTimerRef.current = window.setTimeout(() => {
             previewSyncTimerRef.current = null
-            commitPreviewValue(tab.content, 'preview-sync')
+            commitPreviewValue(tab.content)
             setIsPreviewLoading(false)
           }, 0)
         })
       } else {
-        commitPreviewValue(tab.content, 'preview-sync')
+        commitPreviewValue(tab.content)
         setIsPreviewLoading(false)
       }
 
@@ -1138,32 +1049,24 @@ export function WorkspaceShell({
   })
 
   const handleMarkdownChange = useCallback((val: string, options?: MarkdownSyncOptions) => {
-    lastPreviewInputAtRef.current = performance.now()
     const shouldMarkDirty = options?.markDirty ?? true
     const shouldSyncEditor = options?.syncEditor ?? true
-    const trace = beginInputPerformanceTrace('WorkspaceShell.handleMarkdownChange', {
-      valueLength: val.length,
-      immediate: options?.immediate ?? false,
-      syncEditor: shouldSyncEditor,
-      markDirty: shouldMarkDirty,
-    })
-    try {
-      const syncContent = (next: string) => {
-        setMarkdown(next)
-        editorMarkdownRef.current = next
-        updateActiveContent(next, { markDirty: shouldMarkDirty })
-      }
+    const syncContent = (next: string) => {
+      setMarkdown(next)
+      editorMarkdownRef.current = next
+      updateActiveContent(next, { markDirty: shouldMarkDirty })
+    }
 
-      const patchedDoc = applyChunkEdit(val)
-      if (patchedDoc !== null) {
-        if (patchedDoc === markdownRef.current) {
-          return
-        }
-        markdownRef.current = patchedDoc
-        if (shouldSyncEditor) {
-          editorMarkdownRef.current = patchedDoc
-          setEditorMarkdown(patchedDoc)
-        }
+    const patchedDoc = applyChunkEdit(val)
+    if (patchedDoc !== null) {
+      if (patchedDoc === markdownRef.current) {
+        return
+      }
+      markdownRef.current = patchedDoc
+      if (shouldSyncEditor) {
+        editorMarkdownRef.current = patchedDoc
+        setEditorMarkdown(patchedDoc)
+      }
       if (options?.immediate) {
         syncContent(patchedDoc)
       } else {
@@ -1171,30 +1074,27 @@ export function WorkspaceShell({
       }
       if (shouldMarkDirty) markDirty()
       return
-      }
+    }
 
-      // 普通模式：直接用整篇文档更新
-      if (val === markdownRef.current && !options?.force) {
-        if (shouldSyncEditor && editorMarkdownRef.current !== val) {
-          editorMarkdownRef.current = val
-          setEditorMarkdown(val)
-        }
-        return
-      }
-      markdownRef.current = val
-      if (shouldSyncEditor) {
+    // 普通模式：直接用整篇文档更新
+    if (val === markdownRef.current && !options?.force) {
+      if (shouldSyncEditor && editorMarkdownRef.current !== val) {
         editorMarkdownRef.current = val
         setEditorMarkdown(val)
       }
-      if (options?.immediate) {
-        syncContent(val)
-      } else {
-        startTransition(() => syncContent(val))
-      }
-      if (shouldMarkDirty) markDirty()
-    } finally {
-      endInputPerformanceTrace(trace)
+      return
     }
+    markdownRef.current = val
+    if (shouldSyncEditor) {
+      editorMarkdownRef.current = val
+      setEditorMarkdown(val)
+    }
+    if (options?.immediate) {
+      syncContent(val)
+    } else {
+      startTransition(() => syncContent(val))
+    }
+    if (shouldMarkDirty) markDirty()
   }, [applyChunkEdit, markDirty, updateActiveContent])
 
   const handleWysiwygChange = useCallback((sourceTabId: string, val: string) => {
@@ -1285,29 +1185,21 @@ export function WorkspaceShell({
   // - Markdown 标签：沿用原有 handleMarkdownChange
   const handleEditorChange = useCallback(
     (val: string) => {
-      const trace = beginInputPerformanceTrace('WorkspaceShell.handleEditorChange', {
-        valueLength: val.length,
-        isPdf: isPdfActive,
-      })
-      try {
-        if (isPdfActive) {
-          if (!activePdfPath) return
-          setPdfNotes((prev) => {
-            if (prev[activePdfPath] === val) return prev
-            return { ...prev, [activePdfPath]: val }
-          })
-          return
-        }
-
-        if (preserveTextColorTargetOnNextChangeRef.current) {
-          preserveTextColorTargetOnNextChangeRef.current = false
-        } else {
-          textColorTargetRef.current = null
-        }
-        handleMarkdownChange(val)
-      } finally {
-        endInputPerformanceTrace(trace)
+      if (isPdfActive) {
+        if (!activePdfPath) return
+        setPdfNotes((prev) => {
+          if (prev[activePdfPath] === val) return prev
+          return { ...prev, [activePdfPath]: val }
+        })
+        return
       }
+
+      if (preserveTextColorTargetOnNextChangeRef.current) {
+        preserveTextColorTargetOnNextChangeRef.current = false
+      } else {
+        textColorTargetRef.current = null
+      }
+      handleMarkdownChange(val)
     },
     [isPdfActive, activePdfPath, handleMarkdownChange],
   )
@@ -2078,7 +1970,7 @@ export function WorkspaceShell({
     clearPreviewSyncTimer()
     const timer = window.setTimeout(() => {
       previewSyncTimerRef.current = null
-      commitPreviewValue(markdown, 'debounce-trigger')
+      commitPreviewValue(markdown)
     }, PREVIEW_SYNC_DELAY_MS)
     previewSyncTimerRef.current = timer
     return () => clearTimeout(timer)
@@ -2087,7 +1979,7 @@ export function WorkspaceShell({
   // 当预览从不可见切换为可见时，立即用最新 markdown 做一次全量同步
   useEffect(() => {
     if (!prevIsPreviewVisibleRef.current && isPreviewVisible) {
-      commitPreviewValue(markdown, 'preview-sync')
+      commitPreviewValue(markdown)
       setIsPreviewLoading(false)
     }
     prevIsPreviewVisibleRef.current = isPreviewVisible
@@ -2136,12 +2028,12 @@ export function WorkspaceShell({
       requestAnimationFrame(() => {
         previewSyncTimerRef.current = window.setTimeout(() => {
           previewSyncTimerRef.current = null
-          commitPreviewValue(content, 'preview-sync')
+          commitPreviewValue(content)
           setIsPreviewLoading(false)
         }, 0)
       })
     } else {
-      commitPreviewValue(content, 'preview-sync')
+      commitPreviewValue(content)
       setIsPreviewLoading(false)
     }
     setActiveLine(1)
@@ -4111,47 +4003,39 @@ export function WorkspaceShell({
                           onClose={() => setIsSearchOpen(false)}
                         />
                       )}
-                      <Profiler id="source-editor" onRender={handleInputProfilerRender}>
-                        <EditorPaneLazy
-                          markdown={editorContent}
-                          onChange={handleEditorChange}
-                          onCursorChange={handleCursorChange}
-                          showPreview={showPreview}
-                          setShowPreview={setShowPreview}
-                          editorViewRef={editorViewRef}
-                          onFoldRegionsChange={setFoldRegions}
-                          focusRequest={focusRequest}
-                          onFocusHandled={() => setFocusRequest(null)}
-                          onProgrammaticScrollStart={() => { isProgrammaticScrollRef.current = true }}
-                          onProgrammaticScrollEnd={() => { isProgrammaticScrollRef.current = false }}
-                          editorZoom={editorZoom}
-                          onEditorReady={handleEditorReady}
-                          transientSearchQuery={transientSearchQuery}
-                        />
-                      </Profiler>
+                      <EditorPaneLazy
+                        markdown={editorContent}
+                        onChange={handleEditorChange}
+                        onCursorChange={handleCursorChange}
+                        showPreview={showPreview}
+                        setShowPreview={setShowPreview}
+                        editorViewRef={editorViewRef}
+                        onFoldRegionsChange={setFoldRegions}
+                        focusRequest={focusRequest}
+                        onFocusHandled={() => setFocusRequest(null)}
+                        onProgrammaticScrollStart={() => { isProgrammaticScrollRef.current = true }}
+                        onProgrammaticScrollEnd={() => { isProgrammaticScrollRef.current = false }}
+                        editorZoom={editorZoom}
+                        onEditorReady={handleEditorReady}
+                        transientSearchQuery={transientSearchQuery}
+                      />
                     </Suspense>
                   </section>
 
                   <PreviewErrorBoundary>
                   <Suspense fallback={<section className="pane preview"><div className="preview-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13 }}>{t('workspace.loadingPreview')}</div></section>}>
-                    <Profiler
-                      id={`source-preview:${previewTrace?.id ?? 'none'}`}
-                      onRender={handlePreviewProfilerRender}
-                    >
-                      <PreviewPaneLazy
-                        value={previewValue}
-                        previewTrace={previewTrace}
-                        activeLine={previewActiveLine}
-                        previewWidth={previewWidthForRender}
-                        effectiveLayout={effectiveLayout}
-                        loading={isPreviewLoading}
-                        loadingLabel={t('workspace.loadingPreview')}
-                        filePath={filePath}
-                        foldRegions={foldRegions}
-                        onPreviewLineClick={handlePreviewLineClick}
-                        onSelectionChange={setPreviewSelectionText}
-                      />
-                    </Profiler>
+                    <PreviewPaneLazy
+                      value={previewValue}
+                      activeLine={previewActiveLine}
+                      previewWidth={previewWidthForRender}
+                      effectiveLayout={effectiveLayout}
+                      loading={isPreviewLoading}
+                      loadingLabel={t('workspace.loadingPreview')}
+                      filePath={filePath}
+                      foldRegions={foldRegions}
+                      onPreviewLineClick={handlePreviewLineClick}
+                      onSelectionChange={setPreviewSelectionText}
+                    />
                   </Suspense>
                   </PreviewErrorBoundary>
                     </>

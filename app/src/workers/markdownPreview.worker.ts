@@ -5,9 +5,6 @@ import { preparePreviewMarkdown } from '../modules/markdown/previewPipeline'
 type PreviewWorkerRequest = {
   id: number
   value: string
-  traceId: number | null
-  inputAt: number | null
-  debounceAt: number | null
 }
 
 type PreviewWorkerResponse = {
@@ -17,7 +14,6 @@ type PreviewWorkerResponse = {
   containsToc: boolean
   sourceLineOffset: number
   lineCount: number
-  traceId: number | null
   blockChunks: Array<{
     id: string
     startLine: number
@@ -39,7 +35,6 @@ workerScope.addEventListener('message', (event: MessageEvent<PreviewWorkerReques
     containsToc: result.containsToc,
     sourceLineOffset: result.sourceLineOffset,
     lineCount: result.lineCount,
-    traceId: event.data.traceId,
     blockChunks: result.blockChunks,
   }
   workerScope.postMessage(response)
