@@ -12,6 +12,7 @@ type PreviewWorkerResponse = {
   processedMarkdown: string
   hasMath: boolean
   containsToc: boolean
+  sourceLineOffset: number
   lineCount: number
   blockChunks: Array<{
     id: string
@@ -32,6 +33,7 @@ workerScope.addEventListener('message', (event: MessageEvent<PreviewWorkerReques
     processedMarkdown: result.processedMarkdown,
     hasMath: result.hasMath,
     containsToc: result.containsToc,
+    sourceLineOffset: result.sourceLineOffset,
     lineCount: result.lineCount,
     blockChunks: result.blockChunks,
   }

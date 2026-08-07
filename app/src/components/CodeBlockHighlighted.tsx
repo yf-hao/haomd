@@ -9,6 +9,7 @@ type CodeBlockProps = {
   content: string
   className?: string
   showCopyButton?: boolean
+  sourceLineStart?: number
 }
 
 async function copyTextToClipboard(text: string): Promise<boolean> {
@@ -56,10 +57,16 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
 }
 
 const CodeBlock = memo(
-  ({ lang, content, showCopyButton = true, ...rest }: CodeBlockProps) => {
+  ({ lang, content, showCopyButton = true, sourceLineStart, ...rest }: CodeBlockProps) => {
     const { t } = useI18n()
     const [copied, setCopied] = React.useState(false)
     const themeMode = useResolvedThemeMode()
+    const lineProps = sourceLineStart == null
+      ? undefined
+      : (lineNumber: number) => ({
+          className: 'md-source-line',
+          'data-source-line': String(sourceLineStart + lineNumber - 1),
+        })
 
     const handleCopy = async (event: React.MouseEvent<HTMLButtonElement>) => {
       event.stopPropagation()
@@ -91,6 +98,7 @@ const CodeBlock = memo(
           customStyle={{
             fontSize: 'var(--markdown-code-font-size, inherit)',
           }}
+          lineProps={lineProps}
           codeTagProps={{
             style: {
               fontSize: 'var(--markdown-code-font-size, inherit)',
@@ -107,7 +115,8 @@ const CodeBlock = memo(
     prev.lang === next.lang &&
     prev.content === next.content &&
     prev.className === next.className &&
-    prev.showCopyButton === next.showCopyButton,
+    prev.showCopyButton === next.showCopyButton &&
+    prev.sourceLineStart === next.sourceLineStart,
 )
 
 export default CodeBlock

@@ -24,4 +24,11 @@ describe('preparePreviewMarkdown', () => {
 
     expect(preparePreviewMarkdown(value).blockChunks).toHaveLength(0)
   })
+
+  it('keeps source line offsets when front matter is removed from the preview', () => {
+    const value = '---\ntitle: Demo\n---\n\n# Heading'
+    const result = preparePreviewMarkdown(value)
+
+    expect(result.sourceLineOffset).toBe(3)
+  })
 })

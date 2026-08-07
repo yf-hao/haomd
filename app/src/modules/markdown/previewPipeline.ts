@@ -14,6 +14,7 @@ export type PreviewMarkdownResult = {
   processedMarkdown: string
   hasMath: boolean
   containsToc: boolean
+  sourceLineOffset: number
   lineCount: number
   blockChunks: PreviewBlockChunk[]
 }
@@ -152,7 +153,11 @@ export function preparePreviewMarkdown(value: string): PreviewMarkdownResult {
     return cached
   }
 
-  const bodyMarkdown = extractFrontMatter(value).body
+  const document = extractFrontMatter(value)
+  const bodyMarkdown = document.body
+  const sourceLineOffset = document.hasFrontMatter
+    ? document.rawBlock.split(/\r?\n/).length - 1
+    : 0
   const processedMarkdown = replaceTextColorSyntaxWithHtml(normalizeLatexDelimiters(bodyMarkdown))
   const lineCount = processedMarkdown.split(/\r?\n/).length
   const containsToc = containsTocPlaceholder(processedMarkdown)
@@ -167,6 +172,7 @@ export function preparePreviewMarkdown(value: string): PreviewMarkdownResult {
     processedMarkdown,
     hasMath: /\$/.test(processedMarkdown),
     containsToc,
+    sourceLineOffset,
     lineCount,
     blockChunks,
   }

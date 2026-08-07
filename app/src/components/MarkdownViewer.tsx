@@ -11,6 +11,7 @@ import { getDefaultPerformanceSettings, getPerformanceSettings, type Performance
 import { subscribePerformanceSettingsChanged } from '../modules/settings/performanceRuntime'
 import { remarkToc } from '../modules/markdown/remarkToc'
 import { splitAlignedTabInlineNodes } from '../modules/markdown/alignedTab'
+import { rehypeSourceLineAnchors } from '../modules/markdown/rehypeSourceLineAnchors'
 import { DownloadOnClickUseCase, TauriWebviewOpener } from '../modules/download/handleMarkdownLinkClick'
 import { ExamAttachmentLinkClassifier } from '../modules/download/linkClassifier'
 import { FetchTextDownloadService } from '../modules/download/downloadService'
@@ -51,84 +52,101 @@ type LineRangeIndexEntry = {
   element: HTMLElement
 }
 
+type SourceLineIndex = Map<number, HTMLElement[]>
+
+type ActiveSourceLine = {
+  line: number
+  elements: HTMLElement[]
+}
+
 const FoldContext = React.createContext<FoldRegion[]>([])
 const FilePathContext = React.createContext<string | null>(null)
+const SourceLineOffsetContext = React.createContext(0)
 const useFoldRegions = () => React.useContext(FoldContext)
 
 type MarkdownBlockChunk = PreviewBlockChunk
-
-function findLastRangeStartIndex(entries: LineRangeIndexEntry[], line: number): number {
-  let left = 0
-  let right = entries.length - 1
-  let result = -1
-
-  while (left <= right) {
-    const mid = (left + right) >> 1
-    const current = entries[mid]
-    if (current.start <= line) {
-      result = mid
-      left = mid + 1
-    } else {
-      right = mid - 1
-    }
-  }
-
-  return result
-}
 
 function findActiveLineRangeEntry(
   entries: LineRangeIndexEntry[],
   line: number,
   preferredIndex: number | null,
 ): { entry: LineRangeIndexEntry; index: number } | null {
-  const searchAround = (center: number, radius: number) => {
-    if (center < 0 || entries.length === 0) return null
-    const start = Math.max(0, center - radius)
-    const end = Math.min(entries.length - 1, center + radius)
-
-    for (let offset = 0; offset <= radius; offset += 1) {
-      const left = center - offset
-      const right = center + offset
-
-      if (left >= start) {
-        const entry = entries[left]
-        if (line >= entry.start && line <= entry.end) {
-          return { entry, index: left }
-        }
-      }
-
-      if (offset === 0) continue
-
-      if (right <= end) {
-        const entry = entries[right]
-        if (line >= entry.start && line <= entry.end) {
-          return { entry, index: right }
-        }
-      }
-    }
-
-    return null
-  }
-
   if (preferredIndex != null) {
-    const local = searchAround(preferredIndex, 12)
-    if (local) return local
-  }
-
-  const insertionIndex = findLastRangeStartIndex(entries, line)
-  if (insertionIndex < 0) return null
-
-  const local = searchAround(insertionIndex, 12)
-  if (local) return local
-
-  for (let index = insertionIndex - 1; index >= 0; index -= 1) {
-    const entry = entries[index]
-    if (line >= entry.start && line <= entry.end) {
-      return { entry, index }
+    const preferred = entries[preferredIndex]
+    if (preferred && line >= preferred.start && line <= preferred.end) {
+      return { entry: preferred, index: preferredIndex }
     }
   }
 
-  return null
+  let best: { entry: LineRangeIndexEntry; index: number } | null = null
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index]
+    if (line < entry.start || line > entry.end) continue
+
+    if (
+      !best ||
+      entry.end - entry.start < best.entry.end - best.entry.start ||
+      (
+        entry.end - entry.start === best.entry.end - best.entry.start &&
+        index > best.index
+      )
+    ) {
+      best = { entry, index }
+    }
+  }
+
+  return best
+}
+
+function collectSourceLineIndex(container: HTMLElement): SourceLineIndex {
+  const index: SourceLineIndex = new Map()
+  const elements = Array.from(container.querySelectorAll<HTMLElement>('[data-source-line]'))
+
+  for (const element of elements) {
+    const parentMarker = element.parentElement?.closest<HTMLElement>('[data-source-line]')
+    if (parentMarker && container.contains(parentMarker)) continue
+
+    const line = Number(element.dataset.sourceLine)
+    if (!Number.isInteger(line) || line < 1) continue
+
+    const lineElements = index.get(line) ?? []
+    lineElements.push(element)
+    index.set(line, lineElements)
+  }
+
+  return index
+}
+
+function collectLineRangeIndex(container: HTMLElement): LineRangeIndexEntry[] {
+  return Array.from(container.querySelectorAll<HTMLElement>('[data-line-start][data-line-end]'))
+    .map((element) => {
+      const start = Number(element.dataset.lineStart)
+      const end = Number(element.dataset.lineEnd)
+      if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start) {
+        return null
+      }
+      return { start, end, element }
+    })
+    .filter((entry): entry is LineRangeIndexEntry => entry !== null)
+}
+
+function clearSourceLineHighlight(active: ActiveSourceLine | null) {
+  active?.elements.forEach((element) => element.classList.remove('active-source-line'))
+}
+
+function scrollPreviewTarget(scrollParent: HTMLElement, targetElement: HTMLElement) {
+  const parentRect = scrollParent.getBoundingClientRect()
+  const targetRect = targetElement.getBoundingClientRect()
+  const isVisible =
+    targetRect.top >= parentRect.top &&
+    targetRect.bottom <= parentRect.bottom
+
+  if (!isVisible) {
+    const currentBottomOffset = parentRect.height - (targetRect.bottom - parentRect.top)
+    const desiredBottomOffset = parentRect.height / 4
+    const delta = desiredBottomOffset - currentBottomOffset
+    scrollParent.scrollTo({ top: scrollParent.scrollTop + delta })
+  }
 }
 
 // KaTeX 按需加载：单例 Promise + Context
@@ -187,16 +205,30 @@ function remarkPreserveSingleLineBreaks() {
       for (const child of node.children) {
         if (child?.type === 'text' && typeof child.value === 'string' && child.value.includes('\n')) {
           const parts = child.value.split(/\r?\n/)
+          const startLine = child.position?.start?.line
           parts.forEach((part: string, index: number) => {
+            const line = typeof startLine === 'number' ? startLine + index : null
+            const position = child.position && line != null
+              ? {
+                  ...child.position,
+                  start: { ...child.position.start, line },
+                  end: { ...child.position.end, line },
+                }
+              : child.position
             if (part.length > 0) {
               nextChildren.push({
                 ...child,
                 value: part,
+                position,
               })
             }
             if (index < parts.length - 1) {
               nextChildren.push({
                 type: 'break',
+                ...(position ? { position } : {}),
+                ...(line != null
+                  ? { data: { hProperties: { 'data-source-line': String(line) } } }
+                  : {}),
               })
             }
           })
@@ -497,25 +529,51 @@ const DiagramBlock = memo(
 
 const LazyCodeBlock = React.lazy(() => import('./CodeBlockHighlighted'))
 
+function renderPlainCodeLines(content: string, sourceLineStart?: number): React.ReactNode {
+  if (sourceLineStart == null) return content
+
+  return content.split(/\r?\n/).map((line: string, index: number, lines: string[]) => (
+    <React.Fragment key={index}>
+      <span data-source-line={String(sourceLineStart + index)}>{line}</span>
+      {index < lines.length - 1 ? '\n' : null}
+    </React.Fragment>
+  ))
+}
+
 const StableCode = memo(({ inline, className, children, node, ...rest }: any) => {
   const content = String(children).trim()
   const match = /language-([\w]+)/.exec(className || '')
   const lang = match?.[1]
+  const sourceLineOffset = React.useContext(SourceLineOffsetContext)
+  const nodeStartLine = node?.position?.start?.line
+  const contentLineCount = content.split(/\r?\n/).length
+  const blockLineCount = typeof nodeStartLine === 'number' && typeof node?.position?.end?.line === 'number'
+    ? node.position.end.line - nodeStartLine + 1
+    : contentLineCount
+  const sourceLineStart = typeof nodeStartLine === 'number'
+    ? nodeStartLine + (blockLineCount > contentLineCount ? 1 : 0) + sourceLineOffset
+    : undefined
 
   if (lang) {
     const renderer = getRenderer(lang)
     if (renderer) return renderer(content)
     if (lang === 'mermaid' || lang === 'mind') return <DiagramBlock lang={lang} code={content} />
     return (
-      <React.Suspense fallback={<pre><code className={className}>{content}</code></pre>}>
-        <LazyCodeBlock lang={lang} content={content} {...rest} />
+      <React.Suspense fallback={<pre><code className={className}>{renderPlainCodeLines(content, sourceLineStart)}</code></pre>}>
+        <LazyCodeBlock lang={lang} content={content} sourceLineStart={sourceLineStart} {...rest} />
       </React.Suspense>
     )
   }
 
   const isMultiline = content.includes('\n')
   if (!isMultiline) return <code className="code" {...rest}>{content}</code>
-  return <pre {...rest}><code className="plain">{content}</code></pre>
+  return (
+    <pre {...rest}>
+      <code className="plain">
+        {renderPlainCodeLines(content, sourceLineStart)}
+      </code>
+    </pre>
+  )
 })
 
 const StableMath = memo(({ node, value, ...rest }: any) => {
@@ -539,6 +597,7 @@ type MarkdownBlockChunkProps = {
   components: any
   remarkPlugins: any[]
   rehypePlugins: any[]
+  sourceLineOffset: number
   filePath: string | null
   onElementChange: (chunkId: string, element: HTMLElement | null) => void
 }
@@ -548,30 +607,42 @@ const MarkdownChunkContent = memo(({
   components,
   remarkPlugins,
   rehypePlugins,
+  sourceLineOffset,
   filePath,
 }: {
   markdown: string
   components: any
   remarkPlugins: any[]
   rehypePlugins: any[]
+  sourceLineOffset: number
   filePath: string | null
-}) => (
-  <FilePathContext.Provider value={filePath}>
-    <ReactMarkdown
-      remarkPlugins={remarkPlugins}
-      remarkRehypeOptions={remarkRehypeOptions}
-      rehypePlugins={rehypePlugins}
-      components={components}
-    >
-      {markdown}
-    </ReactMarkdown>
-  </FilePathContext.Provider>
-), (prev, next) => (
+}) => {
+  const chunkRehypePlugins = useMemo(
+    () => [...rehypePlugins, [rehypeSourceLineAnchors, { lineOffset: sourceLineOffset }]],
+    [rehypePlugins, sourceLineOffset],
+  )
+
+  return (
+    <SourceLineOffsetContext.Provider value={sourceLineOffset}>
+      <FilePathContext.Provider value={filePath}>
+        <ReactMarkdown
+          remarkPlugins={remarkPlugins}
+          remarkRehypeOptions={remarkRehypeOptions}
+          rehypePlugins={chunkRehypePlugins}
+          components={components}
+        >
+          {markdown}
+        </ReactMarkdown>
+      </FilePathContext.Provider>
+    </SourceLineOffsetContext.Provider>
+  )
+}, (prev, next) => (
   prev.markdown === next.markdown &&
   prev.filePath === next.filePath &&
   prev.components === next.components &&
   prev.remarkPlugins === next.remarkPlugins &&
-  prev.rehypePlugins === next.rehypePlugins
+  prev.rehypePlugins === next.rehypePlugins &&
+  prev.sourceLineOffset === next.sourceLineOffset
 ))
 
 const MarkdownBlockChunkView = memo(({
@@ -579,12 +650,15 @@ const MarkdownBlockChunkView = memo(({
   components,
   remarkPlugins,
   rehypePlugins,
+  sourceLineOffset,
   filePath,
   onElementChange,
 }: MarkdownBlockChunkProps) => {
   const elementRef = useRef<HTMLDivElement | null>(null)
   const regions = useFoldRegions()
-  const isFolded = isBlockFolded(regions, chunk.startLine, chunk.endLine)
+  const chunkStartLine = sourceLineOffset + chunk.startLine
+  const chunkEndLine = sourceLineOffset + chunk.endLine
+  const isFolded = isBlockFolded(regions, chunkStartLine, chunkEndLine)
   const chunkId = chunk.id
 
   useLayoutEffect(() => {
@@ -600,14 +674,15 @@ const MarkdownBlockChunkView = memo(({
     <div
       ref={elementRef}
       className="markdown-block-chunk"
-      data-line-start={chunk.startLine}
-      data-line-end={chunk.endLine}
+      data-line-start={chunkStartLine}
+      data-line-end={chunkEndLine}
     >
       <MarkdownChunkContent
         markdown={chunk.markdown}
         components={components}
         remarkPlugins={remarkPlugins}
         rehypePlugins={rehypePlugins}
+        sourceLineOffset={sourceLineOffset}
         filePath={filePath}
       />
     </div>
@@ -620,7 +695,8 @@ const MarkdownBlockChunkView = memo(({
   prev.filePath === next.filePath &&
   prev.components === next.components &&
   prev.remarkPlugins === next.remarkPlugins &&
-  prev.rehypePlugins === next.rehypePlugins,
+  prev.rehypePlugins === next.rehypePlugins &&
+  prev.sourceLineOffset === next.sourceLineOffset,
 )
 
 type MarkdownDocumentProps = {
@@ -629,6 +705,7 @@ type MarkdownDocumentProps = {
   blockChunks: MarkdownBlockChunk[]
   renderedValue: string
   sourceValue: string
+  sourceLineOffset: number
   components: any
   remarkPlugins: any[]
   rehypePlugins: any[]
@@ -642,12 +719,18 @@ const MarkdownDocument = ({
   blockChunks,
   renderedValue,
   sourceValue,
+  sourceLineOffset,
   components,
   remarkPlugins,
   rehypePlugins,
   filePath,
   onElementChange,
 }: MarkdownDocumentProps) => {
+  const documentRehypePlugins = useMemo(
+    () => [...rehypePlugins, [rehypeSourceLineAnchors, { lineOffset: sourceLineOffset }]],
+    [rehypePlugins, sourceLineOffset],
+  )
+
   if (mode !== 'rendered') {
     return (
       <pre className="markdown-source">
@@ -666,6 +749,7 @@ const MarkdownDocument = ({
             components={components}
             remarkPlugins={remarkPlugins}
             rehypePlugins={rehypePlugins}
+            sourceLineOffset={sourceLineOffset + chunk.startLine - 1}
             filePath={filePath}
             onElementChange={onElementChange}
           />
@@ -675,14 +759,16 @@ const MarkdownDocument = ({
   }
 
   return (
-    <ReactMarkdown
-      remarkPlugins={remarkPlugins}
-      remarkRehypeOptions={remarkRehypeOptions}
-      rehypePlugins={rehypePlugins}
-      components={components}
-    >
-      {renderedValue}
-    </ReactMarkdown>
+    <SourceLineOffsetContext.Provider value={0}>
+      <ReactMarkdown
+        remarkPlugins={remarkPlugins}
+        remarkRehypeOptions={remarkRehypeOptions}
+        rehypePlugins={documentRehypePlugins}
+        components={components}
+      >
+        {renderedValue}
+      </ReactMarkdown>
+    </SourceLineOffsetContext.Provider>
   )
 }
 
@@ -696,6 +782,7 @@ const areMarkdownDocumentPropsEqual = (
   previous.components === next.components &&
   previous.remarkPlugins === next.remarkPlugins &&
   previous.rehypePlugins === next.rehypePlugins &&
+  previous.sourceLineOffset === next.sourceLineOffset &&
   previous.filePath === next.filePath &&
   previous.onElementChange === next.onElementChange &&
   (next.mode === 'rendered'
@@ -712,6 +799,8 @@ function MarkdownViewerComponent(
   const containerRef = useRef<HTMLDivElement | null>(null)
   const activeLineIndexRef = useRef<LineRangeIndexEntry[]>([])
   const activeLineEntryRef = useRef<{ entry: LineRangeIndexEntry; index: number } | null>(null)
+  const sourceLineIndexRef = useRef<SourceLineIndex>(new Map())
+  const activeSourceLineRef = useRef<ActiveSourceLine | null>(null)
   const chunkElementMapRef = useRef(new Map<string, HTMLElement>())
   const previewWorkerRef = useRef<Worker | null>(null)
   const previewRequestIdRef = useRef(0)
@@ -757,6 +846,7 @@ function MarkdownViewerComponent(
         processedMarkdown: string
         hasMath: boolean
         containsToc: boolean
+        sourceLineOffset: number
         lineCount: number
         blockChunks: PreviewBlockChunk[]
       }>,
@@ -767,6 +857,7 @@ function MarkdownViewerComponent(
           processedMarkdown: event.data.processedMarkdown,
           hasMath: event.data.hasMath,
           containsToc: event.data.containsToc,
+          sourceLineOffset: event.data.sourceLineOffset,
           lineCount: event.data.lineCount,
           blockChunks: event.data.blockChunks,
         })
@@ -826,6 +917,7 @@ function MarkdownViewerComponent(
   }, [])
 
   const renderedValue = previewResult.processedMarkdown
+  const sourceLineOffset = previewResult.sourceLineOffset
 
   // KaTeX 按需加载：检测文档是否包含数学公式
   const hasMath = previewResult.hasMath
@@ -847,9 +939,13 @@ function MarkdownViewerComponent(
   ), [blockRenderingEnabled, previewResult.blockChunks])
   const hasRawHtml = useMemo(() => containsRawHtml(renderedValue), [renderedValue])
   const rehypePlugins = useMemo(
-    () => hasRawHtml
-      ? [rehypeAlignedTabBlocks, rehypeRaw]
-      : [rehypeAlignedTabBlocks],
+    () => {
+      const plugins: any[] = [rehypeAlignedTabBlocks]
+      if (hasRawHtml) {
+        plugins.push(rehypeRaw)
+      }
+      return plugins
+    },
     [hasRawHtml],
   )
   const handleChunkElementChange = useCallback((chunkId: string, element: HTMLElement | null) => {
@@ -955,6 +1051,8 @@ function MarkdownViewerComponent(
 
   useLayoutEffect(() => {
     const container = containerRef.current
+    clearSourceLineHighlight(activeSourceLineRef.current)
+    activeSourceLineRef.current = null
     const currentActive = activeLineEntryRef.current
     if (currentActive) {
       currentActive.entry.element.classList.remove('active-block')
@@ -962,24 +1060,27 @@ function MarkdownViewerComponent(
     }
 
     if (!container || mode !== 'rendered') {
+      sourceLineIndexRef.current = new Map()
       activeLineIndexRef.current = []
       return
     }
 
-    const index = blockChunks
+    sourceLineIndexRef.current = collectSourceLineIndex(container)
+    const chunkIndex = blockChunks
       .map((chunk) => {
         const element = chunkElementMapRef.current.get(chunk.id)
         if (!element) return null
         return {
-          start: chunk.startLine,
-          end: chunk.endLine,
+          start: sourceLineOffset + chunk.startLine,
+          end: sourceLineOffset + chunk.endLine,
           element,
         }
       })
       .filter((entry): entry is LineRangeIndexEntry => entry !== null)
 
-    activeLineIndexRef.current = index
-  }, [blockChunks, foldRegions, mode])
+    const documentIndex = collectLineRangeIndex(container)
+    activeLineIndexRef.current = documentIndex.length > 0 ? documentIndex : chunkIndex
+  }, [blockChunks, foldRegions, mode, renderedValue, sourceLineOffset])
 
   // 保存和恢复滚动位置
   useLayoutEffect(() => {
@@ -1005,6 +1106,43 @@ function MarkdownViewerComponent(
     if (!container || typeof activeLine !== 'number' || activeLine < 1) return
 
     const rafId = requestAnimationFrame(() => {
+      let sourceLineElements = sourceLineIndexRef.current.get(activeLine) ?? []
+      if (sourceLineElements.length === 0) {
+        sourceLineIndexRef.current = collectSourceLineIndex(container)
+        sourceLineElements = sourceLineIndexRef.current.get(activeLine) ?? []
+      }
+      const currentSourceLine = activeSourceLineRef.current
+
+      if (sourceLineElements.length > 0) {
+        if (
+          currentSourceLine?.line === activeLine &&
+          currentSourceLine.elements.every((element) => container.contains(element))
+        ) {
+          return
+        }
+
+        clearSourceLineHighlight(currentSourceLine)
+        if (activeLineEntryRef.current) {
+          activeLineEntryRef.current.entry.element.classList.remove('active-block')
+          activeLineEntryRef.current = null
+        }
+
+        sourceLineElements.forEach((element) => element.classList.add('active-source-line'))
+        activeSourceLineRef.current = {
+          line: activeLine,
+          elements: sourceLineElements,
+        }
+
+        const scrollParent = container.closest('.preview-body') as HTMLElement | null
+        if (scrollParent) {
+          scrollPreviewTarget(scrollParent, sourceLineElements[0])
+        }
+        return
+      }
+
+      clearSourceLineHighlight(currentSourceLine)
+      activeSourceLineRef.current = null
+
       const entries = activeLineIndexRef.current
       const current = activeLineEntryRef.current
 
@@ -1043,28 +1181,13 @@ function MarkdownViewerComponent(
       const scrollParent = container.closest('.preview-body') as HTMLElement | null
       if (!scrollParent) return
 
-      const parentRect = scrollParent.getBoundingClientRect()
-      const targetRect = target.entry.element.getBoundingClientRect()
-
-      // 判断目标元素是否在可视区域内
-      const isVisible =
-        targetRect.top >= parentRect.top &&
-        targetRect.bottom <= parentRect.bottom
-
-      // 只在目标元素不可见时滚动
-      if (!isVisible) {
-        const currentBottomOffset = parentRect.height - (targetRect.bottom - parentRect.top)
-        const desiredBottomOffset = parentRect.height / 4
-        const delta = desiredBottomOffset - currentBottomOffset
-
-        scrollParent.scrollTo({ top: scrollParent.scrollTop + delta })
-      }
+      scrollPreviewTarget(scrollParent, target.entry.element)
     })
 
     return () => {
       if (rafId) cancelAnimationFrame(rafId)
     }
-  }, [activeLine, mode])
+  }, [activeLine, foldRegions, mode, renderedValue])
 
   useEffect(() => {
     const container = containerRef.current
@@ -1076,6 +1199,15 @@ function MarkdownViewerComponent(
 
       // 避免点击超链接或交互控件时触发跳转编辑器
       if (target.closest('a, button, input, textarea')) return
+
+      const sourceLine = target.closest<HTMLElement>('[data-source-line]')
+      if (sourceLine) {
+        const line = Number(sourceLine.dataset.sourceLine)
+        if (Number.isInteger(line) && line > 0) {
+          onLineClick(line)
+          return
+        }
+      }
 
       const block = target.closest<HTMLElement>('[data-line-start]')
       if (!block) return
@@ -1147,6 +1279,7 @@ function MarkdownViewerComponent(
               blockChunks={blockChunks}
               renderedValue={renderedValue}
               sourceValue={value}
+              sourceLineOffset={previewResult.sourceLineOffset}
               components={components}
               remarkPlugins={activeRemarkPlugins}
               rehypePlugins={rehypePlugins}
