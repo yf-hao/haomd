@@ -3,7 +3,21 @@ const SLOW_THRESHOLD_MS = 8
 const SAMPLE_INTERVAL = 10
 
 type DebugValue = string | number | boolean | null | undefined
-type DebugDetails = Record<string, DebugValue>
+export type DebugDetails = Record<string, DebugValue>
+
+export type PreviewTrace = {
+  id: number
+  inputAt: number
+  debounceAt: number
+}
+
+export type PreviewPerformanceStage =
+  | 'debounce-trigger'
+  | 'preview-sync'
+  | 'worker-post'
+  | 'worker-response'
+  | 'worker-unavailable'
+  | 'react-render'
 
 type PerformanceTrace = {
   label: string
@@ -132,6 +146,19 @@ export function logInputPerformance(
     sinceInputMs: lastInputAt === null
       ? undefined
       : Number((performance.now() - lastInputAt).toFixed(2)),
+    ...details,
+  })
+}
+
+export function logPreviewPerformance(
+  stage: PreviewPerformanceStage,
+  details: DebugDetails = {},
+): void {
+  if (!isInputPerformanceDebugEnabled()) return
+
+  console.info('[preview-perf]', {
+    stage,
+    atMs: Number(performance.now().toFixed(2)),
     ...details,
   })
 }

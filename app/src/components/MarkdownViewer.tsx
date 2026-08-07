@@ -9,6 +9,10 @@ import { getRenderer } from '../modules/markdown/plugins'
 import { preparePreviewMarkdown, type PreviewBlockChunk, type PreviewMarkdownResult } from '../modules/markdown/previewPipeline'
 import { getDefaultPerformanceSettings, getPerformanceSettings, type PerformanceSettings } from '../modules/settings/editorSettings'
 import { subscribePerformanceSettingsChanged } from '../modules/settings/performanceRuntime'
+import {
+  logPreviewPerformance,
+  type PreviewTrace,
+} from '../modules/debug/inputPerformance'
 import { remarkToc } from '../modules/markdown/remarkToc'
 import { splitAlignedTabInlineNodes } from '../modules/markdown/alignedTab'
 import {
@@ -40,6 +44,7 @@ export interface MarkdownViewerProps {
   onLineClick?: (line: number) => void
   /** 预览区域文字选中变更回调 */
   onSelectionChange?: (text: string | null) => void
+  previewTrace?: PreviewTrace | null
 }
 
 function isPlainTextFile(path: string | null | undefined): boolean {
@@ -82,6 +87,16 @@ type ActiveSourceLine = {
 type PreviewWorkerRequest = {
   id: number
   value: string
+  traceId: number | null
+  inputAt: number | null
+  debounceAt: number | null
+}
+
+type PreviewWorkerTiming = {
+  traceId: number | null
+  inputAt: number | null
+  debounceAt: number | null
+  postedAt: number
 }
 
 const FoldContext = React.createContext<FoldRegion[]>([])
@@ -894,8 +909,50 @@ function MarkdownViewerComponent(
   const previewRequestIdRef = useRef(0)
   const previewWorkerBusyRef = useRef(false)
   const pendingPreviewWorkerRequestRef = useRef<PreviewWorkerRequest | null>(null)
+  const previewWorkerTimingRef = useRef(new Map<number, PreviewWorkerTiming>())
 
-  const { value, activeLine, previewWidth, filePath, foldRegions, mode = 'rendered', onLineClick, onSelectionChange } = props
+  const sendPreviewWorkerRequest = useCallback((
+    worker: Worker,
+    request: PreviewWorkerRequest,
+  ) => {
+    const postedAt = performance.now()
+    previewWorkerTimingRef.current.set(request.id, {
+      traceId: request.traceId,
+      inputAt: request.inputAt,
+      debounceAt: request.debounceAt,
+      postedAt,
+    })
+    if (previewWorkerTimingRef.current.size > 32) {
+      const oldestId = previewWorkerTimingRef.current.keys().next().value
+      if (oldestId !== undefined) {
+        previewWorkerTimingRef.current.delete(oldestId)
+      }
+    }
+
+    logPreviewPerformance('worker-post', {
+      traceId: request.traceId,
+      requestId: request.id,
+      sinceInputMs: request.inputAt == null
+        ? undefined
+        : Number((postedAt - request.inputAt).toFixed(2)),
+      sinceDebounceMs: request.debounceAt == null
+        ? undefined
+        : Number((postedAt - request.debounceAt).toFixed(2)),
+    })
+    worker.postMessage(request)
+  }, [])
+
+  const {
+    value,
+    activeLine,
+    previewWidth,
+    filePath,
+    foldRegions,
+    mode = 'rendered',
+    onLineClick,
+    onSelectionChange,
+    previewTrace,
+  } = props
   const plainTextMode = isPlainTextFile(filePath)
   const [performanceSettings, setPerformanceSettings] = useState<PerformanceSettings>(getDefaultPerformanceSettings())
   const [previewResult, setPreviewResult] = useState<PreviewMarkdownResult>(() => preparePreviewMarkdown(value))
@@ -920,6 +977,7 @@ function MarkdownViewerComponent(
       previewWorkerRef.current = null
       previewWorkerBusyRef.current = false
       pendingPreviewWorkerRequestRef.current = null
+      previewWorkerTimingRef.current.clear()
       return
     }
 
@@ -936,17 +994,35 @@ function MarkdownViewerComponent(
         sourceLineOffset: number
         lineCount: number
         blockChunks: PreviewBlockChunk[]
+        traceId: number | null
       }>,
     ) => {
+      const responseAt = performance.now()
+      const timing = previewWorkerTimingRef.current.get(event.data.id)
+      previewWorkerTimingRef.current.delete(event.data.id)
+      const stale = event.data.id !== previewRequestIdRef.current
+      logPreviewPerformance('worker-response', {
+        traceId: event.data.traceId ?? timing?.traceId ?? null,
+        requestId: event.data.id,
+        stale,
+        workerMs: timing ? Number((responseAt - timing.postedAt).toFixed(2)) : undefined,
+        sinceInputMs: timing?.inputAt == null
+          ? undefined
+          : Number((responseAt - timing.inputAt).toFixed(2)),
+        sinceDebounceMs: timing?.debounceAt == null
+          ? undefined
+          : Number((responseAt - timing.debounceAt).toFixed(2)),
+      })
+
       const pendingRequest = pendingPreviewWorkerRequestRef.current
       if (pendingRequest) {
         pendingPreviewWorkerRequestRef.current = null
-        worker.postMessage(pendingRequest)
+        sendPreviewWorkerRequest(worker, pendingRequest)
       } else {
         previewWorkerBusyRef.current = false
       }
 
-      if (event.data.id !== previewRequestIdRef.current) return
+      if (stale) return
       startTransition(() => {
         setPreviewResult({
           processedMarkdown: event.data.processedMarkdown,
@@ -965,15 +1041,21 @@ function MarkdownViewerComponent(
         previewWorkerRef.current = null
         previewWorkerBusyRef.current = false
         pendingPreviewWorkerRequestRef.current = null
+        previewWorkerTimingRef.current.clear()
       }
     }
-  }, [mode, performanceSettings.experimentalPreviewOptimization])
+  }, [mode, performanceSettings.experimentalPreviewOptimization, sendPreviewWorkerRequest])
 
   useEffect(() => {
     if (mode !== 'rendered') return
 
     const requestId = ++previewRequestIdRef.current
     if (!performanceSettings.experimentalPreviewOptimization) {
+      logPreviewPerformance('worker-unavailable', {
+        traceId: previewTrace?.id ?? null,
+        requestId,
+        reason: 'disabled',
+      })
       startTransition(() => {
         setPreviewResult(preparePreviewMarkdown(value))
       })
@@ -982,21 +1064,38 @@ function MarkdownViewerComponent(
 
     const worker = previewWorkerRef.current
     if (!worker) {
+      logPreviewPerformance('worker-unavailable', {
+        traceId: previewTrace?.id ?? null,
+        requestId,
+        reason: 'not-ready',
+      })
       startTransition(() => {
         setPreviewResult(preparePreviewMarkdown(value))
       })
       return
     }
 
-    const request: PreviewWorkerRequest = { id: requestId, value }
+    const request: PreviewWorkerRequest = {
+      id: requestId,
+      value,
+      traceId: previewTrace?.id ?? null,
+      inputAt: previewTrace?.inputAt ?? null,
+      debounceAt: previewTrace?.debounceAt ?? null,
+    }
     if (previewWorkerBusyRef.current) {
       pendingPreviewWorkerRequestRef.current = request
       return
     }
 
     previewWorkerBusyRef.current = true
-    worker.postMessage(request)
-  }, [mode, value, performanceSettings.experimentalPreviewOptimization])
+    sendPreviewWorkerRequest(worker, request)
+  }, [
+    mode,
+    value,
+    previewTrace,
+    performanceSettings.experimentalPreviewOptimization,
+    sendPreviewWorkerRequest,
+  ])
 
   useEffect(() => {
     return () => {
@@ -1468,7 +1567,8 @@ export const MarkdownViewer = memo(
     prev.activeLine === next.activeLine &&
     prev.filePath === next.filePath &&
     prev.mode === next.mode &&
-    prev.foldRegions === next.foldRegions
+    prev.foldRegions === next.foldRegions &&
+    prev.previewTrace === next.previewTrace
   ),
 )
 MarkdownViewer.displayName = 'MarkdownViewer'

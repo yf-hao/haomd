@@ -68,6 +68,8 @@ import {
   beginInputPerformanceTrace,
   endInputPerformanceTrace,
   logInputPerformance,
+  logPreviewPerformance,
+  type PreviewTrace,
 } from '../modules/debug/inputPerformance'
 import { openTerminalAt } from '../modules/platform/terminalService'
 import { openInFileManager } from '../modules/platform/fileExplorerService'
@@ -244,6 +246,7 @@ export function WorkspaceShell({
   const [markdown, setMarkdown] = useState(seed)
   const [editorMarkdown, setEditorMarkdown] = useState(seed)
   const [previewValue, setPreviewValue] = useState(seed)
+  const [previewTrace, setPreviewTrace] = useState<PreviewTrace | null>(null)
   const [activeLine, setActiveLine] = useState(1)
   // 预览专用的行号：对 activeLine 做轻量节流后再驱动 Preview，降低重渲染频率
   const [previewActiveLine, setPreviewActiveLine] = useState(1)
@@ -251,6 +254,9 @@ export function WorkspaceShell({
   const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null)
   const [activeWorkspaceDirectoryPath, setActiveWorkspaceDirectoryPath] = useState<string | null>(null)
   const markdownRef = useRef(markdown)
+  const previewTraceIdRef = useRef(0)
+  const lastPreviewInputAtRef = useRef<number | null>(null)
+  const previewTraceMapRef = useRef(new Map<number, PreviewTrace>())
   const lastActiveIdForPreviewRef = useRef<string | null>(null)
   const textColorTargetRef = useRef<TextColorTarget | null>(null)
   const preserveTextColorTargetOnNextChangeRef = useRef(false)
@@ -479,6 +485,72 @@ export function WorkspaceShell({
   const prevIsPreviewVisibleRef = useRef(isPreviewVisible)
   const previewSyncTimerRef = useRef<number | null>(null)
   const skipNextPreviewThrottleRef = useRef(false)
+
+  const commitPreviewValue = useCallback((
+    nextValue: string,
+    stage: 'debounce-trigger' | 'preview-sync',
+  ) => {
+    const timestamp = performance.now()
+    const inputAt = stage === 'debounce-trigger'
+      ? lastPreviewInputAtRef.current ?? timestamp
+      : timestamp
+    const trace: PreviewTrace = {
+      id: ++previewTraceIdRef.current,
+      inputAt,
+      debounceAt: timestamp,
+    }
+    previewTraceMapRef.current.set(trace.id, trace)
+    if (previewTraceMapRef.current.size > 32) {
+      const oldestId = previewTraceMapRef.current.keys().next().value
+      if (oldestId !== undefined) {
+        previewTraceMapRef.current.delete(oldestId)
+      }
+    }
+
+    logPreviewPerformance(stage, {
+      traceId: trace.id,
+      inputToSyncMs: Number((timestamp - inputAt).toFixed(2)),
+    })
+    setPreviewTrace(trace)
+    setPreviewValue(nextValue)
+  }, [])
+
+  const handlePreviewProfilerRender: ProfilerOnRenderCallback = useCallback((
+    id,
+    phase,
+    actualDuration,
+    baseDuration,
+  ) => {
+    const traceIdText = id.startsWith('source-preview:')
+      ? id.slice('source-preview:'.length)
+      : ''
+    const parsedTraceId = Number(traceIdText)
+    const traceId = Number.isInteger(parsedTraceId) && parsedTraceId > 0 ? parsedTraceId : null
+    const trace = traceId == null ? null : previewTraceMapRef.current.get(traceId)
+    const renderedAt = performance.now()
+
+    logPreviewPerformance('react-render', {
+      traceId,
+      phase,
+      actualDurationMs: Number(actualDuration.toFixed(2)),
+      baseDurationMs: Number(baseDuration.toFixed(2)),
+      sinceInputMs: trace == null
+        ? undefined
+        : Number((renderedAt - trace.inputAt).toFixed(2)),
+      sinceDebounceMs: trace == null
+        ? undefined
+        : Number((renderedAt - trace.debounceAt).toFixed(2)),
+    })
+    logInputPerformance(
+      'React render:source-preview',
+      {
+        phase,
+        baseDurationMs: Number(baseDuration.toFixed(2)),
+        previewTraceId: traceId,
+      },
+      actualDuration,
+    )
+  }, [])
 
   const clearPreviewSyncTimer = useCallback(() => {
     if (previewSyncTimerRef.current != null) {
@@ -920,12 +992,12 @@ export function WorkspaceShell({
         requestAnimationFrame(() => {
           previewSyncTimerRef.current = window.setTimeout(() => {
             previewSyncTimerRef.current = null
-            setPreviewValue(tab.content)
+            commitPreviewValue(tab.content, 'preview-sync')
             setIsPreviewLoading(false)
           }, 0)
         })
       } else {
-        setPreviewValue(tab.content)
+        commitPreviewValue(tab.content, 'preview-sync')
         setIsPreviewLoading(false)
       }
 
@@ -934,7 +1006,7 @@ export function WorkspaceShell({
         restoreCursorRef.current?.(tab.path ?? null)
       }
     }
-  }, [activeId, tabs, isPreviewVisible, clearPreviewSyncTimer])
+  }, [activeId, tabs, isPreviewVisible, clearPreviewSyncTimer, commitPreviewValue])
 
   // Window Title：不再显示文件名，保持标题栏空白
   useEffect(() => {
@@ -1066,6 +1138,7 @@ export function WorkspaceShell({
   })
 
   const handleMarkdownChange = useCallback((val: string, options?: MarkdownSyncOptions) => {
+    lastPreviewInputAtRef.current = performance.now()
     const shouldMarkDirty = options?.markDirty ?? true
     const shouldSyncEditor = options?.syncEditor ?? true
     const trace = beginInputPerformanceTrace('WorkspaceShell.handleMarkdownChange', {
@@ -2005,20 +2078,20 @@ export function WorkspaceShell({
     clearPreviewSyncTimer()
     const timer = window.setTimeout(() => {
       previewSyncTimerRef.current = null
-      setPreviewValue(markdown)
+      commitPreviewValue(markdown, 'debounce-trigger')
     }, PREVIEW_SYNC_DELAY_MS)
     previewSyncTimerRef.current = timer
     return () => clearTimeout(timer)
-  }, [markdown, isPreviewVisible, clearPreviewSyncTimer])
+  }, [markdown, isPreviewVisible, clearPreviewSyncTimer, commitPreviewValue])
 
   // 当预览从不可见切换为可见时，立即用最新 markdown 做一次全量同步
   useEffect(() => {
     if (!prevIsPreviewVisibleRef.current && isPreviewVisible) {
-      setPreviewValue(markdown)
+      commitPreviewValue(markdown, 'preview-sync')
       setIsPreviewLoading(false)
     }
     prevIsPreviewVisibleRef.current = isPreviewVisible
-  }, [isPreviewVisible, markdown])
+  }, [isPreviewVisible, markdown, commitPreviewValue])
 
   useEffect(() => {
     return () => {
@@ -2063,19 +2136,19 @@ export function WorkspaceShell({
       requestAnimationFrame(() => {
         previewSyncTimerRef.current = window.setTimeout(() => {
           previewSyncTimerRef.current = null
-          setPreviewValue(content)
+          commitPreviewValue(content, 'preview-sync')
           setIsPreviewLoading(false)
         }, 0)
       })
     } else {
-      setPreviewValue(content)
+      commitPreviewValue(content, 'preview-sync')
       setIsPreviewLoading(false)
     }
     setActiveLine(1)
     // 注意：不再调用 updateActiveContent。调用方 (open_file 命令) 在此之前已通过
     // createTab({ path, content }) 创建了新标签并设置了内容。而 updateActiveContent
     // 闭包中的 activeId 仍指向旧标签，会误将旧标签内容覆写为新文件内容。
-  }, [isPreviewVisible, clearPreviewSyncTimer])
+  }, [isPreviewVisible, clearPreviewSyncTimer, commitPreviewValue])
 
   const openImportedWordDocument = useCallback(async (path: string) => {
     if (isCreatingTab) {
@@ -4061,9 +4134,13 @@ export function WorkspaceShell({
 
                   <PreviewErrorBoundary>
                   <Suspense fallback={<section className="pane preview"><div className="preview-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13 }}>{t('workspace.loadingPreview')}</div></section>}>
-                    <Profiler id="source-preview" onRender={handleInputProfilerRender}>
+                    <Profiler
+                      id={`source-preview:${previewTrace?.id ?? 'none'}`}
+                      onRender={handlePreviewProfilerRender}
+                    >
                       <PreviewPaneLazy
                         value={previewValue}
+                        previewTrace={previewTrace}
                         activeLine={previewActiveLine}
                         previewWidth={previewWidthForRender}
                         effectiveLayout={effectiveLayout}
