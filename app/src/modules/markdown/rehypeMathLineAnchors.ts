@@ -1,4 +1,9 @@
-// rehype 插件：给 KaTeX 根元素补充 data-line-start / data-line-end 属性
+import {
+  SOURCE_LINE_END_ATTRIBUTE,
+  SOURCE_LINE_START_ATTRIBUTE,
+} from './rehypeSourceLineAnchors'
+
+// rehype 插件：给 KaTeX 根元素补充块内相对行号属性
 // 设计目标：
 // - 只处理 className 包含 katex-display / katex 的元素
 // - 仅当节点存在 position.start.line 时才写入行号
@@ -37,11 +42,11 @@ export function rehypeMathLineAnchors() {
             if (typeof startLine === 'number') {
               if (!node.properties) node.properties = props
 
-              if (node.properties['data-line-start'] == null) {
-                node.properties['data-line-start'] = String(startLine)
+              if (node.properties[SOURCE_LINE_START_ATTRIBUTE] == null) {
+                node.properties[SOURCE_LINE_START_ATTRIBUTE] = String(startLine)
               }
-              if (endLine != null && node.properties['data-line-end'] == null) {
-                node.properties['data-line-end'] = String(endLine)
+              if (endLine != null && node.properties[SOURCE_LINE_END_ATTRIBUTE] == null) {
+                node.properties[SOURCE_LINE_END_ATTRIBUTE] = String(endLine)
               }
 
               if (typeof console !== 'undefined') {

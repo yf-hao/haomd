@@ -1,3 +1,7 @@
+export const SOURCE_LINE_ATTRIBUTE = 'data-source-line-local'
+export const SOURCE_LINE_START_ATTRIBUTE = 'data-line-start-local'
+export const SOURCE_LINE_END_ATTRIBUTE = 'data-line-end-local'
+
 type SourcePosition = {
   start?: {
     line?: number
@@ -5,10 +9,6 @@ type SourcePosition = {
   end?: {
     line?: number
   }
-}
-
-type SourceLineAnchorOptions = {
-  lineOffset?: number
 }
 
 const BLOCK_TAGS = new Set([
@@ -66,41 +66,19 @@ function ensureProperties(node: any): Record<string, any> {
   return node.properties
 }
 
-function offsetExistingLineAttributes(node: any, lineOffset: number) {
-  if (lineOffset === 0 || !node.properties) return
-
-  for (const name of ['data-line-start', 'data-line-end', 'data-source-line']) {
-    const value = Number(node.properties[name])
-    if (Number.isInteger(value)) {
-      node.properties[name] = String(value + lineOffset)
-    }
-  }
-}
-
-function addBlockLineAttributes(node: any, range: { start: number; end: number }, lineOffset: number) {
+function addBlockLineAttributes(node: any, range: { start: number; end: number }) {
   if (!BLOCK_TAGS.has(node.tagName)) return
 
   const properties = ensureProperties(node)
-  if (lineOffset !== 0 || properties['data-line-start'] == null) {
-    properties['data-line-start'] = String(range.start + lineOffset)
-  }
-  if (lineOffset !== 0 || properties['data-line-end'] == null) {
-    properties['data-line-end'] = String(range.end + lineOffset)
-  }
+  properties[SOURCE_LINE_START_ATTRIBUTE] = String(range.start)
+  properties[SOURCE_LINE_END_ATTRIBUTE] = String(range.end)
 }
 
-function addSingleLineAttribute(
-  node: any,
-  range: { start: number; end: number },
-  insidePre: boolean,
-  lineOffset: number,
-) {
+function addSingleLineAttribute(node: any, range: { start: number; end: number }, insidePre: boolean) {
   if (insidePre || range.start !== range.end) return
 
   const properties = ensureProperties(node)
-  if (lineOffset !== 0 || properties['data-source-line'] == null) {
-    properties['data-source-line'] = String(range.start + lineOffset)
-  }
+  properties[SOURCE_LINE_ATTRIBUTE] = String(range.start)
 }
 
 function createSourceLineSpan(value: string, line: number): any {
@@ -108,7 +86,7 @@ function createSourceLineSpan(value: string, line: number): any {
     type: 'element',
     tagName: 'span',
     properties: {
-      'data-source-line': String(line),
+      [SOURCE_LINE_ATTRIBUTE]: String(line),
     },
     children: [{ type: 'text', value }],
   }
@@ -139,9 +117,7 @@ function splitTextNode(node: any, line: number): any[] {
   return nextChildren
 }
 
-export function rehypeSourceLineAnchors(options: SourceLineAnchorOptions = {}) {
-  const lineOffset = options.lineOffset ?? 0
-
+export function rehypeSourceLineAnchors() {
   return function attach(tree: any) {
     const visit = (node: any, insidePre = false): void => {
       if (!node || typeof node !== 'object') return
@@ -151,11 +127,10 @@ export function rehypeSourceLineAnchors(options: SourceLineAnchorOptions = {}) {
         const nextInsidePre = insidePre || tagName === 'pre'
         const range = getLineRange(node.position)
 
-        offsetExistingLineAttributes(node, lineOffset)
         if (range) {
-          addBlockLineAttributes(node, range, lineOffset)
+          addBlockLineAttributes(node, range)
           if (!UNSAFE_INLINE_PARENT_TAGS.has(tagName)) {
-            addSingleLineAttribute(node, range, insidePre, lineOffset)
+            addSingleLineAttribute(node, range, insidePre)
           }
         }
 
@@ -167,10 +142,10 @@ export function rehypeSourceLineAnchors(options: SourceLineAnchorOptions = {}) {
             child?.type === 'text' &&
             !nextInsidePre &&
             !UNSAFE_INLINE_PARENT_TAGS.has(tagName) &&
-            !node.properties?.['data-source-line'] &&
+            !node.properties?.[SOURCE_LINE_ATTRIBUTE] &&
             child.position?.start?.line != null
           ) {
-            nextChildren.push(...splitTextNode(child, child.position.start.line + lineOffset))
+            nextChildren.push(...splitTextNode(child, child.position.start.line))
             continue
           }
 

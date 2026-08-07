@@ -31,4 +31,33 @@ describe('preparePreviewMarkdown', () => {
 
     expect(result.sourceLineOffset).toBe(3)
   })
+
+  it('keeps content-based chunk identities stable when earlier content moves', () => {
+    const stableDocument = [
+      '## Stable section',
+      '',
+      'Stable content '.repeat(100),
+      '',
+      '## Tail section',
+      '',
+      'Tail content '.repeat(100),
+    ].join('\n')
+    const before = preparePreviewMarkdown(stableDocument)
+    const after = preparePreviewMarkdown([
+      '## Inserted section',
+      '',
+      'Inserted content '.repeat(100),
+      '',
+      stableDocument,
+    ].join('\n'))
+
+    const beforeStable = before.blockChunks.find(chunk => chunk.markdown.startsWith('## Stable section'))
+    const afterStable = after.blockChunks.find(chunk => chunk.markdown.startsWith('## Stable section'))
+
+    expect(beforeStable).toBeDefined()
+    expect(afterStable).toBeDefined()
+    expect(afterStable?.id).toBe(beforeStable?.id)
+    expect(afterStable?.signature).toBe(beforeStable?.signature)
+    expect(afterStable?.startLine).toBe((beforeStable?.startLine ?? 0) + 4)
+  })
 })

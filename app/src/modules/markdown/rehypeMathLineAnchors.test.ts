@@ -23,8 +23,8 @@ describe('rehypeMathLineAnchors', () => {
         attach(tree)
 
         const element = tree.children[0]
-        expect(element.properties['data-line-start']).toBe('5')
-        expect(element.properties['data-line-end']).toBe('7')
+        expect(element.properties['data-line-start-local']).toBe('5')
+        expect(element.properties['data-line-end-local']).toBe('7')
     })
 
     it('should add line anchors to inline katex elements', () => {
@@ -48,8 +48,8 @@ describe('rehypeMathLineAnchors', () => {
         attach(tree)
 
         const element = tree.children[0]
-        expect(element.properties['data-line-start']).toBe('10')
-        expect(element.properties['data-line-end']).toBe('10')
+        expect(element.properties['data-line-start-local']).toBe('10')
+        expect(element.properties['data-line-end-local']).toBe('10')
     })
 
     it('should inherit position from parent if node does not have one', () => {
@@ -71,7 +71,7 @@ describe('rehypeMathLineAnchors', () => {
         attach(tree)
 
         const child = tree.children[0]
-        expect(child.properties['data-line-start']).toBe('20')
+        expect(child.properties['data-line-start-local']).toBe('20')
     })
 
     it('should not override existing line anchors', () => {
@@ -80,7 +80,7 @@ describe('rehypeMathLineAnchors', () => {
             tagName: 'span',
             properties: {
                 className: ['katex'],
-                'data-line-start': '99'
+                'data-line-start-local': '99'
             },
             position: { start: { line: 1 } },
             children: []
@@ -89,6 +89,6 @@ describe('rehypeMathLineAnchors', () => {
         const attach = rehypeMathLineAnchors()
         attach(tree)
 
-        expect(tree.properties['data-line-start']).toBe('99')
+        expect(tree.properties['data-line-start-local']).toBe('99')
     })
 })
