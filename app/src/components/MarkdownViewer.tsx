@@ -972,7 +972,7 @@ function MarkdownViewerComponent(
       div: (p: any) => <MarkdownBlockElement tag="div" {...p} />,
       span: ({ className, children, ...rest }: any) => <span className={className} {...rest}>{children}</span>,
       math: StableMath,
-      inlinemath: StableInlineMath,
+      inlineMath: StableInlineMath,
       a: ({ href, children, ...props }: any) => {
         const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
           if (!href) return
