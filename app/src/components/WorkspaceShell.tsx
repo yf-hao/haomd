@@ -200,6 +200,7 @@ const countDocumentChars = (text: string): number => {
 }
 
 const seed = ''
+const PREVIEW_SYNC_DELAY_MS = 300
 
 const handleInputProfilerRender: ProfilerOnRenderCallback = (
   id,
@@ -2005,7 +2006,7 @@ export function WorkspaceShell({
     const timer = window.setTimeout(() => {
       previewSyncTimerRef.current = null
       setPreviewValue(markdown)
-    }, 150)
+    }, PREVIEW_SYNC_DELAY_MS)
     previewSyncTimerRef.current = timer
     return () => clearTimeout(timer)
   }, [markdown, isPreviewVisible, clearPreviewSyncTimer])

@@ -41,6 +41,10 @@ function isPlainTextFile(path: string | null | undefined): boolean {
   return path.toLowerCase().endsWith('.txt')
 }
 
+function containsRawHtml(markdown: string): boolean {
+  return /<!--[\s\S]*?-->|<\/?[A-Za-z][^>]*>/.test(markdown)
+}
+
 type LineRangeIndexEntry = {
   start: number
   end: number
@@ -841,7 +845,13 @@ function MarkdownViewerComponent(
   const blockChunks = useMemo(() => (
     blockRenderingEnabled ? previewResult.blockChunks : []
   ), [blockRenderingEnabled, previewResult.blockChunks])
-  const rehypePlugins = useMemo(() => [rehypeAlignedTabBlocks, rehypeRaw], [])
+  const hasRawHtml = useMemo(() => containsRawHtml(renderedValue), [renderedValue])
+  const rehypePlugins = useMemo(
+    () => hasRawHtml
+      ? [rehypeAlignedTabBlocks, rehypeRaw]
+      : [rehypeAlignedTabBlocks],
+    [hasRawHtml],
+  )
   const handleChunkElementChange = useCallback((chunkId: string, element: HTMLElement | null) => {
     if (element) {
       chunkElementMapRef.current.set(chunkId, element)
@@ -927,10 +937,20 @@ function MarkdownViewerComponent(
   }, []) // 稳定引用
 
   const activeRemarkPlugins = useMemo(
-    () => plainTextMode
-      ? [remarkGfm, remarkMath, remarkMathLineAnchors, remarkToc, remarkPreserveSingleLineBreaks]
-      : [remarkGfm, remarkMath, remarkMathLineAnchors, remarkToc],
-    [plainTextMode],
+    () => {
+      const plugins: any[] = [remarkGfm]
+      if (hasMath) {
+        plugins.push(remarkMath, remarkMathLineAnchors)
+      }
+      if (previewResult.containsToc) {
+        plugins.push(remarkToc)
+      }
+      if (plainTextMode) {
+        plugins.push(remarkPreserveSingleLineBreaks)
+      }
+      return plugins
+    },
+    [hasMath, plainTextMode, previewResult.containsToc],
   )
 
   useLayoutEffect(() => {
