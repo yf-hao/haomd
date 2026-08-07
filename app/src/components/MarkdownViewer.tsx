@@ -79,6 +79,11 @@ type ActiveSourceLine = {
   elements: HTMLElement[]
 }
 
+type PreviewWorkerRequest = {
+  id: number
+  value: string
+}
+
 const FoldContext = React.createContext<FoldRegion[]>([])
 const FilePathContext = React.createContext<string | null>(null)
 const useFoldRegions = () => React.useContext(FoldContext)
@@ -887,7 +892,8 @@ function MarkdownViewerComponent(
   const sourceLineOffsetRef = useRef(0)
   const previewWorkerRef = useRef<Worker | null>(null)
   const previewRequestIdRef = useRef(0)
-  const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const previewWorkerBusyRef = useRef(false)
+  const pendingPreviewWorkerRequestRef = useRef<PreviewWorkerRequest | null>(null)
 
   const { value, activeLine, previewWidth, filePath, foldRegions, mode = 'rendered', onLineClick, onSelectionChange } = props
   const plainTextMode = isPlainTextFile(filePath)
@@ -912,10 +918,8 @@ function MarkdownViewerComponent(
     if (!performanceSettings.experimentalPreviewOptimization || mode !== 'rendered' || typeof Worker === 'undefined') {
       previewWorkerRef.current?.terminate()
       previewWorkerRef.current = null
-      if (previewTimerRef.current) {
-        clearTimeout(previewTimerRef.current)
-        previewTimerRef.current = null
-      }
+      previewWorkerBusyRef.current = false
+      pendingPreviewWorkerRequestRef.current = null
       return
     }
 
@@ -934,6 +938,14 @@ function MarkdownViewerComponent(
         blockChunks: PreviewBlockChunk[]
       }>,
     ) => {
+      const pendingRequest = pendingPreviewWorkerRequestRef.current
+      if (pendingRequest) {
+        pendingPreviewWorkerRequestRef.current = null
+        worker.postMessage(pendingRequest)
+      } else {
+        previewWorkerBusyRef.current = false
+      }
+
       if (event.data.id !== previewRequestIdRef.current) return
       startTransition(() => {
         setPreviewResult({
@@ -951,16 +963,14 @@ function MarkdownViewerComponent(
       worker.terminate()
       if (previewWorkerRef.current === worker) {
         previewWorkerRef.current = null
+        previewWorkerBusyRef.current = false
+        pendingPreviewWorkerRequestRef.current = null
       }
     }
   }, [mode, performanceSettings.experimentalPreviewOptimization])
 
   useEffect(() => {
     if (mode !== 'rendered') return
-
-    if (previewTimerRef.current) {
-      clearTimeout(previewTimerRef.current)
-    }
 
     const requestId = ++previewRequestIdRef.current
     if (!performanceSettings.experimentalPreviewOptimization) {
@@ -970,30 +980,26 @@ function MarkdownViewerComponent(
       return
     }
 
-    previewTimerRef.current = setTimeout(() => {
-      const worker = previewWorkerRef.current
-      if (!worker) {
-        startTransition(() => {
-          setPreviewResult(preparePreviewMarkdown(value))
-        })
-        return
-      }
-      worker.postMessage({ id: requestId, value })
-    }, 160)
-
-    return () => {
-      if (previewTimerRef.current) {
-        clearTimeout(previewTimerRef.current)
-        previewTimerRef.current = null
-      }
+    const worker = previewWorkerRef.current
+    if (!worker) {
+      startTransition(() => {
+        setPreviewResult(preparePreviewMarkdown(value))
+      })
+      return
     }
+
+    const request: PreviewWorkerRequest = { id: requestId, value }
+    if (previewWorkerBusyRef.current) {
+      pendingPreviewWorkerRequestRef.current = request
+      return
+    }
+
+    previewWorkerBusyRef.current = true
+    worker.postMessage(request)
   }, [mode, value, performanceSettings.experimentalPreviewOptimization])
 
   useEffect(() => {
     return () => {
-      if (previewTimerRef.current) {
-        clearTimeout(previewTimerRef.current)
-      }
       previewWorkerRef.current?.terminate()
       previewWorkerRef.current = null
     }
