@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import React, { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -632,7 +632,7 @@ type MarkdownDocumentProps = {
   onElementChange: (chunkId: string, element: HTMLElement | null) => void
 }
 
-const MarkdownDocument = memo(({
+const MarkdownDocument = ({
   mode,
   blockRenderingEnabled,
   blockChunks,
@@ -680,8 +680,27 @@ const MarkdownDocument = memo(({
       {renderedValue}
     </ReactMarkdown>
   )
-})
-MarkdownDocument.displayName = 'MarkdownDocument'
+}
+
+const areMarkdownDocumentPropsEqual = (
+  previous: MarkdownDocumentProps,
+  next: MarkdownDocumentProps,
+) => (
+  previous.mode === next.mode &&
+  previous.blockRenderingEnabled === next.blockRenderingEnabled &&
+  previous.blockChunks === next.blockChunks &&
+  previous.components === next.components &&
+  previous.remarkPlugins === next.remarkPlugins &&
+  previous.rehypePlugins === next.rehypePlugins &&
+  previous.filePath === next.filePath &&
+  previous.onElementChange === next.onElementChange &&
+  (next.mode === 'rendered'
+    ? previous.renderedValue === next.renderedValue
+    : previous.sourceValue === next.sourceValue)
+)
+
+const MemoizedMarkdownDocument = memo(MarkdownDocument, areMarkdownDocumentPropsEqual)
+MemoizedMarkdownDocument.displayName = 'MemoizedMarkdownDocument'
 
 function MarkdownViewerComponent(
   props: Readonly<MarkdownViewerProps>
@@ -739,12 +758,14 @@ function MarkdownViewerComponent(
       }>,
     ) => {
       if (event.data.id !== previewRequestIdRef.current) return
-      setPreviewResult({
-        processedMarkdown: event.data.processedMarkdown,
-        hasMath: event.data.hasMath,
-        containsToc: event.data.containsToc,
-        lineCount: event.data.lineCount,
-        blockChunks: event.data.blockChunks,
+      startTransition(() => {
+        setPreviewResult({
+          processedMarkdown: event.data.processedMarkdown,
+          hasMath: event.data.hasMath,
+          containsToc: event.data.containsToc,
+          lineCount: event.data.lineCount,
+          blockChunks: event.data.blockChunks,
+        })
       })
     }
 
@@ -765,14 +786,18 @@ function MarkdownViewerComponent(
 
     const requestId = ++previewRequestIdRef.current
     if (!performanceSettings.experimentalPreviewOptimization) {
-      setPreviewResult(preparePreviewMarkdown(value))
+      startTransition(() => {
+        setPreviewResult(preparePreviewMarkdown(value))
+      })
       return
     }
 
     previewTimerRef.current = setTimeout(() => {
       const worker = previewWorkerRef.current
       if (!worker) {
-        setPreviewResult(preparePreviewMarkdown(value))
+        startTransition(() => {
+          setPreviewResult(preparePreviewMarkdown(value))
+        })
         return
       }
       worker.postMessage({ id: requestId, value })
@@ -1096,7 +1121,7 @@ function MarkdownViewerComponent(
       <FoldContext.Provider value={foldRegions ?? []}>
         <KatexContext.Provider value={katexLib}>
           <div className="markdown-body gh-markdown" ref={containerRef} data-preview-width={previewWidth}>
-            <MarkdownDocument
+            <MemoizedMarkdownDocument
               mode={mode}
               blockRenderingEnabled={blockRenderingEnabled}
               blockChunks={blockChunks}

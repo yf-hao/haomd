@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, forwardRef } from 'react'
+import { useEffect, useMemo, useRef, useState, forwardRef } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import type { Extension } from '@codemirror/state'
 import type { EditorView } from '@codemirror/view'
@@ -26,15 +26,36 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
   const { value, onChange, onCursorChange, readOnly, extensions, className, placeholder, onViewReady, onFoldRegionsChange, editorZoom } = props
   const themeMode = useResolvedThemeMode()
   const [editorValue, setEditorValue] = useState(value)
+  const editorViewRef = useRef<EditorView | null>(null)
+  const isComposingRef = useRef(false)
+  const lastForwardedValueRef = useRef(value)
 
   useEffect(() => {
     if (value === editorValue) return
+    if (isComposingRef.current || editorViewRef.current?.composing) return
     logInputPerformance('CodeEditor.external-value-sync', {
       valueLength: value.length,
       editorValueLength: editorValue.length,
     })
     setEditorValue(value)
+    lastForwardedValueRef.current = value
   }, [value, editorValue])
+
+  const forwardChange = (nextValue: string) => {
+    if (nextValue === lastForwardedValueRef.current) return
+    lastForwardedValueRef.current = nextValue
+    onChange(nextValue)
+  }
+
+  const flushComposition = () => {
+    queueMicrotask(() => {
+      const view = editorViewRef.current
+      if (!view) return
+      const nextValue = view.state.doc.toString()
+      setEditorValue(nextValue)
+      forwardChange(nextValue)
+    })
+  }
 
   const mergedExtensions = useMemo(() => {
     if (extensions && extensions.length) return extensions
@@ -58,6 +79,13 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
   return (
     <div
       ref={ref}
+      onCompositionStart={() => {
+        isComposingRef.current = true
+      }}
+      onCompositionEnd={() => {
+        isComposingRef.current = false
+        flushComposition()
+      }}
       className={className}
       style={{
         '--editor-font-size': `${fontSizePx}px`,
@@ -78,12 +106,15 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
             'CodeEditor.onChange',
             () => {
               setEditorValue(val)
-              onChange(val)
+              if (!isComposingRef.current && !editorViewRef.current?.composing) {
+                forwardChange(val)
+              }
             },
             { valueLength: val.length },
           )
         }}
         onUpdate={(update) => {
+          isComposingRef.current = update.view.compositionStarted
           if (!update.docChanged) return
           logInputPerformance('CodeMirror.update', {
             docLength: update.state.doc.length,
@@ -92,6 +123,7 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
           })
         }}
         onCreateEditor={(view) => {
+          editorViewRef.current = view
           onViewReady?.(view)
         }}
       />
