@@ -536,7 +536,7 @@ type MarkdownBlockChunkProps = {
   remarkPlugins: any[]
   rehypePlugins: any[]
   filePath: string | null
-  onElementChange: (chunk: MarkdownBlockChunk, element: HTMLElement | null) => void
+  onElementChange: (chunkId: string, element: HTMLElement | null) => void
 }
 
 const MarkdownChunkContent = memo(({
@@ -581,13 +581,14 @@ const MarkdownBlockChunkView = memo(({
   const elementRef = useRef<HTMLDivElement | null>(null)
   const regions = useFoldRegions()
   const isFolded = isBlockFolded(regions, chunk.startLine, chunk.endLine)
+  const chunkId = chunk.id
 
   useLayoutEffect(() => {
-    onElementChange(chunk, isFolded ? null : elementRef.current)
+    onElementChange(chunkId, isFolded ? null : elementRef.current)
     return () => {
-      onElementChange(chunk, null)
+      onElementChange(chunkId, null)
     }
-  }, [chunk, isFolded, onElementChange])
+  }, [chunkId, isFolded, onElementChange])
 
   if (isFolded) return null
 
@@ -617,6 +618,70 @@ const MarkdownBlockChunkView = memo(({
   prev.remarkPlugins === next.remarkPlugins &&
   prev.rehypePlugins === next.rehypePlugins,
 )
+
+type MarkdownDocumentProps = {
+  mode: MarkdownViewerMode
+  blockRenderingEnabled: boolean
+  blockChunks: MarkdownBlockChunk[]
+  renderedValue: string
+  sourceValue: string
+  components: any
+  remarkPlugins: any[]
+  rehypePlugins: any[]
+  filePath: string | null
+  onElementChange: (chunkId: string, element: HTMLElement | null) => void
+}
+
+const MarkdownDocument = memo(({
+  mode,
+  blockRenderingEnabled,
+  blockChunks,
+  renderedValue,
+  sourceValue,
+  components,
+  remarkPlugins,
+  rehypePlugins,
+  filePath,
+  onElementChange,
+}: MarkdownDocumentProps) => {
+  if (mode !== 'rendered') {
+    return (
+      <pre className="markdown-source">
+        <code>{sourceValue}</code>
+      </pre>
+    )
+  }
+
+  if (blockRenderingEnabled) {
+    return (
+      <>
+        {blockChunks.map((chunk) => (
+          <MarkdownBlockChunkView
+            key={chunk.id}
+            chunk={chunk}
+            components={components}
+            remarkPlugins={remarkPlugins}
+            rehypePlugins={rehypePlugins}
+            filePath={filePath}
+            onElementChange={onElementChange}
+          />
+        ))}
+      </>
+    )
+  }
+
+  return (
+    <ReactMarkdown
+      remarkPlugins={remarkPlugins}
+      remarkRehypeOptions={remarkRehypeOptions}
+      rehypePlugins={rehypePlugins}
+      components={components}
+    >
+      {renderedValue}
+    </ReactMarkdown>
+  )
+})
+MarkdownDocument.displayName = 'MarkdownDocument'
 
 function MarkdownViewerComponent(
   props: Readonly<MarkdownViewerProps>
@@ -746,17 +811,17 @@ function MarkdownViewerComponent(
     mode === 'rendered' &&
     !plainTextMode &&
     !previewResult.containsToc &&
-    previewResult.lineCount >= 120
-  ), [mode, plainTextMode, previewResult.containsToc, previewResult.lineCount])
+    previewResult.blockChunks.length > 1
+  ), [mode, plainTextMode, previewResult.containsToc, previewResult.blockChunks])
   const blockChunks = useMemo(() => (
     blockRenderingEnabled ? previewResult.blockChunks : []
   ), [blockRenderingEnabled, previewResult.blockChunks])
   const rehypePlugins = useMemo(() => [rehypeAlignedTabBlocks, rehypeRaw], [])
-  const handleChunkElementChange = useCallback((chunk: MarkdownBlockChunk, element: HTMLElement | null) => {
+  const handleChunkElementChange = useCallback((chunkId: string, element: HTMLElement | null) => {
     if (element) {
-      chunkElementMapRef.current.set(chunk.id, element)
+      chunkElementMapRef.current.set(chunkId, element)
     } else {
-      chunkElementMapRef.current.delete(chunk.id)
+      chunkElementMapRef.current.delete(chunkId)
     }
   }, [])
 
@@ -1031,34 +1096,18 @@ function MarkdownViewerComponent(
       <FoldContext.Provider value={foldRegions ?? []}>
         <KatexContext.Provider value={katexLib}>
           <div className="markdown-body gh-markdown" ref={containerRef} data-preview-width={previewWidth}>
-            {mode === 'rendered' ? (
-              blockRenderingEnabled ? (
-                blockChunks.map((chunk) => (
-                  <MarkdownBlockChunkView
-                    key={chunk.id}
-                    chunk={chunk}
-                    components={components}
-                    remarkPlugins={activeRemarkPlugins}
-                    rehypePlugins={rehypePlugins}
-                    filePath={filePath ?? null}
-                    onElementChange={handleChunkElementChange}
-                  />
-                ))
-              ) : (
-                <ReactMarkdown
-                  remarkPlugins={activeRemarkPlugins}
-                  remarkRehypeOptions={remarkRehypeOptions}
-                  rehypePlugins={rehypePlugins}
-                  components={components}
-                >
-                  {renderedValue}
-                </ReactMarkdown>
-              )
-            ) : (
-              <pre className="markdown-source">
-                <code>{value}</code>
-              </pre>
-            )}
+            <MarkdownDocument
+              mode={mode}
+              blockRenderingEnabled={blockRenderingEnabled}
+              blockChunks={blockChunks}
+              renderedValue={renderedValue}
+              sourceValue={value}
+              components={components}
+              remarkPlugins={activeRemarkPlugins}
+              rehypePlugins={rehypePlugins}
+              filePath={filePath ?? null}
+              onElementChange={handleChunkElementChange}
+            />
           </div>
         </KatexContext.Provider>
       </FoldContext.Provider>

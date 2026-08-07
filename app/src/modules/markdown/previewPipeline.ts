@@ -18,8 +18,14 @@ export type PreviewMarkdownResult = {
   blockChunks: PreviewBlockChunk[]
 }
 
-const MARKDOWN_BLOCK_RENDER_MIN_LINES = 120
+const MARKDOWN_BLOCK_RENDER_MIN_LINES = 60
+const MARKDOWN_BLOCK_RENDER_MIN_CHARS = 2000
 const BLOCK_RENDER_MAX_LINES_PER_CHUNK = 120
+const PREVIEW_RESULT_CACHE_LIMIT = 8
+const PREVIEW_RESULT_CACHE_MAX_CHARS = 1_000_000
+
+const previewResultCache = new Map<string, PreviewMarkdownResult>()
+let previewResultCacheChars = 0
 
 function isFenceLine(line: string): boolean {
   return /^\s{0,3}(```|~~~)/.test(line)
@@ -139,18 +145,48 @@ function assignStableChunkIds(
 }
 
 export function preparePreviewMarkdown(value: string): PreviewMarkdownResult {
+  const cached = previewResultCache.get(value)
+  if (cached) {
+    previewResultCache.delete(value)
+    previewResultCache.set(value, cached)
+    return cached
+  }
+
   const bodyMarkdown = extractFrontMatter(value).body
   const processedMarkdown = replaceTextColorSyntaxWithHtml(normalizeLatexDelimiters(bodyMarkdown))
   const lineCount = processedMarkdown.split(/\r?\n/).length
   const containsToc = containsTocPlaceholder(processedMarkdown)
-  return {
+  const shouldBuildChunks =
+    !containsToc &&
+    (lineCount >= MARKDOWN_BLOCK_RENDER_MIN_LINES || processedMarkdown.length >= MARKDOWN_BLOCK_RENDER_MIN_CHARS)
+  const chunks = shouldBuildChunks
+    ? splitMarkdownIntoBlockChunks(processedMarkdown)
+    : []
+  const blockChunks = chunks.length > 1 ? assignStableChunkIds(chunks) : []
+  const result: PreviewMarkdownResult = {
     processedMarkdown,
     hasMath: /\$/.test(processedMarkdown),
     containsToc,
     lineCount,
-    blockChunks:
-      lineCount >= MARKDOWN_BLOCK_RENDER_MIN_LINES && !containsToc
-        ? assignStableChunkIds(splitMarkdownIntoBlockChunks(processedMarkdown))
-        : [],
+    blockChunks,
   }
+
+  const previous = previewResultCache.get(value)
+  if (previous) {
+    previewResultCacheChars -= previous.processedMarkdown.length
+  }
+  previewResultCache.set(value, result)
+  previewResultCacheChars += result.processedMarkdown.length
+  while (
+    previewResultCache.size > PREVIEW_RESULT_CACHE_LIMIT ||
+    previewResultCacheChars > PREVIEW_RESULT_CACHE_MAX_CHARS
+  ) {
+    const oldestKey = previewResultCache.keys().next().value
+    if (oldestKey === undefined) break
+    const oldest = previewResultCache.get(oldestKey)
+    previewResultCache.delete(oldestKey)
+    previewResultCacheChars -= oldest?.processedMarkdown.length ?? 0
+  }
+
+  return result
 }

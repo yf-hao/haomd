@@ -1,4 +1,4 @@
-import { lazy, Suspense, startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Profiler, Suspense, startTransition, useCallback, useEffect, useMemo, useRef, useState, type ProfilerOnRenderCallback } from 'react'
 import { flushSync } from 'react-dom'
 import { EditorView } from '@codemirror/view'
 import { invoke } from '@tauri-apps/api/core'
@@ -64,6 +64,11 @@ import {
   onNativePasteImage,
 } from '../modules/platform/clipboardEvents'
 import { pasteClipboardImage } from '../modules/platform/clipboardPasteService'
+import {
+  beginInputPerformanceTrace,
+  endInputPerformanceTrace,
+  logInputPerformance,
+} from '../modules/debug/inputPerformance'
 import { openTerminalAt } from '../modules/platform/terminalService'
 import { openInFileManager } from '../modules/platform/fileExplorerService'
 import { getFilePathIdentity } from '../modules/files/filePathState'
@@ -195,6 +200,22 @@ const countDocumentChars = (text: string): number => {
 }
 
 const seed = ''
+
+const handleInputProfilerRender: ProfilerOnRenderCallback = (
+  id,
+  phase,
+  actualDuration,
+  baseDuration,
+) => {
+  logInputPerformance(
+    `React render:${id}`,
+    {
+      phase,
+      baseDurationMs: Number(baseDuration.toFixed(2)),
+    },
+    actualDuration,
+  )
+}
 
 function findOutlineItemByPage(items: OutlineItem[], page: number): OutlineItem | null {
   for (const item of items) {
@@ -1046,13 +1067,20 @@ export function WorkspaceShell({
   const handleMarkdownChange = useCallback((val: string, options?: MarkdownSyncOptions) => {
     const shouldMarkDirty = options?.markDirty ?? true
     const shouldSyncEditor = options?.syncEditor ?? true
-    const syncContent = (next: string) => {
-      setMarkdown(next)
-      editorMarkdownRef.current = next
-      updateActiveContent(next, { markDirty: shouldMarkDirty })
-    }
+    const trace = beginInputPerformanceTrace('WorkspaceShell.handleMarkdownChange', {
+      valueLength: val.length,
+      immediate: options?.immediate ?? false,
+      syncEditor: shouldSyncEditor,
+      markDirty: shouldMarkDirty,
+    })
+    try {
+      const syncContent = (next: string) => {
+        setMarkdown(next)
+        editorMarkdownRef.current = next
+        updateActiveContent(next, { markDirty: shouldMarkDirty })
+      }
 
-    const patchedDoc = applyChunkEdit(val)
+      const patchedDoc = applyChunkEdit(val)
       if (patchedDoc !== null) {
         if (patchedDoc === markdownRef.current) {
           return
@@ -1069,27 +1097,30 @@ export function WorkspaceShell({
       }
       if (shouldMarkDirty) markDirty()
       return
-    }
+      }
 
-    // 普通模式：直接用整篇文档更新
-    if (val === markdownRef.current && !options?.force) {
-      if (shouldSyncEditor && editorMarkdownRef.current !== val) {
+      // 普通模式：直接用整篇文档更新
+      if (val === markdownRef.current && !options?.force) {
+        if (shouldSyncEditor && editorMarkdownRef.current !== val) {
+          editorMarkdownRef.current = val
+          setEditorMarkdown(val)
+        }
+        return
+      }
+      markdownRef.current = val
+      if (shouldSyncEditor) {
         editorMarkdownRef.current = val
         setEditorMarkdown(val)
       }
-      return
+      if (options?.immediate) {
+        syncContent(val)
+      } else {
+        startTransition(() => syncContent(val))
+      }
+      if (shouldMarkDirty) markDirty()
+    } finally {
+      endInputPerformanceTrace(trace)
     }
-    markdownRef.current = val
-    if (shouldSyncEditor) {
-      editorMarkdownRef.current = val
-      setEditorMarkdown(val)
-    }
-    if (options?.immediate) {
-      syncContent(val)
-    } else {
-      startTransition(() => syncContent(val))
-    }
-    if (shouldMarkDirty) markDirty()
   }, [applyChunkEdit, markDirty, updateActiveContent])
 
   const handleWysiwygChange = useCallback((sourceTabId: string, val: string) => {
@@ -1180,21 +1211,29 @@ export function WorkspaceShell({
   // - Markdown 标签：沿用原有 handleMarkdownChange
   const handleEditorChange = useCallback(
     (val: string) => {
-      if (isPdfActive) {
-        if (!activePdfPath) return
-        setPdfNotes((prev) => {
-          if (prev[activePdfPath] === val) return prev
-          return { ...prev, [activePdfPath]: val }
-        })
-        return
-      }
+      const trace = beginInputPerformanceTrace('WorkspaceShell.handleEditorChange', {
+        valueLength: val.length,
+        isPdf: isPdfActive,
+      })
+      try {
+        if (isPdfActive) {
+          if (!activePdfPath) return
+          setPdfNotes((prev) => {
+            if (prev[activePdfPath] === val) return prev
+            return { ...prev, [activePdfPath]: val }
+          })
+          return
+        }
 
-      if (preserveTextColorTargetOnNextChangeRef.current) {
-        preserveTextColorTargetOnNextChangeRef.current = false
-      } else {
-        textColorTargetRef.current = null
+        if (preserveTextColorTargetOnNextChangeRef.current) {
+          preserveTextColorTargetOnNextChangeRef.current = false
+        } else {
+          textColorTargetRef.current = null
+        }
+        handleMarkdownChange(val)
+      } finally {
+        endInputPerformanceTrace(trace)
       }
-      handleMarkdownChange(val)
     },
     [isPdfActive, activePdfPath, handleMarkdownChange],
   )
@@ -3998,39 +4037,43 @@ export function WorkspaceShell({
                           onClose={() => setIsSearchOpen(false)}
                         />
                       )}
-                      <EditorPaneLazy
-                        markdown={editorContent}
-                        onChange={handleEditorChange}
-                        onCursorChange={handleCursorChange}
-                        showPreview={showPreview}
-                        setShowPreview={setShowPreview}
-                        editorViewRef={editorViewRef}
-                        onFoldRegionsChange={setFoldRegions}
-                        focusRequest={focusRequest}
-                        onFocusHandled={() => setFocusRequest(null)}
-                        onProgrammaticScrollStart={() => { isProgrammaticScrollRef.current = true }}
-                        onProgrammaticScrollEnd={() => { isProgrammaticScrollRef.current = false }}
-                        editorZoom={editorZoom}
-                        onEditorReady={handleEditorReady}
-                        transientSearchQuery={transientSearchQuery}
-                      />
+                      <Profiler id="source-editor" onRender={handleInputProfilerRender}>
+                        <EditorPaneLazy
+                          markdown={editorContent}
+                          onChange={handleEditorChange}
+                          onCursorChange={handleCursorChange}
+                          showPreview={showPreview}
+                          setShowPreview={setShowPreview}
+                          editorViewRef={editorViewRef}
+                          onFoldRegionsChange={setFoldRegions}
+                          focusRequest={focusRequest}
+                          onFocusHandled={() => setFocusRequest(null)}
+                          onProgrammaticScrollStart={() => { isProgrammaticScrollRef.current = true }}
+                          onProgrammaticScrollEnd={() => { isProgrammaticScrollRef.current = false }}
+                          editorZoom={editorZoom}
+                          onEditorReady={handleEditorReady}
+                          transientSearchQuery={transientSearchQuery}
+                        />
+                      </Profiler>
                     </Suspense>
                   </section>
 
                   <PreviewErrorBoundary>
                   <Suspense fallback={<section className="pane preview"><div className="preview-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13 }}>{t('workspace.loadingPreview')}</div></section>}>
-                    <PreviewPaneLazy
-                      value={previewValue}
-                      activeLine={previewActiveLine}
-                      previewWidth={previewWidthForRender}
-                      effectiveLayout={effectiveLayout}
-                      loading={isPreviewLoading}
-                      loadingLabel={t('workspace.loadingPreview')}
-                      filePath={filePath}
-                      foldRegions={foldRegions}
-                      onPreviewLineClick={handlePreviewLineClick}
-                      onSelectionChange={setPreviewSelectionText}
-                    />
+                    <Profiler id="source-preview" onRender={handleInputProfilerRender}>
+                      <PreviewPaneLazy
+                        value={previewValue}
+                        activeLine={previewActiveLine}
+                        previewWidth={previewWidthForRender}
+                        effectiveLayout={effectiveLayout}
+                        loading={isPreviewLoading}
+                        loadingLabel={t('workspace.loadingPreview')}
+                        filePath={filePath}
+                        foldRegions={foldRegions}
+                        onPreviewLineClick={handlePreviewLineClick}
+                        onSelectionChange={setPreviewSelectionText}
+                      />
+                    </Profiler>
                   </Suspense>
                   </PreviewErrorBoundary>
                     </>
