@@ -158,10 +158,10 @@ const WysiwygPaneLazy = lazy(() =>
   import('./Wysiwyg/WysiwygPane').then((m) => ({ default: m.WysiwygPane }))
 )
 
-function EditorLoadingFallback({ label }: { label: string }) {
+function LoadingFallback({ label, className }: { label: string; className: string }) {
   return (
-    <div className="editor-loading-fallback" role="status" aria-label={label}>
-      <span className="editor-loading-spinner" aria-hidden="true" />
+    <div className={className} role="status" aria-label={label}>
+      <span className="loading-spinner" aria-hidden="true" />
     </div>
   )
 }
@@ -3977,7 +3977,7 @@ export function WorkspaceShell({
                 <section className="pane-group editor-preview-group" style={{ gridTemplateColumns: editMode === 'wysiwyg' && !isPdfActive ? '1fr' : isPdfActive ? '1fr' : gridTemplateColumns }} ref={workspaceRef}>
                   {isPdfActive ? (
                     <section className="pane preview" style={{ gridColumn: '1 / -1', gridRow: '1 / 2' }}>
-                      <Suspense fallback={<div className="code-editor" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13 }}>{t('workspace.loadingPreview')}</div>}>
+                      <Suspense fallback={<LoadingFallback className="preview-loading-fallback" label={t('workspace.loadingPreview')} />}>
                         <TabBar
                           tabs={tabs}
                           activeId={activeId}
@@ -4004,7 +4004,7 @@ export function WorkspaceShell({
                   ) : editMode === 'wysiwyg' && !isPdfActive ? (
                     /* WYSIWYG 所见即所得模式 */
                     <section className="pane editor-pane" style={{ gridColumn: '1/-1' }}>
-                      <Suspense fallback={<EditorLoadingFallback label={t('workspace.loadingEditor')} />}>
+                      <Suspense fallback={<LoadingFallback className="editor-loading-fallback" label={t('workspace.loadingEditor')} />}>
                         <TabBar
                           tabs={tabs}
                           activeId={activeId}
@@ -4063,7 +4063,7 @@ export function WorkspaceShell({
                             : { gridColumn: '1/-1' }
                     }
                   >
-                    <Suspense fallback={<EditorLoadingFallback label={t('workspace.loadingEditor')} />}>
+                    <Suspense fallback={<LoadingFallback className="editor-loading-fallback" label={t('workspace.loadingEditor')} />}>
                       {effectiveLayout !== 'preview-only' && (
                         <TabBar
                           tabs={tabs}
@@ -4102,7 +4102,7 @@ export function WorkspaceShell({
                   </section>
 
                   <PreviewErrorBoundary>
-                  <Suspense fallback={<section className="pane preview"><div className="preview-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13 }}>{t('workspace.loadingPreview')}</div></section>}>
+                  <Suspense fallback={<LoadingFallback className="preview-loading-fallback" label={t('workspace.loadingPreview')} />}>
                     <PreviewPaneLazy
                       value={previewValue}
                       activeLine={previewActiveLine}

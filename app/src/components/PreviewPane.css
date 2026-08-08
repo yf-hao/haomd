@@ -38,11 +38,6 @@
   pointer-events: none;
 }
 
-.preview-loading-text {
-  color: var(--theme-text-muted);
-  font-size: 13px;
-}
-
 .preview.has-preview-background .preview-body {
   background: transparent;
 }

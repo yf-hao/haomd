@@ -193,8 +193,8 @@ function PreviewPaneComponent({
           />
         )}
         {loading ? (
-          <div className="preview-loading-overlay">
-            <span className="preview-loading-text">{loadingLabel ?? 'Loading preview...'}</span>
+          <div className="preview-loading-overlay" role="status" aria-label={loadingLabel ?? 'Loading preview...'}>
+            <span className="loading-spinner" aria-hidden="true" />
           </div>
         ) : null}
       </div>

@@ -1458,7 +1458,17 @@ button:disabled {
   background: var(--theme-surface-editor);
 }
 
-.editor-loading-spinner {
+.preview-loading-fallback {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  background: var(--markdown-preview-bg);
+}
+
+.loading-spinner {
   width: 22px;
   height: 22px;
   border: 2px solid color-mix(in srgb, var(--theme-text-muted) 24%, transparent);
@@ -1474,7 +1484,7 @@ button:disabled {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .editor-loading-spinner {
+  .loading-spinner {
     animation: none;
   }
 }
