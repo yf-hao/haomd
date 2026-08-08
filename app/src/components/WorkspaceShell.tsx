@@ -158,6 +158,14 @@ const WysiwygPaneLazy = lazy(() =>
   import('./Wysiwyg/WysiwygPane').then((m) => ({ default: m.WysiwygPane }))
 )
 
+function EditorLoadingFallback({ label }: { label: string }) {
+  return (
+    <div className="editor-loading-fallback" role="status" aria-label={label}>
+      <span className="editor-loading-spinner" aria-hidden="true" />
+    </div>
+  )
+}
+
 export type EditMode = 'source' | 'wysiwyg'
 const STORAGE_EDIT_MODE = 'haomd:editMode'
 
@@ -3996,7 +4004,7 @@ export function WorkspaceShell({
                   ) : editMode === 'wysiwyg' && !isPdfActive ? (
                     /* WYSIWYG 所见即所得模式 */
                     <section className="pane editor-pane" style={{ gridColumn: '1/-1' }}>
-                      <Suspense fallback={<div className="code-editor" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13 }}>{t('workspace.loadingEditor')}</div>}>
+                      <Suspense fallback={<EditorLoadingFallback label={t('workspace.loadingEditor')} />}>
                         <TabBar
                           tabs={tabs}
                           activeId={activeId}
@@ -4055,7 +4063,7 @@ export function WorkspaceShell({
                             : { gridColumn: '1/-1' }
                     }
                   >
-                    <Suspense fallback={<div className="code-editor" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13 }}>{t('workspace.loadingEditor')}</div>}>
+                    <Suspense fallback={<EditorLoadingFallback label={t('workspace.loadingEditor')} />}>
                       {effectiveLayout !== 'preview-only' && (
                         <TabBar
                           tabs={tabs}
