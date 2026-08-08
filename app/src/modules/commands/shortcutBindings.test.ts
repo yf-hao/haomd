@@ -48,6 +48,22 @@ describe('format shortcut bindings', () => {
       expect(binding?.matches(event, String(digit))).toBe(true)
     })
   })
+
+  it('should recognize the swapped code block and text color shortcuts by physical key', () => {
+    const codeBlockBinding = FORMAT_SHORTCUT_BINDINGS.find((item) => item.action === 'format_insert_code_block')
+    const textColorBinding = FORMAT_SHORTCUT_BINDINGS.find((item) => item.action === 'format_text_color_cycle')
+
+    expect(codeBlockBinding).toBeDefined()
+    expect(textColorBinding).toBeDefined()
+
+    const shiftC = { altKey: false, shiftKey: true, code: 'KeyC' } as KeyboardEvent
+    const optionC = { altKey: true, shiftKey: false, code: 'KeyC' } as KeyboardEvent
+
+    expect(codeBlockBinding?.matches(shiftC, 'c')).toBe(true)
+    expect(codeBlockBinding?.matches(optionC, 'ç')).toBe(false)
+    expect(textColorBinding?.matches(optionC, 'ç')).toBe(true)
+    expect(textColorBinding?.matches(shiftC, 'c')).toBe(false)
+  })
 })
 
 describe('global shortcut accelerators', () => {

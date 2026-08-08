@@ -726,7 +726,7 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         .item(
             &MenuItemBuilder::new(texts.text_color_cycle)
                 .id("format_text_color_cycle")
-                .accelerator("CmdOrCtrl+Shift+C")
+                .accelerator("CmdOrCtrl+Alt+C")
                 .build(app)?,
         )
         .separator()
@@ -808,7 +808,7 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         .item(
             &MenuItemBuilder::new(texts.code_block)
                 .id("format_insert_code_block")
-                .accelerator("CmdOrCtrl+Alt+C")
+                .accelerator("CmdOrCtrl+Shift+C")
                 .build(app)?,
         )
         .item(

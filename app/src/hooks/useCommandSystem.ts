@@ -494,7 +494,7 @@ export function useCommandSystem(params: CommandSystemParams) {
         } else {
           void dispatchAction('toggle_preview')
         }
-      } else if (key === 'c' && e.altKey) {
+      } else if (e.code === 'KeyC' && e.shiftKey && !e.altKey) {
         if (isWysiwygMode) return
         e.preventDefault()
         void dispatchAction('format_insert_code_block')

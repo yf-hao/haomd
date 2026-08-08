@@ -14,6 +14,10 @@ function matchesAltDigit(event: KeyboardEvent, key: string, digit: number): bool
   )
 }
 
+function matchesPhysicalKey(event: KeyboardEvent, key: string, code: string): boolean {
+  return event.code === code || key === code.replace('Key', '').toLowerCase()
+}
+
 export const PDF_SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
   { action: 'pdf_tool_select', matches: (_event, key) => key === 'v' },
   { action: 'pdf_tool_highlight', matches: (_event, key) => key === 'h' },
@@ -88,7 +92,7 @@ export const FORMAT_SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
   },
   {
     action: 'format_insert_code_block',
-    matches: (event, key) => key === 'c' && event.altKey && !event.shiftKey,
+    matches: (event, key) => matchesPhysicalKey(event, key, 'KeyC') && event.shiftKey && !event.altKey,
     requireEditorContext: true,
   },
   {
@@ -98,7 +102,7 @@ export const FORMAT_SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
   },
   {
     action: 'format_text_color_cycle',
-    matches: (event, key) => key === 'c' && event.shiftKey && !event.altKey,
+    matches: (event, key) => matchesPhysicalKey(event, key, 'KeyC') && event.altKey && !event.shiftKey,
     requireEditorContext: true,
   },
   {
@@ -158,9 +162,9 @@ export const FORMAT_MENU_ACCELERATORS: Readonly<Record<string, string>> = {
   format_heading_6: 'CmdOrCtrl+6',
   format_emphasize_selection: 'CmdOrCtrl+B',
   format_insert_table: 'CmdOrCtrl+T',
-  format_insert_code_block: 'CmdOrCtrl+Alt+C',
+  format_insert_code_block: 'CmdOrCtrl+Shift+C',
   format_insert_front_matter: 'CmdOrCtrl+Alt+F',
-  format_text_color_cycle: 'CmdOrCtrl+Shift+C',
+  format_text_color_cycle: 'CmdOrCtrl+Alt+C',
   format_text_color_red: 'CmdOrCtrl+Alt+1',
   format_text_color_orange: 'CmdOrCtrl+Alt+2',
   format_text_color_yellow: 'CmdOrCtrl+Alt+3',
