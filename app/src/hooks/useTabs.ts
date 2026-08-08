@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { UNTITLED_FILE_PATH } from '../modules/files/filePathState'
 import type { EditorTab } from '../types/tabs'
 
@@ -36,8 +36,11 @@ export function useTabs(options?: UseTabsOptions) {
     return []
   })
   const [activeId, setActiveId] = useState<string | null>(() => null)
-  const onBeforeActiveTabChangeRef = useRef(options?.onBeforeActiveTabChange)
-  onBeforeActiveTabChangeRef.current = options?.onBeforeActiveTabChange
+  const onBeforeActiveTabChange = options?.onBeforeActiveTabChange
+  const onBeforeActiveTabChangeRef = useRef(onBeforeActiveTabChange)
+  useEffect(() => {
+    onBeforeActiveTabChangeRef.current = onBeforeActiveTabChange
+  }, [onBeforeActiveTabChange])
 
   const activateTab = useCallback((id: string) => {
     onBeforeActiveTabChangeRef.current?.(id)
@@ -86,23 +89,24 @@ export function useTabs(options?: UseTabsOptions) {
 
   const closeTab = useCallback(
     (id: string) => {
-      setTabs((prev) => {
-        if (prev.length === 1) {
-          // 最后一个标签：返回空数组，显示欢迎页
-          return []
-        }
+      const closedIndex = tabs.findIndex((tab) => tab.id === id)
+      if (closedIndex < 0) return
 
-        const next = prev.filter((t) => t.id !== id)
-        // 更新当前激活标签
-        if (id === activeId) {
-          const closedIndex = prev.findIndex((t) => t.id === id)
-          const fallback = next[Math.max(0, closedIndex - 1)] ?? next[0]
-          activateTab(fallback.id)
-        }
-        return next
-      })
+      const next = tabs.filter((tab) => tab.id !== id)
+      setTabs(next)
+
+      if (id !== activeId) return
+
+      // Prefer the previous tab. When closing the first tab, wrap to the
+      // last remaining tab to keep tab navigation cyclic.
+      const fallback = next[closedIndex - 1] ?? next[next.length - 1]
+      if (fallback) {
+        activateTab(fallback.id)
+      } else {
+        setActiveId(null)
+      }
     },
-    [activeId, activateTab],
+    [activeId, activateTab, tabs],
   )
 
   const updateTabContent = useCallback(
