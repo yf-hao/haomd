@@ -41,7 +41,7 @@ let getCurrentTextColorImpl: GetCurrentTextColorImpl = null
 let getCurrentTextColorTargetImpl: GetCurrentTextColorTargetImpl = null
 let applyTextColorToTargetImpl: ApplyTextColorToTargetImpl = null
 
-export function registerApplyHeadingLevel(fn: (level: HeadingLevel) => void | Promise<void>): void {
+export function registerApplyHeadingLevel(fn: ((level: HeadingLevel) => void | Promise<void>) | null): void {
   applyHeadingImpl = fn
 }
 
@@ -56,7 +56,7 @@ export async function applyHeadingLevel(level: HeadingLevel): Promise<void> {
 
 // ===== 段落相关（从标题恢复为普通文本） =====
 
-export function registerResetHeadingToParagraph(fn: () => void | Promise<void>): void {
+export function registerResetHeadingToParagraph(fn: (() => void | Promise<void>) | null): void {
   resetHeadingImpl = fn
 }
 
@@ -70,7 +70,7 @@ export async function resetHeadingToParagraph(): Promise<void> {
 
 // ===== 强调选区（Emphasis） =====
 
-export function registerEmphasizeSelection(fn: () => void | Promise<void>): void {
+export function registerEmphasizeSelection(fn: (() => void | Promise<void>) | null): void {
   emphasizeSelectionImpl = fn
 }
 
@@ -84,7 +84,7 @@ export async function emphasizeSelection(): Promise<void> {
 
 // ===== 删除线 =====
 
-export function registerToggleStrikethrough(fn: () => void | Promise<void>): void {
+export function registerToggleStrikethrough(fn: (() => void | Promise<void>) | null): void {
   toggleStrikethroughImpl = fn
 }
 
@@ -98,7 +98,7 @@ export async function toggleStrikethrough(): Promise<void> {
 
 // ===== Code Block 插入 =====
 
-export function registerInsertCodeBlock(fn: () => void | Promise<void>): void {
+export function registerInsertCodeBlock(fn: (() => void | Promise<void>) | null): void {
   insertCodeBlockImpl = fn
 }
 
@@ -112,7 +112,7 @@ export async function insertCodeBlock(): Promise<void> {
 
 // ===== 数学符号插入 =====
 
-export function registerInsertMathSymbol(fn: (latex: string) => void | Promise<void>): void {
+export function registerInsertMathSymbol(fn: ((latex: string) => void | Promise<void>) | null): void {
   insertMathSymbolImpl = fn
 }
 
@@ -126,7 +126,7 @@ export async function insertMathSymbol(latex: string): Promise<void> {
 
 // ===== 文字颜色 =====
 
-export function registerApplyTextColor(fn: (color: string) => void | Promise<void>): void {
+export function registerApplyTextColor(fn: ((color: string) => void | Promise<void>) | null): void {
   applyTextColorImpl = fn
 }
 
@@ -138,7 +138,7 @@ export async function applyTextColor(color: string): Promise<void> {
   await Promise.resolve(applyTextColorImpl(color))
 }
 
-export function registerClearTextColor(fn: () => void | Promise<void>): void {
+export function registerClearTextColor(fn: (() => void | Promise<void>) | null): void {
   clearTextColorImpl = fn
 }
 
@@ -150,7 +150,7 @@ export async function clearTextColor(): Promise<void> {
   await Promise.resolve(clearTextColorImpl())
 }
 
-export function registerGetCurrentTextColor(fn: () => string | null | Promise<string | null>): void {
+export function registerGetCurrentTextColor(fn: (() => string | null | Promise<string | null>) | null): void {
   getCurrentTextColorImpl = fn
 }
 
@@ -162,7 +162,7 @@ export async function getCurrentTextColor(): Promise<string | null> {
   return await Promise.resolve(getCurrentTextColorImpl())
 }
 
-export function registerGetCurrentTextColorTarget(fn: () => TextColorTarget | null | Promise<TextColorTarget | null>): void {
+export function registerGetCurrentTextColorTarget(fn: (() => TextColorTarget | null | Promise<TextColorTarget | null>) | null): void {
   getCurrentTextColorTargetImpl = fn
 }
 
@@ -175,7 +175,7 @@ export async function getCurrentTextColorTarget(): Promise<TextColorTarget | nul
 }
 
 export function registerApplyTextColorToTarget(
-  fn: (color: string | null, target: TextColorTarget) => boolean | Promise<boolean>,
+  fn: ((color: string | null, target: TextColorTarget) => boolean | Promise<boolean>) | null,
 ): void {
   applyTextColorToTargetImpl = fn
 }

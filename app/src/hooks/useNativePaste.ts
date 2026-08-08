@@ -20,8 +20,10 @@ export function useNativePaste(
   editorViewRef: RefObject<EditorView | null>,
   setStatusMessage: (msg: string) => void,
   handlers?: NativePasteHandlers,
+  getEditorView?: () => EditorView | null,
 ) {
   useEffect(() => {
+    const getCurrentView = () => getEditorView ? getEditorView() : editorViewRef.current
     let detachPreventDefaultPaste: (() => void) | undefined
 
     // Windows WebView2 does not reliably fire paste events for images, and its
@@ -31,9 +33,15 @@ export function useNativePaste(
     // macOS/Linux: the standard paste event works for both text and images.
     const isWindows = typeof navigator !== 'undefined' && /Windows/i.test(navigator.userAgent)
 
-    const insertText = (text: string) => {
-      const currentView = editorViewRef.current
-      if (!currentView) return
+    const insertText = (text: string, expectedView?: EditorView | null) => {
+      const currentView = getCurrentView()
+      if (
+        !currentView ||
+        currentView.dom.isConnected === false ||
+        (expectedView && currentView !== expectedView)
+      ) {
+        return
+      }
       const { state } = currentView
       currentView.dispatch(state.update({
         ...state.replaceSelection(text),
@@ -44,7 +52,7 @@ export function useNativePaste(
 
     if (isTauriEnv() && isWindows) {
       const handleKeyDown = async (event: KeyboardEvent) => {
-        const currentView = editorViewRef.current
+        const currentView = getCurrentView()
         console.log('[useNativePaste] keydown on document:', event.key, 'ctrl=', event.ctrlKey, 'view=', currentView)
         if ((!event.ctrlKey && !event.metaKey) || (event.key !== 'v' && event.key !== 'V')) return
 
@@ -76,6 +84,7 @@ export function useNativePaste(
         console.log('[useNativePaste] calling readClipboardForPaste()...')
         void readClipboardForPaste()
           .then((content) => {
+            if (getCurrentView() !== currentView) return
             console.log('[useNativePaste] readClipboardForPaste returned:', JSON.stringify(content))
             if (content.kind === 'image') {
               console.log('[useNativePaste] dispatching native://paste_image')
@@ -86,7 +95,7 @@ export function useNativePaste(
               return
             }
             console.log('[useNativePaste] inserting text, len=', content.text.length)
-            insertText(content.text)
+            insertText(content.text, currentView)
           })
           .catch((err) => {
             console.error('[useNativePaste] readClipboardForPaste error:', err)
@@ -104,7 +113,7 @@ export function useNativePaste(
 
     if (isTauriEnv() && !isWindows) {
       const handlePaste = (event: ClipboardEvent) => {
-        const currentView = editorViewRef.current
+        const currentView = getCurrentView()
         const active = typeof document !== 'undefined' ? document.activeElement : null
         if (!active || !currentView || !currentView.dom.contains(active)) return
         event.preventDefault()
@@ -112,11 +121,12 @@ export function useNativePaste(
 
         void readClipboardForPaste()
           .then((content) => {
+            if (getCurrentView() !== currentView) return
             if (content.kind === 'image') {
               return dispatchNativePasteImage()
             }
             if (content.kind !== 'text' || !content.text) return
-            insertText(content.text)
+            insertText(content.text, currentView)
           })
           .catch((err) => {
             setStatusMessage(err instanceof Error ? err.message : String(err))
@@ -130,7 +140,7 @@ export function useNativePaste(
     }
 
     const unPaste = onNativePaste((text) => {
-      const view = editorViewRef.current
+      const view = getCurrentView()
       console.log('[useNativePaste] native://paste handler fired, view =', view, 'len=', text?.length)
       if (!text) return
 
@@ -191,5 +201,5 @@ export function useNativePaste(
       unPaste()
       unError()
     }
-  }, [editorViewRef, setStatusMessage, handlers?.tryPasteImage])
+  }, [editorViewRef, getEditorView, setStatusMessage, handlers?.tryPasteImage])
 }

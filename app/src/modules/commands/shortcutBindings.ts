@@ -4,6 +4,16 @@ export type ShortcutBinding = {
   requireEditorContext?: boolean
 }
 
+function matchesAltDigit(event: KeyboardEvent, key: string, digit: number): boolean {
+  if (!event.altKey || event.shiftKey) return false
+
+  return (
+    event.code === `Digit${digit}` ||
+    event.code === `Numpad${digit}` ||
+    key === String(digit)
+  )
+}
+
 export const PDF_SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
   { action: 'pdf_tool_select', matches: (_event, key) => key === 'v' },
   { action: 'pdf_tool_highlight', matches: (_event, key) => key === 'h' },
@@ -91,6 +101,41 @@ export const FORMAT_SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
     matches: (event, key) => key === 'c' && event.shiftKey && !event.altKey,
     requireEditorContext: true,
   },
+  {
+    action: 'format_text_color_red',
+    matches: (event, key) => matchesAltDigit(event, key, 1),
+    requireEditorContext: true,
+  },
+  {
+    action: 'format_text_color_orange',
+    matches: (event, key) => matchesAltDigit(event, key, 2),
+    requireEditorContext: true,
+  },
+  {
+    action: 'format_text_color_yellow',
+    matches: (event, key) => matchesAltDigit(event, key, 3),
+    requireEditorContext: true,
+  },
+  {
+    action: 'format_text_color_green',
+    matches: (event, key) => matchesAltDigit(event, key, 4),
+    requireEditorContext: true,
+  },
+  {
+    action: 'format_text_color_cyan',
+    matches: (event, key) => matchesAltDigit(event, key, 5),
+    requireEditorContext: true,
+  },
+  {
+    action: 'format_text_color_blue',
+    matches: (event, key) => matchesAltDigit(event, key, 6),
+    requireEditorContext: true,
+  },
+  {
+    action: 'format_text_color_purple',
+    matches: (event, key) => matchesAltDigit(event, key, 7),
+    requireEditorContext: true,
+  },
 ] as const
 
 export const EDITOR_SHORTCUT_SCOPE_SELECTORS = [
@@ -116,6 +161,13 @@ export const FORMAT_MENU_ACCELERATORS: Readonly<Record<string, string>> = {
   format_insert_code_block: 'CmdOrCtrl+Alt+C',
   format_insert_front_matter: 'CmdOrCtrl+Alt+F',
   format_text_color_cycle: 'CmdOrCtrl+Shift+C',
+  format_text_color_red: 'CmdOrCtrl+Alt+1',
+  format_text_color_orange: 'CmdOrCtrl+Alt+2',
+  format_text_color_yellow: 'CmdOrCtrl+Alt+3',
+  format_text_color_green: 'CmdOrCtrl+Alt+4',
+  format_text_color_cyan: 'CmdOrCtrl+Alt+5',
+  format_text_color_blue: 'CmdOrCtrl+Alt+6',
+  format_text_color_purple: 'CmdOrCtrl+Alt+7',
 }
 
 export const GLOBAL_MENU_ACCELERATORS: Readonly<Record<string, string>> = {

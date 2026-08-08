@@ -13,7 +13,7 @@ export type CodeEditorProps = {
   extensions?: Extension[]
   className?: string
   placeholder?: string
-  onViewReady?: (view: EditorView) => void
+  onViewReady?: (view: EditorView | null) => void
   onFoldRegionsChange?: (regions: { fromLine: number; toLine: number }[]) => void
   editorZoom?: number
 }
@@ -26,8 +26,20 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
   const themeMode = useResolvedThemeMode()
   const [editorValue, setEditorValue] = useState(value)
   const editorViewRef = useRef<EditorView | null>(null)
+  const onViewReadyRef = useRef(onViewReady)
   const isComposingRef = useRef(false)
   const lastForwardedValueRef = useRef(value)
+
+  useEffect(() => {
+    onViewReadyRef.current = onViewReady
+  }, [onViewReady])
+
+  useEffect(() => {
+    return () => {
+      editorViewRef.current = null
+      onViewReadyRef.current?.(null)
+    }
+  }, [])
 
   useEffect(() => {
     if (value === editorValue) return
@@ -45,7 +57,7 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
   const flushComposition = () => {
     queueMicrotask(() => {
       const view = editorViewRef.current
-      if (!view) return
+      if (!view || view.dom.isConnected === false) return
       const nextValue = view.state.doc.toString()
       setEditorValue(nextValue)
       forwardChange(nextValue)
@@ -107,7 +119,7 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
         }}
         onCreateEditor={(view) => {
           editorViewRef.current = view
-          onViewReady?.(view)
+          onViewReadyRef.current?.(view)
         }}
       />
     </div>

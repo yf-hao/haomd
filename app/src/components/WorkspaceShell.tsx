@@ -327,6 +327,18 @@ export function WorkspaceShell({
   // Tracks whether the user has actually made edits while in WYSIWYG mode
   const wysiwygIsDirtyRef = useRef(false)
   const isProgrammaticScrollRef = useRef(false)
+  const sourceEditorEpochRef = useRef(0)
+  const sourceEditorTabIdRef = useRef<string | null>(null)
+  const isWorkspaceMountedRef = useRef(true)
+
+  useEffect(() => {
+    isWorkspaceMountedRef.current = true
+    return () => {
+      isWorkspaceMountedRef.current = false
+      sourceEditorEpochRef.current += 1
+      sourceEditorTabIdRef.current = null
+    }
+  }, [])
 
   // 将编辑器的实时行号节流后再传给预览，使用 rAF 节流（~16ms）降低重渲染频率
   const previewLineRafRef = useRef<number | null>(null)
@@ -367,6 +379,7 @@ export function WorkspaceShell({
   })
   const editModeRef = useRef<EditMode>(editMode)
   const editorMarkdownRef = useRef(markdownRef.current)
+  const isPdfActiveRef = useRef(false)
   useEffect(() => {
     editModeRef.current = editMode
     if (typeof localStorage !== 'undefined') {
@@ -424,6 +437,13 @@ export function WorkspaceShell({
         }
       }
     }
+    if (editMode !== next) {
+      // Invalidate source-editor callbacks before React unmounts or mounts
+      // the corresponding editor surface.
+      sourceEditorEpochRef.current += 1
+      sourceEditorTabIdRef.current = null
+      editModeRef.current = next
+    }
     setEditMode(next)
   }, [editMode])
 
@@ -451,6 +471,8 @@ export function WorkspaceShell({
     }
 
     // Invalidate callbacks from the outgoing WYSIWYG instance synchronously.
+    sourceEditorEpochRef.current += 1
+    sourceEditorTabIdRef.current = null
     activeIdRef.current = nextTabId
   }
 
@@ -579,6 +601,7 @@ export function WorkspaceShell({
   const activeImportedWordState = activeId ? (importedWordTabs[activeId] ?? null) : null
 
   const isPdfActive = !!activeTab?.path && activeTab.path.toLowerCase().endsWith('.pdf')
+  isPdfActiveRef.current = isPdfActive
   const [isAiChatInputFocused, setIsAiChatInputFocused] = useState(false)
   const shouldSuspendPdfViewer = isPdfActive && isAiChatInputFocused
 
@@ -691,6 +714,24 @@ export function WorkspaceShell({
 
   const sidebar = useSidebar()
   const editorViewRef = useRef<EditorView | null>(null)
+  const getActiveSourceView = useCallback(() => {
+    if (
+      !isWorkspaceMountedRef.current ||
+      editModeRef.current !== 'source' ||
+      isPdfActiveRef.current ||
+      sourceEditorTabIdRef.current !== activeIdRef.current
+    ) {
+      return null
+    }
+
+    const view = editorViewRef.current
+    if (!view || !view.dom.isConnected) return null
+    return view
+  }, [])
+  const handleSourceEditorViewChange = useCallback((view: EditorView | null) => {
+    sourceEditorEpochRef.current += 1
+    sourceEditorTabIdRef.current = view ? activeIdRef.current : null
+  }, [])
 
   const openAboutDialog = useCallback(() => {
     setAboutOpen(true)
@@ -751,10 +792,10 @@ export function WorkspaceShell({
     }
 
     // 回退到编辑器选区
-    const view = editorViewRef.current
+    const view = getActiveSourceView()
     if (!view || view.state.selection.main.empty) return null
     return view.state.doc.sliceString(view.state.selection.main.from, view.state.selection.main.to)
-  }, [editMode, isPdfActive, previewSelectionText])
+  }, [editMode, getActiveSourceView, isPdfActive, previewSelectionText])
 
   const isOutlinePanelVisible = activeLeftPanel === 'outline'
   const outlineItems = useOutlineModel({
@@ -1207,7 +1248,7 @@ export function WorkspaceShell({
   // Register AI Editor handlers
   useEffect(() => {
     const syncEditorToReactState = () => {
-      const view = editorViewRef.current
+      const view = getActiveSourceView()
       if (!view) return
       const next = view.state.doc.toString()
       handleMarkdownChange(next)
@@ -1226,7 +1267,7 @@ export function WorkspaceShell({
     }
 
     const getSourceSelectionTarget = () => {
-      const view = editorViewRef.current
+      const view = getActiveSourceView()
       const docKey = getActiveTextColorDocKey()
       if (!view || !docKey) return null
 
@@ -1257,7 +1298,7 @@ export function WorkspaceShell({
         const replacement = color
           ? applyTextColorSyntax(enclosing.content, color)
           : enclosing.content
-        if (!replacement) return null
+        if (!replacement || replacement === markdownText.slice(enclosing.blockStart, enclosing.blockEnd)) return null
         return {
           replaceFrom: enclosing.blockStart,
           replaceTo: enclosing.blockEnd,
@@ -1284,11 +1325,18 @@ export function WorkspaceShell({
     }
 
     const scrollEditorToSelection = () => {
-      const view = editorViewRef.current
+      const view = getActiveSourceView()
       if (!view) return
       const scroller = view.scrollDOM
       const pos = view.state.selection.main.head
+      const sourceEditorEpoch = sourceEditorEpochRef.current
       window.requestAnimationFrame(() => {
+        if (
+          sourceEditorEpochRef.current !== sourceEditorEpoch ||
+          getActiveSourceView() !== view
+        ) {
+          return
+        }
         const coords = view.coordsAtPos(pos)
         if (!coords) return
         const scrollerRect = scroller.getBoundingClientRect()
@@ -1314,7 +1362,7 @@ export function WorkspaceShell({
     }
 
     const runInsertBelow = (text: string) => {
-      const view = editorViewRef.current
+      const view = getActiveSourceView()
       if (!view || !text) return
       const { state } = view
       const pos = state.selection.main.head
@@ -1328,7 +1376,7 @@ export function WorkspaceShell({
     }
 
     const runReplaceSelection = (text: string) => {
-      const view = editorViewRef.current
+      const view = getActiveSourceView()
       if (!view || !text) return
       const { state } = view
       const { from, to } = state.selection.main
@@ -1342,17 +1390,18 @@ export function WorkspaceShell({
     registerEditorInsertBelow(async ({ text, sourceTabId }) => {
       if (!text) return
 
-      if (editMode === 'wysiwyg') {
+      if (editModeRef.current === 'wysiwyg') {
         wysiwygMutate((md) => md + '\n' + text)
         return
       }
 
+      const hasSourceTab = !!sourceTabId && tabs.some((t) => t.id === sourceTabId)
+      const targetTabId = hasSourceTab ? sourceTabId : activeIdRef.current
       const performInsert = () => {
+        if (!targetTabId || activeIdRef.current !== targetTabId) return
         runInsertBelow(text)
         syncEditorToReactState()
       }
-
-      const hasSourceTab = !!sourceTabId && tabs.some((t) => t.id === sourceTabId)
 
       if (hasSourceTab && activeIdRef.current !== sourceTabId) {
         setActiveTab(sourceTabId)
@@ -1366,7 +1415,7 @@ export function WorkspaceShell({
     registerEditorReplaceSelection(async ({ text, sourceTabId }) => {
       if (!text) return
 
-      if (editMode === 'wysiwyg') {
+      if (editModeRef.current === 'wysiwyg') {
         const selectedText = wysiwygSelectionGetterRef.current?.() ?? ''
         wysiwygMutate((md) => {
           if (selectedText) {
@@ -1381,12 +1430,13 @@ export function WorkspaceShell({
         return
       }
 
+      const hasSourceTab = !!sourceTabId && tabs.some((t) => t.id === sourceTabId)
+      const targetTabId = hasSourceTab ? sourceTabId : activeIdRef.current
       const performReplace = () => {
+        if (!targetTabId || activeIdRef.current !== targetTabId) return
         runReplaceSelection(text)
         syncEditorToReactState()
       }
-
-      const hasSourceTab = !!sourceTabId && tabs.some((t) => t.id === sourceTabId)
 
       if (hasSourceTab && activeIdRef.current !== sourceTabId) {
         setActiveTab(sourceTabId)
@@ -1398,13 +1448,15 @@ export function WorkspaceShell({
     })
 
     registerEditorCreateAndInsert(async (text: string) => {
-      if (!text || isCreatingTab) return
+      if (!text || isCreatingTab || !isWorkspaceMountedRef.current) return
       setIsCreatingTab(true)
       try {
         createTab({ content: text })
         await new Promise(resolve => setTimeout(resolve, 50))
       } finally {
-        setIsCreatingTab(false)
+        if (isWorkspaceMountedRef.current) {
+          setIsCreatingTab(false)
+        }
       }
     })
 
@@ -1414,7 +1466,7 @@ export function WorkspaceShell({
         return
       }
 
-      const view = editorViewRef.current
+      const view = getActiveSourceView()
       if (!view) return
 
       const { state } = view
@@ -1446,7 +1498,7 @@ export function WorkspaceShell({
         return
       }
 
-      const view = editorViewRef.current
+      const view = getActiveSourceView()
       if (!view) return
 
       const { state } = view
@@ -1473,7 +1525,7 @@ export function WorkspaceShell({
         return
       }
 
-      const view = editorViewRef.current
+      const view = getActiveSourceView()
       if (!view) return
 
       const { state } = view
@@ -1500,7 +1552,7 @@ export function WorkspaceShell({
         return
       }
 
-      const view = editorViewRef.current
+      const view = getActiveSourceView()
       if (!view) return
 
       const { state } = view
@@ -1548,7 +1600,7 @@ export function WorkspaceShell({
         return
       }
 
-      const view = editorViewRef.current
+      const view = getActiveSourceView()
       if (!view) return
 
       const { state } = view
@@ -1576,7 +1628,7 @@ export function WorkspaceShell({
         return
       }
 
-      const view = editorViewRef.current
+      const view = getActiveSourceView()
       const target = getSourceSelectionTarget()
       if (!view || !target) return
 
@@ -1602,7 +1654,7 @@ export function WorkspaceShell({
         return
       }
 
-      const view = editorViewRef.current
+      const view = getActiveSourceView()
       const target = getSourceSelectionTarget()
       if (!view || !target) return
 
@@ -1627,7 +1679,7 @@ export function WorkspaceShell({
         return wysiwygFormatActionsRef.current?.getCurrentTextColor() ?? null
       }
 
-      const view = editorViewRef.current
+      const view = getActiveSourceView()
       const target = getSourceSelectionTarget()
       if (!view || !target) return null
 
@@ -1647,7 +1699,7 @@ export function WorkspaceShell({
         return wysiwygFormatActionsRef.current?.applyTextColorToTarget(color, target) ?? false
       }
 
-      const view = editorViewRef.current
+      const view = getActiveSourceView()
       const docKey = getActiveTextColorDocKey()
       if (!view || !isTextColorTargetActive(target, docKey, 'source')) return false
 
@@ -1667,7 +1719,7 @@ export function WorkspaceShell({
     })
 
     registerInsertMathSymbol(async (latex: string) => {
-      const view = editorViewRef.current
+      const view = getActiveSourceView()
       if (!view) return
 
       const { state } = view
@@ -1681,7 +1733,24 @@ export function WorkspaceShell({
 
       syncEditorToReactState()
     })
-  }, [createTab, isCreatingTab, setActiveTab, handleMarkdownChange, tabs])
+
+    return () => {
+      registerEditorInsertBelow(null)
+      registerEditorReplaceSelection(null)
+      registerEditorCreateAndInsert(null)
+      registerApplyHeadingLevel(null)
+      registerResetHeadingToParagraph(null)
+      registerEmphasizeSelection(null)
+      registerInsertCodeBlock(null)
+      registerToggleStrikethrough(null)
+      registerInsertMathSymbol(null)
+      registerApplyTextColor(null)
+      registerClearTextColor(null)
+      registerGetCurrentTextColor(null)
+      registerGetCurrentTextColorTarget(null)
+      registerApplyTextColorToTarget(null)
+    }
+  }, [createTab, getActiveSourceView, getActiveTextColorDocKey, handleMarkdownChange, isCreatingTab, setActiveTab, tabs])
 
   const getCurrentFilePath = useCallback(() => {
     if (isPdfActive) {
@@ -3047,7 +3116,7 @@ export function WorkspaceShell({
   }, [isPdfActive, setStatusMessage, getCurrentMarkdown, getCurrentFileName, t])
 
   const openSearchWithSelection = useCallback(() => {
-    const view = editorViewRef.current
+    const view = getActiveSourceView()
     const selection = view?.state?.selection?.main
     const nextSearchText =
       view && selection && !selection.empty
@@ -3057,7 +3126,7 @@ export function WorkspaceShell({
     setSearchPrefillText(nextSearchText)
     setSearchPrefillVersion((prev) => prev + 1)
     setIsSearchOpen(true)
-  }, [])
+  }, [getActiveSourceView])
 
   const openInsertTableDialog = useCallback(() => {
     if (isPdfActive) {
@@ -3288,7 +3357,7 @@ export function WorkspaceShell({
 
   useNativePaste(editorViewRef, setStatusMessage, {
     tryPasteImage: handlePasteImage,
-  })
+  }, getActiveSourceView)
 
   // 监听剪贴板图片后台编码完成/失败事件（所有平台）
   useEffect(() => {
@@ -3312,6 +3381,7 @@ export function WorkspaceShell({
   useEffect(() => {
     console.log('[WorkspaceShell] image paste effect mounted')
     const unlisten = onNativePasteImage(async () => {
+      if (!isWorkspaceMountedRef.current) return
       console.log('[WorkspaceShell] onNativePasteImage fired')
       await handlePasteImage()
     })
@@ -3997,7 +4067,7 @@ export function WorkspaceShell({
                       )}
                       {isSearchOpen && (
                         <SearchBar
-                          view={editorViewRef.current}
+                          view={getActiveSourceView()}
                           prefillText={searchPrefillText}
                           prefillVersion={searchPrefillVersion}
                           onClose={() => setIsSearchOpen(false)}
@@ -4017,6 +4087,7 @@ export function WorkspaceShell({
                         onProgrammaticScrollEnd={() => { isProgrammaticScrollRef.current = false }}
                         editorZoom={editorZoom}
                         onEditorReady={handleEditorReady}
+                        onEditorViewChange={handleSourceEditorViewChange}
                         transientSearchQuery={transientSearchQuery}
                       />
                     </Suspense>

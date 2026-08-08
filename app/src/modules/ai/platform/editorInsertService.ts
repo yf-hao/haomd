@@ -25,7 +25,7 @@ let insertImpl: InsertImpl = null
  *
  * 通常在工作区 Shell（如 WorkspaceShell）中调用，利用实际的 EditorView 来完成插入。
  */
-export function registerEditorInsertBelow(fn: (payload: EditorInsertPayload) => void | Promise<void>): void {
+export function registerEditorInsertBelow(fn: ((payload: EditorInsertPayload) => void | Promise<void>) | null): void {
   insertImpl = fn
 }
 
@@ -61,7 +61,7 @@ let replaceImpl: ReplaceImpl = null
  *
  * 通常在工作区 Shell（如 WorkspaceShell）中调用，利用实际的 EditorView 来完成替换。
  */
-export function registerEditorReplaceSelection(fn: (payload: EditorInsertPayload) => void | Promise<void>): void {
+export function registerEditorReplaceSelection(fn: ((payload: EditorInsertPayload) => void | Promise<void>) | null): void {
   replaceImpl = fn
 }
 
@@ -97,7 +97,7 @@ let createAndInsertImpl: CreateAndInsertImpl = null
  *
  * 通常在工作区 Shell（如 WorkspaceShell）中调用，利用实际的标签管理和编辑器 API 来完成。
  */
-export function registerEditorCreateAndInsert(fn: (text: string) => void | Promise<void>): void {
+export function registerEditorCreateAndInsert(fn: ((text: string) => void | Promise<void>) | null): void {
   createAndInsertImpl = fn
 }
 

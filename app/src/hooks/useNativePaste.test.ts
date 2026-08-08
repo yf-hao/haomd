@@ -100,6 +100,43 @@ describe('useNativePaste', () => {
     expect(editor.dispatch).not.toHaveBeenCalled()
   })
 
+  it('does not apply delayed clipboard content to a replacement editor view', async () => {
+    let resolveClipboard: ((content: { kind: 'text'; text: string }) => void) | undefined
+    vi.mocked(readClipboardForPaste).mockImplementation(
+      () => new Promise((resolve) => {
+        resolveClipboard = resolve
+      }),
+    )
+    const firstEditor = createEditorView()
+    const replacementEditor = createEditorView()
+    const editorRef = { current: firstEditor.view }
+    firstEditor.content.focus()
+
+    renderHook(() => useNativePaste(
+      editorRef,
+      vi.fn(),
+      undefined,
+      () => editorRef.current,
+    ))
+
+    act(() => {
+      firstEditor.content.dispatchEvent(new KeyboardEvent('keydown', {
+        bubbles: true,
+        cancelable: true,
+        key: 'v',
+        ctrlKey: true,
+      }))
+    })
+
+    editorRef.current = replacementEditor.view
+    replacementEditor.content.focus()
+    resolveClipboard?.({ kind: 'text', text: 'late' })
+
+    await waitFor(() => expect(readClipboardForPaste).toHaveBeenCalledTimes(1))
+    expect(firstEditor.dispatch).not.toHaveBeenCalled()
+    expect(replacementEditor.dispatch).not.toHaveBeenCalled()
+  })
+
   it('does not intercept paste when focus is outside the editor', () => {
     const editor = createEditorView()
     const outside = document.createElement('textarea')

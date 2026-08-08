@@ -34,6 +34,7 @@ export type EditorPaneProps = {
   onProgrammaticScrollEnd?: () => void
   editorZoom: number
   onEditorReady?: () => void
+  onEditorViewChange?: (view: EditorView | null) => void
   transientSearchQuery?: EditorTransientSearchQuery | null
 }
 
@@ -50,6 +51,7 @@ export function EditorPane(props: EditorPaneProps) {
     onProgrammaticScrollEnd,
     editorZoom,
     onEditorReady,
+    onEditorViewChange,
     transientSearchQuery,
   } = props
   const { themeSettings } = useThemeContext()
@@ -81,7 +83,7 @@ export function EditorPane(props: EditorPaneProps) {
   useEffect(() => {
     if (!focusRequest) return
     const view = editorViewRef.current
-    if (!view) return
+    if (!view || view.dom.isConnected === false) return
 
     const doc = view.state.doc
     const docText = doc.toString()
@@ -107,7 +109,7 @@ export function EditorPane(props: EditorPaneProps) {
 
   useEffect(() => {
     const view = editorViewRef.current
-    if (!view) return
+    if (!view || view.dom.isConnected === false) return
 
     if (!transientSearchQuery?.searchText.trim()) {
       view.dispatch({
@@ -159,7 +161,10 @@ export function EditorPane(props: EditorPaneProps) {
         editorZoom={editorZoom}
         onViewReady={(view) => {
           editorViewRef.current = view
-          onEditorReady?.()
+          onEditorViewChange?.(view)
+          if (view) {
+            onEditorReady?.()
+          }
         }}
         onFoldRegionsChange={onFoldRegionsChange}
       />

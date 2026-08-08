@@ -733,36 +733,43 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         .item(
             &MenuItemBuilder::new(texts.text_color_red)
                 .id("format_text_color_red")
+                .accelerator("CmdOrCtrl+Alt+1")
                 .build(app)?,
         )
         .item(
             &MenuItemBuilder::new(texts.text_color_orange)
                 .id("format_text_color_orange")
+                .accelerator("CmdOrCtrl+Alt+2")
                 .build(app)?,
         )
         .item(
             &MenuItemBuilder::new(texts.text_color_yellow)
                 .id("format_text_color_yellow")
+                .accelerator("CmdOrCtrl+Alt+3")
                 .build(app)?,
         )
         .item(
             &MenuItemBuilder::new(texts.text_color_green)
                 .id("format_text_color_green")
+                .accelerator("CmdOrCtrl+Alt+4")
                 .build(app)?,
         )
         .item(
             &MenuItemBuilder::new(texts.text_color_cyan)
                 .id("format_text_color_cyan")
+                .accelerator("CmdOrCtrl+Alt+5")
                 .build(app)?,
         )
         .item(
             &MenuItemBuilder::new(texts.text_color_blue)
                 .id("format_text_color_blue")
+                .accelerator("CmdOrCtrl+Alt+6")
                 .build(app)?,
         )
         .item(
             &MenuItemBuilder::new(texts.text_color_purple)
                 .id("format_text_color_purple")
+                .accelerator("CmdOrCtrl+Alt+7")
                 .build(app)?,
         )
         .item(

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback, useMemo, useState, type CSSProperties, type ChangeEvent } from 'react'
 import { Editor, rootCtx, defaultValueCtx, schemaCtx } from '@milkdown/kit/core'
+import { EditorStatus } from '@milkdown/core'
 import { commandsCtx, editorViewCtx, prosePluginsCtx, serializerCtx } from '@milkdown/core'
 import { commonmark, codeBlockSchema, imageSchema } from '@milkdown/kit/preset/commonmark'
 import { codeBlockKeymap } from '@milkdown/preset-commonmark'
@@ -469,6 +470,20 @@ function WysiwygEditor({
     composeMarkdownWithFrontMatter(frontMatterBlock ?? '', value),
   )
 
+  const getReadyEditor = useCallback((expectedEditor?: Editor | null) => {
+    const editor = editorRef.current
+    if (
+      !editor ||
+      (expectedEditor !== undefined && editor !== expectedEditor) ||
+      !isEditorReadyRef.current ||
+      editor.status !== EditorStatus.Created ||
+      containerRef.current?.isConnected === false
+    ) {
+      return null
+    }
+    return editor
+  }, [])
+
   // Block-level incremental serialization cache
   const blockCacheRef = useRef(new BlockCacheManager())
 
@@ -477,8 +492,8 @@ function WysiwygEditor({
   nodeViewFactoryRef.current = nodeViewFactory
 
   const getCurrentMarkdownBody = useCallback(() => {
-    const editor = editorRef.current
-    if (!editor || !isEditorReadyRef.current) {
+    const editor = getReadyEditor()
+    if (!editor) {
       return lastSyncedValueRef.current
     }
     try {
@@ -487,10 +502,10 @@ function WysiwygEditor({
       console.warn('[WysiwygPane] markdown serialization unavailable', error)
       return lastSyncedValueRef.current
     }
-  }, [])
+  }, [getReadyEditor])
 
   const getCurrentMarkdown = useCallback(() => {
-    if (!isEditorReadyRef.current) {
+    if (!getReadyEditor()) {
       return lastValidMarkdownRef.current
     }
     const markdown = composeMarkdownWithFrontMatter(
@@ -499,10 +514,10 @@ function WysiwygEditor({
     )
     lastValidMarkdownRef.current = markdown
     return markdown
-  }, [getCurrentMarkdownBody])
+  }, [getCurrentMarkdownBody, getReadyEditor])
 
-  const emitOutlineItems = useCallback(() => {
-    const editor = editorRef.current
+  const emitOutlineItems = useCallback((expectedEditor?: Editor | null) => {
+    const editor = getReadyEditor(expectedEditor)
     if (!editor) return
 
     editor.action((ctx) => {
@@ -538,15 +553,16 @@ function WysiwygEditor({
       lastOutlineItemsRef.current = items
       onOutlineItemsChangeRef.current?.(items)
     })
-  }, [])
+  }, [getReadyEditor])
 
-  const scheduleOutlineEmit = useCallback(() => {
+  const scheduleOutlineEmit = useCallback((expectedEditor?: Editor | null) => {
     if (outlineEmitFrameRef.current !== null) {
       cancelAnimationFrame(outlineEmitFrameRef.current)
     }
+    const editor = expectedEditor ?? editorRef.current
     outlineEmitFrameRef.current = requestAnimationFrame(() => {
       outlineEmitFrameRef.current = null
-      emitOutlineItems()
+      emitOutlineItems(editor)
     })
   }, [emitOutlineItems])
 
@@ -555,9 +571,10 @@ function WysiwygEditor({
       cancelIdleWork(initialCacheBuildIdleRef.current)
       initialCacheBuildIdleRef.current = null
     }
+    const expectedEditor = editorRef.current
     initialCacheBuildIdleRef.current = requestIdleWork(() => {
       initialCacheBuildIdleRef.current = null
-      const editor = editorRef.current
+      const editor = getReadyEditor(expectedEditor)
       if (!editor) return
       editor.action((ctx) => {
         const view = ctx.get(editorViewCtx)
@@ -565,16 +582,17 @@ function WysiwygEditor({
         blockCacheRef.current.buildFull(view.state.doc, ser)
       })
     }, 250)
-  }, [])
+  }, [getReadyEditor])
 
   const scheduleInitialOutlineEmit = useCallback(() => {
     if (initialOutlineEmitIdleRef.current !== null) {
       cancelIdleWork(initialOutlineEmitIdleRef.current)
       initialOutlineEmitIdleRef.current = null
     }
+    const expectedEditor = editorRef.current
     initialOutlineEmitIdleRef.current = requestIdleWork(() => {
       initialOutlineEmitIdleRef.current = null
-      emitOutlineItems()
+      emitOutlineItems(expectedEditor)
     }, 250)
   }, [emitOutlineItems])
 
@@ -595,43 +613,61 @@ function WysiwygEditor({
   const incrementalSerializeAndPush = useCallback((
     newDoc: ProseMirrorNode,
     prevDoc: ProseMirrorNode | null,
-    serializer: (content: ProseMirrorNode) => string,
+    expectedEditor?: Editor | null,
   ) => {
-    const cache = blockCacheRef.current
+    const editor = getReadyEditor(expectedEditor)
+    if (!editor) return
 
     let md: string
-    if (!prevDoc || !cache.isInitialized) {
-      md = cache.buildFull(newDoc, serializer)
-    } else {
-      md = cache.incrementalUpdate(prevDoc, newDoc, serializer)
+    try {
+      md = editor.action((ctx) => {
+        const serializer = ctx.get(serializerCtx)
+        const cache = blockCacheRef.current
+
+        let nextMarkdown: string
+        if (!prevDoc || !cache.isInitialized) {
+          nextMarkdown = cache.buildFull(newDoc, serializer)
+        } else {
+          nextMarkdown = cache.incrementalUpdate(prevDoc, newDoc, serializer)
+        }
+
+        // Dev-mode verification: compare incremental result against full serialization
+        if (import.meta.env.DEV && prevDoc && cache.isInitialized) {
+          const fullMd = serializer(newDoc)
+          if (nextMarkdown !== fullMd) {
+            console.warn(
+              '[BlockCache] Incremental/full mismatch detected — rebuilding cache.\n' +
+              `  incremental length: ${nextMarkdown.length}, full length: ${fullMd.length}`,
+            )
+            nextMarkdown = cache.buildFull(newDoc, serializer)
+          }
+        }
+
+        return nextMarkdown
+      })
+    } catch (error) {
+      console.warn('[WysiwygPane] incremental serialization unavailable', error)
+      return
     }
 
-    // Dev-mode verification: compare incremental result against full serialization
-    if (import.meta.env.DEV && prevDoc && cache.isInitialized) {
-      const fullMd = serializer(newDoc)
-      if (md !== fullMd) {
-        console.warn(
-          '[BlockCache] Incremental/full mismatch detected — rebuilding cache.\n' +
-          `  incremental length: ${md.length}, full length: ${fullMd.length}`,
-        )
-        md = cache.buildFull(newDoc, serializer)
-      }
-    }
+    if (getReadyEditor(editor) !== editor) return
 
     const nextMarkdown = composeMarkdownWithFrontMatter(frontMatterBlockRef.current, md)
+    if (md === lastSyncedValueRef.current) return
+
     lastValidMarkdownRef.current = nextMarkdown
-    const currentMarkdown = composeMarkdownWithFrontMatter(frontMatterBlockRef.current, valueRef.current)
-    if (nextMarkdown !== currentMarkdown) {
-      isInternalUpdate.current = true
-      lastSyncedValueRef.current = md
-      onChangeRef.current(nextMarkdown)
-      queueMicrotask(() => { isInternalUpdate.current = false })
-    }
-  }, [])
+    isInternalUpdate.current = true
+    lastSyncedValueRef.current = md
+    onChangeRef.current(nextMarkdown)
+    queueMicrotask(() => { isInternalUpdate.current = false })
+  }, [getReadyEditor])
 
   // Full serialization (used by flushPending, scheduleDelayedSync, and format actions)
-  const serializeAndPush = useCallback((requireInteraction = true) => {
-    const editor = editorRef.current
+  const serializeAndPush = useCallback((
+    requireInteraction = true,
+    expectedEditor?: Editor | null,
+  ) => {
+    const editor = getReadyEditor(expectedEditor)
     if (!editor) return
     if (requireInteraction && !hasUserInteractedRef.current) return
 
@@ -639,22 +675,26 @@ function WysiwygEditor({
     const md = getCurrentMarkdownBody()
 
     // Rebuild cache so subsequent incremental updates have a correct baseline
-    editor.action((ctx) => {
-      const view = ctx.get(editorViewCtx)
-      const ser = ctx.get(serializerCtx)
-      blockCacheRef.current.buildFull(view.state.doc, ser)
-    })
-
-    const nextMarkdown = composeMarkdownWithFrontMatter(frontMatterBlockRef.current, md)
-    lastValidMarkdownRef.current = nextMarkdown
-    const currentMarkdown = composeMarkdownWithFrontMatter(frontMatterBlockRef.current, valueRef.current)
-    if (nextMarkdown !== currentMarkdown) {
-      isInternalUpdate.current = true
-      lastSyncedValueRef.current = md
-      onChangeRef.current(nextMarkdown)
-      queueMicrotask(() => { isInternalUpdate.current = false })
+    if (getReadyEditor(editor) !== editor) return
+    try {
+      editor.action((ctx) => {
+        const view = ctx.get(editorViewCtx)
+        const ser = ctx.get(serializerCtx)
+        blockCacheRef.current.buildFull(view.state.doc, ser)
+      })
+    } catch (error) {
+      console.warn('[WysiwygPane] cache rebuild unavailable', error)
+      return
     }
-  }, [getCurrentMarkdownBody])
+    const nextMarkdown = composeMarkdownWithFrontMatter(frontMatterBlockRef.current, md)
+    if (md === lastSyncedValueRef.current) return
+
+    lastValidMarkdownRef.current = nextMarkdown
+    isInternalUpdate.current = true
+    lastSyncedValueRef.current = md
+    onChangeRef.current(nextMarkdown)
+    queueMicrotask(() => { isInternalUpdate.current = false })
+  }, [getCurrentMarkdownBody, getReadyEditor])
 
   const flushPending = useCallback(() => {
     serializationEpochRef.current += 1
@@ -671,6 +711,7 @@ function WysiwygEditor({
 
   const scheduleDelayedSync = useCallback((delayMs = 180) => {
     const epoch = ++serializationEpochRef.current
+    const expectedEditor = getReadyEditor()
     if (delayedSyncTimerRef.current !== null) {
       window.clearTimeout(delayedSyncTimerRef.current)
       delayedSyncTimerRef.current = null
@@ -679,12 +720,13 @@ function WysiwygEditor({
       cancelIdleWork(idleCallbackRef.current)
       idleCallbackRef.current = null
     }
+    if (!expectedEditor) return
     delayedSyncTimerRef.current = window.setTimeout(() => {
       delayedSyncTimerRef.current = null
       if (epoch !== serializationEpochRef.current) return
-      serializeAndPush()
+      serializeAndPush(true, expectedEditor)
     }, delayMs)
-  }, [serializeAndPush])
+  }, [getReadyEditor, serializeAndPush])
 
   const getSaveSnapshot = useCallback(() => {
     serializationEpochRef.current += 1
@@ -700,13 +742,15 @@ function WysiwygEditor({
   }, [getCurrentMarkdown])
 
   const runAction = useCallback((runner: (editor: Editor) => void) => {
-    const editor = editorRef.current
+    const editor = getReadyEditor()
     if (!editor) return
 
     hasUserInteractedRef.current = true
     runner(editor)
-    scheduleDelayedSync()
-  }, [scheduleDelayedSync])
+    if (getReadyEditor() === editor) {
+      scheduleDelayedSync()
+    }
+  }, [getReadyEditor, scheduleDelayedSync])
 
   const insertCodeBlockWithInheritedLanguage = useCallback((editor: Editor) => {
     editor.action((ctx) => {
@@ -717,7 +761,7 @@ function WysiwygEditor({
   }, [])
 
   const navigateToHeadingByIndex = useCallback((target: { headingIndex: number; text: string; level: 1 | 2 | 3 | 4 | 5 | 6 }) => {
-    const editor = editorRef.current
+    const editor = getReadyEditor()
     if (!editor || target.headingIndex < 0) return false
 
     const container = containerRef.current
@@ -792,7 +836,7 @@ function WysiwygEditor({
     })
 
     return didNavigate
-  }, [])
+  }, [getReadyEditor])
 
   const initEditor = useCallback(async () => {
     if (!containerRef.current) return
@@ -844,9 +888,6 @@ function WysiwygEditor({
           ...plugins,
         ])
 
-        // Capture the serializer for incremental block-level serialization
-        const serializer = ctx.get(serializerCtx)
-
         ctx.get(listenerCtx).updated((_ctx, doc, prevDoc) => {
           if (prevDoc?.eq(doc)) {
             return
@@ -865,13 +906,15 @@ function WysiwygEditor({
             idleCallbackRef.current = null
           }
           const epoch = ++serializationEpochRef.current
+          const ownerEditor = editorRef.current
+          if (!ownerEditor) return
           idleCallbackRef.current = requestIdleWork(() => {
             idleCallbackRef.current = null
             if (epoch !== serializationEpochRef.current) return
             // Use incremental serialization: only re-serialize changed blocks
-            incrementalSerializeAndPush(doc, prevDoc, serializer)
+            incrementalSerializeAndPush(doc, prevDoc, ownerEditor)
           }, 2000)
-          scheduleOutlineEmit()
+          scheduleOutlineEmit(ownerEditor)
         })
       })
       .use(commonmark)
@@ -898,13 +941,17 @@ function WysiwygEditor({
     }
 
     isEditorReadyRef.current = false
-    editorRef.current?.destroy()
+    const previousEditor = editorRef.current
+    editorRef.current = null
+    if (previousEditor && previousEditor.status !== EditorStatus.Destroyed) {
+      previousEditor.destroy()
+    }
     editorRef.current = editor
     isEditorReadyRef.current = true
 
     scheduleInitialCacheBuild()
     scheduleInitialOutlineEmit()
-  }, [scheduleDelayedSync, scheduleInitialCacheBuild, scheduleInitialOutlineEmit, serializeAndPush, incrementalSerializeAndPush])
+  }, [incrementalSerializeAndPush, scheduleDelayedSync, scheduleInitialCacheBuild, scheduleInitialOutlineEmit, scheduleOutlineEmit, serializeAndPush])
 
   useEffect(() => {
     onFlushReadyRef.current?.(flushPending)
@@ -971,7 +1018,7 @@ function WysiwygEditor({
         })
       },
       getCurrentTextColor: () => {
-        const editor = editorRef.current
+        const editor = getReadyEditor()
         if (!editor) return null
 
         let currentColor: string | null = null
@@ -1006,7 +1053,7 @@ function WysiwygEditor({
         return currentColor
       },
       getCurrentTextColorTarget: () => {
-        const editor = editorRef.current
+        const editor = getReadyEditor()
         if (!editor) return null
 
         let target: TextColorTarget | null = null
@@ -1023,15 +1070,33 @@ function WysiwygEditor({
         return target
       },
       applyTextColorToTarget: (color, target) => {
-        const editor = editorRef.current
+        const editor = getReadyEditor()
         if (!editor || !isTextColorTargetActive(target, docKey, 'wysiwyg')) return false
 
         let applied = false
         editor.action((ctx) => {
           const view = ctx.get(editorViewCtx)
           const markType = textColorMark.type(ctx)
-          let tr = view.state.tr.removeMark(target.from, target.to, markType)
           const normalizedColor = normalizeTextColor(color)
+          let foundText = false
+          let needsChange = false
+          view.state.doc.nodesBetween(target.from, target.to, (node) => {
+            if (!node.isText) return
+            foundText = true
+            const currentColor = normalizeTextColor(
+              String(node.marks.find((mark) => mark.type === markType)?.attrs?.color ?? ''),
+            )
+            if (currentColor !== normalizedColor) {
+              needsChange = true
+            }
+          })
+          if (!foundText) return
+          if (!needsChange) {
+            applied = true
+            return
+          }
+
+          let tr = view.state.tr.removeMark(target.from, target.to, markType)
           if (normalizedColor) {
             tr = tr.addMark(target.from, target.to, markType.create({ color: normalizedColor }))
           }
@@ -1055,6 +1120,20 @@ function WysiwygEditor({
             if (from === to) return
 
             const markType = textColorMark.type(ctx)
+            let foundText = false
+            let needsChange = false
+            view.state.doc.nodesBetween(from, to, (node) => {
+              if (!node.isText) return
+              foundText = true
+              const currentColor = normalizeTextColor(
+                String(node.marks.find((mark) => mark.type === markType)?.attrs?.color ?? ''),
+              )
+              if (currentColor !== normalizedColor) {
+                needsChange = true
+              }
+            })
+            if (!foundText || !needsChange) return
+
             const mark = markType.create({ color: normalizedColor })
             const target = getEffectiveTextColorTarget(from, to)
             if (target) {
@@ -1077,6 +1156,17 @@ function WysiwygEditor({
             if (from === to) return
 
             const markType = textColorMark.type(ctx)
+            let foundText = false
+            let hasColor = false
+            view.state.doc.nodesBetween(from, to, (node) => {
+              if (!node.isText) return
+              foundText = true
+              if (node.marks.some((mark) => mark.type === markType)) {
+                hasColor = true
+              }
+            })
+            if (!foundText || !hasColor) return
+
             const target = getEffectiveTextColorTarget(from, to)
             if (target) {
               preserveTextColorTargetOnNextDocChangeRef.current = true
@@ -1127,7 +1217,7 @@ function WysiwygEditor({
     return () => {
       onFormatActionsReadyRef.current?.(null)
     }
-  }, [insertCodeBlockWithInheritedLanguage, runAction])
+  }, [getReadyEditor, insertCodeBlockWithInheritedLanguage, runAction])
 
   useEffect(() => {
     initEditor()
@@ -1159,15 +1249,18 @@ function WysiwygEditor({
       onMarkdownGetterReadyRef.current?.(null)
       onFormatActionsReadyRef.current?.(null)
       onOutlineNavigatorReadyRef.current?.(null)
+      const editor = editorRef.current
       isEditorReadyRef.current = false
-      editorRef.current?.destroy()
       editorRef.current = null
+      if (editor && editor.status !== EditorStatus.Destroyed) {
+        editor.destroy()
+      }
     }
   }, [flushPending, initEditor])
 
   // Sync external value changes (e.g. tab switch, file reload)
   useEffect(() => {
-    const editor = editorRef.current
+    const editor = getReadyEditor()
     if (!editor || isInternalUpdate.current) return
     // Fast path: skip if value matches what we last synced
     if (value === lastSyncedValueRef.current) return
@@ -1187,7 +1280,7 @@ function WysiwygEditor({
     } catch {
       // Editor may not be fully initialized yet
     }
-  }, [value])
+  }, [getReadyEditor, value])
 
   useEffect(() => {
     const getter = () => {
@@ -1291,12 +1384,12 @@ function WysiwygEditor({
       container.removeEventListener('drop', markUserInteracted)
       container.removeEventListener('compositionstart', markUserInteracted)
     }
-  }, [flushPending, insertCodeBlockWithInheritedLanguage, scheduleDelayedSync])
+  }, [flushPending, getReadyEditor, insertCodeBlockWithInheritedLanguage, scheduleDelayedSync])
 
   useEffect(() => {
     const unlisten = onNativePaste((text) => {
       const container = containerRef.current
-      const editor = editorRef.current
+      const editor = getReadyEditor()
       const active = typeof document !== 'undefined' ? document.activeElement : null
       if (!container || !editor || !active) return
       if (!container.contains(active)) return
@@ -1316,7 +1409,7 @@ function WysiwygEditor({
     })
 
     return unlisten
-  }, [scheduleDelayedSync])
+  }, [getReadyEditor, scheduleDelayedSync])
 
   const style: CSSProperties & { '--wysiwyg-zoom'?: string } = {}
   if (effectiveLayout === 'preview-only') {

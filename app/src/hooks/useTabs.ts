@@ -108,23 +108,25 @@ export function useTabs(options?: UseTabsOptions) {
   const updateTabContent = useCallback(
     (id: string, content: string, options?: { markDirty?: boolean }) => {
       const shouldMarkDirty = options?.markDirty ?? true
-      setTabs((prev) =>
-        prev.map((t) =>
-          t.id === id
-            ? (() => {
-                const nextDirty = shouldMarkDirty ? true : t.dirty
-                if (t.content === content && t.dirty === nextDirty) {
-                  return t
-                }
-                return {
-                  ...t,
-                  content,
-                  dirty: nextDirty,
-                }
-              })()
-            : t,
-        ),
-      )
+      setTabs((prev) => {
+        let changed = false
+        const next = prev.map((t) => {
+          if (t.id !== id) return t
+
+          const nextDirty = shouldMarkDirty ? true : t.dirty
+          if (t.content === content && t.dirty === nextDirty) {
+            return t
+          }
+
+          changed = true
+          return {
+            ...t,
+            content,
+            dirty: nextDirty,
+          }
+        })
+        return changed ? next : prev
+      })
     },
     [],
   )
@@ -255,10 +257,15 @@ export function useTabs(options?: UseTabsOptions) {
 
   const markActiveTabDirty = useCallback(() => {
     if (!activeId) return
-    setTabs(prev => prev.map(t => {
-      if (t.id !== activeId || t.dirty) return t
-      return { ...t, dirty: true }
-    }))
+    setTabs(prev => {
+      let changed = false
+      const next = prev.map(t => {
+        if (t.id !== activeId || t.dirty) return t
+        changed = true
+        return { ...t, dirty: true }
+      })
+      return changed ? next : prev
+    })
   }, [activeId])
 
   return {
