@@ -220,6 +220,59 @@ describe('export/word - markdownToWordModel', () => {
     )
   })
 
+  it('should preserve inline math inside markdown table cells', () => {
+    const payload = markdownToWordModel([
+      '| 矩阵形状条件 | 维数变化 |',
+      '| --- | --- |',
+      '| **$M > N$** | **升维**（$\\mathbb{R}^N \\to \\mathbb{R}^M$） |',
+    ].join('\n'), 'Math table')
+
+    expect(payload.blocks[0]).toEqual(expect.objectContaining({
+      type: 'table',
+      rows: [
+        expect.objectContaining({
+          cells: [
+            expect.objectContaining({
+              blocks: [{ type: 'paragraph', text: [{ type: 'text', value: '矩阵形状条件' }] }],
+            }),
+            expect.objectContaining({
+              blocks: [{ type: 'paragraph', text: [{ type: 'text', value: '维数变化' }] }],
+            }),
+          ],
+        }),
+        expect.objectContaining({
+          cells: [
+            expect.objectContaining({
+              blocks: [{
+                type: 'paragraph',
+                text: [
+                  expect.objectContaining({
+                    type: 'math',
+                    value: 'M > N',
+                    mathMl: expect.stringContaining('<math'),
+                  }),
+                ],
+              }],
+            }),
+            expect.objectContaining({
+              blocks: [{
+                type: 'paragraph',
+                text: expect.arrayContaining([
+                  expect.objectContaining({ type: 'text', value: '升维' }),
+                  expect.objectContaining({
+                    type: 'math',
+                    value: '\\mathbb{R}^N \\to \\mathbb{R}^M',
+                    mathMl: expect.stringContaining('<math'),
+                  }),
+                ]),
+              }],
+            }),
+          ],
+        }),
+      ],
+    }))
+  })
+
   it('should support standard latex delimiters for inline and block math', () => {
     const payload = markdownToWordModel([
       'Inline \\(E = mc^2\\) example.',

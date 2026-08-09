@@ -646,6 +646,78 @@ fn should_convert_parenthesized_mathml_table_to_word_delimiter_matrix() {
 }
 
 #[test]
+fn should_preserve_mathml_double_struck_variant_in_omml() {
+    let math_ml = concat!(
+        r#"<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics>"#,
+        r#"<mrow><msup><mi mathvariant="double-struck">R</mi><mi>N</mi></msup>"#,
+        r#"<mo>→</mo><msup><mi mathvariant="double-struck">R</mi><mi>M</mi></msup></mrow>"#,
+        r#"</semantics></math>"#
+    );
+
+    let omml = mathml_to_omml(math_ml).expect("double-struck MathML should convert");
+
+    assert_eq!(omml.matches(r#"<m:sty m:val="double-struck"/>"#).count(), 2);
+    assert!(omml.contains("<m:t>→</m:t>"));
+}
+
+#[test]
+fn should_convert_mathml_accent_to_word_accent() {
+    let math_ml = concat!(
+        r#"<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics>"#,
+        r#"<mrow><mover accent="true"><mi>v</mi><mo>⃗</mo></mover>"#,
+        r#"<mover accent="true"><mi>i</mi><mo>^</mo></mover></mrow>"#,
+        r#"</semantics></math>"#
+    );
+
+    let omml = mathml_to_omml(math_ml).expect("accent MathML should convert");
+
+    assert_eq!(omml.matches("<m:acc>").count(), 2);
+    assert!(omml.contains(r#"<m:chr m:val="⃗"/>"#));
+    assert!(!omml.contains(r#"<m:chr m:val="^"/>"#));
+    assert!(omml.contains(r#"<w:i/></w:rPr></m:ctrlPr>"#));
+    assert!(!omml.contains("<m:sSup>"));
+}
+
+#[test]
+fn should_convert_mathml_under_accent_to_word_group_character() {
+    let math_ml = concat!(
+        r#"<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics>"#,
+        r#"<munder accentunder="true"><mi>x</mi><mo>⏟</mo></munder>"#,
+        r#"</semantics></math>"#
+    );
+
+    let omml = mathml_to_omml(math_ml).expect("under accent MathML should convert");
+
+    assert!(omml.contains("<m:groupChr>"));
+    assert!(omml.contains(r#"<m:chr m:val="⏟"/>"#));
+    assert!(omml.contains(r#"<m:pos m:val="bot"/>"#));
+    assert!(!omml.contains("<m:sSub>"));
+}
+
+#[test]
+fn should_convert_matrix_with_vector_columns_to_word_omml() {
+    let math_ml = concat!(
+        r#"<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow>"#,
+        r#"<mi>X</mi><mo>=</mo><mrow><mo fence="true">[</mo>"#,
+        r#"<mtable><mtr>"#,
+        r#"<mtd><mstyle><msub><mover accent="true"><mi>v</mi><mo>⃗</mo></mover><mn>1</mn></msub></mstyle></mtd>"#,
+        r#"<mtd><mstyle><msub><mover accent="true"><mi>v</mi><mo>⃗</mo></mover><mn>2</mn></msub></mstyle></mtd>"#,
+        r#"<mtd><mstyle><msub><mover accent="true"><mi>v</mi><mo>⃗</mo></mover><mn>3</mn></msub></mstyle></mtd>"#,
+        r#"<mtd><mstyle><mo>…</mo></mstyle></mtd>"#,
+        r#"</mtr></mtable><mo fence="true">]</mo></mrow></mrow>"#,
+        r#"</semantics></math>"#
+    );
+
+    let omml = mathml_to_omml(math_ml).expect("matrix MathML should convert");
+
+    assert!(omml.contains("<m:d>"));
+    assert!(omml.contains("<m:m>"));
+    assert_eq!(omml.matches("<m:acc>").count(), 3);
+    assert_eq!(omml.matches(r#"<m:chr m:val="⃗"/>"#).count(), 3);
+    assert!(omml.contains("<m:t>…</m:t>"));
+}
+
+#[test]
 fn should_apply_custom_word_style_settings_to_styles_and_layout() {
     let work_dir = unique_test_path("haomd-word-style", None);
     let payload = WordDocPayloadCfg {

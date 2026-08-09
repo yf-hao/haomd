@@ -1171,7 +1171,12 @@ fn convert_mathml_node(node: &MathMlNode) -> String {
         "mtd" => convert_mathml_table_cell(node),
         "mrow" => convert_mathml_row(node),
         "annotation" => String::new(),
-        "mi" | "mn" | "mo" | "mtext" => render_omml_text_run(&collect_mathml_text(node)),
+        "mi" | "mn" | "mo" | "mtext" => render_omml_text_run(
+            &collect_mathml_text(node),
+            node.attrs
+                .get("mathvariant")
+                .and_then(|value| mathvariant_to_omml(value)),
+        ),
         "msup" => {
             let base = node
                 .children
@@ -1267,7 +1272,11 @@ fn convert_mathml_node(node: &MathMlNode) -> String {
             )
         }
         "munderover" => render_nary_or_limit(node, true, true, &[]),
+        "munder" if is_mathml_true(node.attrs.get("accentunder")) => {
+            render_mathml_group_accent(node)
+        }
         "munder" => render_nary_or_limit(node, true, false, &[]),
+        "mover" if is_mathml_true(node.attrs.get("accent")) => render_mathml_accent(node),
         "mover" => render_nary_or_limit(node, false, true, &[]),
         _ => {
             if !node.children.is_empty() {
@@ -1277,10 +1286,97 @@ fn convert_mathml_node(node: &MathMlNode) -> String {
                     .collect::<Vec<_>>()
                     .join("")
             } else {
-                render_omml_text_run(&collect_mathml_text(node))
+                render_omml_text_run(&collect_mathml_text(node), None)
             }
         }
     }
+}
+
+fn is_mathml_true(value: Option<&String>) -> bool {
+    matches!(
+        value.map(String::as_str),
+        Some("true") | Some("1")
+    )
+}
+
+fn render_mathml_accent(node: &MathMlNode) -> String {
+    let base = node
+        .children
+        .first()
+        .map(convert_mathml_node)
+        .unwrap_or_default();
+    let accent = node
+        .children
+        .get(1)
+        .map(collect_mathml_text)
+        .unwrap_or_default();
+
+    if accent.is_empty() {
+        return base;
+    }
+
+    if matches!(accent.as_str(), "⏞" | "⏜") {
+        return render_mathml_group_character(&base, &accent, "top");
+    }
+
+    format!(
+        concat!(
+            r#"<m:acc><m:accPr>{}{}</m:accPr>"#,
+            r#"<m:e>{}</m:e></m:acc>"#
+        ),
+        if accent == "^" {
+            String::new()
+        } else {
+            format!(r#"<m:chr m:val="{}"/>"#, crate::escape_xml_attr(&accent))
+        },
+        math_accent_control_properties(accent == "^"),
+        base
+    )
+}
+
+fn render_mathml_group_accent(node: &MathMlNode) -> String {
+    let base = node
+        .children
+        .first()
+        .map(convert_mathml_node)
+        .unwrap_or_default();
+    let accent = node
+        .children
+        .get(1)
+        .map(collect_mathml_text)
+        .unwrap_or_default();
+
+    if accent.is_empty() {
+        return base;
+    }
+
+    render_mathml_group_character(&base, &accent, "bot")
+}
+
+fn render_mathml_group_character(base: &str, accent: &str, position: &str) -> String {
+    format!(
+        concat!(
+            r#"<m:groupChr><m:groupChrPr><m:chr m:val="{}"/>"#,
+            r#"<m:pos m:val="{}"/>{}</m:groupChrPr><m:e>{}</m:e></m:groupChr>"#
+        ),
+        crate::escape_xml_attr(accent),
+        position,
+        math_accent_control_properties(false),
+        base,
+    )
+}
+
+fn math_accent_control_properties(italic: bool) -> String {
+    let italic_xml = if italic { "<w:i/>" } else { "" };
+    format!(
+        concat!(
+            r#"<m:ctrlPr><w:rPr>"#,
+            r#"<w:rFonts w:ascii="Cambria Math" w:hAnsi="Cambria Math" w:cs="Cambria Math"/>"#,
+            "{}",
+            r#"</w:rPr></m:ctrlPr>"#
+        ),
+        italic_xml,
+    )
 }
 
 fn convert_mathml_table(node: &MathMlNode) -> String {
@@ -1304,10 +1400,6 @@ fn convert_mathml_table(node: &MathMlNode) -> String {
             .map(convert_mathml_node)
             .collect::<Vec<_>>()
             .join("");
-    }
-
-    if rows.len() == 1 {
-        return rows.into_iter().next().unwrap_or_default();
     }
 
     let alignments = column_alignments(node, &keep_columns);
@@ -1636,11 +1728,40 @@ fn collect_mathml_text(node: &MathMlNode) -> String {
     text
 }
 
-fn render_omml_text_run(text: &str) -> String {
+fn mathvariant_to_omml(value: &str) -> Option<&'static str> {
+    match value {
+        "bold" => Some("bold"),
+        "italic" => Some("italic"),
+        "bold-italic" => Some("bold-italic"),
+        "double-struck" => Some("double-struck"),
+        "script" => Some("script"),
+        "fraktur" => Some("fraktur"),
+        "sans-serif" => Some("sans-serif"),
+        "sans-serif-bold" => Some("sans-serif-bold"),
+        "sans-serif-italic" => Some("sans-serif-italic"),
+        "sans-serif-bold-italic" => Some("sans-serif-bold-italic"),
+        "monospace" => Some("monospace"),
+        _ => None,
+    }
+}
+
+fn render_omml_text_run(text: &str, mathvariant: Option<&str>) -> String {
     if text.is_empty() {
         return String::new();
     }
-    format!(r#"<m:r><m:t>{}</m:t></m:r>"#, crate::escape_xml_text(text))
+    let properties = mathvariant
+        .map(|value| {
+            format!(
+                r#"<m:rPr><m:sty m:val="{}"/></m:rPr>"#,
+                crate::escape_xml_attr(value)
+            )
+        })
+        .unwrap_or_default();
+    format!(
+        r#"<m:r>{}<m:t>{}</m:t></m:r>"#,
+        properties,
+        crate::escape_xml_text(text)
+    )
 }
 
 const WORD_PAGE_WIDTH_TWIPS: u32 = 11906;

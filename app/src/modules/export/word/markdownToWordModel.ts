@@ -175,10 +175,8 @@ function tableRowToModel(row: TableRow, ctx: ParseContext): { cells: { blocks: W
 }
 
 function tableCellToBlocks(cell: TableCell, ctx: ParseContext): WordBlock[] {
-  const blocks = cell.children.flatMap((child) => transformBlock(child, ctx))
-  if (blocks.length > 0) return blocks
-  const fallback = toString(cell).trim()
-  return fallback ? [{ type: 'paragraph', text: [{ type: 'text', value: fallback }] }] : []
+  const text = transformInline(cell.children, ctx)
+  return text.length > 0 ? [{ type: 'paragraph', text }] : []
 }
 
 function paragraphToAlignedTabRows(node: Content): ReturnType<typeof splitAlignedTabInlineNodes<PhrasingContent>> {
