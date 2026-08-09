@@ -129,32 +129,32 @@ export function createFormatCommands(ctx: FormatCommandContext): CommandRegistry
       ctx.setStatusMessage(tr(ctx, 'commands.formatTextColorCleared', '已清除文字颜色'))
     },
     format_background_color_red: async () => {
-      await applyBackgroundColor('#fee2e2')
-      ctx.setStatusMessage(tr(ctx, 'commands.formatBackgroundColorApplied', '已设置背景颜色', { color: '#fee2e2' }))
+      await applyBackgroundColor('#fca5a5')
+      ctx.setStatusMessage(tr(ctx, 'commands.formatBackgroundColorApplied', '已设置背景颜色', { color: '#fca5a5' }))
     },
     format_background_color_orange: async () => {
-      await applyBackgroundColor('#ffedd5')
-      ctx.setStatusMessage(tr(ctx, 'commands.formatBackgroundColorApplied', '已设置背景颜色', { color: '#ffedd5' }))
+      await applyBackgroundColor('#fdba74')
+      ctx.setStatusMessage(tr(ctx, 'commands.formatBackgroundColorApplied', '已设置背景颜色', { color: '#fdba74' }))
     },
     format_background_color_yellow: async () => {
-      await applyBackgroundColor('#fef3c7')
-      ctx.setStatusMessage(tr(ctx, 'commands.formatBackgroundColorApplied', '已设置背景颜色', { color: '#fef3c7' }))
+      await applyBackgroundColor('#fde047')
+      ctx.setStatusMessage(tr(ctx, 'commands.formatBackgroundColorApplied', '已设置背景颜色', { color: '#fde047' }))
     },
     format_background_color_green: async () => {
-      await applyBackgroundColor('#dcfce7')
-      ctx.setStatusMessage(tr(ctx, 'commands.formatBackgroundColorApplied', '已设置背景颜色', { color: '#dcfce7' }))
+      await applyBackgroundColor('#86efac')
+      ctx.setStatusMessage(tr(ctx, 'commands.formatBackgroundColorApplied', '已设置背景颜色', { color: '#86efac' }))
     },
     format_background_color_cyan: async () => {
-      await applyBackgroundColor('#cffafe')
-      ctx.setStatusMessage(tr(ctx, 'commands.formatBackgroundColorApplied', '已设置背景颜色', { color: '#cffafe' }))
+      await applyBackgroundColor('#67e8f9')
+      ctx.setStatusMessage(tr(ctx, 'commands.formatBackgroundColorApplied', '已设置背景颜色', { color: '#67e8f9' }))
     },
     format_background_color_blue: async () => {
-      await applyBackgroundColor('#dbeafe')
-      ctx.setStatusMessage(tr(ctx, 'commands.formatBackgroundColorApplied', '已设置背景颜色', { color: '#dbeafe' }))
+      await applyBackgroundColor('#93c5fd')
+      ctx.setStatusMessage(tr(ctx, 'commands.formatBackgroundColorApplied', '已设置背景颜色', { color: '#93c5fd' }))
     },
     format_background_color_purple: async () => {
-      await applyBackgroundColor('#f3e8ff')
-      ctx.setStatusMessage(tr(ctx, 'commands.formatBackgroundColorApplied', '已设置背景颜色', { color: '#f3e8ff' }))
+      await applyBackgroundColor('#d8b4fe')
+      ctx.setStatusMessage(tr(ctx, 'commands.formatBackgroundColorApplied', '已设置背景颜色', { color: '#d8b4fe' }))
     },
     format_background_color_custom: () => {
       ctx.openBackgroundColorDialog?.()

@@ -724,7 +724,7 @@ export const enUSMessages: MessageDictionary = {
     backgroundColorDialogRecent: 'Recent Colors',
     backgroundColorDialogPicker: 'Color Picker',
     backgroundColorDialogHex: 'Hex',
-    backgroundColorDialogInvalidHex: 'Enter a valid hex color such as #fef3c7.',
+    backgroundColorDialogInvalidHex: 'Enter a valid hex color such as #fde047.',
     backgroundColorDialogClear: 'Clear Color',
     saveCancelled: 'Save cancelled',
   },

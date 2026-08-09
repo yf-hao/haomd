@@ -457,6 +457,7 @@ function WysiwygEditor({
 
   const isInternalUpdate = useRef(false)
   const textColorTargetRef = useRef<TextColorTarget | null>(null)
+  const backgroundColorTargetRef = useRef<TextColorTarget | null>(null)
   const preserveTextColorTargetOnNextDocChangeRef = useRef(false)
   // Track the last value we synced TO the editor (to avoid needless getMarkdown)
   const lastSyncedValueRef = useRef(value)
@@ -605,6 +606,16 @@ function WysiwygEditor({
       return textColorTargetRef.current
     }
     textColorTargetRef.current = null
+    return null
+  }, [docKey])
+
+  const getEffectiveBackgroundColorTarget = useCallback((from: number, to: number): TextColorTarget | null => {
+    if (!docKey) return null
+    if (from !== to) return createTextColorTarget(docKey, 'wysiwyg', from, to)
+    if (isTextColorTargetActive(backgroundColorTargetRef.current, docKey, 'wysiwyg')) {
+      return backgroundColorTargetRef.current
+    }
+    backgroundColorTargetRef.current = null
     return null
   }, [docKey])
 
@@ -900,6 +911,7 @@ function WysiwygEditor({
             preserveTextColorTargetOnNextDocChangeRef.current = false
           } else {
             textColorTargetRef.current = null
+            backgroundColorTargetRef.current = null
           }
 
           onDirtyRef.current?.()
@@ -1029,14 +1041,13 @@ function WysiwygEditor({
           const selection = view.state.selection as typeof view.state.selection & { main?: { from: number; to: number } }
           const from = selection.main?.from ?? selection.from
           const to = selection.main?.to ?? selection.to
-          const target = getEffectiveTextColorTarget(from, to)
-          if (!target) return
+          if (from === to) return
 
           const markType = textColorMark.type(ctx)
           let foundText = false
           let mixed = false
 
-          view.state.doc.nodesBetween(target.from, target.to, (node) => {
+          view.state.doc.nodesBetween(from, to, (node) => {
             if (!node.isText) return
             foundText = true
             const mark = node.marks.find((item) => item.type === markType)
@@ -1137,11 +1148,6 @@ function WysiwygEditor({
             if (!foundText || !needsChange) return
 
             const mark = markType.create({ color: normalizedColor })
-            const target = getEffectiveTextColorTarget(from, to)
-            if (target) {
-              preserveTextColorTargetOnNextDocChangeRef.current = true
-              textColorTargetRef.current = target
-            }
             const tr = view.state.tr.removeMark(from, to, markType).addMark(from, to, mark).scrollIntoView()
             view.dispatch(tr)
             view.focus()
@@ -1169,11 +1175,6 @@ function WysiwygEditor({
             })
             if (!foundText || !hasColor) return
 
-            const target = getEffectiveTextColorTarget(from, to)
-            if (target) {
-              preserveTextColorTargetOnNextDocChangeRef.current = true
-              textColorTargetRef.current = target
-            }
             view.dispatch(view.state.tr.removeMark(from, to, markType).scrollIntoView())
             view.focus()
           })
@@ -1188,12 +1189,13 @@ function WysiwygEditor({
             const selection = view.state.selection as typeof view.state.selection & { main?: { from: number; to: number } }
             const from = selection.main?.from ?? selection.from
             const to = selection.main?.to ?? selection.to
-            if (from === to) return
+            const target = getEffectiveBackgroundColorTarget(from, to)
+            if (!target) return
 
             const markType = backgroundColorMark.type(ctx)
             let foundText = false
             let needsChange = false
-            view.state.doc.nodesBetween(from, to, (node) => {
+            view.state.doc.nodesBetween(target.from, target.to, (node) => {
               if (!node.isText) return
               foundText = true
               const currentColor = normalizeTextColor(
@@ -1204,7 +1206,9 @@ function WysiwygEditor({
             if (!foundText || !needsChange) return
 
             const mark = markType.create({ color: normalizedColor })
-            view.dispatch(view.state.tr.removeMark(from, to, markType).addMark(from, to, mark).scrollIntoView())
+            backgroundColorTargetRef.current = target
+            preserveTextColorTargetOnNextDocChangeRef.current = true
+            view.dispatch(view.state.tr.removeMark(target.from, target.to, markType).addMark(target.from, target.to, mark).scrollIntoView())
             view.focus()
           })
         })
@@ -1216,18 +1220,20 @@ function WysiwygEditor({
             const selection = view.state.selection as typeof view.state.selection & { main?: { from: number; to: number } }
             const from = selection.main?.from ?? selection.from
             const to = selection.main?.to ?? selection.to
-            if (from === to) return
-
             const markType = backgroundColorMark.type(ctx)
+            const target = getEffectiveBackgroundColorTarget(from, to)
+            if (!target) return
             let hasBackgroundColor = false
-            view.state.doc.nodesBetween(from, to, (node) => {
+            view.state.doc.nodesBetween(target.from, target.to, (node) => {
               if (node.isText && node.marks.some((mark) => mark.type === markType)) {
                 hasBackgroundColor = true
               }
             })
             if (!hasBackgroundColor) return
 
-            view.dispatch(view.state.tr.removeMark(from, to, markType).scrollIntoView())
+            backgroundColorTargetRef.current = target
+            preserveTextColorTargetOnNextDocChangeRef.current = true
+            view.dispatch(view.state.tr.removeMark(target.from, target.to, markType).scrollIntoView())
             view.focus()
           })
         })
@@ -1272,7 +1278,7 @@ function WysiwygEditor({
     return () => {
       onFormatActionsReadyRef.current?.(null)
     }
-  }, [getReadyEditor, insertCodeBlockWithInheritedLanguage, runAction])
+  }, [getEffectiveBackgroundColorTarget, getReadyEditor, insertCodeBlockWithInheritedLanguage, runAction])
 
   useEffect(() => {
     initEditor()

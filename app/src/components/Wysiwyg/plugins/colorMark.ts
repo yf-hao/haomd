@@ -55,7 +55,7 @@ export const textColorMark = $markSchema('text_color', () => ({
 export const backgroundColorMark = $markSchema('background_color', () => ({
   attrs: {
     color: {
-      default: '#fef3c7',
+      default: '#fde047',
       validate: 'string',
     },
   },
@@ -71,7 +71,7 @@ export const backgroundColorMark = $markSchema('background_color', () => ({
     },
   ],
   toDOM: (mark) => {
-    const color = normalizeTextColor(String(mark.attrs.color)) ?? '#fef3c7'
+    const color = normalizeTextColor(String(mark.attrs.color)) ?? '#fde047'
     return ['span', { 'data-background-color': color, style: `background-color:${color}` }, 0]
   },
   parseMarkdown: {

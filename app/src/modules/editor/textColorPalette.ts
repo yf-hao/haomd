@@ -17,13 +17,13 @@ export const RECENT_TEXT_COLORS_STORAGE_KEY = 'haomd:text-color:recent'
 export const MAX_RECENT_TEXT_COLORS = 8
 
 export const BACKGROUND_COLOR_PRESETS: readonly TextColorPreset[] = [
-  { id: 'red', color: '#fee2e2' },
-  { id: 'orange', color: '#ffedd5' },
-  { id: 'yellow', color: '#fef3c7' },
-  { id: 'green', color: '#dcfce7' },
-  { id: 'cyan', color: '#cffafe' },
-  { id: 'blue', color: '#dbeafe' },
-  { id: 'purple', color: '#f3e8ff' },
+  { id: 'red', color: '#fca5a5' },
+  { id: 'orange', color: '#fdba74' },
+  { id: 'yellow', color: '#fde047' },
+  { id: 'green', color: '#86efac' },
+  { id: 'cyan', color: '#67e8f9' },
+  { id: 'blue', color: '#93c5fd' },
+  { id: 'purple', color: '#d8b4fe' },
 ]
 
 export const RECENT_BACKGROUND_COLORS_STORAGE_KEY = 'haomd:background-color:recent'

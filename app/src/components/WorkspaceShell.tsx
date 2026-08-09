@@ -252,6 +252,7 @@ export function WorkspaceShell({
   const markdownRef = useRef(markdown)
   const lastActiveIdForPreviewRef = useRef<string | null>(null)
   const textColorTargetRef = useRef<TextColorTarget | null>(null)
+  const backgroundColorTargetRef = useRef<TextColorTarget | null>(null)
   const preserveTextColorTargetOnNextChangeRef = useRef(false)
 
   const [aboutOpen, setAboutOpen] = useState(false)
@@ -685,6 +686,7 @@ export function WorkspaceShell({
 
   useEffect(() => {
     textColorTargetRef.current = null
+    backgroundColorTargetRef.current = null
   }, [activeId, editMode])
 
   useEffect(() => {
@@ -1182,6 +1184,7 @@ export function WorkspaceShell({
       preserveTextColorTargetOnNextChangeRef.current = false
     } else {
       textColorTargetRef.current = null
+      backgroundColorTargetRef.current = null
     }
     handleMarkdownChange(val, { syncEditor: false })
   }, [handleMarkdownChange])
@@ -1275,6 +1278,7 @@ export function WorkspaceShell({
         preserveTextColorTargetOnNextChangeRef.current = false
       } else {
         textColorTargetRef.current = null
+        backgroundColorTargetRef.current = null
       }
       handleMarkdownChange(val)
     },
@@ -1319,6 +1323,26 @@ export function WorkspaceShell({
       }
 
       textColorTargetRef.current = null
+      return null
+    }
+
+    const getSourceBackgroundTarget = () => {
+      const view = getActiveSourceView()
+      const docKey = getActiveTextColorDocKey()
+      if (!view || !docKey) return null
+
+      const { from, to } = view.state.selection.main
+      if (from !== to) {
+        const target = createTextColorTarget(docKey, 'source', from, to)
+        backgroundColorTargetRef.current = target
+        return target
+      }
+
+      if (isTextColorTargetActive(backgroundColorTargetRef.current, docKey, 'source')) {
+        return backgroundColorTargetRef.current
+      }
+
+      backgroundColorTargetRef.current = null
       return null
     }
 
@@ -1758,14 +1782,14 @@ export function WorkspaceShell({
       }
 
       const view = getActiveSourceView()
-      const target = getSourceSelectionTarget()
+      const target = getSourceBackgroundTarget()
       if (!view || !target) return
 
       const payload = getSourceBackgroundReplacementPayload(view.state.doc.toString(), target, normalizedColor)
       if (!payload) return
 
       preserveTextColorTargetOnNextChangeRef.current = true
-      textColorTargetRef.current = payload.nextTarget
+      backgroundColorTargetRef.current = payload.nextTarget
       const cursorPos = payload.replaceFrom + payload.replacement.length
       view.dispatch(view.state.update({
         changes: { from: payload.replaceFrom, to: payload.replaceTo, insert: payload.replacement },
@@ -1782,14 +1806,14 @@ export function WorkspaceShell({
       }
 
       const view = getActiveSourceView()
-      const target = getSourceSelectionTarget()
+      const target = getSourceBackgroundTarget()
       if (!view || !target) return
 
       const payload = getSourceBackgroundReplacementPayload(view.state.doc.toString(), target, null)
       if (!payload) return
 
       preserveTextColorTargetOnNextChangeRef.current = true
-      textColorTargetRef.current = payload.nextTarget
+      backgroundColorTargetRef.current = payload.nextTarget
       const cursorPos = payload.replaceFrom + payload.replacement.length
       view.dispatch(view.state.update({
         changes: { from: payload.replaceFrom, to: payload.replaceTo, insert: payload.replacement },

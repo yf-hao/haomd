@@ -721,7 +721,7 @@ export const zhCNMessages: MessageDictionary = {
     backgroundColorDialogRecent: '最近使用',
     backgroundColorDialogPicker: '颜色选择',
     backgroundColorDialogHex: '十六进制',
-    backgroundColorDialogInvalidHex: '请输入合法的十六进制颜色，例如 #fef3c7。',
+    backgroundColorDialogInvalidHex: '请输入合法的十六进制颜色，例如 #fde047。',
     backgroundColorDialogClear: '清除颜色',
     saveCancelled: '已取消保存',
   },
