@@ -42,6 +42,10 @@ export type CommandSystemParams = CommandContext & {
    */
   openTextColorDialog?: () => void
   /**
+   * 打开“背景颜色”对话框的 UI 回调，由 WorkspaceShell 提供。
+   */
+  openBackgroundColorDialog?: () => void
+  /**
    * 打开最近文件模态窗的 UI 回调，由 WorkspaceShell 提供。
    */
   openRecentDialog?: () => void
@@ -164,6 +168,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     openInsertTableDialog,
     openMathSymbolDialog,
     openTextColorDialog,
+    openBackgroundColorDialog,
     insertWordTemplateFrontMatter,
     openRecentDialog,
     openCalendarDialog,
@@ -284,6 +289,7 @@ export function useCommandSystem(params: CommandSystemParams) {
         openInsertTableDialog,
         openMathSymbolDialog,
         openTextColorDialog,
+        openBackgroundColorDialog,
         insertWordTemplateFrontMatter,
         closeAiChatDialog,
         openRecentDialog,

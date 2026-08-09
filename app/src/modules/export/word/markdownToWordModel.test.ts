@@ -403,6 +403,20 @@ describe('export/word - markdownToWordModel', () => {
     })
   })
 
+  it('should map custom background color syntax and preserve nested text color', () => {
+    const payload = markdownToWordModel(
+      '{background:#fef3c7}{color:#3b82f6}蓝字{/color}{/background}',
+      'Custom Background Color',
+    )
+
+    expect(payload.blocks[0]).toEqual({
+      type: 'paragraph',
+      text: [
+        { type: 'text', value: '蓝字', color: '3B82F6', backgroundColor: 'FEF3C7' },
+      ],
+    })
+  })
+
   it('should map font and background html styles into text runs', () => {
     const payload = markdownToWordModel(
       '<p><span style="font-size: 18px; font-family: &quot;Microsoft YaHei&quot;, sans-serif; background-color: #fff59d;">Styled font</span></p>',

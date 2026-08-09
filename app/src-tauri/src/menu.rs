@@ -94,6 +94,16 @@ struct MenuTexts {
     text_color_cycle: &'static str,
     text_color_custom: &'static str,
     text_color_clear: &'static str,
+    background_color: &'static str,
+    background_color_red: &'static str,
+    background_color_orange: &'static str,
+    background_color_yellow: &'static str,
+    background_color_green: &'static str,
+    background_color_cyan: &'static str,
+    background_color_blue: &'static str,
+    background_color_purple: &'static str,
+    background_color_custom: &'static str,
+    background_color_clear: &'static str,
     table: &'static str,
     code_block: &'static str,
     front_matter: &'static str,
@@ -203,6 +213,16 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             text_color_cycle: "循环颜色",
             text_color_custom: "自定义…",
             text_color_clear: "清除颜色",
+            background_color: "背景颜色",
+            background_color_red: "红色",
+            background_color_orange: "橙色",
+            background_color_yellow: "黄色",
+            background_color_green: "绿色",
+            background_color_cyan: "青色",
+            background_color_blue: "蓝色",
+            background_color_purple: "紫色",
+            background_color_custom: "自定义…",
+            background_color_clear: "清除颜色",
             table: "表格",
             code_block: "代码块",
             front_matter: "Front Matter",
@@ -309,6 +329,16 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             text_color_cycle: "Cycle Colors",
             text_color_custom: "Custom...",
             text_color_clear: "Clear Color",
+            background_color: "Background Color",
+            background_color_red: "Red",
+            background_color_orange: "Orange",
+            background_color_yellow: "Yellow",
+            background_color_green: "Green",
+            background_color_cyan: "Cyan",
+            background_color_blue: "Blue",
+            background_color_purple: "Purple",
+            background_color_custom: "Custom...",
+            background_color_clear: "Clear Color",
             table: "Table",
             code_block: "Code Block",
             front_matter: "Front Matter",
@@ -775,12 +805,72 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         .item(
             &MenuItemBuilder::new(texts.text_color_custom)
                 .id("format_text_color_custom")
+                .accelerator("CmdOrCtrl+Alt+Shift+C")
                 .build(app)?,
         )
         .separator()
         .item(
             &MenuItemBuilder::new(texts.text_color_clear)
                 .id("format_text_color_clear")
+                .accelerator("CmdOrCtrl+Alt+0")
+                .build(app)?,
+        )
+        .build()?;
+
+    let background_color_menu = SubmenuBuilder::new(app, texts.background_color)
+        .item(
+            &MenuItemBuilder::new(texts.background_color_red)
+                .id("format_background_color_red")
+                .accelerator("CmdOrCtrl+Alt+Shift+1")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.background_color_orange)
+                .id("format_background_color_orange")
+                .accelerator("CmdOrCtrl+Alt+Shift+2")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.background_color_yellow)
+                .id("format_background_color_yellow")
+                .accelerator("CmdOrCtrl+Alt+Shift+3")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.background_color_green)
+                .id("format_background_color_green")
+                .accelerator("CmdOrCtrl+Alt+Shift+4")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.background_color_cyan)
+                .id("format_background_color_cyan")
+                .accelerator("CmdOrCtrl+Alt+Shift+5")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.background_color_blue)
+                .id("format_background_color_blue")
+                .accelerator("CmdOrCtrl+Alt+Shift+6")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.background_color_purple)
+                .id("format_background_color_purple")
+                .accelerator("CmdOrCtrl+Alt+Shift+7")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::new(texts.background_color_custom)
+                .id("format_background_color_custom")
+                .accelerator("CmdOrCtrl+Alt+Shift+B")
+                .build(app)?,
+        )
+        .separator()
+        .item(
+            &MenuItemBuilder::new(texts.background_color_clear)
+                .id("format_background_color_clear")
+                .accelerator("CmdOrCtrl+Alt+Shift+0")
                 .build(app)?,
         )
         .build()?;
@@ -799,6 +889,7 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
                 .build(app)?,
         )
         .item(&text_color_menu)
+        .item(&background_color_menu)
         .item(
             &MenuItemBuilder::new(texts.table)
                 .id("format_insert_table")

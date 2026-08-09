@@ -29,7 +29,7 @@ import {
 } from '../../modules/theme/backgroundImageRuntime'
 import { normalizeTextColor } from '../../modules/markdown/extensions/colorMark'
 import { mathPlugin, mathBlockSchema, mathInlineNode } from './plugins/mathPlugin'
-import { colorMarkPlugin, textColorMark } from './plugins/colorMark'
+import { backgroundColorMark, colorMarkPlugin, textColorMark } from './plugins/colorMark'
 import { MathBlockView } from './views/MathBlockView'
 import { InlineMathView } from './views/InlineMathView'
 import { CodeBlockView } from './views/CodeBlockView'
@@ -77,6 +77,8 @@ export interface WysiwygFormatActions {
   applyTextColorToTarget: (color: string | null, target: TextColorTarget) => boolean
   applyTextColor: (color: string) => void
   clearTextColor: () => void
+  applyBackgroundColor: (color: string) => void
+  clearBackgroundColor: () => void
   insertImage: (src: string, alt?: string) => boolean
   insertCodeBlock: () => void
   insertTable: (rows: number, cols: number) => void
@@ -1172,6 +1174,59 @@ function WysiwygEditor({
               preserveTextColorTargetOnNextDocChangeRef.current = true
               textColorTargetRef.current = target
             }
+            view.dispatch(view.state.tr.removeMark(from, to, markType).scrollIntoView())
+            view.focus()
+          })
+        })
+      },
+      applyBackgroundColor: (color) => {
+        const normalizedColor = normalizeTextColor(color)
+        if (!normalizedColor) return
+        runAction((editor) => {
+          editor.action((ctx) => {
+            const view = ctx.get(editorViewCtx)
+            const selection = view.state.selection as typeof view.state.selection & { main?: { from: number; to: number } }
+            const from = selection.main?.from ?? selection.from
+            const to = selection.main?.to ?? selection.to
+            if (from === to) return
+
+            const markType = backgroundColorMark.type(ctx)
+            let foundText = false
+            let needsChange = false
+            view.state.doc.nodesBetween(from, to, (node) => {
+              if (!node.isText) return
+              foundText = true
+              const currentColor = normalizeTextColor(
+                String(node.marks.find((mark) => mark.type === markType)?.attrs?.color ?? ''),
+              )
+              if (currentColor !== normalizedColor) needsChange = true
+            })
+            if (!foundText || !needsChange) return
+
+            const mark = markType.create({ color: normalizedColor })
+            view.dispatch(view.state.tr.removeMark(from, to, markType).addMark(from, to, mark).scrollIntoView())
+            view.focus()
+          })
+        })
+      },
+      clearBackgroundColor: () => {
+        runAction((editor) => {
+          editor.action((ctx) => {
+            const view = ctx.get(editorViewCtx)
+            const selection = view.state.selection as typeof view.state.selection & { main?: { from: number; to: number } }
+            const from = selection.main?.from ?? selection.from
+            const to = selection.main?.to ?? selection.to
+            if (from === to) return
+
+            const markType = backgroundColorMark.type(ctx)
+            let hasBackgroundColor = false
+            view.state.doc.nodesBetween(from, to, (node) => {
+              if (node.isText && node.marks.some((mark) => mark.type === markType)) {
+                hasBackgroundColor = true
+              }
+            })
+            if (!hasBackgroundColor) return
+
             view.dispatch(view.state.tr.removeMark(from, to, markType).scrollIntoView())
             view.focus()
           })

@@ -10,6 +10,8 @@ import {
   getCurrentTextColor,
   getCurrentTextColorTarget,
   applyTextColorToTarget,
+  applyBackgroundColor,
+  clearBackgroundColor,
 } from '../editor/formatService'
 import { MATH_CAT_PREFIX, MATH_CATEGORIES } from '../editor/mathSymbols'
 import { getNextTextColor } from '../editor/textColorCycle'
@@ -19,6 +21,7 @@ export type FormatCommandContext = {
   openInsertTableDialog?: () => void
   openMathSymbolDialog?: (categoryKey: string) => void
   openTextColorDialog?: () => void
+  openBackgroundColorDialog?: () => void
   insertWordTemplateFrontMatter?: () => void
   t?: (key: string, params?: Record<string, string | number>) => string
 }
@@ -124,6 +127,41 @@ export function createFormatCommands(ctx: FormatCommandContext): CommandRegistry
     format_text_color_clear: async () => {
       await clearTextColor()
       ctx.setStatusMessage(tr(ctx, 'commands.formatTextColorCleared', '已清除文字颜色'))
+    },
+    format_background_color_red: async () => {
+      await applyBackgroundColor('#fee2e2')
+      ctx.setStatusMessage(tr(ctx, 'commands.formatBackgroundColorApplied', '已设置背景颜色', { color: '#fee2e2' }))
+    },
+    format_background_color_orange: async () => {
+      await applyBackgroundColor('#ffedd5')
+      ctx.setStatusMessage(tr(ctx, 'commands.formatBackgroundColorApplied', '已设置背景颜色', { color: '#ffedd5' }))
+    },
+    format_background_color_yellow: async () => {
+      await applyBackgroundColor('#fef3c7')
+      ctx.setStatusMessage(tr(ctx, 'commands.formatBackgroundColorApplied', '已设置背景颜色', { color: '#fef3c7' }))
+    },
+    format_background_color_green: async () => {
+      await applyBackgroundColor('#dcfce7')
+      ctx.setStatusMessage(tr(ctx, 'commands.formatBackgroundColorApplied', '已设置背景颜色', { color: '#dcfce7' }))
+    },
+    format_background_color_cyan: async () => {
+      await applyBackgroundColor('#cffafe')
+      ctx.setStatusMessage(tr(ctx, 'commands.formatBackgroundColorApplied', '已设置背景颜色', { color: '#cffafe' }))
+    },
+    format_background_color_blue: async () => {
+      await applyBackgroundColor('#dbeafe')
+      ctx.setStatusMessage(tr(ctx, 'commands.formatBackgroundColorApplied', '已设置背景颜色', { color: '#dbeafe' }))
+    },
+    format_background_color_purple: async () => {
+      await applyBackgroundColor('#f3e8ff')
+      ctx.setStatusMessage(tr(ctx, 'commands.formatBackgroundColorApplied', '已设置背景颜色', { color: '#f3e8ff' }))
+    },
+    format_background_color_custom: () => {
+      ctx.openBackgroundColorDialog?.()
+    },
+    format_background_color_clear: async () => {
+      await clearBackgroundColor()
+      ctx.setStatusMessage(tr(ctx, 'commands.formatBackgroundColorCleared', '已清除背景颜色'))
     },
     format_insert_table: () => {
       if (ctx.openInsertTableDialog) {

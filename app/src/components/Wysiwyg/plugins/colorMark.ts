@@ -52,4 +52,49 @@ export const textColorMark = $markSchema('text_color', () => ({
   },
 }))
 
-export const colorMarkPlugin = [remarkTextColorPlugin, textColorMark].flat()
+export const backgroundColorMark = $markSchema('background_color', () => ({
+  attrs: {
+    color: {
+      default: '#fef3c7',
+      validate: 'string',
+    },
+  },
+  parseDOM: [
+    {
+      tag: 'span[data-background-color]',
+      getAttrs: (dom) => {
+        if (!(dom instanceof HTMLElement)) return false
+        const color = normalizeTextColor(dom.dataset.backgroundColor ?? dom.style.backgroundColor)
+        if (!color) return false
+        return { color }
+      },
+    },
+  ],
+  toDOM: (mark) => {
+    const color = normalizeTextColor(String(mark.attrs.color)) ?? '#fef3c7'
+    return ['span', { 'data-background-color': color, style: `background-color:${color}` }, 0]
+  },
+  parseMarkdown: {
+    match: (node) => node.type === 'backgroundColor',
+    runner: (state, node, markType) => {
+      const color = normalizeTextColor(String(node.color ?? ''))
+      if (!color) {
+        state.next(node.children)
+        return
+      }
+      state.openMark(markType, { color })
+      state.next(node.children)
+      state.closeMark(markType)
+    },
+  },
+  toMarkdown: {
+    match: (mark) => mark.type.name === 'background_color',
+    runner: (state, mark) => {
+      const color = normalizeTextColor(String(mark.attrs.color))
+      if (!color) return
+      state.withMark(mark, 'backgroundColor', undefined, { color })
+    },
+  },
+}))
+
+export const colorMarkPlugin = [remarkTextColorPlugin, textColorMark, backgroundColorMark].flat()

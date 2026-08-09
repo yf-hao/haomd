@@ -14,6 +14,16 @@ function matchesAltDigit(event: KeyboardEvent, key: string, digit: number): bool
   )
 }
 
+function matchesAltShiftDigit(event: KeyboardEvent, key: string, digit: number): boolean {
+  if (!event.altKey || !event.shiftKey) return false
+
+  return (
+    event.code === `Digit${digit}` ||
+    event.code === `Numpad${digit}` ||
+    key === String(digit)
+  )
+}
+
 function matchesPhysicalKey(event: KeyboardEvent, key: string, code: string): boolean {
   return event.code === code || key === code.replace('Key', '').toLowerCase()
 }
@@ -106,6 +116,16 @@ export const FORMAT_SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
     requireEditorContext: true,
   },
   {
+    action: 'format_text_color_custom',
+    matches: (event, key) => matchesPhysicalKey(event, key, 'KeyC') && event.altKey && event.shiftKey,
+    requireEditorContext: true,
+  },
+  {
+    action: 'format_text_color_clear',
+    matches: (event, key) => matchesAltDigit(event, key, 0),
+    requireEditorContext: true,
+  },
+  {
     action: 'format_text_color_red',
     matches: (event, key) => matchesAltDigit(event, key, 1),
     requireEditorContext: true,
@@ -140,6 +160,51 @@ export const FORMAT_SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
     matches: (event, key) => matchesAltDigit(event, key, 7),
     requireEditorContext: true,
   },
+  {
+    action: 'format_background_color_custom',
+    matches: (event, key) => matchesPhysicalKey(event, key, 'KeyB') && event.altKey && event.shiftKey,
+    requireEditorContext: true,
+  },
+  {
+    action: 'format_background_color_clear',
+    matches: (event, key) => matchesAltShiftDigit(event, key, 0),
+    requireEditorContext: true,
+  },
+  {
+    action: 'format_background_color_red',
+    matches: (event, key) => matchesAltShiftDigit(event, key, 1),
+    requireEditorContext: true,
+  },
+  {
+    action: 'format_background_color_orange',
+    matches: (event, key) => matchesAltShiftDigit(event, key, 2),
+    requireEditorContext: true,
+  },
+  {
+    action: 'format_background_color_yellow',
+    matches: (event, key) => matchesAltShiftDigit(event, key, 3),
+    requireEditorContext: true,
+  },
+  {
+    action: 'format_background_color_green',
+    matches: (event, key) => matchesAltShiftDigit(event, key, 4),
+    requireEditorContext: true,
+  },
+  {
+    action: 'format_background_color_cyan',
+    matches: (event, key) => matchesAltShiftDigit(event, key, 5),
+    requireEditorContext: true,
+  },
+  {
+    action: 'format_background_color_blue',
+    matches: (event, key) => matchesAltShiftDigit(event, key, 6),
+    requireEditorContext: true,
+  },
+  {
+    action: 'format_background_color_purple',
+    matches: (event, key) => matchesAltShiftDigit(event, key, 7),
+    requireEditorContext: true,
+  },
 ] as const
 
 export const EDITOR_SHORTCUT_SCOPE_SELECTORS = [
@@ -165,6 +230,8 @@ export const FORMAT_MENU_ACCELERATORS: Readonly<Record<string, string>> = {
   format_insert_code_block: 'CmdOrCtrl+Shift+C',
   format_insert_front_matter: 'CmdOrCtrl+Alt+F',
   format_text_color_cycle: 'CmdOrCtrl+Alt+C',
+  format_text_color_custom: 'CmdOrCtrl+Alt+Shift+C',
+  format_text_color_clear: 'CmdOrCtrl+Alt+0',
   format_text_color_red: 'CmdOrCtrl+Alt+1',
   format_text_color_orange: 'CmdOrCtrl+Alt+2',
   format_text_color_yellow: 'CmdOrCtrl+Alt+3',
@@ -172,6 +239,15 @@ export const FORMAT_MENU_ACCELERATORS: Readonly<Record<string, string>> = {
   format_text_color_cyan: 'CmdOrCtrl+Alt+5',
   format_text_color_blue: 'CmdOrCtrl+Alt+6',
   format_text_color_purple: 'CmdOrCtrl+Alt+7',
+  format_background_color_custom: 'CmdOrCtrl+Alt+Shift+B',
+  format_background_color_clear: 'CmdOrCtrl+Alt+Shift+0',
+  format_background_color_red: 'CmdOrCtrl+Alt+Shift+1',
+  format_background_color_orange: 'CmdOrCtrl+Alt+Shift+2',
+  format_background_color_yellow: 'CmdOrCtrl+Alt+Shift+3',
+  format_background_color_green: 'CmdOrCtrl+Alt+Shift+4',
+  format_background_color_cyan: 'CmdOrCtrl+Alt+Shift+5',
+  format_background_color_blue: 'CmdOrCtrl+Alt+Shift+6',
+  format_background_color_purple: 'CmdOrCtrl+Alt+Shift+7',
 }
 
 export const GLOBAL_MENU_ACCELERATORS: Readonly<Record<string, string>> = {

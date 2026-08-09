@@ -20,8 +20,9 @@ type InsertCodeBlockImpl = (() => void | Promise<void>) | null
 type InsertMathSymbolImpl = ((latex: string) => void | Promise<void>) | null
 
 type ApplyTextColorImpl = ((color: string) => void | Promise<void>) | null
-
 type ClearTextColorImpl = (() => void | Promise<void>) | null
+type ApplyBackgroundColorImpl = ((color: string) => void | Promise<void>) | null
+type ClearBackgroundColorImpl = (() => void | Promise<void>) | null
 
 type GetCurrentTextColorImpl = (() => string | null | Promise<string | null>) | null
 
@@ -37,6 +38,8 @@ let insertCodeBlockImpl: InsertCodeBlockImpl = null
 let insertMathSymbolImpl: InsertMathSymbolImpl = null
 let applyTextColorImpl: ApplyTextColorImpl = null
 let clearTextColorImpl: ClearTextColorImpl = null
+let applyBackgroundColorImpl: ApplyBackgroundColorImpl = null
+let clearBackgroundColorImpl: ClearBackgroundColorImpl = null
 let getCurrentTextColorImpl: GetCurrentTextColorImpl = null
 let getCurrentTextColorTargetImpl: GetCurrentTextColorTargetImpl = null
 let applyTextColorToTargetImpl: ApplyTextColorToTargetImpl = null
@@ -148,6 +151,30 @@ export async function clearTextColor(): Promise<void> {
     return
   }
   await Promise.resolve(clearTextColorImpl())
+}
+
+export function registerApplyBackgroundColor(fn: ((color: string) => void | Promise<void>) | null): void {
+  applyBackgroundColorImpl = fn
+}
+
+export async function applyBackgroundColor(color: string): Promise<void> {
+  if (!applyBackgroundColorImpl) {
+    console.warn('[formatService] applyBackgroundColor called but no implementation registered')
+    return
+  }
+  await Promise.resolve(applyBackgroundColorImpl(color))
+}
+
+export function registerClearBackgroundColor(fn: (() => void | Promise<void>) | null): void {
+  clearBackgroundColorImpl = fn
+}
+
+export async function clearBackgroundColor(): Promise<void> {
+  if (!clearBackgroundColorImpl) {
+    console.warn('[formatService] clearBackgroundColor called but no implementation registered')
+    return
+  }
+  await Promise.resolve(clearBackgroundColorImpl())
 }
 
 export function registerGetCurrentTextColor(fn: (() => string | null | Promise<string | null>) | null): void {

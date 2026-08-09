@@ -92,21 +92,33 @@ import {
   registerGetCurrentTextColor,
   registerGetCurrentTextColorTarget,
   registerApplyTextColorToTarget,
+  registerApplyBackgroundColor,
+  registerClearBackgroundColor,
   applyTextColor,
   clearTextColor,
+  applyBackgroundColor,
+  clearBackgroundColor,
 } from '../modules/editor/formatService'
 import { useI18n } from '../modules/i18n/I18nContext'
 import { useThemeContext } from '../modules/theme/ThemeContext'
 import { buildBackgroundImageVars, resolveManagedBackgroundImageUrl } from '../modules/theme/backgroundImageRuntime'
 import {
   applyTextColorSyntax,
+  applyBackgroundColorSyntax,
   clearTextColorSyntax,
+  clearBackgroundColorSyntax,
   getEnclosingTextColorBlock,
+  getEnclosingBackgroundColorBlock,
   getTextColorAtRange,
   normalizeTextColor,
 } from '../modules/markdown/extensions/colorMark'
 import { extractFrontMatter, upsertFrontMatterValue } from '../modules/markdown/frontMatter'
-import { MAX_RECENT_TEXT_COLORS, RECENT_TEXT_COLORS_STORAGE_KEY } from '../modules/editor/textColorPalette'
+import {
+  BACKGROUND_COLOR_PRESETS,
+  MAX_RECENT_TEXT_COLORS,
+  RECENT_BACKGROUND_COLORS_STORAGE_KEY,
+  RECENT_TEXT_COLORS_STORAGE_KEY,
+} from '../modules/editor/textColorPalette'
 import { createTextColorTarget, isTextColorTargetActive, type TextColorTarget } from '../modules/editor/textColorTarget'
 import { setWorkspaceMountedRoots } from '../modules/workspace/workspaceMountedRoots'
 import { setActiveWorkspaceDirectory } from '../modules/workspace/workspaceActiveDirectory'
@@ -877,12 +889,28 @@ export function WorkspaceShell({
   const [musicPlayerDialogOpen, setMusicPlayerDialogOpen] = useState(false)
   const [recentDialogOpen, setRecentDialogOpen] = useState(false)
   const [isTextColorDialogOpen, setIsTextColorDialogOpen] = useState(false)
+  const [isBackgroundColorDialogOpen, setIsBackgroundColorDialogOpen] = useState(false)
   const pomodoro = usePomodoroController()
   const alarmScheduler = useAlarmScheduler()
   const [recentTextColors, setRecentTextColors] = useState<string[]>(() => {
     try {
       if (typeof localStorage === 'undefined') return []
       const raw = localStorage.getItem(RECENT_TEXT_COLORS_STORAGE_KEY)
+      if (!raw) return []
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) return []
+      return parsed
+        .map((value) => normalizeTextColor(String(value)))
+        .filter((value): value is string => Boolean(value))
+        .slice(0, MAX_RECENT_TEXT_COLORS)
+    } catch {
+      return []
+    }
+  })
+  const [recentBackgroundColors, setRecentBackgroundColors] = useState<string[]>(() => {
+    try {
+      if (typeof localStorage === 'undefined') return []
+      const raw = localStorage.getItem(RECENT_BACKGROUND_COLORS_STORAGE_KEY)
       if (!raw) return []
       const parsed = JSON.parse(raw)
       if (!Array.isArray(parsed)) return []
@@ -1300,6 +1328,12 @@ export function WorkspaceShell({
       return createTextColorTarget(docKey, 'source', start + openTagLength, start + openTagLength + content.length)
     }
 
+    const buildSourceBackgroundTarget = (docKey: string, start: number, color: string, originalText: string) => {
+      const content = originalText.replace(/^\{background:#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})\}([\s\S]*?)\{\/background\}$/i, '$1')
+      const openTagLength = `{background:${color}}`.length
+      return createTextColorTarget(docKey, 'source', start + openTagLength, start + openTagLength + content.length)
+    }
+
     const getSourceReplacementPayload = (markdownText: string, target: TextColorTarget, color: string | null) => {
       const enclosing = getEnclosingTextColorBlock(markdownText, target.from, target.to)
       if (enclosing) {
@@ -1328,6 +1362,38 @@ export function WorkspaceShell({
         replacement,
         nextTarget: color
           ? buildSourceColoredTarget(target.docKey, target.from, color, selected)
+          : createTextColorTarget(target.docKey, 'source', target.from, target.from + replacement.length),
+      }
+    }
+
+    const getSourceBackgroundReplacementPayload = (markdownText: string, target: TextColorTarget, color: string | null) => {
+      const enclosing = getEnclosingBackgroundColorBlock(markdownText, target.from, target.to)
+      if (enclosing) {
+        const replacement = color
+          ? applyBackgroundColorSyntax(enclosing.content, color)
+          : enclosing.content
+        if (!replacement || replacement === markdownText.slice(enclosing.blockStart, enclosing.blockEnd)) return null
+        return {
+          replaceFrom: enclosing.blockStart,
+          replaceTo: enclosing.blockEnd,
+          replacement,
+          nextTarget: color
+            ? buildSourceBackgroundTarget(target.docKey, enclosing.blockStart, color, enclosing.content)
+            : createTextColorTarget(target.docKey, 'source', enclosing.blockStart, enclosing.blockStart + enclosing.content.length),
+        }
+      }
+
+      const selected = markdownText.slice(target.from, target.to)
+      const replacement = color
+        ? applyBackgroundColorSyntax(selected, color)
+        : clearBackgroundColorSyntax(selected)
+      if (!replacement || replacement === selected) return null
+      return {
+        replaceFrom: target.from,
+        replaceTo: target.to,
+        replacement,
+        nextTarget: color
+          ? buildSourceBackgroundTarget(target.docKey, target.from, color, selected)
           : createTextColorTarget(target.docKey, 'source', target.from, target.from + replacement.length),
       }
     }
@@ -1682,6 +1748,57 @@ export function WorkspaceShell({
       syncEditorToReactState()
     })
 
+    registerApplyBackgroundColor(async (color: string) => {
+      const normalizedColor = normalizeTextColor(color)
+      if (!normalizedColor) return
+
+      if (editModeRef.current === 'wysiwyg') {
+        wysiwygFormatActionsRef.current?.applyBackgroundColor(normalizedColor)
+        return
+      }
+
+      const view = getActiveSourceView()
+      const target = getSourceSelectionTarget()
+      if (!view || !target) return
+
+      const payload = getSourceBackgroundReplacementPayload(view.state.doc.toString(), target, normalizedColor)
+      if (!payload) return
+
+      preserveTextColorTargetOnNextChangeRef.current = true
+      textColorTargetRef.current = payload.nextTarget
+      const cursorPos = payload.replaceFrom + payload.replacement.length
+      view.dispatch(view.state.update({
+        changes: { from: payload.replaceFrom, to: payload.replaceTo, insert: payload.replacement },
+        selection: { anchor: cursorPos, head: cursorPos },
+        scrollIntoView: true,
+      }))
+      syncEditorToReactState()
+    })
+
+    registerClearBackgroundColor(async () => {
+      if (editModeRef.current === 'wysiwyg') {
+        wysiwygFormatActionsRef.current?.clearBackgroundColor()
+        return
+      }
+
+      const view = getActiveSourceView()
+      const target = getSourceSelectionTarget()
+      if (!view || !target) return
+
+      const payload = getSourceBackgroundReplacementPayload(view.state.doc.toString(), target, null)
+      if (!payload) return
+
+      preserveTextColorTargetOnNextChangeRef.current = true
+      textColorTargetRef.current = payload.nextTarget
+      const cursorPos = payload.replaceFrom + payload.replacement.length
+      view.dispatch(view.state.update({
+        changes: { from: payload.replaceFrom, to: payload.replaceTo, insert: payload.replacement },
+        selection: { anchor: cursorPos, head: cursorPos },
+        scrollIntoView: true,
+      }))
+      syncEditorToReactState()
+    })
+
     registerGetCurrentTextColor(async () => {
       if (editModeRef.current === 'wysiwyg') {
         return wysiwygFormatActionsRef.current?.getCurrentTextColor() ?? null
@@ -1757,6 +1874,8 @@ export function WorkspaceShell({
       registerGetCurrentTextColor(null)
       registerGetCurrentTextColorTarget(null)
       registerApplyTextColorToTarget(null)
+      registerApplyBackgroundColor(null)
+      registerClearBackgroundColor(null)
     }
   }, [createTab, getActiveSourceView, getActiveTextColorDocKey, handleMarkdownChange, isCreatingTab, setActiveTab, tabs])
 
@@ -3172,6 +3291,30 @@ export function WorkspaceShell({
     setIsTextColorDialogOpen(true)
   }, [isPdfActive, setStatusMessage, t])
 
+  const rememberRecentBackgroundColor = useCallback((color: string) => {
+    const normalized = normalizeTextColor(color)
+    if (!normalized) return
+    setRecentBackgroundColors((prev) => {
+      const next = [normalized, ...prev.filter((item) => item !== normalized)].slice(0, MAX_RECENT_TEXT_COLORS)
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(RECENT_BACKGROUND_COLORS_STORAGE_KEY, JSON.stringify(next))
+        }
+      } catch {
+        // ignore local persistence failures
+      }
+      return next
+    })
+  }, [])
+
+  const openBackgroundColorDialog = useCallback(() => {
+    if (isPdfActive) {
+      setStatusMessage(t('workspace.backgroundColorUnsupportedPdf'))
+      return
+    }
+    setIsBackgroundColorDialogOpen(true)
+  }, [isPdfActive, setStatusMessage, t])
+
   const handleTextColorDialogConfirm = useCallback(async (color: string) => {
     const normalized = normalizeTextColor(color)
     if (!normalized) return
@@ -3185,6 +3328,21 @@ export function WorkspaceShell({
     await clearTextColor()
     setStatusMessage(t('commands.formatTextColorCleared'))
     setIsTextColorDialogOpen(false)
+  }, [setStatusMessage, t])
+
+  const handleBackgroundColorDialogConfirm = useCallback(async (color: string) => {
+    const normalized = normalizeTextColor(color)
+    if (!normalized) return
+    await applyBackgroundColor(normalized)
+    rememberRecentBackgroundColor(normalized)
+    setStatusMessage(t('commands.formatBackgroundColorApplied', { color: normalized }))
+    setIsBackgroundColorDialogOpen(false)
+  }, [rememberRecentBackgroundColor, setStatusMessage, t])
+
+  const handleBackgroundColorDialogClear = useCallback(async () => {
+    await clearBackgroundColor()
+    setStatusMessage(t('commands.formatBackgroundColorCleared'))
+    setIsBackgroundColorDialogOpen(false)
   }, [setStatusMessage, t])
 
   const generateMarkdownTable = useCallback((rows: number, cols: number): string => {
@@ -3248,6 +3406,7 @@ export function WorkspaceShell({
     openInsertTableDialog,
     openMathSymbolDialog,
     openTextColorDialog,
+    openBackgroundColorDialog,
     insertWordTemplateFrontMatter: insertDefaultWordTemplateFrontMatter,
     openCalendarDialog: () => setCalendarDialogOpen(true),
     openAlarmDialog: () => setAlarmDialogOpen(true),
@@ -4229,6 +4388,15 @@ export function WorkspaceShell({
           onConfirm={(color) => { void handleTextColorDialogConfirm(color) }}
           onClear={() => { void handleTextColorDialogClear() }}
           onCancel={() => setIsTextColorDialogOpen(false)}
+        />
+        <TextColorDialog
+          open={isBackgroundColorDialogOpen}
+          mode="background"
+          presets={BACKGROUND_COLOR_PRESETS}
+          recentColors={recentBackgroundColors}
+          onConfirm={(color) => { void handleBackgroundColorDialogConfirm(color) }}
+          onClear={() => { void handleBackgroundColorDialogClear() }}
+          onCancel={() => setIsBackgroundColorDialogOpen(false)}
         />
 
         {effectiveAiChatMode === 'floating' && aiChatOpen && aiChatState?.open && (

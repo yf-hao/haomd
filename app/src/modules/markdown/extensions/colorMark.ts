@@ -1,6 +1,9 @@
 const COLOR_VALUE_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
 const COLOR_BLOCK_RE = /\{color:(#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}))\}([\s\S]*?)\{\/color\}/g
 const COLOR_BLOCK_FULL_RE = /^\{color:(#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}))\}([\s\S]*?)\{\/color\}$/i
+const BACKGROUND_BLOCK_RE = /\{background:(#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}))\}([\s\S]*?)\{\/background\}/g
+const BACKGROUND_BLOCK_FULL_RE = /^\{background:(#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}))\}([\s\S]*?)\{\/background\}$/i
+const STYLE_TOKEN_RE = /\{(\/?)(color|background)(?::(#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})))?\}/g
 
 type MdastNode = {
   type: string
@@ -19,6 +22,8 @@ export type TextColorBlockRange = {
   color: string
   content: string
 }
+
+export type BackgroundColorBlockRange = TextColorBlockRange
 
 export function isSupportedTextColor(value: string | null | undefined): value is string {
   return typeof value === 'string' && COLOR_VALUE_RE.test(value)
@@ -46,6 +51,23 @@ export function clearTextColorSyntax(text: string): string {
   return text.replace(COLOR_BLOCK_RE, (_match, _color, content: string) => content)
 }
 
+export function applyBackgroundColorSyntax(text: string, color: string): string | null {
+  const normalizedColor = normalizeTextColor(color)
+  if (!normalizedColor || !text) return null
+
+  const wrapped = BACKGROUND_BLOCK_FULL_RE.exec(text)
+  if (wrapped) {
+    return `{background:${normalizedColor}}${wrapped[2]}{/background}`
+  }
+
+  return `{background:${normalizedColor}}${text}{/background}`
+}
+
+export function clearBackgroundColorSyntax(text: string): string {
+  if (!text) return text
+  return text.replace(BACKGROUND_BLOCK_RE, (_match, _color, content: string) => content)
+}
+
 export function getTextColorAtRange(markdown: string, from: number, to: number): string | null {
   if (!markdown || from >= to) return null
 
@@ -71,9 +93,23 @@ export function getTextColorAtRange(markdown: string, from: number, to: number):
 }
 
 export function getEnclosingTextColorBlock(markdown: string, from: number, to: number): TextColorBlockRange | null {
+  return getEnclosingColorBlock(markdown, from, to, COLOR_BLOCK_RE, 'color')
+}
+
+export function getEnclosingBackgroundColorBlock(markdown: string, from: number, to: number): BackgroundColorBlockRange | null {
+  return getEnclosingColorBlock(markdown, from, to, BACKGROUND_BLOCK_RE, 'background')
+}
+
+function getEnclosingColorBlock(
+  markdown: string,
+  from: number,
+  to: number,
+  pattern: RegExp,
+  tag: 'color' | 'background',
+): TextColorBlockRange | null {
   if (!markdown || from >= to) return null
 
-  for (const match of markdown.matchAll(COLOR_BLOCK_RE)) {
+  for (const match of markdown.matchAll(pattern)) {
     const index = match.index ?? -1
     if (index < 0) continue
 
@@ -81,9 +117,9 @@ export function getEnclosingTextColorBlock(markdown: string, from: number, to: n
     if (!color) continue
 
     const fullMatch = match[0]
-    const openTag = `{color:${match[1]}}`
+    const openTag = `{${tag}:${match[1]}}`
     const contentStart = index + openTag.length
-    const contentEnd = index + fullMatch.length - '{/color}'.length
+    const contentEnd = index + fullMatch.length - `{/${tag}}`.length
     if (from < contentStart || to > contentEnd) continue
 
     return {
@@ -100,12 +136,8 @@ export function getEnclosingTextColorBlock(markdown: string, from: number, to: n
 }
 
 export function replaceTextColorSyntaxWithHtml(markdown: string): string {
-  if (!markdown || !markdown.includes('{color:')) return markdown
-  return markdown.replace(COLOR_BLOCK_RE, (_match, color: string, content: string) => {
-    const normalizedColor = normalizeTextColor(color)
-    if (!normalizedColor) return content
-    return `<span data-text-color="${normalizedColor}" style="color:${normalizedColor}">${escapeHtml(content)}</span>`
-  })
+  if (!markdown || (!markdown.includes('{color:') && !markdown.includes('{background:'))) return markdown
+  return renderStyledHtml(markdown).value
 }
 
 export function remarkTextColorSyntax(this: { data: () => Record<string, unknown> }) {
@@ -122,6 +154,15 @@ export function remarkTextColorSyntax(this: { data: () => Record<string, unknown
         if (!color) return content
         return `{color:${color}}${content}{/color}`
       },
+      backgroundColor(node: MdastNode, _parent: MdastNode | undefined, state: any, info: any) {
+        const color = normalizeTextColor(String(node.color ?? ''))
+        const content =
+          typeof node.value === 'string'
+            ? node.value
+            : state.containerPhrasing(node, info)
+        if (!color) return content
+        return `{background:${color}}${content}{/background}`
+      },
     },
   })
 
@@ -135,7 +176,7 @@ function transformTextColorTree(node: MdastNode): void {
 
   const nextChildren: MdastNode[] = []
   for (const child of node.children) {
-    if (child.type === 'text' && typeof child.value === 'string' && child.value.includes('{color:')) {
+    if (child.type === 'text' && typeof child.value === 'string' && (child.value.includes('{color:') || child.value.includes('{background:'))) {
       nextChildren.push(...splitTextColorNodes(child.value))
       continue
     }
@@ -150,35 +191,93 @@ function transformTextColorTree(node: MdastNode): void {
 }
 
 function splitTextColorNodes(value: string): MdastNode[] {
-  const nodes: MdastNode[] = []
-  let lastIndex = 0
+  return parseStyledNodes(value).nodes
+}
 
-  for (const match of value.matchAll(COLOR_BLOCK_RE)) {
-    const index = match.index ?? 0
-    if (index > lastIndex) {
-      nodes.push({ type: 'text', value: value.slice(lastIndex, index) })
+function parseStyledNodes(
+  value: string,
+  start = 0,
+  closingTag?: 'color' | 'background',
+): { nodes: MdastNode[]; end: number; closed: boolean } {
+  const nodes: MdastNode[] = []
+  let cursor = start
+  STYLE_TOKEN_RE.lastIndex = start
+
+  for (let match = STYLE_TOKEN_RE.exec(value); match; match = STYLE_TOKEN_RE.exec(value)) {
+    const index = match.index
+    const isClosing = match[1] === '/'
+    const tag = match[2] as 'color' | 'background'
+    const color = normalizeTextColor(match[3])
+
+    if (isClosing) {
+      if (tag === closingTag) {
+        if (index > cursor) nodes.push({ type: 'text', value: value.slice(cursor, index) })
+        return { nodes, end: STYLE_TOKEN_RE.lastIndex, closed: true }
+      }
+      continue
     }
 
-    const color = normalizeTextColor(match[1])
-    const content = match[2] ?? ''
-    if (!color) {
-      nodes.push({ type: 'text', value: match[0] })
-    } else if (content) {
+    if (!color) continue
+    if (index > cursor) nodes.push({ type: 'text', value: value.slice(cursor, index) })
+    const inner = parseStyledNodes(value, STYLE_TOKEN_RE.lastIndex, tag)
+    if (!inner.closed) {
+      nodes.push({ type: 'text', value: value.slice(index) })
+      return { nodes, end: value.length, closed: false }
+    }
+    if (inner.nodes.length > 0) {
       nodes.push({
-        type: 'textColor',
+        type: tag === 'color' ? 'textColor' : 'backgroundColor',
         color,
-        children: [{ type: 'text', value: content }],
+        children: inner.nodes,
       })
     }
-
-    lastIndex = index + match[0].length
+    cursor = inner.end
+    STYLE_TOKEN_RE.lastIndex = cursor
   }
 
-  if (lastIndex < value.length) {
-    nodes.push({ type: 'text', value: value.slice(lastIndex) })
+  if (cursor < value.length) nodes.push({ type: 'text', value: value.slice(cursor) })
+  return { nodes, end: value.length, closed: false }
+}
+
+function renderStyledHtml(
+  value: string,
+  start = 0,
+  closingTag?: 'color' | 'background',
+): { value: string; end: number; closed: boolean } {
+  let output = ''
+  let cursor = start
+  STYLE_TOKEN_RE.lastIndex = start
+
+  for (let match = STYLE_TOKEN_RE.exec(value); match; match = STYLE_TOKEN_RE.exec(value)) {
+    const index = match.index
+    const isClosing = match[1] === '/'
+    const tag = match[2] as 'color' | 'background'
+    const color = normalizeTextColor(match[3])
+
+    if (isClosing) {
+      if (tag === closingTag) {
+        output += escapeHtml(value.slice(cursor, index))
+        return { value: output, end: STYLE_TOKEN_RE.lastIndex, closed: true }
+      }
+      continue
+    }
+
+    if (!color) continue
+    output += escapeHtml(value.slice(cursor, index))
+    const inner = renderStyledHtml(value, STYLE_TOKEN_RE.lastIndex, tag)
+    if (!inner.closed) {
+      output += escapeHtml(value.slice(index))
+      return { value: output, end: value.length, closed: false }
+    }
+    const attr = tag === 'color' ? 'data-text-color' : 'data-background-color'
+    const style = tag === 'color' ? `color:${color}` : `background-color:${color}`
+    output += `<span ${attr}="${color}" style="${style}">${inner.value}</span>`
+    cursor = inner.end
+    STYLE_TOKEN_RE.lastIndex = cursor
   }
 
-  return nodes.length > 0 ? nodes : [{ type: 'text', value }]
+  output += escapeHtml(value.slice(cursor))
+  return { value: output, end: value.length, closed: false }
 }
 
 function escapeHtml(value: string): string {

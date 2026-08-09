@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEven
 import { Button } from './Button'
 import { useI18n } from '../modules/i18n/I18nContext'
 import { normalizeTextColor } from '../modules/markdown/extensions/colorMark'
-import { TEXT_COLOR_PRESETS } from '../modules/editor/textColorPalette'
+import { TEXT_COLOR_PRESETS, type TextColorPreset } from '../modules/editor/textColorPalette'
 
 export type TextColorDialogProps = {
   open: boolean
@@ -10,6 +10,8 @@ export type TextColorDialogProps = {
   onConfirm: (color: string) => void
   onClear: () => void
   onCancel: () => void
+  mode?: 'text' | 'background'
+  presets?: readonly TextColorPreset[]
 }
 
 const FOCUSABLE_SELECTOR =
@@ -21,9 +23,12 @@ export function TextColorDialog({
   onConfirm,
   onClear,
   onCancel,
+  mode = 'text',
+  presets = TEXT_COLOR_PRESETS,
 }: TextColorDialogProps) {
   const { t } = useI18n()
-  const [rawColor, setRawColor] = useState(TEXT_COLOR_PRESETS[3]?.color ?? '#3b82f6')
+  const defaultColor = presets[3]?.color ?? '#3b82f6'
+  const [rawColor, setRawColor] = useState(defaultColor)
   const dialogRef = useRef<HTMLDivElement | null>(null)
   const hexInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -31,13 +36,13 @@ export function TextColorDialog({
 
   useEffect(() => {
     if (!open) return
-    setRawColor(recentColors[0] ?? TEXT_COLOR_PRESETS[3]?.color ?? '#3b82f6')
+    setRawColor(recentColors[0] ?? defaultColor)
     const timer = setTimeout(() => {
       hexInputRef.current?.focus()
       hexInputRef.current?.select()
     }, 0)
     return () => clearTimeout(timer)
-  }, [open, recentColors])
+  }, [defaultColor, open, recentColors])
 
   if (!open) return null
 
@@ -94,14 +99,14 @@ export function TextColorDialog({
         onKeyDown={handleKeyDown}
       >
         <div id="text-color-dialog-title" className="modal-title">
-          {t('workspace.textColorDialogTitle')}
+          {t(mode === 'text' ? 'workspace.textColorDialogTitle' : 'workspace.backgroundColorDialogTitle')}
         </div>
         <form className="modal-content text-color-dialog" onSubmit={handleSubmit}>
           <div className="text-color-row">
             <label className="text-color-label">
-              {t('workspace.textColorDialogPreset')}
+              {t(mode === 'text' ? 'workspace.textColorDialogPreset' : 'workspace.backgroundColorDialogPreset')}
               <div className="text-color-swatch-grid">
-                {TEXT_COLOR_PRESETS.map((preset) => (
+                {presets.map((preset) => (
                   <button
                     key={preset.id}
                     type="button"
@@ -119,7 +124,7 @@ export function TextColorDialog({
           {recentColors.length > 0 && (
             <div className="text-color-row">
               <label className="text-color-label">
-                {t('workspace.textColorDialogRecent')}
+                {t(mode === 'text' ? 'workspace.textColorDialogRecent' : 'workspace.backgroundColorDialogRecent')}
                 <div className="text-color-swatch-grid">
                   {recentColors.map((color) => (
                     <button
@@ -138,7 +143,7 @@ export function TextColorDialog({
 
           <div className="text-color-row text-color-row-split">
             <label className="text-color-label">
-              {t('workspace.textColorDialogPicker')}
+              {t(mode === 'text' ? 'workspace.textColorDialogPicker' : 'workspace.backgroundColorDialogPicker')}
               <input
                 className="text-color-picker"
                 type="color"
@@ -147,7 +152,7 @@ export function TextColorDialog({
               />
             </label>
             <label className="text-color-label text-color-hex-label">
-              {t('workspace.textColorDialogHex')}
+              {t(mode === 'text' ? 'workspace.textColorDialogHex' : 'workspace.backgroundColorDialogHex')}
               <input
                 ref={hexInputRef}
                 type="text"
@@ -162,7 +167,7 @@ export function TextColorDialog({
 
           {!normalizedColor && (
             <div className="insert-table-error">
-              {t('workspace.textColorDialogInvalidHex')}
+              {t(mode === 'text' ? 'workspace.textColorDialogInvalidHex' : 'workspace.backgroundColorDialogInvalidHex')}
             </div>
           )}
 
@@ -171,7 +176,7 @@ export function TextColorDialog({
               {t('common.apply')}
             </Button>
             <Button variant="secondary" type="button" onClick={onClear}>
-              {t('workspace.textColorDialogClear')}
+              {t(mode === 'text' ? 'workspace.textColorDialogClear' : 'workspace.backgroundColorDialogClear')}
             </Button>
             <Button variant="tertiary" type="button" onClick={onCancel}>
               {t('common.cancel')}
