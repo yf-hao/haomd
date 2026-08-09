@@ -216,6 +216,15 @@ const countDocumentChars = (text: string): number => {
 
 const seed = ''
 const PREVIEW_SYNC_DELAY_MS = 300
+const FORMULA_HEAVY_PREVIEW_DELAY_MS = 500
+const FORMULA_EXTREME_PREVIEW_DELAY_MS = 700
+
+function getPreviewSyncDelay(markdown: string): number {
+  const formulaMarkers = (markdown.replace(/\\./g, '').match(/\${1,2}|\\\[|\\\]/g) ?? []).length
+  if (formulaMarkers >= 120) return FORMULA_EXTREME_PREVIEW_DELAY_MS
+  if (formulaMarkers >= 40) return FORMULA_HEAVY_PREVIEW_DELAY_MS
+  return PREVIEW_SYNC_DELAY_MS
+}
 
 function findOutlineItemByPage(items: OutlineItem[], page: number): OutlineItem | null {
   for (const item of items) {
@@ -307,6 +316,7 @@ export function WorkspaceShell({
   const [inlineNewFolderDir, setInlineNewFolderDir] = useState<string | null>(null)
   const [inlineRenamePath, setInlineRenamePath] = useState<string | null>(null)
   const [focusRequest, setFocusRequest] = useState<{ localLine: number; columnStart?: number } | null>(null)
+  const [wysiwygFocusRequest, setWysiwygFocusRequest] = useState(0)
   const [transientSearchQuery, setTransientSearchQuery] = useState<EditorTransientSearchQuery | null>(null)
   const [previewSelectionText, setPreviewSelectionText] = useState<string | null>(null)
   const pdfSelectionGetterRef = useRef<(() => string | null) | null>(null)
@@ -2210,7 +2220,7 @@ export function WorkspaceShell({
     const timer = window.setTimeout(() => {
       previewSyncTimerRef.current = null
       commitPreviewValue(markdown)
-    }, PREVIEW_SYNC_DELAY_MS)
+    }, getPreviewSyncDelay(markdown))
     previewSyncTimerRef.current = timer
     return () => clearTimeout(timer)
   }, [markdown, isPreviewVisible, clearPreviewSyncTimer, commitPreviewValue])
@@ -2260,6 +2270,7 @@ export function WorkspaceShell({
     editorMarkdownRef.current = content
     setEditorMarkdown(content)
     setMarkdown(content)
+    setWysiwygFocusRequest((request) => request + 1)
     if (isPreviewVisible) {
       clearPreviewSyncTimer()
       skipNextPreviewThrottleRef.current = true
@@ -4227,6 +4238,7 @@ export function WorkspaceShell({
                           value={wysiwygBodyMarkdown}
                           frontMatterBlock={wysiwygFrontMatterBlock}
                           docKey={activeId ?? null}
+                          focusAtEndRequest={wysiwygFocusRequest}
                           editorZoom={editorZoom}
                           skipUnmountFlushRef={skipWysiwygUnmountFlushRef}
                           onChange={(val) => {

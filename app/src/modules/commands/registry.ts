@@ -491,7 +491,8 @@ function createFileCommands(ctx: FileCommandContext): CommandRegistry {
   return {
     new_file: () => {
       // 总是新建一个空白标签页，不打断当前未保存的标签
-      ctx.createTab()
+      ctx.createTab({ content: '' })
+      ctx.applyOpenedContent('')
       ctx.newDocument()
     },
     save: async () => {

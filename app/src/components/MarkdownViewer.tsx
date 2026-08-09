@@ -448,34 +448,54 @@ const markdownLinkClickHandler = new DownloadOnClickUseCase(
 // KaTeX 渲染结果缓存，按内容去重
 const blockMathHtmlCache = new Map<string, string>()
 const inlineMathHtmlCache = new Map<string, string>()
+const KATEX_CACHE_LIMIT = 512
+
+function getCachedKatexHtml(cache: Map<string, string>, key: string): string | undefined {
+  const cached = cache.get(key)
+  if (cached === undefined) return undefined
+
+  cache.delete(key)
+  cache.set(key, cached)
+  return cached
+}
+
+function setCachedKatexHtml(cache: Map<string, string>, key: string, html: string): void {
+  cache.delete(key)
+  cache.set(key, html)
+  while (cache.size > KATEX_CACHE_LIMIT) {
+    const oldestKey = cache.keys().next().value
+    if (oldestKey === undefined) break
+    cache.delete(oldestKey)
+  }
+}
 
 function renderBlockMathHtml(tex: string, katexInstance: KatexModule | null): string {
   if (!katexInstance) return tex
   const key = tex
-  const cached = blockMathHtmlCache.get(key)
-  if (cached) return cached
+  const cached = getCachedKatexHtml(blockMathHtmlCache, key)
+  if (cached !== undefined) return cached
   let html = ''
   try {
     html = katexInstance.renderToString(tex, { displayMode: true, throwOnError: false })
   } catch {
     html = tex
   }
-  blockMathHtmlCache.set(key, html)
+  setCachedKatexHtml(blockMathHtmlCache, key, html)
   return html
 }
 
 function renderInlineMathHtml(tex: string, katexInstance: KatexModule | null): string {
   if (!katexInstance) return tex
   const key = tex
-  const cached = inlineMathHtmlCache.get(key)
-  if (cached) return cached
+  const cached = getCachedKatexHtml(inlineMathHtmlCache, key)
+  if (cached !== undefined) return cached
   let html = ''
   try {
     html = katexInstance.renderToString(tex, { displayMode: false, throwOnError: false })
   } catch {
     html = tex
   }
-  inlineMathHtmlCache.set(key, html)
+  setCachedKatexHtml(inlineMathHtmlCache, key, html)
   return html
 }
 

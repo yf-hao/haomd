@@ -50,6 +50,7 @@ export interface WysiwygPaneProps {
   onChange: (markdown: string) => void
   filePath?: string | null
   docKey?: string | null
+  focusAtEndRequest?: number
   effectiveLayout: LayoutType
   editorZoom?: number
   onSelectionGetterReady?: (getter: (() => string | null) | null) => void
@@ -227,6 +228,7 @@ function PlainTextWysiwyg({
   onChange,
   effectiveLayout,
   editorZoom,
+  focusAtEndRequest,
   onSelectionGetterReady,
   onFormatActionsReady,
   onMarkdownGetterReady,
@@ -259,6 +261,16 @@ function PlainTextWysiwyg({
             ? 'wysiwyg-bg-fit-auto'
             : ''
     : ''
+
+  useEffect(() => {
+    if (!focusAtEndRequest) return
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    const end = textarea.value.length
+    textarea.focus()
+    textarea.setSelectionRange(end, end)
+  }, [focusAtEndRequest])
 
   useEffect(() => {
     const getter = () => {
@@ -370,6 +382,7 @@ function WysiwygEditor({
   docKey,
   effectiveLayout,
   editorZoom,
+  focusAtEndRequest,
   onSelectionGetterReady,
   onFormatActionsReady,
   onMarkdownGetterReady,
@@ -389,6 +402,7 @@ function WysiwygEditor({
         onChange={onChange}
         filePath={filePath}
         docKey={docKey}
+        focusAtEndRequest={focusAtEndRequest}
         effectiveLayout={effectiveLayout}
         editorZoom={editorZoom}
         onSelectionGetterReady={onSelectionGetterReady}
@@ -469,6 +483,8 @@ function WysiwygEditor({
   const initialCacheBuildIdleRef = useRef<IdleHandle | null>(null)
   const initialOutlineEmitIdleRef = useRef<IdleHandle | null>(null)
   const isEditorReadyRef = useRef(false)
+  const [editorReady, setEditorReady] = useState(false)
+  const lastFocusAtEndRequestRef = useRef(0)
   const lastValidMarkdownRef = useRef(
     composeMarkdownWithFrontMatter(frontMatterBlock ?? '', value),
   )
@@ -962,6 +978,7 @@ function WysiwygEditor({
     }
     editorRef.current = editor
     isEditorReadyRef.current = true
+    setEditorReady(true)
 
     scheduleInitialCacheBuild()
     scheduleInitialOutlineEmit()
@@ -1312,6 +1329,7 @@ function WysiwygEditor({
       onOutlineNavigatorReadyRef.current?.(null)
       const editor = editorRef.current
       isEditorReadyRef.current = false
+      setEditorReady(false)
       editorRef.current = null
       if (editor && editor.status !== EditorStatus.Destroyed) {
         editor.destroy()
@@ -1341,7 +1359,53 @@ function WysiwygEditor({
     } catch {
       // Editor may not be fully initialized yet
     }
-  }, [getReadyEditor, value])
+  }, [editorReady, getReadyEditor, value])
+
+  useEffect(() => {
+    if (!focusAtEndRequest || focusAtEndRequest === lastFocusAtEndRequestRef.current) return
+
+    const editor = getReadyEditor()
+    if (!editor) return
+
+    editor.action((ctx) => {
+      const view = ctx.get(editorViewCtx)
+      const end = Math.max(1, view.state.doc.content.size)
+      view.dispatch(
+        view.state.tr
+          .setSelection(TextSelection.create(view.state.doc, end))
+          .scrollIntoView(),
+      )
+      view.focus()
+    })
+    lastFocusAtEndRequestRef.current = focusAtEndRequest
+  }, [editorReady, focusAtEndRequest, getReadyEditor])
+
+  const handleDoubleClickAfterDocument = useCallback((event: React.MouseEvent<HTMLElement>) => {
+    const target = event.target
+    if (!(target instanceof HTMLElement)) return
+    if (
+      target.closest('.wysiwyg-frontmatter-panel') ||
+      target.closest('.ProseMirror') ||
+      target.closest('.wysiwyg-plain-textarea') ||
+      !target.closest('.wysiwyg-scroll')
+    ) {
+      return
+    }
+
+    const editor = getReadyEditor()
+    if (!editor) return
+
+    editor.action((ctx) => {
+      const view = ctx.get(editorViewCtx)
+      const end = Math.max(1, view.state.doc.content.size)
+      view.dispatch(
+        view.state.tr
+          .setSelection(TextSelection.create(view.state.doc, end))
+          .scrollIntoView(),
+      )
+      view.focus()
+    })
+  }, [getReadyEditor])
 
   useEffect(() => {
     const getter = () => {
@@ -1483,6 +1547,7 @@ function WysiwygEditor({
     <section
       className={`pane wysiwyg-pane ${isDark ? 'dark' : 'light'} ${hasWysiwygBackground ? 'has-wysiwyg-background' : ''} ${wysiwygBackgroundFitClass}`.trim()}
       style={{ ...style, ...wysiwygBackgroundStyle }}
+      onDoubleClick={handleDoubleClickAfterDocument}
     >
       {hasWysiwygBackground ? (
         <>

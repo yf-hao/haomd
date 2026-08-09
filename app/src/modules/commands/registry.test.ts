@@ -224,7 +224,8 @@ describe('command registry - file commands', () => {
     const registry = createCommandRegistry(ctx)
 
     registry.new_file()
-    expect(ctx.createTab).toHaveBeenCalled()
+    expect(ctx.createTab).toHaveBeenCalledWith({ content: '' })
+    expect(ctx.applyOpenedContent).toHaveBeenCalledWith('')
     expect(ctx.newDocument).toHaveBeenCalled()
   })
 
