@@ -1010,6 +1010,25 @@ export function WorkspaceShell({
     setWorkspaceMountedRoots(sidebar.folderRoots)
   }, [sidebar.folderRoots])
 
+  const restoreActiveFileSelection = useCallback(() => {
+    const path = activeTab?.path
+    if (!path || path === 'untitled') return
+
+    setSelectedFolderPath(null)
+    void sidebar.ensureFileVisible(path)
+  }, [activeTab?.path, sidebar.ensureFileVisible])
+
+  // 切换标签时同步文件浏览器的当前文件，并展开其所在目录。
+  useEffect(() => {
+    const path = activeTab?.path
+    if (!path || path === 'untitled') {
+      setSelectedFolderPath(null)
+      return
+    }
+
+    restoreActiveFileSelection()
+  }, [activeTab?.path, restoreActiveFileSelection])
+
   useEffect(() => {
     setActiveWorkspaceDirectory(activeWorkspaceDirectoryPath)
     return () => {
@@ -3726,7 +3745,7 @@ export function WorkspaceShell({
             treesByRoot={sidebar.treesByRoot} expanded={sidebar.expanded}
             onToggle={sidebar.toggleNode} onFileClick={openFileFromSidebar}
             onDirClick={handleDirClick}
-            onContextAction={handleSidebarContextAction} activePath={selectedFolderPath ?? activeTab?.path ?? null}
+            onContextAction={handleSidebarContextAction} activePath={selectedFolderPath ?? activeTab?.path?.replace(/\\/g, '/') ?? null}
             panelWidth={sidebarWidth}
             highlightedPaths={sidebar.highlightedFiles}
             onFileVisited={sidebar.markFileVisited}
@@ -4186,7 +4205,15 @@ export function WorkspaceShell({
                     </section>
                   ) : editMode === 'wysiwyg' && !isPdfActive ? (
                     /* WYSIWYG 所见即所得模式 */
-                    <section className="pane editor-pane" style={{ gridColumn: '1/-1' }}>
+                    <section
+                      className="pane editor-pane"
+                      style={{ gridColumn: '1/-1' }}
+                      onFocusCapture={(event) => {
+                        if (event.target instanceof HTMLElement && event.target.closest('.wysiwyg-editor')) {
+                          restoreActiveFileSelection()
+                        }
+                      }}
+                    >
                       <Suspense fallback={<LoadingFallback className="editor-loading-fallback" label={t('workspace.loadingEditor')} />}>
                         <TabBar
                           tabs={tabs}
@@ -4236,6 +4263,11 @@ export function WorkspaceShell({
                     <>
                   <section
                     className={`pane ${effectiveLayout === 'preview-only' ? '' : 'editor-pane'}`}
+                    onFocusCapture={(event) => {
+                      if (event.target instanceof HTMLElement && event.target.closest('.cm-editor')) {
+                        restoreActiveFileSelection()
+                      }
+                    }}
                     style={
                       effectiveLayout === 'preview-only'
                         ? { display: 'none' }
