@@ -22,4 +22,24 @@ describe('background color syntax', () => {
       '<span data-background-color="#fef3c7" style="background-color:#fef3c7"><span data-text-color="#3b82f6" style="color:#3b82f6">styled</span></span>',
     )
   })
+
+  it('preserves fenced code contents while rendering colors outside code blocks', () => {
+    const markdown = [
+      '{color:#3b82f6}styled{/color}',
+      '',
+      '```text',
+      '苹果 -> [0.5, 0.5]',
+      '{color:#fef3c7}not styled{/color}',
+      '```',
+    ].join('\n')
+
+    expect(replaceTextColorSyntaxWithHtml(markdown)).toBe([
+      '<span data-text-color="#3b82f6" style="color:#3b82f6">styled</span>',
+      '',
+      '```text',
+      '苹果 -> [0.5, 0.5]',
+      '{color:#fef3c7}not styled{/color}',
+      '```',
+    ].join('\n'))
+  })
 })

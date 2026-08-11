@@ -137,7 +137,52 @@ function getEnclosingColorBlock(
 
 export function replaceTextColorSyntaxWithHtml(markdown: string): string {
   if (!markdown || (!markdown.includes('{color:') && !markdown.includes('{background:'))) return markdown
-  return renderStyledHtml(markdown).value
+  return renderStyledMarkdown(markdown)
+}
+
+function renderStyledMarkdown(markdown: string): string {
+  const parts = markdown.split(/(\r?\n)/)
+  let output = ''
+  let plainMarkdown = ''
+  let fence: { marker: '`' | '~'; length: number } | null = null
+
+  const flushPlainMarkdown = () => {
+    if (!plainMarkdown) return
+    output += renderStyledHtml(plainMarkdown).value
+    plainMarkdown = ''
+  }
+
+  for (const part of parts) {
+    const line = part.replace(/\r?\n$/, '')
+    const fenceMatch = /^( {0,3})(`{3,}|~{3,})(?:[^`]*)$/.exec(line)
+
+    if (fence) {
+      output += part
+      if (
+        fenceMatch &&
+        fenceMatch[2][0] === fence.marker &&
+        fenceMatch[2].length >= fence.length
+      ) {
+        fence = null
+      }
+      continue
+    }
+
+    if (fenceMatch) {
+      flushPlainMarkdown()
+      output += part
+      fence = {
+        marker: fenceMatch[2][0] as '`' | '~',
+        length: fenceMatch[2].length,
+      }
+      continue
+    }
+
+    plainMarkdown += part
+  }
+
+  flushPlainMarkdown()
+  return output
 }
 
 export function remarkTextColorSyntax(this: { data: () => Record<string, unknown> }) {
