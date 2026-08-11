@@ -2493,6 +2493,7 @@ export function WorkspaceShell({
         const tab = createTab({ path: resp.data.path, content: '' })
         tabIdsByPathRef.current.set(getFilePathIdentity(resp.data.path), tab.id)
         updateTabContent(tab.id, resp.data.content, { markDirty: false })
+        setActiveTab(tab.id)
         applyOpenedContent(resp.data.content)
         markPendingRestoreRef.current?.(tab.id)
       }
