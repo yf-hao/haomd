@@ -3604,13 +3604,156 @@ export function WorkspaceShell({
     const unlisten = onNativePasteImage(async () => {
       if (!isWorkspaceMountedRef.current) return
       console.log('[WorkspaceShell] onNativePasteImage fired')
-      await handlePasteImage()
+      const startedMode = editModeRef.current
+      const startedIsPdfActive = isPdfActiveRef.current
+      const startedTabId = activeIdRef.current
+      const startedSourceEditorEpoch = sourceEditorEpochRef.current
+      const isWysiwyg = startedMode === 'wysiwyg' && !startedIsPdfActive
+      const view = getActiveSourceView()
+      const active = typeof document !== 'undefined' ? document.activeElement : null
+      const wysiwygFocused = Boolean(active?.closest('.wysiwyg-editor'))
+
+      if (isWysiwyg && !wysiwygFocused) {
+        console.warn('[WorkspaceShell] onNativePasteImage: WYSIWYG is not focused')
+        return
+      }
+      if (!isWysiwyg && !view) {
+        console.warn('[WorkspaceShell] onNativePasteImage: no editor view')
+        return
+      }
+
+      // 仅当焦点在编辑器内部时才处理粘贴，避免与其他输入框冲突
+      if (typeof document !== 'undefined') {
+        const contains = active
+          ? (isWysiwyg ? wysiwygFocused : Boolean(view?.dom.contains(active)))
+          : false
+        console.log('[WorkspaceShell] onNativePasteImage: active in editor =', contains)
+        if (active && !contains) {
+          return
+        }
+      }
+
+      if (isTransientFilePath(filePath)) {
+        console.warn('[WorkspaceShell] onNativePasteImage: no filePath, cannot determine images dir')
+        setConfirmDialogRef.current({
+          title: t('workspace.cannotInsertImageTitle'),
+          message: t('workspace.cannotInsertImageMessage'),
+          confirmText: t('workspace.ok'),
+          onConfirm: () => setConfirmDialogRef.current(null),
+        })
+        return
+      }
+
+      const placeholder = '[正在粘贴图片...](...)'
+      const placeholderFrom = view ? view.state.selection.main.from : null
+      const replaceSourcePlaceholder = (replacement: string): boolean => {
+        if (!view || placeholderFrom == null) return false
+        const currentText = view.state.doc.toString()
+        const exactIndex = currentText.indexOf(placeholder, placeholderFrom)
+        if (exactIndex < 0) return false
+
+        const { state } = view
+        view.dispatch(state.update({
+          changes: {
+            from: exactIndex,
+            to: exactIndex + placeholder.length,
+            insert: replacement,
+          },
+          selection: { anchor: exactIndex + replacement.length },
+          userEvent: 'input.paste',
+          scrollIntoView: true,
+        }))
+        return true
+      }
+
+      if (!isWysiwyg && view) {
+        const { state } = view
+        const { from, to } = state.selection.main
+        view.dispatch(state.update({
+          changes: { from, to, insert: placeholder },
+          selection: { anchor: from + placeholder.length },
+          userEvent: 'input.paste',
+          scrollIntoView: true,
+        }))
+      }
+
+      const cfg = loadDefaultImagePathStrategyConfig()
+      const { targetDir, relDir } = resolveImageTarget(filePath, null, cfg)
+      console.log('[WorkspaceShell] onNativePasteImage: resolved targetDir=', targetDir, 'relDir=', relDir)
+
+      // 根据当前文件名构造图片命名前缀：image_当前文件名（去掉扩展名）
+      const fileBaseName = (() => {
+        const pathPart = filePath.split(/[/\\]/).pop() || ''
+        const withoutExt = pathPart.replace(/\.[^./\\]+$/, '')
+        return withoutExt || 'untitled'
+      })()
+      const suggestedName = `image_${fileBaseName}`
+      console.log('[WorkspaceShell] onNativePasteImage: suggestedName =', suggestedName)
+
+      try {
+        const result = await invoke('save_clipboard_image_to_dir', {
+          targetDir,
+          suggestedName,
+        }) as any
+        console.log('[WorkspaceShell] onNativePasteImage: invoke result =', result)
+
+        // 后端返回的是 ResultPayload<T>，形如 { Ok: { data: { file_name }, trace_id }, Err: { error } }
+        const okPart = result && 'Ok' in result ? result.Ok : null
+        if (!okPart) {
+          console.error('[WorkspaceShell] onNativePasteImage: backend returned Err', result?.Err)
+          replaceSourcePlaceholder('图片粘贴失败')
+          setStatusMessage(result?.Err?.error?.message || t('workspace.pasteImageBackendError'))
+          return
+        }
+
+        const fileName = okPart?.data?.file_name as string | undefined
+        if (!fileName) {
+          console.error('[WorkspaceShell] onNativePasteImage: missing file_name in Ok.data')
+          replaceSourcePlaceholder('图片粘贴失败')
+          setStatusMessage(t('workspace.pasteImageMissingFileName'))
+          return
+        }
+
+        if (
+          !isWorkspaceMountedRef.current ||
+          activeIdRef.current !== startedTabId ||
+          editModeRef.current !== startedMode ||
+          isPdfActiveRef.current !== startedIsPdfActive
+        ) {
+          return
+        }
+
+        const relPath = `${relDir}/${fileName}`
+
+        if (isWysiwyg) {
+          const inserted = wysiwygFormatActionsRef.current?.insertImage(relPath) ?? false
+          if (!inserted) {
+            setStatusMessage(t('workspace.pasteImageFailed', { message: '无法插入图片' }))
+          }
+          return
+        }
+
+        if (sourceEditorEpochRef.current !== startedSourceEditorEpoch) return
+        const currentView = getActiveSourceView()
+        if (!currentView || currentView !== view) return
+
+        const snippet = `![图片](${relPath})`
+        console.log('[WorkspaceShell] onNativePasteImage: inserting snippet', snippet)
+
+        if (!replaceSourcePlaceholder(snippet)) {
+          setStatusMessage(t('workspace.pasteImageFailed', { message: '粘贴位置已被修改' }))
+        }
+      } catch (err) {
+        console.error('[WorkspaceShell] onNativePasteImage: invoke failed', err)
+        replaceSourcePlaceholder('图片粘贴失败')
+        setStatusMessage(t('workspace.pasteImageFailed', { message: String(err) }))
+      }
     })
 
     return () => {
       unlisten()
     }
-  }, [handlePasteImage])
+  }, [editMode, filePath, getActiveSourceView, isPdfActive, setStatusMessage, t])
 
   const saveCursorPositionRef = useRef<((globalLine: number) => void) | null>(null)
 

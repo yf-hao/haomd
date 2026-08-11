@@ -1026,6 +1026,9 @@ struct MathMlNode {
 fn render_math_run_xml(value: &str, math_ml: Option<&str>, display_mode: bool) -> String {
     if let Some(math_ml) = math_ml {
         if let Ok(omml) = mathml_to_omml(math_ml) {
+            if display_mode {
+                return format!(r#"<m:oMathPara><m:oMath>{}</m:oMath></m:oMathPara>"#, omml);
+            }
             return format!(r#"<m:oMath>{}</m:oMath>"#, omml);
         }
     }
@@ -1251,7 +1254,7 @@ fn convert_mathml_node(node: &MathMlNode) -> String {
                 .collect::<Vec<_>>()
                 .join("");
             format!(
-                r#"<m:rad><m:degHide m:val="1"/><m:e>{}</m:e></m:rad>"#,
+                r#"<m:rad><m:radPr><m:degHide m:val="1"/></m:radPr><m:deg/><m:e>{}</m:e></m:rad>"#,
                 body
             )
         }
@@ -1267,7 +1270,7 @@ fn convert_mathml_node(node: &MathMlNode) -> String {
                 .map(convert_mathml_node)
                 .unwrap_or_default();
             format!(
-                r#"<m:rad><m:deg>{}</m:deg><m:e>{}</m:e></m:rad>"#,
+                r#"<m:rad><m:radPr/><m:deg>{}</m:deg><m:e>{}</m:e></m:rad>"#,
                 degree, body
             )
         }

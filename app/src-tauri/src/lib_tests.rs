@@ -595,6 +595,7 @@ fn should_include_math_content_in_document_xml() {
         .expect("document xml should exist");
 
     assert!(document_xml.contains("<m:oMath>"));
+    assert!(document_xml.contains("<m:oMathPara><m:oMath>"));
     assert!(document_xml.contains("<m:sSup>"));
     assert!(document_xml.contains("<m:nary>"));
     assert!(document_xml.contains("<m:f>"));
@@ -604,6 +605,17 @@ fn should_include_math_content_in_document_xml() {
     assert!(document_xml.contains(r#"<w:jc w:val="left"/>"#));
 
     let _ = std::fs::remove_dir_all(&work_dir);
+}
+
+#[test]
+fn should_render_square_root_with_hidden_default_degree() {
+    let math_ml = r#"<math xmlns="http://www.w3.org/1998/Math/MathML"><msqrt><mn>3</mn></msqrt></math>"#;
+    let omml = mathml_to_omml(math_ml).expect("square root MathML should convert");
+
+    assert!(omml.contains(
+        r#"<m:rad><m:radPr><m:degHide m:val="1"/></m:radPr><m:deg/><m:e>"#
+    ));
+    assert!(omml.contains("<m:t>3</m:t>"));
 }
 
 #[test]
