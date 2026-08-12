@@ -35,6 +35,7 @@ import { buildSearchScope } from '../modules/search/searchScopeService'
 import type { SearchScope } from '../modules/search/types'
 import { useOutlineModel } from '../hooks/useOutlineModel'
 import { useEditorDocumentSync } from '../hooks/useEditorDocumentSync'
+import { createPreviewStore } from '../hooks/usePreviewStore'
 import type { OutlineItem } from '../modules/outline/parser'
 import type { OutlineHeading } from '../modules/outline/outlineSource'
 import { getMarkdownOutlineFallbackTarget, getWysiwygOutlineNavigationTarget } from '../modules/outline/outlineNavigation'
@@ -219,12 +220,25 @@ const seed = ''
 const PREVIEW_SYNC_DELAY_MS = 300
 const FORMULA_HEAVY_PREVIEW_DELAY_MS = 500
 const FORMULA_EXTREME_PREVIEW_DELAY_MS = 700
+const SOURCE_PREVIEW_MEDIUM_DOCUMENT_CHARS = 40_000
+const SOURCE_PREVIEW_LARGE_DOCUMENT_CHARS = 120_000
+const SOURCE_PREVIEW_HUGE_DOCUMENT_CHARS = 500_000
+const SOURCE_PREVIEW_MEDIUM_DELAY_MS = 80
+const SOURCE_PREVIEW_LARGE_DELAY_MS = 180
+const SOURCE_PREVIEW_HUGE_DELAY_MS = 350
 
 function getPreviewSyncDelay(markdown: string): number {
   const formulaMarkers = (markdown.replace(/\\./g, '').match(/\${1,2}|\\\[|\\\]/g) ?? []).length
   if (formulaMarkers >= 120) return FORMULA_EXTREME_PREVIEW_DELAY_MS
   if (formulaMarkers >= 40) return FORMULA_HEAVY_PREVIEW_DELAY_MS
   return PREVIEW_SYNC_DELAY_MS
+}
+
+function getSourcePreviewDelay(documentLength: number): number {
+  if (documentLength >= SOURCE_PREVIEW_HUGE_DOCUMENT_CHARS) return SOURCE_PREVIEW_HUGE_DELAY_MS
+  if (documentLength >= SOURCE_PREVIEW_LARGE_DOCUMENT_CHARS) return SOURCE_PREVIEW_LARGE_DELAY_MS
+  if (documentLength >= SOURCE_PREVIEW_MEDIUM_DOCUMENT_CHARS) return SOURCE_PREVIEW_MEDIUM_DELAY_MS
+  return 0
 }
 
 function findOutlineItemByPage(items: OutlineItem[], page: number): OutlineItem | null {
@@ -252,7 +266,7 @@ export function WorkspaceShell({
   const { themeSettings } = useThemeContext()
   const [markdown, setMarkdown] = useState(seed)
   const [editorMarkdown, setEditorMarkdown] = useState(seed)
-  const [previewValue, setPreviewValue] = useState(seed)
+  const [previewStore] = useState(() => createPreviewStore(seed))
   const [activeLine, setActiveLine] = useState(1)
   // 预览专用的行号：对 activeLine 做轻量节流后再驱动 Preview，降低重渲染频率
   const [previewActiveLine, setPreviewActiveLine] = useState(1)
@@ -522,11 +536,12 @@ export function WorkspaceShell({
   const prevIsPreviewVisibleRef = useRef(isPreviewVisible)
   const previewSyncTimerRef = useRef<number | null>(null)
   const previewFrameRef = useRef<number | null>(null)
+  const sourcePreviewDelayTimerRef = useRef<number | null>(null)
   const skipNextPreviewThrottleRef = useRef(false)
 
   const commitPreviewValue = useCallback((nextValue: string) => {
-    setPreviewValue(nextValue)
-  }, [])
+    previewStore.set(nextValue)
+  }, [previewStore])
 
   const clearPreviewSyncTimer = useCallback(() => {
     if (previewSyncTimerRef.current != null) {
@@ -537,15 +552,30 @@ export function WorkspaceShell({
       window.cancelAnimationFrame(previewFrameRef.current)
       previewFrameRef.current = null
     }
+    if (sourcePreviewDelayTimerRef.current != null) {
+      window.clearTimeout(sourcePreviewDelayTimerRef.current)
+      sourcePreviewDelayTimerRef.current = null
+    }
   }, [])
 
-  const schedulePreviewDocument = useCallback((tabId: string, view: EditorView, revision: number) => {
+  const schedulePreviewDocument = useCallback((
+    tabId: string,
+    view: EditorView,
+    revision: number,
+    getContent: () => string,
+  ) => {
     if (!isPreviewVisible) return
 
     if (previewFrameRef.current != null) {
       window.cancelAnimationFrame(previewFrameRef.current)
     }
-    previewFrameRef.current = window.requestAnimationFrame(() => {
+    if (sourcePreviewDelayTimerRef.current != null) {
+      window.clearTimeout(sourcePreviewDelayTimerRef.current)
+      sourcePreviewDelayTimerRef.current = null
+    }
+
+    const commit = () => {
+      sourcePreviewDelayTimerRef.current = null
       previewFrameRef.current = null
       if (
         activeIdRef.current !== tabId ||
@@ -554,7 +584,17 @@ export function WorkspaceShell({
       ) {
         return
       }
-      commitPreviewValue(view.state.doc.toString())
+      commitPreviewValue(getContent())
+    }
+    const delay = getSourcePreviewDelay(view.state.doc.length)
+    if (delay > 0) {
+      sourcePreviewDelayTimerRef.current = window.setTimeout(commit, delay)
+      return
+    }
+
+    previewFrameRef.current = window.requestAnimationFrame(() => {
+      previewFrameRef.current = null
+      commit()
     })
   }, [commitPreviewValue, isPreviewVisible])
 
@@ -4620,7 +4660,7 @@ export function WorkspaceShell({
                   <PreviewErrorBoundary>
                   <Suspense fallback={<LoadingFallback className="preview-loading-fallback" label={t('workspace.loadingPreview')} />}>
                     <PreviewPaneLazy
-                      value={previewValue}
+                      previewStore={previewStore}
                       activeLine={previewActiveLine}
                       previewWidth={previewWidthForRender}
                       effectiveLayout={effectiveLayout}
