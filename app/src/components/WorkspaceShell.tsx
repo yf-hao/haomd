@@ -217,29 +217,6 @@ const countDocumentChars = (text: string): number => {
 }
 
 const seed = ''
-const PREVIEW_SYNC_DELAY_MS = 300
-const FORMULA_HEAVY_PREVIEW_DELAY_MS = 500
-const FORMULA_EXTREME_PREVIEW_DELAY_MS = 700
-const SOURCE_PREVIEW_MEDIUM_DOCUMENT_CHARS = 40_000
-const SOURCE_PREVIEW_LARGE_DOCUMENT_CHARS = 120_000
-const SOURCE_PREVIEW_HUGE_DOCUMENT_CHARS = 500_000
-const SOURCE_PREVIEW_MEDIUM_DELAY_MS = 80
-const SOURCE_PREVIEW_LARGE_DELAY_MS = 180
-const SOURCE_PREVIEW_HUGE_DELAY_MS = 350
-
-function getPreviewSyncDelay(markdown: string): number {
-  const formulaMarkers = (markdown.replace(/\\./g, '').match(/\${1,2}|\\\[|\\\]/g) ?? []).length
-  if (formulaMarkers >= 120) return FORMULA_EXTREME_PREVIEW_DELAY_MS
-  if (formulaMarkers >= 40) return FORMULA_HEAVY_PREVIEW_DELAY_MS
-  return PREVIEW_SYNC_DELAY_MS
-}
-
-function getSourcePreviewDelay(documentLength: number): number {
-  if (documentLength >= SOURCE_PREVIEW_HUGE_DOCUMENT_CHARS) return SOURCE_PREVIEW_HUGE_DELAY_MS
-  if (documentLength >= SOURCE_PREVIEW_LARGE_DOCUMENT_CHARS) return SOURCE_PREVIEW_LARGE_DELAY_MS
-  if (documentLength >= SOURCE_PREVIEW_MEDIUM_DOCUMENT_CHARS) return SOURCE_PREVIEW_MEDIUM_DELAY_MS
-  return 0
-}
 
 function findOutlineItemByPage(items: OutlineItem[], page: number): OutlineItem | null {
   for (const item of items) {
@@ -536,7 +513,6 @@ export function WorkspaceShell({
   const prevIsPreviewVisibleRef = useRef(isPreviewVisible)
   const previewSyncTimerRef = useRef<number | null>(null)
   const previewFrameRef = useRef<number | null>(null)
-  const sourcePreviewDelayTimerRef = useRef<number | null>(null)
   const skipNextPreviewThrottleRef = useRef(false)
 
   const commitPreviewValue = useCallback((nextValue: string) => {
@@ -552,10 +528,6 @@ export function WorkspaceShell({
       window.cancelAnimationFrame(previewFrameRef.current)
       previewFrameRef.current = null
     }
-    if (sourcePreviewDelayTimerRef.current != null) {
-      window.clearTimeout(sourcePreviewDelayTimerRef.current)
-      sourcePreviewDelayTimerRef.current = null
-    }
   }, [])
 
   const schedulePreviewDocument = useCallback((
@@ -569,13 +541,7 @@ export function WorkspaceShell({
     if (previewFrameRef.current != null) {
       window.cancelAnimationFrame(previewFrameRef.current)
     }
-    if (sourcePreviewDelayTimerRef.current != null) {
-      window.clearTimeout(sourcePreviewDelayTimerRef.current)
-      sourcePreviewDelayTimerRef.current = null
-    }
-
     const commit = () => {
-      sourcePreviewDelayTimerRef.current = null
       previewFrameRef.current = null
       if (
         activeIdRef.current !== tabId ||
@@ -585,11 +551,6 @@ export function WorkspaceShell({
         return
       }
       commitPreviewValue(getContent())
-    }
-    const delay = getSourcePreviewDelay(view.state.doc.length)
-    if (delay > 0) {
-      sourcePreviewDelayTimerRef.current = window.setTimeout(commit, delay)
-      return
     }
 
     previewFrameRef.current = window.requestAnimationFrame(() => {
@@ -2358,7 +2319,8 @@ export function WorkspaceShell({
     })
   }, [isCreatingTab, getUnsavedTabs, isTauriEnv, setActiveTab, setConfirmDialog, cleanupAllImportedWordTemps, t])
 
-  // 预览内容只在预览可见时才节流同步，避免 editor-only 模式下做无意义渲染
+  // 预览内容只在预览可见时按帧同步，避免 editor-only 模式下做无意义渲染。
+  // 不使用固定时间防抖，保证连续输入时预览仍然实时跟随最新内容。
   useEffect(() => {
     if (!isPreviewVisible) return
     if (skipNextPreviewThrottleRef.current) {
@@ -2367,12 +2329,12 @@ export function WorkspaceShell({
     }
 
     clearPreviewSyncTimer()
-    const timer = window.setTimeout(() => {
-      previewSyncTimerRef.current = null
+    const frame = window.requestAnimationFrame(() => {
+      previewFrameRef.current = null
       commitPreviewValue(markdown)
-    }, getPreviewSyncDelay(markdown))
-    previewSyncTimerRef.current = timer
-    return () => clearTimeout(timer)
+    })
+    previewFrameRef.current = frame
+    return () => window.cancelAnimationFrame(frame)
   }, [markdown, isPreviewVisible, clearPreviewSyncTimer, commitPreviewValue])
 
   // 当预览从不可见切换为可见时，立即用最新 markdown 做一次全量同步
