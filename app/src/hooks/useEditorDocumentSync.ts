@@ -1,5 +1,6 @@
 import { useCallback, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react'
-import type { EditorView } from '@codemirror/view'
+import type { Text } from '@codemirror/state'
+import type { EditorView, ViewUpdate } from '@codemirror/view'
 
 type EditorMode = 'source' | 'wysiwyg'
 
@@ -39,9 +40,14 @@ type SourceDocumentSnapshot = {
   tabId: string
   view: EditorView
   revision: number
+  doc: Text
+  editorDoc: Text
 }
 
-type SourceContentCache = SourceDocumentSnapshot & {
+type SourceContentCache = {
+  tabId: string
+  view: EditorView
+  revision: number
   content: string
 }
 
@@ -78,7 +84,14 @@ export function useEditorDocumentSync({
       return cached.content
     }
 
-    const rawContent = view.state.doc.toString()
+    const pending = sourceDocumentSyncSnapshotRef.current
+    const rawContent = (
+      pending?.tabId === tabId &&
+      pending.view === view &&
+      pending.revision === revision
+        ? pending.doc
+        : view.state.doc
+    ).toString()
     const content = applyChunkEdit(rawContent) ?? rawContent
     sourceContentCacheRef.current = { tabId, view, revision, content }
     return content
@@ -118,7 +131,6 @@ export function useEditorDocumentSync({
   ])
 
   const scheduleSourceDocumentSync = useCallback((tabId: string, view: EditorView, revision: number) => {
-    sourceDocumentSyncSnapshotRef.current = { tabId, view, revision }
     if (sourceDocumentSyncTimerRef.current != null) {
       window.clearTimeout(sourceDocumentSyncTimerRef.current)
     }
@@ -186,13 +198,30 @@ export function useEditorDocumentSync({
     sourceEditorRevisionRef,
   ])
 
-  const handleSourceDocumentChange = useCallback((view: EditorView) => {
+  const handleSourceDocumentChange = useCallback((change: ViewUpdate | EditorView) => {
+    const view = 'changes' in change ? change.view : change
     const tabId = activeIdRef.current
     if (!tabId || view !== editorViewRef.current) return
 
     const revision = sourceEditorRevisionRef.current + 1
     sourceEditorRevisionRef.current = revision
-    sourceDocumentSyncSnapshotRef.current = { tabId, view, revision }
+    const previousSnapshot = sourceDocumentSyncSnapshotRef.current
+    const nextDoc = 'changes' in change
+      ? change.changes.apply(
+        previousSnapshot?.tabId === tabId &&
+          previousSnapshot.view === view &&
+          previousSnapshot.editorDoc === change.startState.doc
+          ? previousSnapshot.doc
+          : change.startState.doc,
+      )
+      : view.state.doc
+    sourceDocumentSyncSnapshotRef.current = {
+      tabId,
+      view,
+      revision,
+      doc: nextDoc,
+      editorDoc: view.state.doc,
+    }
     const getContent = () => getSourceDocumentContent(tabId, view, revision)
 
     if (!activeTabDirty && sourceDirtyTabRef.current !== tabId) {

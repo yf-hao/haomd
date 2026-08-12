@@ -306,6 +306,8 @@ export const enUSMessages: MessageDictionary = {
     openAiChat: 'Open AI Chat',
   },
   app: {
+    name: 'HaoMD',
+    subtitle: 'Markdown Editor',
     files: 'Files',
     search: 'Search',
     outline: 'Outline',

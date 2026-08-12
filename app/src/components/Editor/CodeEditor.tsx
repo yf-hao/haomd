@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, forwardRef } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import type { Extension } from '@codemirror/state'
-import type { EditorView } from '@codemirror/view'
+import type { EditorView, ViewUpdate } from '@codemirror/view'
 import { createExtensions, type EditorOptions } from './extensions'
 import { useResolvedThemeMode } from '../../modules/theme/ThemeContext'
 
@@ -10,7 +10,7 @@ export type CodeEditorProps = {
   documentKey?: string | null
   preserveLocalDocument?: boolean
   onChange?: (value: string) => void
-  onDocumentChange?: (view: EditorView) => void
+  onDocumentChange?: (change: ViewUpdate | EditorView) => void
   onCursorChange?: (line: number) => void
   readOnly?: boolean
   extensions?: Extension[]
@@ -216,7 +216,7 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
             !applyingExternalValueRef.current
           ) {
             hasLocalDocumentChangesRef.current = true
-            onDocumentChangeRef.current?.(update.view)
+            onDocumentChangeRef.current?.(update)
           }
         }}
         onCreateEditor={(view) => {

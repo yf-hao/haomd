@@ -1,5 +1,5 @@
 import { useEffect, useMemo, type CSSProperties, type RefObject } from 'react'
-import { EditorView } from '@codemirror/view'
+import { EditorView, type ViewUpdate } from '@codemirror/view'
 import { SearchQuery, setSearchQuery } from '@codemirror/search'
 import { CodeEditor } from './Editor/CodeEditor'
 import { setCustomSearchQuery } from './Editor/searchHighlight'
@@ -25,7 +25,7 @@ export type EditorPaneProps = {
   documentKey?: string | null
   preserveLocalDocument?: boolean
   onChange?: (value: string) => void
-  onDocumentChange?: (view: EditorView) => void
+  onDocumentChange?: (change: ViewUpdate | EditorView) => void
   onCursorChange: (line: number) => void
   showPreview: boolean
   setShowPreview: (value: boolean | ((prev: boolean) => boolean)) => void

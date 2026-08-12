@@ -51,6 +51,7 @@ fn format_recent_menu_label(item: &RecentFile) -> String {
 
 #[derive(Clone, Copy)]
 struct MenuTexts {
+    app_name: &'static str,
     about_haomd: &'static str,
     settings: &'static str,
     quit: &'static str,
@@ -170,7 +171,8 @@ struct MenuTexts {
 fn menu_texts(locale: MenuLocale) -> MenuTexts {
     match locale {
         MenuLocale::ZhCn => MenuTexts {
-            about_haomd: "关于 HaoMD",
+            app_name: "好记",
+            about_haomd: "关于好记",
             settings: "设置...",
             quit: "退出",
             open_recent: "打开最近文件",
@@ -286,6 +288,7 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             word_docx: "Word (.docx)",
         },
         MenuLocale::EnUs => MenuTexts {
+            app_name: "HaoMD",
             about_haomd: "About HaoMD",
             settings: "Settings...",
             quit: "Quit",
@@ -504,7 +507,7 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         &recent[start..std::cmp::min(end, total)]
     };
 
-    let haomd_menu = SubmenuBuilder::new(app, "HaoMD")
+    let haomd_menu = SubmenuBuilder::new(app, texts.app_name)
         .item(
             &MenuItemBuilder::new(texts.about_haomd)
                 .id("haomd_about")

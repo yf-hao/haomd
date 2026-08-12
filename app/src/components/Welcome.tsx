@@ -15,9 +15,9 @@ export function Welcome({ onNewFile, onOpenFile, onOpenAiChat }: WelcomeProps) {
       <div className="welcome-content">
         <div className="welcome-logo">
           <div className="logo-mark">
-             <img src={logo} alt="HaoMD Logo" />
+             <img src={logo} alt={`${t('app.name')} Logo`} />
           </div>
-          <div className="logo-title">HaoMD</div>
+          <div className="logo-title">{t('app.name')}</div>
         </div>
 
         <p className="welcome-subtitle">{t('welcome.subtitle')}</p>

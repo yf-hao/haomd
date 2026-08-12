@@ -120,6 +120,8 @@ describe('CodeEditor', () => {
       })
     })
 
-    expect(onDocumentChange).toHaveBeenCalledWith(view)
+    const change = onDocumentChange.mock.calls[0][0]
+    expect(change.view).toBe(view)
+    expect(change.changes).toBeDefined()
   })
 })

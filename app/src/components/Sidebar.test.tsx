@@ -12,7 +12,13 @@ vi.mock('./FileContextMenu', () => ({
     FileContextMenu: (props: any) => (
         <div data-testid="context-menu">
             {props.items?.map((item: any) => (
-                <button key={item.id} onClick={item.onClick}>{item.label}</button>
+                <button
+                    key={item.id}
+                    data-testid={`context-action-${item.id}`}
+                    onClick={item.onClick}
+                >
+                    {item.label}
+                </button>
             ))}
         </div>
     )
@@ -137,7 +143,7 @@ describe('Sidebar', () => {
         const dirNode = screen.getByText('dir1')
         fireEvent.contextMenu(dirNode)
 
-        const deleteButton = screen.getByText('Delete…')
+        const deleteButton = screen.getByTestId('context-action-delete')
         fireEvent.click(deleteButton)
 
         expect(onContextAction).toHaveBeenCalledWith({

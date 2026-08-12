@@ -1,6 +1,6 @@
 import { lazy, Suspense, startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
-import { EditorView } from '@codemirror/view'
+import { EditorView, type ViewUpdate } from '@codemirror/view'
 import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { ConflictModal } from './ConflictModal'
@@ -1228,9 +1228,9 @@ export function WorkspaceShell({
     applyChunkEdit,
     schedulePreviewDocument,
   })
-  const handleSourceEditorDocumentChange = useCallback((view: EditorView) => {
+  const handleSourceEditorDocumentChange = useCallback((change: ViewUpdate | EditorView) => {
     setFocusRequest(null)
-    handleSourceDocumentChange(view)
+    handleSourceDocumentChange(change)
   }, [handleSourceDocumentChange])
   flushSourceEditorRef.current = flushSourceDocumentSync
   hasPendingSourceEditsRef.current = hasPendingSourceEdits
