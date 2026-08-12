@@ -62,6 +62,7 @@ function useRecentFilesState(setStatusMessage: (msg: string) => void) {
 
 export type FilePersistenceOptions = {
   onSaved?: (path: string) => void
+  getLatestMarkdown?: () => string
 }
 
 export function useFilePersistence(markdown: string, options?: FilePersistenceOptions) {
@@ -282,7 +283,7 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
   useEffect(() => {
     saverRef.current?.cancel()
     saverRef.current = createAutoSaver({
-      save: () => handleSave(),
+      save: () => handleSave(undefined, optionsRef.current?.getLatestMarkdown?.()),
       isDirty: () => dirty,
       enabled: !isTransientFilePath(filePath),
       debounceMs: 120000,

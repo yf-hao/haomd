@@ -22,7 +22,8 @@ export type EditorTransientSearchQuery = {
 
 export type EditorPaneProps = {
   markdown: string
-  onChange: (value: string) => void
+  onChange?: (value: string) => void
+  onDocumentChange?: (view: EditorView) => void
   onCursorChange: (line: number) => void
   showPreview: boolean
   setShowPreview: (value: boolean | ((prev: boolean) => boolean)) => void
@@ -42,6 +43,7 @@ export function EditorPane(props: EditorPaneProps) {
   const {
     markdown,
     onChange,
+    onDocumentChange,
     onCursorChange,
     editorViewRef,
     onFoldRegionsChange,
@@ -155,6 +157,7 @@ export function EditorPane(props: EditorPaneProps) {
       <CodeEditor
         value={markdown}
         onChange={onChange}
+        onDocumentChange={onDocumentChange}
         onCursorChange={onCursorChange}
         placeholder={t('editor.placeholder')}
         className="code-editor"

@@ -1013,6 +1013,7 @@ const MarkdownViewerComponent = React.forwardRef<
 
       if (stale) return
       startTransition(() => {
+        if (event.data.id !== previewRequestIdRef.current) return
         setPreviewResult({
           processedMarkdown: event.data.processedMarkdown,
           hasMath: event.data.hasMath,
@@ -1042,16 +1043,20 @@ const MarkdownViewerComponent = React.forwardRef<
 
     const requestId = ++previewRequestIdRef.current
     if (!performanceSettings.experimentalPreviewOptimization) {
+      const nextResult = preparePreviewMarkdown(value)
       startTransition(() => {
-        setPreviewResult(preparePreviewMarkdown(value))
+        if (requestId !== previewRequestIdRef.current) return
+        setPreviewResult(nextResult)
       })
       return
     }
 
     const worker = previewWorkerRef.current
     if (!worker) {
+      const nextResult = preparePreviewMarkdown(value)
       startTransition(() => {
-        setPreviewResult(preparePreviewMarkdown(value))
+        if (requestId !== previewRequestIdRef.current) return
+        setPreviewResult(nextResult)
       })
       return
     }

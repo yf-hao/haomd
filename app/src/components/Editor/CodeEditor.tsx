@@ -7,7 +7,8 @@ import { useResolvedThemeMode } from '../../modules/theme/ThemeContext'
 
 export type CodeEditorProps = {
   value: string
-  onChange: (value: string) => void
+  onChange?: (value: string) => void
+  onDocumentChange?: (view: EditorView) => void
   onCursorChange?: (line: number) => void
   readOnly?: boolean
   extensions?: Extension[]
@@ -22,19 +23,42 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
   props,
   ref,
 ) {
-  const { value, onChange, onCursorChange, readOnly, extensions, className, placeholder, onViewReady, onFoldRegionsChange, editorZoom } = props
+  const {
+    value,
+    onChange,
+    onDocumentChange,
+    onCursorChange,
+    readOnly,
+    extensions,
+    className,
+    placeholder,
+    onViewReady,
+    onFoldRegionsChange,
+    editorZoom,
+  } = props
   const themeMode = useResolvedThemeMode()
   const [editorValue, setEditorValue] = useState(value)
   const editorViewRef = useRef<EditorView | null>(null)
   const onViewReadyRef = useRef(onViewReady)
+  const onChangeRef = useRef(onChange)
+  const onDocumentChangeRef = useRef(onDocumentChange)
   const isComposingRef = useRef(false)
   const lastForwardedValueRef = useRef(value)
   const lastPropValueRef = useRef(value)
   const pendingExternalValueRef = useRef<string | null>(null)
+  const applyingExternalValueRef = useRef(false)
 
   useEffect(() => {
     onViewReadyRef.current = onViewReady
   }, [onViewReady])
+
+  useEffect(() => {
+    onChangeRef.current = onChange
+  }, [onChange])
+
+  useEffect(() => {
+    onDocumentChangeRef.current = onDocumentChange
+  }, [onDocumentChange])
 
   useEffect(() => {
     return () => {
@@ -56,13 +80,18 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
     pendingExternalValueRef.current = null
     lastForwardedValueRef.current = value
     if (view && view.state.doc.toString() !== value) {
-      view.dispatch({
-        changes: {
-          from: 0,
-          to: view.state.doc.length,
-          insert: value,
-        },
-      })
+      applyingExternalValueRef.current = true
+      try {
+        view.dispatch({
+          changes: {
+            from: 0,
+            to: view.state.doc.length,
+            insert: value,
+          },
+        })
+      } finally {
+        applyingExternalValueRef.current = false
+      }
     }
     setEditorValue(value)
   }, [value])
@@ -70,7 +99,7 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
   const forwardChange = (nextValue: string) => {
     if (nextValue === lastForwardedValueRef.current) return
     lastForwardedValueRef.current = nextValue
-    onChange(nextValue)
+    onChangeRef.current?.(nextValue)
   }
 
   const flushComposition = () => {
@@ -80,17 +109,23 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
       const nextValue = view.state.doc.toString()
       setEditorValue(nextValue)
       forwardChange(nextValue)
+      onDocumentChangeRef.current?.(view)
 
       const pendingExternalValue = pendingExternalValueRef.current
       pendingExternalValueRef.current = null
       if (pendingExternalValue !== null && pendingExternalValue !== nextValue) {
-        view.dispatch({
-          changes: {
-            from: 0,
-            to: view.state.doc.length,
-            insert: pendingExternalValue,
-          },
-        })
+        applyingExternalValueRef.current = true
+        try {
+          view.dispatch({
+            changes: {
+              from: 0,
+              to: view.state.doc.length,
+              insert: pendingExternalValue,
+            },
+          })
+        } finally {
+          applyingExternalValueRef.current = false
+        }
         setEditorValue(pendingExternalValue)
         lastForwardedValueRef.current = pendingExternalValue
       }
@@ -149,6 +184,14 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
         }}
         onUpdate={(update) => {
           isComposingRef.current = update.view.compositionStarted
+          if (
+            update.docChanged &&
+            !update.view.compositionStarted &&
+            !update.view.composing &&
+            !applyingExternalValueRef.current
+          ) {
+            onDocumentChangeRef.current?.(update.view)
+          }
         }}
         onCreateEditor={(view) => {
           editorViewRef.current = view

@@ -61,4 +61,47 @@ describe('CodeEditor', () => {
 
     expect(view!.state.doc.toString()).toBe('initial changed')
   })
+
+  it('reports document changes through the editor view callback', async () => {
+    vi.stubGlobal('ResizeObserver', class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    })
+
+    if (!Range.prototype.getClientRects) {
+      Object.defineProperty(Range.prototype, 'getClientRects', {
+        configurable: true,
+        value: () => [],
+      })
+    }
+
+    let view: EditorView | null = null
+    const onDocumentChange = vi.fn()
+
+    render(
+      <CodeEditor
+        value="initial"
+        onDocumentChange={onDocumentChange}
+        onViewReady={(nextView) => {
+          view = nextView
+        }}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(view).not.toBeNull()
+    })
+
+    act(() => {
+      view!.dispatch({
+        changes: {
+          from: view!.state.doc.length,
+          insert: ' changed',
+        },
+      })
+    })
+
+    expect(onDocumentChange).toHaveBeenCalledWith(view)
+  })
 })
