@@ -1,6 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { OutlineItem } from '../modules/outline/parser'
-import { buildHeadingsFromMarkdown, buildOutlineTreeFromHeadings, type OutlineHeading } from '../modules/outline/outlineSource'
+import {
+  buildHeadingsFromMarkdown,
+  buildOutlineTreeFromHeadings,
+  getMarkdownHeadingSignature,
+  type OutlineHeading,
+} from '../modules/outline/outlineSource'
 
 export function useOutlineModel(args: {
   mode: 'source' | 'wysiwyg'
@@ -8,23 +13,53 @@ export function useOutlineModel(args: {
   wysiwygHeadings: OutlineHeading[]
   enabled?: boolean
   debounceMs?: number
+  documentKey?: string | null
 }): OutlineItem[] {
-  const { mode, markdown, wysiwygHeadings, enabled = true, debounceMs = 300 } = args
+  const {
+    mode,
+    markdown,
+    wysiwygHeadings,
+    enabled = true,
+    debounceMs = 300,
+    documentKey,
+  } = args
   const [debouncedMarkdown, setDebouncedMarkdown] = useState(markdown)
+  const markdownHeadingSignature = useMemo(
+    () => (enabled && mode === 'source' ? getMarkdownHeadingSignature(markdown) : ''),
+    [enabled, markdown, mode],
+  )
+  const renderedHeadingSignatureRef = useRef(markdownHeadingSignature)
+  const previousContextRef = useRef({
+    enabled,
+    mode,
+    documentKey,
+  })
 
   useEffect(() => {
-    if (!enabled) return
-    setDebouncedMarkdown(markdown)
-  }, [enabled, markdown])
+    const previous = previousContextRef.current
+    previousContextRef.current = { enabled, mode, documentKey }
 
-  useEffect(() => {
-    if (!enabled) return
-    if (mode !== 'source') return
+    if (!enabled || mode !== 'source') return
+
+    const shouldSyncImmediately =
+      !previous.enabled ||
+      previous.mode !== mode ||
+      previous.documentKey !== documentKey
+
+    if (shouldSyncImmediately) {
+      renderedHeadingSignatureRef.current = markdownHeadingSignature
+      setDebouncedMarkdown(markdown)
+      return
+    }
+
+    if (markdownHeadingSignature === renderedHeadingSignatureRef.current) return
+
     const timer = setTimeout(() => {
+      renderedHeadingSignatureRef.current = markdownHeadingSignature
       setDebouncedMarkdown(markdown)
     }, debounceMs)
     return () => clearTimeout(timer)
-  }, [enabled, markdown, debounceMs, mode])
+  }, [debounceMs, documentKey, enabled, markdown, markdownHeadingSignature, mode])
 
   return useMemo(() => {
     if (!enabled) {

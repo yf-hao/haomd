@@ -23,6 +23,30 @@ export function buildHeadingsFromMarkdown(markdown: string): OutlineHeading[] {
   }))
 }
 
+export function getMarkdownHeadingSignature(markdown: string): string {
+  const headings: string[] = []
+  let inFencedCodeBlock = false
+  let line = 1
+
+  for (const lineContent of markdown.split(/\r\n?|\n/)) {
+    const trimmed = lineContent.trimStart()
+
+    if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) {
+      inFencedCodeBlock = !inFencedCodeBlock
+    } else if (!inFencedCodeBlock) {
+      const match = /^(#{1,6})\s+(.+)$/.exec(lineContent)
+
+      if (match) {
+        headings.push(`${line}:${match[1].length}:${match[2].trim()}`)
+      }
+    }
+
+    line++
+  }
+
+  return JSON.stringify(headings)
+}
+
 export function buildOutlineTreeFromHeadings(headings: OutlineHeading[]): OutlineItem[] {
   const items: OutlineItem[] = headings.map((heading, index) => ({
     id: heading.id,

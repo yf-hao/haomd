@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { buildHeadingsFromMarkdown, buildOutlineTreeFromHeadings, type OutlineHeading } from './outlineSource'
+import {
+  buildHeadingsFromMarkdown,
+  buildOutlineTreeFromHeadings,
+  getMarkdownHeadingSignature,
+  type OutlineHeading,
+} from './outlineSource'
 
 describe('outlineSource', () => {
   it('should adapt markdown headings into the unified heading model', () => {
@@ -64,5 +69,11 @@ describe('outlineSource', () => {
       source: 'wysiwyg',
       headingIndex: 1,
     })
+  })
+
+  it('should include heading positions and ignore headings inside fenced code', () => {
+    expect(getMarkdownHeadingSignature('Intro\n\n# Title\n\n```md\n## Code\n```\n\n## Section')).toBe(
+      '["3:1:Title","9:2:Section"]',
+    )
   })
 })

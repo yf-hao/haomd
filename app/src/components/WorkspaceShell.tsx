@@ -835,6 +835,7 @@ export function WorkspaceShell({
     markdown,
     wysiwygHeadings: wysiwygOutlineHeadings,
     enabled: isOutlinePanelVisible && !isPdfActive,
+    documentKey: activeId,
   })
 
   const activePdfOutlineId = useMemo(() => {
