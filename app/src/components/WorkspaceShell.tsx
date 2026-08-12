@@ -260,6 +260,11 @@ export function WorkspaceShell({
   const [activeWorkspaceDirectoryPath, setActiveWorkspaceDirectoryPath] = useState<string | null>(null)
   const markdownRef = useRef(markdown)
   const lastActiveIdForPreviewRef = useRef<string | null>(null)
+  const sourceDocumentSyncTimerRef = useRef<number | null>(null)
+  const sourceDocumentSyncSnapshotRef = useRef<{ tabId: string; content: string } | null>(null)
+  const flushSourceEditorRef = useRef<((tabId?: string) => string | null) | null>(null)
+  const sourceDirtyTabRef = useRef<string | null>(null)
+  const editorViewRef = useRef<EditorView | null>(null)
   const textColorTargetRef = useRef<TextColorTarget | null>(null)
   const backgroundColorTargetRef = useRef<TextColorTarget | null>(null)
   const preserveTextColorTargetOnNextChangeRef = useRef(false)
@@ -427,8 +432,9 @@ export function WorkspaceShell({
 
   const setEditModeWithFlush = useCallback((next: EditMode) => {
     if (editMode === 'source' && next === 'wysiwyg') {
+      flushSourceEditorRef.current?.()
       // Save original markdown and reset dirty flag when entering WYSIWYG
-      wysiwygEntryMarkdownRef.current = editorMarkdownRef.current
+      wysiwygEntryMarkdownRef.current = markdownRef.current
       wysiwygIsDirtyRef.current = false
     }
     if (editMode === 'wysiwyg' && next === 'source') {
@@ -482,6 +488,10 @@ export function WorkspaceShell({
     const previousTabId = activeIdRef.current
     if (previousTabId === nextTabId) return
 
+    if (editModeRef.current === 'source' && previousTabId) {
+      flushSourceEditorRef.current?.(previousTabId)
+    }
+
     // A keyed WYSIWYG pane unmounts when its tab changes. Persist its snapshot
     // to the outgoing tab before that happens, without touching global content.
     if (editModeRef.current === 'wysiwyg' && previousTabId) {
@@ -510,6 +520,7 @@ export function WorkspaceShell({
   const isPreviewVisible = effectiveLayout !== 'editor-only'
   const prevIsPreviewVisibleRef = useRef(isPreviewVisible)
   const previewSyncTimerRef = useRef<number | null>(null)
+  const previewFrameRef = useRef<number | null>(null)
   const skipNextPreviewThrottleRef = useRef(false)
 
   const commitPreviewValue = useCallback((nextValue: string) => {
@@ -521,6 +532,30 @@ export function WorkspaceShell({
       window.clearTimeout(previewSyncTimerRef.current)
       previewSyncTimerRef.current = null
     }
+    if (previewFrameRef.current != null) {
+      window.cancelAnimationFrame(previewFrameRef.current)
+      previewFrameRef.current = null
+    }
+  }, [])
+
+  const schedulePreviewValue = useCallback((nextValue: string) => {
+    if (!isPreviewVisible) return
+
+    if (previewFrameRef.current != null) {
+      window.cancelAnimationFrame(previewFrameRef.current)
+    }
+    previewFrameRef.current = window.requestAnimationFrame(() => {
+      previewFrameRef.current = null
+      commitPreviewValue(nextValue)
+    })
+  }, [commitPreviewValue, isPreviewVisible])
+
+  const clearSourceDocumentSync = useCallback(() => {
+    if (sourceDocumentSyncTimerRef.current != null) {
+      window.clearTimeout(sourceDocumentSyncTimerRef.current)
+      sourceDocumentSyncTimerRef.current = null
+    }
+    sourceDocumentSyncSnapshotRef.current = null
   }, [])
 
   // 在 editor/preview 区域统一处理滚轮：如果鼠标横坐标落在编辑器列内，就把滚动量转发给编辑器的 .cm-scroller
@@ -590,6 +625,57 @@ export function WorkspaceShell({
       beforeActiveTabChangeRef.current(nextTabId)
     },
   })
+
+  const commitSourceDocumentSnapshot = useCallback((tabId: string, content: string, markDirty: boolean) => {
+    if (activeIdRef.current !== tabId) return
+
+    markdownRef.current = content
+    editorMarkdownRef.current = content
+    if (isPreviewVisible) {
+      skipNextPreviewThrottleRef.current = true
+    }
+    setMarkdown(content)
+    setEditorMarkdown(content)
+    updateActiveContent(content, { markDirty })
+    sourceDocumentSyncSnapshotRef.current = null
+  }, [isPreviewVisible, updateActiveContent])
+
+  const scheduleSourceDocumentSync = useCallback((tabId: string, content: string) => {
+    sourceDocumentSyncSnapshotRef.current = { tabId, content }
+    if (sourceDocumentSyncTimerRef.current != null) {
+      window.clearTimeout(sourceDocumentSyncTimerRef.current)
+    }
+
+    sourceDocumentSyncTimerRef.current = window.setTimeout(() => {
+      sourceDocumentSyncTimerRef.current = null
+      const snapshot = sourceDocumentSyncSnapshotRef.current
+      if (!snapshot || snapshot.tabId !== tabId || activeIdRef.current !== tabId) return
+      commitSourceDocumentSnapshot(snapshot.tabId, snapshot.content, true)
+    }, 150)
+  }, [commitSourceDocumentSnapshot])
+
+  const flushSourceDocumentSync = useCallback((tabId = activeIdRef.current) => {
+    if (!tabId) return null
+
+    const view =
+      editModeRef.current === 'source' &&
+      !isPdfActiveRef.current &&
+      sourceEditorTabIdRef.current === tabId &&
+      editorViewRef.current?.dom.isConnected
+        ? editorViewRef.current
+        : null
+    const snapshot = sourceDocumentSyncSnapshotRef.current
+    const content = view?.state.doc.toString()
+      ?? (snapshot?.tabId === tabId ? snapshot.content : null)
+      ?? markdownRef.current
+    const previousContent = activeTab?.id === tabId ? activeTab.content : null
+    const shouldMarkDirty = previousContent !== null && previousContent !== content
+
+    clearSourceDocumentSync()
+    commitSourceDocumentSnapshot(tabId, content, shouldMarkDirty)
+    return content
+  }, [activeTab?.content, activeTab?.id, clearSourceDocumentSync, commitSourceDocumentSnapshot])
+  flushSourceEditorRef.current = flushSourceDocumentSync
 
   const openingPathsRef = useRef(new FileOpenCoordinator())
   const tabIdsByPathRef = useRef(new Map<string, string>())
@@ -745,7 +831,6 @@ export function WorkspaceShell({
   }, [])
 
   const sidebar = useSidebar()
-  const editorViewRef = useRef<EditorView | null>(null)
   const getActiveSourceView = useCallback(() => {
     if (
       !isWorkspaceMountedRef.current ||
@@ -789,7 +874,12 @@ export function WorkspaceShell({
     setIssueReportOpen(false)
   }, [])
 
-  const getCurrentMarkdown = useCallback(() => markdown, [markdown])
+  const getCurrentMarkdown = useCallback(() => {
+    if (editModeRef.current === 'source' && !isPdfActiveRef.current) {
+      return getActiveSourceView()?.state.doc.toString() ?? markdownRef.current
+    }
+    return markdownRef.current
+  }, [getActiveSourceView])
   const getCurrentFileName = useCallback(() => {
     const path = activeTab?.path
     if (!path) return null
@@ -978,6 +1068,16 @@ export function WorkspaceShell({
     if (!tab) return
 
     const isTabSwitch = lastActiveIdForPreviewRef.current !== activeId
+    const pendingSourceSnapshot = sourceDocumentSyncSnapshotRef.current
+    const hasPendingSourceEdits =
+      !isTabSwitch &&
+      editModeRef.current === 'source' &&
+      pendingSourceSnapshot?.tabId === activeId &&
+      pendingSourceSnapshot.content !== tab.content
+
+    if (hasPendingSourceEdits) {
+      return
+    }
 
     // 只有在切换标签页，或者外部强制更新了标签内容（且与当前编辑器不一致）时，才同步回编辑器
     // 这样避免了「输入 -> 更新 tabs -> tabs 触发 effect -> effect 用旧 tab.content 回滚输入」的循环
@@ -1078,6 +1178,7 @@ export function WorkspaceShell({
       // 方案2：在父组件处理保存后的逻辑
 
       // 1. 更新标签元数据（名称和 dirty 状态）
+      sourceDirtyTabRef.current = null
       updateActiveMeta(path, false)
 
       // 2. 处理侧边栏文件列表
@@ -1160,6 +1261,9 @@ export function WorkspaceShell({
   const handleMarkdownChange = useCallback((val: string, options?: MarkdownSyncOptions) => {
     const shouldMarkDirty = options?.markDirty ?? true
     const shouldSyncEditor = options?.syncEditor ?? true
+    if (editModeRef.current === 'source') {
+      clearSourceDocumentSync()
+    }
     const syncContent = (next: string) => {
       setMarkdown(next)
       editorMarkdownRef.current = next
@@ -1204,7 +1308,33 @@ export function WorkspaceShell({
       startTransition(() => syncContent(val))
     }
     if (shouldMarkDirty) markDirty()
-  }, [applyChunkEdit, markDirty, updateActiveContent])
+  }, [applyChunkEdit, clearSourceDocumentSync, markDirty, updateActiveContent])
+
+  const handleSourceMarkdownChange = useCallback((val: string) => {
+    const tabId = activeIdRef.current
+    if (!tabId) return
+
+    const patchedDoc = applyChunkEdit(val)
+    const next = patchedDoc ?? val
+    if (next === markdownRef.current) return
+
+    markdownRef.current = next
+    sourceDocumentSyncSnapshotRef.current = { tabId, content: next }
+    if (!activeTab?.dirty && sourceDirtyTabRef.current !== tabId) {
+      markActiveTabDirty()
+      sourceDirtyTabRef.current = tabId
+      markDirty()
+    }
+    schedulePreviewValue(next)
+    scheduleSourceDocumentSync(tabId, next)
+  }, [
+    activeTab?.dirty,
+    applyChunkEdit,
+    markActiveTabDirty,
+    markDirty,
+    schedulePreviewValue,
+    scheduleSourceDocumentSync,
+  ])
 
   const handleWysiwygChange = useCallback((sourceTabId: string, val: string) => {
     if (activeIdRef.current !== sourceTabId) {
@@ -1310,9 +1440,13 @@ export function WorkspaceShell({
         textColorTargetRef.current = null
         backgroundColorTargetRef.current = null
       }
-      handleMarkdownChange(val)
+      if (editModeRef.current === 'source') {
+        handleSourceMarkdownChange(val)
+      } else {
+        handleMarkdownChange(val)
+      }
     },
-    [isPdfActive, activePdfPath, handleMarkdownChange],
+    [activePdfPath, handleMarkdownChange, handleSourceMarkdownChange, isPdfActive],
   )
 
   // Register AI Editor handlers
@@ -1321,7 +1455,7 @@ export function WorkspaceShell({
       const view = getActiveSourceView()
       if (!view) return
       const next = view.state.doc.toString()
-      handleMarkdownChange(next)
+      handleSourceMarkdownChange(next)
     }
 
     /** WYSIWYG: flush pending idle serialization, get latest markdown,
@@ -1931,7 +2065,16 @@ export function WorkspaceShell({
       registerApplyBackgroundColor(null)
       registerClearBackgroundColor(null)
     }
-  }, [createTab, getActiveSourceView, getActiveTextColorDocKey, handleMarkdownChange, isCreatingTab, setActiveTab, tabs])
+  }, [
+    createTab,
+    getActiveSourceView,
+    getActiveTextColorDocKey,
+    handleMarkdownChange,
+    handleSourceMarkdownChange,
+    isCreatingTab,
+    setActiveTab,
+    tabs,
+  ])
 
   const getCurrentFilePath = useCallback(() => {
     if (isPdfActive) {
@@ -2229,7 +2372,7 @@ export function WorkspaceShell({
   // 当预览从不可见切换为可见时，立即用最新 markdown 做一次全量同步
   useEffect(() => {
     if (!prevIsPreviewVisibleRef.current && isPreviewVisible) {
-      commitPreviewValue(markdown)
+      commitPreviewValue(markdownRef.current)
       setIsPreviewLoading(false)
     }
     prevIsPreviewVisibleRef.current = isPreviewVisible
@@ -2238,8 +2381,9 @@ export function WorkspaceShell({
   useEffect(() => {
     return () => {
       clearPreviewSyncTimer()
+      clearSourceDocumentSync()
     }
-  }, [clearPreviewSyncTimer])
+  }, [clearPreviewSyncTimer, clearSourceDocumentSync])
 
   // 轻量节流的字数统计：在用户停止输入一小段时间后上报当前文档的总字数
   useEffect(() => {
@@ -2267,6 +2411,8 @@ export function WorkspaceShell({
   }, [markdown, isPdfActive, onDocumentStatsChange])
 
   const applyOpenedContent = useCallback((content: string) => {
+    clearSourceDocumentSync()
+    sourceDirtyTabRef.current = null
     markdownRef.current = content
     editorMarkdownRef.current = content
     setEditorMarkdown(content)
@@ -2291,7 +2437,7 @@ export function WorkspaceShell({
     // 注意：不再调用 updateActiveContent。调用方 (open_file 命令) 在此之前已通过
     // createTab({ path, content }) 创建了新标签并设置了内容。而 updateActiveContent
     // 闭包中的 activeId 仍指向旧标签，会误将旧标签内容覆写为新文件内容。
-  }, [isPreviewVisible, clearPreviewSyncTimer, commitPreviewValue])
+  }, [isPreviewVisible, clearPreviewSyncTimer, clearSourceDocumentSync, commitPreviewValue])
 
   const openImportedWordDocument = useCallback(async (path: string) => {
     if (isCreatingTab) {
@@ -2414,6 +2560,10 @@ export function WorkspaceShell({
       const latestImported = syncLatestWysiwygToReact() ?? markdownRef.current
       return await saveImportedWordDocumentAs(latestImported)
     }
+    if (editMode === 'source') {
+      const latest = flushSourceEditorRef.current?.() ?? getCurrentMarkdown()
+      return await save(latest)
+    }
     const latest = syncLatestWysiwygToReact()
     if (latest !== null) {
       return await save(latest)
@@ -2422,7 +2572,17 @@ export function WorkspaceShell({
       flushSync(() => { wysiwygFlushRef.current!() })
     }
     return await save()
-  }, [activeImportedWordState, isPdfActive, save, saveImportedWordDocumentAs, setStatusMessage, syncLatestWysiwygToReact, t])
+  }, [
+    activeImportedWordState,
+    editMode,
+    getCurrentMarkdown,
+    isPdfActive,
+    save,
+    saveImportedWordDocumentAs,
+    setStatusMessage,
+    syncLatestWysiwygToReact,
+    t,
+  ])
   guardedSaveRef.current = saveWithPdfGuard
 
   const saveAsWithPdfGuard = useCallback(async () => {
@@ -2449,12 +2609,27 @@ export function WorkspaceShell({
       const latestImported = syncLatestWysiwygToReact() ?? markdownRef.current
       return await saveImportedWordDocumentAs(latestImported)
     }
+    if (editMode === 'source') {
+      const latest = flushSourceEditorRef.current?.() ?? getCurrentMarkdown()
+      return await saveAs(latest)
+    }
     const latest = syncLatestWysiwygToReact()
     if (latest !== null) {
       return await saveAs(latest)
     }
     return await saveAs()
-  }, [activeImportedWordState, activePdfPath, isPdfActive, saveAs, saveImportedWordDocumentAs, setStatusMessage, syncLatestWysiwygToReact, t])
+  }, [
+    activeImportedWordState,
+    activePdfPath,
+    editMode,
+    getCurrentMarkdown,
+    isPdfActive,
+    saveAs,
+    saveImportedWordDocumentAs,
+    setStatusMessage,
+    syncLatestWysiwygToReact,
+    t,
+  ])
 
   const markPendingRestoreRef = useRef<((tabId: string) => void) | null>(null)
 

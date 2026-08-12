@@ -29,6 +29,8 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
   const onViewReadyRef = useRef(onViewReady)
   const isComposingRef = useRef(false)
   const lastForwardedValueRef = useRef(value)
+  const lastPropValueRef = useRef(value)
+  const pendingExternalValueRef = useRef<string | null>(null)
 
   useEffect(() => {
     onViewReadyRef.current = onViewReady
@@ -42,11 +44,28 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
   }, [])
 
   useEffect(() => {
-    if (value === editorValue) return
-    if (isComposingRef.current || editorViewRef.current?.composing) return
-    setEditorValue(value)
+    if (value === lastPropValueRef.current) return
+    lastPropValueRef.current = value
+
+    const view = editorViewRef.current
+    if (isComposingRef.current || view?.composing) {
+      pendingExternalValueRef.current = value
+      return
+    }
+
+    pendingExternalValueRef.current = null
     lastForwardedValueRef.current = value
-  }, [value, editorValue])
+    if (view && view.state.doc.toString() !== value) {
+      view.dispatch({
+        changes: {
+          from: 0,
+          to: view.state.doc.length,
+          insert: value,
+        },
+      })
+    }
+    setEditorValue(value)
+  }, [value])
 
   const forwardChange = (nextValue: string) => {
     if (nextValue === lastForwardedValueRef.current) return
@@ -61,6 +80,20 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
       const nextValue = view.state.doc.toString()
       setEditorValue(nextValue)
       forwardChange(nextValue)
+
+      const pendingExternalValue = pendingExternalValueRef.current
+      pendingExternalValueRef.current = null
+      if (pendingExternalValue !== null && pendingExternalValue !== nextValue) {
+        view.dispatch({
+          changes: {
+            from: 0,
+            to: view.state.doc.length,
+            insert: pendingExternalValue,
+          },
+        })
+        setEditorValue(pendingExternalValue)
+        lastForwardedValueRef.current = pendingExternalValue
+      }
     })
   }
 
