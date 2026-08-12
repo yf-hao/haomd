@@ -30,6 +30,7 @@ import { WorkflowsPanel } from './WorkflowsPanel'
 import { SidebarBackgroundShell } from './SidebarBackgroundShell'
 import { Welcome } from './Welcome'
 import { SearchBar } from './Editor/SearchBar'
+import type { SearchController } from './Editor/searchController'
 import type { EditorTransientSearchQuery } from './EditorPane'
 import { buildSearchScope } from '../modules/search/searchScopeService'
 import type { SearchScope } from '../modules/search/types'
@@ -251,6 +252,8 @@ export function WorkspaceShell({
   const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null)
   const [activeWorkspaceDirectoryPath, setActiveWorkspaceDirectoryPath] = useState<string | null>(null)
   const markdownRef = useRef(markdown)
+  const activeLineRef = useRef(activeLine)
+  activeLineRef.current = activeLine
   const lastActiveIdForPreviewRef = useRef<string | null>(null)
   const sourceEditorRevisionRef = useRef(0)
   const flushSourceEditorRef = useRef<((tabId?: string) => string | null) | null>(null)
@@ -316,6 +319,11 @@ export function WorkspaceShell({
   const [wysiwygFocusRequest, setWysiwygFocusRequest] = useState(0)
   const [transientSearchQuery, setTransientSearchQuery] = useState<EditorTransientSearchQuery | null>(null)
   const [previewSelectionText, setPreviewSelectionText] = useState<string | null>(null)
+  const pendingSourceCursorRestoreRef = useRef<{
+    tabId: string | null
+    globalLine: number
+    columnStart?: number
+  } | null>(null)
   const pdfSelectionGetterRef = useRef<(() => string | null) | null>(null)
   const pdfZoomActionsRef = useRef<{
     zoomIn: () => number | null
@@ -424,6 +432,18 @@ export function WorkspaceShell({
 
   const setEditModeWithFlush = useCallback((next: EditMode) => {
     if (editMode === 'source' && next === 'wysiwyg') {
+      const view = editorViewRef.current
+      const selection = view?.state.selection.main
+      const cursorLine = selection && view
+        ? view.state.doc.lineAt(selection.head)
+        : null
+      pendingSourceCursorRestoreRef.current = {
+        tabId: activeIdRef.current,
+        globalLine: activeLineRef.current > 0 ? activeLineRef.current : 1,
+        columnStart: cursorLine && selection
+          ? selection.head - cursorLine.from + 1
+          : undefined,
+      }
       flushSourceEditorRef.current?.()
       // Save original markdown and reset dirty flag when entering WYSIWYG
       wysiwygEntryMarkdownRef.current = markdownRef.current
@@ -941,6 +961,10 @@ export function WorkspaceShell({
   const [confirmDialog, setConfirmDialog] = useState<any>(null)
   const [searchPrefillText, setSearchPrefillText] = useState('')
   const [searchPrefillVersion, setSearchPrefillVersion] = useState(0)
+  const [wysiwygSearchController, setWysiwygSearchController] = useState<SearchController | null>(null)
+  const handleWysiwygSearchControllerReady = useCallback((controller: SearchController | null) => {
+    setWysiwygSearchController(controller)
+  }, [])
   const [quitConfirmDialog, setQuitConfirmDialog] = useState<any>(null)
   const [isInsertTableDialogOpen, setIsInsertTableDialogOpen] = useState(false)
   const [mathSymbolDialog, setMathSymbolDialog] = useState<{ open: boolean; categoryKey: string }>({ open: false, categoryKey: 'greek' })
@@ -2401,6 +2425,7 @@ export function WorkspaceShell({
       commitPreviewValue(content)
       setIsPreviewLoading(false)
     }
+    activeLineRef.current = 1
     setActiveLine(1)
     // 注意：不再调用 updateActiveContent。调用方 (open_file 命令) 在此之前已通过
     // createTab({ path, content }) 创建了新标签并设置了内容。而 updateActiveContent
@@ -3453,12 +3478,14 @@ export function WorkspaceShell({
     const nextSearchText =
       view && selection && !selection.empty
         ? view.state.sliceDoc(selection.from, selection.to)
-        : ''
+        : editModeRef.current === 'wysiwyg'
+          ? wysiwygSearchController?.getInitialSearchText() ?? ''
+          : ''
 
     setSearchPrefillText(nextSearchText)
     setSearchPrefillVersion((prev) => prev + 1)
     setIsSearchOpen(true)
-  }, [getActiveSourceView])
+  }, [getActiveSourceView, wysiwygSearchController])
 
   const openInsertTableDialog = useCallback(() => {
     if (isPdfActive) {
@@ -3913,6 +3940,7 @@ export function WorkspaceShell({
     if (isProgrammaticScrollRef.current) return
 
     const globalLine = localToGlobal(localLine)
+    activeLineRef.current = globalLine
     setActiveLine(globalLine)
 
     saveCursorPositionRef.current?.(globalLine)
@@ -3921,6 +3949,7 @@ export function WorkspaceShell({
   const focusEditorOnGlobalLine = useCallback((globalLine: number, searchText?: string, columnStart?: number) => {
     const safeGlobal = globalLine > 0 ? globalLine : 1
     const result = focusOnGlobalLine(safeGlobal, searchText, columnStart)
+    activeLineRef.current = safeGlobal
     setActiveLine(safeGlobal)
     setFocusRequest(result)
   }, [focusOnGlobalLine])
@@ -3941,6 +3970,15 @@ export function WorkspaceShell({
   restoreCursorRef.current = restoreCursorForPath
   saveCursorPositionRef.current = saveCursorPosition
   markPendingRestoreRef.current = markPendingRestore
+
+  const handleSourceEditorReady = useCallback(() => {
+    handleEditorReady()
+    const pending = pendingSourceCursorRestoreRef.current
+    if (pending && pending.tabId === activeIdRef.current) {
+      pendingSourceCursorRestoreRef.current = null
+      focusEditorOnGlobalLine(pending.globalLine, undefined, pending.columnStart)
+    }
+  }, [focusEditorOnGlobalLine, handleEditorReady])
 
   const handlePreviewLineClick = useCallback((line: number) => {
     focusEditorOnGlobalLine(line)
@@ -4527,6 +4565,14 @@ export function WorkspaceShell({
                           onTabClose={closeTabWithAiSession}
                           onRequestSaveAndClose={handleTabSaveAndClose}
                         />
+                        {isSearchOpen && wysiwygSearchController && (
+                          <SearchBar
+                            controller={wysiwygSearchController}
+                            prefillText={searchPrefillText}
+                            prefillVersion={searchPrefillVersion}
+                            onClose={() => setIsSearchOpen(false)}
+                          />
+                        )}
                         <WysiwygPaneLazy
                           key={activeId ?? 'wysiwyg-empty'}
                           value={wysiwygBodyMarkdown}
@@ -4548,6 +4594,7 @@ export function WorkspaceShell({
                           onSaveSnapshotReady={(getter) => {
                             wysiwygSaveSnapshotRef.current = getter
                           }}
+                          onSearchControllerReady={handleWysiwygSearchControllerReady}
                           onOutlineNavigatorReady={(navigator) => {
                             wysiwygOutlineNavigatorRef.current = navigator
                           }}
@@ -4618,7 +4665,7 @@ export function WorkspaceShell({
                         onProgrammaticScrollStart={() => { isProgrammaticScrollRef.current = true }}
                         onProgrammaticScrollEnd={() => { isProgrammaticScrollRef.current = false }}
                         editorZoom={editorZoom}
-                        onEditorReady={handleEditorReady}
+                        onEditorReady={handleSourceEditorReady}
                         onEditorViewChange={handleSourceEditorViewChange}
                         transientSearchQuery={transientSearchQuery}
                       />

@@ -163,7 +163,6 @@ struct MenuTexts {
     markdown_handbook: &'static str,
     release_notes: &'static str,
     report_issue: &'static str,
-    about: &'static str,
     html: &'static str,
     word_docx: &'static str,
 }
@@ -283,7 +282,6 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             markdown_handbook: "Markdown 手册",
             release_notes: "版本说明",
             report_issue: "报告问题",
-            about: "关于",
             html: "HTML",
             word_docx: "Word (.docx)",
         },
@@ -400,7 +398,6 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             markdown_handbook: "Markdown Handbook",
             release_notes: "Release Notes",
             report_issue: "Report Issue",
-            about: "About",
             html: "HTML",
             word_docx: "Word (.docx)",
         },
@@ -1151,11 +1148,6 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         .item(
             &MenuItemBuilder::new(texts.report_issue)
                 .id("help_issue")
-                .build(app)?,
-        )
-        .item(
-            &MenuItemBuilder::new(texts.about)
-                .id("help_about")
                 .build(app)?,
         )
         .build()?;

@@ -41,6 +41,11 @@ import { dispatchNativePasteImage, onNativePaste } from '../../modules/platform/
 import { readClipboardForPaste } from '../../modules/platform/clipboardPasteService'
 import { isTauriEnv } from '../../modules/platform/runtime'
 import { buildHeadingsFromWysiwygDoc } from '../../modules/outline/wysiwygOutline'
+import {
+  createProseMirrorSearchController,
+  createTextareaSearchController,
+  type SearchController,
+} from '../Editor/searchController'
 import type { OutlineHeading } from '../../modules/outline/outlineSource'
 import './WysiwygPane.css'
 
@@ -57,6 +62,7 @@ export interface WysiwygPaneProps {
   onFormatActionsReady?: (actions: WysiwygFormatActions | null) => void
   onMarkdownGetterReady?: (getter: (() => string) | null) => void
   onSaveSnapshotReady?: (getter: (() => string) | null) => void
+  onSearchControllerReady?: (controller: SearchController | null) => void
   onOutlineNavigatorReady?: (navigator: ((target: { headingIndex: number; text: string; level: 1 | 2 | 3 | 4 | 5 | 6 }) => boolean) | null) => void
   onOutlineItemsChange?: (items: OutlineHeading[]) => void
   skipUnmountFlushRef?: { current: boolean } | null
@@ -233,6 +239,7 @@ function PlainTextWysiwyg({
   onFormatActionsReady,
   onMarkdownGetterReady,
   onSaveSnapshotReady,
+  onSearchControllerReady,
   onOutlineNavigatorReady,
   onOutlineItemsChange,
 }: WysiwygPaneProps) {
@@ -285,6 +292,13 @@ function PlainTextWysiwyg({
     onSelectionGetterReady?.(getter)
     return () => onSelectionGetterReady?.(null)
   }, [onSelectionGetterReady])
+
+  useEffect(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+    onSearchControllerReady?.(createTextareaSearchController(textarea))
+    return () => onSearchControllerReady?.(null)
+  }, [onSearchControllerReady])
 
   useEffect(() => {
     onFormatActionsReady?.(null)
@@ -387,6 +401,7 @@ function WysiwygEditor({
   onFormatActionsReady,
   onMarkdownGetterReady,
   onSaveSnapshotReady,
+  onSearchControllerReady,
   onOutlineNavigatorReady,
   onOutlineItemsChange,
   skipUnmountFlushRef,
@@ -408,6 +423,7 @@ function WysiwygEditor({
         onSelectionGetterReady={onSelectionGetterReady}
         onMarkdownGetterReady={onMarkdownGetterReady}
         onSaveSnapshotReady={onSaveSnapshotReady}
+        onSearchControllerReady={onSearchControllerReady}
         onOutlineNavigatorReady={onOutlineNavigatorReady}
         onOutlineItemsChange={onOutlineItemsChange}
       />
@@ -461,6 +477,8 @@ function WysiwygEditor({
   onMarkdownGetterReadyRef.current = onMarkdownGetterReady
   const onSaveSnapshotReadyRef = useRef(onSaveSnapshotReady)
   onSaveSnapshotReadyRef.current = onSaveSnapshotReady
+  const onSearchControllerReadyRef = useRef(onSearchControllerReady)
+  onSearchControllerReadyRef.current = onSearchControllerReady
   const onFormatActionsReadyRef = useRef(onFormatActionsReady)
   onFormatActionsReadyRef.current = onFormatActionsReady
   const onOutlineNavigatorReadyRef = useRef(onOutlineNavigatorReady)
@@ -502,6 +520,30 @@ function WysiwygEditor({
     }
     return editor
   }, [])
+
+  useEffect(() => {
+    const editor = getReadyEditor()
+    if (!editor) {
+      onSearchControllerReadyRef.current?.(null)
+      return
+    }
+
+    let view: EditorView | null = null
+    editor.action((ctx) => {
+      view = ctx.get(editorViewCtx)
+    })
+    if (!view) {
+      onSearchControllerReadyRef.current?.(null)
+      return
+    }
+
+    onSearchControllerReadyRef.current?.(
+      createProseMirrorSearchController(view, () => {
+        hasUserInteractedRef.current = true
+      }),
+    )
+    return () => onSearchControllerReadyRef.current?.(null)
+  }, [editorReady, getReadyEditor])
 
   // Block-level incremental serialization cache
   const blockCacheRef = useRef(new BlockCacheManager())
@@ -1325,6 +1367,7 @@ function WysiwygEditor({
       onOutlineItemsChangeRef.current?.([])
       onSelectionGetterReadyRef.current?.(null)
       onMarkdownGetterReadyRef.current?.(null)
+      onSearchControllerReadyRef.current?.(null)
       onFormatActionsReadyRef.current?.(null)
       onOutlineNavigatorReadyRef.current?.(null)
       const editor = editorRef.current

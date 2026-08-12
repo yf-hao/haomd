@@ -1,27 +1,27 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { setSearchQuery, findNext, findPrevious, SearchQuery, replaceNext, replaceAll } from '@codemirror/search'
-import { setCustomSearchQuery } from './searchHighlight'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import type { EditorView as CodeMirrorEditorView } from '@codemirror/view'
 import { useI18n } from '../../modules/i18n/I18nContext'
 import { onNativePaste } from '../../modules/platform/clipboardEvents'
+import { createCodeMirrorSearchController, type SearchController, type SearchOptions } from './searchController'
 import './SearchBar.css'
 
 interface SearchBarProps {
-    view: any
+    view?: CodeMirrorEditorView | null
+    controller?: SearchController | null
     onClose: () => void
     prefillText?: string
     prefillVersion?: number
 }
 
-function getInitialSearchText(view: any): string {
-    if (!view?.state?.selection?.main || !view?.state?.sliceDoc) return ''
-    const selection = view.state.selection.main
-    if (selection.empty) return ''
-    return view.state.sliceDoc(selection.from, selection.to)
-}
-
-export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose, prefillText, prefillVersion }) => {
+export const SearchBar: React.FC<SearchBarProps> = ({ view, controller, onClose, prefillText, prefillVersion }) => {
     const { t } = useI18n()
-    const [searchText, setSearchText] = useState(() => prefillText ?? getInitialSearchText(view))
+    const searchController = useMemo(
+        () => controller ?? (view ? createCodeMirrorSearchController(view) : null),
+        [controller, view],
+    )
+    const [searchText, setSearchText] = useState(
+        () => prefillText ?? searchController?.getInitialSearchText() ?? '',
+    )
     const [caseSensitive, setCaseSensitive] = useState(false)
     const [wholeWord, setWholeWord] = useState(false)
     const [regexp, setRegexp] = useState(false)
@@ -41,16 +41,9 @@ export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose, prefillText
         }
 
         return () => {
-            if (view) {
-                view.dispatch({
-                    effects: [
-                        setSearchQuery.of(new SearchQuery({ search: '' })),
-                        setCustomSearchQuery.of(null)
-                    ]
-                })
-            }
+            searchController?.clear()
         }
-    }, [view])
+    }, [searchController])
 
     useEffect(() => {
         if (prefillVersion == null) return
@@ -75,49 +68,33 @@ export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose, prefillText
         return unlisten
     }, [])
 
+    const getSearchOptions = useCallback((): SearchOptions => ({
+        searchText,
+        caseSensitive,
+        wholeWord,
+        regexp,
+    }), [caseSensitive, regexp, searchText, wholeWord])
+
+    const applyResult = useCallback((result: { matchCount: number; currentMatchIndex: number }) => {
+        setMatchCount(result.matchCount)
+        setCurrentMatchIndex(result.currentMatchIndex)
+    }, [])
+
     const updateIndex = useCallback(() => {
-        if (!view || !searchText) return;
-        const query = new SearchQuery({ search: searchText, caseSensitive, wholeWord, regexp });
-        const cursor = query.getCursor(view.state) as any;
-        const head = view.state.selection.main.head;
-        let count = 0;
-        let foundIndex = 0;
-
-        while (!cursor.next().done) {
-            count++;
-            if (!foundIndex) {
-                const matchFrom = cursor.value?.from ?? cursor.from;
-                const matchTo = cursor.value?.to ?? cursor.to;
-                if (matchFrom >= head || (matchFrom < head && matchTo >= head)) {
-                    foundIndex = count;
-                }
-            }
+        if (!searchController || !searchText) {
+            applyResult({ matchCount: 0, currentMatchIndex: 0 })
+            return
         }
-
-        setMatchCount(count);
-        setCurrentMatchIndex(count > 0 ? (foundIndex || count) : 0);
-    }, [view, searchText, caseSensitive, wholeWord, regexp]);
+        applyResult(searchController.apply(getSearchOptions()))
+    }, [applyResult, getSearchOptions, searchController, searchText])
 
     const updateIndexTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     // Update query and count matches
     useEffect(() => {
-        if (!view) return
-
-        const query = new SearchQuery({
-            search: searchText,
-            caseSensitive,
-            wholeWord,
-            regexp,
-        })
-
-        // Apply query to CodeMirror (this handles highlighting) — 立即执行，保证视觉反馈
-        view.dispatch({
-            effects: [
-                setSearchQuery.of(query),
-                setCustomSearchQuery.of(query)
-            ]
-        })
+        if (!searchController) return
+        const result = searchController.apply(getSearchOptions())
+        applyResult(result)
 
         // Count matches — debounce 150ms，避免大文档每次按键都遍历全文
         if (updateIndexTimerRef.current != null) {
@@ -137,53 +114,12 @@ export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose, prefillText
                 clearTimeout(updateIndexTimerRef.current)
             }
         }
-    }, [view, searchText, caseSensitive, wholeWord, regexp, updateIndex])
+    }, [applyResult, getSearchOptions, searchController, searchText, updateIndex])
 
     const navigate = useCallback((direction: 'next' | 'prev') => {
-        if (!view || !searchText) return
-
-        if (direction === 'next') {
-            findNext(view as any)
-        } else {
-            // 为了防止向后查找时因为光标在当前匹配词末尾而反复匹配当前词
-            // 先尝试把光标移到当前匹配词的开头
-            const query = new SearchQuery({ search: searchText, caseSensitive, wholeWord, regexp })
-            const cursor = query.getCursor(view.state) as any
-            const head = view.state.selection.main.head
-            let matchFrom = null
-
-            while (!cursor.next().done) {
-                const f = cursor.value?.from ?? cursor.from
-                const t = cursor.value?.to ?? cursor.to
-                if (t === head) {
-                    matchFrom = f
-                    break
-                }
-            }
-
-            if (matchFrom !== null) {
-                view.dispatch({
-                    selection: { anchor: matchFrom, head: matchFrom }
-                })
-            }
-
-            findPrevious(view as any)
-        }
-
-        // After navigation, CodeMirror selects the match.
-        // User requirement: positioning the cursor AFTER the match text.
-        const { selection } = view.state
-        if (!selection.main.empty) {
-            const targetPos = selection.main.to
-            view.dispatch({
-                selection: { anchor: targetPos, head: targetPos },
-                scrollIntoView: true,
-                userEvent: 'select.search'
-            })
-        }
-
-        updateIndex()
-    }, [view, searchText, caseSensitive, wholeWord, regexp, updateIndex])
+        if (!searchController || !searchText) return
+        applyResult(searchController.navigate(direction, getSearchOptions()))
+    }, [applyResult, getSearchOptions, searchController, searchText])
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         // 防止外层编辑器或宏命令吃掉输入框里的原生复制、粘贴、全选等快捷键
@@ -204,31 +140,13 @@ export const SearchBar: React.FC<SearchBarProps> = ({ view, onClose, prefillText
     }
 
     const handleReplace = () => {
-        if (!view || !searchText) return
-        const query = new SearchQuery({
-            search: searchText,
-            caseSensitive,
-            wholeWord,
-            regexp,
-            replace: replaceText
-        })
-        view.dispatch({ effects: setSearchQuery.of(query) })
-        replaceNext(view as any)
-        updateIndex()
+        if (!searchController || !searchText) return
+        applyResult(searchController.replace(getSearchOptions(), replaceText, false))
     }
 
     const handleReplaceAll = () => {
-        if (!view || !searchText) return
-        const query = new SearchQuery({
-            search: searchText,
-            caseSensitive,
-            wholeWord,
-            regexp,
-            replace: replaceText
-        })
-        view.dispatch({ effects: setSearchQuery.of(query) })
-        replaceAll(view as any)
-        updateIndex()
+        if (!searchController || !searchText) return
+        applyResult(searchController.replace(getSearchOptions(), replaceText, true))
     }
 
     return (

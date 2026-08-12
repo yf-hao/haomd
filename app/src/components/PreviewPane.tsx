@@ -67,8 +67,9 @@ function PreviewPaneComponent({
   const markdownViewerRef = useRef<MarkdownViewerHandle | null>(null)
 
   useLayoutEffect(() => {
+    if (effectiveLayout === 'editor-only') return
     markdownViewerRef.current?.updateActiveLine(activeLine)
-  }, [activeLine])
+  }, [activeLine, effectiveLayout])
 
   if (effectiveLayout === 'preview-only') {
     style.gridColumn = '1 / -1'
