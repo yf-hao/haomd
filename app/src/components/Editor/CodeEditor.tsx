@@ -7,6 +7,8 @@ import { useResolvedThemeMode } from '../../modules/theme/ThemeContext'
 
 export type CodeEditorProps = {
   value: string
+  documentKey?: string | null
+  preserveLocalDocument?: boolean
   onChange?: (value: string) => void
   onDocumentChange?: (view: EditorView) => void
   onCursorChange?: (line: number) => void
@@ -25,6 +27,8 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
 ) {
   const {
     value,
+    documentKey,
+    preserveLocalDocument = false,
     onChange,
     onDocumentChange,
     onCursorChange,
@@ -45,6 +49,8 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
   const isComposingRef = useRef(false)
   const lastForwardedValueRef = useRef(value)
   const lastPropValueRef = useRef(value)
+  const lastDocumentKeyRef = useRef(documentKey)
+  const hasLocalDocumentChangesRef = useRef(false)
   const pendingExternalValueRef = useRef<string | null>(null)
   const applyingExternalValueRef = useRef(false)
 
@@ -68,18 +74,34 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
   }, [])
 
   useEffect(() => {
-    if (value === lastPropValueRef.current) return
+    const documentChanged = documentKey !== lastDocumentKeyRef.current
+    if (documentChanged) {
+      lastDocumentKeyRef.current = documentKey
+      hasLocalDocumentChangesRef.current = false
+    }
+    if (!documentChanged && value === lastPropValueRef.current) return
     lastPropValueRef.current = value
 
     const view = editorViewRef.current
+    const currentDocument = view?.state.doc.toString()
+    if (
+      !documentChanged &&
+      preserveLocalDocument &&
+      hasLocalDocumentChangesRef.current &&
+      currentDocument !== value
+    ) {
+      return
+    }
+
     if (isComposingRef.current || view?.composing) {
       pendingExternalValueRef.current = value
       return
     }
 
     pendingExternalValueRef.current = null
+    hasLocalDocumentChangesRef.current = false
     lastForwardedValueRef.current = value
-    if (view && view.state.doc.toString() !== value) {
+    if (view && currentDocument !== value) {
       applyingExternalValueRef.current = true
       try {
         view.dispatch({
@@ -94,7 +116,7 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
       }
     }
     setEditorValue(value)
-  }, [value])
+  }, [documentKey, preserveLocalDocument, value])
 
   const forwardChange = (nextValue: string) => {
     if (nextValue === lastForwardedValueRef.current) return
@@ -156,6 +178,9 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
       ref={ref}
       onCompositionStart={() => {
         isComposingRef.current = true
+        if (preserveLocalDocument) {
+          hasLocalDocumentChangesRef.current = true
+        }
       }}
       onCompositionEnd={() => {
         isComposingRef.current = false
@@ -190,6 +215,7 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
             !update.view.composing &&
             !applyingExternalValueRef.current
           ) {
+            hasLocalDocumentChangesRef.current = true
             onDocumentChangeRef.current?.(update.view)
           }
         }}

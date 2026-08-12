@@ -27,6 +27,8 @@ describe('CodeEditor', () => {
     const { rerender } = render(
       <CodeEditor
         value="initial"
+        documentKey="doc-1"
+        preserveLocalDocument
         onChange={onChange}
         onViewReady={(nextView) => {
           view = nextView
@@ -51,7 +53,9 @@ describe('CodeEditor', () => {
 
     rerender(
       <CodeEditor
-        value="initial"
+        value="stale parent"
+        documentKey="doc-1"
+        preserveLocalDocument
         onChange={onChange}
         onViewReady={(nextView) => {
           view = nextView
@@ -60,6 +64,20 @@ describe('CodeEditor', () => {
     )
 
     expect(view!.state.doc.toString()).toBe('initial changed')
+
+    rerender(
+      <CodeEditor
+        value="replacement"
+        documentKey="doc-2"
+        preserveLocalDocument
+        onChange={onChange}
+        onViewReady={(nextView) => {
+          view = nextView
+        }}
+      />,
+    )
+
+    expect(view!.state.doc.toString()).toBe('replacement')
   })
 
   it('reports document changes through the editor view callback', async () => {

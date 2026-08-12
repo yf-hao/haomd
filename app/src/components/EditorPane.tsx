@@ -22,6 +22,8 @@ export type EditorTransientSearchQuery = {
 
 export type EditorPaneProps = {
   markdown: string
+  documentKey?: string | null
+  preserveLocalDocument?: boolean
   onChange?: (value: string) => void
   onDocumentChange?: (view: EditorView) => void
   onCursorChange: (line: number) => void
@@ -42,6 +44,8 @@ export type EditorPaneProps = {
 export function EditorPane(props: EditorPaneProps) {
   const {
     markdown,
+    documentKey,
+    preserveLocalDocument,
     onChange,
     onDocumentChange,
     onCursorChange,
@@ -156,6 +160,8 @@ export function EditorPane(props: EditorPaneProps) {
       ) : null}
       <CodeEditor
         value={markdown}
+        documentKey={documentKey}
+        preserveLocalDocument={preserveLocalDocument}
         onChange={onChange}
         onDocumentChange={onDocumentChange}
         onCursorChange={onCursorChange}

@@ -1228,6 +1228,10 @@ export function WorkspaceShell({
     applyChunkEdit,
     schedulePreviewDocument,
   })
+  const handleSourceEditorDocumentChange = useCallback((view: EditorView) => {
+    setFocusRequest(null)
+    handleSourceDocumentChange(view)
+  }, [handleSourceDocumentChange])
   flushSourceEditorRef.current = flushSourceDocumentSync
   hasPendingSourceEditsRef.current = hasPendingSourceEdits
   resetSourceDirtyTrackingRef.current = resetDirtyTracking
@@ -1444,12 +1448,12 @@ export function WorkspaceShell({
       }
       if (editModeRef.current === 'source') {
         const view = getActiveSourceView()
-        if (view) handleSourceDocumentChange(view)
+        if (view) handleSourceEditorDocumentChange(view)
       } else {
         handleMarkdownChange(val)
       }
     },
-    [activePdfPath, getActiveSourceView, handleMarkdownChange, handleSourceDocumentChange, isPdfActive],
+    [activePdfPath, getActiveSourceView, handleMarkdownChange, handleSourceEditorDocumentChange, isPdfActive],
   )
 
   // Register AI Editor handlers
@@ -1457,7 +1461,7 @@ export function WorkspaceShell({
     const syncEditorToReactState = () => {
       const view = getActiveSourceView()
       if (!view) return
-      handleSourceDocumentChange(view)
+      handleSourceEditorDocumentChange(view)
     }
 
     /** WYSIWYG: flush pending idle serialization, get latest markdown,
@@ -2072,7 +2076,7 @@ export function WorkspaceShell({
     getActiveSourceView,
     getActiveTextColorDocKey,
     handleMarkdownChange,
-    handleSourceDocumentChange,
+    handleSourceEditorDocumentChange,
     isCreatingTab,
     setActiveTab,
     tabs,
@@ -4638,8 +4642,10 @@ export function WorkspaceShell({
                       )}
                       <EditorPaneLazy
                         markdown={editorContent}
+                        documentKey={activeId}
+                        preserveLocalDocument={!isPdfActive}
                         onChange={isPdfActive ? handleEditorChange : undefined}
-                        onDocumentChange={handleSourceDocumentChange}
+                        onDocumentChange={handleSourceEditorDocumentChange}
                         onCursorChange={handleCursorChange}
                         showPreview={showPreview}
                         setShowPreview={setShowPreview}
