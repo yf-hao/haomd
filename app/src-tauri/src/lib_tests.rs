@@ -609,12 +609,11 @@ fn should_include_math_content_in_document_xml() {
 
 #[test]
 fn should_render_square_root_with_hidden_default_degree() {
-    let math_ml = r#"<math xmlns="http://www.w3.org/1998/Math/MathML"><msqrt><mn>3</mn></msqrt></math>"#;
+    let math_ml =
+        r#"<math xmlns="http://www.w3.org/1998/Math/MathML"><msqrt><mn>3</mn></msqrt></math>"#;
     let omml = mathml_to_omml(math_ml).expect("square root MathML should convert");
 
-    assert!(omml.contains(
-        r#"<m:rad><m:radPr><m:degHide m:val="1"/></m:radPr><m:deg/><m:e>"#
-    ));
+    assert!(omml.contains(r#"<m:rad><m:radPr><m:degHide m:val="1"/></m:radPr><m:deg/><m:e>"#));
     assert!(omml.contains("<m:t>3</m:t>"));
 }
 

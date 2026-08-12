@@ -1296,10 +1296,7 @@ fn convert_mathml_node(node: &MathMlNode) -> String {
 }
 
 fn is_mathml_true(value: Option<&String>) -> bool {
-    matches!(
-        value.map(String::as_str),
-        Some("true") | Some("1")
-    )
+    matches!(value.map(String::as_str), Some("true") | Some("1"))
 }
 
 fn render_mathml_accent(node: &MathMlNode) -> String {

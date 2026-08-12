@@ -41,9 +41,9 @@ fn legacy_root_recent_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
 }
 
 fn is_internal_haomd_path(path: &str) -> bool {
-    Path::new(path).components().any(|component| {
-        matches!(component, Component::Normal(name) if name == ".haomd")
-    })
+    Path::new(path)
+        .components()
+        .any(|component| matches!(component, Component::Normal(name) if name == ".haomd"))
 }
 
 fn filter_internal_recent_entries(items: Vec<RecentFile>) -> Vec<RecentFile> {

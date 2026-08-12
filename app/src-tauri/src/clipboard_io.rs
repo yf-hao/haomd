@@ -195,19 +195,23 @@ unsafe fn try_read_clipboard_dib_fast() -> Option<DynamicImage> {
 
     let mut rgba = vec![0u8; abs_width as usize * abs_height as usize * 4];
 
-    let src_slice = std::slice::from_raw_parts(
-        (ptr as *const u8).add(pixel_data_offset),
-        pixel_data_size,
-    );
+    let src_slice =
+        std::slice::from_raw_parts((ptr as *const u8).add(pixel_data_offset), pixel_data_size);
 
     for row in 0..abs_height as usize {
-        let src_row = if is_top_down { row } else { abs_height as usize - 1 - row };
-        let src_line = &src_slice[src_row * stride..src_row * stride + abs_width as usize * bytes_per_pixel];
+        let src_row = if is_top_down {
+            row
+        } else {
+            abs_height as usize - 1 - row
+        };
+        let src_line =
+            &src_slice[src_row * stride..src_row * stride + abs_width as usize * bytes_per_pixel];
         let dst_line = &mut rgba[row * abs_width as usize * 4..(row + 1) * abs_width as usize * 4];
 
         if bit_count == 32 {
             // DIB 32-bit = BGRA; ImageBuffer<Rgba8> expects RGBA
-            for (src_pixel, dst_pixel) in src_line.chunks_exact(4).zip(dst_line.chunks_exact_mut(4)) {
+            for (src_pixel, dst_pixel) in src_line.chunks_exact(4).zip(dst_line.chunks_exact_mut(4))
+            {
                 dst_pixel[0] = src_pixel[2]; // R
                 dst_pixel[1] = src_pixel[1]; // G
                 dst_pixel[2] = src_pixel[0]; // B
@@ -215,11 +219,12 @@ unsafe fn try_read_clipboard_dib_fast() -> Option<DynamicImage> {
             }
         } else {
             // DIB 24-bit = BGR
-            for (src_pixel, dst_pixel) in src_line.chunks_exact(3).zip(dst_line.chunks_exact_mut(4)) {
+            for (src_pixel, dst_pixel) in src_line.chunks_exact(3).zip(dst_line.chunks_exact_mut(4))
+            {
                 dst_pixel[0] = src_pixel[2]; // R
                 dst_pixel[1] = src_pixel[1]; // G
                 dst_pixel[2] = src_pixel[0]; // B
-                dst_pixel[3] = 255;          // A
+                dst_pixel[3] = 255; // A
             }
         }
     }
@@ -416,9 +421,8 @@ pub async fn save_clipboard_image_to_dir(
             }
         };
 
-    let base_name = sanitize_clipboard_image_base_name(
-        &suggested_name.unwrap_or_else(|| "image".to_string()),
-    );
+    let base_name =
+        sanitize_clipboard_image_base_name(&suggested_name.unwrap_or_else(|| "image".to_string()));
     let _guard = CLIPBOARD_IMAGE_SAVE_LOCK.lock().await;
 
     let mut index: u32 = 1;
@@ -603,9 +607,8 @@ pub async fn paste_clipboard_image(
     // 在后台线程完成 WebP 编码与写入，不阻塞异步事件循环
     let file_name_for_event = file_name.clone();
     tokio::spawn(async move {
-        let result = tokio::task::spawn_blocking(move || {
-            img.write_to(&mut file, ImageFormat::WebP)
-        }).await;
+        let result =
+            tokio::task::spawn_blocking(move || img.write_to(&mut file, ImageFormat::WebP)).await;
 
         match result {
             Ok(Ok(())) => {
