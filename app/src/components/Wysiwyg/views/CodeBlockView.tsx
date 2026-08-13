@@ -3,7 +3,7 @@
  * Handles special languages (mermaid, mind) with visual rendering,
  * and falls back to plain code display for other languages.
  */
-import { memo, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { memo, useEffect, useRef, useState, type CSSProperties, type FocusEvent } from 'react'
 import { useNodeViewContext } from '@prosemirror-adapter/react'
 import { useResolvedThemeMode } from '../../../modules/theme/ThemeContext'
 import { renderMermaidToSvg } from '../../../modules/visualization/mermaidRenderer'
@@ -242,6 +242,7 @@ function getLanguageSelectWidth(value: string): string {
 
 export const CodeBlockView = memo(function CodeBlockView() {
   const { node, contentRef, selected, getPos, view } = useNodeViewContext()
+  const sourceContainerRef = useRef<HTMLDivElement>(null)
   const language = normalizeCodeBlockLanguage(node.attrs.language)
   const code = node.textContent || ''
   const [showSource, setShowSource] = useState(false)
@@ -293,6 +294,31 @@ export const CodeBlockView = memo(function CodeBlockView() {
       setCopied(false)
     }
   }
+
+  const handleSourceBlur = (event: FocusEvent<HTMLDivElement>) => {
+    const nextTarget = event.relatedTarget
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+      return
+    }
+    setShowSource(false)
+  }
+
+  useEffect(() => {
+    if (!showSource) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (!(target instanceof Node) || sourceContainerRef.current?.contains(target)) {
+        return
+      }
+      setShowSource(false)
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown, true)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown, true)
+    }
+  }, [showSource])
 
   if (isSpecial && !showSource) {
     return (
@@ -400,7 +426,11 @@ export const CodeBlockView = memo(function CodeBlockView() {
 
   // Source editing mode
   return (
-    <div className={`wysiwyg-codeblock ${selected ? 'selected' : ''}`}>
+    <div
+      ref={sourceContainerRef}
+      className={`wysiwyg-codeblock ${selected ? 'selected' : ''}`}
+      onBlur={handleSourceBlur}
+    >
       <div className="wysiwyg-codeblock-toolbar">
         <div className="wysiwyg-codeblock-toolbar-spacer" />
         <div className="wysiwyg-codeblock-toolbar-right">
