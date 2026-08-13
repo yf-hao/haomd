@@ -16,11 +16,25 @@ import { insertTableCommand, strikethroughSchema } from '@milkdown/preset-gfm'
 import { setBlockType, toggleMark } from '@milkdown/prose/commands'
 import { keymap as createKeymap } from '@milkdown/prose/keymap'
 import { TextSelection } from '@milkdown/prose/state'
-import type { Node as ProseMirrorNode, NodeType as ProseMirrorNodeType } from '@milkdown/prose/model'
+import type {
+  Node as ProseMirrorNode,
+  NodeType as ProseMirrorNodeType,
+  ResolvedPos,
+} from '@milkdown/prose/model'
 import type { EditorView } from '@milkdown/prose/view'
+import {
+  CellSelection,
+  addColumnAfter,
+  addRowAfter,
+  cellAround,
+  deleteColumn,
+  deleteRow,
+  deleteTable,
+} from '@milkdown/prose/tables'
 import { nord } from '@milkdown/theme-nord'
 import { ProsemirrorAdapterProvider, useNodeViewFactory } from '@prosemirror-adapter/react'
 import { useThemeContext } from '../../modules/theme/ThemeContext'
+import { useI18n } from '../../modules/i18n/I18nContext'
 import { createTextColorTarget, isTextColorTargetActive, type TextColorTarget } from '../../modules/editor/textColorTarget'
 import type { LayoutType } from '../../hooks/useWorkspaceLayout'
 import {
@@ -46,6 +60,7 @@ import {
   createTextareaSearchController,
   type SearchController,
 } from '../Editor/searchController'
+import { FileContextMenu } from '../FileContextMenu'
 import type { OutlineHeading } from '../../modules/outline/outlineSource'
 import './WysiwygPane.css'
 
@@ -92,6 +107,19 @@ export interface WysiwygFormatActions {
 }
 
 type IdleHandle = number
+
+type TableContextMenuState = {
+  x: number
+  y: number
+  cellPos: number
+}
+
+type TableContextMenuAction =
+  | 'add-row-after'
+  | 'add-column-after'
+  | 'delete-row'
+  | 'delete-column'
+  | 'delete-table'
 
 function requestIdleWork(callback: () => void, timeout = 2000): IdleHandle {
   const win = window as Window & typeof globalThis & {
@@ -409,6 +437,8 @@ function WysiwygEditor({
   onDirty,
 }: WysiwygPaneProps) {
   const [isFrontMatterCollapsed, setIsFrontMatterCollapsed] = useState(false)
+  const [tableContextMenu, setTableContextMenu] = useState<TableContextMenuState | null>(null)
+  const { t } = useI18n()
   if (isPlainTextFile(filePath)) {
     return (
       <PlainTextWysiwyg
@@ -822,6 +852,94 @@ function WysiwygEditor({
       scheduleDelayedSync()
     }
   }, [getReadyEditor, scheduleDelayedSync])
+
+  const handleTableContextMenu = useCallback((event: MouseEvent) => {
+    const target = event.target
+    if (!(target instanceof Element)) return
+
+    const cell = target.closest('td, th')
+    const container = containerRef.current
+    if (!cell || !container || !container.contains(cell)) return
+
+    const editor = getReadyEditor()
+    if (!editor) return
+
+    const cellPos = editor.action((ctx) => {
+      const view = ctx.get(editorViewCtx)
+      let $cell: ResolvedPos | null = null
+      try {
+        $cell = cellAround(view.state.doc.resolve(view.posAtDOM(cell, 0)))
+      } catch (error) {
+        console.warn('[WysiwygPane] failed to resolve table cell from context menu:', error)
+      }
+      if (!$cell) {
+        const coords = view.posAtCoords({
+          left: event.clientX,
+          top: event.clientY,
+        })
+        if (coords) {
+          $cell = cellAround(view.state.doc.resolve(coords.pos))
+        }
+      }
+      if (!$cell) return null
+
+      view.dispatch(view.state.tr.setSelection(new CellSelection($cell)))
+      view.focus()
+      return $cell.pos
+    })
+
+    if (cellPos === null) return
+
+    event.preventDefault()
+    event.stopPropagation()
+    setTableContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      cellPos,
+    })
+  }, [getReadyEditor])
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    container.addEventListener('contextmenu', handleTableContextMenu, true)
+    return () => {
+      container.removeEventListener('contextmenu', handleTableContextMenu, true)
+    }
+  }, [handleTableContextMenu])
+
+  const runTableContextAction = useCallback((action: TableContextMenuAction) => {
+    const context = tableContextMenu
+    if (!context) return
+
+    setTableContextMenu(null)
+    runAction((editor) => {
+      editor.action((ctx) => {
+        const view = ctx.get(editorViewCtx)
+        const safePos = Math.min(Math.max(0, context.cellPos), view.state.doc.content.size)
+        view.dispatch(
+          view.state.tr.setSelection(CellSelection.create(view.state.doc, safePos)),
+        )
+        let changed = false
+        if (action === 'add-row-after') {
+          changed = addRowAfter(view.state, view.dispatch)
+        } else if (action === 'add-column-after') {
+          changed = addColumnAfter(view.state, view.dispatch)
+        } else if (action === 'delete-row') {
+          changed = deleteRow(view.state, view.dispatch)
+        } else if (action === 'delete-column') {
+          changed = deleteColumn(view.state, view.dispatch)
+        } else {
+          changed = deleteTable(view.state, view.dispatch)
+        }
+        if (!changed) {
+          console.warn('[WysiwygPane] table context menu action did not change the document:', action)
+        }
+        view.focus()
+      })
+    })
+  }, [runAction, tableContextMenu])
 
   const insertCodeBlockWithInheritedLanguage = useCallback((editor: Editor) => {
     editor.action((ctx) => {
@@ -1622,6 +1740,40 @@ function WysiwygEditor({
         ) : null}
         <div ref={containerRef} className="wysiwyg-editor" />
       </div>
+      {tableContextMenu ? (
+        <FileContextMenu
+          x={tableContextMenu.x}
+          y={tableContextMenu.y}
+          items={[
+            {
+              id: 'add-row-after',
+              label: t('workspace.tableAddRowAfter'),
+              onClick: () => runTableContextAction('add-row-after'),
+            },
+            {
+              id: 'add-column-after',
+              label: t('workspace.tableAddColumnAfter'),
+              onClick: () => runTableContextAction('add-column-after'),
+            },
+            {
+              id: 'delete-row',
+              label: t('workspace.tableDeleteRow'),
+              onClick: () => runTableContextAction('delete-row'),
+            },
+            {
+              id: 'delete-column',
+              label: t('workspace.tableDeleteColumn'),
+              onClick: () => runTableContextAction('delete-column'),
+            },
+            {
+              id: 'delete-table',
+              label: t('workspace.tableDelete'),
+              onClick: () => runTableContextAction('delete-table'),
+            },
+          ]}
+          onRequestClose={() => setTableContextMenu(null)}
+        />
+      ) : null}
     </section>
   )
 }
