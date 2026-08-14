@@ -354,7 +354,7 @@ export function WorkspaceShell({
   const wysiwygSaveSnapshotRef = useRef<(() => string) | null>(null)
   const wysiwygOutlineNavigatorRef = useRef<((target: { headingIndex: number; text: string; level: 1 | 2 | 3 | 4 | 5 | 6 }) => boolean) | null>(null)
   const wysiwygFormatActionsRef = useRef<WysiwygFormatActions | null>(null)
-  const beforeActiveTabChangeRef = useRef<(nextTabId: string) => void>(() => {})
+  const beforeActiveTabChangeRef = useRef<(nextTabId: string | null) => void>(() => {})
   type MarkdownSyncOptions = {
     markDirty?: boolean
     immediate?: boolean
@@ -516,7 +516,7 @@ export function WorkspaceShell({
     setEditMode(next)
   }, [editMode])
 
-  beforeActiveTabChangeRef.current = (nextTabId) => {
+  beforeActiveTabChangeRef.current = (nextTabId: string | null) => {
     const previousTabId = activeIdRef.current
     if (previousTabId === nextTabId) return
 
@@ -2742,16 +2742,15 @@ export function WorkspaceShell({
 
       const resp = await openFromPath(path)
       if (resp.ok) {
-        const tab = createTab({ path: resp.data.path, content: '' })
+        const tab = createTab({ path: resp.data.path, content: resp.data.content })
         tabIdsByPathRef.current.set(getFilePathIdentity(resp.data.path), tab.id)
-        updateTabContent(tab.id, resp.data.content, { markDirty: false })
         setActiveTab(tab.id)
         applyOpenedContent(resp.data.content)
         markPendingRestoreRef.current?.(tab.id)
       }
       return resp
     })
-  }, [isCreatingTab, openFromPath, createTab, updateTabContent, setActiveTab, applyOpenedContent, openImportedWordDocument])
+  }, [isCreatingTab, openFromPath, createTab, setActiveTab, applyOpenedContent, openImportedWordDocument])
 
   const openFileFromSidebar = useCallback(async (path: string) => {
     if (isCreatingTab) return { ok: false } as any

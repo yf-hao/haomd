@@ -718,6 +718,7 @@ function WysiwygEditor({
   const initialCacheBuildIdleRef = useRef<IdleHandle | null>(null)
   const initialOutlineEmitIdleRef = useRef<IdleHandle | null>(null)
   const isEditorReadyRef = useRef(false)
+  const isMountedRef = useRef(false)
   const [editorReady, setEditorReady] = useState(false)
   const lastFocusAtEndRequestRef = useRef(0)
   const lastValidMarkdownRef = useRef(
@@ -1368,7 +1369,7 @@ function WysiwygEditor({
       .use(imageView)
       .create()
 
-    if (runId !== initRunIdRef.current) {
+    if (!isMountedRef.current || runId !== initRunIdRef.current) {
       editor.destroy()
       return
     }
@@ -1381,6 +1382,11 @@ function WysiwygEditor({
     }
     editorRef.current = editor
     isEditorReadyRef.current = true
+    if (!isMountedRef.current || runId !== initRunIdRef.current) {
+      editor.destroy()
+      editorRef.current = null
+      return
+    }
     setEditorReady(true)
 
     scheduleInitialCacheBuild()
@@ -1706,8 +1712,14 @@ function WysiwygEditor({
   }, [getEffectiveBackgroundColorTarget, getReadyEditor, insertCodeBlockWithInheritedLanguage, runAction])
 
   useEffect(() => {
-    initEditor()
+    isMountedRef.current = true
+    void initEditor().catch((error) => {
+      if (isMountedRef.current) {
+        console.error('[WysiwygPane] editor initialization failed', error)
+      }
+    })
     return () => {
+      isMountedRef.current = false
       initRunIdRef.current += 1
       if (skipUnmountFlushRef?.current) {
         skipUnmountFlushRef.current = false
@@ -1738,7 +1750,9 @@ function WysiwygEditor({
       onOutlineNavigatorReadyRef.current?.(null)
       const editor = editorRef.current
       isEditorReadyRef.current = false
-      setEditorReady(false)
+      if (isMountedRef.current) {
+        setEditorReady(false)
+      }
       editorRef.current = null
       if (editor && editor.status !== EditorStatus.Destroyed) {
         editor.destroy()

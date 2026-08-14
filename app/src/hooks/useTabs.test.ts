@@ -112,7 +112,8 @@ describe('useTabs', () => {
   })
 
   it('clears the active tab when closing the last remaining tab', () => {
-    const { result } = renderHook(() => useTabs())
+    const onBeforeActiveTabChange = vi.fn()
+    const { result } = renderHook(() => useTabs({ onBeforeActiveTabChange }))
 
     act(() => {
       result.current.createTab({ title: 'only tab' })
@@ -124,5 +125,6 @@ describe('useTabs', () => {
 
     expect(result.current.tabs).toEqual([])
     expect(result.current.activeId).toBeNull()
+    expect(onBeforeActiveTabChange).toHaveBeenCalledWith(null)
   })
 })

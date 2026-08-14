@@ -4,7 +4,7 @@ import type { EditorTab } from '../types/tabs'
 
 export type UseTabsOptions = {
   onRequestCloseCurrentTab?: () => void
-  onBeforeActiveTabChange?: (nextTabId: string) => void
+  onBeforeActiveTabChange?: (nextTabId: string | null) => void
 }
 
 const DEFAULT_UNTITLED = UNTITLED_FILE_PATH
@@ -100,8 +100,9 @@ export function useTabs(options?: UseTabsOptions) {
       // Prefer the previous tab. When closing the first tab, wrap to the
       // last remaining tab to keep tab navigation cyclic.
       const fallback = next[closedIndex - 1] ?? next[next.length - 1]
+      onBeforeActiveTabChangeRef.current?.(fallback?.id ?? null)
       if (fallback) {
-        activateTab(fallback.id)
+        setActiveId(fallback.id)
       } else {
         setActiveId(null)
       }
