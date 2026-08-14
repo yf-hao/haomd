@@ -101,6 +101,7 @@ function formatWebDavImportProgress(payload: WebDavImportProgressPayload): strin
 function App() {
   const [activeLeftPanel, setActiveLeftPanel] = useState<LeftPanelId>(null)
   const lastVisibleLeftPanelRef = useRef<Exclude<LeftPanelId, null>>('files')
+  const [isActivityBarVisible, setActivityBarVisible] = useState(true)
   const [initialWorkspaceAction, setInitialWorkspaceAction] = useState<InitialWorkspaceAction>(null)
   const [initialOpenRecentPath, setInitialOpenRecentPath] = useState<string | null>(null)
   const [initialOpenRecentIsFolder, setInitialOpenRecentIsFolder] = useState<boolean | null>(null)
@@ -158,14 +159,8 @@ function App() {
     [],
   )
 
-  const toggleSidebarVisible = useCallback(() => {
-    setActiveLeftPanel((prev) => {
-      if (prev) {
-        lastVisibleLeftPanelRef.current = prev
-        return null
-      }
-      return lastVisibleLeftPanelRef.current
-    })
+  const toggleActivityBarVisible = useCallback(() => {
+    setActivityBarVisible((visible) => !visible)
   }, [])
 
   const handleInitialActionHandled = useCallback(() => {
@@ -327,6 +322,7 @@ function App() {
       >
         <AppShellContent
           activeLeftPanel={activeLeftPanel}
+          isActivityBarVisible={isActivityBarVisible}
           initialWorkspaceAction={initialWorkspaceAction}
           initialOpenRecentPath={initialOpenRecentPath}
           initialOpenRecentIsFolder={initialOpenRecentIsFolder}
@@ -341,7 +337,7 @@ function App() {
           docCharCount={docCharCount}
           statusMessage={statusMessage}
           handleLeftPanelToggle={handleLeftPanelToggle}
-          toggleSidebarVisible={toggleSidebarVisible}
+          toggleActivityBarVisible={toggleActivityBarVisible}
           handleInitialActionHandled={handleInitialActionHandled}
           onThemeSettingsChange={handleThemeSettingsPreview}
           onLanguageModeChange={(mode) => {
@@ -371,6 +367,7 @@ function App() {
 
 type AppShellContentProps = {
   activeLeftPanel: LeftPanelId
+  isActivityBarVisible: boolean
   initialWorkspaceAction: InitialWorkspaceAction
   initialOpenRecentPath: string | null
   initialOpenRecentIsFolder: boolean | null
@@ -385,7 +382,7 @@ type AppShellContentProps = {
   docCharCount: number | null
   statusMessage: string
   handleLeftPanelToggle: (id: LeftPanelId) => void
-  toggleSidebarVisible: () => void
+  toggleActivityBarVisible: () => void
   handleInitialActionHandled: () => void
   onThemeSettingsChange: (settings: ThemeSettings) => void
   onLanguageModeChange: (mode: LanguageMode) => void
@@ -405,6 +402,7 @@ type AppShellContentProps = {
 
 function AppShellContent({
   activeLeftPanel,
+  isActivityBarVisible,
   initialWorkspaceAction,
   initialOpenRecentPath,
   initialOpenRecentIsFolder,
@@ -419,7 +417,7 @@ function AppShellContent({
   docCharCount,
   statusMessage,
   handleLeftPanelToggle,
-  toggleSidebarVisible,
+  toggleActivityBarVisible,
   handleInitialActionHandled,
   onThemeSettingsChange,
   onLanguageModeChange,
@@ -546,6 +544,7 @@ function AppShellContent({
   return (
     <div className="app-shell">
       <div className="layout-row">
+        {isActivityBarVisible && (
         <div className="activity-bar">
           <button
             type="button"
@@ -764,11 +763,44 @@ function AppShellContent({
               />
             </svg>
           </button>
+
+          <div className="activity-bar-bottom">
+            <button
+              type="button"
+              className={`activity-item ${isSettingsOpen ? 'active' : ''}`}
+              onClick={() => setSettingsOpen(true)}
+              aria-expanded={isSettingsOpen}
+              aria-label={t('settings.title')}
+              title={t('settings.title')}
+            >
+              <svg
+                className="activity-icon-settings"
+                viewBox="0 0 20 20"
+                aria-hidden="true"
+                fill="none"
+              >
+                <circle cx="10" cy="10" r="3.1" stroke="currentColor" strokeWidth="1.5" />
+                <path
+                  d="M10 2.1V4M10 16V17.9M2.1 10H4M16 10H17.9M4.4 4.4L5.7 5.7M14.3 14.3L15.6 15.6M15.6 4.4L14.3 5.7M5.7 14.3L4.4 15.6"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+                <path
+                  d="M10 1.2L11.2 2.9L13.2 2.6L13.9 4.5L15.8 5.2L15.5 7.2L17.2 8.4L16.2 10L17.2 11.6L15.5 12.8L15.8 14.8L13.9 15.5L13.2 17.4L11.2 17.1L10 18.8L8.8 17.1L6.8 17.4L6.1 15.5L4.2 14.8L4.5 12.8L2.8 11.6L3.8 10L2.8 8.4L4.5 7.2L4.2 5.2L6.1 4.5L6.8 2.6L8.8 2.9L10 1.2Z"
+                  stroke="currentColor"
+                  strokeWidth="0.9"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+          </div>
         </div>
+        )}
 
         <WorkspaceShell
           activeLeftPanel={activeLeftPanel}
-          toggleSidebarVisible={toggleSidebarVisible}
+          toggleSidebarVisible={toggleActivityBarVisible}
           isTauriEnv={isTauriEnv}
           initialAction={initialWorkspaceAction}
           initialOpenRecentPath={initialOpenRecentPath}
