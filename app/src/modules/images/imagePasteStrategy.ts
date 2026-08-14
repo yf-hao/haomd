@@ -46,3 +46,9 @@ export function resolveImageTarget(
     relDir: cfg.subdir,
   }
 }
+
+export function buildImageSuggestedName(currentFilePath: string): string {
+  const pathPart = currentFilePath.split(/[/\\]/).pop() || ''
+  const withoutExt = pathPart.replace(/\.[^./\\]+$/, '')
+  return `image_${withoutExt || 'untitled'}`
+}

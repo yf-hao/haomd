@@ -22,6 +22,7 @@ import type {
   NodeType as ProseMirrorNodeType,
   ResolvedPos,
 } from '@milkdown/prose/model'
+import { DOMParser as ProseMirrorDOMParser } from '@milkdown/prose/model'
 import type { EditorView } from '@milkdown/prose/view'
 import {
   CellSelection,
@@ -53,8 +54,17 @@ import { normalizeCodeBlockLanguage } from './codeLanguage'
 import { BlockCacheManager } from './blockCache'
 import { composeMarkdownWithFrontMatter } from '../../modules/markdown/frontMatter'
 import { dispatchNativePasteImage, onNativePaste } from '../../modules/platform/clipboardEvents'
-import { readClipboardForPaste } from '../../modules/platform/clipboardPasteService'
+import {
+  downloadRemoteImages,
+  readClipboardForPaste,
+} from '../../modules/platform/clipboardPasteService'
 import { isTauriEnv } from '../../modules/platform/runtime'
+import { isTransientFilePath } from '../../modules/files/filePathState'
+import {
+  buildImageSuggestedName,
+  loadDefaultImagePathStrategyConfig,
+  resolveImageTarget,
+} from '../../modules/images/imagePasteStrategy'
 import { buildHeadingsFromWysiwygDoc } from '../../modules/outline/wysiwygOutline'
 import type { RemoveBlankLinesScope } from '../../modules/document/application/removeBlankLinesService'
 import {
@@ -91,6 +101,8 @@ export interface WysiwygPaneProps {
   /** Called immediately when the Milkdown doc changes (200ms debounce),
    *  before the idle-time serialization runs. */
   onDirty?: () => void
+  /** Reports a remote-image paste failure without discarding the pasted HTML. */
+  onPasteError?: (message: string) => void
 }
 
 export interface WysiwygFormatActions {
@@ -127,6 +139,26 @@ type TableContextMenuAction =
   | 'delete-row'
   | 'delete-column'
   | 'delete-table'
+
+const REMOTE_IMAGE_SOURCE_ATTRIBUTES = ['src', 'data-src', 'data-original', 'data-lazy-src'] as const
+
+function isRemoteImageSource(source: string | null): source is string {
+  if (!source) return false
+  try {
+    const parsed = new URL(source.trim())
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+function getRemoteImageSource(image: HTMLImageElement): string | null {
+  for (const attribute of REMOTE_IMAGE_SOURCE_ATTRIBUTES) {
+    const source = image.getAttribute(attribute)?.trim() || null
+    if (isRemoteImageSource(source)) return source
+  }
+  return null
+}
 
 function requestIdleWork(callback: () => void, timeout = 2000): IdleHandle {
   const win = window as Window & typeof globalThis & {
@@ -619,6 +651,7 @@ function WysiwygEditor({
   skipUnmountFlushRef,
   onFlushReady,
   onDirty,
+  onPasteError,
 }: WysiwygPaneProps) {
   const [isFrontMatterCollapsed, setIsFrontMatterCollapsed] = useState(false)
   const [tableContextMenu, setTableContextMenu] = useState<TableContextMenuState | null>(null)
@@ -684,6 +717,8 @@ function WysiwygEditor({
   onFlushReadyRef.current = onFlushReady
   const onDirtyRef = useRef(onDirty)
   onDirtyRef.current = onDirty
+  const onPasteErrorRef = useRef(onPasteError)
+  onPasteErrorRef.current = onPasteError
   const frontMatterBlockRef = useRef(frontMatterBlock ?? '')
   frontMatterBlockRef.current = frontMatterBlock ?? ''
   const onSelectionGetterReadyRef = useRef(onSelectionGetterReady)
@@ -1885,6 +1920,102 @@ function WysiwygEditor({
       if (!isTauriEnv()) return
 
       const clipboardData = event.clipboardData
+      const html = clipboardData?.getData('text/html') || ''
+      const template = html ? document.createElement('template') : null
+      if (template) {
+        template.innerHTML = html
+      }
+      const images = template
+        ? Array.from(template.content.querySelectorAll('img'))
+        : []
+      const remoteSources = Array.from(
+        new Set(
+          images
+            .map(getRemoteImageSource)
+            .filter((source): source is string => Boolean(source)),
+        ),
+      )
+
+      if (remoteSources.length > 0) {
+        event.preventDefault()
+        event.stopPropagation()
+
+        if (isTransientFilePath(filePathRef.current)) {
+          onPasteErrorRef.current?.(t('workspace.cannotInsertImageMessage'))
+          return
+        }
+
+        void (async () => {
+          if (!template) {
+            throw new Error('无法解析剪贴板 HTML')
+          }
+
+          const cfg = loadDefaultImagePathStrategyConfig()
+          const { targetDir, relDir } = resolveImageTarget(filePathRef.current!, null, cfg)
+          const downloads = await downloadRemoteImages(
+            targetDir,
+            remoteSources,
+            buildImageSuggestedName(filePathRef.current!),
+          )
+          const downloadedBySource = new Map(
+            downloads
+              .filter((download) => download.file_name)
+              .map((download) => [download.source_url, download.file_name!]),
+          )
+          const failedCount = downloads.filter((download) => !download.file_name).length
+
+          for (const image of images) {
+            const source = getRemoteImageSource(image)
+            const fileName = source ? downloadedBySource.get(source) : undefined
+            if (!fileName) continue
+
+            image.setAttribute('src', `${relDir}/${fileName}`)
+            for (const attribute of REMOTE_IMAGE_SOURCE_ATTRIBUTES) {
+              if (attribute !== 'src') image.removeAttribute(attribute)
+            }
+            image.removeAttribute('srcset')
+          }
+
+          const editor = getReadyEditor()
+          if (!editor) {
+            throw new Error('实时编辑器尚未准备好')
+          }
+
+          hasUserInteractedRef.current = true
+          let inserted = false
+          editor.action((ctx) => {
+            const view = ctx.get(editorViewCtx)
+            const slice = ProseMirrorDOMParser
+              .fromSchema(view.state.schema)
+              .parseSlice(template.content)
+            const tr = view.state.tr.replaceSelection(slice).scrollIntoView()
+            if (!tr.docChanged) return
+            view.dispatch(tr)
+            view.focus()
+            inserted = true
+          })
+
+          if (!inserted) {
+            throw new Error('无法插入粘贴内容')
+          }
+
+          scheduleDelayedSync()
+          if (failedCount > 0) {
+            onPasteErrorRef.current?.(
+              t('workspace.remoteImageDownloadFailed', { count: failedCount }),
+            )
+          }
+        })().catch((error) => {
+          console.error('[WysiwygPane] remote image paste failed:', error)
+          onPasteErrorRef.current?.(
+            t('workspace.pasteImageFailed', {
+              message: error instanceof Error ? error.message : String(error),
+            }),
+          )
+        })
+        return
+      }
+
       const hasImage = (() => {
         if (!clipboardData) return false
         // Standard file-based paste (Windows Snipping Tool, browser copy-image, etc.)
@@ -1932,7 +2063,7 @@ function WysiwygEditor({
       container.removeEventListener('drop', markUserInteracted)
       container.removeEventListener('compositionstart', markUserInteracted)
     }
-  }, [flushPending, getReadyEditor, insertCodeBlockWithInheritedLanguage, scheduleDelayedSync])
+  }, [flushPending, getReadyEditor, insertCodeBlockWithInheritedLanguage, scheduleDelayedSync, t])
 
   useEffect(() => {
     const unlisten = onNativePaste((text) => {

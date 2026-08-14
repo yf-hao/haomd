@@ -1,15 +1,23 @@
 use crate::{err_payload, new_trace_id, normalize_path, ok, ErrorCode, ResultPayload};
 use arboard::Clipboard;
 use chrono::Local;
+use futures_util::{stream, StreamExt};
 use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba};
 use once_cell::sync::Lazy;
 use rand::{distributions::Alphanumeric, Rng};
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::io::Cursor;
+use std::path::Path;
+use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::Mutex;
+use url::Url;
 
 static CLIPBOARD_IMAGE_SAVE_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+const REMOTE_IMAGE_DOWNLOAD_CONCURRENCY: usize = 3;
+const MAX_REMOTE_IMAGE_COUNT: usize = 100;
+const MAX_REMOTE_IMAGE_BYTES: u64 = 25 * 1024 * 1024;
 
 /// Windows fallback: read CF_DIBV5 or CF_DIB from clipboard directly via Win32 API.
 /// Many screenshot tools (Snipaste, PixPin, QQ, etc.) write DIBV5 format which arboard may not read.
@@ -241,6 +249,19 @@ pub struct ClipboardImageResult {
     pub file_name: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RemoteImageDownloadResult {
+    pub source_url: String,
+    pub file_name: Option<String>,
+    pub error: Option<String>,
+}
+
+struct RemoteImageFetchResult {
+    source_url: String,
+    content_type: Option<String>,
+    bytes: Result<Vec<u8>, String>,
+}
+
 fn sanitize_clipboard_image_base_name(name: &str) -> String {
     let sanitized: String = name
         .trim()
@@ -263,6 +284,261 @@ fn sanitize_clipboard_image_base_name(name: &str) -> String {
     } else {
         trimmed.to_string()
     }
+}
+
+fn remote_image_extension(source_url: &str, content_type: Option<&str>) -> Option<String> {
+    if let Some(content_type) = content_type {
+        let mime = content_type
+            .split(';')
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase();
+        let extension = match mime.as_str() {
+            "image/jpeg" => Some("jpg"),
+            "image/png" => Some("png"),
+            "image/gif" => Some("gif"),
+            "image/webp" => Some("webp"),
+            "image/svg+xml" => Some("svg"),
+            "image/avif" => Some("avif"),
+            "image/bmp" => Some("bmp"),
+            "image/x-icon" | "image/vnd.microsoft.icon" => Some("ico"),
+            _ => None,
+        };
+        if let Some(extension) = extension {
+            return Some(extension.to_string());
+        }
+        return None;
+    }
+
+    let parsed = Url::parse(source_url).ok()?;
+    let extension = Path::new(parsed.path())
+        .extension()?
+        .to_str()?
+        .to_ascii_lowercase();
+    match extension.as_str() {
+        "jpg" | "jpeg" | "png" | "gif" | "webp" | "svg" | "avif" | "bmp" | "ico" => {
+            Some(if extension == "jpeg" {
+                "jpg".to_string()
+            } else {
+                extension
+            })
+        }
+        _ => None,
+    }
+}
+
+async fn fetch_remote_image(client: Client, source_url: String) -> RemoteImageFetchResult {
+    let parsed_url = match Url::parse(&source_url) {
+        Ok(url) if matches!(url.scheme(), "http" | "https") && url.host_str().is_some() => url,
+        _ => {
+            return RemoteImageFetchResult {
+                source_url,
+                content_type: None,
+                bytes: Err("仅支持 HTTP/HTTPS 图片地址".to_string()),
+            };
+        }
+    };
+
+    let response = match client.get(parsed_url).send().await {
+        Ok(response) => response,
+        Err(error) => {
+            return RemoteImageFetchResult {
+                source_url,
+                content_type: None,
+                bytes: Err(format!("请求图片失败: {error}")),
+            };
+        }
+    };
+
+    if !response.status().is_success() {
+        return RemoteImageFetchResult {
+            source_url,
+            content_type: None,
+            bytes: Err(format!(
+                "图片服务器返回 HTTP {}",
+                response.status().as_u16()
+            )),
+        };
+    }
+
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string);
+
+    if let Some(length) = response.content_length() {
+        if length > MAX_REMOTE_IMAGE_BYTES {
+            return RemoteImageFetchResult {
+                source_url,
+                content_type,
+                bytes: Err(format!(
+                    "图片过大，不能超过 {} MB",
+                    MAX_REMOTE_IMAGE_BYTES / 1024 / 1024
+                )),
+            };
+        }
+    }
+
+    let bytes = match response.bytes().await {
+        Ok(bytes) if bytes.len() as u64 <= MAX_REMOTE_IMAGE_BYTES => bytes.to_vec(),
+        Ok(_) => {
+            return RemoteImageFetchResult {
+                source_url,
+                content_type,
+                bytes: Err(format!(
+                    "图片过大，不能超过 {} MB",
+                    MAX_REMOTE_IMAGE_BYTES / 1024 / 1024
+                )),
+            };
+        }
+        Err(error) => {
+            return RemoteImageFetchResult {
+                source_url,
+                content_type,
+                bytes: Err(format!("读取图片失败: {error}")),
+            };
+        }
+    };
+
+    if remote_image_extension(&source_url, content_type.as_deref()).is_none() {
+        return RemoteImageFetchResult {
+            source_url,
+            content_type,
+            bytes: Err("响应内容不是受支持的图片格式".to_string()),
+        };
+    }
+
+    RemoteImageFetchResult {
+        source_url,
+        content_type,
+        bytes: Ok(bytes),
+    }
+}
+
+/// 下载实时编辑粘贴 HTML 中的远程图片，最多同时执行 3 个下载任务。
+#[tauri::command]
+pub async fn download_remote_images(
+    target_dir: String,
+    suggested_name: Option<String>,
+    urls: Vec<String>,
+) -> ResultPayload<Vec<RemoteImageDownloadResult>> {
+    let trace = new_trace_id();
+    if urls.len() > MAX_REMOTE_IMAGE_COUNT {
+        return err_payload(
+            ErrorCode::TooLarge,
+            format!("一次最多下载 {} 张图片", MAX_REMOTE_IMAGE_COUNT),
+            trace,
+        );
+    }
+
+    let normalized_dir = match normalize_path(&target_dir) {
+        Ok(path) => path,
+        Err(error) => return ResultPayload::Err { error },
+    };
+
+    if let Err(error) = std::fs::create_dir_all(&normalized_dir) {
+        return err_payload(
+            ErrorCode::IoError,
+            format!("创建图片目录失败: {error}"),
+            trace,
+        );
+    }
+
+    let mut unique_urls = Vec::new();
+    for url in urls {
+        let trimmed = url.trim();
+        if !trimmed.is_empty() && !unique_urls.iter().any(|item| item == trimmed) {
+            unique_urls.push(trimmed.to_string());
+        }
+    }
+
+    let client = match Client::builder()
+        .redirect(reqwest::redirect::Policy::limited(5))
+        .timeout(Duration::from_secs(20))
+        .user_agent("HaoMD/0.12")
+        .build()
+    {
+        Ok(client) => client,
+        Err(error) => {
+            return err_payload(
+                ErrorCode::UNKNOWN,
+                format!("创建图片下载客户端失败: {error}"),
+                trace,
+            );
+        }
+    };
+
+    let mut fetched = stream::iter(unique_urls.into_iter().enumerate().map(
+        |(index, source_url)| {
+            let client = client.clone();
+            async move { (index, fetch_remote_image(client, source_url).await) }
+        },
+    ))
+    .buffer_unordered(REMOTE_IMAGE_DOWNLOAD_CONCURRENCY)
+    .collect::<Vec<_>>()
+    .await;
+    fetched.sort_by_key(|(index, _)| *index);
+
+    let _guard = CLIPBOARD_IMAGE_SAVE_LOCK.lock().await;
+    let base_name =
+        sanitize_clipboard_image_base_name(suggested_name.as_deref().unwrap_or("image"));
+    let mut next_index: u32 = 1;
+    let mut results = Vec::with_capacity(fetched.len());
+
+    for (_, item) in fetched {
+        let bytes = match item.bytes {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                results.push(RemoteImageDownloadResult {
+                    source_url: item.source_url,
+                    file_name: None,
+                    error: Some(error),
+                });
+                continue;
+            }
+        };
+
+        let extension = match remote_image_extension(&item.source_url, item.content_type.as_deref())
+        {
+            Some(extension) => extension,
+            None => {
+                results.push(RemoteImageDownloadResult {
+                    source_url: item.source_url,
+                    file_name: None,
+                    error: Some("响应内容不是受支持的图片格式".to_string()),
+                });
+                continue;
+            }
+        };
+
+        let (file_name, full_path) = loop {
+            let candidate = format!("{}_{}.{}", base_name, next_index, extension);
+            next_index += 1;
+            let path = normalized_dir.join(&candidate);
+            if !path.exists() {
+                break (candidate, path);
+            }
+        };
+
+        if let Err(error) = tokio::fs::write(&full_path, bytes).await {
+            results.push(RemoteImageDownloadResult {
+                source_url: item.source_url,
+                file_name: None,
+                error: Some(format!("保存图片失败: {error}")),
+            });
+            continue;
+        }
+
+        results.push(RemoteImageDownloadResult {
+            source_url: item.source_url,
+            file_name: Some(file_name),
+            error: None,
+        });
+    }
+
+    ok(results, trace)
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -747,7 +1023,9 @@ pub async fn read_clipboard_image_as_base64() -> ResultPayload<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{sanitize_clipboard_image_base_name, ClipboardPasteContent};
+    use super::{
+        remote_image_extension, sanitize_clipboard_image_base_name, ClipboardPasteContent,
+    };
 
     #[test]
     fn clipboard_image_base_name_is_safe_across_platforms() {
@@ -775,5 +1053,21 @@ mod tests {
         assert_eq!(image, serde_json::json!({ "kind": "image" }));
         assert_eq!(text, serde_json::json!({ "kind": "text", "text": "hello" }));
         assert_eq!(empty, serde_json::json!({ "kind": "empty" }));
+    }
+
+    #[test]
+    fn remote_image_extension_prefers_image_content_type() {
+        assert_eq!(
+            remote_image_extension("https://example.com/download?id=1", Some("image/png")),
+            Some("png".to_string())
+        );
+        assert_eq!(
+            remote_image_extension("https://example.com/image.jpeg", None),
+            Some("jpg".to_string())
+        );
+        assert_eq!(
+            remote_image_extension("https://example.com/image.png", Some("text/html")),
+            None
+        );
     }
 }

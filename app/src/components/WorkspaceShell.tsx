@@ -76,7 +76,7 @@ import { openTerminalAt } from '../modules/platform/terminalService'
 import { openInFileManager } from '../modules/platform/fileExplorerService'
 import { getFilePathIdentity } from '../modules/files/filePathState'
 import { FileOpenCoordinator } from '../modules/files/fileOpenCoordinator'
-import { loadDefaultImagePathStrategyConfig, resolveImageTarget } from '../modules/images/imagePasteStrategy'
+import { buildImageSuggestedName, loadDefaultImagePathStrategyConfig, resolveImageTarget } from '../modules/images/imagePasteStrategy'
 import {
   buildImportedWordTabTitle,
   cleanupImportedWordTemp,
@@ -3788,12 +3788,7 @@ export function WorkspaceShell({
     const { targetDir, relDir } = resolveImageTarget(filePath, null, cfg)
     console.log('[WorkspaceShell] handlePasteImage: resolved targetDir=', targetDir, 'relDir=', relDir)
 
-    const fileBaseName = (() => {
-      const pathPart = filePath.split(/[/\\]/).pop() || ''
-      const withoutExt = pathPart.replace(/\.[^./\\]+$/, '')
-      return withoutExt || 'untitled'
-    })()
-    const suggestedName = `image_${fileBaseName}`
+    const suggestedName = buildImageSuggestedName(filePath)
     console.log('[WorkspaceShell] handlePasteImage: suggestedName =', suggestedName)
 
     try {
@@ -3936,13 +3931,7 @@ export function WorkspaceShell({
       const { targetDir, relDir } = resolveImageTarget(filePath, null, cfg)
       console.log('[WorkspaceShell] onNativePasteImage: resolved targetDir=', targetDir, 'relDir=', relDir)
 
-      // 根据当前文件名构造图片命名前缀：image_当前文件名（去掉扩展名）
-      const fileBaseName = (() => {
-        const pathPart = filePath.split(/[/\\]/).pop() || ''
-        const withoutExt = pathPart.replace(/\.[^./\\]+$/, '')
-        return withoutExt || 'untitled'
-      })()
-      const suggestedName = `image_${fileBaseName}`
+      const suggestedName = buildImageSuggestedName(filePath)
       console.log('[WorkspaceShell] onNativePasteImage: suggestedName =', suggestedName)
 
       try {
@@ -4688,6 +4677,7 @@ export function WorkspaceShell({
                             wysiwygFlushRef.current = flush
                           }}
                           onDirty={() => { wysiwygIsDirtyRef.current = true; markDirty(); markActiveTabDirty() }}
+                          onPasteError={setStatusMessage}
                           filePath={filePath}
                           effectiveLayout="preview-only"
                         />

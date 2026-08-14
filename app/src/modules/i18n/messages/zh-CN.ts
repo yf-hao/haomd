@@ -691,6 +691,7 @@ export const zhCNMessages: MessageDictionary = {
     pasteImageBackendError: '粘贴图片失败：后端错误',
     pasteImageMissingFileName: '粘贴图片失败：后端未返回文件名',
     pasteImageFailed: '粘贴图片失败：{message}',
+    remoteImageDownloadFailed: '有 {count} 张网络图片下载失败，已保留原始链接。',
     cannotSaveBackgroundTab: '无法保存后台标签',
     closeAndDiscardChanges: '关闭 {title} 并放弃更改？',
     discardAndClose: '放弃并关闭',

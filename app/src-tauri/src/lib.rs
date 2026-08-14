@@ -271,6 +271,7 @@ macro_rules! app_invoke_handler {
             read_clipboard_for_paste,
             save_clipboard_image_to_dir,
             paste_clipboard_image,
+            download_remote_images,
             read_clipboard_image_as_base64,
             take_pending_external_open_items,
             save_text_with_dialog,

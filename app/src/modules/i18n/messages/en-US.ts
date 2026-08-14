@@ -694,6 +694,7 @@ export const enUSMessages: MessageDictionary = {
     pasteImageBackendError: 'Failed to paste image: backend error',
     pasteImageMissingFileName: 'Failed to paste image: backend did not return a file name',
     pasteImageFailed: 'Failed to paste image: {message}',
+    remoteImageDownloadFailed: '{count} remote image(s) could not be downloaded; original links were kept.',
     cannotSaveBackgroundTab: 'Cannot save background tab',
     closeAndDiscardChanges: 'Close {title} and discard changes?',
     discardAndClose: 'Discard and Close',

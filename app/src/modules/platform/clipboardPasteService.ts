@@ -60,3 +60,35 @@ export async function pasteClipboardImage(
   console.error('[clipboardPasteService] failed:', errMsg)
   throw new Error(errMsg)
 }
+
+export type RemoteImageDownloadResult = {
+  source_url: string
+  file_name?: string | null
+  error?: string | null
+}
+
+type RemoteImageDownloadResponse = {
+  Ok?: { data?: RemoteImageDownloadResult[] }
+  Err?: { error?: { message?: string } }
+}
+
+export async function downloadRemoteImages(
+  targetDir: string,
+  urls: string[],
+  suggestedName?: string,
+): Promise<RemoteImageDownloadResult[]> {
+  const result = await invoke<RemoteImageDownloadResponse>('download_remote_images', {
+    targetDir,
+    urls,
+    suggestedName: suggestedName ?? undefined,
+  })
+
+  const downloads = result?.Ok?.data
+  if (Array.isArray(downloads)) {
+    return downloads
+  }
+
+  const errMsg = result?.Err?.error?.message || '无法下载网络图片'
+  console.error('[clipboardPasteService] remote image download failed:', errMsg)
+  throw new Error(errMsg)
+}
