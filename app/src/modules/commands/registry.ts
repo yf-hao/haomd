@@ -294,33 +294,44 @@ function formatCompressionStatusMessage(ctx: StatusContext, event: CompressionSt
 }
 
 function createLayoutCommands(ctx: LayoutCommandContext): CommandRegistry {
+  const preventRealtimeEditingLayoutChange = () => {
+    if (ctx.editMode !== 'wysiwyg') return false
+    ctx.setStatusMessage(tr(ctx, 'commands.realtimeEditingLayoutUnavailable', '实时编辑下布局不可用'))
+    return true
+  }
   const toggleEditor = () => {
+    if (preventRealtimeEditingLayoutChange()) return
     ctx.setShowEditor((visible) => !visible)
   }
   const togglePreview = () => {
+    if (preventRealtimeEditingLayoutChange()) return
     ctx.setShowPreview((visible) => !visible)
   }
 
   return {
     layout_preview_left: () => {
+      if (preventRealtimeEditingLayoutChange()) return
       ctx.setLayout('preview-left')
       ctx.setShowEditor(true)
       ctx.setShowPreview(true)
       ctx.setStatusMessage(tr(ctx, 'commands.layoutPreviewLeft', '布局：预览在左'))
     },
     layout_preview_right: () => {
+      if (preventRealtimeEditingLayoutChange()) return
       ctx.setLayout('preview-right')
       ctx.setShowEditor(true)
       ctx.setShowPreview(true)
       ctx.setStatusMessage(tr(ctx, 'commands.layoutPreviewRight', '布局：预览在右'))
     },
     layout_editor_only: () => {
+      if (preventRealtimeEditingLayoutChange()) return
       ctx.setLayout('editor-only')
       ctx.setShowEditor(true)
       ctx.setShowPreview(false)
       ctx.setStatusMessage(tr(ctx, 'commands.layoutEditorOnly', '布局：仅编辑器'))
     },
     layout_preview_only: () => {
+      if (preventRealtimeEditingLayoutChange()) return
       ctx.setLayout('preview-only')
       ctx.setShowEditor(false)
       ctx.setShowPreview(true)
@@ -394,7 +405,7 @@ function createLayoutCommands(ctx: LayoutCommandContext): CommandRegistry {
       ctx.setEditMode(next)
       ctx.setStatusMessage(
         next === 'wysiwyg'
-          ? tr(ctx, 'commands.editModeWysiwyg', '所见即所得模式')
+          ? tr(ctx, 'commands.editModeWysiwyg', '实时编辑')
           : tr(ctx, 'commands.editModeSource', '编辑器模式'),
       )
     },

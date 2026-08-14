@@ -834,7 +834,7 @@ export const enUSMessages: MessageDictionary = {
     aiChatDockLeft: 'AI Chat: dock on the left',
     aiChatDockRight: 'AI Chat: dock on the right',
     editorZoomPercent: 'Editor Zoom: {percent}%',
-    editModeWysiwyg: 'WYSIWYG Mode',
+    editModeWysiwyg: 'Live Editing',
     editModeSource: 'Editor Mode',
     openFolderSidebarUnsupported: 'Opening folders in Sidebar is not supported in this version',
     recentPanelRemoved: 'The recent files panel has been removed. Please use File → Open Recent',

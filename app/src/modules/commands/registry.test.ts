@@ -140,6 +140,21 @@ describe('command registry - layout & view', () => {
     expect(ctx.toggleLeftPanel).toHaveBeenNthCalledWith(2, 'workflows')
   })
 
+  it('should block layout and appearance changes during real-time editing', () => {
+    const ctx = createMockCtx()
+    ctx.editMode = 'wysiwyg'
+    const registry = createCommandRegistry(ctx)
+
+    registry.layout_preview_left()
+    registry.toggle_editor()
+    registry.toggle_preview()
+
+    expect(ctx.setLayout).not.toHaveBeenCalled()
+    expect(ctx.setShowEditor).not.toHaveBeenCalled()
+    expect(ctx.setShowPreview).not.toHaveBeenCalled()
+    expect(ctx.setStatusMessage).toHaveBeenCalledWith('实时编辑下布局不可用')
+  })
+
   it('ai chat dock / floating commands should update ai chat view state', () => {
     const ctx = createMockCtx()
     const registry = createCommandRegistry(ctx)

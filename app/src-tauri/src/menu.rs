@@ -274,7 +274,7 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             panel_workflows: "工作流",
             toggle_editor: "编辑器",
             toggle_preview_only: "预览",
-            toggle_wysiwyg: "所见即所得模式",
+            toggle_wysiwyg: "实时编辑",
             toggle_sidebar: "活动栏",
             toggle_status_bar: "状态栏",
             zoom_in: "放大",
@@ -400,7 +400,7 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             panel_workflows: "Workflows",
             toggle_editor: "Editor",
             toggle_preview_only: "Preview",
-            toggle_wysiwyg: "WYSIWYG Mode",
+            toggle_wysiwyg: "Live Editing",
             toggle_sidebar: "Activity Bar",
             toggle_status_bar: "Status Bar",
             zoom_in: "Zoom In",
@@ -949,6 +949,8 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         .build()?;
 
     let layout_menu = SubmenuBuilder::new(app, texts.layout)
+        .id("layout_menu")
+        .enabled(!WYSIWYG_MENU_CHECKED.load(Ordering::Relaxed))
         .item(
             &MenuItemBuilder::new(texts.preview_left)
                 .id("layout_preview_left")
@@ -997,6 +999,7 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
             &CheckMenuItemBuilder::new(texts.toggle_editor)
                 .id("toggle_editor")
                 .checked(EDITOR_MENU_CHECKED.load(Ordering::Relaxed))
+                .enabled(!WYSIWYG_MENU_CHECKED.load(Ordering::Relaxed))
                 .accelerator("CmdOrCtrl+P")
                 .build(app)?,
         )
@@ -1004,6 +1007,7 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
             &CheckMenuItemBuilder::new(texts.toggle_preview_only)
                 .id("toggle_preview")
                 .checked(PREVIEW_MENU_CHECKED.load(Ordering::Relaxed))
+                .enabled(!WYSIWYG_MENU_CHECKED.load(Ordering::Relaxed))
                 .accelerator("CmdOrCtrl+Shift+P")
                 .build(app)?,
         )

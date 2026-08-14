@@ -827,7 +827,7 @@ export const zhCNMessages: MessageDictionary = {
     aiChatDockLeft: 'AI Chat：Dock 在左侧',
     aiChatDockRight: 'AI Chat：Dock 在右侧',
     editorZoomPercent: 'Editor Zoom：{percent}%',
-    editModeWysiwyg: '所见即所得模式',
+    editModeWysiwyg: '实时编辑',
     editModeSource: '编辑器模式',
     openFolderSidebarUnsupported: '当前版本暂不支持 Sidebar 打开文件夹',
     recentPanelRemoved: '最近文件面板已移除，请使用菜单 File → Open Recent',
