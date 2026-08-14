@@ -266,6 +266,8 @@ macro_rules! app_invoke_handler {
             convert_svg_to_emf,
             convert_svg_to_plain_svg,
             set_wysiwyg_menu_checked,
+            set_appearance_menu_state,
+            set_panel_menu_state,
             read_clipboard_for_paste,
             save_clipboard_image_to_dir,
             paste_clipboard_image,

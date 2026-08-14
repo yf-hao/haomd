@@ -163,6 +163,25 @@ function App() {
     setActivityBarVisible((visible) => !visible)
   }, [])
 
+  useEffect(() => {
+    if (!isTauriEnv()) return
+    void invoke('set_appearance_menu_state', {
+      activityBar: isActivityBarVisible,
+      statusBar: isStatusBarVisible,
+    }).catch((error) => {
+      console.warn('[App] failed to sync appearance menu state:', error)
+    })
+  }, [isActivityBarVisible, isStatusBarVisible])
+
+  useEffect(() => {
+    if (!isTauriEnv()) return
+    void invoke('set_panel_menu_state', {
+      activePanel: activeLeftPanel,
+    }).catch((error) => {
+      console.warn('[App] failed to sync panel menu state:', error)
+    })
+  }, [activeLeftPanel])
+
   const handleInitialActionHandled = useCallback(() => {
     setInitialWorkspaceAction(null)
     setInitialOpenRecentPath(null)
@@ -800,6 +819,7 @@ function AppShellContent({
 
         <WorkspaceShell
           activeLeftPanel={activeLeftPanel}
+          onLeftPanelToggle={handleLeftPanelToggle}
           toggleSidebarVisible={toggleActivityBarVisible}
           isTauriEnv={isTauriEnv}
           initialAction={initialWorkspaceAction}

@@ -14,6 +14,7 @@ function createMockCtx(): CommandContext & {
     // LayoutCommandContext
     layout: 'preview-left',
     setLayout: vi.fn(),
+    setShowEditor: vi.fn(),
     setShowPreview: vi.fn(),
     setStatusMessage,
     aiChatMode: 'docked',
@@ -59,6 +60,7 @@ function createMockCtx(): CommandContext & {
 
     // AppLifecycleCommandContext
     toggleSidebarVisible: vi.fn(),
+    toggleLeftPanel: vi.fn(),
     closeCurrentTab: vi.fn(),
     onRequestCloseCurrentTab: vi.fn(),
     onRequestQuit: vi.fn(),
@@ -111,18 +113,31 @@ describe('command registry - layout & view', () => {
     expect(ctx.setLayout).toHaveBeenCalledWith('preview-only')
   })
 
-  it('toggle_preview_only should remember last layout and restore it', () => {
+  it('appearance commands should only toggle their own visibility state', () => {
     const ctx = createMockCtx()
     const registry = createCommandRegistry(ctx)
 
-    ctx.layout = 'preview-right'
-    registry.toggle_preview_only()
-    expect(ctx.setLayout).toHaveBeenCalledWith('preview-only')
+    registry.toggle_editor()
+    expect(ctx.setShowEditor).toHaveBeenCalledWith(expect.any(Function))
+
+    registry.toggle_preview()
+    expect(ctx.setShowPreview).toHaveBeenCalledWith(expect.any(Function))
 
     ;(ctx.setLayout as any).mockClear()
-    ctx.layout = 'preview-only'
     registry.toggle_preview_only()
-    expect(ctx.setLayout).toHaveBeenCalledWith('preview-right')
+    expect(ctx.setShowPreview).toHaveBeenCalledTimes(2)
+    expect(ctx.setLayout).not.toHaveBeenCalled()
+  })
+
+  it('panel commands should toggle the requested activity panel', () => {
+    const ctx = createMockCtx()
+    const registry = createCommandRegistry(ctx)
+
+    registry.toggle_panel_files()
+    registry.toggle_panel_workflows()
+
+    expect(ctx.toggleLeftPanel).toHaveBeenNthCalledWith(1, 'files')
+    expect(ctx.toggleLeftPanel).toHaveBeenNthCalledWith(2, 'workflows')
   })
 
   it('ai chat dock / floating commands should update ai chat view state', () => {

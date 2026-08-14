@@ -5,6 +5,7 @@ import { useWorkspaceLayout } from './useWorkspaceLayout'
 const STORAGE_LAYOUT = 'haomd:layout'
 const STORAGE_WIDTH = 'haomd:layout:width'
 const STORAGE_SHOW = 'haomd:layout:show'
+const STORAGE_SHOW_EDITOR = 'haomd:layout:show-editor'
 
 describe('useWorkspaceLayout', () => {
   beforeEach(() => {
@@ -19,6 +20,7 @@ describe('useWorkspaceLayout', () => {
     const { result } = renderHook(() => useWorkspaceLayout())
 
     expect(result.current.layout).toBe('preview-left')
+    expect(result.current.showEditor).toBe(true)
     expect(result.current.showPreview).toBe(true)
     expect(result.current.editorWidth).toBe(55)
     expect(result.current.effectiveLayout).toBe('preview-left')
@@ -33,6 +35,7 @@ describe('useWorkspaceLayout', () => {
     const { result } = renderHook(() => useWorkspaceLayout())
 
     expect(result.current.layout).toBe('preview-right')
+    expect(result.current.showEditor).toBe(true)
     expect(result.current.showPreview).toBe(false)
     // editorWidth 使用存储值
     expect(result.current.editorWidth).toBe(40)
@@ -48,6 +51,7 @@ describe('useWorkspaceLayout', () => {
 
     act(() => {
       result.current.setLayout('preview-right')
+      result.current.setShowEditor(false)
       result.current.setShowPreview(false)
       result.current.setEditorWidth(60)
     })
@@ -58,6 +62,7 @@ describe('useWorkspaceLayout', () => {
     expect(window.localStorage.getItem(STORAGE_LAYOUT)).toBe('preview-right')
     expect(window.localStorage.getItem(STORAGE_WIDTH)).toBe('60')
     expect(window.localStorage.getItem(STORAGE_SHOW)).toBe('false')
+    expect(window.localStorage.getItem(STORAGE_SHOW_EDITOR)).toBe('false')
   })
 
   it('should update editorWidth while dragging based on mouse position and layout', () => {

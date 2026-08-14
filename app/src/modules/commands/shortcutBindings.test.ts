@@ -4,6 +4,7 @@ import {
   FORMAT_SHORTCUT_ACTIONS,
   FORMAT_SHORTCUT_BINDINGS,
   GLOBAL_MENU_ACCELERATORS,
+  PANEL_SHORTCUT_BINDINGS,
 } from './shortcutBindings'
 import menuSource from '../../../src-tauri/src/menu.rs?raw'
 
@@ -92,5 +93,19 @@ describe('format shortcut bindings', () => {
 describe('global shortcut accelerators', () => {
   it('should match Rust global menu accelerators', () => {
     expectAcceleratorsToMatch(GLOBAL_MENU_ACCELERATORS)
+  })
+})
+
+describe('panel shortcut bindings', () => {
+  it('should map Shift+F1 through Shift+F8 to the activity panels', () => {
+    PANEL_SHORTCUT_BINDINGS.forEach((binding, index) => {
+      const event = {
+        altKey: false,
+        shiftKey: true,
+        code: `F${index + 1}`,
+      } as KeyboardEvent
+
+      expect(binding.matches(event, `F${index + 1}`)).toBe(true)
+    })
   })
 })

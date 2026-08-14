@@ -5,6 +5,7 @@ import {
   EDITOR_SHORTCUT_SCOPE_SELECTORS,
   FORMAT_SHORTCUT_ACTIONS,
   FORMAT_SHORTCUT_BINDINGS,
+  PANEL_SHORTCUT_BINDINGS,
   PDF_SHORTCUT_BINDINGS,
 } from '../modules/commands/shortcutBindings'
 import { onMenuAction } from '../modules/platform/menuEvents'
@@ -85,9 +86,18 @@ export function useCommandSystem(params: CommandSystemParams) {
     'open_folder',
     'new_file',
     'close_file',
+    'toggle_editor',
     'toggle_preview',
     'toggle_preview_only',
     'toggle_sidebar',
+    'toggle_panel_files',
+    'toggle_panel_search',
+    'toggle_panel_outline',
+    'toggle_panel_pdf',
+    'toggle_panel_sessions',
+    'toggle_panel_notes',
+    'toggle_panel_skills',
+    'toggle_panel_workflows',
     'zoom_in',
     'zoom_out',
     'zoom_reset',
@@ -103,6 +113,7 @@ export function useCommandSystem(params: CommandSystemParams) {
   const {
     layout,
     setLayout,
+    setShowEditor,
     setShowPreview,
     setStatusMessage,
     aiChatMode,
@@ -144,6 +155,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     updateActiveMeta,
     openFolderInSidebar,
     toggleSidebarVisible,
+    toggleLeftPanel,
     closeCurrentTab,
     isTauriEnv,
     onRequestCloseCurrentTab,
@@ -223,6 +235,7 @@ export function useCommandSystem(params: CommandSystemParams) {
       createCommandRegistry({
         layout,
         setLayout,
+        setShowEditor,
         setShowPreview,
         setStatusMessage,
         aiChatMode,
@@ -267,6 +280,7 @@ export function useCommandSystem(params: CommandSystemParams) {
         updateActiveMeta,
         openFolderInSidebar,
         toggleSidebarVisible,
+        toggleLeftPanel,
         closeCurrentTab,
         onRequestCloseCurrentTab,
         onRequestQuit,
@@ -303,6 +317,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     [
       layout,
       setLayout,
+      setShowEditor,
       setShowPreview,
       setStatusMessage,
       aiChatMode,
@@ -347,6 +362,7 @@ export function useCommandSystem(params: CommandSystemParams) {
       updateActiveMeta,
       openFolderInSidebar,
       toggleSidebarVisible,
+      toggleLeftPanel,
       closeCurrentTab,
       onRequestCloseCurrentTab,
       onRequestQuit,
@@ -452,8 +468,16 @@ export function useCommandSystem(params: CommandSystemParams) {
 
       if (!meta) return
 
-      const formatBinding = FORMAT_SHORTCUT_BINDINGS.find((binding) => binding.matches(e, key))
       const prefersMenuAccelerator = isTauri && isMac
+      const panelBinding = PANEL_SHORTCUT_BINDINGS.find((binding) => binding.matches(e, key))
+      if (panelBinding) {
+        if (prefersMenuAccelerator) return
+        e.preventDefault()
+        void dispatchAction(panelBinding.action)
+        return
+      }
+
+      const formatBinding = FORMAT_SHORTCUT_BINDINGS.find((binding) => binding.matches(e, key))
 
       if (formatBinding) {
         if (formatBinding.requireEditorContext && !isEditorShortcutContext(activeElement)) {
@@ -496,9 +520,9 @@ export function useCommandSystem(params: CommandSystemParams) {
       } else if (key === 'p') {
         e.preventDefault()
         if (e.shiftKey) {
-          void dispatchAction('toggle_preview_only')
-        } else {
           void dispatchAction('toggle_preview')
+        } else {
+          void dispatchAction('toggle_editor')
         }
       } else if (e.code === 'KeyC' && e.shiftKey && !e.altKey) {
         if (isWysiwygMode) return

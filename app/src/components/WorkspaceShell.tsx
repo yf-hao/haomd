@@ -203,6 +203,7 @@ export type InitialWorkspaceAction = 'new' | 'open' | 'open_folder' | 'open_rece
 
 export interface WorkspaceShellProps {
   activeLeftPanel: LeftPanelId
+  onLeftPanelToggle: (id: Exclude<LeftPanelId, null>) => void
   toggleSidebarVisible: () => void
   isTauriEnv: () => boolean
   initialAction: InitialWorkspaceAction
@@ -235,6 +236,7 @@ function findOutlineItemByPage(items: OutlineItem[], page: number): OutlineItem 
 
 export function WorkspaceShell({
   activeLeftPanel,
+  onLeftPanelToggle,
   toggleSidebarVisible,
   isTauriEnv,
   initialAction,
@@ -404,6 +406,8 @@ export function WorkspaceShell({
   const {
     layout,
     setLayout,
+    showEditor,
+    setShowEditor,
     showPreview,
     setShowPreview,
     dragging,
@@ -435,6 +439,16 @@ export function WorkspaceShell({
       console.warn('[WorkspaceShell] failed to sync WYSIWYG menu state:', error)
     })
   }, [editMode, isTauriEnv])
+
+  useEffect(() => {
+    if (!isTauriEnv()) return
+    void invoke('set_appearance_menu_state', {
+      editor: showEditor,
+      preview: showPreview,
+    }).catch((error) => {
+      console.warn('[WorkspaceShell] failed to sync appearance menu state:', error)
+    })
+  }, [isTauriEnv, showEditor, showPreview])
 
   const setEditModeWithFlush = useCallback((next: EditMode) => {
     if (editMode === 'source' && next === 'wysiwyg') {
@@ -535,7 +549,7 @@ export function WorkspaceShell({
     activeIdRef.current = nextTabId
   }
 
-  const isPreviewVisible = effectiveLayout !== 'editor-only'
+  const isPreviewVisible = showPreview
   const prevIsPreviewVisibleRef = useRef(isPreviewVisible)
   const previewSyncTimerRef = useRef<number | null>(null)
   const previewFrameRef = useRef<number | null>(null)
@@ -3677,7 +3691,7 @@ export function WorkspaceShell({
   )
 
   const { dispatchAction } = useCommandSystem({
-    layout, setLayout: setLayout as any, setShowPreview, setStatusMessage,
+    layout, setLayout: setLayout as any, setShowEditor, setShowPreview, setStatusMessage,
     aiChatMode, setAiChatMode, aiChatDockSide, setAiChatDockSide, aiChatOpen, aiChatOpenRef,
     editorZoom, setEditorZoom,
     isPdfActive,
@@ -3697,6 +3711,7 @@ export function WorkspaceShell({
     confirmLoseChanges, hasUnsavedChanges, newDocument, setFilePath, applyOpenedContent,
     openFile, importWordFile, openImportedWordDocument, save: saveWithPdfGuard, saveAs: saveAsWithPdfGuard, handleShowRecent: undefined, clearRecentAll,
     createTab, updateActiveMeta, openFolderInSidebar, toggleSidebarVisible, closeCurrentTab,
+    toggleLeftPanel: onLeftPanelToggle,
     openSearch: openSearchWithSelection,
     openInsertTableDialog,
     openMathSymbolDialog,
@@ -4615,7 +4630,7 @@ export function WorkspaceShell({
                     /* WYSIWYG 所见即所得模式 */
                     <section
                       className="pane editor-pane"
-                      style={{ gridColumn: '1/-1' }}
+                      style={{ gridColumn: '1/-1', display: showEditor ? undefined : 'none' }}
                       onFocusCapture={(event) => {
                         if (event.target instanceof HTMLElement && event.target.closest('.wysiwyg-editor')) {
                           restoreActiveFileSelection()
@@ -4690,7 +4705,7 @@ export function WorkspaceShell({
                       }
                     }}
                     style={
-                      effectiveLayout === 'preview-only'
+                      !showEditor || effectiveLayout === 'preview-only'
                         ? { display: 'none' }
                         : effectiveLayout === 'preview-left'
                           ? { gridColumn: '2/3' }
@@ -4740,26 +4755,28 @@ export function WorkspaceShell({
                     </Suspense>
                   </section>
 
-                  <PreviewErrorBoundary>
-                  <Suspense fallback={<LoadingFallback className="preview-loading-fallback" label={t('workspace.loadingPreview')} />}>
-                    <PreviewPaneLazy
-                      previewStore={previewStore}
-                      activeLine={previewActiveLine}
-                      previewWidth={previewWidthForRender}
-                      effectiveLayout={effectiveLayout}
-                      loading={isPreviewLoading}
-                      loadingLabel={t('workspace.loadingPreview')}
-                      filePath={filePath}
-                      foldRegions={foldRegions}
-                      onPreviewLineClick={handlePreviewLineClick}
-                      onSelectionChange={setPreviewSelectionText}
-                    />
-                  </Suspense>
-                  </PreviewErrorBoundary>
+                  {showPreview && (
+                    <PreviewErrorBoundary>
+                    <Suspense fallback={<LoadingFallback className="preview-loading-fallback" label={t('workspace.loadingPreview')} />}>
+                      <PreviewPaneLazy
+                        previewStore={previewStore}
+                        activeLine={previewActiveLine}
+                        previewWidth={previewWidthForRender}
+                        effectiveLayout={effectiveLayout}
+                        loading={isPreviewLoading}
+                        loadingLabel={t('workspace.loadingPreview')}
+                        filePath={filePath}
+                        foldRegions={foldRegions}
+                        onPreviewLineClick={handlePreviewLineClick}
+                        onSelectionChange={setPreviewSelectionText}
+                      />
+                    </Suspense>
+                    </PreviewErrorBoundary>
+                  )}
                     </>
                   )}
 
-                  {!isPdfActive && effectiveLayout !== 'editor-only' && editMode !== 'wysiwyg' && (effectiveLayout === 'preview-left' || effectiveLayout === 'preview-right') && (
+                  {!isPdfActive && showEditor && showPreview && editMode !== 'wysiwyg' && (effectiveLayout === 'preview-left' || effectiveLayout === 'preview-right') && (
                     <div className={`divider-hotzone editor-preview-divider ${dragging ? 'active' : ''}`} style={{ left: effectiveLayout === 'preview-left' ? `${previewWidthForRender}%` : `${100 - previewWidthForRender}%` }} onMouseDown={startDragging}>
                       <div className="divider-rail"><span className="divider-handle" /></div>
                     </div>

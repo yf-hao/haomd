@@ -14,12 +14,19 @@ type StatusContext = {
   t?: (key: string, params?: Record<string, string | number>) => string
 }
 
+export type WorkspacePanelId = 'files' | 'search' | 'outline' | 'pdf' | 'sessions' | 'notes' | 'skills' | 'workflows'
+
+export type PanelCommandContext = StatusContext & {
+  toggleLeftPanel?: (panel: WorkspacePanelId) => void
+}
+
 /**
  * 布局相关命令所需的上下文。
  */
 export type LayoutCommandContext = StatusContext & {
   layout: string
   setLayout: (layout: string) => void
+  setShowEditor: (value: boolean | ((prev: boolean) => boolean)) => void
   setShowPreview: (value: boolean | ((prev: boolean) => boolean)) => void
   aiChatMode: 'floating' | 'docked'
   setAiChatMode: (mode: 'floating' | 'docked') => void
@@ -178,6 +185,7 @@ export type ToolsCommandContext = StatusContext & {
  * 外层系统（如 useCommandSystem）只需要提供这一份，总体仍保持向后兼容。
  */
 export type CommandContext = LayoutCommandContext &
+  PanelCommandContext &
   FileCommandContext &
   AppLifecycleCommandContext &
   HelpCommandContext &
@@ -186,8 +194,6 @@ export type CommandContext = LayoutCommandContext &
   ToolsCommandContext
 
 // ===== 分组命令工厂 =====
-
-let lastLayoutForPreviewOnly: string | null = null
 
 const EDITOR_ZOOM_MIN = 0.75
 const EDITOR_ZOOM_MAX = 1.5
@@ -202,6 +208,27 @@ const tr = (
 
 function formatElapsedSeconds(elapsedMs: number): number {
   return Math.max(1, Math.round(elapsedMs / 1000))
+}
+
+function createPanelCommands(ctx: PanelCommandContext): CommandRegistry {
+  const togglePanel = (panel: WorkspacePanelId) => {
+    if (!ctx.toggleLeftPanel) {
+      ctx.setStatusMessage(tr(ctx, 'commands.panelUnavailable', '当前面板不可用'))
+      return
+    }
+    ctx.toggleLeftPanel(panel)
+  }
+
+  return {
+    toggle_panel_files: () => togglePanel('files'),
+    toggle_panel_search: () => togglePanel('search'),
+    toggle_panel_outline: () => togglePanel('outline'),
+    toggle_panel_pdf: () => togglePanel('pdf'),
+    toggle_panel_sessions: () => togglePanel('sessions'),
+    toggle_panel_notes: () => togglePanel('notes'),
+    toggle_panel_skills: () => togglePanel('skills'),
+    toggle_panel_workflows: () => togglePanel('workflows'),
+  }
 }
 
 function formatCompressionStatusMessage(ctx: StatusContext, event: CompressionStatusEvent): string {
@@ -267,44 +294,44 @@ function formatCompressionStatusMessage(ctx: StatusContext, event: CompressionSt
 }
 
 function createLayoutCommands(ctx: LayoutCommandContext): CommandRegistry {
+  const toggleEditor = () => {
+    ctx.setShowEditor((visible) => !visible)
+  }
+  const togglePreview = () => {
+    ctx.setShowPreview((visible) => !visible)
+  }
+
   return {
     layout_preview_left: () => {
       ctx.setLayout('preview-left')
+      ctx.setShowEditor(true)
       ctx.setShowPreview(true)
       ctx.setStatusMessage(tr(ctx, 'commands.layoutPreviewLeft', '布局：预览在左'))
     },
     layout_preview_right: () => {
       ctx.setLayout('preview-right')
+      ctx.setShowEditor(true)
       ctx.setShowPreview(true)
       ctx.setStatusMessage(tr(ctx, 'commands.layoutPreviewRight', '布局：预览在右'))
     },
     layout_editor_only: () => {
       ctx.setLayout('editor-only')
+      ctx.setShowEditor(true)
       ctx.setShowPreview(false)
       ctx.setStatusMessage(tr(ctx, 'commands.layoutEditorOnly', '布局：仅编辑器'))
     },
     layout_preview_only: () => {
       ctx.setLayout('preview-only')
+      ctx.setShowEditor(false)
       ctx.setShowPreview(true)
       ctx.setStatusMessage(tr(ctx, 'commands.layoutPreviewOnly', '布局：仅预览'))
     },
     find: () => {
       ctx.openSearch?.()
     },
-    toggle_preview_only: () => {
-      if (ctx.layout === 'preview-only') {
-        const target = lastLayoutForPreviewOnly ?? 'preview-right'
-        ctx.setLayout(target)
-        ctx.setShowPreview(true)
-        ctx.setStatusMessage(tr(ctx, 'commands.layoutExitPreviewFocus', '布局：退出预览专注模式'))
-        return
-      }
-
-      lastLayoutForPreviewOnly = ctx.layout
-      ctx.setLayout('preview-only')
-      ctx.setShowPreview(true)
-      ctx.setStatusMessage(tr(ctx, 'commands.layoutPreviewFocus', '布局：预览专注模式'))
-    },
+    toggle_editor: toggleEditor,
+    toggle_preview: togglePreview,
+    toggle_preview_only: togglePreview,
     view_ai_chat_floating: () => {
       ctx.setAiChatMode('floating')
       ctx.setStatusMessage(tr(ctx, 'commands.aiChatFloating', 'AI Chat：浮动模式'))
@@ -360,14 +387,6 @@ function createLayoutCommands(ctx: LayoutCommandContext): CommandRegistry {
       const next = 1.0
       ctx.setEditorZoom(next)
       ctx.setStatusMessage(tr(ctx, 'commands.editorZoomPercent', 'Editor Zoom：100%', { percent: 100 }))
-    },
-    toggle_preview: () => {
-      ctx.setShowPreview((v) => {
-        if (!v && ctx.layout === 'editor-only') {
-          ctx.setLayout('preview-right')
-        }
-        return !v
-      })
     },
     toggle_wysiwyg: () => {
       if (!ctx.setEditMode) return
@@ -953,6 +972,7 @@ function createAiCommands(ctx: AiCommandContext): CommandRegistry {
 import { createFormatCommands } from './formatCommands'
 
 export const createCommandRegistry = (ctx: CommandContext): CommandRegistry => ({
+  ...createPanelCommands(ctx),
   ...createLayoutCommands(ctx),
   ...createFileCommands(ctx),
   ...createLifecycleCommands(ctx),

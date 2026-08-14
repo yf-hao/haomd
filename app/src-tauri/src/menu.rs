@@ -9,9 +9,10 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::menu::{
-    CheckMenuItemBuilder, Menu, MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder,
+    CheckMenuItemBuilder, Menu, MenuBuilder, MenuItemBuilder, MenuItemKind, PredefinedMenuItem,
+    SubmenuBuilder,
 };
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Runtime};
 
 const RECENT_PAGE_SIZE: usize = 20;
 const RECENT_MENU_PREFIX: &str = "recent_item_";
@@ -20,6 +21,11 @@ static RECENT_MENU_MAP: Lazy<Mutex<HashMap<String, RecentMenuPayload>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 static RECENT_PAGE: Lazy<Mutex<u32>> = Lazy::new(|| Mutex::new(0));
 static WYSIWYG_MENU_CHECKED: AtomicBool = AtomicBool::new(false);
+static EDITOR_MENU_CHECKED: AtomicBool = AtomicBool::new(true);
+static PREVIEW_MENU_CHECKED: AtomicBool = AtomicBool::new(true);
+static ACTIVITY_BAR_MENU_CHECKED: AtomicBool = AtomicBool::new(true);
+static STATUS_BAR_MENU_CHECKED: AtomicBool = AtomicBool::new(true);
+static ACTIVE_PANEL_MENU: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
 
 #[derive(Clone, Debug, Serialize)]
 pub struct RecentMenuPayload {
@@ -127,6 +133,16 @@ struct MenuTexts {
     dock_left: &'static str,
     dock_right: &'static str,
     view: &'static str,
+    appearance: &'static str,
+    panels: &'static str,
+    panel_files: &'static str,
+    panel_search: &'static str,
+    panel_outline: &'static str,
+    panel_pdf: &'static str,
+    panel_sessions: &'static str,
+    panel_notes: &'static str,
+    panel_skills: &'static str,
+    panel_workflows: &'static str,
     toggle_editor: &'static str,
     toggle_preview_only: &'static str,
     toggle_wysiwyg: &'static str,
@@ -246,11 +262,21 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             dock_left: "停靠左侧",
             dock_right: "停靠右侧",
             view: "视图",
-            toggle_editor: "切换编辑器 ",
-            toggle_preview_only: "切换仅预览",
+            appearance: "外观",
+            panels: "面板",
+            panel_files: "文件浏览器",
+            panel_search: "搜索",
+            panel_outline: "大纲",
+            panel_pdf: "PDF",
+            panel_sessions: "会话",
+            panel_notes: "笔记",
+            panel_skills: "技能",
+            panel_workflows: "工作流",
+            toggle_editor: "编辑器",
+            toggle_preview_only: "预览",
             toggle_wysiwyg: "所见即所得模式",
-            toggle_sidebar: "切换活动栏",
-            toggle_status_bar: "切换状态栏",
+            toggle_sidebar: "活动栏",
+            toggle_status_bar: "状态栏",
             zoom_in: "放大",
             zoom_out: "缩小",
             reset_zoom: "重置缩放",
@@ -362,11 +388,21 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             dock_left: "Dock Left",
             dock_right: "Dock Right",
             view: "View",
-            toggle_editor: "Toggle Editor",
-            toggle_preview_only: "Toggle Preview Only",
+            appearance: "Appearance",
+            panels: "Panels",
+            panel_files: "File Explorer",
+            panel_search: "Search",
+            panel_outline: "Outline",
+            panel_pdf: "PDF",
+            panel_sessions: "Sessions",
+            panel_notes: "Notes",
+            panel_skills: "Skills",
+            panel_workflows: "Workflows",
+            toggle_editor: "Editor",
+            toggle_preview_only: "Preview",
             toggle_wysiwyg: "WYSIWYG Mode",
-            toggle_sidebar: "Toggle Activity Bar",
-            toggle_status_bar: "Toggle Status Bar",
+            toggle_sidebar: "Activity Bar",
+            toggle_status_bar: "Status Bar",
             zoom_in: "Zoom In",
             zoom_out: "Zoom Out",
             reset_zoom: "Reset Zoom",
@@ -956,19 +992,96 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         )
         .build()?;
 
-    let view_menu = SubmenuBuilder::new(app, texts.view)
+    let appearance_menu = SubmenuBuilder::new(app, texts.appearance)
         .item(
-            &MenuItemBuilder::new(texts.toggle_editor)
-                .id("toggle_preview")
+            &CheckMenuItemBuilder::new(texts.toggle_editor)
+                .id("toggle_editor")
+                .checked(EDITOR_MENU_CHECKED.load(Ordering::Relaxed))
                 .accelerator("CmdOrCtrl+P")
                 .build(app)?,
         )
         .item(
-            &MenuItemBuilder::new(texts.toggle_preview_only)
-                .id("toggle_preview_only")
+            &CheckMenuItemBuilder::new(texts.toggle_preview_only)
+                .id("toggle_preview")
+                .checked(PREVIEW_MENU_CHECKED.load(Ordering::Relaxed))
                 .accelerator("CmdOrCtrl+Shift+P")
                 .build(app)?,
         )
+        .item(
+            &CheckMenuItemBuilder::new(texts.toggle_sidebar)
+                .id("toggle_sidebar")
+                .checked(ACTIVITY_BAR_MENU_CHECKED.load(Ordering::Relaxed))
+                .accelerator("CmdOrCtrl+Shift+S")
+                .build(app)?,
+        )
+        .item(
+            &CheckMenuItemBuilder::new(texts.toggle_status_bar)
+                .id("toggle_status_bar")
+                .checked(STATUS_BAR_MENU_CHECKED.load(Ordering::Relaxed))
+                .build(app)?,
+        )
+        .build()?;
+
+    let panels_menu = SubmenuBuilder::new(app, texts.panels)
+        .item(
+            &CheckMenuItemBuilder::new(texts.panel_files)
+                .id("toggle_panel_files")
+                .checked(panel_menu_checked("files"))
+                .accelerator("CmdOrCtrl+Shift+F1")
+                .build(app)?,
+        )
+        .item(
+            &CheckMenuItemBuilder::new(texts.panel_search)
+                .id("toggle_panel_search")
+                .checked(panel_menu_checked("search"))
+                .accelerator("CmdOrCtrl+Shift+F2")
+                .build(app)?,
+        )
+        .item(
+            &CheckMenuItemBuilder::new(texts.panel_outline)
+                .id("toggle_panel_outline")
+                .checked(panel_menu_checked("outline"))
+                .accelerator("CmdOrCtrl+Shift+F3")
+                .build(app)?,
+        )
+        .item(
+            &CheckMenuItemBuilder::new(texts.panel_pdf)
+                .id("toggle_panel_pdf")
+                .checked(panel_menu_checked("pdf"))
+                .accelerator("CmdOrCtrl+Shift+F4")
+                .build(app)?,
+        )
+        .item(
+            &CheckMenuItemBuilder::new(texts.panel_sessions)
+                .id("toggle_panel_sessions")
+                .checked(panel_menu_checked("sessions"))
+                .accelerator("CmdOrCtrl+Shift+F5")
+                .build(app)?,
+        )
+        .item(
+            &CheckMenuItemBuilder::new(texts.panel_notes)
+                .id("toggle_panel_notes")
+                .checked(panel_menu_checked("notes"))
+                .accelerator("CmdOrCtrl+Shift+F6")
+                .build(app)?,
+        )
+        .item(
+            &CheckMenuItemBuilder::new(texts.panel_skills)
+                .id("toggle_panel_skills")
+                .checked(panel_menu_checked("skills"))
+                .accelerator("CmdOrCtrl+Shift+F7")
+                .build(app)?,
+        )
+        .item(
+            &CheckMenuItemBuilder::new(texts.panel_workflows)
+                .id("toggle_panel_workflows")
+                .checked(panel_menu_checked("workflows"))
+                .accelerator("CmdOrCtrl+Shift+F8")
+                .build(app)?,
+        )
+        .build()?;
+
+    let view_menu = SubmenuBuilder::new(app, texts.view)
         .item(
             &CheckMenuItemBuilder::new(texts.toggle_wysiwyg)
                 .id("toggle_wysiwyg")
@@ -976,17 +1089,8 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
                 .accelerator("CmdOrCtrl+Alt+W")
                 .build(app)?,
         )
-        .item(
-            &MenuItemBuilder::new(texts.toggle_sidebar)
-                .id("toggle_sidebar")
-                .accelerator("CmdOrCtrl+Shift+s")
-                .build(app)?,
-        )
-        .item(
-            &MenuItemBuilder::new(texts.toggle_status_bar)
-                .id("toggle_status_bar")
-                .build(app)?,
-        )
+        .item(&appearance_menu)
+        .item(&panels_menu)
         .item(
             &MenuItemBuilder::new(texts.zoom_in)
                 .id("zoom_in")
@@ -1170,8 +1274,113 @@ pub async fn refresh_app_menu(app: &AppHandle) {
     }
 }
 
+fn find_menu_item<R: Runtime>(
+    items: Vec<MenuItemKind<R>>,
+    id: &str,
+) -> tauri::Result<Option<MenuItemKind<R>>> {
+    for item in items {
+        if item.id().as_ref() == id {
+            return Ok(Some(item));
+        }
+
+        if let Some(submenu) = item.as_submenu() {
+            if let Some(found) = find_menu_item(submenu.items()?, id)? {
+                return Ok(Some(found));
+            }
+        }
+    }
+
+    Ok(None)
+}
+
+fn sync_check_menu_item(app: &AppHandle, id: &str, checked: bool) -> tauri::Result<()> {
+    let Some(menu) = app.menu() else {
+        return Ok(());
+    };
+    let Some(item) = find_menu_item(menu.items()?, id)? else {
+        return Ok(());
+    };
+    let Some(check_item) = item.as_check_menuitem() else {
+        return Ok(());
+    };
+
+    check_item.set_checked(checked)
+}
+
+fn panel_menu_checked(panel: &str) -> bool {
+    ACTIVE_PANEL_MENU
+        .lock()
+        .map(|active| active.as_deref() == Some(panel))
+        .unwrap_or(false)
+}
+
 #[tauri::command]
 pub async fn set_wysiwyg_menu_checked(app: AppHandle, checked: bool) {
     WYSIWYG_MENU_CHECKED.store(checked, Ordering::Relaxed);
     refresh_app_menu(&app).await;
+}
+
+#[tauri::command]
+pub async fn set_appearance_menu_state(
+    app: AppHandle,
+    editor: Option<bool>,
+    preview: Option<bool>,
+    activity_bar: Option<bool>,
+    status_bar: Option<bool>,
+) {
+    if let Some(checked) = editor {
+        EDITOR_MENU_CHECKED.store(checked, Ordering::Relaxed);
+    }
+    if let Some(checked) = preview {
+        PREVIEW_MENU_CHECKED.store(checked, Ordering::Relaxed);
+    }
+    if let Some(checked) = activity_bar {
+        ACTIVITY_BAR_MENU_CHECKED.store(checked, Ordering::Relaxed);
+    }
+    if let Some(checked) = status_bar {
+        STATUS_BAR_MENU_CHECKED.store(checked, Ordering::Relaxed);
+    }
+
+    let states = [
+        ("toggle_editor", EDITOR_MENU_CHECKED.load(Ordering::Relaxed)),
+        ("toggle_preview", PREVIEW_MENU_CHECKED.load(Ordering::Relaxed)),
+        (
+            "toggle_sidebar",
+            ACTIVITY_BAR_MENU_CHECKED.load(Ordering::Relaxed),
+        ),
+        (
+            "toggle_status_bar",
+            STATUS_BAR_MENU_CHECKED.load(Ordering::Relaxed),
+        ),
+    ];
+    for (id, checked) in states {
+        if let Err(error) = sync_check_menu_item(&app, id, checked) {
+            log::warn!("[menu] failed to sync appearance item {id}: {error}");
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn set_panel_menu_state(app: AppHandle, active_panel: Option<String>) {
+    if let Ok(mut active) = ACTIVE_PANEL_MENU.lock() {
+        *active = active_panel.clone();
+    } else {
+        log::warn!("[menu] failed to update active panel menu state");
+        return;
+    }
+
+    for (panel, id) in [
+        ("files", "toggle_panel_files"),
+        ("search", "toggle_panel_search"),
+        ("outline", "toggle_panel_outline"),
+        ("pdf", "toggle_panel_pdf"),
+        ("sessions", "toggle_panel_sessions"),
+        ("notes", "toggle_panel_notes"),
+        ("skills", "toggle_panel_skills"),
+        ("workflows", "toggle_panel_workflows"),
+    ] {
+        if let Err(error) = sync_check_menu_item(&app, id, active_panel.as_deref() == Some(panel)) {
+            log::warn!("[menu] failed to sync panel item {id}: {error}");
+        }
+    }
 }

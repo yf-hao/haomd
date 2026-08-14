@@ -7,6 +7,7 @@ const WIDTH_MAX = 70
 const STORAGE_LAYOUT = 'haomd:layout'
 const STORAGE_WIDTH = 'haomd:layout:width'
 const STORAGE_SHOW = 'haomd:layout:show'
+const STORAGE_SHOW_EDITOR = 'haomd:layout:show-editor'
 
 export function useWorkspaceLayout() {
   const [layout, setLayout] = useState<LayoutType>(() => {
@@ -19,6 +20,12 @@ export function useWorkspaceLayout() {
     const storedShow = localStorage.getItem(STORAGE_SHOW)
     if (storedShow == null) return true
     return storedShow !== 'false'
+  })
+  const [showEditor, setShowEditor] = useState<boolean>(() => {
+    if (typeof localStorage === 'undefined') return true
+    const storedShowEditor = localStorage.getItem(STORAGE_SHOW_EDITOR)
+    if (storedShowEditor != null) return storedShowEditor !== 'false'
+    return localStorage.getItem(STORAGE_LAYOUT) !== 'preview-only'
   })
   const [editorWidth, setEditorWidth] = useState<number>(() => {
     if (typeof localStorage === 'undefined') return 55
@@ -40,17 +47,20 @@ export function useWorkspaceLayout() {
       localStorage.setItem(STORAGE_LAYOUT, layout)
       localStorage.setItem(STORAGE_WIDTH, String(editorWidth))
       localStorage.setItem(STORAGE_SHOW, String(showPreview))
+      localStorage.setItem(STORAGE_SHOW_EDITOR, String(showEditor))
     }, 200)
 
     return () => {
       clearTimeout(timer)
     }
-  }, [layout, editorWidth, showPreview, dragging])
+  }, [layout, editorWidth, showPreview, showEditor, dragging])
 
   const effectiveLayout = useMemo<LayoutType>(() => {
+    if (!showEditor && showPreview) return 'preview-only'
     if (!showPreview) return 'editor-only'
+    if (layout === 'editor-only' || layout === 'preview-only') return 'preview-right'
     return layout
-  }, [layout, showPreview])
+  }, [layout, showEditor, showPreview])
 
   const clampedEditorWidth = useMemo(
     () => Math.min(WIDTH_MAX, Math.max(WIDTH_MIN, editorWidth)),
@@ -61,20 +71,20 @@ export function useWorkspaceLayout() {
     [clampedEditorWidth],
   )
   const previewWidthForRender = useMemo(
-    () => (effectiveLayout === 'preview-only' ? 100 : clampedPreviewWidth),
-    [clampedPreviewWidth, effectiveLayout],
+    () => (!showEditor ? 100 : clampedPreviewWidth),
+    [clampedPreviewWidth, showEditor],
   )
 
   const gridTemplateColumns = useMemo(() => {
     const previewCol = `minmax(0, ${clampedPreviewWidth}%)`
     const editorCol = `minmax(0, ${clampedEditorWidth}%)`
 
+    if (!showEditor && !showPreview) return '0 0'
+    if (!showEditor) return '1fr 0'
+    if (!showPreview) return '0 1fr'
     if (effectiveLayout === 'preview-left') return `${previewCol} ${editorCol}`
-    if (effectiveLayout === 'preview-right') return `${editorCol} ${previewCol}`
-    if (effectiveLayout === 'preview-only') return '1fr 0'
-    // editor-only
-    return '0 1fr'
-  }, [clampedEditorWidth, clampedPreviewWidth, effectiveLayout])
+    return `${editorCol} ${previewCol}`
+  }, [clampedEditorWidth, clampedPreviewWidth, effectiveLayout, showEditor, showPreview])
 
   useEffect(() => {
     const handleMove = (e: MouseEvent) => {
@@ -106,6 +116,8 @@ export function useWorkspaceLayout() {
   return {
     layout,
     setLayout,
+    showEditor,
+    setShowEditor,
     showPreview,
     setShowPreview,
     editorWidth,

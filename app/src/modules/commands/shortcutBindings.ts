@@ -54,6 +54,17 @@ export const PDF_SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
   { action: 'pdf_color_9', matches: (event, key) => key === '9' && !event.shiftKey },
 ] as const
 
+export const PANEL_SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
+  { action: 'toggle_panel_files', matches: (event) => event.shiftKey && !event.altKey && event.code === 'F1' },
+  { action: 'toggle_panel_search', matches: (event) => event.shiftKey && !event.altKey && event.code === 'F2' },
+  { action: 'toggle_panel_outline', matches: (event) => event.shiftKey && !event.altKey && event.code === 'F3' },
+  { action: 'toggle_panel_pdf', matches: (event) => event.shiftKey && !event.altKey && event.code === 'F4' },
+  { action: 'toggle_panel_sessions', matches: (event) => event.shiftKey && !event.altKey && event.code === 'F5' },
+  { action: 'toggle_panel_notes', matches: (event) => event.shiftKey && !event.altKey && event.code === 'F6' },
+  { action: 'toggle_panel_skills', matches: (event) => event.shiftKey && !event.altKey && event.code === 'F7' },
+  { action: 'toggle_panel_workflows', matches: (event) => event.shiftKey && !event.altKey && event.code === 'F8' },
+] as const
+
 export const FORMAT_SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
   {
     action: 'format_heading_paragraph',
@@ -259,8 +270,16 @@ export const GLOBAL_MENU_ACCELERATORS: Readonly<Record<string, string>> = {
   toggle_sidebar: 'CmdOrCtrl+Shift+S',
   close_file: 'CmdOrCtrl+W',
   find: 'CmdOrCtrl+F',
-  toggle_preview: 'CmdOrCtrl+P',
-  toggle_preview_only: 'CmdOrCtrl+Shift+P',
+  toggle_editor: 'CmdOrCtrl+P',
+  toggle_preview: 'CmdOrCtrl+Shift+P',
+  toggle_panel_files: 'CmdOrCtrl+Shift+F1',
+  toggle_panel_search: 'CmdOrCtrl+Shift+F2',
+  toggle_panel_outline: 'CmdOrCtrl+Shift+F3',
+  toggle_panel_pdf: 'CmdOrCtrl+Shift+F4',
+  toggle_panel_sessions: 'CmdOrCtrl+Shift+F5',
+  toggle_panel_notes: 'CmdOrCtrl+Shift+F6',
+  toggle_panel_skills: 'CmdOrCtrl+Shift+F7',
+  toggle_panel_workflows: 'CmdOrCtrl+Shift+F8',
   zoom_in: 'CmdOrCtrl+=',
   zoom_out: 'CmdOrCtrl+-',
   zoom_reset: 'CmdOrCtrl+Shift+0',
