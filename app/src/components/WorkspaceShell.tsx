@@ -3835,10 +3835,16 @@ export function WorkspaceShell({
     content: { html: string; text: string },
     expectedView: EditorView | null,
   ): Promise<boolean> => {
+    const active = typeof document !== 'undefined' ? document.activeElement : null
+    if (active?.closest('.wysiwyg-editor')) {
+      const pasteHtml = wysiwygFormatActionsRef.current?.pasteHtml
+      if (!pasteHtml) return false
+      return pasteHtml(content)
+    }
+
     const view = getActiveSourceView()
     if (!view || view !== expectedView || view.dom.isConnected === false) return false
 
-    const active = typeof document !== 'undefined' ? document.activeElement : null
     if (!active || !view.dom.contains(active)) return false
 
     const initialDoc = view.state.doc

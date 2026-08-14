@@ -549,6 +549,12 @@ pub enum ClipboardPasteContent {
     Empty,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct ClipboardMatchStyleContent {
+    pub html: String,
+    pub text: String,
+}
+
 #[tauri::command]
 pub async fn read_clipboard_for_paste() -> ResultPayload<ClipboardPasteContent> {
     let trace = new_trace_id();
@@ -604,6 +610,27 @@ pub async fn read_clipboard_for_paste() -> ResultPayload<ClipboardPasteContent> 
 
     log::info!("[tauri] read_clipboard_for_paste: empty");
     ok(ClipboardPasteContent::Empty, trace)
+}
+
+#[tauri::command]
+pub async fn read_clipboard_for_match_style() -> ResultPayload<ClipboardMatchStyleContent> {
+    let trace = new_trace_id();
+    let mut clipboard = match Clipboard::new() {
+        Ok(clipboard) => clipboard,
+        Err(err) => {
+            return err_payload(ErrorCode::IoError, format!("访问剪贴板失败: {err}"), trace);
+        }
+    };
+
+    let html = clipboard.get().html().unwrap_or_default();
+    let text = clipboard.get_text().unwrap_or_default();
+
+    log::info!(
+        "[tauri] read_clipboard_for_match_style: html_len={} text_len={}",
+        html.len(),
+        text.len()
+    );
+    ok(ClipboardMatchStyleContent { html, text }, trace)
 }
 
 #[tauri::command]

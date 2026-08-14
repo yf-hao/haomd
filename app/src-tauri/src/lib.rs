@@ -269,6 +269,7 @@ macro_rules! app_invoke_handler {
             set_appearance_menu_state,
             set_panel_menu_state,
             read_clipboard_for_paste,
+            read_clipboard_for_match_style,
             save_clipboard_image_to_dir,
             paste_clipboard_image,
             download_remote_images,

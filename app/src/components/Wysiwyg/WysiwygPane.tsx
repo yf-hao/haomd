@@ -117,6 +117,7 @@ export interface WysiwygFormatActions {
   applyBackgroundColor: (color: string) => void
   clearBackgroundColor: () => void
   insertImage: (src: string, alt?: string) => boolean
+  pasteHtml: (content: { html: string; text: string }) => Promise<boolean>
   insertCodeBlock: () => void
   insertTable: (rows: number, cols: number) => void
 }
@@ -1154,6 +1155,91 @@ function WysiwygEditor({
     })
   }, [getReadyEditor])
 
+  const pasteHtmlContent = useCallback(async (
+    content: { html: string; text: string },
+  ): Promise<boolean> => {
+    const template = document.createElement('template')
+    if (content.html.trim()) {
+      template.innerHTML = content.html
+    } else if (content.text) {
+      template.content.append(document.createTextNode(content.text))
+    }
+
+    const images = Array.from(template.content.querySelectorAll('img'))
+    const remoteSources = Array.from(
+      new Set(
+        images
+          .map(getRemoteImageSource)
+          .filter((source): source is string => Boolean(source)),
+      ),
+    )
+
+    let failedCount = 0
+    if (remoteSources.length > 0) {
+      if (isTransientFilePath(filePathRef.current)) {
+        onPasteErrorRef.current?.(t('workspace.cannotInsertImageMessage'))
+        return false
+      }
+
+      const cfg = loadDefaultImagePathStrategyConfig()
+      const { targetDir, relDir } = resolveImageTarget(filePathRef.current!, null, cfg)
+      const downloads = await downloadRemoteImages(
+        targetDir,
+        remoteSources,
+        buildImageSuggestedName(filePathRef.current!),
+      )
+      const downloadedBySource = new Map(
+        downloads
+          .filter((download) => download.file_name)
+          .map((download) => [download.source_url, download.file_name!]),
+      )
+      failedCount = downloads.filter((download) => !download.file_name).length
+
+      for (const image of images) {
+        const source = getRemoteImageSource(image)
+        const fileName = source ? downloadedBySource.get(source) : undefined
+        if (!fileName) continue
+
+        image.setAttribute('src', `${relDir}/${fileName}`)
+        for (const attribute of REMOTE_IMAGE_SOURCE_ATTRIBUTES) {
+          if (attribute !== 'src') image.removeAttribute(attribute)
+        }
+        image.removeAttribute('srcset')
+      }
+    }
+
+    const editor = getReadyEditor()
+    if (!editor) {
+      throw new Error('实时编辑器尚未准备好')
+    }
+
+    hasUserInteractedRef.current = true
+    let inserted = false
+    editor.action((ctx) => {
+      const view = ctx.get(editorViewCtx)
+      const slice = ProseMirrorDOMParser
+        .fromSchema(view.state.schema)
+        .parseSlice(template.content)
+      const tr = view.state.tr.replaceSelection(slice).scrollIntoView()
+      if (!tr.docChanged) return
+      view.dispatch(tr)
+      view.focus()
+      inserted = true
+    })
+
+    if (!inserted) {
+      throw new Error('无法插入粘贴内容')
+    }
+
+    scheduleDelayedSync()
+    if (failedCount > 0) {
+      onPasteErrorRef.current?.(
+        t('workspace.remoteImageDownloadFailed', { count: failedCount }),
+      )
+    }
+    return true
+  }, [getReadyEditor, scheduleDelayedSync, t])
+
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
@@ -1722,6 +1808,7 @@ function WysiwygEditor({
         })
         return inserted
       },
+      pasteHtml: pasteHtmlContent,
       insertCodeBlock: () => {
         runAction((editor) => {
           insertCodeBlockWithInheritedLanguage(editor)
@@ -1744,7 +1831,13 @@ function WysiwygEditor({
     return () => {
       onFormatActionsReadyRef.current?.(null)
     }
-  }, [getEffectiveBackgroundColorTarget, getReadyEditor, insertCodeBlockWithInheritedLanguage, runAction])
+  }, [
+    getEffectiveBackgroundColorTarget,
+    getReadyEditor,
+    insertCodeBlockWithInheritedLanguage,
+    pasteHtmlContent,
+    runAction,
+  ])
 
   useEffect(() => {
     isMountedRef.current = true
@@ -1921,13 +2014,10 @@ function WysiwygEditor({
 
       const clipboardData = event.clipboardData
       const html = clipboardData?.getData('text/html') || ''
+      const text = clipboardData?.getData('text/plain') || ''
       const template = html ? document.createElement('template') : null
-      if (template) {
-        template.innerHTML = html
-      }
-      const images = template
-        ? Array.from(template.content.querySelectorAll('img'))
-        : []
+      if (template) template.innerHTML = html
+      const images = template ? Array.from(template.content.querySelectorAll('img')) : []
       const remoteSources = Array.from(
         new Set(
           images
@@ -1939,73 +2029,7 @@ function WysiwygEditor({
       if (remoteSources.length > 0) {
         event.preventDefault()
         event.stopPropagation()
-
-        if (isTransientFilePath(filePathRef.current)) {
-          onPasteErrorRef.current?.(t('workspace.cannotInsertImageMessage'))
-          return
-        }
-
-        void (async () => {
-          if (!template) {
-            throw new Error('无法解析剪贴板 HTML')
-          }
-
-          const cfg = loadDefaultImagePathStrategyConfig()
-          const { targetDir, relDir } = resolveImageTarget(filePathRef.current!, null, cfg)
-          const downloads = await downloadRemoteImages(
-            targetDir,
-            remoteSources,
-            buildImageSuggestedName(filePathRef.current!),
-          )
-          const downloadedBySource = new Map(
-            downloads
-              .filter((download) => download.file_name)
-              .map((download) => [download.source_url, download.file_name!]),
-          )
-          const failedCount = downloads.filter((download) => !download.file_name).length
-
-          for (const image of images) {
-            const source = getRemoteImageSource(image)
-            const fileName = source ? downloadedBySource.get(source) : undefined
-            if (!fileName) continue
-
-            image.setAttribute('src', `${relDir}/${fileName}`)
-            for (const attribute of REMOTE_IMAGE_SOURCE_ATTRIBUTES) {
-              if (attribute !== 'src') image.removeAttribute(attribute)
-            }
-            image.removeAttribute('srcset')
-          }
-
-          const editor = getReadyEditor()
-          if (!editor) {
-            throw new Error('实时编辑器尚未准备好')
-          }
-
-          hasUserInteractedRef.current = true
-          let inserted = false
-          editor.action((ctx) => {
-            const view = ctx.get(editorViewCtx)
-            const slice = ProseMirrorDOMParser
-              .fromSchema(view.state.schema)
-              .parseSlice(template.content)
-            const tr = view.state.tr.replaceSelection(slice).scrollIntoView()
-            if (!tr.docChanged) return
-            view.dispatch(tr)
-            view.focus()
-            inserted = true
-          })
-
-          if (!inserted) {
-            throw new Error('无法插入粘贴内容')
-          }
-
-          scheduleDelayedSync()
-          if (failedCount > 0) {
-            onPasteErrorRef.current?.(
-              t('workspace.remoteImageDownloadFailed', { count: failedCount }),
-            )
-          }
-        })().catch((error) => {
+        void pasteHtmlContent({ html, text }).catch((error) => {
           console.error('[WysiwygPane] remote image paste failed:', error)
           onPasteErrorRef.current?.(
             t('workspace.pasteImageFailed', {
@@ -2063,7 +2087,7 @@ function WysiwygEditor({
       container.removeEventListener('drop', markUserInteracted)
       container.removeEventListener('compositionstart', markUserInteracted)
     }
-  }, [flushPending, getReadyEditor, insertCodeBlockWithInheritedLanguage, scheduleDelayedSync, t])
+  }, [flushPending, getReadyEditor, insertCodeBlockWithInheritedLanguage, pasteHtmlContent, scheduleDelayedSync, t])
 
   useEffect(() => {
     const unlisten = onNativePaste((text) => {

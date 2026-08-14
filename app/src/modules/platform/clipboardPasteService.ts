@@ -10,6 +10,16 @@ type ClipboardPasteResult = {
   Err?: { error?: { message?: string } }
 }
 
+export type ClipboardMatchStyleContent = {
+  html: string
+  text: string
+}
+
+type ClipboardMatchStyleResponse = {
+  Ok?: { data?: ClipboardMatchStyleContent }
+  Err?: { error?: { message?: string } }
+}
+
 export async function readClipboardForPaste(): Promise<ClipboardPasteContent> {
   console.log('[clipboardPasteService] invoking read_clipboard_for_paste...')
   const result = await invoke<ClipboardPasteResult>('read_clipboard_for_paste')
@@ -28,6 +38,21 @@ export async function readClipboardForPaste(): Promise<ClipboardPasteContent> {
   const errMsg = result?.Err?.error?.message || '无法读取剪贴板内容'
   console.error('[clipboardPasteService] failed:', errMsg)
   throw new Error(errMsg)
+}
+
+export async function readClipboardForMatchStyle(): Promise<ClipboardMatchStyleContent> {
+  const result = await invoke<ClipboardMatchStyleResponse>('read_clipboard_for_match_style')
+  const content = result?.Ok?.data
+
+  if (
+    content &&
+    typeof content.html === 'string' &&
+    typeof content.text === 'string'
+  ) {
+    return content
+  }
+
+  throw new Error(result?.Err?.error?.message || '无法读取剪贴板内容')
 }
 
 export type ClipboardImageSaveResult = {

@@ -5,7 +5,10 @@ import {
   onNativePaste,
   onNativePasteError,
 } from '../modules/platform/clipboardEvents'
-import { readClipboardForPaste } from '../modules/platform/clipboardPasteService'
+import {
+  readClipboardForMatchStyle,
+  readClipboardForPaste,
+} from '../modules/platform/clipboardPasteService'
 import { isTauriEnv } from '../modules/platform/runtime'
 
 export interface NativePasteHandlers {
@@ -35,8 +38,7 @@ export function useNativePaste(
   useEffect(() => {
     const getCurrentView = () => getEditorView ? getEditorView() : editorViewRef.current
     let detachPreventDefaultPaste: (() => void) | undefined
-    let specialPasteResetTimer: ReturnType<typeof window.setTimeout> | null = null
-    const specialPasteRequestedRef = { current: false }
+    let specialPasteInFlight = false
 
     // Windows WebView2 does not reliably fire paste events for images, and its
     // built-in accelerator handling intercepts Ctrl+V before Tauri menu items
@@ -123,29 +125,8 @@ export function useNativePaste(
       // Windows WebView2 dispatches Ctrl+V keydown only to document level,
       // not to child DOM nodes. We must listen on document in capture phase.
       document.addEventListener('keydown', handleKeyDown, true)
-      const handleWindowsSpecialPaste = (event: ClipboardEvent) => {
-        if (!specialPasteRequestedRef.current) return
-        const currentView = getCurrentView()
-        const active = typeof document !== 'undefined' ? document.activeElement : null
-        if (!active || !currentView || !currentView.dom.contains(active)) return
-
-        specialPasteRequestedRef.current = false
-        event.preventDefault()
-        event.stopPropagation()
-        const handler = pasteMatchStyle
-        if (!handler) return
-
-        void handler({
-          html: event.clipboardData?.getData('text/html') || '',
-          text: event.clipboardData?.getData('text/plain') || '',
-        }, currentView).catch((err) => {
-          setStatusMessage(err instanceof Error ? err.message : String(err))
-        })
-      }
-      document.addEventListener('paste', handleWindowsSpecialPaste, true)
       detachPreventDefaultPaste = () => {
         document.removeEventListener('keydown', handleKeyDown, true)
-        document.removeEventListener('paste', handleWindowsSpecialPaste, true)
       }
     }
 
@@ -156,20 +137,6 @@ export function useNativePaste(
         if (!active || !currentView || !currentView.dom.contains(active)) return
         event.preventDefault()
         event.stopPropagation()
-
-        if (specialPasteRequestedRef.current) {
-          specialPasteRequestedRef.current = false
-          const handler = pasteMatchStyle
-          if (!handler) return
-
-          void handler({
-            html: event.clipboardData?.getData('text/html') || '',
-            text: event.clipboardData?.getData('text/plain') || '',
-          }, currentView).catch((err) => {
-            setStatusMessage(err instanceof Error ? err.message : String(err))
-          })
-          return
-        }
 
         void readClipboardForPaste()
           .then((content) => {
@@ -197,28 +164,28 @@ export function useNativePaste(
       const inSourceEditor = Boolean(active && currentView?.dom.contains(active))
       const inWysiwygEditor = Boolean(active?.closest('.wysiwyg-editor'))
       if ((!currentView || !inSourceEditor) && !inWysiwygEditor) return
-      if (specialPasteRequestedRef.current) return
-
-      specialPasteRequestedRef.current = true
-      if (specialPasteResetTimer !== null) {
-        window.clearTimeout(specialPasteResetTimer)
-      }
-      specialPasteResetTimer = window.setTimeout(() => {
-        specialPasteRequestedRef.current = false
-        specialPasteResetTimer = null
-      }, 1000)
-
-      try {
-        const pasted = document.execCommand('paste')
-        if (!pasted) {
-          specialPasteRequestedRef.current = false
-          onPasteMatchStyleUnavailable?.()
-        }
-      } catch (err) {
-        specialPasteRequestedRef.current = false
-        console.warn('[useNativePaste] paste and match style failed', err)
+      if (!pasteMatchStyle) {
         onPasteMatchStyleUnavailable?.()
+        return
       }
+      if (specialPasteInFlight) return
+      specialPasteInFlight = true
+
+      void readClipboardForMatchStyle()
+        .then((content) => {
+          if (!content.html && !content.text) {
+            onPasteMatchStyleUnavailable?.()
+            return
+          }
+          return pasteMatchStyle(content, currentView)
+        })
+        .catch((err) => {
+          console.warn('[useNativePaste] native match-style paste failed', err)
+          setStatusMessage(err instanceof Error ? err.message : String(err))
+        })
+        .finally(() => {
+          specialPasteInFlight = false
+        })
     }
 
     window.addEventListener('haomd:paste-match-style', handleSpecialPasteRequest)
@@ -283,9 +250,6 @@ export function useNativePaste(
     return () => {
       detachPreventDefaultPaste?.()
       window.removeEventListener('haomd:paste-match-style', handleSpecialPasteRequest)
-      if (specialPasteResetTimer !== null) {
-        window.clearTimeout(specialPasteResetTimer)
-      }
       unPaste()
       unError()
     }
