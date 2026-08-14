@@ -729,6 +729,13 @@ function createClipboardCommands(ctx: StatusContext): CommandRegistry {
         ctx.setStatusMessage(tr(ctx, 'commands.pasteFailed', '粘贴未生效'))
       }
     },
+    paste_match_style: () => {
+      if (typeof window === 'undefined') {
+        ctx.setStatusMessage(tr(ctx, 'commands.pasteMatchStyleFailed', '粘贴并匹配样式未生效'))
+        return
+      }
+      window.dispatchEvent(new CustomEvent('haomd:paste-match-style'))
+    },
     copy: () => {
       if (typeof document === 'undefined') {
         ctx.setStatusMessage(tr(ctx, 'commands.copyFailed', '复制未生效'))

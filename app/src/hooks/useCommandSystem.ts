@@ -86,6 +86,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     'open_folder',
     'new_file',
     'close_file',
+    'paste_match_style',
     'toggle_editor',
     'toggle_preview',
     'toggle_preview_only',
@@ -546,6 +547,12 @@ export function useCommandSystem(params: CommandSystemParams) {
         if (isEditableElement(active)) {
           void dispatchAction('cut')
         }
+      } else if (key === 'v' && e.shiftKey) {
+        // macOS uses the native menu accelerator; other platforms use this
+        // JavaScript fallback when the native accelerator is unreliable.
+        if (isTauri && isMac) return
+        e.preventDefault()
+        void dispatchAction('paste_match_style')
       } else if (key === 'v') {
         // Tauri 下的粘贴交给系统 / WebView 处理，避免与原生快捷键或菜单重复触发。
         if (isTauri) return

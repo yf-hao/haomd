@@ -100,6 +100,55 @@ describe('useNativePaste', () => {
     expect(editor.dispatch).not.toHaveBeenCalled()
   })
 
+  it('routes Windows Ctrl+Shift+V through the HTML paste handler', async () => {
+    const pasteMatchStyle = vi.fn().mockResolvedValue(true)
+    const execCommand = document.execCommand
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: vi.fn(() => true),
+    })
+
+    try {
+      const editor = createEditorView()
+      editor.content.focus()
+
+      renderHook(() => useNativePaste(
+        { current: editor.view },
+        vi.fn(),
+        { pasteMatchStyle },
+      ))
+
+      act(() => {
+        window.dispatchEvent(new CustomEvent('haomd:paste-match-style'))
+      })
+
+      expect(document.execCommand).toHaveBeenCalledWith('paste')
+
+      const paste = new Event('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(paste, 'clipboardData', {
+        value: {
+          getData: (type: string) => type === 'text/html'
+            ? '<p><strong>formatted</strong></p>'
+            : 'formatted',
+        },
+      })
+      act(() => {
+        document.dispatchEvent(paste)
+      })
+
+      await waitFor(() => expect(pasteMatchStyle).toHaveBeenCalledWith(
+        { html: '<p><strong>formatted</strong></p>', text: 'formatted' },
+        editor.view,
+      ))
+      expect(paste.defaultPrevented).toBe(true)
+    } finally {
+      Object.defineProperty(document, 'execCommand', {
+        configurable: true,
+        value: execCommand,
+      })
+    }
+  })
+
   it('does not apply delayed clipboard content to a replacement editor view', async () => {
     let resolveClipboard: ((content: { kind: 'text'; text: string }) => void) | undefined
     vi.mocked(readClipboardForPaste).mockImplementation(

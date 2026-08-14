@@ -269,6 +269,7 @@ export const GLOBAL_MENU_ACCELERATORS: Readonly<Record<string, string>> = {
   save_as: 'CmdOrCtrl+Alt+S',
   toggle_sidebar: 'CmdOrCtrl+Shift+S',
   close_file: 'CmdOrCtrl+W',
+  paste_match_style: 'CmdOrCtrl+Shift+V',
   find: 'CmdOrCtrl+F',
   toggle_editor: 'CmdOrCtrl+P',
   toggle_preview: 'CmdOrCtrl+Shift+P',

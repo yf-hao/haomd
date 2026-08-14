@@ -75,6 +75,7 @@ struct MenuTexts {
     close_file: &'static str,
     edit: &'static str,
     paste: &'static str,
+    paste_match_style: &'static str,
     find: &'static str,
     replace: &'static str,
     toggle_comment: &'static str,
@@ -204,6 +205,7 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             close_file: "关闭文件",
             edit: "编辑",
             paste: "粘贴",
+            paste_match_style: "粘贴并匹配样式",
             find: "查找",
             replace: "替换",
             toggle_comment: "切换注释",
@@ -330,6 +332,7 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             close_file: "Close File",
             edit: "Edit",
             paste: "Paste",
+            paste_match_style: "Paste and Match Style",
             find: "Find",
             replace: "Replace",
             toggle_comment: "Toggle Comment",
@@ -674,6 +677,12 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         .item(&PredefinedMenuItem::cut(app, None)?)
         .item(&PredefinedMenuItem::copy(app, None)?)
         .item(&PredefinedMenuItem::paste(app, Some(texts.paste))?)
+        .item(
+            &MenuItemBuilder::new(texts.paste_match_style)
+                .id("paste_match_style")
+                .accelerator("CmdOrCtrl+Shift+v")
+                .build(app)?,
+        )
         .separator()
         .separator()
         .item(

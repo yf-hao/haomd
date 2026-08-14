@@ -11,6 +11,12 @@ import { isTauriEnv } from '../modules/platform/runtime'
 export interface NativePasteHandlers {
   /** 尝试粘贴剪贴板中的图片。如果成功返回 true，失败或剪贴板无图片返回 false */
   tryPasteImage?: () => Promise<boolean>
+  /** 处理“粘贴并匹配样式”产生的 HTML 剪贴板内容。 */
+  pasteMatchStyle?: (
+    content: { html: string; text: string },
+    expectedView: EditorView | null,
+  ) => Promise<boolean>
+  onPasteMatchStyleUnavailable?: () => void
 }
 
 /**
@@ -22,9 +28,15 @@ export function useNativePaste(
   handlers?: NativePasteHandlers,
   getEditorView?: () => EditorView | null,
 ) {
+  const tryPasteImage = handlers?.tryPasteImage
+  const pasteMatchStyle = handlers?.pasteMatchStyle
+  const onPasteMatchStyleUnavailable = handlers?.onPasteMatchStyleUnavailable
+
   useEffect(() => {
     const getCurrentView = () => getEditorView ? getEditorView() : editorViewRef.current
     let detachPreventDefaultPaste: (() => void) | undefined
+    let specialPasteResetTimer: ReturnType<typeof window.setTimeout> | null = null
+    const specialPasteRequestedRef = { current: false }
 
     // Windows WebView2 does not reliably fire paste events for images, and its
     // built-in accelerator handling intercepts Ctrl+V before Tauri menu items
@@ -59,12 +71,17 @@ export function useNativePaste(
         const active = typeof document !== 'undefined' ? document.activeElement : null
         console.log('[useNativePaste] Ctrl+V, active=', active?.tagName, 'inEditor=', active ? currentView?.dom.contains(active) : false)
         if (!active || !currentView || !currentView.dom.contains(active)) return
+        if (event.shiftKey) {
+          // Let useCommandSystem dispatch the special-paste command. Handling
+          // it here would bypass its native-menu duplicate suppression.
+          return
+        }
 
         // 优先尝试图片粘贴（合并路径：一次 IPC 完成检测+保存）
-        if (handlers?.tryPasteImage) {
+        if (tryPasteImage) {
           console.log('[useNativePaste] trying tryPasteImage...')
           try {
-            const pasted = await handlers.tryPasteImage()
+            const pasted = await tryPasteImage()
             if (pasted) {
               console.log('[useNativePaste] tryPasteImage succeeded')
               event.preventDefault()
@@ -106,8 +123,29 @@ export function useNativePaste(
       // Windows WebView2 dispatches Ctrl+V keydown only to document level,
       // not to child DOM nodes. We must listen on document in capture phase.
       document.addEventListener('keydown', handleKeyDown, true)
+      const handleWindowsSpecialPaste = (event: ClipboardEvent) => {
+        if (!specialPasteRequestedRef.current) return
+        const currentView = getCurrentView()
+        const active = typeof document !== 'undefined' ? document.activeElement : null
+        if (!active || !currentView || !currentView.dom.contains(active)) return
+
+        specialPasteRequestedRef.current = false
+        event.preventDefault()
+        event.stopPropagation()
+        const handler = pasteMatchStyle
+        if (!handler) return
+
+        void handler({
+          html: event.clipboardData?.getData('text/html') || '',
+          text: event.clipboardData?.getData('text/plain') || '',
+        }, currentView).catch((err) => {
+          setStatusMessage(err instanceof Error ? err.message : String(err))
+        })
+      }
+      document.addEventListener('paste', handleWindowsSpecialPaste, true)
       detachPreventDefaultPaste = () => {
         document.removeEventListener('keydown', handleKeyDown, true)
+        document.removeEventListener('paste', handleWindowsSpecialPaste, true)
       }
     }
 
@@ -118,6 +156,20 @@ export function useNativePaste(
         if (!active || !currentView || !currentView.dom.contains(active)) return
         event.preventDefault()
         event.stopPropagation()
+
+        if (specialPasteRequestedRef.current) {
+          specialPasteRequestedRef.current = false
+          const handler = pasteMatchStyle
+          if (!handler) return
+
+          void handler({
+            html: event.clipboardData?.getData('text/html') || '',
+            text: event.clipboardData?.getData('text/plain') || '',
+          }, currentView).catch((err) => {
+            setStatusMessage(err instanceof Error ? err.message : String(err))
+          })
+          return
+        }
 
         void readClipboardForPaste()
           .then((content) => {
@@ -138,6 +190,38 @@ export function useNativePaste(
         document.removeEventListener('paste', handlePaste, true)
       }
     }
+
+    const handleSpecialPasteRequest = () => {
+      const currentView = getCurrentView()
+      const active = typeof document !== 'undefined' ? document.activeElement : null
+      const inSourceEditor = Boolean(active && currentView?.dom.contains(active))
+      const inWysiwygEditor = Boolean(active?.closest('.wysiwyg-editor'))
+      if ((!currentView || !inSourceEditor) && !inWysiwygEditor) return
+      if (specialPasteRequestedRef.current) return
+
+      specialPasteRequestedRef.current = true
+      if (specialPasteResetTimer !== null) {
+        window.clearTimeout(specialPasteResetTimer)
+      }
+      specialPasteResetTimer = window.setTimeout(() => {
+        specialPasteRequestedRef.current = false
+        specialPasteResetTimer = null
+      }, 1000)
+
+      try {
+        const pasted = document.execCommand('paste')
+        if (!pasted) {
+          specialPasteRequestedRef.current = false
+          onPasteMatchStyleUnavailable?.()
+        }
+      } catch (err) {
+        specialPasteRequestedRef.current = false
+        console.warn('[useNativePaste] paste and match style failed', err)
+        onPasteMatchStyleUnavailable?.()
+      }
+    }
+
+    window.addEventListener('haomd:paste-match-style', handleSpecialPasteRequest)
 
     const unPaste = onNativePaste((text) => {
       const view = getCurrentView()
@@ -198,8 +282,19 @@ export function useNativePaste(
 
     return () => {
       detachPreventDefaultPaste?.()
+      window.removeEventListener('haomd:paste-match-style', handleSpecialPasteRequest)
+      if (specialPasteResetTimer !== null) {
+        window.clearTimeout(specialPasteResetTimer)
+      }
       unPaste()
       unError()
     }
-  }, [editorViewRef, getEditorView, setStatusMessage, handlers?.tryPasteImage])
+  }, [
+    editorViewRef,
+    getEditorView,
+    setStatusMessage,
+    onPasteMatchStyleUnavailable,
+    pasteMatchStyle,
+    tryPasteImage,
+  ])
 }

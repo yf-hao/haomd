@@ -78,6 +78,11 @@ import { getFilePathIdentity } from '../modules/files/filePathState'
 import { FileOpenCoordinator } from '../modules/files/fileOpenCoordinator'
 import { buildImageSuggestedName, loadDefaultImagePathStrategyConfig, resolveImageTarget } from '../modules/images/imagePasteStrategy'
 import {
+  hasRemoteImagesInHtml,
+  localizeRemoteImagesInHtml,
+} from '../modules/images/remoteImagePasteService'
+import { htmlToMarkdown } from '../modules/markdown/htmlToMarkdown'
+import {
   buildImportedWordTabTitle,
   cleanupImportedWordTemp,
   cleanupStaleImportedWordTemps,
@@ -3826,8 +3831,71 @@ export function WorkspaceShell({
     }
   }, [editMode, editorViewRef, filePath, isPdfActive, setStatusMessage, t])
 
+  const handlePasteMatchStyle = useCallback(async (
+    content: { html: string; text: string },
+    expectedView: EditorView | null,
+  ): Promise<boolean> => {
+    const view = getActiveSourceView()
+    if (!view || view !== expectedView || view.dom.isConnected === false) return false
+
+    const active = typeof document !== 'undefined' ? document.activeElement : null
+    if (!active || !view.dom.contains(active)) return false
+
+    const initialDoc = view.state.doc
+    const { from, to } = view.state.selection.main
+    let html = content.html
+    let failedCount = 0
+
+    const hasRemoteImages = html.trim() && hasRemoteImagesInHtml(html)
+    if (hasRemoteImages && !isTransientFilePath(filePath)) {
+      const cfg = loadDefaultImagePathStrategyConfig()
+      const { targetDir, relDir } = resolveImageTarget(filePath, null, cfg)
+      try {
+        const localized = await localizeRemoteImagesInHtml(
+          html,
+          targetDir,
+          relDir,
+          buildImageSuggestedName(filePath),
+        )
+        html = localized.html
+        failedCount = localized.failedCount
+      } catch (error) {
+        console.error('[WorkspaceShell] paste and match style image localization failed', error)
+        setStatusMessage(t('workspace.pasteImageFailed', {
+          message: error instanceof Error ? error.message : String(error),
+        }))
+      }
+    } else if (hasRemoteImages && isTransientFilePath(filePath)) {
+      setStatusMessage(t('commands.pasteMatchStyleNeedsSavedDoc'))
+    }
+
+    const markdown = htmlToMarkdown(html) || content.text
+    if (!markdown) return false
+    if (getActiveSourceView() !== view || !view.state.doc.eq(initialDoc)) {
+      setStatusMessage(t('commands.pasteMatchStyleStale'))
+      return false
+    }
+
+    view.dispatch(view.state.update({
+      changes: { from, to, insert: markdown },
+      selection: { anchor: from + markdown.length },
+      userEvent: 'input.paste',
+      scrollIntoView: true,
+    }))
+    view.focus()
+
+    if (failedCount > 0) {
+      setStatusMessage(t('workspace.remoteImageDownloadFailed', { count: failedCount }))
+    }
+    return true
+  }, [filePath, getActiveSourceView, setStatusMessage, t])
+
   useNativePaste(editorViewRef, setStatusMessage, {
     tryPasteImage: handlePasteImage,
+    pasteMatchStyle: handlePasteMatchStyle,
+    onPasteMatchStyleUnavailable: () => {
+      setStatusMessage(t('commands.pasteMatchStyleFailed'))
+    },
   }, getActiveSourceView)
 
   // 监听剪贴板图片后台编码完成/失败事件（所有平台）
