@@ -23,6 +23,7 @@ import {
   shouldTriggerDeleteCurrentDocument,
   shouldTriggerDeleteCurrentFolder,
 } from './deleteIntentMatcher'
+import { shouldRemoveBlankLines } from './blankLineIntentMatcher'
 import { matchRenameCurrentDocument } from './renameIntentMatcher'
 import { matchCreateDirectoryUnderSelection } from './createDirectoryIntentMatcher'
 import {
@@ -69,6 +70,7 @@ export type AiChatDialogProps = {
   getCurrentDirectoryPath?: () => string | null
   getCurrentWorkspaceRoot?: () => string | null
   onDocumentSaved?: (path: string) => void
+  onRemoveBlankLinesCurrentDocument?: () => Promise<{ ok: boolean; message: string }>
   onConfirmDeleteCurrentDocument?: (path: string) => Promise<{ ok: boolean; message: string }>
   onConfirmDeleteCurrentFolder?: (path: string) => Promise<{ ok: boolean; message: string }>
   onConfirmDeleteWorkspaceEntry?: (
@@ -111,6 +113,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
   getCurrentDirectoryPath,
   getCurrentWorkspaceRoot,
   onDocumentSaved,
+  onRemoveBlankLinesCurrentDocument,
   onConfirmDeleteCurrentDocument,
   onConfirmDeleteCurrentFolder,
   onConfirmDeleteWorkspaceEntry,
@@ -262,6 +265,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
     getCurrentDirectoryPath: () => currentDirectoryPath ?? getCurrentDirectoryPath?.() ?? null,
     getCurrentWorkspaceRoot,
     onDocumentSaved,
+    onRemoveBlankLinesCurrentDocument,
     onRequestDeleteCurrentDocument: async (path: string) => {
       setPendingDeleteRequest({ path, target: 'document' })
       return {
@@ -617,6 +621,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
 
     const trimmedInput = contentToSend.trim()
     const normalizedInput = trimmedInput.toLowerCase()
+
     const effectivePendingDeleteRequest =
       pendingDeleteRequest
       ?? (
@@ -657,6 +662,17 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
       }
       setStatusMessage?.('请回复“确认删除”或“取消”。')
       pushLocalFeedback('请回复“确认删除”或“取消”。')
+      return
+    }
+
+    if (shouldRemoveBlankLines(trimmedInput)) {
+      clearHistoryBrowse()
+      clearDraft()
+      const result = onRemoveBlankLinesCurrentDocument
+        ? await onRemoveBlankLinesCurrentDocument()
+        : { ok: false, message: '当前去除空行能力不可用。' }
+      setStatusMessage?.(result.message)
+      pushLocalFeedback(result.message)
       return
     }
 

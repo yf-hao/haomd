@@ -40,6 +40,7 @@ export type UseAiChatSessionOptions = {
   getCurrentDirectoryPath?: () => string | null
   getCurrentWorkspaceRoot?: () => string | null
   onDocumentSaved?: (path: string) => void
+  onRemoveBlankLinesCurrentDocument?: () => Promise<{ ok: boolean; message: string }>
   onRequestDeleteCurrentDocument?: (path: string) => Promise<{ ok: boolean; message: string }>
   onRequestDeleteCurrentFolder?: (path: string) => Promise<{ ok: boolean; message: string }>
   onRequestDeleteWorkspaceEntry?: (
@@ -167,6 +168,7 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
     getCurrentDirectoryPath,
     getCurrentWorkspaceRoot,
     onDocumentSaved,
+    onRemoveBlankLinesCurrentDocument,
     onRequestDeleteCurrentDocument,
     onRequestDeleteCurrentFolder,
     onRequestDeleteWorkspaceEntry,
@@ -205,6 +207,7 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
   const getCurrentDirectoryPathRef = useRef(getCurrentDirectoryPath)
   const getCurrentWorkspaceRootRef = useRef(getCurrentWorkspaceRoot)
   const onDocumentSavedRef = useRef(onDocumentSaved)
+  const onRemoveBlankLinesCurrentDocumentRef = useRef(onRemoveBlankLinesCurrentDocument)
   const onRequestDeleteCurrentDocumentRef = useRef(onRequestDeleteCurrentDocument)
   const onRequestDeleteCurrentFolderRef = useRef(onRequestDeleteCurrentFolder)
   const onRequestDeleteWorkspaceEntryRef = useRef(onRequestDeleteWorkspaceEntry)
@@ -245,6 +248,10 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
   useEffect(() => {
     onDocumentSavedRef.current = onDocumentSaved
   }, [onDocumentSaved])
+
+  useEffect(() => {
+    onRemoveBlankLinesCurrentDocumentRef.current = onRemoveBlankLinesCurrentDocument
+  }, [onRemoveBlankLinesCurrentDocument])
 
   useEffect(() => {
     onRequestDeleteCurrentDocumentRef.current = onRequestDeleteCurrentDocument
@@ -393,6 +400,13 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
           ...(onDocumentSavedRef.current
             ? {
                 onDocumentSaved: (path: string) => onDocumentSavedRef.current?.(path),
+              }
+            : {}),
+          ...(onRemoveBlankLinesCurrentDocumentRef.current
+            ? {
+                onRemoveBlankLinesCurrentDocument: () =>
+                  onRemoveBlankLinesCurrentDocumentRef.current?.() ??
+                  Promise.resolve({ ok: false, message: '当前去除空行能力不可用。' }),
               }
             : {}),
           ...(onRequestDeleteCurrentDocumentRef.current

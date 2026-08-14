@@ -10,6 +10,7 @@ import {
     executeCreateDirectoryUnderSelection,
     executeDeleteCurrentDocument,
     executeDeleteCurrentFolder,
+    executeRemoveBlankLinesCurrentDocument,
     executeRenameCurrentDocument,
     executeSaveOrExportCurrentDocument,
 } from '../../document/documentBuiltinTool'
@@ -90,6 +91,7 @@ vi.mock('../globalMemory/context', () => ({
 
 vi.mock('../../document/documentBuiltinTool', () => ({
     SAVE_OR_EXPORT_CURRENT_DOCUMENT_TOOL_NAME: 'save_or_export_current_document',
+    REMOVE_BLANK_LINES_CURRENT_DOCUMENT_TOOL_NAME: 'remove_blank_lines_current_document',
     DELETE_CURRENT_DOCUMENT_TOOL_NAME: 'delete_current_document',
     DELETE_CURRENT_FOLDER_TOOL_NAME: 'delete_current_folder',
     DELETE_WORKSPACE_ENTRY_TOOL_NAME: 'delete_workspace_entry',
@@ -100,6 +102,10 @@ vi.mock('../../document/documentBuiltinTool', () => ({
     saveOrExportCurrentDocumentToolSchema: {
         type: 'function',
         function: { name: 'save_or_export_current_document', parameters: { type: 'object', properties: {}, required: [] } }
+    },
+    removeBlankLinesCurrentDocumentToolSchema: {
+        type: 'function',
+        function: { name: 'remove_blank_lines_current_document', parameters: { type: 'object', properties: {}, required: [] } }
     },
     deleteCurrentDocumentToolSchema: {
         type: 'function',
@@ -130,6 +136,7 @@ vi.mock('../../document/documentBuiltinTool', () => ({
         function: { name: 'create_directory_in_workspace', parameters: { type: 'object', properties: {}, required: [] } }
     },
     executeSaveOrExportCurrentDocument: vi.fn(),
+    executeRemoveBlankLinesCurrentDocument: vi.fn(),
     executeDeleteCurrentDocument: vi.fn(),
     executeDeleteCurrentFolder: vi.fn(),
     executeDeleteWorkspaceEntry: vi.fn(),
@@ -330,6 +337,43 @@ describe('ChatSessionService', () => {
                 getCurrentFileName: expect.any(Function),
                 getCurrentFilePath: expect.any(Function),
             }),
+        )
+    })
+
+    it('should execute remove_blank_lines_current_document built-in tool', async () => {
+        const askStream = vi.fn()
+            .mockResolvedValueOnce({
+                toolCalls: [
+                    {
+                        id: 'tool-blank-lines',
+                        type: 'function',
+                        function: {
+                            name: 'remove_blank_lines_current_document',
+                            arguments: '{}',
+                        },
+                    },
+                ],
+            })
+            .mockResolvedValueOnce({ content: 'done', completed: true })
+
+        vi.mocked(createStreamingClientFromSettings).mockReturnValue({
+            askStream,
+        } as any)
+        vi.mocked(executeRemoveBlankLinesCurrentDocument).mockResolvedValue(
+            '已去除 3 个空行，可使用 Cmd+Z 撤销。',
+        )
+        const onRemoveBlankLinesCurrentDocument = vi.fn()
+
+        const session = await createChatSession({
+            entryMode: 'chat',
+            onRemoveBlankLinesCurrentDocument,
+        })
+
+        await session.sendUserMessage('请清理当前文档的空行')
+
+        expect(executeRemoveBlankLinesCurrentDocument).toHaveBeenCalledWith(
+            {},
+            { onRemoveBlankLinesCurrentDocument },
         )
     })
 

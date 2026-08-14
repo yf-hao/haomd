@@ -85,6 +85,9 @@ import {
   SAVE_OR_EXPORT_CURRENT_DOCUMENT_TOOL_NAME,
   saveOrExportCurrentDocumentToolSchema,
   executeSaveOrExportCurrentDocument,
+  REMOVE_BLANK_LINES_CURRENT_DOCUMENT_TOOL_NAME,
+  removeBlankLinesCurrentDocumentToolSchema,
+  executeRemoveBlankLinesCurrentDocument,
   DELETE_CURRENT_DOCUMENT_TOOL_NAME,
   deleteCurrentDocumentToolSchema,
   executeDeleteCurrentDocument,
@@ -140,6 +143,7 @@ export type StartChatOptions = {
   getCurrentDirectoryPath?: () => string | null
   getCurrentWorkspaceRoot?: () => string | null
   onDocumentSaved?: (path: string) => void
+  onRemoveBlankLinesCurrentDocument?: () => Promise<{ ok: boolean; message: string }>
   onRequestDeleteCurrentDocument?: (path: string) => Promise<{ ok: boolean; message: string }>
   onRequestDeleteCurrentFolder?: (path: string) => Promise<{ ok: boolean; message: string }>
   onRequestDeleteWorkspaceEntry?: (
@@ -679,6 +683,13 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
                   },
                 )
               }
+            } else if (tc.function.name === REMOVE_BLANK_LINES_CURRENT_DOCUMENT_TOOL_NAME) {
+              toolResult = await executeRemoveBlankLinesCurrentDocument(
+                parsedArgs as Record<string, never>,
+                {
+                  onRemoveBlankLinesCurrentDocument: options.onRemoveBlankLinesCurrentDocument,
+                },
+              )
             } else if (tc.function.name === DELETE_CURRENT_DOCUMENT_TOOL_NAME) {
               toolResult = await executeDeleteCurrentDocument(
                 parsedArgs as Record<string, never>,
@@ -1047,6 +1058,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
           createWorkspaceDirectoryToolSchema,
           writeToWorkspaceToolSchema,
           saveOrExportCurrentDocumentToolSchema,
+          removeBlankLinesCurrentDocumentToolSchema,
           deleteCurrentDocumentToolSchema,
           deleteCurrentFolderToolSchema,
           deleteWorkspaceEntryToolSchema,

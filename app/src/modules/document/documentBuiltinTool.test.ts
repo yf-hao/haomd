@@ -5,6 +5,7 @@ import {
   executeDeleteCurrentDocument,
   executeDeleteCurrentFolder,
   executeDeleteWorkspaceEntry,
+  executeRemoveBlankLinesCurrentDocument,
   executeRenameCurrentDocument,
   executeRenameWorkspaceEntry,
   executeSaveOrExportCurrentDocument,
@@ -68,6 +69,21 @@ describe('documentBuiltinTool', () => {
     )
 
     expect(result).toBe('✅ 已保存：/root/doc.md')
+  })
+
+  it('delegates removing blank lines to the active document callback', async () => {
+    const onRemoveBlankLinesCurrentDocument = vi.fn().mockResolvedValue({
+      ok: true,
+      message: '已去除 2 个空行，可使用 Cmd+Z 撤销。',
+    })
+
+    const result = await executeRemoveBlankLinesCurrentDocument(
+      {},
+      { onRemoveBlankLinesCurrentDocument },
+    )
+
+    expect(onRemoveBlankLinesCurrentDocument).toHaveBeenCalledOnce()
+    expect(result).toBe('已去除 2 个空行，可使用 Cmd+Z 撤销。')
   })
 
   it('formats failure message from service', async () => {

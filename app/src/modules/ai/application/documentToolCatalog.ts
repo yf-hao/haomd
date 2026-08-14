@@ -1,6 +1,7 @@
 export function buildDocumentToolCatalogPrompt(): string {
   return (
     '\n\n当前可用文档保存/导出工具。\n' +
+    '当用户明确要求“去除空行”“删除当前文档空行”“清除当前文档中的空行”时，应使用 remove_blank_lines_current_document。该工具只修改当前活动文档，不接受文件路径。\n' +
     '当用户明确要求保存当前文档、导出当前文档、保存为 md、保存为 word/docx、保存为 html 时，应优先考虑 save_or_export_current_document，而不是只给文字说明。\n' +
     '当用户明确要求“删除”“删除当前文档”“把当前文档删掉”时，应使用 delete_current_document。删除必须先确认，不能直接删除。\n' +
     '当用户明确要求“删除文件夹”“删除当前文件夹”时，应使用 delete_current_folder。仅删除当前文件浏览器已选中的文件夹，且必须先确认。\n' +

@@ -45,6 +45,7 @@ import { AiChatCommandBridgeContext } from '../modules/ai/ui/AiChatCommandBridge
 import type { AiChatSessionKey } from '../modules/ai/application/aiChatSessionService'
 import { aiChatSessionManager } from '../modules/ai/application/localStorageAiChatSessionManager'
 import { registerEditorInsertBelow, registerEditorReplaceSelection, registerEditorCreateAndInsert, insertMarkdownAtCursorBelow } from '../modules/ai/platform/editorInsertService'
+import { removeBlankLines } from '../modules/document/application/removeBlankLinesService'
 import { useFilePersistence } from '../hooks/useFilePersistence'
 import { useTabs } from '../hooks/useTabs'
 import { useCommandSystem } from '../hooks/useCommandSystem'
@@ -1326,6 +1327,46 @@ export function WorkspaceShell({
     }
     if (shouldMarkDirty) markDirty()
   }, [applyChunkEdit, clearSourceDocumentSync, markDirty, updateActiveContent])
+
+  const removeBlankLinesFromCurrentDocument = useCallback(async (): Promise<{ ok: boolean; message: string }> => {
+    if (isPdfActiveRef.current) {
+      return { ok: false, message: '当前打开的是 PDF，无法去除 Markdown 空行。' }
+    }
+
+    if (editModeRef.current === 'source') {
+      const view = getActiveSourceView()
+      if (!view) {
+        return { ok: false, message: '当前编辑器不可用，无法去除空行。' }
+      }
+
+      const current = view.state.doc.toString()
+      const result = removeBlankLines(current)
+      if (result.removedCount === 0) {
+        return { ok: true, message: '当前文档没有可去除的空行。' }
+      }
+
+      view.dispatch({
+        changes: {
+          from: 0,
+          to: view.state.doc.length,
+          insert: result.content,
+        },
+        userEvent: 'input',
+      })
+      handleSourceEditorDocumentChange(view)
+      return { ok: true, message: `已去除 ${result.removedCount} 个空行，可使用 Cmd+Z 撤销。` }
+    }
+
+    wysiwygFlushRef.current?.()
+    const current = wysiwygMarkdownGetterRef.current?.() ?? markdownRef.current
+    const result = removeBlankLines(current)
+    if (result.removedCount === 0) {
+      return { ok: true, message: '当前文档没有可去除的空行。' }
+    }
+
+    handleMarkdownChange(result.content)
+    return { ok: true, message: `已去除 ${result.removedCount} 个空行，可使用 Cmd+Z 撤销。` }
+  }, [getActiveSourceView, handleMarkdownChange, handleSourceEditorDocumentChange])
 
   const handleWysiwygChange = useCallback((sourceTabId: string, val: string) => {
     if (activeIdRef.current !== sourceTabId) {
@@ -4446,6 +4487,7 @@ export function WorkspaceShell({
                 getCurrentDirectoryPath={getCurrentAiDirectoryPath}
                 getCurrentWorkspaceRoot={getCurrentWorkspaceRoot}
                 onDocumentSaved={handleAiDocumentSaved}
+                onRemoveBlankLinesCurrentDocument={removeBlankLinesFromCurrentDocument}
                 onConfirmDeleteCurrentDocument={handleAiDeleteCurrentDocument}
                 onConfirmDeleteCurrentFolder={handleAiDeleteCurrentFolder}
                 onConfirmDeleteWorkspaceEntry={handleAiDeleteWorkspaceEntry}
@@ -4500,6 +4542,7 @@ export function WorkspaceShell({
                           getCurrentDirectoryPath={getCurrentAiDirectoryPath}
                           getCurrentWorkspaceRoot={getCurrentWorkspaceRoot}
                           onDocumentSaved={handleAiDocumentSaved}
+                          onRemoveBlankLinesCurrentDocument={removeBlankLinesFromCurrentDocument}
                           onConfirmDeleteCurrentDocument={handleAiDeleteCurrentDocument}
                           onConfirmDeleteCurrentFolder={handleAiDeleteCurrentFolder}
                           onConfirmDeleteWorkspaceEntry={handleAiDeleteWorkspaceEntry}
@@ -4715,6 +4758,7 @@ export function WorkspaceShell({
                         getCurrentDirectoryPath={getCurrentAiDirectoryPath}
                         getCurrentWorkspaceRoot={getCurrentWorkspaceRoot}
                         onDocumentSaved={handleAiDocumentSaved}
+                        onRemoveBlankLinesCurrentDocument={removeBlankLinesFromCurrentDocument}
                         onConfirmDeleteCurrentDocument={handleAiDeleteCurrentDocument}
                         onConfirmDeleteCurrentFolder={handleAiDeleteCurrentFolder}
                         onConfirmDeleteWorkspaceEntry={handleAiDeleteWorkspaceEntry}
@@ -4829,6 +4873,7 @@ export function WorkspaceShell({
               getCurrentDirectoryPath={getCurrentAiDirectoryPath}
               getCurrentWorkspaceRoot={getCurrentWorkspaceRoot}
               onDocumentSaved={handleAiDocumentSaved}
+              onRemoveBlankLinesCurrentDocument={removeBlankLinesFromCurrentDocument}
               onConfirmDeleteCurrentDocument={handleAiDeleteCurrentDocument}
               onConfirmDeleteCurrentFolder={handleAiDeleteCurrentFolder}
               onConfirmDeleteWorkspaceEntry={handleAiDeleteWorkspaceEntry}
