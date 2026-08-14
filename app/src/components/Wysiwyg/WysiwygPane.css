@@ -3,6 +3,8 @@
  * 继承 github-markdown-css 基础排版，适配应用暗色/亮色主题
  * ============================================================ */
 
+@import '@milkdown/prose/gapcursor/style/gapcursor.css';
+
 .wysiwyg-pane {
   overflow: hidden;
   height: 100%;

@@ -1,3 +1,5 @@
+import type { RemoveBlankLinesScope } from '../../document/application/removeBlankLinesService'
+
 const REMOVE_BLANK_LINES_PATTERNS = [
   /^去除空行$/,
   /^删除空行$/,
@@ -18,6 +20,17 @@ const REMOVE_BLANK_LINES_PATTERNS = [
   /^delete blank lines from current document$/,
 ] as const
 
+const REMOVE_TABLE_CODE_GAP_PATTERNS = [
+  /^删除表格与代码块之间的空行$/,
+  /^去除表格与代码块之间的空行$/,
+  /^清除表格与代码块之间的空行$/,
+  /^删除表格和代码块之间的空行$/,
+  /^去除表格和代码块之间的空行$/,
+  /^删除 table 与 code 之间的空行$/,
+  /^去除 table 与 code 之间的空行$/,
+  /^remove blank lines between table and code$/,
+] as const
+
 function normalizeInput(input: string): string {
   return input
     .trim()
@@ -26,9 +39,19 @@ function normalizeInput(input: string): string {
     .replace(/\s+/g, ' ')
 }
 
-export function shouldRemoveBlankLines(input: string): boolean {
+export function matchRemoveBlankLinesScope(input: string): RemoveBlankLinesScope | null {
   const normalized = normalizeInput(input)
-  if (!normalized) return false
+  if (!normalized) return null
 
-  return REMOVE_BLANK_LINES_PATTERNS.some((pattern) => pattern.test(normalized))
+  if (REMOVE_TABLE_CODE_GAP_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return 'table_code_gap'
+  }
+  if (REMOVE_BLANK_LINES_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return 'all'
+  }
+  return null
+}
+
+export function shouldRemoveBlankLines(input: string): boolean {
+  return matchRemoveBlankLinesScope(input) !== null
 }

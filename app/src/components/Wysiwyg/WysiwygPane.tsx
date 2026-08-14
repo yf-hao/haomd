@@ -10,6 +10,7 @@ import { listener, listenerCtx } from '@milkdown/kit/plugin/listener'
 import { clipboard } from '@milkdown/kit/plugin/clipboard'
 import { indent } from '@milkdown/kit/plugin/indent'
 import { trailing } from '@milkdown/kit/plugin/trailing'
+import { gapCursorPlugin } from '@milkdown/kit/plugin/cursor'
 import { replaceAll, getMarkdown, $view } from '@milkdown/kit/utils'
 import { headingSchema, paragraphSchema, strongSchema } from '@milkdown/preset-commonmark'
 import { insertTableCommand, strikethroughSchema } from '@milkdown/preset-gfm'
@@ -55,6 +56,7 @@ import { dispatchNativePasteImage, onNativePaste } from '../../modules/platform/
 import { readClipboardForPaste } from '../../modules/platform/clipboardPasteService'
 import { isTauriEnv } from '../../modules/platform/runtime'
 import { buildHeadingsFromWysiwygDoc } from '../../modules/outline/wysiwygOutline'
+import type { RemoveBlankLinesScope } from '../../modules/document/application/removeBlankLinesService'
 import {
   createProseMirrorSearchController,
   createTextareaSearchController,
@@ -77,6 +79,7 @@ export interface WysiwygPaneProps {
   onFormatActionsReady?: (actions: WysiwygFormatActions | null) => void
   onMarkdownGetterReady?: (getter: (() => string) | null) => void
   onSaveSnapshotReady?: (getter: (() => string) | null) => void
+  onBlankLineActionReady?: (action: WysiwygBlankLineAction | null) => void
   onSearchControllerReady?: (controller: SearchController | null) => void
   onOutlineNavigatorReady?: (navigator: ((target: { headingIndex: number; text: string; level: 1 | 2 | 3 | 4 | 5 | 6 }) => boolean) | null) => void
   onOutlineItemsChange?: (items: OutlineHeading[]) => void
@@ -105,6 +108,10 @@ export interface WysiwygFormatActions {
   insertCodeBlock: () => void
   insertTable: (rows: number, cols: number) => void
 }
+
+export type WysiwygBlankLineAction = (
+  scope?: RemoveBlankLinesScope,
+) => { removedCount: number }
 
 type IdleHandle = number
 
@@ -240,6 +247,176 @@ function insertInheritedCodeBlock(
   return true
 }
 
+function isTableNode(node: ProseMirrorNode | null): boolean {
+  return node?.type.spec.tableRole === 'table' || node?.type.name === 'table'
+}
+
+function isEmptyParagraph(node: ProseMirrorNode): boolean {
+  if (node.type.name !== 'paragraph') return false
+  if (node.content.size === 0) return true
+
+  let isBlank = true
+  node.forEach((child) => {
+    if (!child.isText || (child.text ?? '').trim() !== '') {
+      isBlank = false
+    }
+  })
+  return isBlank
+}
+
+function collectTopLevelBlocks(doc: ProseMirrorNode) {
+  const blocks: Array<{ node: ProseMirrorNode; pos: number }> = []
+  let pos = 0
+  for (let index = 0; index < doc.childCount; index += 1) {
+    const node = doc.child(index)
+    blocks.push({ node, pos })
+    pos += node.nodeSize
+  }
+  return blocks
+}
+
+function findBlankLineBlockIndexes(
+  doc: ProseMirrorNode,
+  scope: RemoveBlankLinesScope,
+  codeBlockType: ProseMirrorNodeType | undefined,
+): number[] {
+  const blocks = collectTopLevelBlocks(doc)
+  const indexes: number[] = []
+
+  if (scope === 'all') {
+    blocks.forEach(({ node }, index) => {
+      if (isEmptyParagraph(node)) indexes.push(index)
+    })
+  } else {
+    let index = 0
+    while (index < blocks.length) {
+      if (!isEmptyParagraph(blocks[index].node)) {
+        index += 1
+        continue
+      }
+
+      const start = index
+      while (index < blocks.length && isEmptyParagraph(blocks[index].node)) {
+        index += 1
+      }
+
+      const previous = blocks[start - 1]?.node
+      const next = blocks[index]?.node
+      if (isTableNode(previous) && codeBlockType && next?.type === codeBlockType) {
+        for (let gapIndex = start; gapIndex < index; gapIndex += 1) {
+          indexes.push(gapIndex)
+        }
+      }
+    }
+  }
+
+  // Keep the trailing editable paragraph maintained by Milkdown's trailing plugin.
+  const lastBlockIndex = doc.childCount - 1
+  if (indexes[indexes.length - 1] === lastBlockIndex) {
+    indexes.pop()
+  }
+
+  return indexes
+}
+
+function insertParagraphBeforeCodeBlock(
+  view: EditorView,
+  codeBlockType: ProseMirrorNodeType,
+): boolean {
+  const { state } = view
+  const { selection } = state
+  if (!selection.empty) return false
+
+  const { $from } = selection
+  let codeBlockDepth = -1
+  for (let depth = $from.depth; depth > 0; depth -= 1) {
+    if ($from.node(depth).type === codeBlockType) {
+      codeBlockDepth = depth
+      break
+    }
+  }
+
+  if (
+    codeBlockDepth === -1 ||
+    $from.parent !== $from.node(codeBlockDepth) ||
+    $from.parentOffset !== 0
+  ) {
+    return false
+  }
+
+  const parentDepth = codeBlockDepth - 1
+  const parent = $from.node(parentDepth)
+  const codeBlockIndex = $from.index(parentDepth)
+  if (codeBlockIndex === 0 || !isTableNode(parent.child(codeBlockIndex - 1))) {
+    return false
+  }
+
+  const paragraphType = state.schema.nodes.paragraph
+  if (!paragraphType || !parent.canReplaceWith(codeBlockIndex, codeBlockIndex, paragraphType)) {
+    return false
+  }
+
+  const paragraph = paragraphType.createAndFill()
+  if (!paragraph) return false
+
+  const insertPos = $from.before(codeBlockDepth)
+  let tr = state.tr.insert(insertPos, paragraph)
+  tr = tr.setSelection(TextSelection.create(tr.doc, insertPos + 1))
+  view.dispatch(tr.scrollIntoView())
+  view.focus()
+  return true
+}
+
+function insertParagraphAfterTable(
+  view: EditorView,
+  codeBlockType: ProseMirrorNodeType,
+): boolean {
+  const { state } = view
+  const { selection } = state
+  if (!selection.empty) return false
+
+  const { $from } = selection
+  let tableDepth = -1
+  for (let depth = $from.depth; depth > 0; depth -= 1) {
+    if ($from.node(depth).type.spec.tableRole === 'table') {
+      tableDepth = depth
+      break
+    }
+  }
+  if (tableDepth === -1 || !view.endOfTextblock('down')) return false
+
+  const table = $from.node(tableDepth)
+  const rowIndex = $from.index(tableDepth)
+  if (rowIndex !== table.childCount - 1) return false
+
+  const row = $from.node(tableDepth + 1)
+  const cellIndex = $from.index(tableDepth + 1)
+  if (cellIndex !== row.childCount - 1) return false
+
+  const cell = $from.node(tableDepth + 2)
+  if ($from.index(tableDepth + 2) !== cell.childCount - 1) return false
+
+  const parentDepth = tableDepth - 1
+  const parent = $from.node(parentDepth)
+  const tableIndex = $from.index(parentDepth)
+  if (parent.child(tableIndex + 1)?.type !== codeBlockType) return false
+
+  const paragraphType = state.schema.nodes.paragraph
+  if (!paragraphType || !parent.canReplaceWith(tableIndex + 1, tableIndex + 1, paragraphType)) {
+    return false
+  }
+
+  const paragraph = paragraphType.createAndFill()
+  if (!paragraph) return false
+
+  const insertPos = $from.after(tableDepth)
+  let tr = state.tr.insert(insertPos, paragraph)
+  tr = tr.setSelection(TextSelection.create(tr.doc, insertPos + 1))
+  view.dispatch(tr.scrollIntoView())
+  view.focus()
+  return true
+}
+
 /**
  * Outer wrapper — provides ProsemirrorAdapterProvider context.
  */
@@ -267,6 +444,7 @@ function PlainTextWysiwyg({
   onFormatActionsReady,
   onMarkdownGetterReady,
   onSaveSnapshotReady,
+  onBlankLineActionReady,
   onSearchControllerReady,
   onOutlineNavigatorReady,
   onOutlineItemsChange,
@@ -355,6 +533,11 @@ function PlainTextWysiwyg({
     return () => onSaveSnapshotReady?.(null)
   }, [frontMatterBlock, onSaveSnapshotReady, value])
 
+  useEffect(() => {
+    onBlankLineActionReady?.(null)
+    return () => onBlankLineActionReady?.(null)
+  }, [onBlankLineActionReady])
+
   const style: CSSProperties & { '--wysiwyg-zoom'?: string } = {}
   if (effectiveLayout === 'preview-only') {
     style.gridColumn = '1 / -1'
@@ -429,6 +612,7 @@ function WysiwygEditor({
   onFormatActionsReady,
   onMarkdownGetterReady,
   onSaveSnapshotReady,
+  onBlankLineActionReady,
   onSearchControllerReady,
   onOutlineNavigatorReady,
   onOutlineItemsChange,
@@ -453,6 +637,7 @@ function WysiwygEditor({
         onSelectionGetterReady={onSelectionGetterReady}
         onMarkdownGetterReady={onMarkdownGetterReady}
         onSaveSnapshotReady={onSaveSnapshotReady}
+        onBlankLineActionReady={onBlankLineActionReady}
         onSearchControllerReady={onSearchControllerReady}
         onOutlineNavigatorReady={onOutlineNavigatorReady}
         onOutlineItemsChange={onOutlineItemsChange}
@@ -507,6 +692,8 @@ function WysiwygEditor({
   onMarkdownGetterReadyRef.current = onMarkdownGetterReady
   const onSaveSnapshotReadyRef = useRef(onSaveSnapshotReady)
   onSaveSnapshotReadyRef.current = onSaveSnapshotReady
+  const onBlankLineActionReadyRef = useRef(onBlankLineActionReady)
+  onBlankLineActionReadyRef.current = onBlankLineActionReady
   const onSearchControllerReadyRef = useRef(onSearchControllerReady)
   onSearchControllerReadyRef.current = onSearchControllerReady
   const onFormatActionsReadyRef = useRef(onFormatActionsReady)
@@ -829,6 +1016,38 @@ function WysiwygEditor({
     }, delayMs)
   }, [getReadyEditor, serializeAndPush])
 
+  const removeBlankLineBlocks = useCallback<WysiwygBlankLineAction>((scope = 'all') => {
+    const editor = getReadyEditor()
+    if (!editor) return { removedCount: 0 }
+
+    let removedCount = 0
+    editor.action((ctx) => {
+      const view = ctx.get(editorViewCtx)
+      const codeBlockType = ctx.get(schemaCtx).nodes[codeBlockSchema.id]
+      const blocks = collectTopLevelBlocks(view.state.doc)
+      const indexes = findBlankLineBlockIndexes(view.state.doc, scope, codeBlockType)
+      if (indexes.length === 0) return
+
+      const tr = view.state.tr
+      for (let index = indexes.length - 1; index >= 0; index -= 1) {
+        const block = blocks[indexes[index]]
+        tr.delete(block.pos, block.pos + block.node.nodeSize)
+      }
+
+      tr.setMeta('uiEvent', 'input')
+      view.dispatch(tr.scrollIntoView())
+      removedCount = indexes.length
+    })
+
+    if (removedCount > 0) {
+      hasUserInteractedRef.current = true
+      flushPending()
+      scheduleOutlineEmit(editor)
+    }
+
+    return { removedCount }
+  }, [flushPending, getReadyEditor, scheduleOutlineEmit])
+
   const getSaveSnapshot = useCallback(() => {
     serializationEpochRef.current += 1
     if (idleCallbackRef.current !== null) {
@@ -1064,6 +1283,28 @@ function WysiwygEditor({
 
         ctx.update(prosePluginsCtx, (plugins) => [
           createKeymap({
+            ArrowDown: (_state, _dispatch, view) => {
+              if (!view) return false
+              const codeBlockType = ctx.get(schemaCtx).nodes[codeBlockSchema.id]
+              if (!codeBlockType) return false
+              const inserted = insertParagraphAfterTable(view, codeBlockType)
+              if (inserted) {
+                hasUserInteractedRef.current = true
+                scheduleDelayedSync()
+              }
+              return inserted
+            },
+            Enter: (_state, _dispatch, view) => {
+              if (!view) return false
+              const codeBlockType = ctx.get(schemaCtx).nodes[codeBlockSchema.id]
+              if (!codeBlockType) return false
+              const inserted = insertParagraphBeforeCodeBlock(view, codeBlockType)
+              if (inserted) {
+                hasUserInteractedRef.current = true
+                scheduleDelayedSync()
+              }
+              return inserted
+            },
             'Mod-Alt-c': (_state, _dispatch, view) => {
               if (!view) return false
               const codeBlockType = ctx.get(schemaCtx).nodes[codeBlockSchema.id]
@@ -1114,6 +1355,8 @@ function WysiwygEditor({
       .use(clipboard)
       .use(indent)
       .use(trailing)
+      // Allow a real selection between adjacent block nodes, such as a table and code block.
+      .use(gapCursorPlugin)
       .use(colorMarkPlugin)
       // Math support
       .use(mathPlugin)
@@ -1160,6 +1403,11 @@ function WysiwygEditor({
     onSaveSnapshotReadyRef.current?.(getSaveSnapshot)
     return () => onSaveSnapshotReadyRef.current?.(null)
   }, [getSaveSnapshot])
+
+  useEffect(() => {
+    onBlankLineActionReadyRef.current?.(removeBlankLineBlocks)
+    return () => onBlankLineActionReadyRef.current?.(null)
+  }, [removeBlankLineBlocks])
 
   const handleFrontMatterChange = useCallback((event: ChangeEvent<HTMLTextAreaElement>) => {
     frontMatterBlockRef.current = event.target.value.replace(/\r\n/g, '\n')

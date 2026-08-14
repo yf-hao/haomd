@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { shouldRemoveBlankLines } from './blankLineIntentMatcher'
+import { matchRemoveBlankLinesScope, shouldRemoveBlankLines } from './blankLineIntentMatcher'
 
 describe('shouldRemoveBlankLines', () => {
   it.each([
@@ -9,6 +9,14 @@ describe('shouldRemoveBlankLines', () => {
     'remove blank lines',
   ])('matches explicit command: %s', (input) => {
     expect(shouldRemoveBlankLines(input)).toBe(true)
+  })
+
+  it.each([
+    '删除表格与代码块之间的空行',
+    '删除 table 与 code 之间的空行',
+    'remove blank lines between table and code',
+  ])('matches table/code gap command: %s', (input) => {
+    expect(matchRemoveBlankLinesScope(input)).toBe('table_code_gap')
   })
 
   it.each([

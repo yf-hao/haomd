@@ -261,6 +261,182 @@ function foldRegionsPlugin(onFoldRegionsChange?: (regions: { fromLine: number; t
   ]
 }
 
+type SourceLine = {
+  from: number
+  to: number
+  content: string
+}
+
+type MathFormulaRange = {
+  from: number
+  to: number
+}
+
+function splitSourceLines(source: string): SourceLine[] {
+  const lines: SourceLine[] = []
+  let from = 0
+
+  while (from <= source.length) {
+    const newline = source.indexOf('\n', from)
+    const to = newline === -1 ? source.length : newline
+    lines.push({ from, to, content: source.slice(from, to) })
+    if (newline === -1) break
+    from = newline + 1
+  }
+
+  return lines
+}
+
+function isEscaped(source: string, position: number): boolean {
+  let backslashCount = 0
+  for (let index = position - 1; index >= 0 && source[index] === '\\'; index -= 1) {
+    backslashCount += 1
+  }
+  return backslashCount % 2 === 1
+}
+
+function getFencedCodeLineIndexes(lines: SourceLine[]): Set<number> {
+  const fencedLines = new Set<number>()
+  let activeFence: { marker: '`' | '~'; length: number } | null = null
+
+  lines.forEach((line, index) => {
+    const fenceMatch = /^[ \t]*(`{3,}|~{3,})/.exec(line.content)
+
+    if (activeFence) {
+      fencedLines.add(index)
+      if (
+        fenceMatch &&
+        fenceMatch[1]![0] === activeFence.marker &&
+        fenceMatch[1]!.length >= activeFence.length
+      ) {
+        activeFence = null
+      }
+      return
+    }
+
+    if (!fenceMatch) return
+    fencedLines.add(index)
+    activeFence = {
+      marker: fenceMatch[1]![0] as '`' | '~',
+      length: fenceMatch[1]!.length,
+    }
+  })
+
+  return fencedLines
+}
+
+function findEmptyDisplayFormula(
+  source: string,
+  lines: SourceLine[],
+  fencedLines: Set<number>,
+  position: number,
+): MathFormulaRange | null {
+  for (let index = 0; index < lines.length; index += 1) {
+    if (fencedLines.has(index)) continue
+    const line = lines[index]!
+    const trimmed = line.content.trim()
+    const leadingWhitespace = line.content.length - line.content.trimStart().length
+    const formulaFrom = line.from + leadingWhitespace
+
+    if (/^\$\$[ \t]*\$\$$/.test(trimmed)) {
+      const openingEnd = formulaFrom + 2
+      const closingStart = formulaFrom + trimmed.length - 2
+      if (position >= openingEnd && position <= closingStart) {
+        return {
+          from: line.from,
+          to: line.to < source.length ? line.to + 1 : line.to,
+        }
+      }
+    }
+
+    if (trimmed !== '$$') continue
+
+    for (let closingIndex = index + 1; closingIndex < lines.length; closingIndex += 1) {
+      if (fencedLines.has(closingIndex)) break
+      const closingLine = lines[closingIndex]!
+      const closingTrimmed = closingLine.content.trim()
+
+      if (closingTrimmed === '$$') {
+        const contentFrom = line.to
+        const contentTo = closingLine.from
+        if (position >= contentFrom && position <= contentTo) {
+          return {
+            from: line.from,
+            to: closingLine.to < source.length ? closingLine.to + 1 : closingLine.to,
+          }
+        }
+        break
+      }
+
+      if (closingTrimmed !== '') break
+    }
+  }
+
+  return null
+}
+
+function isSingleDollarDelimiter(source: string, position: number, line: SourceLine): boolean {
+  if (source[position] !== '$' || isEscaped(source, position)) return false
+  return source[position - 1] !== '$' && source[position + 1] !== '$' &&
+    position >= line.from && position < line.to
+}
+
+function findEmptyInlineFormula(
+  source: string,
+  line: SourceLine,
+  fencedLines: Set<number>,
+  lineIndex: number,
+  position: number,
+): MathFormulaRange | null {
+  if (fencedLines.has(lineIndex)) return null
+
+  let opening = -1
+  for (let index = line.from; index < line.to; index += 1) {
+    if (!isSingleDollarDelimiter(source, index, line)) continue
+
+    if (opening === -1) {
+      opening = index
+      continue
+    }
+
+    if (
+      source.slice(opening + 1, index).trim() === '' &&
+      position >= opening + 1 &&
+      position <= index
+    ) {
+      return { from: opening, to: index + 1 }
+    }
+    opening = -1
+  }
+
+  return null
+}
+
+export function deleteEmptyMathFormula(view: EditorView): boolean {
+  const { state } = view
+  const selection = state.selection.main
+  if (state.readOnly || state.selection.ranges.length !== 1 || !selection.empty) return false
+
+  const source = state.doc.toString()
+  const lines = splitSourceLines(source)
+  const lineIndex = lines.findIndex((line) => selection.from >= line.from && selection.from <= line.to)
+  if (lineIndex === -1) return false
+
+  const fencedLines = getFencedCodeLineIndexes(lines)
+  const range =
+    findEmptyDisplayFormula(source, lines, fencedLines, selection.from) ??
+    findEmptyInlineFormula(source, lines[lineIndex]!, fencedLines, lineIndex, selection.from)
+  if (!range) return false
+
+  view.dispatch({
+    changes: range,
+    selection: { anchor: range.from },
+    scrollIntoView: true,
+    userEvent: 'delete.forward',
+  })
+  return true
+}
+
 export function createExtensions(options: EditorOptions = {}): Extension[] {
   const {
     readOnly = false,
@@ -277,6 +453,10 @@ export function createExtensions(options: EditorOptions = {}): Extension[] {
   const filteredDefaultKeymap = defaultKeymap.filter((binding) => binding.run !== deleteLine)
 
   const customKeymap = [
+    {
+      key: 'Delete',
+      run: deleteEmptyMathFormula,
+    },
     {
       key: 'Mod-Shift-d',
       run: deleteLine,

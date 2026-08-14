@@ -111,6 +111,7 @@ import {
   executeCreateDirectoryInWorkspace,
 } from '../../document/documentBuiltinTool'
 import type { WorkspaceEntryKind } from '../../workspace/workspaceEntryResolver'
+import type { RemoveBlankLinesScope } from '../../document/application/removeBlankLinesService'
 
 export type StartChatOptions = {
   entryMode: ChatEntryMode
@@ -143,7 +144,9 @@ export type StartChatOptions = {
   getCurrentDirectoryPath?: () => string | null
   getCurrentWorkspaceRoot?: () => string | null
   onDocumentSaved?: (path: string) => void
-  onRemoveBlankLinesCurrentDocument?: () => Promise<{ ok: boolean; message: string }>
+  onRemoveBlankLinesCurrentDocument?: (
+    scope?: RemoveBlankLinesScope,
+  ) => Promise<{ ok: boolean; message: string }>
   onRequestDeleteCurrentDocument?: (path: string) => Promise<{ ok: boolean; message: string }>
   onRequestDeleteCurrentFolder?: (path: string) => Promise<{ ok: boolean; message: string }>
   onRequestDeleteWorkspaceEntry?: (
@@ -685,7 +688,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
               }
             } else if (tc.function.name === REMOVE_BLANK_LINES_CURRENT_DOCUMENT_TOOL_NAME) {
               toolResult = await executeRemoveBlankLinesCurrentDocument(
-                parsedArgs as Record<string, never>,
+                parsedArgs as { scope?: RemoveBlankLinesScope },
                 {
                   onRemoveBlankLinesCurrentDocument: options.onRemoveBlankLinesCurrentDocument,
                 },

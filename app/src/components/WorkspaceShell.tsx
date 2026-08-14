@@ -45,7 +45,11 @@ import { AiChatCommandBridgeContext } from '../modules/ai/ui/AiChatCommandBridge
 import type { AiChatSessionKey } from '../modules/ai/application/aiChatSessionService'
 import { aiChatSessionManager } from '../modules/ai/application/localStorageAiChatSessionManager'
 import { registerEditorInsertBelow, registerEditorReplaceSelection, registerEditorCreateAndInsert, insertMarkdownAtCursorBelow } from '../modules/ai/platform/editorInsertService'
-import { removeBlankLines } from '../modules/document/application/removeBlankLinesService'
+import {
+  removeBlankLines,
+  removeTableCodeGapBlankLines,
+  type RemoveBlankLinesScope,
+} from '../modules/document/application/removeBlankLinesService'
 import { useFilePersistence } from '../hooks/useFilePersistence'
 import { useTabs } from '../hooks/useTabs'
 import { useCommandSystem } from '../hooks/useCommandSystem'
@@ -133,7 +137,7 @@ import { renameCurrentDocument } from '../modules/document/application/documentR
 import { createDirectoryFromSelection } from '../modules/document/application/createDirectoryFromSelectionService'
 import { createDirectoryInWorkspace } from '../modules/document/application/createDirectoryInWorkspaceService'
 import { renameWorkspaceEntry } from '../modules/document/application/renameWorkspaceEntryService'
-import type { WysiwygFormatActions } from './Wysiwyg/WysiwygPane'
+import type { WysiwygBlankLineAction, WysiwygFormatActions } from './Wysiwyg/WysiwygPane'
 import { buildPdfAiChatDocPathKey } from '../modules/ai/domain/aiChatDocPathKey'
 // 改为从内部动态加载，优化编辑性能
 // import { exportToHtml } from '../modules/export/html'
@@ -344,6 +348,7 @@ export function WorkspaceShell({
   } | null>(null)
   const wysiwygSelectionGetterRef = useRef<(() => string | null) | null>(null)
   const wysiwygMarkdownGetterRef = useRef<(() => string) | null>(null)
+  const wysiwygBlankLineActionRef = useRef<WysiwygBlankLineAction | null>(null)
   const wysiwygSaveSnapshotRef = useRef<(() => string) | null>(null)
   const wysiwygOutlineNavigatorRef = useRef<((target: { headingIndex: number; text: string; level: 1 | 2 | 3 | 4 | 5 | 6 }) => boolean) | null>(null)
   const wysiwygFormatActionsRef = useRef<WysiwygFormatActions | null>(null)
@@ -1328,7 +1333,9 @@ export function WorkspaceShell({
     if (shouldMarkDirty) markDirty()
   }, [applyChunkEdit, clearSourceDocumentSync, markDirty, updateActiveContent])
 
-  const removeBlankLinesFromCurrentDocument = useCallback(async (): Promise<{ ok: boolean; message: string }> => {
+  const removeBlankLinesFromCurrentDocument = useCallback(async (
+    scope: RemoveBlankLinesScope = 'all',
+  ): Promise<{ ok: boolean; message: string }> => {
     if (isPdfActiveRef.current) {
       return { ok: false, message: '当前打开的是 PDF，无法去除 Markdown 空行。' }
     }
@@ -1340,7 +1347,9 @@ export function WorkspaceShell({
       }
 
       const current = view.state.doc.toString()
-      const result = removeBlankLines(current)
+      const result = scope === 'table_code_gap'
+        ? removeTableCodeGapBlankLines(current)
+        : removeBlankLines(current)
       if (result.removedCount === 0) {
         return { ok: true, message: '当前文档没有可去除的空行。' }
       }
@@ -1355,6 +1364,19 @@ export function WorkspaceShell({
       })
       handleSourceEditorDocumentChange(view)
       return { ok: true, message: `已去除 ${result.removedCount} 个空行，可使用 Cmd+Z 撤销。` }
+    }
+
+    const wysiwygAction = wysiwygBlankLineActionRef.current
+    if (wysiwygAction) {
+      const result = wysiwygAction(scope)
+      if (result.removedCount === 0) {
+        return { ok: true, message: '当前文档没有可去除的空行。' }
+      }
+      return { ok: true, message: `已去除 ${result.removedCount} 个空行，可使用 Cmd+Z 撤销。` }
+    }
+
+    if (scope !== 'all') {
+      return { ok: false, message: '当前 WYSIWYG 编辑器不可用，无法删除指定位置的空行。' }
     }
 
     wysiwygFlushRef.current?.()
@@ -4633,6 +4655,9 @@ export function WorkspaceShell({
                           }}
                           onMarkdownGetterReady={(getter) => {
                             wysiwygMarkdownGetterRef.current = getter
+                          }}
+                          onBlankLineActionReady={(action) => {
+                            wysiwygBlankLineActionRef.current = action
                           }}
                           onSaveSnapshotReady={(getter) => {
                             wysiwygSaveSnapshotRef.current = getter

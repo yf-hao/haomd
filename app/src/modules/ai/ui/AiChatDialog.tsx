@@ -23,7 +23,8 @@ import {
   shouldTriggerDeleteCurrentDocument,
   shouldTriggerDeleteCurrentFolder,
 } from './deleteIntentMatcher'
-import { shouldRemoveBlankLines } from './blankLineIntentMatcher'
+import { matchRemoveBlankLinesScope } from './blankLineIntentMatcher'
+import type { RemoveBlankLinesScope } from '../../document/application/removeBlankLinesService'
 import { matchRenameCurrentDocument } from './renameIntentMatcher'
 import { matchCreateDirectoryUnderSelection } from './createDirectoryIntentMatcher'
 import {
@@ -70,7 +71,9 @@ export type AiChatDialogProps = {
   getCurrentDirectoryPath?: () => string | null
   getCurrentWorkspaceRoot?: () => string | null
   onDocumentSaved?: (path: string) => void
-  onRemoveBlankLinesCurrentDocument?: () => Promise<{ ok: boolean; message: string }>
+  onRemoveBlankLinesCurrentDocument?: (
+    scope?: RemoveBlankLinesScope,
+  ) => Promise<{ ok: boolean; message: string }>
   onConfirmDeleteCurrentDocument?: (path: string) => Promise<{ ok: boolean; message: string }>
   onConfirmDeleteCurrentFolder?: (path: string) => Promise<{ ok: boolean; message: string }>
   onConfirmDeleteWorkspaceEntry?: (
@@ -665,11 +668,12 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
       return
     }
 
-    if (shouldRemoveBlankLines(trimmedInput)) {
+    const removeBlankLinesScope = matchRemoveBlankLinesScope(trimmedInput)
+    if (removeBlankLinesScope) {
       clearHistoryBrowse()
       clearDraft()
       const result = onRemoveBlankLinesCurrentDocument
-        ? await onRemoveBlankLinesCurrentDocument()
+        ? await onRemoveBlankLinesCurrentDocument(removeBlankLinesScope)
         : { ok: false, message: '当前去除空行能力不可用。' }
       setStatusMessage?.(result.message)
       pushLocalFeedback(result.message)

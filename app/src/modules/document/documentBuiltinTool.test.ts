@@ -83,7 +83,22 @@ describe('documentBuiltinTool', () => {
     )
 
     expect(onRemoveBlankLinesCurrentDocument).toHaveBeenCalledOnce()
+    expect(onRemoveBlankLinesCurrentDocument).toHaveBeenCalledWith('all')
     expect(result).toBe('已去除 2 个空行，可使用 Cmd+Z 撤销。')
+  })
+
+  it('forwards the table/code gap scope', async () => {
+    const onRemoveBlankLinesCurrentDocument = vi.fn().mockResolvedValue({
+      ok: true,
+      message: '已去除 1 个空行，可使用 Cmd+Z 撤销。',
+    })
+
+    await executeRemoveBlankLinesCurrentDocument(
+      { scope: 'table_code_gap' },
+      { onRemoveBlankLinesCurrentDocument },
+    )
+
+    expect(onRemoveBlankLinesCurrentDocument).toHaveBeenCalledWith('table_code_gap')
   })
 
   it('formats failure message from service', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { removeBlankLines } from './removeBlankLinesService'
+import { removeBlankLines, removeTableCodeGapBlankLines } from './removeBlankLinesService'
 
 describe('removeBlankLines', () => {
   it('removes empty and whitespace-only lines while preserving content', () => {
@@ -22,6 +22,24 @@ describe('removeBlankLines', () => {
     expect(removeBlankLines(markdown)).toEqual({
       content: markdown,
       removedCount: 0,
+    })
+  })
+
+  it('removes only the blank lines between a table and a fenced code block', () => {
+    const markdown = '| A | B |\n| --- | --- |\n| 1 | 2 |\n\n\n```ts\nconst value = 1\n```\n'
+
+    expect(removeTableCodeGapBlankLines(markdown)).toEqual({
+      content: '| A | B |\n| --- | --- |\n| 1 | 2 |\n```ts\nconst value = 1\n```\n',
+      removedCount: 2,
+    })
+  })
+
+  it('does not remove blank lines inside a fenced code block', () => {
+    const markdown = '| A |\n| --- |\n| 1 |\n\n```ts\nconst first = 1\n\nconst second = 2\n```\n'
+
+    expect(removeTableCodeGapBlankLines(markdown)).toEqual({
+      content: '| A |\n| --- |\n| 1 |\n```ts\nconst first = 1\n\nconst second = 2\n```\n',
+      removedCount: 1,
     })
   })
 })

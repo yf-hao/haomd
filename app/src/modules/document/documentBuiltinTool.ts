@@ -6,6 +6,7 @@ import { createDirectoryInWorkspace } from './application/createDirectoryInWorks
 import { renameWorkspaceEntry } from './application/renameWorkspaceEntryService'
 import { normalizePersistableFilePath } from '../files/filePathState'
 import type { WorkspaceEntryKind } from '../workspace/workspaceEntryResolver'
+import type { RemoveBlankLinesScope } from './application/removeBlankLinesService'
 
 export const SAVE_OR_EXPORT_CURRENT_DOCUMENT_TOOL_NAME = 'save_or_export_current_document'
 export const REMOVE_BLANK_LINES_CURRENT_DOCUMENT_TOOL_NAME = 'remove_blank_lines_current_document'
@@ -25,7 +26,9 @@ export type DeleteCurrentDocumentContext = {
 }
 
 export type RemoveBlankLinesCurrentDocumentContext = {
-  onRemoveBlankLinesCurrentDocument?: () => Promise<{ ok: boolean; message: string }>
+  onRemoveBlankLinesCurrentDocument?: (
+    scope?: RemoveBlankLinesScope,
+  ) => Promise<{ ok: boolean; message: string }>
 }
 
 export type DeleteCurrentFolderContext = {
@@ -116,24 +119,30 @@ export const removeBlankLinesCurrentDocumentToolSchema: OpenAIToolDef = {
     description:
       '删除当前活动 Markdown 文档中的空行和只包含空格或制表符的行。' +
       '仅操作当前文档，不接受文件路径，不直接写入任意文件。' +
-      '当用户明确要求去除、删除、清除当前文档空行时调用。',
+      '当用户明确要求去除、删除、清除当前文档空行时调用。scope=table_code_gap 用于只删除表格与代码块之间的空段落。',
     parameters: {
       type: 'object',
-      properties: {},
+      properties: {
+        scope: {
+          type: 'string',
+          enum: ['all', 'table_code_gap'],
+          description: '删除范围，默认 all；table_code_gap 只处理表格与代码块之间的空段落。',
+        },
+      },
       required: [],
     },
   },
 }
 
 export async function executeRemoveBlankLinesCurrentDocument(
-  _args: Record<string, never>,
+  args: { scope?: RemoveBlankLinesScope },
   ctx: RemoveBlankLinesCurrentDocumentContext,
 ): Promise<string> {
   if (!ctx.onRemoveBlankLinesCurrentDocument) {
     return '⚠️ 当前会话未挂载文档编辑能力，无法去除空行。'
   }
 
-  const result = await ctx.onRemoveBlankLinesCurrentDocument()
+  const result = await ctx.onRemoveBlankLinesCurrentDocument(args.scope ?? 'all')
   return result.ok ? result.message : `❌ ${result.message}`
 }
 

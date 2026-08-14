@@ -22,6 +22,7 @@ import { loadSession, saveSession, type AiChatSessionCfg, type AiChatMessageCfg 
 import { loadPdfSession, savePdfSession, type PdfChatSessionCfg } from '../../../pdf/pdfSessionsRepo'
 import { mergePendingAttachments } from './attachmentDrafts'
 import type { WorkspaceEntryKind } from '../../../workspace/workspaceEntryResolver'
+import type { RemoveBlankLinesScope } from '../../../document/application/removeBlankLinesService'
 
 export type UseAiChatSessionOptions = {
   sessionKey: AiChatSessionKey
@@ -40,7 +41,9 @@ export type UseAiChatSessionOptions = {
   getCurrentDirectoryPath?: () => string | null
   getCurrentWorkspaceRoot?: () => string | null
   onDocumentSaved?: (path: string) => void
-  onRemoveBlankLinesCurrentDocument?: () => Promise<{ ok: boolean; message: string }>
+  onRemoveBlankLinesCurrentDocument?: (
+    scope?: RemoveBlankLinesScope,
+  ) => Promise<{ ok: boolean; message: string }>
   onRequestDeleteCurrentDocument?: (path: string) => Promise<{ ok: boolean; message: string }>
   onRequestDeleteCurrentFolder?: (path: string) => Promise<{ ok: boolean; message: string }>
   onRequestDeleteWorkspaceEntry?: (
@@ -404,8 +407,8 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
             : {}),
           ...(onRemoveBlankLinesCurrentDocumentRef.current
             ? {
-                onRemoveBlankLinesCurrentDocument: () =>
-                  onRemoveBlankLinesCurrentDocumentRef.current?.() ??
+                onRemoveBlankLinesCurrentDocument: (scope?: RemoveBlankLinesScope) =>
+                  onRemoveBlankLinesCurrentDocumentRef.current?.(scope) ??
                   Promise.resolve({ ok: false, message: '当前去除空行能力不可用。' }),
               }
             : {}),
