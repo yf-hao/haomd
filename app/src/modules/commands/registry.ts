@@ -195,8 +195,8 @@ export type CommandContext = LayoutCommandContext &
 
 // ===== 分组命令工厂 =====
 
-const EDITOR_ZOOM_MIN = 0.75
-const EDITOR_ZOOM_MAX = 1.5
+const EDITOR_ZOOM_MIN = 0.25
+const EDITOR_ZOOM_MAX = 3
 const EDITOR_ZOOM_STEP = 0.1
 
 const tr = (

@@ -201,6 +201,21 @@ describe('command registry - layout & view', () => {
     expect(ctx.setEditorZoom).toHaveBeenCalledTimes(3)
   })
 
+  it('zoom commands should clamp editor zoom values to 25%-300%', () => {
+    const ctx = createMockCtx()
+    const registry = createCommandRegistry(ctx)
+
+    registry.zoom_in()
+    registry.zoom_out()
+
+    const setEditorZoomMock = vi.mocked(ctx.setEditorZoom)
+    const increase = setEditorZoomMock.mock.calls[0][0] as (value: number) => number
+    const decrease = setEditorZoomMock.mock.calls[1][0] as (value: number) => number
+
+    expect(increase(3)).toBe(3)
+    expect(decrease(0.25)).toBe(0.25)
+  })
+
   it('pdf annotation commands should dispatch through PDF callbacks only when current tab is a PDF', () => {
     const ctx = createMockCtx()
     ctx.isPdfActive = true

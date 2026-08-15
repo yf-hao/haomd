@@ -302,10 +302,8 @@ export function WorkspaceShell({
     if (!stored) return 1.0
     const n = Number(stored)
     if (!Number.isFinite(n)) return 1.0
-    const min = 0.75
-    const max = 1.5
-    if (n < min) return min
-    if (n > max) return max
+    if (n < 0.25) return 0.25
+    if (n > 3) return 3
     return n
   })
   useEffect(() => {

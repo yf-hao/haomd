@@ -36,7 +36,7 @@ function createBaseTheme(themeMode: ResolvedThemeMode) {
         color: 'var(--theme-text-default)',
         fontFamily:
           "'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-        fontSize: 'var(--ui-font-editor)',
+        fontSize: 'var(--editor-font-size, var(--ui-font-editor))',
       },
       '.cm-activeLine': {
         backgroundColor: 'transparent',
@@ -52,7 +52,7 @@ function createBaseTheme(themeMode: ResolvedThemeMode) {
         backgroundColor: 'var(--theme-surface-editor-gutter)',
         color: 'var(--theme-editor-gutter-fg)',
         borderRight: 'none',
-        fontSize: 'calc(var(--ui-font-editor) - 2px)',
+        fontSize: 'var(--editor-gutter-font-size, calc(var(--ui-font-editor) - 2px))',
         margin: 0,
       },
       '.cm-gutter .cm-activeLineGutter': {
