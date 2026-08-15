@@ -1090,8 +1090,10 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
                 .accelerator("CmdOrCtrl+Alt+W")
                 .build(app)?,
         )
+        .separator()
         .item(&appearance_menu)
         .item(&panels_menu)
+        .separator()
         .item(
             &MenuItemBuilder::new(texts.zoom_in)
                 .id("zoom_in")
@@ -1110,6 +1112,7 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
                 .accelerator("CmdOrCtrl+Shift+0")
                 .build(app)?,
         )
+        .separator()
         .item(
             &MenuItemBuilder::new(texts.next_tab)
                 .id("next_tab")
@@ -1122,6 +1125,7 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
                 .accelerator("Ctrl+Shift+Tab")
                 .build(app)?,
         )
+        .separator()
         .item(&dock_ai_chat_menu)
         .item(&layout_menu)
         .build()?;
@@ -1212,6 +1216,7 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
                 .id("agent_settings")
                 .build(app)?,
         )
+        .separator()
         .item(
             &MenuItemBuilder::new(texts.open_ai_chat)
                 .id("ai_chat")
@@ -1230,6 +1235,7 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
                 .accelerator("CmdOrCtrl+L")
                 .build(app)?,
         )
+        .separator()
         .item(&ai_conversation_menu)
         .build()?;
 
