@@ -299,15 +299,13 @@ export const zhCNMessages: MessageDictionary = {
     pageMarginCm: '页边距（cm）',
   },
   welcome: {
-    subtitle:
-      '围绕写作、知识整理与人机协作，提供连贯而有序的创作空间，让灵感记录、内容推进与知识沉淀自然衔接。',
+    subtitle: '专注写作、知识整理与人机协作，让灵感记录、内容推进与知识沉淀自然衔接，打造连贯有序的创作空间。',
     newFile: '新建文件',
     openFile: '打开文件',
-    openAiChat: '打开 AI Chat',
   },
   app: {
     name: '好记',
-    subtitle: 'Markdown 编辑器',
+    subtitle: 'AI 驱动的 Markdown 编辑器',
     files: '文件',
     search: '搜索',
     outline: '大纲',
@@ -316,7 +314,7 @@ export const zhCNMessages: MessageDictionary = {
     notes: '随笔',
     skills: 'Skills',
     workflows: 'Workflows',
-    statusBarTitle: '好记 · AI Markdown',
+    statusBarTitle: '好记 · AI 驱动的 Markdown 编辑器',
     characters: '{count} 字',
   },
   searchPanel: {

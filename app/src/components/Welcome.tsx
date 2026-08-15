@@ -4,10 +4,9 @@ import { useI18n } from '../modules/i18n/I18nContext'
 export interface WelcomeProps {
   onNewFile: () => void
   onOpenFile: () => void
-  onOpenAiChat?: () => void
 }
 
-export function Welcome({ onNewFile, onOpenFile, onOpenAiChat }: WelcomeProps) {
+export function Welcome({ onNewFile, onOpenFile }: WelcomeProps) {
   const { t } = useI18n()
 
   return (
@@ -30,15 +29,6 @@ export function Welcome({ onNewFile, onOpenFile, onOpenAiChat }: WelcomeProps) {
           <button className="welcome-button secondary" onClick={onOpenFile}>
             {t('welcome.openFile')}
           </button>
-
-          {onOpenAiChat && (
-            <button
-              className="welcome-button secondary"
-              onClick={onOpenAiChat}
-            >
-              {t('welcome.openAiChat')}
-            </button>
-          )}
         </div>
       </div>
     </div>

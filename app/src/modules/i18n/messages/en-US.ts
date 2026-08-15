@@ -300,14 +300,13 @@ export const enUSMessages: MessageDictionary = {
   },
   welcome: {
     subtitle:
-      'Built around writing, knowledge organization, and human-AI collaboration, it provides a coherent creative space where capturing ideas, advancing drafts, and accumulating knowledge connect naturally.',
+      'Focused on writing, knowledge organization, and human-AI collaboration, it connects capturing ideas, advancing drafts, and building knowledge in a coherent creative space.',
     newFile: 'New File',
     openFile: 'Open File',
-    openAiChat: 'Open AI Chat',
   },
   app: {
     name: 'HaoMD',
-    subtitle: 'Markdown Editor',
+    subtitle: 'AI-powered Markdown Editor',
     files: 'Files',
     search: 'Search',
     outline: 'Outline',
@@ -316,7 +315,7 @@ export const enUSMessages: MessageDictionary = {
     notes: 'Notes',
     skills: 'Skills',
     workflows: 'Workflows',
-    statusBarTitle: 'HaoMD · AI Markdown',
+    statusBarTitle: 'HaoMD · AI-powered Markdown Editor',
     characters: '{count} chars',
   },
   searchPanel: {

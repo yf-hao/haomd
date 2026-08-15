@@ -4603,9 +4603,6 @@ export function WorkspaceShell({
             <Welcome
               onNewFile={() => createTab()}
               onOpenFile={() => void dispatchAction('open_file')}
-              onOpenAiChat={() => {
-                openAiChatDialog({ entryMode: 'chat', forceMode: 'floating' })
-              }}
             />
           ) : (
             <>
