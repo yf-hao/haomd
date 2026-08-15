@@ -48,6 +48,14 @@ import type { SearchScope } from './modules/search/types'
 import { getMusicTrackState, saveMusicSession } from './modules/tools/music/musicAudio'
 
 const appStartTime = performance.now()
+const STORAGE_ACTIVITY_BAR_VISIBLE = 'haomd:appearance:activity-bar-visible'
+const STORAGE_STATUS_BAR_VISIBLE = 'haomd:appearance:status-bar-visible'
+
+function readVisibilityPreference(key: string): boolean {
+  if (typeof localStorage === 'undefined') return true
+  const stored = localStorage.getItem(key)
+  return stored !== 'false'
+}
 
 function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) {
@@ -101,7 +109,9 @@ function formatWebDavImportProgress(payload: WebDavImportProgressPayload): strin
 function App() {
   const [activeLeftPanel, setActiveLeftPanel] = useState<LeftPanelId>(null)
   const lastVisibleLeftPanelRef = useRef<Exclude<LeftPanelId, null>>('files')
-  const [isActivityBarVisible, setActivityBarVisible] = useState(true)
+  const [isActivityBarVisible, setActivityBarVisible] = useState(() =>
+    readVisibilityPreference(STORAGE_ACTIVITY_BAR_VISIBLE),
+  )
   const [initialWorkspaceAction, setInitialWorkspaceAction] = useState<InitialWorkspaceAction>(null)
   const [initialOpenRecentPath, setInitialOpenRecentPath] = useState<string | null>(null)
   const [initialOpenRecentIsFolder, setInitialOpenRecentIsFolder] = useState<boolean | null>(null)
@@ -112,7 +122,9 @@ function App() {
   const [isMcpSettingsOpen, setMcpSettingsOpen] = useState(false)
   const [isImageGenerationDialogOpen, setImageGenerationDialogOpen] = useState(false)
   const [initialImageGenerationAgentId, setInitialImageGenerationAgentId] = useState<string | null>(null)
-  const [isStatusBarVisible, setStatusBarVisible] = useState(true)
+  const [isStatusBarVisible, setStatusBarVisible] = useState(() =>
+    readVisibilityPreference(STORAGE_STATUS_BAR_VISIBLE),
+  )
   const [docCharCount, setDocCharCount] = useState<number | null>(null)
   const [statusMessage, setStatusMessage] = useState('')
   const [searchScope, setSearchScope] = useState<SearchScope | null>(null)
@@ -162,6 +174,16 @@ function App() {
   const toggleActivityBarVisible = useCallback(() => {
     setActivityBarVisible((visible) => !visible)
   }, [])
+
+  useEffect(() => {
+    if (typeof localStorage === 'undefined') return
+    localStorage.setItem(STORAGE_ACTIVITY_BAR_VISIBLE, String(isActivityBarVisible))
+  }, [isActivityBarVisible])
+
+  useEffect(() => {
+    if (typeof localStorage === 'undefined') return
+    localStorage.setItem(STORAGE_STATUS_BAR_VISIBLE, String(isStatusBarVisible))
+  }, [isStatusBarVisible])
 
   useEffect(() => {
     if (!isTauriEnv()) return
