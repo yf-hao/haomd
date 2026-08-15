@@ -74,12 +74,14 @@ struct MenuTexts {
     save_as: &'static str,
     close_file: &'static str,
     edit: &'static str,
+    undo: &'static str,
+    redo: &'static str,
+    cut: &'static str,
+    copy: &'static str,
     paste: &'static str,
+    select_all: &'static str,
     paste_match_style: &'static str,
     find: &'static str,
-    replace: &'static str,
-    toggle_comment: &'static str,
-    format_document: &'static str,
     heading: &'static str,
     paragraph: &'static str,
     heading_1: &'static str,
@@ -152,7 +154,6 @@ struct MenuTexts {
     zoom_in: &'static str,
     zoom_out: &'static str,
     reset_zoom: &'static str,
-    go_to_line: &'static str,
     next_tab: &'static str,
     previous_tab: &'static str,
     global_memory: &'static str,
@@ -204,12 +205,14 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             save_as: "另存为",
             close_file: "关闭文件",
             edit: "编辑",
+            undo: "撤销",
+            redo: "重做",
+            cut: "剪切",
+            copy: "复制",
             paste: "粘贴",
+            select_all: "全选",
             paste_match_style: "粘贴并匹配样式",
             find: "查找",
-            replace: "替换",
-            toggle_comment: "切换注释",
-            format_document: "格式化文档",
             heading: "标题",
             paragraph: "段落",
             heading_1: "一级标题",
@@ -282,7 +285,6 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             zoom_in: "放大",
             zoom_out: "缩小",
             reset_zoom: "重置缩放",
-            go_to_line: "跳转到行",
             next_tab: "下一个标签",
             previous_tab: "上一个标签",
             global_memory: "全局记忆",
@@ -331,12 +333,14 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             save_as: "Save As",
             close_file: "Close File",
             edit: "Edit",
+            undo: "Undo",
+            redo: "Redo",
+            cut: "Cut",
+            copy: "Copy",
             paste: "Paste",
+            select_all: "Select All",
             paste_match_style: "Paste and Match Style",
             find: "Find",
-            replace: "Replace",
-            toggle_comment: "Toggle Comment",
-            format_document: "Format Document",
             heading: "Heading",
             paragraph: "Paragraph",
             heading_1: "Heading 1",
@@ -409,7 +413,6 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             zoom_in: "Zoom In",
             zoom_out: "Zoom Out",
             reset_zoom: "Reset Zoom",
-            go_to_line: "Go to Line",
             next_tab: "Next Tab",
             previous_tab: "Previous Tab",
             global_memory: "Global Memory",
@@ -671,11 +674,11 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         .build()?;
 
     let edit_menu = SubmenuBuilder::new(app, texts.edit)
-        .item(&PredefinedMenuItem::undo(app, None)?)
-        .item(&PredefinedMenuItem::redo(app, None)?)
+        .item(&PredefinedMenuItem::undo(app, Some(texts.undo))?)
+        .item(&PredefinedMenuItem::redo(app, Some(texts.redo))?)
         .separator()
-        .item(&PredefinedMenuItem::cut(app, None)?)
-        .item(&PredefinedMenuItem::copy(app, None)?)
+        .item(&PredefinedMenuItem::cut(app, Some(texts.cut))?)
+        .item(&PredefinedMenuItem::copy(app, Some(texts.copy))?)
         .item(&PredefinedMenuItem::paste(app, Some(texts.paste))?)
         .item(
             &MenuItemBuilder::new(texts.paste_match_style)
@@ -691,22 +694,7 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
                 .accelerator("CmdOrCtrl+f")
                 .build(app)?,
         )
-        .item(
-            &MenuItemBuilder::new(texts.replace)
-                .id("replace")
-                .build(app)?,
-        )
-        .item(&PredefinedMenuItem::select_all(app, None)?)
-        .item(
-            &MenuItemBuilder::new(texts.toggle_comment)
-                .id("toggle_comment")
-                .build(app)?,
-        )
-        .item(
-            &MenuItemBuilder::new(texts.format_document)
-                .id("format_document")
-                .build(app)?,
-        )
+        .item(&PredefinedMenuItem::select_all(app, Some(texts.select_all))?)
         .build()?;
 
     let heading_menu = SubmenuBuilder::new(app, texts.heading)
@@ -1120,12 +1108,6 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
             &MenuItemBuilder::new(texts.reset_zoom)
                 .id("zoom_reset")
                 .accelerator("CmdOrCtrl+Shift+0")
-                .build(app)?,
-        )
-        .item(
-            &MenuItemBuilder::new(texts.go_to_line)
-                .id("go_line")
-                .accelerator("CmdOrCtrl+L")
                 .build(app)?,
         )
         .item(
