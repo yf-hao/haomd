@@ -65,7 +65,7 @@ const CodeBlock = memo(
       ? undefined
       : (lineNumber: number) => ({
           className: 'md-source-line',
-          'data-source-line-local': String(sourceLineStart + lineNumber - 1),
+          'data-source-line': String(sourceLineStart + lineNumber - 1),
         })
 
     const handleCopy = async (event: React.MouseEvent<HTMLButtonElement>) => {

@@ -30,12 +30,12 @@ describe('rehypeSourceLineAnchors', () => {
     rehypeSourceLineAnchors()(tree)
 
     const paragraph = tree.children[0]
-    expect(paragraph.properties['data-line-start-local']).toBe('2')
-    expect(paragraph.properties['data-line-end-local']).toBe('3')
-    expect(paragraph.children[0].properties['data-source-line-local']).toBe('2')
+    expect(paragraph.properties['data-line-start']).toBe('2')
+    expect(paragraph.properties['data-line-end']).toBe('3')
+    expect(paragraph.children[0].properties['data-source-line']).toBe('2')
     expect(paragraph.children[0].children[0].value).toBe('first line')
     expect(paragraph.children[1].value).toBe('\n')
-    expect(paragraph.children[2].properties['data-source-line-local']).toBe('3')
+    expect(paragraph.children[2].properties['data-source-line']).toBe('3')
   })
 
   it('marks a single-line block without wrapping its text', () => {
@@ -57,9 +57,9 @@ describe('rehypeSourceLineAnchors', () => {
     rehypeSourceLineAnchors()(tree)
 
     const heading = tree.children[0]
-    expect(heading.properties['data-line-start-local']).toBe('5')
-    expect(heading.properties['data-line-end-local']).toBe('5')
-    expect(heading.properties['data-source-line-local']).toBe('5')
+    expect(heading.properties['data-line-start']).toBe('5')
+    expect(heading.properties['data-line-end']).toBe('5')
+    expect(heading.properties['data-source-line']).toBe('5')
     expect(heading.children[0].type).toBe('text')
   })
 
@@ -102,14 +102,14 @@ describe('rehypeSourceLineAnchors', () => {
 
     const pre = tree.children[0]
     const code = pre.children[0]
-    expect(pre.properties['data-line-start-local']).toBe('8')
-    expect(pre.properties['data-line-end-local']).toBe('11')
+    expect(pre.properties['data-line-start']).toBe('8')
+    expect(pre.properties['data-line-end']).toBe('11')
     expect(code.children[0].type).toBe('text')
     expect(code.children[0].value).toBe('const a = 1\nconst b = 2')
     expect(code.children[0].properties).toBeUndefined()
   })
 
-  it('keeps source lines local to the rendered document or chunk', () => {
+  it('applies a global line offset when rendering a document chunk', () => {
     const tree = {
       type: 'root',
       children: [
@@ -134,16 +134,16 @@ describe('rehypeSourceLineAnchors', () => {
       ],
     } as any
 
-    rehypeSourceLineAnchors()(tree)
+    rehypeSourceLineAnchors({ lineOffset: 9 })(tree)
 
     const paragraph = tree.children[0]
-    expect(paragraph.properties['data-line-start-local']).toBe('1')
-    expect(paragraph.properties['data-line-end-local']).toBe('2')
-    expect(paragraph.children[0].properties['data-source-line-local']).toBe('1')
-    expect(paragraph.children[2].properties['data-source-line-local']).toBe('2')
+    expect(paragraph.properties['data-line-start']).toBe('10')
+    expect(paragraph.properties['data-line-end']).toBe('11')
+    expect(paragraph.children[0].properties['data-source-line']).toBe('10')
+    expect(paragraph.children[2].properties['data-source-line']).toBe('11')
   })
 
-  it('does not rewrite line attributes created by earlier Markdown plugins', () => {
+  it('offsets line attributes created by earlier Markdown plugins', () => {
     const tree = {
       type: 'root',
       children: [
@@ -151,8 +151,8 @@ describe('rehypeSourceLineAnchors', () => {
           type: 'element',
           tagName: 'math',
           properties: {
-            'data-line-start-local': '2',
-            'data-line-end-local': '4',
+            'data-line-start': '2',
+            'data-line-end': '4',
           },
           position: {
             start: { line: 2 },
@@ -163,9 +163,9 @@ describe('rehypeSourceLineAnchors', () => {
       ],
     } as any
 
-    rehypeSourceLineAnchors()(tree)
+    rehypeSourceLineAnchors({ lineOffset: 6 })(tree)
 
-    expect(tree.children[0].properties['data-line-start-local']).toBe('2')
-    expect(tree.children[0].properties['data-line-end-local']).toBe('4')
+    expect(tree.children[0].properties['data-line-start']).toBe('8')
+    expect(tree.children[0].properties['data-line-end']).toBe('10')
   })
 })
