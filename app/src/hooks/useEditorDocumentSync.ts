@@ -28,12 +28,7 @@ export type UseEditorDocumentSyncOptions = {
   markActiveTabDirty: () => void
   markDirty: () => void
   applyChunkEdit: (value: string) => string | null
-  schedulePreviewDocument: (
-    tabId: string,
-    view: EditorView,
-    revision: number,
-    getContent: () => string,
-  ) => void
+  schedulePreviewDocument: (tabId: string, view: EditorView, revision: number) => void
 }
 
 type SourceDocumentSnapshot = {
@@ -42,13 +37,6 @@ type SourceDocumentSnapshot = {
   revision: number
   doc: Text
   editorDoc: Text
-}
-
-type SourceContentCache = {
-  tabId: string
-  view: EditorView
-  revision: number
-  content: string
 }
 
 export function useEditorDocumentSync({
@@ -75,27 +63,7 @@ export function useEditorDocumentSync({
 }: UseEditorDocumentSyncOptions) {
   const sourceDocumentSyncTimerRef = useRef<number | null>(null)
   const sourceDocumentSyncSnapshotRef = useRef<SourceDocumentSnapshot | null>(null)
-  const sourceContentCacheRef = useRef<SourceContentCache | null>(null)
   const sourceDirtyTabRef = useRef<string | null>(null)
-
-  const getSourceDocumentContent = useCallback((tabId: string, view: EditorView, revision: number) => {
-    const cached = sourceContentCacheRef.current
-    if (cached?.tabId === tabId && cached.view === view && cached.revision === revision) {
-      return cached.content
-    }
-
-    const pending = sourceDocumentSyncSnapshotRef.current
-    const rawContent = (
-      pending?.tabId === tabId &&
-      pending.view === view &&
-      pending.revision === revision
-        ? pending.doc
-        : view.state.doc
-    ).toString()
-    const content = applyChunkEdit(rawContent) ?? rawContent
-    sourceContentCacheRef.current = { tabId, view, revision, content }
-    return content
-  }, [applyChunkEdit])
 
   const clearSourceDocumentSync = useCallback(() => {
     if (sourceDocumentSyncTimerRef.current != null) {
@@ -104,7 +72,6 @@ export function useEditorDocumentSync({
     }
     sourceEditorRevisionRef.current += 1
     sourceDocumentSyncSnapshotRef.current = null
-    sourceContentCacheRef.current = null
   }, [sourceEditorRevisionRef])
 
   const commitSourceDocumentSnapshot = useCallback((tabId: string, content: string, shouldMarkDirty: boolean) => {
@@ -148,15 +115,11 @@ export function useEditorDocumentSync({
         return
       }
 
-      const content = getSourceDocumentContent(snapshot.tabId, view, snapshot.revision)
+      const rawContent = view.state.doc.toString()
+      const content = applyChunkEdit(rawContent) ?? rawContent
       commitSourceDocumentSnapshot(snapshot.tabId, content, true)
     }, 150)
-  }, [
-    activeIdRef,
-    commitSourceDocumentSnapshot,
-    editorViewRef,
-    getSourceDocumentContent,
-  ])
+  }, [activeIdRef, applyChunkEdit, commitSourceDocumentSnapshot, editorViewRef])
 
   const flushSourceDocumentSync = useCallback((tabId = activeIdRef.current) => {
     if (!tabId) return null
@@ -170,14 +133,13 @@ export function useEditorDocumentSync({
         : null
     const pendingSnapshot = sourceDocumentSyncSnapshotRef.current
     const view = currentView ?? (pendingSnapshot?.tabId === tabId ? pendingSnapshot.view : null)
-    const content = view
-      ? getSourceDocumentContent(tabId, view, sourceEditorRevisionRef.current)
-      : markdownRef.current
+    const rawContent = view?.state.doc.toString() ?? markdownRef.current
+    const content = view ? applyChunkEdit(rawContent) ?? rawContent : rawContent
     const shouldMarkDirty = activeTabId === tabId && activeTabContent !== content
 
     clearSourceDocumentSync()
     if (view && isPreviewVisible) {
-      schedulePreviewDocument(tabId, view, sourceEditorRevisionRef.current, () => content)
+      schedulePreviewDocument(tabId, view, sourceEditorRevisionRef.current)
     }
     commitSourceDocumentSnapshot(tabId, content, shouldMarkDirty)
     return content
@@ -185,6 +147,7 @@ export function useEditorDocumentSync({
     activeIdRef,
     activeTabContent,
     activeTabId,
+    applyChunkEdit,
     clearSourceDocumentSync,
     commitSourceDocumentSnapshot,
     editModeRef,
@@ -193,7 +156,6 @@ export function useEditorDocumentSync({
     markdownRef,
     isPreviewVisible,
     schedulePreviewDocument,
-    getSourceDocumentContent,
     sourceEditorTabIdRef,
     sourceEditorRevisionRef,
   ])
@@ -222,7 +184,7 @@ export function useEditorDocumentSync({
       doc: nextDoc,
       editorDoc: view.state.doc,
     }
-    const getContent = () => getSourceDocumentContent(tabId, view, revision)
+
 
     if (!activeTabDirty && sourceDirtyTabRef.current !== tabId) {
       markActiveTabDirty()
@@ -230,7 +192,7 @@ export function useEditorDocumentSync({
       markDirty()
     }
 
-    schedulePreviewDocument(tabId, view, revision, getContent)
+    schedulePreviewDocument(tabId, view, revision)
     scheduleSourceDocumentSync(tabId, view, revision)
   }, [
     activeIdRef,
@@ -238,7 +200,6 @@ export function useEditorDocumentSync({
     editorViewRef,
     markActiveTabDirty,
     markDirty,
-    getSourceDocumentContent,
     schedulePreviewDocument,
     scheduleSourceDocumentSync,
     sourceEditorRevisionRef,

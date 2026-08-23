@@ -39,7 +39,7 @@ export const enUSMessages: MessageDictionary = {
     title: 'Performance',
     description: 'Tune experimental performance behavior for large documents.',
     experimentalPreviewOptimization: 'Enable experimental preview optimization',
-    experimentalPreviewOptimizationHint: 'Uses a worker for Markdown preview processing. Large documents use the worker automatically to reduce input impact while still following the latest content.',
+    experimentalPreviewOptimizationHint: 'Uses a worker and deferred refresh for Markdown preview processing. It can improve typing responsiveness on large documents, but preview updates may feel a little delayed.',
   },
   searchSettings: {
     title: 'Search',

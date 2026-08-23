@@ -7,10 +7,9 @@ import {
   buildBackgroundImageVars,
   resolveManagedBackgroundImageUrl,
 } from '../modules/theme/backgroundImageRuntime'
-import { type PreviewStore, usePreviewValue } from '../hooks/usePreviewStore'
 
 export type PreviewPaneProps = {
-  previewStore: PreviewStore
+  value: string
   activeLine: number
   previewWidth: number
   effectiveLayout: LayoutType
@@ -49,7 +48,7 @@ function HtmlPreview({ html }: HtmlPreviewProps) {
 }
 
 function PreviewPaneComponent({
-  previewStore,
+  value,
   activeLine,
   previewWidth,
   effectiveLayout,
@@ -60,7 +59,6 @@ function PreviewPaneComponent({
   onPreviewLineClick,
   onSelectionChange,
 }: PreviewPaneProps) {
-  const value = usePreviewValue(previewStore)
   const style: CSSProperties = {}
   const { themeSettings } = useThemeContext()
   const previewRootRef = useRef<HTMLElement | null>(null)
@@ -208,7 +206,7 @@ function PreviewPaneComponent({
 export const PreviewPane = memo(
   PreviewPaneComponent,
   (prev, next) => (
-    prev.previewStore === next.previewStore &&
+    prev.value === next.value &&
     prev.activeLine === next.activeLine &&
     prev.previewWidth === next.previewWidth &&
     prev.effectiveLayout === next.effectiveLayout &&

@@ -39,7 +39,7 @@ export const zhCNMessages: MessageDictionary = {
     title: '性能',
     description: '调节大文档相关的实验性性能行为。',
     experimentalPreviewOptimization: '启用实验性预览优化',
-    experimentalPreviewOptimizationHint: '使用 worker 处理 Markdown 预览。大文档会自动使用 worker，减少预览解析对输入的影响，同时继续跟随最新内容。',
+    experimentalPreviewOptimizationHint: '使用 worker 和延迟刷新来处理 Markdown 预览。它能提升大文档输入流畅度，但预览更新可能会稍微延迟。',
   },
   searchSettings: {
     title: '搜索',

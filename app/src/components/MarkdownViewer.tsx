@@ -50,6 +50,10 @@ function isPlainTextFile(path: string | null | undefined): boolean {
   return path.toLowerCase().endsWith('.txt')
 }
 
+function containsRawHtml(markdown: string): boolean {
+  return /<!--[\s\S]*?-->|<\/?[A-Za-z][^>]*>/.test(markdown)
+}
+
 type LineRangeIndexEntry = {
   start: number
   end: number
@@ -82,8 +86,6 @@ type PreviewWorkerRequest = {
   id: number
   value: string
 }
-
-const LARGE_DOCUMENT_PREVIEW_WORKER_THRESHOLD = 16_000
 
 const FoldContext = React.createContext<FoldRegion[]>([])
 const FilePathContext = React.createContext<string | null>(null)
@@ -142,17 +144,6 @@ function collectSourceLineIndex(container: HTMLElement): SourceLineIndex {
   return index
 }
 
-function collectSourceLineElements(container: HTMLElement, line: number): HTMLElement[] {
-  const elements = Array.from(container.querySelectorAll<HTMLElement>(
-    `[${SOURCE_LINE_ATTRIBUTE}="${line}"]`,
-  ))
-
-  return elements.filter((element) => {
-    const parentMarker = element.parentElement?.closest<HTMLElement>(`[${SOURCE_LINE_ATTRIBUTE}]`)
-    return !(parentMarker && container.contains(parentMarker))
-  })
-}
-
 function collectLineRangeIndex(container: HTMLElement): LineRangeIndexEntry[] {
   return Array.from(container.querySelectorAll<HTMLElement>(
     `[${SOURCE_LINE_START_ATTRIBUTE}][${SOURCE_LINE_END_ATTRIBUTE}]`,
@@ -197,24 +188,8 @@ function findLineTarget(chunks: ChunkLineIndex[], line: number): HTMLElement | n
 
   const localLine = getChunkLocalLine(chunk, line)
   const exact = chunk.sourceLineIndex.get(localLine)
-  if (exact?.length && exact.every((element) => element.isConnected && chunk.element.contains(element))) {
-    return exact[0]
-  }
-  if (exact?.length) {
-    chunk.sourceLineIndex.delete(localLine)
-  }
+  if (exact?.length) return exact[0]
 
-  if (chunk.element.isConnected) {
-    const sourceLineElements = collectSourceLineElements(chunk.element, localLine)
-    if (sourceLineElements.length > 0) {
-      chunk.sourceLineIndex.set(localLine, sourceLineElements)
-      return sourceLineElements[0]
-    }
-  }
-
-  if (chunk.lineRanges.length === 0 && chunk.element.isConnected) {
-    chunk.lineRanges = collectLineRangeIndex(chunk.element)
-  }
   return findActiveLineRangeEntry(chunk.lineRanges, localLine, null)?.entry.element ?? null
 }
 
@@ -851,11 +826,14 @@ const MarkdownBlockChunkView = memo(({
   )
 }, (prev, next) =>
   prev.chunk.id === next.chunk.id &&
+  prev.chunk.startLine === next.chunk.startLine &&
+  prev.chunk.endLine === next.chunk.endLine &&
   prev.chunk.markdown === next.chunk.markdown &&
   prev.filePath === next.filePath &&
   prev.components === next.components &&
   prev.remarkPlugins === next.remarkPlugins &&
-  prev.rehypePlugins === next.rehypePlugins,
+  prev.rehypePlugins === next.rehypePlugins &&
+  prev.documentLineOffset === next.documentLineOffset,
 )
 
 type MarkdownDocumentProps = {
@@ -971,7 +949,6 @@ const MarkdownViewerComponent = React.forwardRef<
   const previewRequestIdRef = useRef(0)
   const previewWorkerBusyRef = useRef(false)
   const pendingPreviewWorkerRequestRef = useRef<PreviewWorkerRequest | null>(null)
-  const previewNearBottomRef = useRef(true)
 
   const {
     value,
@@ -985,9 +962,6 @@ const MarkdownViewerComponent = React.forwardRef<
   const plainTextMode = isPlainTextFile(filePath)
   const [performanceSettings, setPerformanceSettings] = useState<PerformanceSettings>(getDefaultPerformanceSettings())
   const [previewResult, setPreviewResult] = useState<PreviewMarkdownResult>(() => preparePreviewMarkdown(value))
-  const shouldUsePreviewWorker =
-    performanceSettings.experimentalPreviewOptimization ||
-    value.length >= LARGE_DOCUMENT_PREVIEW_WORKER_THRESHOLD
 
   useEffect(() => {
     let cancelled = false
@@ -1004,7 +978,7 @@ const MarkdownViewerComponent = React.forwardRef<
   }, [])
 
   useEffect(() => {
-    if (!shouldUsePreviewWorker || mode !== 'rendered' || typeof Worker === 'undefined') {
+    if (!performanceSettings.experimentalPreviewOptimization || mode !== 'rendered' || typeof Worker === 'undefined') {
       previewWorkerRef.current?.terminate()
       previewWorkerRef.current = null
       previewWorkerBusyRef.current = false
@@ -1021,7 +995,6 @@ const MarkdownViewerComponent = React.forwardRef<
         id: number
         processedMarkdown: string
         hasMath: boolean
-        hasRawHtml: boolean
         containsToc: boolean
         sourceLineOffset: number
         lineCount: number
@@ -1044,7 +1017,6 @@ const MarkdownViewerComponent = React.forwardRef<
         setPreviewResult({
           processedMarkdown: event.data.processedMarkdown,
           hasMath: event.data.hasMath,
-          hasRawHtml: event.data.hasRawHtml,
           containsToc: event.data.containsToc,
           sourceLineOffset: event.data.sourceLineOffset,
           lineCount: event.data.lineCount,
@@ -1063,14 +1035,14 @@ const MarkdownViewerComponent = React.forwardRef<
     }
   }, [
     mode,
-    shouldUsePreviewWorker,
+    performanceSettings.experimentalPreviewOptimization,
   ])
 
   useEffect(() => {
     if (mode !== 'rendered') return
 
     const requestId = ++previewRequestIdRef.current
-    if (!shouldUsePreviewWorker) {
+    if (!performanceSettings.experimentalPreviewOptimization) {
       const nextResult = preparePreviewMarkdown(value)
       startTransition(() => {
         if (requestId !== previewRequestIdRef.current) return
@@ -1103,7 +1075,7 @@ const MarkdownViewerComponent = React.forwardRef<
   }, [
     mode,
     value,
-    shouldUsePreviewWorker,
+    performanceSettings.experimentalPreviewOptimization,
   ])
 
   useEffect(() => {
@@ -1126,40 +1098,19 @@ const MarkdownViewerComponent = React.forwardRef<
     }
 
     const container = containerRef.current
-    const currentSourceLine = activeSourceLineRef.current
-    const currentBlock = activeLineEntryRef.current
+    clearSourceLineHighlight(activeSourceLineRef.current)
+    activeSourceLineRef.current = null
+    const currentActive = activeLineEntryRef.current
+    if (currentActive) {
+      currentActive.entry.element.classList.remove('active-block')
+      activeLineEntryRef.current = null
+    }
 
     if (!container || mode !== 'rendered' || typeof nextActiveLine !== 'number' || nextActiveLine < 1) {
-      clearSourceLineHighlight(currentSourceLine)
-      activeSourceLineRef.current = null
-      if (currentBlock) {
-        currentBlock.entry.element.classList.remove('active-block')
-        activeLineEntryRef.current = null
-      }
       if (!container || mode !== 'rendered') {
         previewLineIndexRef.current = []
       }
       return
-    }
-
-    const sourceLineStillValid = (
-      currentSourceLine?.line === nextActiveLine &&
-      currentSourceLine.elements.length > 0 &&
-      currentSourceLine.elements.every((element) => container.contains(element))
-    )
-    const blockStillValid = (
-      currentBlock &&
-      currentBlock.entry.element.isConnected &&
-      nextActiveLine >= currentBlock.entry.start &&
-      nextActiveLine <= currentBlock.entry.end
-    )
-    if (sourceLineStillValid || blockStillValid) return
-
-    clearSourceLineHighlight(currentSourceLine)
-    activeSourceLineRef.current = null
-    if (currentBlock) {
-      currentBlock.entry.element.classList.remove('active-block')
-      activeLineEntryRef.current = null
     }
 
     activeLineRafRef.current = requestAnimationFrame(() => {
@@ -1172,20 +1123,10 @@ const MarkdownViewerComponent = React.forwardRef<
       if (chunk) {
         localLine = getChunkLocalLine(chunk, nextActiveLine)
         sourceLineElements = chunk.sourceLineIndex.get(localLine) ?? []
-        if (
-          sourceLineElements.length > 0 &&
-          !sourceLineElements.every((element) => element.isConnected && chunk.element.contains(element))
-        ) {
-          chunk.sourceLineIndex.delete(localLine)
-          sourceLineElements = []
-        }
         if (sourceLineElements.length === 0 && chunk.element.isConnected) {
-          sourceLineElements = collectSourceLineElements(chunk.element, localLine)
-          if (sourceLineElements.length > 0) {
-            chunk.sourceLineIndex.set(localLine, sourceLineElements)
-          } else if (chunk.lineRanges.length === 0) {
-            chunk.lineRanges = collectLineRangeIndex(chunk.element)
-          }
+          chunk.sourceLineIndex = collectSourceLineIndex(chunk.element)
+          chunk.lineRanges = collectLineRangeIndex(chunk.element)
+          sourceLineElements = chunk.sourceLineIndex.get(localLine) ?? []
         }
       }
       const currentSourceLine = activeSourceLineRef.current
@@ -1310,7 +1251,7 @@ const MarkdownViewerComponent = React.forwardRef<
   const blockChunks = useMemo(() => (
     blockRenderingEnabled ? previewResult.blockChunks : []
   ), [blockRenderingEnabled, previewResult.blockChunks])
-  const hasRawHtml = previewResult.hasRawHtml
+  const hasRawHtml = useMemo(() => containsRawHtml(renderedValue), [renderedValue])
   const rehypePlugins = useMemo(
     () => {
       const plugins: any[] = [rehypeAlignedTabBlocks]
@@ -1332,12 +1273,10 @@ const MarkdownViewerComponent = React.forwardRef<
       return
     }
 
-    const domStartLine = Number(element.dataset.chunkStartLine)
-    const domEndLine = Number(element.dataset.chunkEndLine)
     chunkLineIndexMapRef.current.set(chunkId, {
       id: chunkId,
-      startLine: Number.isInteger(domStartLine) ? domStartLine : startLine,
-      endLine: Number.isInteger(domEndLine) ? domEndLine : endLine,
+      startLine,
+      endLine,
       element,
       sourceLineIndex: collectSourceLineIndex(element),
       lineRanges: collectLineRangeIndex(element),
@@ -1445,98 +1384,64 @@ const MarkdownViewerComponent = React.forwardRef<
     [hasMath, plainTextMode, previewResult.containsToc],
   )
 
-  // Earlier edits can shift later chunks without changing their markdown.
-  // Update only their line metadata so those chunks stay memoized.
-  useLayoutEffect(() => {
-    if (!blockRenderingEnabled) return
-
-    const activeChunkIds = new Set(blockChunks.map((chunk) => chunk.id))
-    for (const chunk of blockChunks) {
-      const indexed = chunkLineIndexMapRef.current.get(chunk.id)
-      if (!indexed) continue
-
-      const startLine = sourceLineOffset + chunk.startLine
-      const endLine = sourceLineOffset + chunk.endLine
-      indexed.startLine = startLine
-      indexed.endLine = endLine
-      indexed.element.dataset.lineStart = String(startLine)
-      indexed.element.dataset.lineEnd = String(endLine)
-      indexed.element.dataset.chunkStartLine = String(startLine)
-      indexed.element.dataset.chunkEndLine = String(endLine)
-    }
-
-    for (const chunkId of chunkLineIndexMapRef.current.keys()) {
-      if (!activeChunkIds.has(chunkId)) {
-        chunkLineIndexMapRef.current.delete(chunkId)
-      }
-    }
-  }, [blockChunks, blockRenderingEnabled, sourceLineOffset])
-
   useLayoutEffect(() => {
     const container = containerRef.current
-    if (!container || mode !== 'rendered' || !blockRenderingEnabled) return
+    clearSourceLineHighlight(activeSourceLineRef.current)
+    activeSourceLineRef.current = null
+    const currentActive = activeLineEntryRef.current
+    if (currentActive) {
+      currentActive.entry.element.classList.remove('active-block')
+      activeLineEntryRef.current = null
+    }
 
-    previewLineIndexRef.current = blockChunks
-      .map((chunk) => chunkLineIndexMapRef.current.get(chunk.id) ?? null)
-      .filter((chunk): chunk is ChunkLineIndex => chunk !== null)
-      .sort((left, right) => left.startLine - right.startLine)
-  }, [
-    blockChunks,
-    blockRenderingEnabled,
-    mode,
-  ])
+    if (!container || mode !== 'rendered') {
+      previewLineIndexRef.current = []
+      return
+    }
 
-  useLayoutEffect(() => {
-    const container = containerRef.current
-    if (!container || mode !== 'rendered' || blockRenderingEnabled) return
+    if (blockRenderingEnabled) {
+      previewLineIndexRef.current = blockChunks
+        .map((chunk) => chunkLineIndexMapRef.current.get(chunk.id) ?? null)
+        .filter((chunk): chunk is ChunkLineIndex => chunk !== null)
+        .sort((left, right) => left.startLine - right.startLine)
+      return
+    }
 
     previewLineIndexRef.current = [{
       id: 'document',
       startLine: sourceLineOffset + 1,
       endLine: sourceLineOffset + Math.max(previewResult.lineCount, 1),
       element: container,
-      // Full-document indexes are built lazily for the active line or a click target.
-      sourceLineIndex: new Map(),
-      lineRanges: [],
+      sourceLineIndex: collectSourceLineIndex(container),
+      lineRanges: collectLineRangeIndex(container),
     }]
   }, [
+    blockChunks,
     blockRenderingEnabled,
+    foldRegions,
     mode,
     previewResult.lineCount,
     renderedValue,
     sourceLineOffset,
+    activeRemarkPlugins,
+    rehypePlugins,
   ])
 
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container || mode !== 'rendered') return
-
-    const scrollParent = container.closest('.preview-body') as HTMLElement | null
-    if (!scrollParent) return
-
-    const updateNearBottom = () => {
-      previewNearBottomRef.current =
-        scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight < 100
-    }
-
-    updateNearBottom()
-    scrollParent.addEventListener('scroll', updateNearBottom, { passive: true })
-    return () => {
-      scrollParent.removeEventListener('scroll', updateNearBottom)
-    }
-  }, [mode])
-
-  // Keep the preview pinned to the bottom only when the user was already there.
-  useEffect(() => {
+  // 保存和恢复滚动位置
+  useLayoutEffect(() => {
     const container = containerRef.current
     if (!container) return
 
     const scrollParent = container.closest('.preview-body') as HTMLElement | null
     if (!scrollParent) return
 
-    if (!previewNearBottomRef.current) return
-    if (scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight >= 1) {
+    const savedScrollTop = scrollParent.scrollTop
+    const wasNearBottom = scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight < 100
+
+    if (wasNearBottom) {
       scrollParent.scrollTop = scrollParent.scrollHeight
+    } else {
+      scrollParent.scrollTop = savedScrollTop
     }
   }, [renderedValue])
 

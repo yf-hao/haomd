@@ -11,7 +11,6 @@ type PreviewWorkerResponse = {
   id: number
   processedMarkdown: string
   hasMath: boolean
-  hasRawHtml: boolean
   containsToc: boolean
   sourceLineOffset: number
   lineCount: number
@@ -33,7 +32,6 @@ workerScope.addEventListener('message', (event: MessageEvent<PreviewWorkerReques
     id,
     processedMarkdown: result.processedMarkdown,
     hasMath: result.hasMath,
-    hasRawHtml: result.hasRawHtml,
     containsToc: result.containsToc,
     sourceLineOffset: result.sourceLineOffset,
     lineCount: result.lineCount,

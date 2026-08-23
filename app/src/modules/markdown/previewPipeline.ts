@@ -13,7 +13,6 @@ export type PreviewBlockChunk = {
 export type PreviewMarkdownResult = {
   processedMarkdown: string
   hasMath: boolean
-  hasRawHtml: boolean
   containsToc: boolean
   sourceLineOffset: number
   lineCount: number
@@ -47,10 +46,6 @@ function isBlockStartLine(line: string): boolean {
 
 function containsTocPlaceholder(markdown: string): boolean {
   return markdown.split(/\r?\n/).some((line) => /^\s*\[(?:toc)([^\]]*)?\]\s*$/i.test(line))
-}
-
-function containsRawHtml(markdown: string): boolean {
-  return /<!--[\s\S]*?-->|<\/?[A-Za-z][^>]*>/.test(markdown)
 }
 
 function hashMarkdownChunk(markdown: string): string {
@@ -176,7 +171,6 @@ export function preparePreviewMarkdown(value: string): PreviewMarkdownResult {
   const result: PreviewMarkdownResult = {
     processedMarkdown,
     hasMath: /\$/.test(processedMarkdown),
-    hasRawHtml: containsRawHtml(processedMarkdown),
     containsToc,
     sourceLineOffset,
     lineCount,
