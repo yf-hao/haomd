@@ -1,4 +1,5 @@
 import { listen } from '@tauri-apps/api/event'
+import { safeUnlisten } from './safeUnlisten'
 
 export type Unlisten = () => void
 
@@ -24,11 +25,7 @@ export function onMenuAction(handler: (actionId: string) => void | Promise<void>
       if (disposed) {
         if (!unlistenCalled) {
           unlistenCalled = true
-          try {
-            un()
-          } catch (err) {
-            console.warn('[menuEvents] unlisten menu://action failed', err)
-          }
+          safeUnlisten(un, 'menuEvents:menu://action')
         }
       } else {
         unlisten = un
@@ -44,11 +41,7 @@ export function onMenuAction(handler: (actionId: string) => void | Promise<void>
     disposed = true
     if (unlisten && !unlistenCalled) {
       unlistenCalled = true
-      try {
-        unlisten()
-      } catch (err) {
-        console.warn('[menuEvents] manual unlisten menu://action failed', err)
-      }
+      safeUnlisten(unlisten, 'menuEvents:menu://action')
     }
   }
 }
@@ -69,11 +62,7 @@ export function onOpenRecentFile(handler: (payload: RecentMenuPayload) => void |
       if (disposed) {
         if (!unlistenCalled) {
           unlistenCalled = true
-          try {
-            un()
-          } catch (err) {
-            console.warn('[menuEvents] unlisten menu://open_recent_file failed', err)
-          }
+          safeUnlisten(un, 'menuEvents:menu://open_recent_file')
         }
       } else {
         unlisten = un
@@ -89,11 +78,7 @@ export function onOpenRecentFile(handler: (payload: RecentMenuPayload) => void |
     disposed = true
     if (unlisten && !unlistenCalled) {
       unlistenCalled = true
-      try {
-        unlisten()
-      } catch (err) {
-        console.warn('[menuEvents] manual unlisten menu://open_recent_file failed', err)
-      }
+      safeUnlisten(unlisten, 'menuEvents:menu://open_recent_file')
     }
   }
 }

@@ -1,4 +1,5 @@
 import { listen } from '@tauri-apps/api/event'
+import { safeUnlisten } from './safeUnlisten'
 
 export type Unlisten = () => void
 
@@ -52,11 +53,7 @@ export function onWebDavImportStarted(handler: () => void): Unlisten {
       if (disposed) {
         if (!unlistenCalled) {
           unlistenCalled = true
-          try {
-            un()
-          } catch (err) {
-            console.warn('[backupEvents] unlisten backup://webdav_import_started failed', err)
-          }
+          safeUnlisten(un, 'backupEvents:backup://webdav_import_started')
         }
       } else {
         unlisten = un
@@ -72,11 +69,7 @@ export function onWebDavImportStarted(handler: () => void): Unlisten {
     disposed = true
     if (unlisten && !unlistenCalled) {
       unlistenCalled = true
-      try {
-        unlisten()
-      } catch (err) {
-        console.warn('[backupEvents] manual unlisten backup://webdav_import_started failed', err)
-      }
+      safeUnlisten(unlisten, 'backupEvents:backup://webdav_import_started')
     }
   }
 }
@@ -99,11 +92,7 @@ export function onWebDavImportFinished(
       if (disposed) {
         if (!unlistenCalled) {
           unlistenCalled = true
-          try {
-            un()
-          } catch (err) {
-            console.warn('[backupEvents] unlisten backup://webdav_import_finished failed', err)
-          }
+          safeUnlisten(un, 'backupEvents:backup://webdav_import_finished')
         }
       } else {
         unlisten = un
@@ -119,11 +108,7 @@ export function onWebDavImportFinished(
     disposed = true
     if (unlisten && !unlistenCalled) {
       unlistenCalled = true
-      try {
-        unlisten()
-      } catch (err) {
-        console.warn('[backupEvents] manual unlisten backup://webdav_import_finished failed', err)
-      }
+      safeUnlisten(unlisten, 'backupEvents:backup://webdav_import_finished')
     }
   }
 }
@@ -146,11 +131,7 @@ export function onWebDavImportProgress(
       if (disposed) {
         if (!unlistenCalled) {
           unlistenCalled = true
-          try {
-            un()
-          } catch (err) {
-            console.warn('[backupEvents] unlisten backup://webdav_import_progress failed', err)
-          }
+          safeUnlisten(un, 'backupEvents:backup://webdav_import_progress')
         }
       } else {
         unlisten = un
@@ -166,11 +147,7 @@ export function onWebDavImportProgress(
     disposed = true
     if (unlisten && !unlistenCalled) {
       unlistenCalled = true
-      try {
-        unlisten()
-      } catch (err) {
-        console.warn('[backupEvents] manual unlisten backup://webdav_import_progress failed', err)
-      }
+      safeUnlisten(unlisten, 'backupEvents:backup://webdav_import_progress')
     }
   }
 }
@@ -188,11 +165,7 @@ export function onWebDavExportStarted(handler: () => void): Unlisten {
       if (disposed) {
         if (!unlistenCalled) {
           unlistenCalled = true
-          try {
-            un()
-          } catch (err) {
-            console.warn('[backupEvents] unlisten backup://webdav_export_started failed', err)
-          }
+          safeUnlisten(un, 'backupEvents:backup://webdav_export_started')
         }
       } else {
         unlisten = un
@@ -208,11 +181,7 @@ export function onWebDavExportStarted(handler: () => void): Unlisten {
     disposed = true
     if (unlisten && !unlistenCalled) {
       unlistenCalled = true
-      try {
-        unlisten()
-      } catch (err) {
-        console.warn('[backupEvents] manual unlisten backup://webdav_export_started failed', err)
-      }
+      safeUnlisten(unlisten, 'backupEvents:backup://webdav_export_started')
     }
   }
 }
@@ -235,11 +204,7 @@ export function onWebDavExportProgress(
       if (disposed) {
         if (!unlistenCalled) {
           unlistenCalled = true
-          try {
-            un()
-          } catch (err) {
-            console.warn('[backupEvents] unlisten backup://webdav_export_progress failed', err)
-          }
+          safeUnlisten(un, 'backupEvents:backup://webdav_export_progress')
         }
       } else {
         unlisten = un
@@ -255,11 +220,7 @@ export function onWebDavExportProgress(
     disposed = true
     if (unlisten && !unlistenCalled) {
       unlistenCalled = true
-      try {
-        unlisten()
-      } catch (err) {
-        console.warn('[backupEvents] manual unlisten backup://webdav_export_progress failed', err)
-      }
+      safeUnlisten(unlisten, 'backupEvents:backup://webdav_export_progress')
     }
   }
 }
@@ -282,11 +243,7 @@ export function onWebDavExportFinished(
       if (disposed) {
         if (!unlistenCalled) {
           unlistenCalled = true
-          try {
-            un()
-          } catch (err) {
-            console.warn('[backupEvents] unlisten backup://webdav_export_finished failed', err)
-          }
+          safeUnlisten(un, 'backupEvents:backup://webdav_export_finished')
         }
       } else {
         unlisten = un
@@ -302,11 +259,7 @@ export function onWebDavExportFinished(
     disposed = true
     if (unlisten && !unlistenCalled) {
       unlistenCalled = true
-      try {
-        unlisten()
-      } catch (err) {
-        console.warn('[backupEvents] manual unlisten backup://webdav_export_finished failed', err)
-      }
+      safeUnlisten(unlisten, 'backupEvents:backup://webdav_export_finished')
     }
   }
 }

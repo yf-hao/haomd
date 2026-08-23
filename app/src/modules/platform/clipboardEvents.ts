@@ -1,5 +1,6 @@
 import { emit, listen } from '@tauri-apps/api/event'
 import { isTauriEnv } from './runtime'
+import { safeUnlisten } from './safeUnlisten'
 
 export type Unlisten = () => void
 
@@ -24,11 +25,7 @@ function createNativeClipboardListener<T>(
       if (disposed) {
         if (!unlistenCalled) {
           unlistenCalled = true
-          try {
-            un()
-          } catch (err) {
-            console.warn(`[clipboardEvents] unlisten ${eventName} failed`, err)
-          }
+          safeUnlisten(un, `clipboardEvents:${eventName}`)
         }
       } else {
         unlisten = un
@@ -44,11 +41,7 @@ function createNativeClipboardListener<T>(
     disposed = true
     if (unlisten && !unlistenCalled) {
       unlistenCalled = true
-      try {
-        unlisten()
-      } catch (err) {
-        console.warn(`[clipboardEvents] manual unlisten ${eventName} failed`, err)
-      }
+      safeUnlisten(unlisten, `clipboardEvents:${eventName}`)
     }
   }
 }

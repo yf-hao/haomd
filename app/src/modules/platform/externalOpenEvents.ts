@@ -1,4 +1,5 @@
 import { listen } from '@tauri-apps/api/event'
+import { safeUnlisten } from './safeUnlisten'
 
 export type Unlisten = () => void
 
@@ -20,11 +21,7 @@ export function onExternalOpenFile(handler: (payload: ExternalOpenPayload) => vo
       if (disposed) {
         if (!unlistenCalled) {
           unlistenCalled = true
-          try {
-            un()
-          } catch (err) {
-            console.warn('[externalOpenEvents] unlisten native://open_external_file failed', err)
-          }
+          safeUnlisten(un, 'externalOpenEvents:native://open_external_file')
         }
       } else {
         unlisten = un
@@ -40,11 +37,7 @@ export function onExternalOpenFile(handler: (payload: ExternalOpenPayload) => vo
     disposed = true
     if (unlisten && !unlistenCalled) {
       unlistenCalled = true
-      try {
-        unlisten()
-      } catch (err) {
-        console.warn('[externalOpenEvents] manual unlisten native://open_external_file failed', err)
-      }
+      safeUnlisten(unlisten, 'externalOpenEvents:native://open_external_file')
     }
   }
 }
