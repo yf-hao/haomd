@@ -41,7 +41,8 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
     editorZoom,
   } = props
   const themeMode = useResolvedThemeMode()
-  const [editorValue, setEditorValue] = useState(value)
+  const [, setEditorValue] = useState(value)
+  const editorValueRef = useRef(value)
   const editorViewRef = useRef<EditorView | null>(null)
   const onViewReadyRef = useRef(onViewReady)
   const onChangeRef = useRef(onChange)
@@ -101,6 +102,7 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
     pendingExternalValueRef.current = null
     hasLocalDocumentChangesRef.current = false
     lastForwardedValueRef.current = value
+    editorValueRef.current = value
     if (view && currentDocument !== value) {
       applyingExternalValueRef.current = true
       try {
@@ -129,6 +131,7 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
       const view = editorViewRef.current
       if (!view || view.dom.isConnected === false) return
       const nextValue = view.state.doc.toString()
+      editorValueRef.current = nextValue
       setEditorValue(nextValue)
       forwardChange(nextValue)
       onDocumentChangeRef.current?.(view)
@@ -148,6 +151,7 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
         } finally {
           applyingExternalValueRef.current = false
         }
+        editorValueRef.current = pendingExternalValue
         setEditorValue(pendingExternalValue)
         lastForwardedValueRef.current = pendingExternalValue
       }
@@ -200,8 +204,9 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
         readOnly={readOnly}
         placeholder={placeholder}
         extensions={mergedExtensions}
-        value={editorValue}
+        value={preserveLocalDocument || onChange ? editorValueRef.current : value}
         onChange={(val) => {
+          editorValueRef.current = val
           setEditorValue(val)
           if (!isComposingRef.current && !editorViewRef.current?.composing) {
             forwardChange(val)

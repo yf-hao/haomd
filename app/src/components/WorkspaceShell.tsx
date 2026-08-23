@@ -1505,6 +1505,7 @@ export function WorkspaceShell({
       } else {
         handleMarkdownChange(val)
       }
+
     },
     [activePdfPath, getActiveSourceView, handleMarkdownChange, handleSourceEditorDocumentChange, isPdfActive],
   )
