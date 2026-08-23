@@ -228,17 +228,6 @@ const countDocumentChars = (text: string): number => {
 }
 
 const seed = ''
-const PREVIEW_SYNC_DELAY_MS = 300
-const FORMULA_HEAVY_PREVIEW_DELAY_MS = 500
-const FORMULA_EXTREME_PREVIEW_DELAY_MS = 700
-
-function getPreviewSyncDelay(markdown: string): number {
-  const formulaMarkers = (markdown.replace(/\\./g, '').match(/\${1,2}|\\\[|\\\]/g) ?? []).length
-  if (formulaMarkers >= 120) return FORMULA_EXTREME_PREVIEW_DELAY_MS
-  if (formulaMarkers >= 40) return FORMULA_HEAVY_PREVIEW_DELAY_MS
-  return PREVIEW_SYNC_DELAY_MS
-}
-
 function findOutlineItemByPage(items: OutlineItem[], page: number): OutlineItem | null {
   for (const item of items) {
     const childMatch = item.children ? findOutlineItemByPage(item.children, page) : null
@@ -2433,8 +2422,8 @@ export function WorkspaceShell({
     clearPreviewSyncTimer()
     const timer = window.setTimeout(() => {
       previewSyncTimerRef.current = null
-      commitPreviewValue(markdown)
-    }, getPreviewSyncDelay(markdown))
+      setPreviewValue(markdown)
+     }, 150)
     previewSyncTimerRef.current = timer
     return () => clearTimeout(timer)
   }, [markdown, isPreviewVisible, clearPreviewSyncTimer, commitPreviewValue])
