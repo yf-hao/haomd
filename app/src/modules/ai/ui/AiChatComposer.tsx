@@ -97,6 +97,7 @@ const AiChatComposerToolbar = memo(({
   imageGenerationRunning,
   attachedImageDataUrl,
   pendingAttachmentsLength,
+  hasDraft,
   t,
   modelGroups,
   roleOptions,
@@ -120,6 +121,7 @@ const AiChatComposerToolbar = memo(({
   imageGenerationRunning?: boolean
   attachedImageDataUrl?: string | null
   pendingAttachmentsLength: number
+  hasDraft: boolean
   t: (key: string, params?: Record<string, string | number>) => string
   modelGroups: BadgeSelectGroup[]
   roleOptions: { value: string; label: string }[]
@@ -188,7 +190,7 @@ const AiChatComposerToolbar = memo(({
               && (
                 agentMode === 'image_generation'
                   ? false
-                  : (!pendingAttachmentsLength && !attachedImageDataUrl)
+                  : (!hasDraft && !pendingAttachmentsLength && !attachedImageDataUrl)
               ))
           }
         >
@@ -247,6 +249,7 @@ export const AiChatComposer = memo(function AiChatComposer({
   const textareaValueRef = useRef('')
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const [composerState, setComposerState] = useState<ComposerState>({ draft: '', cursorIndex: null })
+  const [hasDraft, setHasDraft] = useState(false)
   const draft = composerState.draft
   const cursorIndex = composerState.cursorIndex
 
@@ -284,6 +287,7 @@ export const AiChatComposer = memo(function AiChatComposer({
 
   useEffect(() => {
     setComposerState({ draft: '', cursorIndex: null })
+    setHasDraft(false)
     draftSelectionRef.current = null
     textareaValueRef.current = ''
     autoResizeHeightRef.current = null
@@ -297,6 +301,7 @@ export const AiChatComposer = memo(function AiChatComposer({
     getDraft: () => textareaValueRef.current,
     setDraft: (value: string, caret?: number | null) => {
       textareaValueRef.current = value
+      setHasDraft(value.trim().length > 0)
       if (textareaRef.current) {
         textareaRef.current.value = value
       }
@@ -312,6 +317,7 @@ export const AiChatComposer = memo(function AiChatComposer({
     },
     clearDraft: () => {
       textareaValueRef.current = ''
+      setHasDraft(false)
       if (textareaRef.current) {
         textareaRef.current.value = ''
       }
@@ -337,6 +343,7 @@ export const AiChatComposer = memo(function AiChatComposer({
   const commitDraftFromInput = useCallback((target: HTMLTextAreaElement, syncState = false) => {
     const nextDraft = target.value
     textareaValueRef.current = nextDraft
+    setHasDraft(nextDraft.trim().length > 0)
     onDraftChange?.()
     if (syncState) {
       const nextCursor = resolveSlashCursorIndex(nextDraft, target.selectionStart)
@@ -354,6 +361,7 @@ export const AiChatComposer = memo(function AiChatComposer({
 
   const applyComposerState = useCallback((value: string, caret: number | null) => {
     textareaValueRef.current = value
+    setHasDraft(value.trim().length > 0)
     if (inputRef?.current) {
       inputRef.current.value = value
     }
@@ -694,6 +702,7 @@ export const AiChatComposer = memo(function AiChatComposer({
           imageGenerationRunning={imageGenerationRunning}
           attachedImageDataUrl={attachedImageDataUrl}
           pendingAttachmentsLength={pendingAttachments?.length ?? 0}
+          hasDraft={hasDraft}
           t={t}
           modelGroups={modelGroups}
           roleOptions={roleOptions}

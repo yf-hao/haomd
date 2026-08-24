@@ -55,6 +55,34 @@ describe('AiChatComposer', () => {
     expect(textarea.style.height).toBe('120px')
   })
 
+  it('enables the send button when ordinary text is entered', async () => {
+    const inputRef = createRef<HTMLTextAreaElement | null>()
+
+    renderWithI18n(
+      <AiChatComposer
+        loading={false}
+        onSubmit={() => {}}
+        onInputKeyDown={() => {}}
+        inputRef={inputRef}
+        pendingAttachmentsLength={0}
+        onStop={() => {}}
+      />,
+    )
+
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement
+    const sendButton = document.querySelector<HTMLButtonElement>('.ai-chat-send-button')
+    if (!sendButton) throw new Error('send button was not rendered')
+    expect(sendButton.disabled).toBe(true)
+
+    await act(async () => {
+      fireEvent.input(textarea, {
+        target: { value: 'hello world', selectionStart: 11 },
+      })
+    })
+
+    expect(sendButton.disabled).toBe(false)
+  })
+
   it('commits the finalized composition text after composition ends', async () => {
     const inputRef = createRef<HTMLTextAreaElement | null>()
     const composerHandleRef = createRef<AiChatComposerHandle>()
