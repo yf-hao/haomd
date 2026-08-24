@@ -36,6 +36,7 @@ import { buildSearchScope } from '../modules/search/searchScopeService'
 import type { SearchScope } from '../modules/search/types'
 import { useOutlineModel } from '../hooks/useOutlineModel'
 import { useEditorDocumentSync } from '../hooks/useEditorDocumentSync'
+import { createPreviewStore } from '../hooks/usePreviewStore'
 import type { OutlineItem } from '../modules/outline/parser'
 import type { OutlineHeading } from '../modules/outline/outlineSource'
 import { getMarkdownOutlineFallbackTarget, getWysiwygOutlineNavigationTarget } from '../modules/outline/outlineNavigation'
@@ -228,16 +229,6 @@ const countDocumentChars = (text: string): number => {
 }
 
 const seed = ''
-const PREVIEW_SYNC_DELAY_MS = 300
-const FORMULA_HEAVY_PREVIEW_DELAY_MS = 500
-const FORMULA_EXTREME_PREVIEW_DELAY_MS = 700
-
-function getPreviewSyncDelay(markdown: string): number {
-  const formulaMarkers = (markdown.replace(/\\./g, '').match(/\${1,2}|\\\[|\\\]/g) ?? []).length
-  if (formulaMarkers >= 120) return FORMULA_EXTREME_PREVIEW_DELAY_MS
-  if (formulaMarkers >= 40) return FORMULA_HEAVY_PREVIEW_DELAY_MS
-  return PREVIEW_SYNC_DELAY_MS
-}
 
 function findOutlineItemByPage(items: OutlineItem[], page: number): OutlineItem | null {
   for (const item of items) {
@@ -265,7 +256,7 @@ export function WorkspaceShell({
   const { themeSettings } = useThemeContext()
   const [markdown, setMarkdown] = useState(seed)
   const [editorMarkdown, setEditorMarkdown] = useState(seed)
-  const [previewValue, setPreviewValue] = useState(seed)
+  const [previewStore] = useState(() => createPreviewStore(seed))
   const [activeLine, setActiveLine] = useState(1)
   // 预览专用的行号：对 activeLine 做轻量节流后再驱动 Preview，降低重渲染频率
   const [previewActiveLine, setPreviewActiveLine] = useState(1)
@@ -568,8 +559,8 @@ export function WorkspaceShell({
   const skipNextPreviewThrottleRef = useRef(false)
 
   const commitPreviewValue = useCallback((nextValue: string) => {
-    setPreviewValue(nextValue)
-  }, [])
+    previewStore.set(nextValue)
+  }, [previewStore])
 
   const clearPreviewSyncTimer = useCallback(() => {
     if (previewSyncTimerRef.current != null) {
@@ -582,13 +573,18 @@ export function WorkspaceShell({
     }
   }, [])
 
-  const schedulePreviewDocument = useCallback((tabId: string, view: EditorView, revision: number) => {
+  const schedulePreviewDocument = useCallback((
+    tabId: string,
+    view: EditorView,
+    revision: number,
+    getContent: () => string,
+  ) => {
     if (!isPreviewVisible) return
 
     if (previewFrameRef.current != null) {
       window.cancelAnimationFrame(previewFrameRef.current)
     }
-    previewFrameRef.current = window.requestAnimationFrame(() => {
+    const commit = () => {
       previewFrameRef.current = null
       if (
         activeIdRef.current !== tabId ||
@@ -597,7 +593,12 @@ export function WorkspaceShell({
       ) {
         return
       }
-      commitPreviewValue(view.state.doc.toString())
+      commitPreviewValue(getContent())
+    }
+
+    previewFrameRef.current = window.requestAnimationFrame(() => {
+      previewFrameRef.current = null
+      commit()
     })
   }, [commitPreviewValue, isPreviewVisible])
 
@@ -2422,7 +2423,8 @@ export function WorkspaceShell({
     })
   }, [isCreatingTab, getUnsavedTabs, isTauriEnv, setActiveTab, setConfirmDialog, cleanupAllImportedWordTemps, t])
 
-  // 预览内容只在预览可见时才节流同步，避免 editor-only 模式下做无意义渲染
+  // 预览内容只在预览可见时按帧同步，避免 editor-only 模式下做无意义渲染。
+  // 不使用固定时间防抖，保证连续输入时预览仍然实时跟随最新内容。
   useEffect(() => {
     if (!isPreviewVisible) return
     if (skipNextPreviewThrottleRef.current) {
@@ -2431,12 +2433,12 @@ export function WorkspaceShell({
     }
 
     clearPreviewSyncTimer()
-    const timer = window.setTimeout(() => {
-      previewSyncTimerRef.current = null
+    const frame = window.requestAnimationFrame(() => {
+      previewFrameRef.current = null
       commitPreviewValue(markdown)
-    }, getPreviewSyncDelay(markdown))
-    previewSyncTimerRef.current = timer
-    return () => clearTimeout(timer)
+    })
+    previewFrameRef.current = frame
+    return () => window.cancelAnimationFrame(frame)
   }, [markdown, isPreviewVisible, clearPreviewSyncTimer, commitPreviewValue])
 
   // 当预览从不可见切换为可见时，立即用最新 markdown 做一次全量同步
@@ -4811,22 +4813,24 @@ export function WorkspaceShell({
                     </Suspense>
                   </section>
 
-                  <PreviewErrorBoundary>
-                  <Suspense fallback={<LoadingFallback className="preview-loading-fallback" label={t('workspace.loadingPreview')} />}>
-                    <PreviewPaneLazy
-                      value={previewValue}
-                      activeLine={previewActiveLine}
-                      previewWidth={previewWidthForRender}
-                      effectiveLayout={effectiveLayout}
-                      loading={isPreviewLoading}
-                      loadingLabel={t('workspace.loadingPreview')}
-                      filePath={filePath}
-                      foldRegions={foldRegions}
-                      onPreviewLineClick={handlePreviewLineClick}
-                      onSelectionChange={setPreviewSelectionText}
-                    />
-                  </Suspense>
-                  </PreviewErrorBoundary>
+                  {showPreview && (
+                    <PreviewErrorBoundary>
+                    <Suspense fallback={<LoadingFallback className="preview-loading-fallback" label={t('workspace.loadingPreview')} />}>
+                      <PreviewPaneLazy
+                        previewStore={previewStore}
+                        activeLine={previewActiveLine}
+                        previewWidth={previewWidthForRender}
+                        effectiveLayout={effectiveLayout}
+                        loading={isPreviewLoading}
+                        loadingLabel={t('workspace.loadingPreview')}
+                        filePath={filePath}
+                        foldRegions={foldRegions}
+                        onPreviewLineClick={handlePreviewLineClick}
+                        onSelectionChange={setPreviewSelectionText}
+                      />
+                    </Suspense>
+                    </PreviewErrorBoundary>
+                  )}
                     </>
                   )}
 

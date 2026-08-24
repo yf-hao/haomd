@@ -76,7 +76,13 @@ describe('useEditorDocumentSync', () => {
       })
 
       expect(updateActiveContent).not.toHaveBeenCalled()
-      expect(schedulePreviewDocument).toHaveBeenCalledWith('doc-1', view, 1)
+      expect(schedulePreviewDocument).toHaveBeenCalledWith(
+        'doc-1',
+        view,
+        1,
+        expect.any(Function),
+      )
+      expect(schedulePreviewDocument.mock.calls[0][3]()).toBe('updated')
 
       act(() => {
         vi.advanceTimersByTime(149)
