@@ -7,6 +7,7 @@ import { getWordExportStyleSettings } from '../../settings/editorSettings'
 import { extractFrontMatter } from '../../markdown/frontMatter'
 import { parseMarkdownToTemplateModel, resolveWordTemplateId } from './template/parseMarkdownToTemplateModel'
 import type { WordTemplateConfig } from './template/types'
+import { resolveExportBaseName } from '../exportFileName'
 
 export async function exportToWord(ctx: {
   setStatusMessage: (msg: string) => void
@@ -21,8 +22,7 @@ export async function exportToWord(ctx: {
   }) => Promise<boolean>
   t?: (key: string, params?: Record<string, string | number>) => string
 }) {
-  const rawTitle = ctx.getCurrentFileName() || 'Document'
-  const title = buildWordExportBaseName(rawTitle)
+  const title = resolveExportBaseName(ctx.getCurrentFileName(), ctx.getCurrentMarkdown())
   const outputPath = await save({
     defaultPath: `${title}.docx`,
     filters: [{ name: 'Word 文件', extensions: ['docx'] }],
@@ -47,12 +47,12 @@ export async function exportToWordAtPath(ctx: {
   const tr = (key: string, fallback: string, params?: Record<string, string | number>) =>
     ctx.t?.(key, params) ?? fallback
   try {
-    const rawTitle = ctx.getCurrentFileName() || 'Document'
-    const title = buildWordExportBaseName(rawTitle)
-    const filePath = ctx.getFilePath ? ctx.getFilePath() : null
+    const rawFileName = ctx.getCurrentFileName()
     const markdown = ctx.getCurrentMarkdown()
+    const title = resolveExportBaseName(rawFileName, markdown)
+    const filePath = ctx.getFilePath ? ctx.getFilePath() : null
     const { body: markdownBody } = extractFrontMatter(markdown)
-    const isPlainText = /\.txt$/i.test(rawTitle) || /\.txt$/i.test(filePath || '')
+    const isPlainText = /\.txt$/i.test(rawFileName || '') || /\.txt$/i.test(filePath || '')
     const styleSettings = await getWordExportStyleSettings()
     const selectedTemplateId = resolveWordTemplateId(markdown)
     let preferInkscapeForMermaid = false

@@ -13,6 +13,7 @@ import { ExportWrapper } from './components/ExportWrapper'
 import { generateHTMLTemplate } from './template'
 import { convertImagesToBase64 } from './imageHandler'
 import { renderMermaidToSvg } from '../../visualization/mermaidRenderer'
+import { resolveExportBaseName } from '../exportFileName'
 
 export interface ExportHtmlOptions {
   title: string
@@ -35,10 +36,9 @@ export async function prepareExportHtmlContents(ctx: any, options?: PrepareExpor
   const { preRenderMermaid = false, inlineCss = false } = options ?? {}
   const tr = (key: string, fallback: string, params?: Record<string, string | number>) =>
     ctx.t?.(key, params) ?? fallback
-  const rawTitle = ctx.getCurrentFileName() || 'Document'
-  const title = rawTitle.replace(/\.md$/i, '')
   const filePath = ctx.getFilePath ? ctx.getFilePath() : null
   const markdown = ctx.getCurrentMarkdown()
+  const title = resolveExportBaseName(ctx.getCurrentFileName(), markdown)
   const baseDir = filePath ? await dirname(filePath) : null
 
   // 1. 并行渲染思维导图
@@ -90,8 +90,8 @@ export async function exportToHtml(ctx: any) {
   try {
     console.log('[Export] 开始导出 HTML')
 
-    const rawTitle = ctx.getCurrentFileName() || 'Document'
-    const title = rawTitle.replace(/\.md$/i, '')
+    const markdown = ctx.getCurrentMarkdown()
+    const title = resolveExportBaseName(ctx.getCurrentFileName(), markdown)
 
     // 1. 先弹窗获取保存路径
     const savePath = await save({

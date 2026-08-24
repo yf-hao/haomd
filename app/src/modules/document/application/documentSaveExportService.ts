@@ -4,6 +4,7 @@ import { normalizePersistableFilePath } from '../../files/filePathState'
 import { writeFileNoRecent } from '../../files/service'
 import { exportToWordAtPath, buildWordExportBaseName } from '../../export/word'
 import { exportToHtmlAtPath } from '../../export/html'
+import { resolveExportBaseName } from '../../export/exportFileName'
 import { getActiveWorkspaceDirectory } from '../../workspace/workspaceActiveDirectory'
 import { getWorkspaceMountedRoots } from '../../workspace/workspaceMountedRoots'
 import type { BackendResult } from '../../platform/backendTypes'
@@ -221,15 +222,16 @@ async function ensureWorkspaceDirectoryExists(
 function buildDefaultFileName(
   format: DocumentSaveFormat,
   fileName: string | null,
+  markdown: string,
 ): string {
-  const rawFileName = fileName?.trim() || 'Document.md'
+  const baseName = resolveExportBaseName(fileName, markdown)
   switch (format) {
     case 'md':
-      return rawFileName.endsWith('.md') ? rawFileName : `${buildWordExportBaseName(rawFileName)}.md`
+      return `${baseName}.md`
     case 'word':
-      return replaceExtension(rawFileName, 'docx')
+      return `${baseName}.docx`
     case 'html':
-      return replaceExtension(rawFileName, 'html')
+      return `${baseName}.html`
   }
 }
 
@@ -270,11 +272,12 @@ function mapWriteFailureMessage(message: string | undefined, outputPath: string)
 function resolveOutputFileName(
   format: DocumentSaveFormat,
   currentFileName: string | null,
+  markdown: string,
   requestedFileName?: string,
 ): { ok: true; fileName: string } | { ok: false; message: string } {
   const trimmedRequested = requestedFileName?.trim()
   if (!trimmedRequested) {
-    return { ok: true, fileName: buildDefaultFileName(format, currentFileName) }
+    return { ok: true, fileName: buildDefaultFileName(format, currentFileName, markdown) }
   }
 
   if (/[\\/]/.test(trimmedRequested)) {
@@ -301,7 +304,7 @@ export async function saveOrExportCurrentDocument(
   const currentFilePath = ctx.getCurrentFilePath ? ctx.getCurrentFilePath() : null
   const persistableCurrentFilePath = normalizePersistableFilePath(currentFilePath)
   const currentFileName = ctx.getCurrentFileName()
-  const fileNameResult = resolveOutputFileName(args.format, currentFileName, args.fileName)
+  const fileNameResult = resolveOutputFileName(args.format, currentFileName, markdown, args.fileName)
   if (!fileNameResult.ok) {
     return fileNameResult
   }

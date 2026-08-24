@@ -72,9 +72,9 @@ describe('documentSaveExportService', () => {
 
     expect(result).toEqual({
       ok: true,
-      savedFilePath: '/active-dir/Document.docx',
+      savedFilePath: '/active-dir/Title.docx',
     })
-    expect(exportToWordAtPath).toHaveBeenCalledWith(expect.any(Object), '/active-dir/Document.docx')
+    expect(exportToWordAtPath).toHaveBeenCalledWith(expect.any(Object), '/active-dir/Title.docx')
   })
 
   it('falls back to documentDir when there is no active workspace directory', async () => {
@@ -92,9 +92,9 @@ describe('documentSaveExportService', () => {
 
     expect(result).toEqual({
       ok: true,
-      savedFilePath: '/documents/Document.docx',
+      savedFilePath: '/documents/Title.docx',
     })
-    expect(exportToWordAtPath).toHaveBeenCalledWith(expect.any(Object), '/documents/Document.docx')
+    expect(exportToWordAtPath).toHaveBeenCalledWith(expect.any(Object), '/documents/Title.docx')
   })
 
   it('treats untitled as unsaved and falls back to active workspace directory', async () => {
@@ -202,7 +202,7 @@ describe('documentSaveExportService', () => {
     vi.mocked(writeFileNoRecent).mockResolvedValue({
       ok: true,
       data: {
-        path: '/root/离散数学/教案/Document.md',
+        path: '/root/离散数学/教案/New.md',
         mtimeMs: 1,
         hash: 'h',
         code: 'OK',
@@ -221,7 +221,7 @@ describe('documentSaveExportService', () => {
 
     expect(result).toEqual({
       ok: true,
-      savedFilePath: '/root/离散数学/教案/Document.md',
+      savedFilePath: '/root/离散数学/教案/New.md',
     })
     expect(mockInvoke).toHaveBeenNthCalledWith(2, 'create_workspace_directory', {
       mountedRoots: ['/root'],
