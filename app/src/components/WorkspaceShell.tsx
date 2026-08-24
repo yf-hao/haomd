@@ -268,6 +268,7 @@ export function WorkspaceShell({
   activeLineRef.current = activeLine
   const lastActiveIdForPreviewRef = useRef<string | null>(null)
   const sourceEditorRevisionRef = useRef(0)
+  const clearSourceDocumentSyncRef = useRef<(() => void) | null>(null)
   const flushSourceEditorRef = useRef<((tabId?: string) => string | null) | null>(null)
   const editorViewRef = useRef<EditorView | null>(null)
   const hasPendingSourceEditsRef = useRef<((tabId: string | null) => boolean) | null>(null)
@@ -1068,7 +1069,27 @@ export function WorkspaceShell({
 
   // Sync Content：切换激活标签时，同步内容，并仅在 tab 变化时重置 activeLine
   useEffect(() => {
-    if (!activeId) return
+    if (!activeId) {
+      clearSourceDocumentSyncRef.current?.()
+      clearPreviewSyncTimer()
+      lastActiveIdForPreviewRef.current = null
+      markdownRef.current = ''
+      editorMarkdownRef.current = ''
+      setMarkdown('')
+      setEditorMarkdown('')
+      commitPreviewValue('')
+      setIsPreviewLoading(false)
+      setActiveLine(1)
+      setPreviewActiveLine(1)
+      setFoldRegions([])
+      setPreviewSelectionText(null)
+      setActiveOutlineId(null)
+      setPdfOutlineItems([])
+      setPdfOutlineLoading(false)
+      setPdfCurrentPage(null)
+      setPdfOutlineRequestedPage(null)
+      return
+    }
     const tab = tabs.find((t) => t.id === activeId)
     if (!tab) return
 
@@ -1236,6 +1257,7 @@ export function WorkspaceShell({
     applyChunkEdit,
     schedulePreviewDocument,
   })
+  clearSourceDocumentSyncRef.current = clearSourceDocumentSync
   const handleSourceEditorDocumentChange = useCallback((change: ViewUpdate | EditorView) => {
     setFocusRequest(null)
     handleSourceDocumentChange(change)

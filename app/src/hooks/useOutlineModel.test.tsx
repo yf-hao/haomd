@@ -118,6 +118,30 @@ describe('useOutlineModel', () => {
     }
   })
 
+  it('should clear the outline when there is no active document', () => {
+    const { result, rerender } = renderHook(
+      ({ documentKey, markdown }) => useOutlineModel({
+        mode: 'source',
+        markdown,
+        wysiwygHeadings: [],
+        enabled: true,
+        documentKey,
+      }),
+      {
+        initialProps: {
+          documentKey: 'doc-1' as string | null,
+          markdown: '# Existing title',
+        },
+      },
+    )
+
+    expect(result.current).toHaveLength(1)
+
+    rerender({ documentKey: null, markdown: '# Existing title' })
+
+    expect(result.current).toEqual([])
+  })
+
   it('should not rebuild the outline when only body text changes', () => {
     vi.useFakeTimers()
     try {

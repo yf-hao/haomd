@@ -40,6 +40,11 @@ export function useOutlineModel(args: {
     previousContextRef.current = { enabled, mode, documentKey }
 
     if (!enabled || mode !== 'source') return
+    if (documentKey === null) {
+      renderedHeadingSignatureRef.current = ''
+      setDebouncedMarkdown('')
+      return
+    }
 
     const shouldSyncImmediately =
       !previous.enabled ||
@@ -62,7 +67,7 @@ export function useOutlineModel(args: {
   }, [debounceMs, documentKey, enabled, markdown, markdownHeadingSignature, mode])
 
   return useMemo(() => {
-    if (!enabled) {
+    if (!enabled || documentKey === null) {
       return []
     }
     if (mode === 'wysiwyg') {
