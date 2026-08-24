@@ -93,6 +93,12 @@ export function generateHTMLTemplate(options: TemplateOptions): string {
   <script>
     (function() {
       function toggleTocSections(expand) {
+        var items = document.querySelectorAll('.md-toc-root .md-toc-item');
+        items.forEach(function(item) {
+          var isLevelOne = item.classList.contains('md-toc-level-1');
+          item.hidden = !expand && !isLevelOne;
+        });
+
         var sections = document.querySelectorAll('.md-toc-root details');
         sections.forEach(function(section) {
           if (expand) {
@@ -115,18 +121,18 @@ export function generateHTMLTemplate(options: TemplateOptions): string {
 
         function renderIcon() {
           if (expanded) {
-            // 减号图标：当前为展开状态，可点击折叠
+            // 减号图标：当前为展开状态，可点击折叠到一级目录
             button.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.2"></circle><line x1="4" y1="8" x2="12" y2="8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"></line></svg>';
-            button.setAttribute('aria-label', '折叠三级标题');
+            button.setAttribute('aria-label', '折叠到一级目录');
           } else {
-            // 加号图标：当前为折叠状态，可点击展开
+            // 加号图标：当前为折叠状态，可点击展开全部目录
             button.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.2"></circle><line x1="4" y1="8" x2="12" y2="8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"></line><line x1="8" y1="4" x2="8" y2="12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"></line></svg>';
-            button.setAttribute('aria-label', '展开三级标题');
+            button.setAttribute('aria-label', '展开全部目录');
           }
         }
 
         button.addEventListener('click', function(event) {
-          // 阻止触发外层 summary 的默认折叠行为，只控制三级目录
+          // 阻止触发外层 summary 的默认折叠行为，只控制目录层级
           event.stopPropagation();
           event.preventDefault();
 
@@ -135,8 +141,9 @@ export function generateHTMLTemplate(options: TemplateOptions): string {
           renderIcon();
         });
 
-        renderIcon();
         summary.appendChild(button);
+        toggleTocSections(expanded);
+        renderIcon();
       }
 
       if (document.readyState === 'loading') {
@@ -209,6 +216,9 @@ export function generateHTMLTemplate(options: TemplateOptions): string {
     .markdown-body .md-toc-item {
       list-style: none;
       margin: 2px 0;
+    }
+    .markdown-body .md-toc-root .md-toc-item[hidden] {
+      display: none !important;
     }
     .markdown-body .md-toc-level-1 {
       font-weight: 600;

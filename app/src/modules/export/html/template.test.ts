@@ -20,4 +20,20 @@ describe('generateHTMLTemplate', () => {
     expect(html).toContain('page-break-before: always')
     expect(html).toContain('print-color-adjust: exact')
   })
+
+  it('initializes the exported TOC collapsed to level one', () => {
+    const html = generateHTMLTemplate({
+      title: 'Demo',
+      body: '<div class="markdown-body">Hello</div>',
+      hasMind: false,
+      hasMermaid: false,
+    })
+
+    expect(html).toContain("var expanded = false;")
+    expect(html).toContain("item.hidden = !expand && !isLevelOne;")
+    expect(html).toContain("item.classList.contains('md-toc-level-1')")
+    expect(html).toContain("toggleTocSections(expanded);")
+    expect(html).toContain("折叠到一级目录")
+    expect(html).toContain("展开全部目录")
+  })
 })
