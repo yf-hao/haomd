@@ -82,6 +82,11 @@ type ActiveSourceLine = {
   elements: HTMLElement[]
 }
 
+type PreviewWorkerRequest = {
+  id: number
+  value: string
+}
+
 const FoldContext = React.createContext<FoldRegion[]>([])
 const FilePathContext = React.createContext<string | null>(null)
 const useFoldRegions = () => React.useContext(FoldContext)
@@ -942,7 +947,8 @@ const MarkdownViewerComponent = React.forwardRef<
   const sourceLineOffsetRef = useRef(0)
   const previewWorkerRef = useRef<Worker | null>(null)
   const previewRequestIdRef = useRef(0)
-  const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const previewWorkerBusyRef = useRef(false)
+  const pendingPreviewWorkerRequestRef = useRef<PreviewWorkerRequest | null>(null)
 
   const {
     value,
@@ -975,10 +981,8 @@ const MarkdownViewerComponent = React.forwardRef<
     if (!performanceSettings.experimentalPreviewOptimization || mode !== 'rendered' || typeof Worker === 'undefined') {
       previewWorkerRef.current?.terminate()
       previewWorkerRef.current = null
-      if (previewTimerRef.current) {
-        clearTimeout(previewTimerRef.current)
-        previewTimerRef.current = null
-      }
+      previewWorkerBusyRef.current = false
+      pendingPreviewWorkerRequestRef.current = null
       return
     }
 
@@ -997,7 +1001,17 @@ const MarkdownViewerComponent = React.forwardRef<
         blockChunks: PreviewBlockChunk[]
       }>,
     ) => {
-      if (event.data.id !== previewRequestIdRef.current) return
+      const stale = event.data.id !== previewRequestIdRef.current
+
+      const pendingRequest = pendingPreviewWorkerRequestRef.current
+      if (pendingRequest) {
+        pendingPreviewWorkerRequestRef.current = null
+        worker.postMessage(pendingRequest)
+      } else {
+        previewWorkerBusyRef.current = false
+      }
+
+      if (stale) return
       startTransition(() => {
         if (event.data.id !== previewRequestIdRef.current) return
         setPreviewResult({
@@ -1015,6 +1029,8 @@ const MarkdownViewerComponent = React.forwardRef<
       worker.terminate()
       if (previewWorkerRef.current === worker) {
         previewWorkerRef.current = null
+        previewWorkerBusyRef.current = false
+        pendingPreviewWorkerRequestRef.current = null
       }
     }
   }, [
@@ -1024,10 +1040,6 @@ const MarkdownViewerComponent = React.forwardRef<
 
   useEffect(() => {
     if (mode !== 'rendered') return
-
-    if (previewTimerRef.current) {
-      clearTimeout(previewTimerRef.current)
-    }
 
     const requestId = ++previewRequestIdRef.current
     if (!performanceSettings.experimentalPreviewOptimization) {
@@ -1039,30 +1051,35 @@ const MarkdownViewerComponent = React.forwardRef<
       return
     }
 
-    previewTimerRef.current = setTimeout(() => {
-      const worker = previewWorkerRef.current
-      if (!worker) {
-        startTransition(() => {
-          setPreviewResult(preparePreviewMarkdown(value))
-        })
-        return
-      }
-      worker.postMessage({ id: requestId, value })
-    }, 160)
-
-    return () => {
-      if (previewTimerRef.current) {
-        clearTimeout(previewTimerRef.current)
-        previewTimerRef.current = null
-      }
+    const worker = previewWorkerRef.current
+    if (!worker) {
+      const nextResult = preparePreviewMarkdown(value)
+      startTransition(() => {
+        if (requestId !== previewRequestIdRef.current) return
+        setPreviewResult(nextResult)
+      })
+      return
     }
-  }, [mode, value, performanceSettings.experimentalPreviewOptimization])
+
+    const request: PreviewWorkerRequest = {
+      id: requestId,
+      value,
+    }
+    if (previewWorkerBusyRef.current) {
+      pendingPreviewWorkerRequestRef.current = request
+      return
+    }
+
+    previewWorkerBusyRef.current = true
+    worker.postMessage(request)
+  }, [
+    mode,
+    value,
+    performanceSettings.experimentalPreviewOptimization,
+  ])
 
   useEffect(() => {
     return () => {
-      if (previewTimerRef.current) {
-        clearTimeout(previewTimerRef.current)
-      }
       previewWorkerRef.current?.terminate()
       previewWorkerRef.current = null
     }
