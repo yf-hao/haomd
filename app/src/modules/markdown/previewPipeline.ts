@@ -121,7 +121,7 @@ function splitMarkdownIntoBlockChunks(markdown: string): Array<Omit<PreviewBlock
       (isBlockStartLine(line) || currentLength >= BLOCK_RENDER_MAX_LINES_PER_CHUNK)
     )
     if (shouldSplit) {
-      pushChunk(lastBlankLine - 1)
+      pushChunk(lastBlankLine)
     }
   }
 
