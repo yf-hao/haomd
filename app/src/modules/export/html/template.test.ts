@@ -36,4 +36,19 @@ describe('generateHTMLTemplate', () => {
     expect(html).toContain("折叠到一级目录")
     expect(html).toContain("展开全部目录")
   })
+
+  it('uses inherited colors for exported TOC links', () => {
+    const html = generateHTMLTemplate({
+      title: 'Demo',
+      body: '<div class="markdown-body">Hello</div>',
+      hasMind: false,
+      hasMermaid: false,
+    })
+
+    expect(html).toContain('.markdown-body .md-toc-root a {')
+    expect(html).toContain('color: inherit;')
+    expect(html).toContain('.markdown-body .md-toc-root a:visited {')
+    expect(html).toContain('.markdown-body .md-toc-root a:hover {')
+    expect(html).toContain('color: var(--md-toc-link-hover-color, #555);')
+  })
 })

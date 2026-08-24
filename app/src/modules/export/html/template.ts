@@ -209,6 +209,17 @@ export function generateHTMLTemplate(options: TemplateOptions): string {
       margin: 0;
       padding-left: 0;
     }
+    .markdown-body .md-toc-root a {
+      color: inherit;
+      text-decoration: none;
+    }
+    .markdown-body .md-toc-root a:visited {
+      color: inherit;
+    }
+    .markdown-body .md-toc-root a:hover {
+      color: var(--md-toc-link-hover-color, #555);
+      text-decoration: underline;
+    }
     .markdown-body .md-toc-root ul {
       margin: 0;
       padding-left: 0;
