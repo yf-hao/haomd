@@ -345,6 +345,11 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
   let currentAbortController: AbortController | null = null
   let currentToolAbortController: AbortController | null = null
   let stopRequested = false
+  const DOC_CONVERSATION_PERSIST_DELAY_MS = 400
+  let persistTimer: ReturnType<typeof setTimeout> | null = null
+  let persistInFlight: Promise<void> | null = null
+  let persistPending = false
+  let persistFlushOnDispose = false
 
   function shouldStopRequested(): boolean {
     return stopRequested
@@ -379,20 +384,52 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
     options.onStateChange(state)
   }
 
-  const persistDocConversationSnapshot = () => {
-    if (disposed || !boundDocPath || !shouldPersistDocConversation || !provider) return
-    void docConversationService
-      .upsertFromState({
-        docPath: boundDocPath,
-        state,
-        providerType,
-        modelName: currentModelId,
-        providerId: provider.id,
-        difyConversationId,
-      })
+  const flushDocConversationSnapshot = async (allowDisposed = false) => {
+    if ((!allowDisposed && disposed) || !boundDocPath || !shouldPersistDocConversation || !provider) return
+    if (!persistPending || persistInFlight) return
+
+    persistPending = false
+    const snapshot = {
+      docPath: boundDocPath,
+      state,
+      providerType,
+      modelName: currentModelId,
+      providerId: provider.id,
+      difyConversationId,
+    }
+
+    persistInFlight = docConversationService
+      .upsertFromState(snapshot)
       .catch((err) => {
         console.error('[ChatSession] failed to persist doc conversation', err)
       })
+      .finally(() => {
+        persistInFlight = null
+        if (persistPending && (!disposed || persistFlushOnDispose)) {
+          void flushDocConversationSnapshot(persistFlushOnDispose)
+        }
+      })
+    await persistInFlight
+  }
+
+  const persistDocConversationSnapshot = (immediate = false) => {
+    if (disposed || !boundDocPath || !shouldPersistDocConversation || !provider) return
+    persistPending = true
+
+    if (persistTimer != null) {
+      clearTimeout(persistTimer)
+      persistTimer = null
+    }
+
+    if (immediate) {
+      void flushDocConversationSnapshot()
+      return
+    }
+
+    persistTimer = setTimeout(() => {
+      persistTimer = null
+      void flushDocConversationSnapshot()
+    }, DOC_CONVERSATION_PERSIST_DELAY_MS)
   }
 
   async function runStream(
@@ -483,26 +520,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
         notifyStateChange()
 
         if ((options.persistConversation ?? true) && boundDocPath && shouldPersistDocConversation) {
-          console.warn('[ChatSession] Persisting doc conversation', {
-            docPath: boundDocPath,
-            providerType,
-            modelName: currentModelId,
-            difyConversationId: difyConversationId || '(none)',
-          })
-
-          void docConversationService
-            .upsertFromState({
-              docPath: boundDocPath,
-              state,
-              providerType,
-              modelName: currentModelId,
-              providerId: provider.id,
-
-              difyConversationId,
-            })
-            .catch((err) => {
-              console.error('[ChatSession] failed to persist doc conversation', err)
-            })
+          persistDocConversationSnapshot(true)
         }
       }
       currentAbortController = null
@@ -1244,6 +1262,14 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       persistDocConversationSnapshot()
     },
     dispose() {
+      if (persistTimer != null) {
+        clearTimeout(persistTimer)
+        persistTimer = null
+      }
+      if (persistPending) {
+        persistFlushOnDispose = true
+        void flushDocConversationSnapshot(true)
+      }
       disposed = true
       stopRequested = true
       if (currentAbortController) {

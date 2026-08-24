@@ -1,0 +1,181 @@
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
+import type { ChatMessageView } from '../domain/chatSession'
+
+const DEFAULT_MESSAGE_HEIGHT = 180
+const MIN_OVERSCAN_HEIGHT = 600
+const OVERSCAN_VIEWPORT_MULTIPLIER = 1.5
+export const AI_CHAT_VIRTUALIZATION_THRESHOLD = 12
+
+type MessagePosition = {
+  id: string
+  top: number
+  height: number
+}
+
+type VirtualMessageListProps = {
+  messages: ChatMessageView[]
+  containerRef: RefObject<HTMLDivElement>
+  renderMessage: (message: ChatMessageView) => ReactNode
+}
+
+function findFirstPosition(positions: MessagePosition[], offset: number): number {
+  let low = 0
+  let high = positions.length - 1
+
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2)
+    const position = positions[middle]
+    if (!position || position.top + position.height < offset) {
+      low = middle + 1
+    } else {
+      high = middle
+    }
+  }
+
+  return low
+}
+
+export function AiChatVirtualMessageList({
+  messages,
+  containerRef,
+  renderMessage,
+}: VirtualMessageListProps) {
+  const rowElementsRef = useRef(new Map<string, HTMLElement>())
+  const scrollFrameRef = useRef<number | null>(null)
+  const [viewport, setViewport] = useState({ scrollTop: 0, height: 0 })
+  const [measuredHeights, setMeasuredHeights] = useState(() => new Map<string, number>())
+
+  const updateViewport = useCallback(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    setViewport((previous) => {
+      const next = {
+        scrollTop: container.scrollTop,
+        height: container.clientHeight,
+      }
+      return previous.scrollTop === next.scrollTop && previous.height === next.height
+        ? previous
+        : next
+    })
+  }, [containerRef])
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const handleScroll = () => {
+      if (scrollFrameRef.current !== null) return
+      scrollFrameRef.current = window.requestAnimationFrame(() => {
+        scrollFrameRef.current = null
+        updateViewport()
+      })
+    }
+
+    updateViewport()
+    container.addEventListener('scroll', handleScroll, { passive: true })
+
+    let resizeObserver: ResizeObserver | null = null
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(updateViewport)
+      resizeObserver.observe(container)
+    }
+
+    return () => {
+      container.removeEventListener('scroll', handleScroll)
+      resizeObserver?.disconnect()
+      if (scrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollFrameRef.current)
+        scrollFrameRef.current = null
+      }
+    }
+  }, [containerRef, updateViewport])
+
+  const positions = useMemo(() => {
+    return messages.reduce<MessagePosition[]>((result, message) => {
+      const previous = result[result.length - 1]
+      const top = previous ? previous.top + previous.height : 0
+      const height = measuredHeights.get(message.id) ?? DEFAULT_MESSAGE_HEIGHT
+      result.push({ id: message.id, top, height })
+      return result
+    }, [])
+  }, [messages, measuredHeights])
+
+  const totalHeight = positions.at(-1)
+    ? positions[positions.length - 1]!.top + positions[positions.length - 1]!.height
+    : 0
+  const viewportHeight = viewport.height || MIN_OVERSCAN_HEIGHT
+  const overscan = Math.max(MIN_OVERSCAN_HEIGHT, viewportHeight * OVERSCAN_VIEWPORT_MULTIPLIER)
+  const firstVisibleOffset = Math.max(0, viewport.scrollTop - overscan)
+  const lastVisibleOffset = viewport.scrollTop + viewportHeight + overscan
+  const firstIndex = positions.length ? findFirstPosition(positions, firstVisibleOffset) : 0
+  const lastIndex = positions.length
+    ? Math.min(positions.length - 1, findFirstPosition(positions, lastVisibleOffset) + 1)
+    : -1
+
+  const setRowElement = useCallback((id: string, element: HTMLElement | null) => {
+    if (element) {
+      rowElementsRef.current.set(id, element)
+    } else {
+      rowElementsRef.current.delete(id)
+    }
+  }, [])
+
+  useLayoutEffect(() => {
+    const updateHeight = (id: string, height: number) => {
+      if (!Number.isFinite(height) || height <= 0) return
+      setMeasuredHeights((previous) => {
+        const previousHeight = previous.get(id)
+        if (previousHeight != null && Math.abs(previousHeight - height) < 1) return previous
+        const next = new Map(previous)
+        next.set(id, height)
+        return next
+      })
+    }
+
+    for (const [id, element] of rowElementsRef.current) {
+      updateHeight(id, element.getBoundingClientRect().height)
+    }
+
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const id = entry.target.getAttribute('data-ai-message-id')
+        if (!id) continue
+        updateHeight(id, entry.contentRect.height)
+      }
+    })
+
+    for (const element of rowElementsRef.current.values()) {
+      observer.observe(element)
+    }
+
+    return () => observer.disconnect()
+  }, [firstIndex, lastIndex, messages.length])
+
+  const renderedMessages = firstIndex <= lastIndex
+    ? messages.slice(firstIndex, lastIndex + 1)
+    : []
+  const topSpacerHeight = positions[firstIndex]?.top ?? 0
+  const renderedBottom = lastIndex >= 0
+    ? positions[lastIndex]!.top + positions[lastIndex]!.height
+    : 0
+  const bottomSpacerHeight = Math.max(0, totalHeight - renderedBottom)
+
+  return (
+    <div className="ai-chat-virtual-message-list" style={{ minHeight: totalHeight }}>
+      <div aria-hidden="true" style={{ height: topSpacerHeight }} />
+      {renderedMessages.map((message) => (
+        <div
+          key={message.id}
+          ref={(element) => setRowElement(message.id, element)}
+          data-ai-message-id={message.id}
+          className="ai-chat-virtual-message-row"
+        >
+          {renderMessage(message)}
+        </div>
+      ))}
+      <div aria-hidden="true" style={{ height: bottomSpacerHeight }} />
+    </div>
+  )
+}

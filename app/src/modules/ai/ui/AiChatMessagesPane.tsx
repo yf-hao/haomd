@@ -1,9 +1,10 @@
 import type { CSSProperties, Dispatch, RefObject, SetStateAction } from 'react'
-import { memo } from 'react'
+import { memo, useCallback } from 'react'
 import { MarkdownViewer } from '../../../components/MarkdownViewer'
 import type { ChatMessageView } from '../domain/chatSession'
 import type { AssistantToolExecutionView } from '../domain/chatSession'
 import type { EphemeralAiChatMessage, EphemeralImageGenerationResultMessage } from './imageGenerationEphemeral'
+import { AiChatVirtualMessageList, AI_CHAT_VIRTUALIZATION_THRESHOLD } from './AiChatVirtualMessageList'
 
 export type MessageViewMode = 'rendered' | 'source'
 
@@ -260,6 +261,69 @@ export const AiChatMessagesPane = memo(({
   onInsertGeneratedImage,
   onSaveGeneratedImageToNotes,
 }: AiChatMessagesPaneProps) => {
+  const renderMessage = useCallback((msg: ChatMessageView) => {
+    const viewMode: MessageViewMode = messageViewModes[msg.id] ?? 'rendered'
+    const displayContent =
+      msg.role === 'assistant'
+        ? (
+          viewMode === 'source'
+            ? msg.content
+            : msg.id === latestDynamicAssistantId
+              ? getDisplayContent(msg.id, msg.content, msg.streaming)
+              : msg.content
+        )
+        : getUserDisplayContent(msg.content)
+
+    return (
+      <AiChatMessageItem
+        key={msg.id}
+        msg={msg}
+        displayContent={displayContent}
+        viewMode={viewMode}
+        onCopy={onCopy}
+        onInsert={onInsert}
+        onReplace={onReplace}
+        onSave={onSave}
+        onSaveToNotes={onSaveToNotes}
+        onToggleViewMode={() => {
+          setMessageViewModes((prev) => {
+            const current = prev[msg.id] ?? 'rendered'
+            const next: MessageViewMode = current === 'rendered' ? 'source' : 'rendered'
+            return { ...prev, [msg.id]: next }
+          })
+        }}
+        toolExecutionDetailsLabel={toolExecutionDetailsLabel}
+        copyMarkdownLabel={copyMarkdownLabel}
+        insertIntoEditorLabel={insertIntoEditorLabel}
+        replaceSelectionLabel={replaceSelectionLabel}
+        saveAsNewDocumentLabel={saveAsNewDocumentLabel}
+        saveToNotesLabel={saveToNotesLabel}
+        showRenderedMarkdownLabel={showRenderedMarkdownLabel}
+        viewMarkdownSourceLabel={viewMarkdownSourceLabel}
+        summaryPreservedUserInputLabel={summaryPreservedUserInputLabel}
+      />
+    )
+  }, [
+    copyMarkdownLabel,
+    getDisplayContent,
+    insertIntoEditorLabel,
+    latestDynamicAssistantId,
+    messageViewModes,
+    onCopy,
+    onInsert,
+    onReplace,
+    onSave,
+    onSaveToNotes,
+    replaceSelectionLabel,
+    saveAsNewDocumentLabel,
+    saveToNotesLabel,
+    setMessageViewModes,
+    showRenderedMarkdownLabel,
+    summaryPreservedUserInputLabel,
+    toolExecutionDetailsLabel,
+    viewMarkdownSourceLabel,
+  ])
+
   return (
     <div
       className={`ai-chat-messages ${aiChatBackgroundUrl ? 'has-ai-chat-background' : ''} ${isResizing ? 'is-ai-chat-resizing' : ''} ai-chat-bg-fit-${aiChatBackgroundSize}`}
@@ -276,48 +340,15 @@ export const AiChatMessagesPane = memo(({
           {visibleMessages.length === 0 && !loading && (
             <div className="ai-chat-empty muted small"></div>
           )}
-          {renderedMessages.map((msg) => {
-            const viewMode: MessageViewMode = messageViewModes[msg.id] ?? 'rendered'
-            const displayContent =
-              msg.role === 'assistant'
-                ? (
-                  viewMode === 'source'
-                    ? msg.content
-                    : msg.id === latestDynamicAssistantId
-                      ? getDisplayContent(msg.id, msg.content, msg.streaming)
-                      : msg.content
-                )
-                : getUserDisplayContent(msg.content)
-            return (
-              <AiChatMessageItem
-                key={msg.id}
-                msg={msg}
-                displayContent={displayContent}
-                viewMode={viewMode}
-                onCopy={onCopy}
-                onInsert={onInsert}
-                onReplace={onReplace}
-                onSave={onSave}
-                onSaveToNotes={onSaveToNotes}
-                onToggleViewMode={() => {
-                  setMessageViewModes((prev) => {
-                    const current = prev[msg.id] ?? 'rendered'
-                    const next: MessageViewMode = current === 'rendered' ? 'source' : 'rendered'
-                    return { ...prev, [msg.id]: next }
-                  })
-                }}
-                toolExecutionDetailsLabel={toolExecutionDetailsLabel}
-                copyMarkdownLabel={copyMarkdownLabel}
-                insertIntoEditorLabel={insertIntoEditorLabel}
-                replaceSelectionLabel={replaceSelectionLabel}
-                saveAsNewDocumentLabel={saveAsNewDocumentLabel}
-                saveToNotesLabel={saveToNotesLabel}
-                showRenderedMarkdownLabel={showRenderedMarkdownLabel}
-                viewMarkdownSourceLabel={viewMarkdownSourceLabel}
-                summaryPreservedUserInputLabel={summaryPreservedUserInputLabel}
-              />
-            )
-          })}
+          {visibleMessages.length > AI_CHAT_VIRTUALIZATION_THRESHOLD ? (
+            <AiChatVirtualMessageList
+              messages={visibleMessages}
+              containerRef={messagesContainerRef}
+              renderMessage={renderMessage}
+            />
+          ) : (
+            renderedMessages.map(renderMessage)
+          )}
           {ephemeralMessages.map((message) => {
             if (message.type === 'image_generation_prompt') {
               return (

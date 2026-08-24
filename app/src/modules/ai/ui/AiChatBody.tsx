@@ -2,10 +2,11 @@ import type {
   FC,
   FormEvent,
   KeyboardEvent,
+  ProfilerOnRenderCallback,
   RefObject,
   CSSProperties,
 } from 'react'
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Profiler, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ChatMessageView } from '../domain/chatSession'
 import type { VisionMode, UploadedFileRef } from '../domain/types'
 import type {
@@ -24,6 +25,7 @@ import { AiChatComposer } from './AiChatComposer'
 import type { AiChatComposerHandle } from './AiChatComposer'
 import { AiChatMessagesPane } from './AiChatMessagesPane'
 import type { MessageViewMode } from './AiChatMessagesPane'
+import { AI_CHAT_VIRTUALIZATION_THRESHOLD } from './AiChatVirtualMessageList'
 
 export interface AiChatBodyProps {
   messages: ChatMessageView[]
@@ -183,6 +185,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
 
     const handleScroll = () => {
       if (el.scrollTop > 80) return
+      if (visibleMessages.length > AI_CHAT_VIRTUALIZATION_THRESHOLD) return
       if (visibleMessages.length <= renderCount) return
       pendingPrependDeltaRef.current = el.scrollHeight
       setRenderCount((prev) => Math.min(visibleMessages.length, prev + HISTORY_RENDER_INCREMENT))
@@ -223,10 +226,21 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
   const hasMessages = visibleMessages.length > 0 || loading
   const hasEphemeralMessages = ephemeralMessages.length > 0
   const fullPageClass = fullPage ? ((hasMessages || hasEphemeralMessages) ? 'ai-chat-body-fullpage has-messages' : 'ai-chat-body-fullpage') : ''
+  const onMessagesProfilerRender = useCallback<ProfilerOnRenderCallback>((id, phase, actualDuration, baseDuration) => {
+    if (!import.meta.env.DEV || actualDuration < 8) return
+    console.debug('[AiChatPerf]', {
+      id,
+      phase,
+      actualDuration: Number(actualDuration.toFixed(2)),
+      baseDuration: Number(baseDuration.toFixed(2)),
+      messageCount: visibleMessages.length,
+    })
+  }, [visibleMessages.length])
 
   return (
     <div className={`modal-content ai-chat-body ${fullPageClass}`.trim()}>
-      <AiChatMessagesPane
+      <Profiler id="ai-chat-messages" onRender={onMessagesProfilerRender}>
+        <AiChatMessagesPane
         visibleMessages={visibleMessages}
         renderedMessages={renderedMessages}
         ephemeralMessages={ephemeralMessages}
@@ -269,7 +283,8 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
         onSaveGeneratedImage={onSaveGeneratedImage}
         onInsertGeneratedImage={onInsertGeneratedImage}
         onSaveGeneratedImageToNotes={onSaveGeneratedImageToNotes}
-      />
+        />
+      </Profiler>
 
       <AiChatComposer
         historyIdentity={historyIdentity}

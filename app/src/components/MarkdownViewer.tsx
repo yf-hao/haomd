@@ -84,6 +84,37 @@ type PreviewWorkerRequest = {
 }
 
 const LARGE_DOCUMENT_PREVIEW_WORKER_THRESHOLD = 16_000
+const PREVIEW_RESULT_CACHE_LIMIT = 32
+
+const previewResultCache = new Map<string, PreviewMarkdownResult>()
+
+function getCachedPreviewResult(value: string): PreviewMarkdownResult {
+  const cached = previewResultCache.get(value)
+  if (cached) {
+    previewResultCache.delete(value)
+    previewResultCache.set(value, cached)
+    return cached
+  }
+
+  const result = preparePreviewMarkdown(value)
+  previewResultCache.set(value, result)
+  while (previewResultCache.size > PREVIEW_RESULT_CACHE_LIMIT) {
+    const oldestKey = previewResultCache.keys().next().value
+    if (oldestKey == null) break
+    previewResultCache.delete(oldestKey)
+  }
+  return result
+}
+
+function cachePreviewResult(value: string, result: PreviewMarkdownResult): void {
+  previewResultCache.delete(value)
+  previewResultCache.set(value, result)
+  while (previewResultCache.size > PREVIEW_RESULT_CACHE_LIMIT) {
+    const oldestKey = previewResultCache.keys().next().value
+    if (oldestKey == null) break
+    previewResultCache.delete(oldestKey)
+  }
+}
 
 const FoldContext = React.createContext<FoldRegion[]>([])
 const FilePathContext = React.createContext<string | null>(null)
@@ -969,6 +1000,7 @@ const MarkdownViewerComponent = React.forwardRef<
   const sourceLineOffsetRef = useRef(0)
   const previewWorkerRef = useRef<Worker | null>(null)
   const previewRequestIdRef = useRef(0)
+  const previewWorkerValuesRef = useRef(new Map<number, string>())
   const previewWorkerBusyRef = useRef(false)
   const pendingPreviewWorkerRequestRef = useRef<PreviewWorkerRequest | null>(null)
   const previewNearBottomRef = useRef(true)
@@ -984,7 +1016,7 @@ const MarkdownViewerComponent = React.forwardRef<
   } = props
   const plainTextMode = isPlainTextFile(filePath)
   const [performanceSettings, setPerformanceSettings] = useState<PerformanceSettings>(getDefaultPerformanceSettings())
-  const [previewResult, setPreviewResult] = useState<PreviewMarkdownResult>(() => preparePreviewMarkdown(value))
+  const [previewResult, setPreviewResult] = useState<PreviewMarkdownResult>(() => getCachedPreviewResult(value))
   const shouldUsePreviewWorker =
     performanceSettings.experimentalPreviewOptimization ||
     value.length >= LARGE_DOCUMENT_PREVIEW_WORKER_THRESHOLD
@@ -1038,6 +1070,19 @@ const MarkdownViewerComponent = React.forwardRef<
         previewWorkerBusyRef.current = false
       }
 
+      const requestedValue = previewWorkerValuesRef.current.get(event.data.id)
+      previewWorkerValuesRef.current.delete(event.data.id)
+      if (requestedValue != null) {
+        cachePreviewResult(requestedValue, {
+          processedMarkdown: event.data.processedMarkdown,
+          hasMath: event.data.hasMath,
+          hasRawHtml: event.data.hasRawHtml,
+          containsToc: event.data.containsToc,
+          sourceLineOffset: event.data.sourceLineOffset,
+          lineCount: event.data.lineCount,
+          blockChunks: event.data.blockChunks,
+        })
+      }
       if (stale) return
       startTransition(() => {
         if (event.data.id !== previewRequestIdRef.current) return
@@ -1055,6 +1100,7 @@ const MarkdownViewerComponent = React.forwardRef<
 
     return () => {
       worker.terminate()
+      previewWorkerValuesRef.current.clear()
       if (previewWorkerRef.current === worker) {
         previewWorkerRef.current = null
         previewWorkerBusyRef.current = false
@@ -1071,7 +1117,7 @@ const MarkdownViewerComponent = React.forwardRef<
 
     const requestId = ++previewRequestIdRef.current
     if (!shouldUsePreviewWorker) {
-      const nextResult = preparePreviewMarkdown(value)
+      const nextResult = getCachedPreviewResult(value)
       startTransition(() => {
         if (requestId !== previewRequestIdRef.current) return
         setPreviewResult(nextResult)
@@ -1081,7 +1127,7 @@ const MarkdownViewerComponent = React.forwardRef<
 
     const worker = previewWorkerRef.current
     if (!worker) {
-      const nextResult = preparePreviewMarkdown(value)
+      const nextResult = getCachedPreviewResult(value)
       startTransition(() => {
         if (requestId !== previewRequestIdRef.current) return
         setPreviewResult(nextResult)
@@ -1093,6 +1139,7 @@ const MarkdownViewerComponent = React.forwardRef<
       id: requestId,
       value,
     }
+    previewWorkerValuesRef.current.set(requestId, value)
     if (previewWorkerBusyRef.current) {
       pendingPreviewWorkerRequestRef.current = request
       return
