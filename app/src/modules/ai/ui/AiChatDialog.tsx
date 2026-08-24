@@ -1,5 +1,5 @@
 import type { FC, FormEvent, KeyboardEvent, MouseEventHandler, MouseEvent as ReactMouseEvent } from 'react'
-import { useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { getAiChatUiSettings } from '../../settings/editorSettings'
 import type { ChatEntryMode, ChatMessageView, EntryContext } from '../domain/chatSession'
 import { getDirKeyFromDocPath, normalizePersistableDocPath } from '../domain/docPathUtils'
@@ -1048,13 +1048,19 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
   }, [])
 
   const messageSource = state?.viewMessages ?? EMPTY_MESSAGES
-  const allMessages = messageSource.filter((m) => !m.hidden)
+  const allMessages = useMemo(
+    () => messageSource.filter((m) => !m.hidden),
+    [messageSource],
+  )
   const limit = maxVisibleMessages && maxVisibleMessages > 0 ? maxVisibleMessages : allMessages.length
-  const persistedMessages =
-    allMessages.length > limit
-      ? allMessages.slice(-limit)
-      : allMessages
-  const messages = buildDisplayMessages(persistedMessages, localFeedbackMessages)
+  const persistedMessages = useMemo(
+    () => allMessages.length > limit ? allMessages.slice(-limit) : allMessages,
+    [allMessages, limit],
+  )
+  const messages = useMemo(
+    () => buildDisplayMessages(persistedMessages, localFeedbackMessages),
+    [persistedMessages, localFeedbackMessages],
+  )
 
   const [visibleLengths, setVisibleLengths] = useState<Record<string, number>>({})
   const [activeTypewriterId, setActiveTypewriterId] = useState<string | null>(null)
@@ -1067,6 +1073,12 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
   const resizeRestoreTimerRef = useRef<number | null>(null)
 
   const isDifyProvider = providerType === 'dify'
+  const activeTypewriterMessage = useMemo(
+    () => activeTypewriterId
+      ? messages.find((msg) => msg.id === activeTypewriterId && msg.role === 'assistant') ?? null
+      : null,
+    [activeTypewriterId, messages],
+  )
 
   // 核心策略：任何时刻只允许“当前这一条助手回复”参与打字机动画，
   // 历史消息一律显示全文，避免重复播放。
@@ -1076,10 +1088,13 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
     ),
   )
 
-  const streamingIds = messages
-    .filter((m) => m.role === 'assistant' && m.streaming)
-    .map((m) => m.id)
-    .join(',')
+  const streamingIds = useMemo(
+    () => messages
+      .filter((m) => m.role === 'assistant' && m.streaming)
+      .map((m) => m.id)
+      .join(','),
+    [messages],
+  )
 
   const animationKey = !isDifyProvider ? 'off' : (isTypewriterRunning ? `active:${streamingIds}` : 'idle')
 
@@ -1108,19 +1123,11 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
       return
     }
 
-    setVisibleLengths((prev) => {
-      const next: Record<string, number> = { ...prev }
-      for (const msg of assistantMessages) {
-        const fullLen = msg.content.length
-        if (fullLen === 0) continue
-        if (msg.id === nextActiveId) {
-          next[msg.id] = 0
-        } else {
-          next[msg.id] = fullLen
-        }
-      }
-      return next
-    })
+    setVisibleLengths((prev) => (
+      prev[nextActiveId] === 0
+        ? prev
+        : { ...prev, [nextActiveId]: 0 }
+    ))
 
     setActiveTypewriterId(nextActiveId)
   }, [open, isDifyProvider, messages, activeTypewriterId])
@@ -1142,6 +1149,11 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
     // 累积本轮还未消费的“字符额度”，避免过度刷新
     let charBudget = 0
 
+    const activeMessage = activeTypewriterMessage
+    if (!activeMessage || activeMessage.role !== 'assistant' || activeMessage.content.length === 0) {
+      return
+    }
+
     const tick = (time: number) => {
       const deltaMs = time - lastTime
       lastTime = time
@@ -1158,39 +1170,16 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
       charBudget -= Math.max(0, deltaChars)
 
       setVisibleLengths((prev) => {
-        let changed = false
-        const next: Record<string, number> = { ...prev }
+        const fullLen = activeMessage.content.length
+        const base = prev[activeMessage.id] ?? 0
+        if (base >= fullLen || deltaChars <= 0) return prev
 
-        for (const msg of messages) {
-          if (msg.role !== 'assistant') continue
-          const fullLen = msg.content.length
-          if (fullLen === 0) continue
-
-          const existing = next[msg.id]
-
-          // 关键修复：只要消息正在流式传输，就必须立即在打字机进度表中“挂号” (设置为 0)。
-          // 这样即便网络流在打字机还没产生第 1 个字时就结束了，打字机也能接手后续播放。
-          if (msg.streaming && existing === undefined) {
-            next[msg.id] = 0
-            changed = true
-          }
-
-          const base = next[msg.id]
-          // 如果该消息既不在 streaming 也不在打字机流程中，则跳过（处理历史对话）
-          if (base === undefined) continue
-
-          if (base >= fullLen) continue
-
-          if (deltaChars > 0) {
-            const target = Math.min(fullLen, base + deltaChars)
-            if (target !== base) {
-              next[msg.id] = target
-              changed = true
-            }
-          }
+        const target = Math.min(fullLen, base + deltaChars)
+        if (target === base) return prev
+        return {
+          ...prev,
+          [activeMessage.id]: target,
         }
-
-        return changed ? next : prev
       })
 
       frameId = window.requestAnimationFrame(tick)
@@ -1201,21 +1190,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
     return () => {
       if (frameId !== null) window.cancelAnimationFrame(frameId)
     }
-  }, [animationKey, messageSource, isDifyProvider])
-
-  useEffect(() => {
-    if (!open || !isDifyProvider) return
-    const assistantMessages = messages.filter((m) => m.role === 'assistant')
-    console.warn('[AiChatDialog][typewriter] visibleLengths', {
-      animationKey,
-      items: assistantMessages.map((m) => ({
-        id: m.id,
-        streaming: m.streaming,
-        contentLen: m.content.length,
-        visible: visibleLengths[m.id],
-      })),
-    })
-  }, [open, isDifyProvider, animationKey, messages, visibleLengths])
+  }, [activeTypewriterMessage, animationKey, isDifyProvider])
 
   const getDisplayContent = useCallback((msgId: string, full: string) => {
     if (!isDifyProvider || full.length === 0 || !state) return full
@@ -1331,6 +1306,8 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
       ? getDisplayContent(lastMessage.id, lastMessage.content).length
       : lastMessage?.content.length ?? 0
   const lastMessageKey = lastMessage ? `${lastMessage.id}:${lastMessageDisplayLength}` : ''
+  const shouldAutoScrollRef = useRef(true)
+  const autoScrollRafRef = useRef<number | null>(null)
 
   const handleStop = useCallback(() => {
     const activeMsg = messages.find((m) =>
@@ -1351,9 +1328,43 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
   }, [isDifyProvider, messages, stop, stopAndTruncate, visibleLengths])
 
   useEffect(() => {
+    if (!open) return
+    shouldAutoScrollRef.current = true
+  }, [open])
+
+  useEffect(() => {
     const el = messagesContainerRef.current
     if (!el) return
-    el.scrollTop = el.scrollHeight
+
+    const handleScroll = () => {
+      const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+      shouldAutoScrollRef.current = distanceToBottom <= 80
+    }
+
+    el.addEventListener('scroll', handleScroll, { passive: true })
+    return () => el.removeEventListener('scroll', handleScroll)
+  }, [open])
+
+  useEffect(() => {
+    if (!shouldAutoScrollRef.current) return
+    const el = messagesContainerRef.current
+    if (!el) return
+    if (autoScrollRafRef.current !== null) {
+      window.cancelAnimationFrame(autoScrollRafRef.current)
+    }
+    autoScrollRafRef.current = window.requestAnimationFrame(() => {
+      autoScrollRafRef.current = null
+      const current = messagesContainerRef.current
+      if (current && shouldAutoScrollRef.current) {
+        current.scrollTop = current.scrollHeight
+      }
+    })
+    return () => {
+      if (autoScrollRafRef.current !== null) {
+        window.cancelAnimationFrame(autoScrollRafRef.current)
+        autoScrollRafRef.current = null
+      }
+    }
   }, [lastMessageKey])
 
   useEffect(() => {

@@ -1,5 +1,5 @@
 import type { FC, FormEvent, KeyboardEvent } from 'react'
-import { useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChatEntryMode, ChatMessageView, EntryContext } from '../domain/chatSession'
 import { getDirKeyFromDocPath, normalizePersistableDocPath } from '../domain/docPathUtils'
 import type { AiChatSessionKey } from '../application/aiChatSessionService'
@@ -1080,12 +1080,24 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
   }, [agents])
 
   const messageSource = state?.viewMessages ?? EMPTY_MESSAGES
-  const allMessages = messageSource.filter((m) => !m.hidden)
-  const messages = buildDisplayMessages(allMessages, localFeedbackMessages)
+  const allMessages = useMemo(
+    () => messageSource.filter((m) => !m.hidden),
+    [messageSource],
+  )
+  const messages = useMemo(
+    () => buildDisplayMessages(allMessages, localFeedbackMessages),
+    [allMessages, localFeedbackMessages],
+  )
 
   const [visibleLengths, setVisibleLengths] = useState<Record<string, number>>({})
   const [activeTypewriterId, setActiveTypewriterId] = useState<string | null>(null)
   const isDifyProvider = providerType === 'dify'
+  const activeTypewriterMessage = useMemo(
+    () => activeTypewriterId
+      ? messages.find((msg) => msg.id === activeTypewriterId && msg.role === 'assistant') ?? null
+      : null,
+    [activeTypewriterId, messages],
+  )
 
   // 核心策略：任何时刻只允许“当前这一条助手回复”参与打字机动画，
   // 历史消息一律显示全文，避免重复播放。
@@ -1095,10 +1107,13 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
     ),
   )
 
-  const streamingIds = messages
-    .filter((m) => m.role === 'assistant' && m.streaming)
-    .map((m) => m.id)
-    .join(',')
+  const streamingIds = useMemo(
+    () => messages
+      .filter((m) => m.role === 'assistant' && m.streaming)
+      .map((m) => m.id)
+      .join(','),
+    [messages],
+  )
 
   const animationKey = !isDifyProvider ? 'off' : (isTypewriterRunning ? `active:${streamingIds}` : 'idle')
 
@@ -1127,21 +1142,11 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
       return
     }
 
-    setVisibleLengths((prev) => {
-      const next: Record<string, number> = { ...prev }
-      for (const msg of assistantMessages) {
-        const fullLen = msg.content.length
-        if (fullLen === 0) continue
-        if (msg.id === nextActiveId) {
-          // 新的打字目标，从 0 开始
-          next[msg.id] = 0
-        } else {
-          // 旧消息一律锁死为全文
-          next[msg.id] = fullLen
-        }
-      }
-      return next
-    })
+    setVisibleLengths((prev) => (
+      prev[nextActiveId] === 0
+        ? prev
+        : { ...prev, [nextActiveId]: 0 }
+    ))
 
     setActiveTypewriterId(nextActiveId)
   }, [isDifyProvider, messages, activeTypewriterId])
@@ -1167,6 +1172,11 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
     // 累积本轮还未消费的“字符额度”，避免过度刷新
     let charBudget = 0
 
+    const activeMessage = activeTypewriterMessage
+    if (!activeMessage || activeMessage.role !== 'assistant' || activeMessage.content.length === 0) {
+      return
+    }
+
     const tick = (time: number) => {
       const deltaMs = time - lastTime
       lastTime = time
@@ -1183,41 +1193,16 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
       charBudget -= Math.max(0, deltaChars)
 
       setVisibleLengths((prev) => {
-        let changed = false
-        const next: Record<string, number> = { ...prev }
+        const fullLen = activeMessage.content.length
+        const base = prev[activeMessage.id] ?? 0
+        if (base >= fullLen || deltaChars <= 0) return prev
 
-        for (const msg of messages) {
-          if (msg.role !== 'assistant') continue
-          const fullLen = msg.content.length
-          if (fullLen === 0) continue
-
-          const existing = next[msg.id]
-
-          // 关键修复：只要消息正在流式传输，就必须立即在打字机进度表中“挂号” (设置为 0)。
-          // 这样即便网络流在打字机还没产生第 1 个字时就结束了，打字机也能接手后续播放。
-          if (msg.streaming && existing === undefined) {
-            next[msg.id] = 0
-            changed = true
-          }
-
-          const base = next[msg.id]
-          // 如果该消息既不在 streaming 也不在打字机流程中，则跳过（处理历史对话）
-          if (base === undefined) continue
-
-          if (base >= fullLen) continue
-
-          if (deltaChars > 0) {
-            const target = Math.min(fullLen, base + deltaChars)
-            if (target !== base) {
-              next[msg.id] = target
-              changed = true
-            }
-          } else {
-            // 虽然本帧由于 speed 限制没产生新字符，但任务未完成，仍需下一帧
-          }
+        const target = Math.min(fullLen, base + deltaChars)
+        if (target === base) return prev
+        return {
+          ...prev,
+          [activeMessage.id]: target,
         }
-
-        return changed ? next : prev
       })
 
       frameId = window.requestAnimationFrame(tick)
@@ -1230,7 +1215,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
         window.cancelAnimationFrame(frameId)
       }
     }
-  }, [animationKey, messageSource])
+  }, [activeTypewriterMessage, animationKey])
 
 
   const getDisplayContent = useCallback((msgId: string, full: string) => {
