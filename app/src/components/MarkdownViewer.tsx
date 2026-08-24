@@ -647,7 +647,7 @@ type MarkdownBlockChunkProps = {
   rehypePlugins: any[]
   sourceLineOffset: number
   filePath: string | null
-  onElementChange: (chunk: MarkdownBlockChunk, element: HTMLElement | null) => void
+  onElementChange: (chunkId: string, element: HTMLElement | null) => void
 }
 
 const MarkdownChunkContent = memo(({
@@ -707,12 +707,14 @@ const MarkdownBlockChunkView = memo(({
   const chunkStartLine = sourceLineOffset + chunk.startLine
   const chunkEndLine = sourceLineOffset + chunk.endLine
   const isFolded = isBlockFolded(regions, chunkStartLine, chunkEndLine)
+  const chunkId = chunk.id
+
   useLayoutEffect(() => {
-    onElementChange(chunk, isFolded ? null : elementRef.current)
+    onElementChange(chunkId, isFolded ? null : elementRef.current)
     return () => {
-      onElementChange(chunk, null)
+      onElementChange(chunkId, null)
     }
-  }, [chunk, isFolded, onElementChange])
+  }, [chunkId, isFolded, onElementChange])
 
   if (isFolded) return null
 
@@ -756,7 +758,7 @@ type MarkdownDocumentProps = {
   remarkPlugins: any[]
   rehypePlugins: any[]
   filePath: string | null
-  onElementChange: (chunk: MarkdownBlockChunk, element: HTMLElement | null) => void
+  onElementChange: (chunkId: string, element: HTMLElement | null) => void
 }
 
 const MarkdownDocument = ({
@@ -805,7 +807,7 @@ const MarkdownDocument = ({
   }
 
   return (
-    <SourceLineOffsetContext.Provider value={sourceLineOffset}>
+    <SourceLineOffsetContext.Provider value={0}>
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
         remarkRehypeOptions={remarkRehypeOptions}
@@ -931,7 +933,6 @@ const MarkdownViewerComponent = React.forwardRef<
   }, [
     mode,
     performanceSettings.experimentalPreviewOptimization,
-  ])
   useEffect(() => {
     if (mode !== 'rendered') return
 
@@ -1075,17 +1076,17 @@ const MarkdownViewerComponent = React.forwardRef<
     mode === 'rendered' &&
     !plainTextMode &&
     !previewResult.containsToc &&
-    previewResult.lineCount >= 120
-  ), [mode, plainTextMode, previewResult.containsToc, previewResult.lineCount])
+    previewResult.blockChunks.length > 1
+  ), [mode, plainTextMode, previewResult.containsToc, previewResult.blockChunks])
   const blockChunks = useMemo(() => (
     blockRenderingEnabled ? previewResult.blockChunks : []
   ), [blockRenderingEnabled, previewResult.blockChunks])
   const rehypePlugins = useMemo(() => [rehypeAlignedTabBlocks, rehypeRaw], [])
-  const handleChunkElementChange = useCallback((chunk: MarkdownBlockChunk, element: HTMLElement | null) => {
+  const handleChunkElementChange = useCallback((chunkId: string, element: HTMLElement | null) => {
     if (element) {
-      chunkElementMapRef.current.set(chunk.id, element)
+      chunkElementMapRef.current.set(chunkId, element)
     } else {
-      chunkElementMapRef.current.delete(chunk.id)
+      chunkElementMapRef.current.delete(chunkId)
     }
   }, [])
 
@@ -1248,6 +1249,8 @@ const MarkdownViewerComponent = React.forwardRef<
     renderedValue,
     sourceLineOffset,
   ])
+  ])
+
   useEffect(() => {
     const container = containerRef.current
     if (!container || !onLineClick || mode !== 'rendered') return
