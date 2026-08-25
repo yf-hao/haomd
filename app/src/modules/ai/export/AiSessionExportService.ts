@@ -6,6 +6,7 @@ import {
   type ExportedAiSessionsPayload,
 } from './AiSessionExportModel'
 import { TauriAiSessionExportFileAdapter, type AiSessionExportFilePort } from './AiSessionExportFilePort'
+import { buildSuggestedExportFileName } from './AiSessionExportFileName'
 
 export interface AiSessionExportService {
   /**
@@ -16,19 +17,6 @@ export interface AiSessionExportService {
     docPath: string,
     options?: { currentSession?: ExportedAiSessionsPayload['currentSession'] },
   ): Promise<void>
-}
-
-function buildSuggestedFileNameFromDocPath(docPath: string): string {
-  const now = new Date()
-  const yyyy = now.getFullYear()
-  const mm = String(now.getMonth() + 1).padStart(2, '0')
-  const dd = String(now.getDate()).padStart(2, '0')
-  const hh = String(now.getHours()).padStart(2, '0')
-  const mi = String(now.getMinutes()).padStart(2, '0')
-  const ts = `${yyyy}${mm}${dd}-${hh}${mi}`
-
-  const baseName = docPath.split(/[/\\]/).pop()?.replace(/\.[^./\\]+$/, '') || 'document'
-  return `AI Sessions - ${baseName} - ${ts}.json`
 }
 
 export function createAiSessionExportService(
@@ -63,7 +51,13 @@ export function createAiSessionExportService(
       }
 
       const json = serializeExportedPayload(payload)
-      const suggestedFileName = buildSuggestedFileNameFromDocPath(trimmed)
+      const suggestedFileName = buildSuggestedExportFileName({
+        prefix: 'AI Sessions',
+        extension: 'json',
+        docPath: trimmed,
+        currentSessionTitle: options?.currentSession?.title,
+        hasCurrentSession,
+      })
       await filePortImpl.save(json, { suggestedFileName })
     },
   }

@@ -5,6 +5,7 @@ import type { DocConversationMessage, DocConversationRecord } from '../domain/do
 import type { ConversationState } from '../domain/chatSession'
 import { loadSession, type AiChatSessionCfg } from '../config/aiSessionsRepo'
 import type { ExportedAiMessage, ExportedAiSession } from '../export/AiSessionExportModel'
+import { buildSuggestedExportFileName } from '../export/AiSessionExportFileName'
 import { docConversationService } from '../application/docConversationService'
 import { aiSessionExportService } from '../export/AiSessionExportService'
 import { aiSessionImportService } from '../import/AiSessionImportService'
@@ -203,7 +204,7 @@ function buildCurrentSessionExport(
 
     return {
       sessionId: sessionKey,
-      title: undefined,
+      title: persisted?.title?.trim() || undefined,
       createdAt: new Date(now).toISOString(),
       updatedAt: new Date(now).toISOString(),
       messages,
@@ -460,15 +461,13 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
         currentSessionForExport ? buildMarkdownFromCurrentSession(currentSessionForExport) : '',
         record ? `## 当前目录历史\n\n${directoryContent.replace(/^# AI 会话历史（当前目录会话）\n\n/, '')}` : '',
       ].filter(Boolean).join('\n')
-      const now = new Date()
-      const yyyy = now.getFullYear()
-      const mm = String(now.getMonth() + 1).padStart(2, '0')
-      const dd = String(now.getDate()).padStart(2, '0')
-      const hh = String(now.getHours()).padStart(2, '0')
-      const mi = String(now.getMinutes()).padStart(2, '0')
-      const ts = `${yyyy}${mm}${dd}-${hh}${mi}`
-      const baseName = docPath.split(/[/\\]/).pop()?.replace(/\.[^./\\]+$/, '') || 'document'
-      const defaultFileName = `AI History - ${baseName} - ${ts}.md`
+      const defaultFileName = buildSuggestedExportFileName({
+        prefix: 'AI History',
+        extension: 'md',
+        docPath,
+        currentSessionTitle: currentSessionForExport?.title,
+        hasCurrentSession: !!currentSessionForExport,
+      })
 
       await invoke('save_text_with_dialog', {
         defaultFileName,
