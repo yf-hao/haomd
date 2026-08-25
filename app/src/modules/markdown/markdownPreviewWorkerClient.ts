@@ -24,6 +24,7 @@ let worker: Worker | null = null
 let activeTask: PreviewWorkerTask | null = null
 let nextTaskId = 0
 const taskQueue: PreviewWorkerTask[] = []
+const tasksByValue = new Map<string, Promise<PreviewMarkdownResult>>()
 
 function createAbortError(): Error {
   const error = new Error('Markdown preview task was cancelled')
@@ -112,7 +113,10 @@ export function preparePreviewMarkdownInWorker(
     return Promise.resolve(preparePreviewMarkdown(value))
   }
 
-  return new Promise<PreviewMarkdownResult>((resolve, reject) => {
+  const existingTask = tasksByValue.get(value)
+  if (existingTask) return existingTask
+
+  const taskPromise = new Promise<PreviewMarkdownResult>((resolve, reject) => {
     const task: PreviewWorkerTask = {
       id: nextTaskId++,
       value,
@@ -129,6 +133,11 @@ export function preparePreviewMarkdownInWorker(
     taskQueue.push(task)
     pumpQueue()
   })
+  tasksByValue.set(value, taskPromise)
+  void taskPromise.finally(() => {
+    if (tasksByValue.get(value) === taskPromise) tasksByValue.delete(value)
+  }).catch(() => undefined)
+  return taskPromise
 }
 
 export function prefetchMarkdownPreviews(
@@ -140,4 +149,3 @@ export function prefetchMarkdownPreviews(
     void preparePreviewMarkdownInWorker(value, options).catch(() => undefined)
   }
 }
-

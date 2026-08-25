@@ -1,10 +1,12 @@
 import type { CSSProperties, Dispatch, RefObject, SetStateAction } from 'react'
-import { memo, useCallback } from 'react'
+import { memo, startTransition, useCallback, useEffect, useState } from 'react'
 import { MarkdownViewer } from '../../../components/MarkdownViewer'
 import type { ChatMessageView } from '../domain/chatSession'
 import type { AssistantToolExecutionView } from '../domain/chatSession'
 import type { EphemeralAiChatMessage, EphemeralImageGenerationResultMessage } from './imageGenerationEphemeral'
 import { AiChatVirtualMessageList, AI_CHAT_VIRTUALIZATION_THRESHOLD } from './AiChatVirtualMessageList'
+import { getCachedPreviewMarkdown } from '../../markdown/previewPipeline'
+import { preparePreviewMarkdownInWorker } from '../../markdown/markdownPreviewWorkerClient'
 
 export type MessageViewMode = 'rendered' | 'source'
 
@@ -33,6 +35,7 @@ export type AiChatMessagesPaneProps = {
   visibleMessages: ChatMessageView[]
   renderedMessages: ChatMessageView[]
   ephemeralMessages: EphemeralAiChatMessage[]
+  initialScrollKey?: string
   loading: boolean
   isResizing: boolean
   aiChatBackgroundUrl: string | null
@@ -75,6 +78,50 @@ export type AiChatMessagesPaneProps = {
 }
 
 const DEFAULT_VISION_PROMPT = '请详细识别并描述这张图片中的内容。如果图片中包含文字、公式、表格、题目或文档，请先完整提取关键信息，再直接回答。若图片信息不足，请明确说明。'
+const AI_CHAT_DEFER_RICH_RENDER_MIN_CHARS = 2_000
+
+type AiChatAssistantMarkdownProps = {
+  value: string
+  mode: MessageViewMode
+}
+
+const AiChatAssistantMarkdown = memo(({ value, mode }: AiChatAssistantMarkdownProps) => {
+  const shouldDefer = mode === 'rendered' && value.length >= AI_CHAT_DEFER_RICH_RENDER_MIN_CHARS
+  const [readyValue, setReadyValue] = useState<string | null>(() => (
+    !shouldDefer || getCachedPreviewMarkdown(value) ? value : null
+  ))
+
+  useEffect(() => {
+    if (!shouldDefer || readyValue === value) return
+    const controller = new AbortController()
+    let frame: number | null = null
+
+    void preparePreviewMarkdownInWorker(value, { signal: controller.signal }).then(() => {
+      if (controller.signal.aborted) return
+      frame = window.requestAnimationFrame(() => {
+        startTransition(() => setReadyValue(value))
+      })
+    }).catch(() => undefined)
+
+    return () => {
+      controller.abort()
+      if (frame != null) window.cancelAnimationFrame(frame)
+    }
+  }, [readyValue, shouldDefer, value])
+
+  if (!shouldDefer || readyValue === value) {
+    return <MarkdownViewer value={value} mode={mode} />
+  }
+
+  const previewText = value.length > 2_400
+    ? `${value.slice(0, 2_400)}\n\n…`
+    : value
+  return (
+    <div className="ai-chat-message-content ai-chat-message-content-deferred">
+      {previewText}
+    </div>
+  )
+})
 
 const getUserDisplayContent = (content: string) => {
   const trimmed = content.trim()
@@ -145,7 +192,7 @@ const AiChatMessageItem = memo(({
             <span className="ai-typing-dot" />
           </div>
         ) : displayContent.trim() ? (
-          <MarkdownViewer value={displayContent} mode={viewMode} />
+          <AiChatAssistantMarkdown value={displayContent} mode={viewMode} />
         ) : null
       ) : (
         <div className="ai-chat-message-content">{displayContent}</div>
@@ -221,6 +268,7 @@ export const AiChatMessagesPane = memo(({
   visibleMessages,
   renderedMessages,
   ephemeralMessages,
+  initialScrollKey,
   loading,
   isResizing,
   aiChatBackgroundUrl,
@@ -345,6 +393,7 @@ export const AiChatMessagesPane = memo(({
               messages={visibleMessages}
               containerRef={messagesContainerRef}
               renderMessage={renderMessage}
+              initialScrollKey={initialScrollKey}
             />
           ) : (
             renderedMessages.map(renderMessage)

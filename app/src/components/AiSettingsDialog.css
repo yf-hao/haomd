@@ -1460,6 +1460,13 @@ button.ghost.ghost-subtle:hover {
   font-size: var(--ai-chat-message-font-size);
 }
 
+.ai-chat-message-content-deferred {
+  white-space: pre-wrap;
+  max-height: 420px;
+  overflow: hidden;
+  opacity: 0.86;
+}
+
 .ai-chat-message-badge {
   display: inline-flex;
   align-items: center;

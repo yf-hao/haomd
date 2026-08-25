@@ -1430,6 +1430,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
         <AiChatBody
           messages={messages}
           ephemeralMessages={ephemeralMessages}
+          historyIdentity={`${tabId}:${entryMode}`}
           agentMode={activeAgentMode}
           loading={isProcessing}
           error={error}

@@ -18,6 +18,7 @@ type VirtualMessageListProps = {
   messages: ChatMessageView[]
   containerRef: RefObject<HTMLDivElement>
   renderMessage: (message: ChatMessageView) => ReactNode
+  initialScrollKey?: string
 }
 
 function findFirstPosition(positions: MessagePosition[], offset: number): number {
@@ -41,11 +42,14 @@ export function AiChatVirtualMessageList({
   messages,
   containerRef,
   renderMessage,
+  initialScrollKey = 'ai-chat',
 }: VirtualMessageListProps) {
   const rowElementsRef = useRef(new Map<string, HTMLElement>())
   const scrollFrameRef = useRef<number | null>(null)
+  const pinToBottomRef = useRef(false)
   const [viewport, setViewport] = useState({ scrollTop: 0, height: 0 })
   const [measuredHeights, setMeasuredHeights] = useState(() => new Map<string, number>())
+  const [initializedScrollKey, setInitializedScrollKey] = useState<string | null>(null)
 
   const updateViewport = useCallback(() => {
     const container = containerRef.current
@@ -67,6 +71,7 @@ export function AiChatVirtualMessageList({
     if (!container) return
 
     const handleScroll = () => {
+      pinToBottomRef.current = container.scrollHeight - container.scrollTop - container.clientHeight <= 80
       if (scrollFrameRef.current !== null) return
       scrollFrameRef.current = window.requestAnimationFrame(() => {
         scrollFrameRef.current = null
@@ -107,9 +112,13 @@ export function AiChatVirtualMessageList({
     ? positions[positions.length - 1]!.top + positions[positions.length - 1]!.height
     : 0
   const viewportHeight = viewport.height || MIN_OVERSCAN_HEIGHT
+  const isInitialScrollPending = initializedScrollKey !== initialScrollKey
+  const effectiveScrollTop = isInitialScrollPending
+    ? Math.max(0, totalHeight - viewportHeight)
+    : viewport.scrollTop
   const overscan = Math.max(MIN_OVERSCAN_HEIGHT, viewportHeight * OVERSCAN_VIEWPORT_MULTIPLIER)
-  const firstVisibleOffset = Math.max(0, viewport.scrollTop - overscan)
-  const lastVisibleOffset = viewport.scrollTop + viewportHeight + overscan
+  const firstVisibleOffset = Math.max(0, effectiveScrollTop - overscan)
+  const lastVisibleOffset = effectiveScrollTop + viewportHeight + overscan
   const firstIndex = positions.length ? findFirstPosition(positions, firstVisibleOffset) : 0
   const lastIndex = positions.length
     ? Math.min(positions.length - 1, findFirstPosition(positions, lastVisibleOffset) + 1)
@@ -122,6 +131,20 @@ export function AiChatVirtualMessageList({
       rowElementsRef.current.delete(id)
     }
   }, [])
+
+  useLayoutEffect(() => {
+    const container = containerRef.current
+    if (
+      container
+      && messages.length > 0
+      && initializedScrollKey !== initialScrollKey
+    ) {
+      container.scrollTop = Math.max(0, totalHeight - container.clientHeight)
+      setInitializedScrollKey(initialScrollKey)
+      pinToBottomRef.current = true
+      updateViewport()
+    }
+  }, [containerRef, initialScrollKey, initializedScrollKey, messages.length, totalHeight, updateViewport])
 
   useLayoutEffect(() => {
     const updateHeight = (id: string, height: number) => {
@@ -154,6 +177,13 @@ export function AiChatVirtualMessageList({
 
     return () => observer.disconnect()
   }, [firstIndex, lastIndex, messages.length])
+
+  useLayoutEffect(() => {
+    const container = containerRef.current
+    if (!container || !pinToBottomRef.current) return
+    container.scrollTop = container.scrollHeight
+    updateViewport()
+  }, [containerRef, measuredHeights, updateViewport])
 
   const renderedMessages = firstIndex <= lastIndex
     ? messages.slice(firstIndex, lastIndex + 1)
