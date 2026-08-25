@@ -79,6 +79,7 @@ export type AiChatMessagesPaneProps = {
 
 const DEFAULT_VISION_PROMPT = '请详细识别并描述这张图片中的内容。如果图片中包含文字、公式、表格、题目或文档，请先完整提取关键信息，再直接回答。若图片信息不足，请明确说明。'
 const AI_CHAT_DEFER_RICH_RENDER_MIN_CHARS = 2_000
+const AI_CHAT_RICH_RENDER_FALLBACK_DELAY_MS = 800
 
 type AiChatAssistantMarkdownProps = {
   value: string
@@ -93,18 +94,28 @@ const AiChatAssistantMarkdown = memo(({ value, mode }: AiChatAssistantMarkdownPr
 
   useEffect(() => {
     if (!shouldDefer || readyValue === value) return
-    const controller = new AbortController()
+    let disposed = false
     let frame: number | null = null
+    const fallbackTimer = window.setTimeout(() => {
+      if (disposed) return
+      startTransition(() => setReadyValue(value))
+    }, AI_CHAT_RICH_RENDER_FALLBACK_DELAY_MS)
 
-    void preparePreviewMarkdownInWorker(value, { signal: controller.signal }).then(() => {
-      if (controller.signal.aborted) return
+    void preparePreviewMarkdownInWorker(value).then(() => {
+      if (disposed) return
+      window.clearTimeout(fallbackTimer)
       frame = window.requestAnimationFrame(() => {
         startTransition(() => setReadyValue(value))
       })
-    }).catch(() => undefined)
+    }).catch(() => {
+      if (disposed) return
+      window.clearTimeout(fallbackTimer)
+      startTransition(() => setReadyValue(value))
+    })
 
     return () => {
-      controller.abort()
+      disposed = true
+      window.clearTimeout(fallbackTimer)
       if (frame != null) window.cancelAnimationFrame(frame)
     }
   }, [readyValue, shouldDefer, value])

@@ -15,16 +15,22 @@ type PreviewWorkerRequest = {
 type PreviewWorkerTask = {
   id: number
   value: string
-  signal?: AbortSignal
+  cancellable: boolean
+  cancelled: boolean
   resolve: (result: PreviewMarkdownResult) => void
   reject: (error: unknown) => void
+}
+
+type PreviewWorkerTaskEntry = {
+  task: PreviewWorkerTask
+  promise: Promise<PreviewMarkdownResult>
 }
 
 let worker: Worker | null = null
 let activeTask: PreviewWorkerTask | null = null
 let nextTaskId = 0
 const taskQueue: PreviewWorkerTask[] = []
-const tasksByValue = new Map<string, Promise<PreviewMarkdownResult>>()
+const tasksByValue = new Map<string, PreviewWorkerTaskEntry>()
 
 function createAbortError(): Error {
   const error = new Error('Markdown preview task was cancelled')
@@ -54,11 +60,7 @@ function getWorker(): Worker | null {
       blockChunks: event.data.blockChunks,
     }
     cachePreviewMarkdown(task.value, result)
-    if (task.signal?.aborted) {
-      task.reject(createAbortError())
-    } else {
-      task.resolve(result)
-    }
+    task.resolve(result)
     pumpQueue()
   }
   nextWorker.onerror = (event) => {
@@ -78,6 +80,9 @@ function removeQueuedTask(task: PreviewWorkerTask): void {
   const index = taskQueue.indexOf(task)
   if (index < 0) return
   taskQueue.splice(index, 1)
+  task.cancelled = true
+  const entry = tasksByValue.get(task.value)
+  if (entry?.task === task) tasksByValue.delete(task.value)
   task.reject(createAbortError())
 }
 
@@ -86,7 +91,7 @@ function pumpQueue(): void {
 
   while (taskQueue.length > 0) {
     const nextTask = taskQueue.shift()!
-    if (nextTask.signal?.aborted) {
+    if (nextTask.cancelled) {
       nextTask.reject(createAbortError())
       continue
     }
@@ -114,28 +119,42 @@ export function preparePreviewMarkdownInWorker(
   }
 
   const existingTask = tasksByValue.get(value)
-  if (existingTask) return existingTask
+  if (existingTask) {
+    // 可视区域调用方不传 signal，接管共享任务，防止预加载清理时取消它。
+    if (!options.signal) existingTask.task.cancellable = false
+    return existingTask.promise
+  }
 
   const taskPromise = new Promise<PreviewMarkdownResult>((resolve, reject) => {
     const task: PreviewWorkerTask = {
       id: nextTaskId++,
       value,
-      signal: options.signal,
+      cancellable: Boolean(options.signal),
+      cancelled: false,
       resolve,
       reject,
     }
     if (options.signal) {
       options.signal.addEventListener('abort', () => {
-        if (activeTask === task) return
+        if (!task.cancellable) return
+        if (activeTask === task) {
+          // 当前任务已经发给 Worker，继续完成并写入共享缓存。
+          task.cancellable = false
+          return
+        }
         removeQueuedTask(task)
       }, { once: true })
     }
     taskQueue.push(task)
     pumpQueue()
   })
-  tasksByValue.set(value, taskPromise)
+  const entry: PreviewWorkerTaskEntry = {
+    task: taskQueue.find((task) => task.value === value) ?? activeTask!,
+    promise: taskPromise,
+  }
+  tasksByValue.set(value, entry)
   void taskPromise.finally(() => {
-    if (tasksByValue.get(value) === taskPromise) tasksByValue.delete(value)
+    if (tasksByValue.get(value) === entry) tasksByValue.delete(value)
   }).catch(() => undefined)
   return taskPromise
 }
