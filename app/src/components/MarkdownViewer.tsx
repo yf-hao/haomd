@@ -6,7 +6,7 @@ import rehypeRaw from 'rehype-raw'
 import 'github-markdown-css/github-markdown.css'
 import './MarkdownViewer.css'
 import { getRenderer } from '../modules/markdown/plugins'
-import { preparePreviewMarkdown, type PreviewBlockChunk, type PreviewMarkdownResult } from '../modules/markdown/previewPipeline'
+import { cachePreviewMarkdown, getCachedPreviewMarkdown, preparePreviewMarkdown, type PreviewBlockChunk, type PreviewMarkdownResult } from '../modules/markdown/previewPipeline'
 import { getDefaultPerformanceSettings, getPerformanceSettings, type PerformanceSettings } from '../modules/settings/editorSettings'
 import { subscribePerformanceSettingsChanged } from '../modules/settings/performanceRuntime'
 import { remarkToc } from '../modules/markdown/remarkToc'
@@ -84,36 +84,9 @@ type PreviewWorkerRequest = {
 }
 
 const LARGE_DOCUMENT_PREVIEW_WORKER_THRESHOLD = 16_000
-const PREVIEW_RESULT_CACHE_LIMIT = 32
-
-const previewResultCache = new Map<string, PreviewMarkdownResult>()
 
 function getCachedPreviewResult(value: string): PreviewMarkdownResult {
-  const cached = previewResultCache.get(value)
-  if (cached) {
-    previewResultCache.delete(value)
-    previewResultCache.set(value, cached)
-    return cached
-  }
-
-  const result = preparePreviewMarkdown(value)
-  previewResultCache.set(value, result)
-  while (previewResultCache.size > PREVIEW_RESULT_CACHE_LIMIT) {
-    const oldestKey = previewResultCache.keys().next().value
-    if (oldestKey == null) break
-    previewResultCache.delete(oldestKey)
-  }
-  return result
-}
-
-function cachePreviewResult(value: string, result: PreviewMarkdownResult): void {
-  previewResultCache.delete(value)
-  previewResultCache.set(value, result)
-  while (previewResultCache.size > PREVIEW_RESULT_CACHE_LIMIT) {
-    const oldestKey = previewResultCache.keys().next().value
-    if (oldestKey == null) break
-    previewResultCache.delete(oldestKey)
-  }
+  return getCachedPreviewMarkdown(value) ?? preparePreviewMarkdown(value)
 }
 
 const FoldContext = React.createContext<FoldRegion[]>([])
@@ -1036,7 +1009,12 @@ const MarkdownViewerComponent = React.forwardRef<
   }, [])
 
   useEffect(() => {
-    if (!shouldUsePreviewWorker || mode !== 'rendered' || typeof Worker === 'undefined') {
+    if (
+      !shouldUsePreviewWorker
+      || mode !== 'rendered'
+      || typeof Worker === 'undefined'
+      || getCachedPreviewMarkdown(value)
+    ) {
       previewWorkerRef.current?.terminate()
       previewWorkerRef.current = null
       previewWorkerBusyRef.current = false
@@ -1073,7 +1051,7 @@ const MarkdownViewerComponent = React.forwardRef<
       const requestedValue = previewWorkerValuesRef.current.get(event.data.id)
       previewWorkerValuesRef.current.delete(event.data.id)
       if (requestedValue != null) {
-        cachePreviewResult(requestedValue, {
+        cachePreviewMarkdown(requestedValue, {
           processedMarkdown: event.data.processedMarkdown,
           hasMath: event.data.hasMath,
           hasRawHtml: event.data.hasRawHtml,
@@ -1110,6 +1088,7 @@ const MarkdownViewerComponent = React.forwardRef<
   }, [
     mode,
     shouldUsePreviewWorker,
+    value,
   ])
 
   useEffect(() => {
@@ -1121,6 +1100,15 @@ const MarkdownViewerComponent = React.forwardRef<
       startTransition(() => {
         if (requestId !== previewRequestIdRef.current) return
         setPreviewResult(nextResult)
+      })
+      return
+    }
+
+    const cachedResult = getCachedPreviewMarkdown(value)
+    if (cachedResult) {
+      startTransition(() => {
+        if (requestId !== previewRequestIdRef.current) return
+        setPreviewResult(cachedResult)
       })
       return
     }

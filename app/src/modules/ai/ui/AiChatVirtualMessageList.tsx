@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import type { ChatMessageView } from '../domain/chatSession'
+import { prefetchMarkdownPreviews } from '../../markdown/markdownPreviewWorkerClient'
 
 const DEFAULT_MESSAGE_HEIGHT = 180
 const MIN_OVERSCAN_HEIGHT = 600
 const OVERSCAN_VIEWPORT_MULTIPLIER = 1.5
+const PREFETCH_MESSAGE_COUNT = 8
 export const AI_CHAT_VIRTUALIZATION_THRESHOLD = 12
 
 type MessagePosition = {
@@ -156,6 +158,23 @@ export function AiChatVirtualMessageList({
   const renderedMessages = firstIndex <= lastIndex
     ? messages.slice(firstIndex, lastIndex + 1)
     : []
+  const prefetchValues = useMemo(() => (
+    messages
+      .slice(
+        Math.max(0, firstIndex - PREFETCH_MESSAGE_COUNT),
+        Math.min(messages.length, lastIndex + PREFETCH_MESSAGE_COUNT + 1),
+      )
+      .filter((message) => message.role === 'assistant' && !message.streaming && message.content.trim())
+      .map((message) => message.content)
+  ), [firstIndex, lastIndex, messages])
+
+  useEffect(() => {
+    if (prefetchValues.length === 0) return
+    const controller = new AbortController()
+    prefetchMarkdownPreviews(prefetchValues, { signal: controller.signal })
+    return () => controller.abort()
+  }, [prefetchValues])
+
   const topSpacerHeight = positions[firstIndex]?.top ?? 0
   const renderedBottom = lastIndex >= 0
     ? positions[lastIndex]!.top + positions[lastIndex]!.height

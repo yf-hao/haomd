@@ -29,6 +29,14 @@ const PREVIEW_RESULT_CACHE_MAX_CHARS = 1_000_000
 const previewResultCache = new Map<string, PreviewMarkdownResult>()
 let previewResultCacheChars = 0
 
+export function getCachedPreviewMarkdown(value: string): PreviewMarkdownResult | null {
+  const cached = previewResultCache.get(value)
+  if (!cached) return null
+  previewResultCache.delete(value)
+  previewResultCache.set(value, cached)
+  return cached
+}
+
 function isFenceLine(line: string): boolean {
   return /^\s{0,3}(```|~~~)/.test(line)
 }
@@ -150,13 +158,29 @@ function assignStableChunkIds(
   })
 }
 
-export function preparePreviewMarkdown(value: string): PreviewMarkdownResult {
-  const cached = previewResultCache.get(value)
-  if (cached) {
-    previewResultCache.delete(value)
-    previewResultCache.set(value, cached)
-    return cached
+export function cachePreviewMarkdown(value: string, result: PreviewMarkdownResult): void {
+  const previous = previewResultCache.get(value)
+  if (previous) {
+    previewResultCacheChars -= previous.processedMarkdown.length
   }
+  previewResultCache.delete(value)
+  previewResultCache.set(value, result)
+  previewResultCacheChars += result.processedMarkdown.length
+  while (
+    previewResultCache.size > PREVIEW_RESULT_CACHE_LIMIT ||
+    previewResultCacheChars > PREVIEW_RESULT_CACHE_MAX_CHARS
+  ) {
+    const oldestKey = previewResultCache.keys().next().value
+    if (oldestKey === undefined) break
+    const oldest = previewResultCache.get(oldestKey)
+    previewResultCache.delete(oldestKey)
+    previewResultCacheChars -= oldest?.processedMarkdown.length ?? 0
+  }
+}
+
+export function preparePreviewMarkdown(value: string): PreviewMarkdownResult {
+  const cached = getCachedPreviewMarkdown(value)
+  if (cached) return cached
 
   const document = extractFrontMatter(value)
   const bodyMarkdown = document.body
@@ -183,22 +207,7 @@ export function preparePreviewMarkdown(value: string): PreviewMarkdownResult {
     blockChunks,
   }
 
-  const previous = previewResultCache.get(value)
-  if (previous) {
-    previewResultCacheChars -= previous.processedMarkdown.length
-  }
-  previewResultCache.set(value, result)
-  previewResultCacheChars += result.processedMarkdown.length
-  while (
-    previewResultCache.size > PREVIEW_RESULT_CACHE_LIMIT ||
-    previewResultCacheChars > PREVIEW_RESULT_CACHE_MAX_CHARS
-  ) {
-    const oldestKey = previewResultCache.keys().next().value
-    if (oldestKey === undefined) break
-    const oldest = previewResultCache.get(oldestKey)
-    previewResultCache.delete(oldestKey)
-    previewResultCacheChars -= oldest?.processedMarkdown.length ?? 0
-  }
+  cachePreviewMarkdown(value, result)
 
   return result
 }
