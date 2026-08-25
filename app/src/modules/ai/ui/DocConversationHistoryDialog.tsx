@@ -2,21 +2,27 @@ import type { FC, MouseEventHandler, MouseEvent as ReactMouseEvent } from 'react
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import type { DocConversationMessage, DocConversationRecord } from '../domain/docConversations'
+import type { ConversationState } from '../domain/chatSession'
+import { loadSession, type AiChatSessionCfg } from '../config/aiSessionsRepo'
 import { docConversationService } from '../application/docConversationService'
 import { aiSessionExportService } from '../export/AiSessionExportService'
 import { aiSessionImportService } from '../import/AiSessionImportService'
-import { loadSessionsIndex, type AiChatSessionIndexEntry } from '../config/aiSessionsRepo'
 import { useI18n } from '../../i18n/I18nContext'
 
 export type DocConversationHistoryDialogProps = {
   open: boolean
   docPath: string
   currentSessionKey?: string | null
+  currentSessionState?: ConversationState | null
   onClose: () => void
 }
 
-type ActivitySessionItem = AiChatSessionIndexEntry & {
-  transient?: boolean
+type CurrentSessionMessage = {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  timestamp?: number
+  streaming?: boolean
 }
 
 type ConversationGroup = {
@@ -144,10 +150,24 @@ function buildMarkdownFromDocRecord(record: DocConversationRecord, groups: Conve
   return lines.join('\n')
 }
 
+function getPersistedCurrentSessionMessages(session: AiChatSessionCfg | null): CurrentSessionMessage[] {
+  if (!session) return []
+  return session.messages
+    .filter((message) => message.role === 'user' || message.role === 'assistant')
+    .filter((message) => message.content.trim().length > 0)
+    .map((message) => ({
+      id: `persisted:${session.id}:${message.id}`,
+      role: message.role as 'user' | 'assistant',
+      content: message.content,
+      timestamp: message.timestamp,
+    }))
+}
+
 export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps> = ({
   open,
   docPath,
   currentSessionKey = null,
+  currentSessionState = null,
   onClose,
 }) => {
   const { t } = useI18n()
@@ -155,7 +175,8 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
   const [error, setError] = useState<Error | null>(null)
   const [record, setRecord] = useState<DocConversationRecord | null>(null)
   const [groups, setGroups] = useState<ConversationGroup[]>([])
-  const [activitySessions, setActivitySessions] = useState<ActivitySessionItem[]>([])
+  const [persistedCurrentSession, setPersistedCurrentSession] = useState<AiChatSessionCfg | null>(null)
+  const [currentSessionLoading, setCurrentSessionLoading] = useState(false)
   const [pageIndex, setPageIndex] = useState(0)
   const [pageSize, setPageSize] = useState(10)
 
@@ -202,52 +223,51 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
   }, [open, docPath, pageSize])
 
   useEffect(() => {
-    if (!open) return
+    if (!open || !currentSessionKey?.startsWith('session:')) {
+      setPersistedCurrentSession(null)
+      setCurrentSessionLoading(false)
+      return
+    }
 
     let cancelled = false
-    void loadSessionsIndex()
-      .then((entries) => {
-        if (cancelled) return
-
-        const sessions = [...entries]
-        if (
-          currentSessionKey?.startsWith('session:')
-          && !sessions.some((session) => session.id === currentSessionKey)
-        ) {
-          const now = Date.now()
-          sessions.push({
-            id: currentSessionKey,
-            title: null,
-            messageCount: 0,
-            createdAt: now,
-            updatedAt: now,
-          })
-        }
-
-        sessions.sort((left, right) => {
-          if (left.id === currentSessionKey) return -1
-          if (right.id === currentSessionKey) return 1
-          return right.updatedAt - left.updatedAt
-        })
-
-        setActivitySessions(sessions.map((session) => ({
-          ...session,
-          transient: session.id === currentSessionKey && session.messageCount === 0,
-        })))
+    setCurrentSessionLoading(true)
+    void loadSession(currentSessionKey)
+      .then((session) => {
+        if (!cancelled) setPersistedCurrentSession(session)
       })
-      .catch((error) => {
-        if (!cancelled) {
-          console.warn('[DocConversationHistoryDialog] failed to load activity sessions', error)
-          setActivitySessions([])
-        }
+      .catch((e) => {
+        if (!cancelled) console.warn('[DocConversationHistoryDialog] load current session failed', e)
+      })
+      .finally(() => {
+        if (!cancelled) setCurrentSessionLoading(false)
       })
 
     return () => {
       cancelled = true
     }
-  }, [currentSessionKey, open])
+  }, [open, currentSessionKey])
 
-  const hasData = !!record && record.messages.length > 0 && groups.length > 0
+  const currentSessionMessages = useMemo<CurrentSessionMessage[]>(() => {
+    const liveMessages = (currentSessionState?.viewMessages ?? [])
+      .filter((message) => !message.hidden)
+      .filter((message) => message.content.trim().length > 0)
+      .map((message) => ({
+        id: `live:${message.id}`,
+        role: message.role,
+        content: message.content,
+        streaming: message.streaming,
+      }))
+
+    return liveMessages.length > 0 ? liveMessages : getPersistedCurrentSessionMessages(persistedCurrentSession)
+  }, [currentSessionState, persistedCurrentSession])
+
+  const hasDocumentData = !!record && record.messages.length > 0 && groups.length > 0
+  const hasCurrentSessionData = currentSessionMessages.length > 0
+  const hasLiveCurrentSessionData = (currentSessionState?.viewMessages ?? []).some(
+    (message) => !message.hidden && message.content.trim().length > 0,
+  )
+  const hasData = hasDocumentData || hasCurrentSessionData
+  const showLoading = !error && !hasData && (loading || currentSessionLoading)
 
   const { pageGroups, totalPages, displayPageIndex } = useMemo(() => {
     if (!groups.length) {
@@ -404,15 +424,16 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
 
   const summaryLine = (() => {
     if (!record || !record.messages.length) {
-      return activitySessions.length > 0
-        ? t('aiHistory.activitySummary', { sessions: activitySessions.length })
+      return hasCurrentSessionData
+        ? t('aiHistory.currentSessionSummary', { messages: currentSessionMessages.length })
         : t('aiHistory.emptySummary')
     }
     const lastTs = new Date(record.lastActiveAt).toLocaleString()
-    return t('aiHistory.summaryLine', { time: lastTs, messages: record.messages.length, groups: groups.length })
+    const documentSummary = t('aiHistory.summaryLine', { time: lastTs, messages: record.messages.length, groups: groups.length })
+    return hasCurrentSessionData
+      ? `${documentSummary} · ${t('aiHistory.currentSessionSummary', { messages: currentSessionMessages.length })}`
+      : documentSummary
   })()
-
-  const hasActivitySessions = activitySessions.length > 0
 
   return (
     <div className="modal-backdrop modal-backdrop-plain" onClick={onClose}>
@@ -456,49 +477,17 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
         </div>
 
         <div className="ai-history-summary">
-          {loading && <div className="ai-history-status">{t('aiHistory.loading')}</div>}
+          {showLoading && <div className="ai-history-status">{t('aiHistory.loading')}</div>}
           {!loading && error && (
             <div className="ai-history-status ai-history-status-error">{t('aiHistory.loadFailed', { message: error.message })}</div>
           )}
-          {!loading && !error && (
+          {!showLoading && !error && (
             <div className="ai-history-status">{summaryLine}</div>
           )}
         </div>
 
         <div className="ai-history-body">
-          {!loading && !error && hasActivitySessions && (
-            <section className="ai-history-activity-sessions">
-              <div className="ai-history-activity-title">{t('aiHistory.activitySessions')}</div>
-              <div className="ai-history-activity-list">
-                {activitySessions.map((session) => {
-                  const isCurrent = session.id === currentSessionKey
-                  const title = session.transient
-                    ? t('aiHistory.currentSession')
-                    : session.title?.trim() || t('aiHistory.untitledSession')
-                  return (
-                    <div
-                      key={session.id}
-                      className={`ai-history-activity-item ${isCurrent ? 'is-current' : ''}`}
-                      aria-current={isCurrent ? 'true' : undefined}
-                    >
-                      <div className="ai-history-activity-item-main">
-                        <span className="ai-history-activity-item-title">{title}</span>
-                        {isCurrent && (
-                          <span className="ai-history-activity-current">{t('aiHistory.currentSession')}</span>
-                        )}
-                      </div>
-                      <div className="ai-history-activity-item-meta">
-                        <span>{session.messageCount} {t('aiHistory.messages')}</span>
-                        <span>{new Date(session.updatedAt).toLocaleString()}</span>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </section>
-          )}
-
-          {!loading && !error && !hasData && !hasActivitySessions && (
+          {!showLoading && !error && !hasData && (
             <div className="ai-history-empty">
               {t('aiHistory.emptyBody').split('\n').map((line, index) => (
                 <div key={index}>{line}</div>
@@ -506,8 +495,39 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
             </div>
           )}
 
-          {!loading && !error && hasData && (
+          {!showLoading && !error && hasData && (
             <div className="ai-history-list">
+              {hasCurrentSessionData && (
+                <div className="ai-history-group ai-history-current-session">
+                  <div className="ai-history-group-header">
+                    <span className="ai-history-group-title">{t('aiHistory.currentSession')}</span>
+                    <span className="ai-history-current-session-live">
+                      {hasLiveCurrentSessionData ? t('aiHistory.currentSessionLive') : t('aiHistory.currentSessionSaved')}
+                    </span>
+                  </div>
+
+                  {currentSessionMessages.map((message) => (
+                    <div
+                      key={message.id}
+                      className={`ai-history-message ai-history-message-${message.role}`}
+                    >
+                      <div className="ai-history-message-meta">
+                        <span className="ai-history-role">
+                          {message.role === 'user' ? t('aiHistory.user') : t('aiHistory.assistant')}
+                        </span>
+                        {message.timestamp ? (
+                          <span className="ai-history-time">{new Date(message.timestamp).toLocaleString()}</span>
+                        ) : message.streaming ? (
+                          <span className="ai-history-time">{t('aiHistory.currentSessionStreaming')}</span>
+                        ) : null}
+                      </div>
+                      <div className="ai-history-message-content">{message.content}</div>
+                    </div>
+                  ))}
+                  {hasDocumentData && <div className="ai-history-group-divider" />}
+                </div>
+              )}
+
               {pageGroups.map((group, idx) => {
                 const groupIndex = displayPageIndex * pageSize + idx + 1
                 return (

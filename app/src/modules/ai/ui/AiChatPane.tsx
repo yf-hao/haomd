@@ -1,6 +1,6 @@
 import type { FC, FormEvent, KeyboardEvent } from 'react'
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import type { ChatEntryMode, ChatMessageView, EntryContext } from '../domain/chatSession'
+import type { ChatEntryMode, ChatMessageView, ConversationState, EntryContext } from '../domain/chatSession'
 import { getDirKeyFromDocPath, normalizePersistableDocPath } from '../domain/docPathUtils'
 import type { AiChatSessionKey } from '../application/aiChatSessionService'
 import { useAiChatSession } from './hooks/useAiChatSession'
@@ -114,6 +114,8 @@ export interface AiChatPaneProps {
   sourceTabId?: string | null
   /** 输入框聚焦状态，用于让父层按需卸载重型视图 */
   onInputFocusChange?: (focused: boolean) => void
+  /** 将当前会话的实时状态提供给外层历史弹窗，避免只显示持久化快照 */
+  onSessionStateChange?: (sessionKey: string, state: ConversationState | null) => void
   /** Full-page mode: centered input when empty, messages above input when not */
   fullPage?: boolean
 }
@@ -146,6 +148,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
   t,
   sourceTabId,
   onInputFocusChange,
+  onSessionStateChange,
   fullPage = false,
 }) => {
   const { themeSettings } = useThemeContext()
@@ -343,6 +346,10 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
   })
 
   const isBusy = loading || !!state?.viewMessages.some((message) => message.streaming)
+
+  useEffect(() => {
+    onSessionStateChange?.(sessionKey, state)
+  }, [onSessionStateChange, sessionKey, state])
 
   useEffect(() => {
     if (isPersistedSession) return

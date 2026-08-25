@@ -43,6 +43,7 @@ import { getMarkdownOutlineFallbackTarget, getWysiwygOutlineNavigationTarget } f
 import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout'
 import { AiChatCommandBridgeContext } from '../modules/ai/ui/AiChatCommandBridgeContext'
 import type { AiChatSessionKey } from '../modules/ai/application/aiChatSessionService'
+import type { ConversationState } from '../modules/ai/domain/chatSession'
 import { aiChatSessionManager } from '../modules/ai/application/localStorageAiChatSessionManager'
 import { registerEditorInsertBelow, registerEditorReplaceSelection, registerEditorCreateAndInsert, insertMarkdownAtCursorBelow } from '../modules/ai/platform/editorInsertService'
 import {
@@ -282,6 +283,19 @@ export function WorkspaceShell({
   const [issueReportOpen, setIssueReportOpen] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [aiChatSessionKey, setAiChatSessionKey] = useState<AiChatSessionKey>('global')
+  const [currentAiChatSessionState, setCurrentAiChatSessionState] = useState<ConversationState | null>(null)
+
+  useEffect(() => {
+    setCurrentAiChatSessionState(null)
+  }, [aiChatSessionKey])
+
+  const handleAiChatSessionStateChange = useCallback(
+    (sessionKey: string, nextState: ConversationState | null) => {
+      if (sessionKey !== aiChatSessionKey) return
+      setCurrentAiChatSessionState(nextState)
+    },
+    [aiChatSessionKey],
+  )
 
   // Reset session key when switching away from the sessions panel
   useEffect(() => {
@@ -4618,6 +4632,7 @@ export function WorkspaceShell({
                 t={t}
                 sourceTabId={null}
                 onInputFocusChange={setIsAiChatInputFocused}
+                onSessionStateChange={handleAiChatSessionStateChange}
                 fullPage
               />
             </Suspense>
@@ -5030,6 +5045,7 @@ export function WorkspaceShell({
               open={docHistoryState.open}
               docPath={docHistoryState.docPath}
               currentSessionKey={aiChatSessionKey.startsWith('session:') ? aiChatSessionKey : null}
+              currentSessionState={currentAiChatSessionState}
               onClose={closeDocHistoryDialog}
             />
           </Suspense>
