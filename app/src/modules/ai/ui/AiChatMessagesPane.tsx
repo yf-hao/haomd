@@ -337,7 +337,10 @@ export const AiChatMessagesPane = memo(({
           <div className="ai-chat-messages-background-overlay" aria-hidden="true" />
         </>
       ) : null}
-      <div className="ai-chat-messages-scroll" ref={messagesContainerRef}>
+      <div
+        className={`ai-chat-messages-scroll ${visibleMessages.length > AI_CHAT_VIRTUALIZATION_THRESHOLD ? 'ai-chat-messages-scroll-virtualized' : ''}`}
+        ref={messagesContainerRef}
+      >
         <div className="ai-chat-messages-content">
           {visibleMessages.length === 0 && !loading && (
             <div className="ai-chat-empty muted small"></div>

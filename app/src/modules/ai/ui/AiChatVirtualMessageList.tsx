@@ -14,6 +14,11 @@ type MessagePosition = {
   height: number
 }
 
+type ScrollAnchor = {
+  id: string
+  top: number
+}
+
 type VirtualMessageListProps = {
   messages: ChatMessageView[]
   containerRef: RefObject<HTMLDivElement>
@@ -47,6 +52,8 @@ export function AiChatVirtualMessageList({
   const rowElementsRef = useRef(new Map<string, HTMLElement>())
   const scrollFrameRef = useRef<number | null>(null)
   const pinToBottomRef = useRef(false)
+  const lastScrollTopRef = useRef(0)
+  const scrollAnchorRef = useRef<ScrollAnchor | null>(null)
   const [viewport, setViewport] = useState({ scrollTop: 0, height: 0 })
   const [measuredHeights, setMeasuredHeights] = useState(() => new Map<string, number>())
   const [initializedScrollKey, setInitializedScrollKey] = useState<string | null>(null)
@@ -66,12 +73,34 @@ export function AiChatVirtualMessageList({
     })
   }, [containerRef])
 
+  const captureScrollAnchor = useCallback(() => {
+    if (pinToBottomRef.current || scrollAnchorRef.current) return
+
+    const container = containerRef.current
+    if (!container) return
+
+    const containerRect = container.getBoundingClientRect()
+    for (const [id, element] of rowElementsRef.current) {
+      const rect = element.getBoundingClientRect()
+      if (rect.bottom <= containerRect.top || rect.top >= containerRect.bottom) continue
+      scrollAnchorRef.current = {
+        id,
+        top: rect.top - containerRect.top,
+      }
+      return
+    }
+  }, [containerRef])
+
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
 
     const handleScroll = () => {
-      pinToBottomRef.current = container.scrollHeight - container.scrollTop - container.clientHeight <= 80
+      const nextScrollTop = container.scrollTop
+      const isScrollingUp = nextScrollTop < lastScrollTopRef.current - 0.5
+      pinToBottomRef.current = !isScrollingUp
+        && container.scrollHeight - nextScrollTop - container.clientHeight <= 80
+      lastScrollTopRef.current = nextScrollTop
       if (scrollFrameRef.current !== null) return
       scrollFrameRef.current = window.requestAnimationFrame(() => {
         scrollFrameRef.current = null
@@ -142,6 +171,8 @@ export function AiChatVirtualMessageList({
       container.scrollTop = Math.max(0, totalHeight - container.clientHeight)
       setInitializedScrollKey(initialScrollKey)
       pinToBottomRef.current = true
+      lastScrollTopRef.current = container.scrollTop
+      scrollAnchorRef.current = null
       updateViewport()
     }
   }, [containerRef, initialScrollKey, initializedScrollKey, messages.length, totalHeight, updateViewport])
@@ -152,6 +183,7 @@ export function AiChatVirtualMessageList({
       setMeasuredHeights((previous) => {
         const previousHeight = previous.get(id)
         if (previousHeight != null && Math.abs(previousHeight - height) < 1) return previous
+        captureScrollAnchor()
         const next = new Map(previous)
         next.set(id, height)
         return next
@@ -176,7 +208,28 @@ export function AiChatVirtualMessageList({
     }
 
     return () => observer.disconnect()
-  }, [firstIndex, lastIndex, messages.length])
+  }, [captureScrollAnchor, firstIndex, lastIndex, messages.length])
+
+  useLayoutEffect(() => {
+    const anchor = scrollAnchorRef.current
+    const container = containerRef.current
+    if (!anchor || !container) return
+
+    scrollAnchorRef.current = null
+    if (pinToBottomRef.current) return
+
+    const element = rowElementsRef.current.get(anchor.id)
+    if (!element) return
+
+    const containerRect = container.getBoundingClientRect()
+    const currentTop = element.getBoundingClientRect().top - containerRect.top
+    const delta = currentTop - anchor.top
+    if (Math.abs(delta) < 0.5) return
+
+    container.scrollTop += delta
+    lastScrollTopRef.current = container.scrollTop
+    updateViewport()
+  }, [containerRef, measuredHeights, updateViewport])
 
   useLayoutEffect(() => {
     const container = containerRef.current
