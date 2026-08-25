@@ -180,18 +180,20 @@ function buildCurrentSessionExport(
       viewIds.set(key, [...(viewIds.get(key) ?? []), message.id])
     })
 
-    const messages: ExportedAiMessage[] = state.engineHistory.map((message, index) => {
-      const key = `${message.role}\u0000${message.content}`
-      const ids = viewIds.get(key) ?? []
-      const id = ids.shift()
-      if (id) viewIds.set(key, ids)
-      return {
-        id,
-        role: message.role,
-        content: message.content,
-        createdAt: new Date(now + index).toISOString(),
-      }
-    })
+    const messages: ExportedAiMessage[] = state.engineHistory
+      .filter((message) => message.role === 'user' || message.role === 'assistant')
+      .map((message, index) => {
+        const key = `${message.role}\u0000${message.content}`
+        const ids = viewIds.get(key) ?? []
+        const id = ids.shift()
+        if (id) viewIds.set(key, ids)
+        return {
+          id,
+          role: message.role,
+          content: message.content,
+          createdAt: new Date(now + index).toISOString(),
+        }
+      })
 
     return {
       sessionId: sessionKey,
@@ -209,12 +211,14 @@ function buildCurrentSessionExport(
     createdAt: new Date(persisted.createdAt).toISOString(),
     updatedAt: new Date(persisted.updatedAt).toISOString(),
     model: persisted.providerType ?? undefined,
-    messages: persisted.messages.map((message) => ({
-      id: message.id,
-      role: message.role === 'system' || message.role === 'user' || message.role === 'assistant' ? message.role : 'system',
-      content: message.content,
-      createdAt: new Date(message.timestamp).toISOString(),
-    })),
+    messages: persisted.messages
+      .filter((message) => message.role === 'user' || message.role === 'assistant')
+      .map((message) => ({
+        id: message.id,
+        role: message.role as 'user' | 'assistant',
+        content: message.content,
+        createdAt: new Date(message.timestamp).toISOString(),
+      })),
   }
 }
 

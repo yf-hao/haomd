@@ -447,7 +447,7 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
 
       messages.forEach((message, index) => {
         const content = message.content.trim()
-        if (!content || (message.role !== 'user' && message.role !== 'assistant' && message.role !== 'system')) {
+        if (!content || (message.role !== 'user' && message.role !== 'assistant')) {
           skipped += 1
           return
         }
@@ -458,14 +458,12 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
         }
         existingKeys.add(key)
         nextEngineHistory.push({ role: message.role, content })
-        if (message.role === 'user' || message.role === 'assistant') {
-          nextViewMessages.push({
-            id: message.id?.trim() || `imported:${Date.now()}:${index}`,
-            role: message.role,
-            content,
-            source: 'original',
-          })
-        }
+        nextViewMessages.push({
+          id: message.id?.trim() || `imported:${Date.now()}:${index}`,
+          role: message.role,
+          content,
+          source: 'original',
+        })
         imported += 1
       })
 
