@@ -96,10 +96,15 @@ export const SessionsPanel = memo(function SessionsPanel({
   )
 
   const beginRename = useCallback((id: string, currentTitle: string | null | undefined) => {
-      setEditingId(id)
-      setEditingTitle(currentTitle ?? '')
-      // Focus the input after render
-      requestAnimationFrame(() => editInputRef.current?.focus())
+    setEditingId(id)
+    setEditingTitle(currentTitle ?? '')
+    // 输入框渲染后聚焦并全选当前标题，方便直接删除或覆盖
+    requestAnimationFrame(() => {
+      const input = editInputRef.current
+      if (!input) return
+      input.focus()
+      input.select()
+    })
   }, [])
 
   const handleStartRename = useCallback(
