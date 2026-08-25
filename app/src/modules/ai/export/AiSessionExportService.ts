@@ -12,7 +12,10 @@ export interface AiSessionExportService {
    * 导出指定 docPath 下的 AI 会话历史为 JSON 文件。
    * - 若当前目录无会话记录，则静默返回，不弹出保存对话框。
    */
-  exportDocSessionsToJson(docPath: string): Promise<void>
+  exportDocSessionsToJson(
+    docPath: string,
+    options?: { currentSession?: ExportedAiSessionsPayload['currentSession'] },
+  ): Promise<void>
 }
 
 function buildSuggestedFileNameFromDocPath(docPath: string): string {
@@ -38,22 +41,25 @@ export function createAiSessionExportService(
   const filePortImpl = deps?.filePort ?? new TauriAiSessionExportFileAdapter()
 
   return {
-    async exportDocSessionsToJson(docPath: string): Promise<void> {
+    async exportDocSessionsToJson(docPath: string, options): Promise<void> {
       const trimmed = docPath.trim()
       if (!trimmed) return
 
       const record: DocConversationRecord | null = await docServiceImpl.getByDocPath(trimmed)
-      if (!record || !record.messages.length) {
+      const hasDirectoryHistory = !!record?.messages.length
+      const hasCurrentSession = !!options?.currentSession?.messages.length
+      if (!hasDirectoryHistory && !hasCurrentSession) {
         // 当前目录没有会话历史时直接返回，避免弹出空导出对话框
         return
       }
 
-      const exportedSession = mapDocConversationToExportedSession(record)
+      const exportedSession = hasDirectoryHistory && record ? mapDocConversationToExportedSession(record) : null
       const payload: ExportedAiSessionsPayload = {
-        version: 1,
+        version: 2,
         app: 'HaoMD',
         exportedAt: new Date().toISOString(),
-        sessions: [exportedSession],
+        sessions: exportedSession ? [exportedSession] : [],
+        currentSession: options?.currentSession ?? null,
       }
 
       const json = serializeExportedPayload(payload)

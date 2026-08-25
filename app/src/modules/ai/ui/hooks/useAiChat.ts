@@ -6,6 +6,7 @@ import type { ChatSession, StartChatOptions } from '../../application/chatSessio
 import { createChatSession } from '../../application/chatSessionService'
 import { aiChatSessionManager } from '../../application/localStorageAiChatSessionManager'
 import { mergePendingAttachments } from './attachmentDrafts'
+import type { ExportedAiMessage } from '../../export/AiSessionExportModel'
 
 export type UseAiChatOptions = {
   entryMode: ChatEntryMode
@@ -24,6 +25,7 @@ export type UseAiChatOptions = {
 export type UseAiChatResult = {
   loading: boolean
   state: ConversationState | null
+  importSessionMessages: (messages: ExportedAiMessage[]) => Promise<{ imported: number; skipped: number }>
   systemPromptInfo: SystemPromptInfo | null
   providerType: ProviderType | null
   error: Error | null
@@ -430,9 +432,56 @@ export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
     [state],
   )
 
+  const importSessionMessages = useCallback<UseAiChatResult['importSessionMessages']>(
+    async (messages) => {
+      if (!session || !state) throw new Error('当前 AI 会话尚未加载完成')
+      if (state.viewMessages.some((message) => message.streaming)) {
+        throw new Error('当前会话正在生成内容，请生成完成后再导入')
+      }
+
+      const existingKeys = new Set(state.engineHistory.map((message) => `${message.role}\u0000${message.content}`))
+      const nextEngineHistory = [...state.engineHistory]
+      const nextViewMessages = [...state.viewMessages]
+      let imported = 0
+      let skipped = 0
+
+      messages.forEach((message, index) => {
+        const content = message.content.trim()
+        if (!content || (message.role !== 'user' && message.role !== 'assistant' && message.role !== 'system')) {
+          skipped += 1
+          return
+        }
+        const key = `${message.role}\u0000${content}`
+        if (existingKeys.has(key)) {
+          skipped += 1
+          return
+        }
+        existingKeys.add(key)
+        nextEngineHistory.push({ role: message.role, content })
+        if (message.role === 'user' || message.role === 'assistant') {
+          nextViewMessages.push({
+            id: message.id?.trim() || `imported:${Date.now()}:${index}`,
+            role: message.role,
+            content,
+            source: 'original',
+          })
+        }
+        imported += 1
+      })
+
+      if (imported === 0) return { imported: 0, skipped }
+      const nextState = { ...state, engineHistory: nextEngineHistory, viewMessages: nextViewMessages }
+      session.replaceState(nextState)
+      setState(nextState)
+      return { imported, skipped }
+    },
+    [session, state],
+  )
+
   return {
     loading: isGenerating, // Rename derived state to loading for UI compatibility
     state,
+    importSessionMessages,
     systemPromptInfo,
     providerType,
     error,

@@ -28,6 +28,8 @@ export interface ExportedAiSessionsPayload {
   app: string
   exportedAt: string
   sessions: ExportedAiSession[]
+  /** version 2: 当前活动栏打开的会话 */
+  currentSession?: ExportedAiSession | null
 }
 
 function mapMessageToExported(m: DocConversationMessage): ExportedAiMessage {

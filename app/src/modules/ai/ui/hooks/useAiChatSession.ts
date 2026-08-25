@@ -23,6 +23,7 @@ import { loadPdfSession, savePdfSession, type PdfChatSessionCfg } from '../../..
 import { mergePendingAttachments } from './attachmentDrafts'
 import type { WorkspaceEntryKind } from '../../../workspace/workspaceEntryResolver'
 import type { RemoveBlankLinesScope } from '../../../document/application/removeBlankLinesService'
+import type { ExportedAiMessage } from '../../export/AiSessionExportModel'
 
 export type UseAiChatSessionOptions = {
   sessionKey: AiChatSessionKey
@@ -148,6 +149,55 @@ function buildStateFromAiSessionRecord(record: AiChatSessionCfg, entryMode: Chat
     viewMessages,
     entryMode: (record.entryMode as ChatEntryMode | null | undefined) ?? entryMode,
     activeRoleId: record.activeRoleId ?? undefined,
+  }
+}
+
+function buildImportedState(
+  current: ConversationState,
+  messages: ExportedAiMessage[],
+): { state: ConversationState; imported: number; skipped: number } {
+  const existingKeys = new Set(
+    current.engineHistory.map((message) => `${message.role}\u0000${message.content}`),
+  )
+  const nextEngineHistory = [...current.engineHistory]
+  const nextViewMessages = [...current.viewMessages]
+  let imported = 0
+  let skipped = 0
+
+  messages.forEach((message, index) => {
+    const content = message.content.trim()
+    if (!content || (message.role !== 'user' && message.role !== 'assistant' && message.role !== 'system')) {
+      skipped += 1
+      return
+    }
+
+    const key = `${message.role}\u0000${content}`
+    if (existingKeys.has(key)) {
+      skipped += 1
+      return
+    }
+
+    existingKeys.add(key)
+    nextEngineHistory.push({ role: message.role, content })
+    if (message.role === 'user' || message.role === 'assistant') {
+      nextViewMessages.push({
+        id: message.id?.trim() || `imported:${Date.now()}:${index}`,
+        role: message.role,
+        content,
+        source: 'original',
+      })
+    }
+    imported += 1
+  })
+
+  return {
+    state: {
+      ...current,
+      engineHistory: nextEngineHistory,
+      viewMessages: nextViewMessages,
+    },
+    imported,
+    skipped,
   }
 }
 
@@ -874,6 +924,25 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
     [session, providerType, pendingAttachments, docPath],
   )
 
+  const importSessionMessages = useCallback<UseAiChatResult['importSessionMessages']>(
+    async (messages) => {
+      if (!session || !state) {
+        throw new Error('当前活动栏会话尚未加载完成')
+      }
+      if (state.viewMessages.some((message) => message.streaming)) {
+        throw new Error('当前会话正在生成内容，请生成完成后再导入')
+      }
+
+      const result = buildImportedState(state, messages)
+      if (result.imported === 0) return { imported: 0, skipped: result.skipped }
+
+      session.replaceState(result.state)
+      setState(result.state)
+      return { imported: result.imported, skipped: result.skipped }
+    },
+    [session, state],
+  )
+
   const stop = useCallback<UseAiChatResult['stop']>(() => {
     console.log('[useAiChatSession] stop called', { hasSession: !!session })
     if (session) {
@@ -908,6 +977,7 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
   return {
     loading: isGenerating,
     state,
+    importSessionMessages,
     systemPromptInfo,
     providerType,
     error,

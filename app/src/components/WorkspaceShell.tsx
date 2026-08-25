@@ -44,6 +44,7 @@ import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout'
 import { AiChatCommandBridgeContext } from '../modules/ai/ui/AiChatCommandBridgeContext'
 import type { AiChatSessionKey } from '../modules/ai/application/aiChatSessionService'
 import type { ConversationState } from '../modules/ai/domain/chatSession'
+import type { ExportedAiMessage, ExportedAiSession } from '../modules/ai/export/AiSessionExportModel'
 import { aiChatSessionManager } from '../modules/ai/application/localStorageAiChatSessionManager'
 import { registerEditorInsertBelow, registerEditorReplaceSelection, registerEditorCreateAndInsert, insertMarkdownAtCursorBelow } from '../modules/ai/platform/editorInsertService'
 import {
@@ -284,6 +285,9 @@ export function WorkspaceShell({
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [aiChatSessionKey, setAiChatSessionKey] = useState<AiChatSessionKey>('global')
   const [currentAiChatSessionState, setCurrentAiChatSessionState] = useState<ConversationState | null>(null)
+  const currentSessionImporterRef = useRef<
+    ((messages: ExportedAiMessage[]) => Promise<{ imported: number; skipped: number }>) | null
+  >(null)
 
   useEffect(() => {
     setCurrentAiChatSessionState(null)
@@ -296,6 +300,24 @@ export function WorkspaceShell({
     },
     [aiChatSessionKey],
   )
+
+  const registerCurrentSessionImporter = useCallback(
+    (importer: (messages: ExportedAiMessage[]) => Promise<{ imported: number; skipped: number }>) => {
+      currentSessionImporterRef.current = importer
+      return () => {
+        if (currentSessionImporterRef.current === importer) {
+          currentSessionImporterRef.current = null
+        }
+      }
+    },
+    [],
+  )
+
+  const importCurrentSession = useCallback(async (session: ExportedAiSession) => {
+    const importer = currentSessionImporterRef.current
+    if (!importer) throw new Error('当前活动栏会话尚未加载完成')
+    return importer(session.messages)
+  }, [])
 
   // Reset session key when switching away from the sessions panel
   useEffect(() => {
@@ -4633,6 +4655,7 @@ export function WorkspaceShell({
                 sourceTabId={null}
                 onInputFocusChange={setIsAiChatInputFocused}
                 onSessionStateChange={handleAiChatSessionStateChange}
+                onRegisterSessionImporter={registerCurrentSessionImporter}
                 fullPage
               />
             </Suspense>
@@ -5046,6 +5069,7 @@ export function WorkspaceShell({
               docPath={docHistoryState.docPath}
               currentSessionKey={aiChatSessionKey.startsWith('session:') ? aiChatSessionKey : null}
               currentSessionState={currentAiChatSessionState}
+              onImportCurrentSession={importCurrentSession}
               onClose={closeDocHistoryDialog}
             />
           </Suspense>

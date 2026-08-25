@@ -170,6 +170,7 @@ export type StartChatOptions = {
 
 export type ChatSession = {
   getState(): ConversationState
+  replaceState(nextState: ConversationState): void
   getSystemPromptInfo(): SystemPromptInfo
   getProviderType(): ProviderType
   getActiveModelId(): string
@@ -899,6 +900,11 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
   const session: ChatSession = {
     getState() {
       return state
+    },
+    replaceState(nextState: ConversationState) {
+      if (disposed) return
+      state = nextState
+      notifyStateChange()
     },
     getSystemPromptInfo() {
       return systemPromptInfo

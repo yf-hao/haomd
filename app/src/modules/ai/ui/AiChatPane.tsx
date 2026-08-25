@@ -49,6 +49,7 @@ import {
 import { saveImageGenerationToNotes } from '../agents/imageGeneration/imageGenerationNotesBridge'
 import { resolveWorkspaceEntryByName, type WorkspaceEntryKind } from '../../workspace/workspaceEntryResolver'
 import type { AiChatComposerHandle } from './AiChatComposer'
+import type { ExportedAiMessage } from '../export/AiSessionExportModel'
 
 const EMPTY_MESSAGES = [] as const
 const AI_CHAT_AGENT_STORAGE_KEY = 'haomd_ai_chat_selected_agent_id'
@@ -116,6 +117,9 @@ export interface AiChatPaneProps {
   onInputFocusChange?: (focused: boolean) => void
   /** 将当前会话的实时状态提供给外层历史弹窗，避免只显示持久化快照 */
   onSessionStateChange?: (sessionKey: string, state: ConversationState | null) => void
+  onRegisterSessionImporter?: (
+    importer: (messages: ExportedAiMessage[]) => Promise<{ imported: number; skipped: number }>,
+  ) => () => void
   /** Full-page mode: centered input when empty, messages above input when not */
   fullPage?: boolean
 }
@@ -149,6 +153,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
   sourceTabId,
   onInputFocusChange,
   onSessionStateChange,
+  onRegisterSessionImporter,
   fullPage = false,
 }) => {
   const { themeSettings } = useThemeContext()
@@ -270,6 +275,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
     systemPromptInfo,
     providerType,
     error,
+    importSessionMessages,
     sendMessage,
     stop,
     stopAndTruncate,
@@ -350,6 +356,11 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
   useEffect(() => {
     onSessionStateChange?.(sessionKey, state)
   }, [onSessionStateChange, sessionKey, state])
+
+  useEffect(() => {
+    if (!onRegisterSessionImporter) return
+    return onRegisterSessionImporter(importSessionMessages)
+  }, [importSessionMessages, onRegisterSessionImporter])
 
   useEffect(() => {
     if (isPersistedSession) return

@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core'
 import type { DocConversationMessage, DocConversationRecord } from '../domain/docConversations'
 import type { ConversationState } from '../domain/chatSession'
 import { loadSession, type AiChatSessionCfg } from '../config/aiSessionsRepo'
+import type { ExportedAiMessage, ExportedAiSession } from '../export/AiSessionExportModel'
 import { docConversationService } from '../application/docConversationService'
 import { aiSessionExportService } from '../export/AiSessionExportService'
 import { aiSessionImportService } from '../import/AiSessionImportService'
@@ -14,6 +15,7 @@ export type DocConversationHistoryDialogProps = {
   docPath: string
   currentSessionKey?: string | null
   currentSessionState?: ConversationState | null
+  onImportCurrentSession?: (session: ExportedAiSession) => Promise<{ imported: number; skipped: number }>
   onClose: () => void
 }
 
@@ -163,11 +165,76 @@ function getPersistedCurrentSessionMessages(session: AiChatSessionCfg | null): C
     }))
 }
 
+function buildCurrentSessionExport(
+  sessionKey: string | null,
+  state: ConversationState | null,
+  persisted: AiChatSessionCfg | null,
+): ExportedAiSession | null {
+  if (!sessionKey) return null
+
+  if (state && state.engineHistory.length > 0) {
+    const now = Date.now()
+    const viewIds = new Map<string, string[]>()
+    state.viewMessages.forEach((message) => {
+      const key = `${message.role}\u0000${message.content}`
+      viewIds.set(key, [...(viewIds.get(key) ?? []), message.id])
+    })
+
+    const messages: ExportedAiMessage[] = state.engineHistory.map((message, index) => {
+      const key = `${message.role}\u0000${message.content}`
+      const ids = viewIds.get(key) ?? []
+      const id = ids.shift()
+      if (id) viewIds.set(key, ids)
+      return {
+        id,
+        role: message.role,
+        content: message.content,
+        createdAt: new Date(now + index).toISOString(),
+      }
+    })
+
+    return {
+      sessionId: sessionKey,
+      title: undefined,
+      createdAt: new Date(now).toISOString(),
+      updatedAt: new Date(now).toISOString(),
+      messages,
+    }
+  }
+
+  if (!persisted || persisted.messages.length === 0) return null
+  return {
+    sessionId: persisted.id,
+    title: persisted.title ?? undefined,
+    createdAt: new Date(persisted.createdAt).toISOString(),
+    updatedAt: new Date(persisted.updatedAt).toISOString(),
+    model: persisted.providerType ?? undefined,
+    messages: persisted.messages.map((message) => ({
+      id: message.id,
+      role: message.role === 'system' || message.role === 'user' || message.role === 'assistant' ? message.role : 'system',
+      content: message.content,
+      createdAt: new Date(message.timestamp).toISOString(),
+    })),
+  }
+}
+
+function buildMarkdownFromCurrentSession(session: ExportedAiSession): string {
+  const lines = ['## 当前打开的会话', '']
+  session.messages.forEach((message) => {
+    lines.push(`**${message.role === 'user' ? 'User' : message.role === 'assistant' ? 'Assistant' : 'System'}**`)
+    lines.push('')
+    lines.push(message.content)
+    lines.push('')
+  })
+  return lines.join('\n')
+}
+
 export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps> = ({
   open,
   docPath,
   currentSessionKey = null,
   currentSessionState = null,
+  onImportCurrentSession,
   onClose,
 }) => {
   const { t } = useI18n()
@@ -177,6 +244,7 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
   const [groups, setGroups] = useState<ConversationGroup[]>([])
   const [persistedCurrentSession, setPersistedCurrentSession] = useState<AiChatSessionCfg | null>(null)
   const [currentSessionLoading, setCurrentSessionLoading] = useState(false)
+  const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [pageIndex, setPageIndex] = useState(0)
   const [pageSize, setPageSize] = useState(10)
 
@@ -268,6 +336,10 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
   )
   const hasData = hasDocumentData || hasCurrentSessionData
   const showLoading = !error && !hasData && (loading || currentSessionLoading)
+  const currentSessionForExport = useMemo(
+    () => buildCurrentSessionExport(currentSessionKey, currentSessionState, persistedCurrentSession),
+    [currentSessionKey, currentSessionState, persistedCurrentSession],
+  )
 
   const { pageGroups, totalPages, displayPageIndex } = useMemo(() => {
     if (!groups.length) {
@@ -369,9 +441,15 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
   }
 
   const handleExportMarkdown = useCallback(async () => {
-    if (!record) return
+    if (!record && !currentSessionForExport) return
     try {
-      const content = buildMarkdownFromDocRecord(record, groups)
+      const directoryContent = record ? buildMarkdownFromDocRecord(record, groups) : ''
+      const content = [
+        '# AI 会话历史',
+        '',
+        currentSessionForExport ? buildMarkdownFromCurrentSession(currentSessionForExport) : '',
+        record ? `## 当前目录历史\n\n${directoryContent.replace(/^# AI 会话历史（当前目录会话）\n\n/, '')}` : '',
+      ].filter(Boolean).join('\n')
       const now = new Date()
       const yyyy = now.getFullYear()
       const mm = String(now.getMonth() + 1).padStart(2, '0')
@@ -386,23 +464,32 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
         defaultFileName,
         content,
       })
+      setActionMessage(t('aiHistory.exportSuccess'))
     } catch (e) {
       // 仅在控制台记录错误，不阻塞 UI
       console.error('[DocConversationHistoryDialog] export markdown failed', e)
     }
-  }, [record, groups, docPath])
+  }, [record, groups, docPath, currentSessionForExport, t])
 
   const handleExportJson = useCallback(async () => {
     try {
-      await aiSessionExportService.exportDocSessionsToJson(docPath)
+      await aiSessionExportService.exportDocSessionsToJson(docPath, { currentSession: currentSessionForExport })
+      setActionMessage(t('aiHistory.exportSuccess'))
     } catch (e) {
       console.error('[DocConversationHistoryDialog] export JSON failed', e)
     }
-  }, [docPath])
+  }, [docPath, currentSessionForExport, t])
 
   const handleImportJson = useCallback(async () => {
     try {
-      const summary = await aiSessionImportService.importDocSessionsFromJsonForDoc(docPath)
+      const summary = await aiSessionImportService.importDocSessionsFromJsonForDoc(docPath, {
+        onCurrentSession: async (session) => {
+          if (!onImportCurrentSession) {
+            throw new Error('当前没有可写入的活动栏会话')
+          }
+          return onImportCurrentSession(session)
+        },
+      })
       if (summary.importedSessions > 0) {
         // 导入成功后重新加载会话记录，以反映最新状态
         const rec = await docConversationService.getByDocPath(docPath)
@@ -417,10 +504,16 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
           setPageIndex(0)
         }
       }
+      setActionMessage(t('aiHistory.importResult', {
+        directorySessions: summary.importedSessions > 0 ? summary.importedSessions : 0,
+        currentMessages: summary.importedCurrentMessages,
+      }))
+      console.info('[DocConversationHistoryDialog] import result', summary)
     } catch (e) {
       console.error('[DocConversationHistoryDialog] import JSON failed', e)
+      setActionMessage(t('aiHistory.operationFailed', { message: e instanceof Error ? e.message : String(e) }))
     }
-  }, [docPath, pageSize])
+  }, [docPath, pageSize, onImportCurrentSession, t])
 
   const summaryLine = (() => {
     if (!record || !record.messages.length) {
@@ -484,6 +577,7 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
           {!showLoading && !error && (
             <div className="ai-history-status">{summaryLine}</div>
           )}
+          {actionMessage && <div className="ai-history-status">{actionMessage}</div>}
         </div>
 
         <div className="ai-history-body">
