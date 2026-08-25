@@ -25,7 +25,7 @@ import { AiChatComposer } from './AiChatComposer'
 import type { AiChatComposerHandle } from './AiChatComposer'
 import { AiChatMessagesPane } from './AiChatMessagesPane'
 import type { MessageViewMode } from './AiChatMessagesPane'
-import { shouldVirtualizeAiChatMessages } from './AiChatVirtualMessageList'
+import { AI_CHAT_VIRTUALIZATION_THRESHOLD } from './AiChatVirtualMessageList'
 
 export interface AiChatBodyProps {
   messages: ChatMessageView[]
@@ -174,10 +174,6 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
     if (visibleMessages.length <= renderCount) return visibleMessages
     return visibleMessages.slice(-renderCount)
   }, [visibleMessages, renderCount])
-  const shouldVirtualizeMessages = useMemo(
-    () => shouldVirtualizeAiChatMessages(visibleMessages),
-    [visibleMessages],
-  )
   useEffect(() => {
     setRenderCount(INITIAL_HISTORY_RENDER_COUNT)
     pendingPrependDeltaRef.current = null
@@ -189,7 +185,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
 
     const handleScroll = () => {
       if (el.scrollTop > 80) return
-      if (shouldVirtualizeMessages) return
+      if (visibleMessages.length > AI_CHAT_VIRTUALIZATION_THRESHOLD) return
       if (visibleMessages.length <= renderCount) return
       pendingPrependDeltaRef.current = el.scrollHeight
       setRenderCount((prev) => Math.min(visibleMessages.length, prev + HISTORY_RENDER_INCREMENT))
@@ -199,7 +195,7 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
     return () => {
       el.removeEventListener('scroll', handleScroll)
     }
-  }, [messagesContainerRef, renderCount, shouldVirtualizeMessages, visibleMessages.length])
+  }, [messagesContainerRef, renderCount, visibleMessages.length])
 
   useLayoutEffect(() => {
     const previousScrollHeight = pendingPrependDeltaRef.current

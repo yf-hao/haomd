@@ -2,10 +2,6 @@
   padding: 5px 10px;
 }
 
-.markdown-preview-loading {
-  min-height: 1.5em;
-}
-
 /* 应用内预览使用暗色背景，不影响导出 HTML（导出不带 gh-markdown 类） */
 .markdown-body.gh-markdown {
   background: var(--markdown-preview-bg);
