@@ -920,6 +920,7 @@ export const zhCNMessages: MessageDictionary = {
   sessions: {
     title: '会话',
     newSession: '新建会话',
+    rename: '重命名',
     delete: '删除',
     untitled: '新对话',
     autoTitlePending: '命名中',

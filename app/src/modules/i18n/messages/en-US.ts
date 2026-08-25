@@ -928,6 +928,7 @@ export const enUSMessages: MessageDictionary = {
   sessions: {
     title: 'Sessions',
     newSession: 'New Session',
+    rename: 'Rename',
     delete: 'Delete',
     untitled: 'New Chat',
     autoTitlePending: 'Naming...',

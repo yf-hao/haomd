@@ -1,6 +1,7 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState, type MouseEvent } from 'react'
 import { useI18n } from '../modules/i18n/I18nContext'
 import { SidebarBackgroundShell } from './SidebarBackgroundShell'
+import { FileContextMenu } from './FileContextMenu'
 import {
   loadSessionsIndex,
   loadSession,
@@ -20,6 +21,13 @@ function generateSessionId(): string {
   return `session:${crypto.randomUUID()}`
 }
 
+type SessionContextMenuState = {
+  x: number
+  y: number
+  id: string
+  title: string | null | undefined
+}
+
 export const SessionsPanel = memo(function SessionsPanel({
   panelWidth,
   activeSessionKey,
@@ -30,6 +38,7 @@ export const SessionsPanel = memo(function SessionsPanel({
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
+  const [contextMenu, setContextMenu] = useState<SessionContextMenuState | null>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
 
   const style = panelWidth ? { width: panelWidth } : undefined
@@ -86,16 +95,31 @@ export const SessionsPanel = memo(function SessionsPanel({
     [activeSessionKey, onSelectSession, refreshList],
   )
 
-  const handleStartRename = useCallback(
-    (e: React.MouseEvent, id: string, currentTitle: string | null | undefined) => {
-      e.stopPropagation()
+  const beginRename = useCallback((id: string, currentTitle: string | null | undefined) => {
       setEditingId(id)
       setEditingTitle(currentTitle ?? '')
       // Focus the input after render
       requestAnimationFrame(() => editInputRef.current?.focus())
+  }, [])
+
+  const handleStartRename = useCallback(
+    (e: MouseEvent, id: string, currentTitle: string | null | undefined) => {
+      e.stopPropagation()
+      beginRename(id, currentTitle)
     },
-    [],
+    [beginRename],
   )
+
+  const handleSessionContextMenu = useCallback((e: MouseEvent<HTMLLIElement>, session: AiChatSessionIndexEntry) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      id: session.id,
+      title: session.title,
+    })
+  }, [])
 
   const handleRenameConfirm = useCallback(
     async (id: string) => {
@@ -159,8 +183,12 @@ export const SessionsPanel = memo(function SessionsPanel({
               <li
                 key={s.id}
                 className={`sessions-item ${activeSessionKey === s.id ? 'active' : ''}`}
-                onClick={() => onSelectSession(s.id)}
+                onClick={() => {
+                  setContextMenu(null)
+                  onSelectSession(s.id)
+                }}
                 onDoubleClick={(e) => handleStartRename(e, s.id, s.title)}
+                onContextMenu={(e) => handleSessionContextMenu(e, s)}
               >
                 {editingId === s.id ? (
                   <input
@@ -213,6 +241,21 @@ export const SessionsPanel = memo(function SessionsPanel({
               </li>
             ))}
           </ul>
+        )}
+        {contextMenu && (
+          <FileContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            items={[{
+              id: 'rename',
+              label: t('sessions.rename'),
+              onClick: () => {
+                beginRename(contextMenu.id, contextMenu.title)
+                setContextMenu(null)
+              },
+            }]}
+            onRequestClose={() => setContextMenu(null)}
+          />
         )}
       </div>
     </SidebarBackgroundShell>
