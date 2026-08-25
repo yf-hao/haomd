@@ -7,6 +7,18 @@ const MIN_OVERSCAN_HEIGHT = 600
 const OVERSCAN_VIEWPORT_MULTIPLIER = 1.5
 const PREFETCH_MESSAGE_COUNT = 8
 export const AI_CHAT_VIRTUALIZATION_THRESHOLD = 12
+export const AI_CHAT_VIRTUALIZATION_CONTENT_THRESHOLD = 12_000
+
+export function shouldVirtualizeAiChatMessages(messages: ChatMessageView[]): boolean {
+  if (messages.length > AI_CHAT_VIRTUALIZATION_THRESHOLD) return true
+  return messages.reduce((total, message) => total + message.content.length, 0)
+    >= AI_CHAT_VIRTUALIZATION_CONTENT_THRESHOLD
+}
+
+function estimateMessageHeight(message: ChatMessageView): number {
+  const estimatedLines = Math.ceil(message.content.length / 90)
+  return Math.min(1_600, Math.max(DEFAULT_MESSAGE_HEIGHT, 96 + estimatedLines * 22))
+}
 
 type MessagePosition = {
   id: string
@@ -131,7 +143,7 @@ export function AiChatVirtualMessageList({
     return messages.reduce<MessagePosition[]>((result, message) => {
       const previous = result[result.length - 1]
       const top = previous ? previous.top + previous.height : 0
-      const height = measuredHeights.get(message.id) ?? DEFAULT_MESSAGE_HEIGHT
+      const height = measuredHeights.get(message.id) ?? estimateMessageHeight(message)
       result.push({ id: message.id, top, height })
       return result
     }, [])

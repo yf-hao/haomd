@@ -4,7 +4,7 @@ import { MarkdownViewer } from '../../../components/MarkdownViewer'
 import type { ChatMessageView } from '../domain/chatSession'
 import type { AssistantToolExecutionView } from '../domain/chatSession'
 import type { EphemeralAiChatMessage, EphemeralImageGenerationResultMessage } from './imageGenerationEphemeral'
-import { AiChatVirtualMessageList, AI_CHAT_VIRTUALIZATION_THRESHOLD } from './AiChatVirtualMessageList'
+import { AiChatVirtualMessageList, shouldVirtualizeAiChatMessages } from './AiChatVirtualMessageList'
 
 export type MessageViewMode = 'rendered' | 'source'
 
@@ -263,6 +263,7 @@ export const AiChatMessagesPane = memo(({
   onInsertGeneratedImage,
   onSaveGeneratedImageToNotes,
 }: AiChatMessagesPaneProps) => {
+  const shouldVirtualizeMessages = shouldVirtualizeAiChatMessages(visibleMessages)
   const renderMessage = useCallback((msg: ChatMessageView) => {
     const viewMode: MessageViewMode = messageViewModes[msg.id] ?? 'rendered'
     const displayContent =
@@ -338,14 +339,14 @@ export const AiChatMessagesPane = memo(({
         </>
       ) : null}
       <div
-        className={`ai-chat-messages-scroll ${visibleMessages.length > AI_CHAT_VIRTUALIZATION_THRESHOLD ? 'ai-chat-messages-scroll-virtualized' : ''}`}
+        className={`ai-chat-messages-scroll ${shouldVirtualizeMessages ? 'ai-chat-messages-scroll-virtualized' : ''}`}
         ref={messagesContainerRef}
       >
         <div className="ai-chat-messages-content">
           {visibleMessages.length === 0 && !loading && (
             <div className="ai-chat-empty muted small"></div>
           )}
-          {visibleMessages.length > AI_CHAT_VIRTUALIZATION_THRESHOLD ? (
+          {shouldVirtualizeMessages ? (
             <AiChatVirtualMessageList
               messages={visibleMessages}
               containerRef={messagesContainerRef}

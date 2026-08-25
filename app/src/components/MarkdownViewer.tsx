@@ -84,9 +84,29 @@ type PreviewWorkerRequest = {
 }
 
 const LARGE_DOCUMENT_PREVIEW_WORKER_THRESHOLD = 16_000
+const ASYNC_PREVIEW_THRESHOLD = 8_000
+
+const EMPTY_PREVIEW_RESULT: PreviewMarkdownResult = {
+  processedMarkdown: '',
+  hasMath: false,
+  hasRawHtml: false,
+  containsToc: false,
+  sourceLineOffset: 0,
+  lineCount: 0,
+  blockChunks: [],
+}
+
+function shouldDeferInitialPreview(value: string, mode: MarkdownViewerMode): boolean {
+  return mode === 'rendered' && value.length >= ASYNC_PREVIEW_THRESHOLD && !getCachedPreviewMarkdown(value)
+}
 
 function getCachedPreviewResult(value: string): PreviewMarkdownResult {
   return getCachedPreviewMarkdown(value) ?? preparePreviewMarkdown(value)
+}
+
+function getInitialPreviewResult(value: string, mode: MarkdownViewerMode): PreviewMarkdownResult {
+  if (shouldDeferInitialPreview(value, mode)) return EMPTY_PREVIEW_RESULT
+  return getCachedPreviewResult(value)
 }
 
 const FoldContext = React.createContext<FoldRegion[]>([])
@@ -989,7 +1009,8 @@ const MarkdownViewerComponent = React.forwardRef<
   } = props
   const plainTextMode = isPlainTextFile(filePath)
   const [performanceSettings, setPerformanceSettings] = useState<PerformanceSettings>(getDefaultPerformanceSettings())
-  const [previewResult, setPreviewResult] = useState<PreviewMarkdownResult>(() => getCachedPreviewResult(value))
+  const [previewResult, setPreviewResult] = useState<PreviewMarkdownResult>(() => getInitialPreviewResult(value, mode))
+  const [previewPending, setPreviewPending] = useState(() => shouldDeferInitialPreview(value, mode))
   const shouldUsePreviewWorker =
     performanceSettings.experimentalPreviewOptimization ||
     value.length >= LARGE_DOCUMENT_PREVIEW_WORKER_THRESHOLD
@@ -1064,6 +1085,7 @@ const MarkdownViewerComponent = React.forwardRef<
       if (stale) return
       startTransition(() => {
         if (event.data.id !== previewRequestIdRef.current) return
+        setPreviewPending(false)
         setPreviewResult({
           processedMarkdown: event.data.processedMarkdown,
           hasMath: event.data.hasMath,
@@ -1074,6 +1096,23 @@ const MarkdownViewerComponent = React.forwardRef<
           blockChunks: event.data.blockChunks,
         })
       })
+    }
+    worker.onerror = () => {
+      previewWorkerBusyRef.current = false
+      pendingPreviewWorkerRequestRef.current = null
+      if (previewWorkerRef.current === worker) {
+        previewWorkerRef.current = null
+      }
+      const requestId = previewRequestIdRef.current
+      window.setTimeout(() => {
+        if (requestId !== previewRequestIdRef.current) return
+        const nextResult = getCachedPreviewResult(value)
+        startTransition(() => {
+          if (requestId !== previewRequestIdRef.current) return
+          setPreviewPending(false)
+          setPreviewResult(nextResult)
+        })
+      }, 0)
     }
 
     return () => {
@@ -1092,35 +1131,44 @@ const MarkdownViewerComponent = React.forwardRef<
   ])
 
   useEffect(() => {
-    if (mode !== 'rendered') return
-
-    const requestId = ++previewRequestIdRef.current
-    if (!shouldUsePreviewWorker) {
-      const nextResult = getCachedPreviewResult(value)
-      startTransition(() => {
-        if (requestId !== previewRequestIdRef.current) return
-        setPreviewResult(nextResult)
-      })
+    if (mode !== 'rendered') {
+      setPreviewPending(false)
       return
     }
 
+    const requestId = ++previewRequestIdRef.current
     const cachedResult = getCachedPreviewMarkdown(value)
     if (cachedResult) {
       startTransition(() => {
         if (requestId !== previewRequestIdRef.current) return
+        setPreviewPending(false)
         setPreviewResult(cachedResult)
+      })
+      return
+    }
+
+    if (value.length < ASYNC_PREVIEW_THRESHOLD) {
+      const nextResult = preparePreviewMarkdown(value)
+      startTransition(() => {
+        if (requestId !== previewRequestIdRef.current) return
+        setPreviewPending(false)
+        setPreviewResult(nextResult)
       })
       return
     }
 
     const worker = previewWorkerRef.current
     if (!worker) {
-      const nextResult = getCachedPreviewResult(value)
-      startTransition(() => {
+      const fallbackTimer = window.setTimeout(() => {
         if (requestId !== previewRequestIdRef.current) return
-        setPreviewResult(nextResult)
-      })
-      return
+        const nextResult = getCachedPreviewResult(value)
+        startTransition(() => {
+          if (requestId !== previewRequestIdRef.current) return
+          setPreviewPending(false)
+          setPreviewResult(nextResult)
+        })
+      }, 0)
+      return () => window.clearTimeout(fallbackTimer)
     }
 
     const request: PreviewWorkerRequest = {
@@ -1694,19 +1742,23 @@ const MarkdownViewerComponent = React.forwardRef<
     <FilePathContext.Provider value={filePath ?? null}>
       <FoldContext.Provider value={foldRegions ?? []}>
         <div className="markdown-body gh-markdown" ref={containerRef} data-preview-width={previewWidth}>
-          <MemoizedMarkdownDocument
-            mode={mode}
-            blockRenderingEnabled={blockRenderingEnabled}
-            blockChunks={blockChunks}
-            renderedValue={renderedValue}
-            sourceValue={value}
-            sourceLineOffset={previewResult.sourceLineOffset}
-            components={components}
-            remarkPlugins={activeRemarkPlugins}
-            rehypePlugins={rehypePlugins}
-            filePath={filePath ?? null}
-            onElementChange={handleChunkElementChange}
-          />
+          {previewPending && mode === 'rendered' ? (
+            <div className="markdown-preview-loading" aria-busy="true" />
+          ) : (
+            <MemoizedMarkdownDocument
+              mode={mode}
+              blockRenderingEnabled={blockRenderingEnabled}
+              blockChunks={blockChunks}
+              renderedValue={renderedValue}
+              sourceValue={value}
+              sourceLineOffset={previewResult.sourceLineOffset}
+              components={components}
+              remarkPlugins={activeRemarkPlugins}
+              rehypePlugins={rehypePlugins}
+              filePath={filePath ?? null}
+              onElementChange={handleChunkElementChange}
+            />
+          )}
         </div>
       </FoldContext.Provider>
     </FilePathContext.Provider>
