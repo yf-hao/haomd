@@ -85,6 +85,10 @@ function buildConversationGroups(messages: DocConversationMessage[]): Conversati
   return groups
 }
 
+function toMarkdownQuote(content: string): string[] {
+  return content.split('\n').map((line) => (line ? `> ${line}` : '>'))
+}
+
 function buildMarkdownFromDocRecord(record: DocConversationRecord, groups: ConversationGroup[]): string {
   const lines: string[] = []
 
@@ -103,13 +107,13 @@ function buildMarkdownFromDocRecord(record: DocConversationRecord, groups: Conve
 
     if (g.systemMessages.length) {
       g.systemMessages.forEach((m) => {
-        lines.push('**System**')
+        lines.push('### ⚙️ System summary')
         lines.push('')
-        lines.push(`> ${m.content}`)
+        lines.push(...toMarkdownQuote(m.content))
         lines.push('')
         const preservedUserInputs = m.meta?.preservedUserInputs ?? []
         if (preservedUserInputs.length) {
-          lines.push('**保留的用户输入摘录**')
+          lines.push('#### 保留的用户输入摘录')
           lines.push('')
           preservedUserInputs.forEach((item) => {
             lines.push(`- ${item}`)
@@ -123,10 +127,10 @@ function buildMarkdownFromDocRecord(record: DocConversationRecord, groups: Conve
       const first = g.userMessages[0]
       lines.push(`- 时间：${new Date(first.timestamp).toLocaleString()}`)
       lines.push('')
-      lines.push('**User**')
+      lines.push('### 👤 User')
       lines.push('')
       g.userMessages.forEach((m) => {
-        lines.push(`> ${m.content}`)
+        lines.push(...toMarkdownQuote(m.content))
         lines.push('')
       })
     }
@@ -137,10 +141,12 @@ function buildMarkdownFromDocRecord(record: DocConversationRecord, groups: Conve
       const provider = meta.providerType ?? 'unknown'
       const model = meta.modelName ?? ''
       const label = model ? `${provider} / ${model}` : provider
-      lines.push(`**Assistant: （${label}）**`)
+      lines.push('### 🤖 Assistant')
+      lines.push('')
+      lines.push(`- Model: ${label}`)
       lines.push('')
       g.assistantMessages.forEach((m) => {
-        lines.push(`> ${m.content}`)
+        lines.push(...toMarkdownQuote(m.content))
         lines.push('')
       })
     }
@@ -225,9 +231,9 @@ function buildCurrentSessionExport(
 function buildMarkdownFromCurrentSession(session: ExportedAiSession): string {
   const lines = ['## 当前打开的会话', '']
   session.messages.forEach((message) => {
-    lines.push(`**${message.role === 'user' ? 'User' : message.role === 'assistant' ? 'Assistant' : 'System'}**`)
+    lines.push(message.role === 'user' ? '### 👤 User' : '### 🤖 Assistant')
     lines.push('')
-    lines.push(message.content)
+    lines.push(...toMarkdownQuote(message.content))
     lines.push('')
   })
   return lines.join('\n')
