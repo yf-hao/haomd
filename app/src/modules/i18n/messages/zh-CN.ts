@@ -772,6 +772,11 @@ export const zhCNMessages: MessageDictionary = {
     perPage: '每页',
     groups: '组',
     conversations: '对话',
+    activitySessions: '活动栏会话',
+    activitySummary: '活动栏会话：{sessions} 个',
+    currentSession: '当前会话',
+    untitledSession: '未命名会话',
+    messages: '条消息',
   },
   globalMemory: {
     close: '关闭 Global Memory',

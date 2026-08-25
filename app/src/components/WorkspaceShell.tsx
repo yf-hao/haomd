@@ -5029,6 +5029,7 @@ export function WorkspaceShell({
             <DocConversationHistoryDialogLazy
               open={docHistoryState.open}
               docPath={docHistoryState.docPath}
+              currentSessionKey={aiChatSessionKey.startsWith('session:') ? aiChatSessionKey : null}
               onClose={closeDocHistoryDialog}
             />
           </Suspense>

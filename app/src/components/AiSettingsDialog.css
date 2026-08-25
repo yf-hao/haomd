@@ -2139,6 +2139,65 @@ button.ghost.ghost-subtle:hover {
   gap: 10px;
 }
 
+.ai-history-activity-sessions {
+  margin-bottom: 12px;
+  padding: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 8px;
+  background: rgba(30, 41, 59, 0.55);
+}
+
+.ai-history-activity-title {
+  margin-bottom: 6px;
+  color: #e5e7eb;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ai-history-activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ai-history-activity-item {
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #cbd5e1;
+}
+
+.ai-history-activity-item.is-current {
+  border-color: rgba(74, 222, 128, 0.55);
+  background: rgba(22, 101, 52, 0.28);
+  color: #f8fafc;
+}
+
+.ai-history-activity-item-main,
+.ai-history-activity-item-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ai-history-activity-item-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-history-activity-current,
+.ai-history-activity-item-meta {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.ai-history-activity-current {
+  flex: 0 0 auto;
+  color: #86efac;
+}
+
 .ai-history-group {
   padding-bottom: 6px;
 }

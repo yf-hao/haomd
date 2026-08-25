@@ -5,12 +5,18 @@ import type { DocConversationMessage, DocConversationRecord } from '../domain/do
 import { docConversationService } from '../application/docConversationService'
 import { aiSessionExportService } from '../export/AiSessionExportService'
 import { aiSessionImportService } from '../import/AiSessionImportService'
+import { loadSessionsIndex, type AiChatSessionIndexEntry } from '../config/aiSessionsRepo'
 import { useI18n } from '../../i18n/I18nContext'
 
 export type DocConversationHistoryDialogProps = {
   open: boolean
   docPath: string
+  currentSessionKey?: string | null
   onClose: () => void
+}
+
+type ActivitySessionItem = AiChatSessionIndexEntry & {
+  transient?: boolean
 }
 
 type ConversationGroup = {
@@ -138,12 +144,18 @@ function buildMarkdownFromDocRecord(record: DocConversationRecord, groups: Conve
   return lines.join('\n')
 }
 
-export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps> = ({ open, docPath, onClose }) => {
+export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps> = ({
+  open,
+  docPath,
+  currentSessionKey = null,
+  onClose,
+}) => {
   const { t } = useI18n()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [record, setRecord] = useState<DocConversationRecord | null>(null)
   const [groups, setGroups] = useState<ConversationGroup[]>([])
+  const [activitySessions, setActivitySessions] = useState<ActivitySessionItem[]>([])
   const [pageIndex, setPageIndex] = useState(0)
   const [pageSize, setPageSize] = useState(10)
 
@@ -188,6 +200,52 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
       cancelled = true
     }
   }, [open, docPath, pageSize])
+
+  useEffect(() => {
+    if (!open) return
+
+    let cancelled = false
+    void loadSessionsIndex()
+      .then((entries) => {
+        if (cancelled) return
+
+        const sessions = [...entries]
+        if (
+          currentSessionKey?.startsWith('session:')
+          && !sessions.some((session) => session.id === currentSessionKey)
+        ) {
+          const now = Date.now()
+          sessions.push({
+            id: currentSessionKey,
+            title: null,
+            messageCount: 0,
+            createdAt: now,
+            updatedAt: now,
+          })
+        }
+
+        sessions.sort((left, right) => {
+          if (left.id === currentSessionKey) return -1
+          if (right.id === currentSessionKey) return 1
+          return right.updatedAt - left.updatedAt
+        })
+
+        setActivitySessions(sessions.map((session) => ({
+          ...session,
+          transient: session.id === currentSessionKey && session.messageCount === 0,
+        })))
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.warn('[DocConversationHistoryDialog] failed to load activity sessions', error)
+          setActivitySessions([])
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [currentSessionKey, open])
 
   const hasData = !!record && record.messages.length > 0 && groups.length > 0
 
@@ -345,10 +403,16 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
   }, [docPath, pageSize])
 
   const summaryLine = (() => {
-    if (!record || !record.messages.length) return t('aiHistory.emptySummary')
+    if (!record || !record.messages.length) {
+      return activitySessions.length > 0
+        ? t('aiHistory.activitySummary', { sessions: activitySessions.length })
+        : t('aiHistory.emptySummary')
+    }
     const lastTs = new Date(record.lastActiveAt).toLocaleString()
     return t('aiHistory.summaryLine', { time: lastTs, messages: record.messages.length, groups: groups.length })
   })()
+
+  const hasActivitySessions = activitySessions.length > 0
 
   return (
     <div className="modal-backdrop modal-backdrop-plain" onClick={onClose}>
@@ -402,7 +466,39 @@ export const DocConversationHistoryDialog: FC<DocConversationHistoryDialogProps>
         </div>
 
         <div className="ai-history-body">
-          {!loading && !error && !hasData && (
+          {!loading && !error && hasActivitySessions && (
+            <section className="ai-history-activity-sessions">
+              <div className="ai-history-activity-title">{t('aiHistory.activitySessions')}</div>
+              <div className="ai-history-activity-list">
+                {activitySessions.map((session) => {
+                  const isCurrent = session.id === currentSessionKey
+                  const title = session.transient
+                    ? t('aiHistory.currentSession')
+                    : session.title?.trim() || t('aiHistory.untitledSession')
+                  return (
+                    <div
+                      key={session.id}
+                      className={`ai-history-activity-item ${isCurrent ? 'is-current' : ''}`}
+                      aria-current={isCurrent ? 'true' : undefined}
+                    >
+                      <div className="ai-history-activity-item-main">
+                        <span className="ai-history-activity-item-title">{title}</span>
+                        {isCurrent && (
+                          <span className="ai-history-activity-current">{t('aiHistory.currentSession')}</span>
+                        )}
+                      </div>
+                      <div className="ai-history-activity-item-meta">
+                        <span>{session.messageCount} {t('aiHistory.messages')}</span>
+                        <span>{new Date(session.updatedAt).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+          )}
+
+          {!loading && !error && !hasData && !hasActivitySessions && (
             <div className="ai-history-empty">
               {t('aiHistory.emptyBody').split('\n').map((line, index) => (
                 <div key={index}>{line}</div>

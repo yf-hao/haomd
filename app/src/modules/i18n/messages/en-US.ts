@@ -776,6 +776,11 @@ export const enUSMessages: MessageDictionary = {
     perPage: 'Per page',
     groups: 'groups',
     conversations: 'conversations',
+    activitySessions: 'Activity bar sessions',
+    activitySummary: 'Activity bar sessions: {sessions}',
+    currentSession: 'Current session',
+    untitledSession: 'Untitled session',
+    messages: 'messages',
   },
   globalMemory: {
     close: 'Close Global Memory',
