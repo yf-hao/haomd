@@ -223,6 +223,7 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
   const pendingDocPathRef = useRef<string | undefined>(undefined)
   const lastBoundDocPathRef = useRef<string | undefined>(undefined)
   const migrationTimerRef = useRef<number | null>(null)
+  const initializationRequestRef = useRef(0)
 
   useEffect(() => {
     getCurrentMarkdownRef.current = getCurrentMarkdown
@@ -322,6 +323,8 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
     if (!open) return
 
     let cancelled = false
+    const requestId = ++initializationRequestRef.current
+    const isStaleRequest = () => cancelled || initializationRequestRef.current !== requestId
     setStarting(true)
     setError(null)
 
@@ -333,22 +336,26 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
 
         if (isPersistedSessionKey(sessionKey)) {
           const savedSession = await loadSession(sessionKey)
+          if (isStaleRequest()) return
           if (savedSession) {
             initialState = buildStateFromAiSessionRecord(savedSession, entryMode)
           }
         } else if (sanitizedDocPath && shouldUseDocPersistence) {
           if (shouldUsePdfDocPersistence) {
             const savedSession = await loadPdfSession(sanitizedDocPath)
+            if (isStaleRequest()) return
             if (savedSession) {
               initialState = buildStateFromPdfSessionRecord(savedSession, entryMode)
             }
           } else {
             let saved: DocConversationRecord | null = await docConversationService.getByDocPath(sanitizedDocPath)
+            if (isStaleRequest()) return
 
             // 懒迁移：如果目录级 docPath 下没有记录，且提供了旧版文件级 docPath，则尝试回退加载
             if (!saved && sanitizedLegacyDocPath && sanitizedLegacyDocPath !== sanitizedDocPath) {
               try {
                 saved = await docConversationService.getByDocPath(sanitizedLegacyDocPath)
+                if (isStaleRequest()) return
               } catch (e) {
                 console.warn('[useAiChatSession] failed to load legacy doc conversation', e)
               }
@@ -483,13 +490,13 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
               }
             : {}),
           onStateChange: (nextState) => {
-            if (cancelled) return
+            if (isStaleRequest()) return
             setState(nextState)
           },
         }
 
         const created = await createChatSession(startOptions)
-        if (cancelled) {
+        if (isStaleRequest()) {
           created.dispose()
           return
         }
@@ -502,10 +509,10 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
         setProviderType(created.getProviderType())
         setActiveModelId(created.getActiveModelId())
       } catch (e) {
-        if (cancelled) return
+        if (isStaleRequest()) return
         setError(e as Error)
       } finally {
-        if (!cancelled) {
+        if (!isStaleRequest()) {
           setStarting(false)
         }
       }
@@ -515,6 +522,9 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
 
     return () => {
       cancelled = true
+      if (initializationRequestRef.current === requestId) {
+        initializationRequestRef.current += 1
+      }
       pendingDocPathRef.current = undefined
       lastBoundDocPathRef.current = undefined
       if (migrationTimerRef.current != null) {

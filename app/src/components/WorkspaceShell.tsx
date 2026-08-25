@@ -282,13 +282,25 @@ export function WorkspaceShell({
   const [issueReportOpen, setIssueReportOpen] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [aiChatSessionKey, setAiChatSessionKey] = useState<AiChatSessionKey>('global')
+  const [selectedAiChatSessionKey, setSelectedAiChatSessionKey] = useState<AiChatSessionKey>('global')
+
+  const switchAiChatSession = useCallback((key: AiChatSessionKey) => {
+    setSelectedAiChatSessionKey(key)
+    if (key === 'global') {
+      setAiChatSessionKey(key)
+      return
+    }
+    startTransition(() => {
+      setAiChatSessionKey(key)
+    })
+  }, [])
 
   // Reset session key when switching away from the sessions panel
   useEffect(() => {
     if (activeLeftPanel !== 'sessions' && aiChatSessionKey.startsWith('session:')) {
-      setAiChatSessionKey('global')
+      switchAiChatSession('global')
     }
-  }, [activeLeftPanel])
+  }, [activeLeftPanel, aiChatSessionKey, switchAiChatSession])
 
   useEffect(() => {
     if (activeLeftPanel !== 'search') {
@@ -4559,9 +4571,9 @@ export function WorkspaceShell({
         {activeLeftPanel === 'sessions' && (
           <SessionsPanel
             panelWidth={sidebarWidth}
-            activeSessionKey={aiChatSessionKey}
+            activeSessionKey={selectedAiChatSessionKey}
             onSelectSession={(key) => {
-              setAiChatSessionKey(key as AiChatSessionKey)
+              switchAiChatSession(key as AiChatSessionKey)
             }}
           />
         )}
@@ -4594,7 +4606,7 @@ export function WorkspaceShell({
                 key={aiChatSessionKey}
                 sessionKey={aiChatSessionKey}
                 entryMode="chat"
-                onClose={() => setAiChatSessionKey('global')}
+                onClose={() => switchAiChatSession('global')}
                 currentFilePath={aiChatFilePath}
                 currentFolderPath={selectedFolderPath}
                 currentDirectoryPath={getCurrentAiDirectoryPath()}
