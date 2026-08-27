@@ -841,6 +841,41 @@ fn should_preserve_text_code_block_layout_in_word_xml() {
 }
 
 #[test]
+fn should_render_inline_code_as_plain_text_without_changing_fenced_code_blocks() {
+    let work_dir = unique_test_path("haomd-word-inline-code", None);
+    let payload = WordDocPayloadCfg {
+        title: "Inline code".to_string(),
+        blocks: vec![WordBlockCfg::Paragraph {
+            text: vec![WordInlineRunCfg::Text {
+                value: "JAVA_HOME".to_string(),
+                bold: None,
+                italic: None,
+                code: Some(true),
+                strike: None,
+                underline: None,
+                color: None,
+                background_color: None,
+                font_size_pt: None,
+                font_family: None,
+            }],
+            style: None,
+        }],
+        assets: vec![],
+        style_settings: None,
+    };
+
+    build_word_export_workspace(&work_dir, &payload).expect("workspace should build");
+    let document_xml = fs::read_to_string(work_dir.join("word").join("document.xml"))
+        .expect("document xml should exist");
+
+    assert!(document_xml.contains("JAVA_HOME"));
+    assert!(!document_xml.contains("w:ascii=\"Menlo\""));
+    assert!(!document_xml.contains("w:fill=\"F6F8FA\""));
+
+    let _ = std::fs::remove_dir_all(&work_dir);
+}
+
+#[test]
 fn should_render_text_run_color_and_underline_styles() {
     let run_xml = render_text_run_xml(RenderTextRunOptions {
         value: "Styled",

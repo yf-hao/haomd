@@ -869,7 +869,7 @@ fn render_inline_runs_xml(runs: &[WordInlineRunCfg], render_state: &mut WordRend
                 value,
                 bold,
                 italic,
-                code,
+                code: _,
                 strike,
                 underline,
                 color,
@@ -881,7 +881,10 @@ fn render_inline_runs_xml(runs: &[WordInlineRunCfg], render_state: &mut WordRend
                     value,
                     bold: bold.unwrap_or(false),
                     italic: italic.unwrap_or(false),
-                    code: code.unwrap_or(false),
+                    // Inline Markdown code is exported as ordinary text. A
+                    // fenced code block uses render_code_block_runs_xml below
+                    // and keeps its dedicated code styling.
+                    code: false,
                     strike: strike.unwrap_or(false),
                     underline: underline.unwrap_or(false),
                     color: color.as_deref(),
