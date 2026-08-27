@@ -115,14 +115,15 @@ fn render_word_block(
             language: _,
             content,
         } => {
-            let runs = render_code_runs_xml(
+            let code_style = code_block_paragraph_style();
+            let runs = render_code_block_runs_xml(
                 content,
                 render_state.style_settings.code_font_size_half_points,
             );
             Ok(render_paragraph_xml(
                 runs,
                 resolve_paragraph_style_id(render_state, quote_depth, list_info, true, false),
-                None,
+                Some(&code_style),
                 quote_depth,
                 list_info,
                 true,
@@ -970,9 +971,29 @@ pub(crate) fn render_text_run_xml(options: RenderTextRunOptions<'_>) -> String {
     format!("<w:r>{}{}</w:r>", rpr_xml, body)
 }
 
-fn render_code_runs_xml(content: &str, code_font_size_half_points: u32) -> String {
+fn code_block_paragraph_style() -> WordParagraphStyleCfg {
+    WordParagraphStyleCfg {
+        // A fenced code block is preformatted content. Keep its lines compact so
+        // the spacing in the source is visible without adding paragraph-sized gaps.
+        line_height: Some(1.0),
+        spacing_after_pt: Some(0.0),
+        align: None,
+        background_color: None,
+        border_color: None,
+        border_top_color: None,
+        border_right_color: None,
+        border_bottom_color: None,
+        border_left_color: None,
+    }
+}
+
+fn render_code_block_runs_xml(content: &str, code_font_size_half_points: u32) -> String {
+    // Markdown parsers normally normalize line endings, but payloads can also
+    // come from imported/plain-text documents. Normalize them here so CRLF and
+    // lone CR become the same visible Word line breaks without changing spaces.
+    let normalized_content = content.replace("\r\n", "\n").replace('\r', "\n");
     render_text_run_xml(RenderTextRunOptions {
-        value: content,
+        value: &normalized_content,
         bold: false,
         italic: false,
         code: true,

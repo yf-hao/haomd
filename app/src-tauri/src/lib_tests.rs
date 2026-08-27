@@ -810,6 +810,36 @@ fn should_apply_custom_word_style_settings_to_styles_and_layout() {
 }
 
 #[test]
+fn should_preserve_text_code_block_layout_in_word_xml() {
+    let work_dir = unique_test_path("haomd-word-text-code", None);
+    let content = "Java 源文件（        ）——javac 编译——>（        ）——JVM 执行——>程序运行结果\r\n\r\n下一行\t保留";
+    let payload = WordDocPayloadCfg {
+        title: "Text code".to_string(),
+        blocks: vec![WordBlockCfg::Code {
+            language: Some("text".to_string()),
+            content: content.to_string(),
+        }],
+        assets: vec![],
+        style_settings: None,
+    };
+
+    build_word_export_workspace(&work_dir, &payload).expect("workspace should build");
+    let document_xml = fs::read_to_string(work_dir.join("word").join("document.xml"))
+        .expect("document xml should exist");
+
+    assert!(document_xml.contains(
+        "Java 源文件（        ）——javac 编译——&gt;（        ）——JVM 执行——&gt;程序运行结果"
+    ));
+    assert!(document_xml.contains("<w:br/><w:t xml:space=\"preserve\"></w:t><w:br/>"));
+    assert!(document_xml.contains("下一行\t保留"));
+    assert!(document_xml.contains("<w:spacing w:after=\"0\" w:line=\"240\" w:lineRule=\"auto\"/>"));
+    assert!(document_xml.contains("<w:rFonts w:ascii=\"Menlo\" w:hAnsi=\"Menlo\" w:cs=\"Menlo\"/>"));
+    assert!(!document_xml.contains("<w:tbl>"));
+
+    let _ = std::fs::remove_dir_all(&work_dir);
+}
+
+#[test]
 fn should_render_text_run_color_and_underline_styles() {
     let run_xml = render_text_run_xml(RenderTextRunOptions {
         value: "Styled",
