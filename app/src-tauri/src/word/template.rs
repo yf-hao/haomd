@@ -610,6 +610,12 @@ struct TextNodeRange {
     combined_end: usize,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct XmlRange {
+    start: usize,
+    end: usize,
+}
+
 fn find_paragraph_containing_placeholder(
     document_xml: &str,
     placeholder: &str,
@@ -649,9 +655,18 @@ fn replace_placeholder_in_paragraph(
         .iter()
         .position(|node| node.combined_start < match_end && match_end <= node.combined_end)?;
 
-    let mut edits: Vec<(usize, usize, &str)> = Vec::with_capacity(last_node - first_node + 1);
-    for (index, node) in nodes[first_node..=last_node].iter().enumerate() {
-        let node_index = first_node + index;
+    let run_ranges = iter_run_ranges(paragraph);
+    let first_run = run_ranges.iter().position(|run| {
+        run.start <= nodes[first_node].content_start && nodes[first_node].content_end <= run.end
+    });
+    let last_run = run_ranges.iter().position(|run| {
+        run.start <= nodes[last_node].content_start && nodes[last_node].content_end <= run.end
+    });
+
+    let mut edits: Vec<(usize, usize, &str)> = Vec::new();
+    let mut removed_runs = Vec::new();
+    for node_index in first_node..=last_node {
+        let node = nodes[node_index];
         let start = if node_index == first_node {
             node.content_start + match_start - node.combined_start
         } else {
@@ -662,18 +677,105 @@ fn replace_placeholder_in_paragraph(
         } else {
             node.content_end
         };
-        edits.push((
-            start,
-            end,
-            if node_index == first_node { value } else { "" },
-        ));
+        if start >= end {
+            continue;
+        }
+
+        let node_run = run_ranges
+            .iter()
+            .position(|run| run.start <= node.content_start && node.content_end <= run.end);
+        let can_remove_run = match (node_run, first_run, last_run) {
+            (Some(node_run), Some(first_run), Some(last_run)) => {
+                node_index != first_node
+                    && node_run != first_run
+                    && node_run >= first_run
+                    && node_run <= last_run
+                    && run_ranges[node_run].contains_only_placeholder_text(
+                        &nodes,
+                        match_start,
+                        match_end,
+                    )
+            }
+            _ => false,
+        };
+
+        if can_remove_run {
+            let run = run_ranges[node_run.unwrap()];
+            if !removed_runs
+                .iter()
+                .any(|removed: &XmlRange| removed.start == run.start && removed.end == run.end)
+            {
+                removed_runs.push(run);
+            }
+        } else if node_index != first_node
+            && node.combined_start >= match_start
+            && node.combined_end <= match_end
+        {
+            edits.push((
+                text_node_element_range(paragraph, node).start,
+                text_node_element_range(paragraph, node).end,
+                "",
+            ));
+        } else {
+            edits.push((
+                start,
+                end,
+                if node_index == first_node { value } else { "" },
+            ));
+        }
+    }
+
+    if let (Some(first_run), Some(last_run)) = (first_run, last_run) {
+        for proof_err in iter_proof_err_ranges(paragraph) {
+            if proof_err.start >= run_ranges[first_run].start
+                && proof_err.end <= run_ranges[last_run].end
+                && !removed_runs
+                    .iter()
+                    .any(|run| proof_err.start >= run.start && proof_err.end <= run.end)
+            {
+                edits.push((proof_err.start, proof_err.end, ""));
+            }
+        }
+    }
+
+    for run in removed_runs {
+        edits.push((run.start, run.end, ""));
     }
 
     let mut output = paragraph.to_string();
+    edits.sort_by_key(|(start, _, _)| *start);
     for (start, end, replacement) in edits.into_iter().rev() {
         output.replace_range(start..end, replacement);
     }
     Some(output)
+}
+
+impl XmlRange {
+    fn contains_only_placeholder_text(
+        self,
+        nodes: &[TextNodeRange],
+        match_start: usize,
+        match_end: usize,
+    ) -> bool {
+        let run_nodes: Vec<_> = nodes
+            .iter()
+            .filter(|node| self.start <= node.content_start && node.content_end <= self.end)
+            .collect();
+        !run_nodes.is_empty()
+            && run_nodes
+                .iter()
+                .all(|node| node.combined_start >= match_start && node.combined_end <= match_end)
+    }
+}
+
+fn text_node_element_range(paragraph: &str, node: TextNodeRange) -> XmlRange {
+    let element_start = paragraph[..node.content_start]
+        .rfind("<w:t")
+        .expect("text node must have an opening tag");
+    XmlRange {
+        start: element_start,
+        end: node.content_end + "</w:t>".len(),
+    }
 }
 
 fn iter_text_node_ranges(paragraph: &str) -> Vec<(usize, usize)> {
@@ -699,6 +801,48 @@ fn iter_text_node_ranges(paragraph: &str) -> Vec<(usize, usize)> {
         let content_end = content_start + end_offset;
         ranges.push((content_start, content_end));
         search_start = content_end + "</w:t>".len();
+    }
+    ranges
+}
+
+fn iter_run_ranges(paragraph: &str) -> Vec<XmlRange> {
+    let mut ranges = Vec::new();
+    let mut search_start = 0usize;
+    while let Some(tag_offset) = paragraph[search_start..].find("<w:r") {
+        let start = search_start + tag_offset;
+        let tag_suffix = paragraph.as_bytes().get(start + "<w:r".len()).copied();
+        if !matches!(
+            tag_suffix,
+            Some(b'>') | Some(b' ') | Some(b'\t') | Some(b'\r') | Some(b'\n')
+        ) {
+            search_start = start + "<w:r".len();
+            continue;
+        }
+        let Some(open_end_offset) = paragraph[start..].find('>') else {
+            break;
+        };
+        let content_start = start + open_end_offset + 1;
+        let Some(close_offset) = paragraph[content_start..].find("</w:r>") else {
+            break;
+        };
+        let end = content_start + close_offset + "</w:r>".len();
+        ranges.push(XmlRange { start, end });
+        search_start = end;
+    }
+    ranges
+}
+
+fn iter_proof_err_ranges(paragraph: &str) -> Vec<XmlRange> {
+    let mut ranges = Vec::new();
+    let mut search_start = 0usize;
+    while let Some(tag_offset) = paragraph[search_start..].find("<w:proofErr") {
+        let start = search_start + tag_offset;
+        let Some(end_offset) = paragraph[start..].find('>') else {
+            break;
+        };
+        let end = start + end_offset + 1;
+        ranges.push(XmlRange { start, end });
+        search_start = end;
     }
     ranges
 }
@@ -768,7 +912,54 @@ mod tests {
 
         assert!(replaced.contains("第1周至第1周"));
         assert!(!replaced.contains("${"));
+        assert!(!replaced.contains("<w:proofErr"), "{replaced}");
+        assert!(!replaced.contains("<w:t></w:t>"));
         assert!(replaced.contains("<w:tbl>"));
+    }
+
+    #[test]
+    fn should_preserve_template_paragraph_and_first_run_formatting() {
+        let document_xml = concat!(
+            r#"<w:document><w:body><w:tbl><w:tr><w:tc><w:p><w:pPr><w:jc w:val="center"/></w:pPr>"#,
+            r#"<w:r><w:rPr><w:b/></w:rPr><w:t>${</w:t></w:r><w:proofErr w:type="spellStart"/>"#,
+            r#"<w:r><w:t>week_range</w:t></w:r><w:proofErr w:type="spellEnd"/>"#,
+            r#"<w:r><w:t>}</w:t></w:r></w:p></w:tc></w:tr></w:tbl>"#,
+            r#"</w:body></w:document>"#,
+        );
+
+        let replaced = apply_template_replacements(
+            document_xml,
+            &[TemplateReplacement::Text {
+                placeholder: "${week_range}".to_string(),
+                value: "第1周至第1周".to_string(),
+            }],
+        );
+
+        assert!(replaced.contains(r#"<w:pPr><w:jc w:val="center"/></w:pPr>"#));
+        assert!(replaced.contains("<w:rPr><w:b/></w:rPr><w:t>第1周至第1周</w:t>"));
+        assert!(!replaced.contains("<w:proofErr"), "{replaced}");
+        assert!(!replaced.contains("<w:t></w:t>"));
+    }
+
+    #[test]
+    fn should_remove_empty_text_nodes_when_placeholder_shares_a_run() {
+        let document_xml = concat!(
+            r#"<w:document><w:body><w:p><w:r><w:rPr><w:i/></w:rPr>"#,
+            r#"<w:t>${</w:t><w:t>week_range</w:t><w:t>}</w:t></w:r></w:p>"#,
+            r#"</w:body></w:document>"#,
+        );
+
+        let replaced = apply_template_replacements(
+            document_xml,
+            &[TemplateReplacement::Text {
+                placeholder: "${week_range}".to_string(),
+                value: "第1周至第1周".to_string(),
+            }],
+        );
+
+        assert!(replaced.contains("<w:t>第1周至第1周</w:t>"));
+        assert!(!replaced.contains("<w:t></w:t>"));
+        assert!(replaced.contains("<w:rPr><w:i/></w:rPr>"));
     }
 
     #[test]
@@ -790,6 +981,8 @@ mod tests {
 
         assert!(replaced.contains("教学内容"));
         assert!(!replaced.contains("teaching_requirements"));
+        assert!(!replaced.contains("<w:proofErr"));
+        assert!(!replaced.contains("<w:t></w:t>"));
         assert!(replaced.contains("<w:tbl>"));
     }
 }
