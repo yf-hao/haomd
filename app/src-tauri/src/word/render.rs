@@ -120,7 +120,7 @@ fn render_word_block(
                 content,
                 render_state.style_settings.code_font_size_half_points,
             );
-            Ok(render_paragraph_xml(
+            Ok(render_paragraph_xml_with_code_shading(
                 runs,
                 resolve_paragraph_style_id(render_state, quote_depth, list_info, true, false),
                 Some(&code_style),
@@ -128,6 +128,7 @@ fn render_word_block(
                 list_info,
                 true,
                 false,
+                render_state.template_styles.is_none(),
             ))
         }
         WordBlockCfg::Image {
@@ -691,6 +692,28 @@ pub(crate) fn render_paragraph_xml(
     code_block: bool,
     center: bool,
 ) -> String {
+    render_paragraph_xml_with_code_shading(
+        content_xml,
+        style,
+        paragraph_style,
+        quote_depth,
+        list_info,
+        code_block,
+        center,
+        true,
+    )
+}
+
+fn render_paragraph_xml_with_code_shading(
+    content_xml: String,
+    style: Option<String>,
+    paragraph_style: Option<&WordParagraphStyleCfg>,
+    quote_depth: usize,
+    list_info: Option<(bool, usize)>,
+    code_block: bool,
+    center: bool,
+    code_block_shading: bool,
+) -> String {
     let mut ppr = String::new();
     if let Some(style_id) = style {
         ppr.push_str(&format!(r#"<w:pStyle w:val="{}"/>"#, style_id));
@@ -711,7 +734,7 @@ pub(crate) fn render_paragraph_xml(
             r#"<w:pBdr><w:left w:val="single" w:sz="8" w:space="8" w:color="C9CDD1"/></w:pBdr>"#,
         );
     }
-    if code_block {
+    if code_block && code_block_shading {
         ppr.push_str(r#"<w:shd w:val="clear" w:color="auto" w:fill="F6F8FA"/>"#);
     }
     if let Some(paragraph_style) = paragraph_style {

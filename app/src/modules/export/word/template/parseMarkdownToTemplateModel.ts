@@ -208,11 +208,34 @@ function normalizeSectionContent(content: string): string {
 }
 
 function preserveLeadingSpacesForTemplate(markdown: string): string {
-  return markdown
-    .replace(/\r\n/g, '\n')
-    .split('\n')
-    .map((line) => preserveLeadingSpacesInLine(line))
-    .join('\n')
+  const lines = markdown.replace(/\r\n/g, '\n').split('\n')
+  let fence: { marker: '`' | '~'; length: number } | null = null
+
+  return lines.map((line) => {
+    const fenceMatch = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/)
+    if (fence) {
+      if (
+        fenceMatch &&
+        fenceMatch[1][0] === fence.marker &&
+        fenceMatch[1].length >= fence.length &&
+        fenceMatch[2].trim() === ''
+      ) {
+        fence = null
+      }
+      // Preserve code-fence lines and every line inside the fence verbatim.
+      return line
+    }
+
+    if (fenceMatch) {
+      fence = {
+        marker: fenceMatch[1][0] as '`' | '~',
+        length: fenceMatch[1].length,
+      }
+      return line
+    }
+
+    return preserveLeadingSpacesInLine(line)
+  }).join('\n')
 }
 
 function preserveLeadingSpacesInLine(line: string): string {

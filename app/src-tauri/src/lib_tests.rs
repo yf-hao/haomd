@@ -834,6 +834,7 @@ fn should_preserve_text_code_block_layout_in_word_xml() {
     assert!(document_xml.contains("下一行\t保留"));
     assert!(document_xml.contains("<w:spacing w:after=\"0\" w:line=\"240\" w:lineRule=\"auto\"/>"));
     assert!(document_xml.contains("<w:rFonts w:ascii=\"Menlo\" w:hAnsi=\"Menlo\" w:cs=\"Menlo\"/>"));
+    assert!(document_xml.contains("<w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"F6F8FA\"/>"));
     assert!(!document_xml.contains("<w:tbl>"));
 
     let _ = std::fs::remove_dir_all(&work_dir);
