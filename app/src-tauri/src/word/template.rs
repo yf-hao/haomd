@@ -236,7 +236,7 @@ fn apply_template_replacements(document_xml: &str, replacements: &[TemplateRepla
     for replacement in replacements {
         match replacement {
             TemplateReplacement::Text { placeholder, value } => {
-                xml = xml.replace(placeholder, value);
+                xml = replace_text_placeholder(&xml, placeholder, value);
             }
             TemplateReplacement::Paragraph {
                 placeholder,
@@ -247,6 +247,31 @@ fn apply_template_replacements(document_xml: &str, replacements: &[TemplateRepla
         }
     }
     xml
+}
+
+fn replace_text_placeholder(document_xml: &str, placeholder: &str, value: &str) -> String {
+    let paragraph_ranges = iter_paragraph_ranges(document_xml);
+    if paragraph_ranges.is_empty() {
+        return document_xml.replace(placeholder, value);
+    }
+
+    let mut output = String::with_capacity(document_xml.len());
+    let mut cursor = 0usize;
+    for (paragraph_start, paragraph_end) in paragraph_ranges {
+        output.push_str(&document_xml[cursor..paragraph_start]);
+        let paragraph = &document_xml[paragraph_start..paragraph_end];
+        if let Some(replaced) = replace_placeholder_in_paragraph(paragraph, placeholder, value) {
+            output.push_str(&replaced);
+        } else {
+            output.push_str(paragraph);
+        }
+        cursor = paragraph_end;
+    }
+    output.push_str(&document_xml[cursor..]);
+
+    // Keep supporting placeholders outside a paragraph, which was the behavior
+    // of the original direct replacement path.
+    output.replace(placeholder, value)
 }
 
 fn read_optional_docx_entry_as_string<R: Read + std::io::Seek>(
@@ -563,14 +588,9 @@ fn replace_placeholder_paragraph(
     replacement_xml: &str,
 ) -> String {
     let mut xml = document_xml.to_string();
-    while let Some(placeholder_index) = xml.find(placeholder) {
-        let Some((paragraph_start, paragraph_end)) =
-            find_enclosing_paragraph_range(&xml, placeholder_index)
-        else {
-            xml = xml.replacen(placeholder, replacement_xml, 1);
-            continue;
-        };
-
+    while let Some((paragraph_start, paragraph_end)) =
+        find_paragraph_containing_placeholder(&xml, placeholder)
+    {
         let mut out = String::with_capacity(
             xml.len().saturating_sub(paragraph_end - paragraph_start) + replacement_xml.len(),
         );
@@ -579,19 +599,108 @@ fn replace_placeholder_paragraph(
         out.push_str(&xml[paragraph_end..]);
         xml = out;
     }
-    xml
+    xml.replace(placeholder, replacement_xml)
 }
 
-fn find_enclosing_paragraph_range(
+#[derive(Debug, Clone, Copy)]
+struct TextNodeRange {
+    content_start: usize,
+    content_end: usize,
+    combined_start: usize,
+    combined_end: usize,
+}
+
+fn find_paragraph_containing_placeholder(
     document_xml: &str,
-    target_index: usize,
+    placeholder: &str,
 ) -> Option<(usize, usize)> {
-    for (start, end) in iter_paragraph_ranges(document_xml) {
-        if start <= target_index && target_index < end {
-            return Some((start, end));
-        }
+    iter_paragraph_ranges(document_xml)
+        .into_iter()
+        .find(|(start, end)| {
+            replace_placeholder_in_paragraph(&document_xml[*start..*end], placeholder, "").is_some()
+        })
+}
+
+fn replace_placeholder_in_paragraph(
+    paragraph: &str,
+    placeholder: &str,
+    value: &str,
+) -> Option<String> {
+    let text_nodes = iter_text_node_ranges(paragraph);
+    let mut combined = String::new();
+    let mut nodes = Vec::with_capacity(text_nodes.len());
+    for (content_start, content_end) in text_nodes {
+        let combined_start = combined.len();
+        combined.push_str(&paragraph[content_start..content_end]);
+        nodes.push(TextNodeRange {
+            content_start,
+            content_end,
+            combined_start,
+            combined_end: combined.len(),
+        });
     }
-    None
+
+    let match_start = combined.find(placeholder)?;
+    let match_end = match_start + placeholder.len();
+    let first_node = nodes
+        .iter()
+        .position(|node| node.combined_start <= match_start && match_start < node.combined_end)?;
+    let last_node = nodes
+        .iter()
+        .position(|node| node.combined_start < match_end && match_end <= node.combined_end)?;
+
+    let mut edits: Vec<(usize, usize, &str)> = Vec::with_capacity(last_node - first_node + 1);
+    for (index, node) in nodes[first_node..=last_node].iter().enumerate() {
+        let node_index = first_node + index;
+        let start = if node_index == first_node {
+            node.content_start + match_start - node.combined_start
+        } else {
+            node.content_start
+        };
+        let end = if node_index == last_node {
+            node.content_start + match_end - node.combined_start
+        } else {
+            node.content_end
+        };
+        edits.push((
+            start,
+            end,
+            if node_index == first_node { value } else { "" },
+        ));
+    }
+
+    let mut output = paragraph.to_string();
+    for (start, end, replacement) in edits.into_iter().rev() {
+        output.replace_range(start..end, replacement);
+    }
+    Some(output)
+}
+
+fn iter_text_node_ranges(paragraph: &str) -> Vec<(usize, usize)> {
+    let mut ranges = Vec::new();
+    let mut search_start = 0usize;
+    while let Some(tag_offset) = paragraph[search_start..].find("<w:t") {
+        let tag_start = search_start + tag_offset;
+        let tag_suffix = paragraph.as_bytes().get(tag_start + "<w:t".len()).copied();
+        if !matches!(
+            tag_suffix,
+            Some(b'>') | Some(b' ') | Some(b'\t') | Some(b'\r') | Some(b'\n')
+        ) {
+            search_start = tag_start + "<w:t".len();
+            continue;
+        }
+        let Some(tag_end_offset) = paragraph[tag_start..].find('>') else {
+            break;
+        };
+        let content_start = tag_start + tag_end_offset + 1;
+        let Some(end_offset) = paragraph[content_start..].find("</w:t>") else {
+            break;
+        };
+        let content_end = content_start + end_offset;
+        ranges.push((content_start, content_end));
+        search_start = content_end + "</w:t>".len();
+    }
+    ranges
 }
 
 fn iter_paragraph_ranges(document_xml: &str) -> Vec<(usize, usize)> {
@@ -633,4 +742,54 @@ fn iter_paragraph_ranges(document_xml: &str) -> Vec<(usize, usize)> {
     }
 
     ranges
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn should_replace_text_placeholder_split_across_word_runs() {
+        let document_xml = concat!(
+            r#"<w:document><w:body><w:tbl><w:tr><w:tc><w:p>"#,
+            r#"<w:r><w:t>${</w:t></w:r><w:proofErr w:type="spellStart"/>"#,
+            r#"<w:r><w:t>week_range</w:t></w:r><w:proofErr w:type="spellEnd"/>"#,
+            r#"<w:r><w:t>}</w:t></w:r></w:p></w:tc></w:tr></w:tbl>"#,
+            r#"</w:body></w:document>"#,
+        );
+
+        let replaced = apply_template_replacements(
+            document_xml,
+            &[TemplateReplacement::Text {
+                placeholder: "${week_range}".to_string(),
+                value: "第1周至第1周".to_string(),
+            }],
+        );
+
+        assert!(replaced.contains("第1周至第1周"));
+        assert!(!replaced.contains("${"));
+        assert!(replaced.contains("<w:tbl>"));
+    }
+
+    #[test]
+    fn should_replace_rich_text_placeholder_split_across_word_runs() {
+        let document_xml = concat!(
+            r#"<w:document><w:body><w:tbl><w:tr><w:tc><w:p>"#,
+            r#"<w:r><w:t>${</w:t></w:r><w:r><w:t>teaching_requirements</w:t></w:r>"#,
+            r#"<w:r><w:t>}</w:t></w:r></w:p></w:tc></w:tr></w:tbl>"#,
+            r#"</w:body></w:document>"#,
+        );
+
+        let replaced = apply_template_replacements(
+            document_xml,
+            &[TemplateReplacement::Paragraph {
+                placeholder: "${teaching_requirements}".to_string(),
+                xml: r#"<w:p><w:r><w:t>教学内容</w:t></w:r></w:p>"#.to_string(),
+            }],
+        );
+
+        assert!(replaced.contains("教学内容"));
+        assert!(!replaced.contains("teaching_requirements"));
+        assert!(replaced.contains("<w:tbl>"));
+    }
 }
