@@ -376,11 +376,11 @@ export const PromptSettingsDialog: FC<PromptSettingsDialogProps> = ({ open, onCl
                               const previewLines = lines.slice(0, 5)
                               let previewText = previewLines.join('\n')
 
-                              // 如果内容超过5行或者总字符数超过100，添加省略号
-                              if (lines.length > 5 || previewText.length > 100) {
-                                // 超过100个字符时使用两个省略号表示截断
-                                if (previewText.length > 100) {
-                                  previewText = previewText.substring(0, 100) + '......'
+                              // 如果内容超过5行或者总字符数超过80，添加省略号
+                              if (lines.length > 5 || previewText.length > 80) {
+                                // 超过80个字符时使用两个省略号表示截断
+                                if (previewText.length > 80) {
+                                  previewText = previewText.substring(0, 80) + '......'
                                 } else {
                                   previewText += '...'
                                 }
