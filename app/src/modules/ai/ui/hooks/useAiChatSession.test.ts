@@ -254,6 +254,37 @@ describe('useAiChatSession', () => {
     )
   })
 
+  it('restores the saved prompt role when starting a document conversation', async () => {
+    const session = createMockSession('openai')
+    mocks.createChatSession.mockResolvedValue(session)
+    vi.mocked(docConversationService.getByDocPath).mockResolvedValueOnce({
+      docPath: '/workspace/doc.md',
+      sessionId: 'session-1',
+      lastActiveAt: 1,
+      activeRoleId: 'custom-role',
+      messages: [],
+    })
+
+    const { unmount } = renderHook(() =>
+      useAiChatSession({
+        sessionKey: 'temp-session',
+        entryMode: 'file',
+        open: true,
+        docPath: '/workspace/doc.md',
+      }),
+    )
+
+    await waitFor(() => {
+      expect(mocks.createChatSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          initialState: expect.objectContaining({ activeRoleId: 'custom-role' }),
+        }),
+      )
+    })
+
+    unmount()
+  })
+
   it('does not recreate session when docPath changes after initial start, and migrates binding in-place', async () => {
     const session = createMockSession('openai')
     mocks.createChatSession.mockResolvedValue(session)

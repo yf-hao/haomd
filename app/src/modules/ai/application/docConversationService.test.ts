@@ -36,6 +36,7 @@ describe('docConversationService', () => {
             ; (mockInvoke as any).mockResolvedValue({ Ok: { data: [] } })
 
         const mockState = {
+            activeRoleId: 'custom-role',
             viewMessages: [
                 { id: 'm1', role: 'user', content: 'hello' }
             ]
@@ -54,6 +55,7 @@ describe('docConversationService', () => {
         const payload = JSON.parse(convoCall[0].content)
         expect(Array.isArray(payload)).toBe(true)
         expect(payload[0].messages[0].content).toBe('hello')
+        expect(payload[0].activeRoleId).toBe('custom-role')
     })
 
     it('clearByDocPath should clear messages for a path in workspace file', async () => {
@@ -122,4 +124,3 @@ describe('docConversationService', () => {
         }))
     })
 })
-

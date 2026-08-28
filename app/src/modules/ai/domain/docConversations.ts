@@ -42,6 +42,8 @@ export type DocConversationRecord = {
   difyConversationId?: string
   /** 按 ProviderId 隔离的 Dify 会话 ID 映射 */
   difyProviderConversations?: Record<string, string>
+  /** 当前文档会话使用的系统提示词角色；旧记录缺省时使用全局默认角色 */
+  activeRoleId?: string | null
   messages: DocConversationMessage[]
 }
 

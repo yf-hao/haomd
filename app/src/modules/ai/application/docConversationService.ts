@@ -382,6 +382,7 @@ function migrateLegacyRecordsForWorkspace(
   let sessionId = candidates[0]?.sessionId ?? genSessionId()
   let difyConversationId: string | undefined
   let difyProviderConversations: Record<string, string> = {}
+  let activeRoleId: string | null | undefined
   const byId = new Map<string, DocConversationMessage>()
 
   for (const rec of candidates) {
@@ -391,6 +392,7 @@ function migrateLegacyRecordsForWorkspace(
       if (rec.difyConversationId) {
         difyConversationId = rec.difyConversationId
       }
+      activeRoleId = rec.activeRoleId
     }
     if (rec.difyProviderConversations) {
       difyProviderConversations = {
@@ -411,6 +413,7 @@ function migrateLegacyRecordsForWorkspace(
     lastActiveAt,
     difyConversationId,
     difyProviderConversations,
+    activeRoleId,
     messages,
   }
 
@@ -655,6 +658,7 @@ export function createDocConversationService(): DocConversationService {
           lastActiveAt: now,
           difyConversationId: difyConversationId ?? existing.difyConversationId,
           difyProviderConversations,
+          activeRoleId: state.activeRoleId ?? existing.activeRoleId,
           messages: mergedMessages,
         }
       } else {
@@ -664,6 +668,7 @@ export function createDocConversationService(): DocConversationService {
           lastActiveAt: now,
           difyConversationId,
           difyProviderConversations: providerId && difyConversationId ? { [providerId]: difyConversationId } : {},
+          activeRoleId: state.activeRoleId,
           messages: nextMessages,
         })
       }

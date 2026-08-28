@@ -112,6 +112,7 @@ function buildStateFromDocRecord(record: DocConversationRecord, entryMode: ChatE
     engineHistory,
     viewMessages,
     entryMode,
+    activeRoleId: record.activeRoleId ?? undefined,
   }
 }
 

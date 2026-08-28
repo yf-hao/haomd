@@ -6,6 +6,7 @@ import { createInitialConversationState } from '../domain/chatSession'
 import { createStreamingClientFromSettings } from '../streamingClientFactory'
 import { appendAssistantChunk } from '../domain/chatSession'
 import { loadAgentSettingsState } from '../config/agentSettingsRepo'
+import { docConversationService } from './docConversationService'
 import {
     executeCreateDirectoryUnderSelection,
     executeDeleteCurrentDocument,
@@ -208,6 +209,19 @@ describe('ChatSessionService', () => {
         expect(session.getSystemPromptInfo().activeRoleId).toBe('expert')
         // Should recreate client
         expect(createStreamingClientFromSettings).toHaveBeenCalledTimes(2)
+    })
+
+    it('should persist the active role immediately for a document conversation', async () => {
+        const session = await createChatSession({ entryMode: 'chat', docPath: '/test/file.md' })
+
+        await session.setActiveRole('expert')
+
+        expect(docConversationService.upsertFromState).toHaveBeenCalledWith(
+            expect.objectContaining({
+                docPath: '/test/file.md',
+                state: expect.objectContaining({ activeRoleId: 'expert' }),
+            }),
+        )
     })
 
     it('should change active model', async () => {
