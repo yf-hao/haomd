@@ -159,6 +159,27 @@
   white-space: pre-wrap;
 }
 
+/* 展开详情独立滚动，保持提示词预览仍只展示前 5 行 */
+.modal.modal-prompt-settings .provider-details {
+  max-height: 240px;
+  overflow-y: scroll;
+  scrollbar-width: thin;
+  scrollbar-color: var(--theme-border-input-strong) transparent;
+}
+
+.modal.modal-prompt-settings .provider-details::-webkit-scrollbar {
+  width: 8px;
+}
+
+.modal.modal-prompt-settings .provider-details::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.modal.modal-prompt-settings .provider-details::-webkit-scrollbar-thumb {
+  background-color: var(--theme-border-input-strong);
+  border-radius: 4px;
+}
+
 @media (max-width: 960px) {
   .modal.modal-prompt-settings {
     width: 100%;
