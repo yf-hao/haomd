@@ -591,15 +591,40 @@ fn replace_placeholder_paragraph(
     while let Some((paragraph_start, paragraph_end)) =
         find_paragraph_containing_placeholder(&xml, placeholder)
     {
+        let paragraph = &xml[paragraph_start..paragraph_end];
+        let replacement = if replacement_xml.is_empty() {
+            empty_paragraph_with_properties(paragraph)
+        } else {
+            replacement_xml.to_string()
+        };
         let mut out = String::with_capacity(
-            xml.len().saturating_sub(paragraph_end - paragraph_start) + replacement_xml.len(),
+            xml.len().saturating_sub(paragraph_end - paragraph_start) + replacement.len(),
         );
         out.push_str(&xml[..paragraph_start]);
-        out.push_str(replacement_xml);
+        out.push_str(&replacement);
         out.push_str(&xml[paragraph_end..]);
         xml = out;
     }
     xml.replace(placeholder, replacement_xml)
+}
+
+fn empty_paragraph_with_properties(paragraph: &str) -> String {
+    let Some(open_end) = paragraph.find('>') else {
+        return "<w:p/>".to_string();
+    };
+    let opening_tag = &paragraph[..=open_end];
+    let paragraph_properties = paragraph
+        .find("<w:pPr")
+        .and_then(|properties_start| {
+            paragraph[properties_start..]
+                .find("</w:pPr>")
+                .map(|close_offset| {
+                    let properties_end = properties_start + close_offset + "</w:pPr>".len();
+                    &paragraph[properties_start..properties_end]
+                })
+        })
+        .unwrap_or("");
+    format!("{opening_tag}{paragraph_properties}</w:p>")
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -984,5 +1009,34 @@ mod tests {
         assert!(!replaced.contains("<w:proofErr"));
         assert!(!replaced.contains("<w:t></w:t>"));
         assert!(replaced.contains("<w:tbl>"));
+    }
+
+    #[test]
+    fn should_keep_an_empty_paragraph_for_empty_rich_text_placeholder() {
+        let document_xml = concat!(
+            r#"<w:document><w:body><w:tbl><w:tr><w:tc>"#,
+            r#"<w:tcPr><w:tcW w:w="7154" w:type="dxa"/></w:tcPr>"#,
+            r#"<w:p w14:paraId="1234"><w:pPr><w:jc w:val="left"/></w:pPr>"#,
+            r#"<w:r><w:t>${</w:t></w:r><w:proofErr w:type="spellStart"/>"#,
+            r#"<w:r><w:t>teaching_postscript</w:t></w:r><w:proofErr w:type="spellEnd"/>"#,
+            r#"<w:r><w:t>}</w:t></w:r></w:p></w:tc></w:tr></w:tbl>"#,
+            r#"</w:body></w:document>"#,
+        );
+
+        let replaced = apply_template_replacements(
+            document_xml,
+            &[TemplateReplacement::Paragraph {
+                placeholder: "${teaching_postscript}".to_string(),
+                xml: String::new(),
+            }],
+        );
+
+        assert!(replaced
+            .contains(r#"<w:p w14:paraId="1234"><w:pPr><w:jc w:val="left"/></w:pPr></w:p>"#));
+        assert!(!replaced.contains("teaching_postscript"));
+        assert!(!replaced.contains("<w:proofErr"));
+        assert!(
+            !replaced.contains(r#"<w:tc><w:tcPr><w:tcW w:w="7154" w:type="dxa"/></w:tcPr></w:tc>"#)
+        );
     }
 }
