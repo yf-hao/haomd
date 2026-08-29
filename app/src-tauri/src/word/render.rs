@@ -122,12 +122,20 @@ fn render_word_block(
             );
             Ok(render_paragraph_xml_with_code_shading(
                 runs,
-                resolve_paragraph_style_id(render_state, quote_depth, list_info, true, false),
-                Some(&code_style),
-                quote_depth,
-                list_info,
-                true,
-                false,
+                RenderParagraphXmlOptions {
+                    style: resolve_paragraph_style_id(
+                        render_state,
+                        quote_depth,
+                        list_info,
+                        true,
+                        false,
+                    ),
+                    paragraph_style: Some(&code_style),
+                    quote_depth,
+                    list_info,
+                    code_block: true,
+                    center: false,
+                },
                 render_state.template_styles.is_none(),
             ))
         }
@@ -694,26 +702,40 @@ pub(crate) fn render_paragraph_xml(
 ) -> String {
     render_paragraph_xml_with_code_shading(
         content_xml,
+        RenderParagraphXmlOptions {
+            style,
+            paragraph_style,
+            quote_depth,
+            list_info,
+            code_block,
+            center,
+        },
+        true,
+    )
+}
+
+struct RenderParagraphXmlOptions<'a> {
+    style: Option<String>,
+    paragraph_style: Option<&'a WordParagraphStyleCfg>,
+    quote_depth: usize,
+    list_info: Option<(bool, usize)>,
+    code_block: bool,
+    center: bool,
+}
+
+fn render_paragraph_xml_with_code_shading(
+    content_xml: String,
+    options: RenderParagraphXmlOptions<'_>,
+    code_block_shading: bool,
+) -> String {
+    let RenderParagraphXmlOptions {
         style,
         paragraph_style,
         quote_depth,
         list_info,
         code_block,
         center,
-        true,
-    )
-}
-
-fn render_paragraph_xml_with_code_shading(
-    content_xml: String,
-    style: Option<String>,
-    paragraph_style: Option<&WordParagraphStyleCfg>,
-    quote_depth: usize,
-    list_info: Option<(bool, usize)>,
-    code_block: bool,
-    center: bool,
-    code_block_shading: bool,
-) -> String {
+    } = options;
     let mut ppr = String::new();
     if let Some(style_id) = style {
         ppr.push_str(&format!(r#"<w:pStyle w:val="{}"/>"#, style_id));
