@@ -16,6 +16,11 @@ type StatusContext = {
 
 export type WorkspacePanelId = 'files' | 'search' | 'outline' | 'pdf' | 'sessions' | 'notes' | 'skills' | 'workflows'
 
+export type CurrentSelectionReadOptions = {
+  /** 允许读取刚刚因原生菜单失焦而暂存的本次菜单激活选区 */
+  allowTransientMenuSelection?: boolean
+}
+
 export type PanelCommandContext = StatusContext & {
   toggleLeftPanel?: (panel: WorkspacePanelId) => void
 }
@@ -142,7 +147,7 @@ export type AiCommandContext = StatusContext & {
   /** 获取当前标签对应的文件名（用于展示给模型） */
   getCurrentFileName?: () => string | null
   /** 获取当前编辑器中选中的文本内容 */
-  getCurrentSelectionText?: () => string | null
+  getCurrentSelectionText?: (options?: CurrentSelectionReadOptions) => string | null
   /** 获取当前文档的完整路径（用于文档会话历史/清理/压缩） */
   getCurrentFilePath?: () => string | null
   /** 打开文档会话历史视图（由 WorkspaceShell 提供，当前版本可选） */

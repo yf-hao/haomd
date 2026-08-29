@@ -365,7 +365,7 @@ export function WorkspaceShell({
   const [focusRequest, setFocusRequest] = useState<{ localLine: number; columnStart?: number } | null>(null)
   const [wysiwygFocusRequest, setWysiwygFocusRequest] = useState(0)
   const [transientSearchQuery, setTransientSearchQuery] = useState<EditorTransientSearchQuery | null>(null)
-  const [, setPreviewSelectionText] = useState<string | null>(null)
+  const [, setPreviewSelectionTextState] = useState<string | null>(null)
   const pendingSourceCursorRestoreRef = useRef<{
     tabId: string | null
     globalLine: number
@@ -373,6 +373,12 @@ export function WorkspaceShell({
   } | null>(null)
   const pdfSelectionGetterRef = useRef<(() => string | null) | null>(null)
   const previewSelectionGetterRef = useRef<(() => string | null) | null>(null)
+  const previewSelectionTextRef = useRef<string | null>(null)
+  const transientMenuSelectionRef = useRef<{
+    tabId: string
+    text: string
+    expiresAt: number
+  } | null>(null)
   const pdfZoomActionsRef = useRef<{
     zoomIn: () => number | null
     zoomOut: () => number | null
@@ -923,10 +929,21 @@ export function WorkspaceShell({
     if (!path) return null
     return path.split(/[/\\]/).pop() || path
   }, [activeTab])
+  const setPreviewSelectionText = useCallback((text: string | null) => {
+    previewSelectionTextRef.current = text
+    setPreviewSelectionTextState(text)
+  }, [])
   const handlePreviewSelectionGetterReady = useCallback((getter: (() => string | null) | null) => {
     previewSelectionGetterRef.current = getter
   }, [])
-  const getCurrentSelectionText = useCallback(() => {
+  const consumeTransientMenuSelection = useCallback(() => {
+    const pending = transientMenuSelectionRef.current
+    if (!pending) return null
+    transientMenuSelectionRef.current = null
+    if (pending.tabId !== activeId || pending.expiresAt <= Date.now()) return null
+    return pending.text
+  }, [activeId])
+  const getCurrentSelectionText = useCallback((options?: { allowTransientMenuSelection?: boolean }) => {
     // PDF 标签：优先使用 PdfViewer 提供的实时选区 getter
     if (isPdfActive) {
       const getter = pdfSelectionGetterRef.current
@@ -936,7 +953,7 @@ export function WorkspaceShell({
           return text
         }
       }
-      return null
+      return options?.allowTransientMenuSelection ? consumeTransientMenuSelection() : null
     }
 
     if (editMode === 'wysiwyg') {
@@ -958,11 +975,38 @@ export function WorkspaceShell({
       }
     }
 
+    // 原生菜单导致预览区失焦后，优先消费本次菜单激活时捕获的选区，避免被源码编辑器中的旧选区覆盖。
+    if (options?.allowTransientMenuSelection) {
+      const transientText = consumeTransientMenuSelection()
+      if (transientText) return transientText
+    }
+
     // 回退到编辑器选区
     const view = getActiveSourceView()
-    if (!view || view.state.selection.main.empty) return null
-    return view.state.doc.sliceString(view.state.selection.main.from, view.state.selection.main.to)
-  }, [editMode, getActiveSourceView, isPdfActive])
+    if (view && !view.state.selection.main.empty) {
+      return view.state.doc.sliceString(view.state.selection.main.from, view.state.selection.main.to)
+    }
+    return null
+  }, [consumeTransientMenuSelection, editMode, getActiveSourceView, isPdfActive])
+
+  // 原生菜单打开时 WebView 可能先失焦并清空 window.getSelection()。
+  // 只在失焦瞬间记录当前选区，供紧接着到达的 Ask AI About Selection 菜单命令消费。
+  useEffect(() => {
+    const captureSelectionBeforeWindowBlur = () => {
+      if (!activeId) return
+      const liveText = getCurrentSelectionText()?.trim()
+      const text = liveText || previewSelectionTextRef.current?.trim()
+      if (!text) return
+      transientMenuSelectionRef.current = {
+        tabId: activeId,
+        text,
+        expiresAt: Date.now() + 1500,
+      }
+    }
+
+    window.addEventListener('blur', captureSelectionBeforeWindowBlur, true)
+    return () => window.removeEventListener('blur', captureSelectionBeforeWindowBlur, true)
+  }, [activeId, getCurrentSelectionText])
 
   const isOutlinePanelVisible = activeLeftPanel === 'outline'
   const outlineItems = useOutlineModel({

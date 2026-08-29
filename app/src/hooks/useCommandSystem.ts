@@ -203,6 +203,13 @@ export function useCommandSystem(params: CommandSystemParams) {
   const aiClient = useMemo<IAiClient>(() => {
     return aiClientFromParams ?? createDefaultAiClient()
   }, [aiClientFromParams])
+  const commandSourceRef = useRef<'local' | 'menu'>('local')
+  const getSelectionForCommand = useCallback(() => {
+    if (!getCurrentSelectionText) return null
+    return getCurrentSelectionText({
+      allowTransientMenuSelection: commandSourceRef.current === 'menu',
+    })
+  }, [getCurrentSelectionText])
 
   const adjustWysiwygFontSize = useCallback(async (delta: number) => {
     const typography = await getUiTypographySettings()
@@ -293,7 +300,7 @@ export function useCommandSystem(params: CommandSystemParams) {
         openIssueReportDialog,
         getCurrentMarkdown,
         getCurrentFileName,
-        getCurrentSelectionText,
+        getCurrentSelectionText: getCurrentSelectionText ? getSelectionForCommand : undefined,
         getCurrentFilePath,
         openDocConversationsHistory,
         addStandaloneFile,
@@ -376,6 +383,7 @@ export function useCommandSystem(params: CommandSystemParams) {
       getCurrentMarkdown,
       getCurrentFileName,
       getCurrentSelectionText,
+      getSelectionForCommand,
       getCurrentFilePath,
       openDocConversationsHistory,
       addStandaloneFile,
@@ -416,7 +424,12 @@ export function useCommandSystem(params: CommandSystemParams) {
         setStatusMessage(t?.('commands.menuNotImplemented') ?? '暂未实现的菜单')
         return
       }
-      await Promise.resolve(handler())
+      commandSourceRef.current = source
+      try {
+        await Promise.resolve(handler())
+      } finally {
+        commandSourceRef.current = 'local'
+      }
     },
     [commands, setStatusMessage, t],
   )
