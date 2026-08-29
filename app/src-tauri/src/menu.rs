@@ -694,7 +694,10 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
                 .accelerator("CmdOrCtrl+f")
                 .build(app)?,
         )
-        .item(&PredefinedMenuItem::select_all(app, Some(texts.select_all))?)
+        .item(&PredefinedMenuItem::select_all(
+            app,
+            Some(texts.select_all),
+        )?)
         .build()?;
 
     let heading_menu = SubmenuBuilder::new(app, texts.heading)
@@ -1344,7 +1347,10 @@ pub async fn set_appearance_menu_state(
 
     let states = [
         ("toggle_editor", EDITOR_MENU_CHECKED.load(Ordering::Relaxed)),
-        ("toggle_preview", PREVIEW_MENU_CHECKED.load(Ordering::Relaxed)),
+        (
+            "toggle_preview",
+            PREVIEW_MENU_CHECKED.load(Ordering::Relaxed),
+        ),
         (
             "toggle_sidebar",
             ACTIVITY_BAR_MENU_CHECKED.load(Ordering::Relaxed),

@@ -3,6 +3,7 @@ import {
   DEFAULT_EXPORT_BASE_NAME,
   extractFirstMarkdownHeading,
   resolveExportBaseName,
+  sanitizeExportBaseName,
 } from './exportFileName'
 
 describe('export file name helpers', () => {
@@ -24,5 +25,9 @@ describe('export file name helpers', () => {
 
   it('sanitizes characters that cannot be used in file names', () => {
     expect(resolveExportBaseName(null, '# A/B: C?')).toBe('A-B- C-')
+  })
+
+  it('sanitizes control characters without changing the filename behavior', () => {
+    expect(sanitizeExportBaseName('chapter\u0000\u001F-name')).toBe('chapter---name')
   })
 })

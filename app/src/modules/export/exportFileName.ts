@@ -54,7 +54,10 @@ export function extractFirstMarkdownHeading(markdown: string): string | null {
 
 export function sanitizeExportBaseName(value: string): string {
   return value
-    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '-')
+    .replace(/[<>:"/\\|?*]/g, '-')
+    .split('')
+    .map((character) => character.charCodeAt(0) <= 0x1f ? '-' : character)
+    .join('')
     .replace(/\s+/g, ' ')
     .replace(/[. ]+$/g, '')
     .trim()
