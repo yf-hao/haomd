@@ -22,6 +22,8 @@ export type PreviewPaneProps = {
   onPreviewLineClick?: (line: number) => void
   /** 预览区域文字选中变更回调 */
   onSelectionChange?: (text: string | null) => void
+  /** 注册读取预览区当前实时选区的 getter */
+  onSelectionGetterReady?: (getter: (() => string | null) | null) => void
 }
 
 function isHtmlFile(path: string | null | undefined): boolean {
@@ -59,6 +61,7 @@ function PreviewPaneComponent({
   foldRegions,
   onPreviewLineClick,
   onSelectionChange,
+  onSelectionGetterReady,
 }: PreviewPaneProps) {
   const value = usePreviewValue(previewStore)
   const style: CSSProperties = {}
@@ -193,6 +196,7 @@ function PreviewPaneComponent({
             foldRegions={foldRegions}
             onLineClick={onPreviewLineClick}
             onSelectionChange={onSelectionChange}
+            onSelectionGetterReady={onSelectionGetterReady}
           />
         )}
         {loading ? (
@@ -217,7 +221,8 @@ export const PreviewPane = memo(
     prev.filePath === next.filePath &&
     prev.foldRegions === next.foldRegions &&
     prev.onPreviewLineClick === next.onPreviewLineClick &&
-    prev.onSelectionChange === next.onSelectionChange
+    prev.onSelectionChange === next.onSelectionChange &&
+    prev.onSelectionGetterReady === next.onSelectionGetterReady
   ),
 )
 PreviewPane.displayName = 'PreviewPane'

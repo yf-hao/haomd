@@ -891,12 +891,29 @@ function createAiCommands(ctx: AiCommandContext): CommandRegistry {
       })
     },
     ai_ask_selection: async () => {
-      if (!ctx.aiClient) return
-      const resp = await ctx.aiClient.askAboutSelection()
-      if (!resp.ok) return
-      if (!ctx.openAiChatDialog || !ctx.getCurrentSelectionText) return
+      if (!ctx.aiClient) {
+        ctx.setStatusMessage(tr(ctx, 'commands.askAiAboutSelectionUnconfigured', 'Ask AI About Selection 未配置：AI 客户端未初始化'))
+        return
+      }
+      if (!ctx.getCurrentSelectionText) {
+        ctx.setStatusMessage(tr(ctx, 'commands.askAiAboutSelectionUnavailable', '当前编辑器状态不可用，无法读取选中内容'))
+        return
+      }
+
+      // 在任何异步配置检查之前读取选区，避免等待期间选区变化后再读到错误内容。
       const selection = ctx.getCurrentSelectionText()?.trim()
-      if (!selection) return
+      if (!selection) {
+        ctx.setStatusMessage(tr(ctx, 'commands.askAiAboutSelectionNeedsSelection', '请先选择要询问的内容'))
+        return
+      }
+
+      const resp = await ctx.aiClient.askAboutSelection()
+      ctx.setStatusMessage(resp.message)
+      if (!resp.ok) return
+      if (!ctx.openAiChatDialog) {
+        ctx.setStatusMessage(tr(ctx, 'commands.askAiAboutSelectionUnavailable', '当前编辑器状态不可用，无法读取选中内容'))
+        return
+      }
       ctx.openAiChatDialog({
         entryMode: 'selection',
         initialContext: { type: 'selection', content: selection },

@@ -365,13 +365,14 @@ export function WorkspaceShell({
   const [focusRequest, setFocusRequest] = useState<{ localLine: number; columnStart?: number } | null>(null)
   const [wysiwygFocusRequest, setWysiwygFocusRequest] = useState(0)
   const [transientSearchQuery, setTransientSearchQuery] = useState<EditorTransientSearchQuery | null>(null)
-  const [previewSelectionText, setPreviewSelectionText] = useState<string | null>(null)
+  const [, setPreviewSelectionText] = useState<string | null>(null)
   const pendingSourceCursorRestoreRef = useRef<{
     tabId: string | null
     globalLine: number
     columnStart?: number
   } | null>(null)
   const pdfSelectionGetterRef = useRef<(() => string | null) | null>(null)
+  const previewSelectionGetterRef = useRef<(() => string | null) | null>(null)
   const pdfZoomActionsRef = useRef<{
     zoomIn: () => number | null
     zoomOut: () => number | null
@@ -922,6 +923,9 @@ export function WorkspaceShell({
     if (!path) return null
     return path.split(/[/\\]/).pop() || path
   }, [activeTab])
+  const handlePreviewSelectionGetterReady = useCallback((getter: (() => string | null) | null) => {
+    previewSelectionGetterRef.current = getter
+  }, [])
   const getCurrentSelectionText = useCallback(() => {
     // PDF 标签：优先使用 PdfViewer 提供的实时选区 getter
     if (isPdfActive) {
@@ -945,16 +949,20 @@ export function WorkspaceShell({
       }
     }
 
-    // 非 PDF：优先使用 Markdown 预览的选区
-    if (previewSelectionText && previewSelectionText.trim()) {
-      return previewSelectionText
+    // 预览区只读取浏览器当前实时选区，不回退到上一次选区快照。
+    const previewGetter = previewSelectionGetterRef.current
+    if (previewGetter) {
+      const text = previewGetter()
+      if (text && text.trim()) {
+        return text
+      }
     }
 
     // 回退到编辑器选区
     const view = getActiveSourceView()
     if (!view || view.state.selection.main.empty) return null
     return view.state.doc.sliceString(view.state.selection.main.from, view.state.selection.main.to)
-  }, [editMode, getActiveSourceView, isPdfActive, previewSelectionText])
+  }, [editMode, getActiveSourceView, isPdfActive])
 
   const isOutlinePanelVisible = activeLeftPanel === 'outline'
   const outlineItems = useOutlineModel({
@@ -4887,6 +4895,7 @@ export function WorkspaceShell({
                         foldRegions={foldRegions}
                         onPreviewLineClick={handlePreviewLineClick}
                         onSelectionChange={setPreviewSelectionText}
+                        onSelectionGetterReady={handlePreviewSelectionGetterReady}
                       />
                     </Suspense>
                     </PreviewErrorBoundary>

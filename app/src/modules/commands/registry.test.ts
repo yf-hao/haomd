@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createCommandRegistry, type CommandContext } from './registry'
 import { docConversationService } from '../ai/application/docConversationService'
+import type { AiResponse } from '../ai/domain/types'
 
 // jsdom 环境下，可能没有全局 alert，这里兜底一个
 ;(globalThis as any).alert = (globalThis as any).alert ?? vi.fn()
@@ -508,7 +509,28 @@ describe('command registry - ai commands', () => {
 
     await registry.ai_ask_selection()
     expect(ctx.openAiChatDialog).not.toHaveBeenCalled()
-    expect(ctx.setStatusMessage).not.toHaveBeenCalled()
+    expect(ctx.setStatusMessage).toHaveBeenCalledWith('请先选择要询问的内容')
+  })
+
+  it('ai_ask_selection should capture selection before async configuration check', async () => {
+    const ctx = createMockCtx()
+    let resolveCheck: ((response: AiResponse) => void) | undefined
+    ctx.aiClient!.askAboutSelection = vi.fn(() => new Promise<AiResponse>((resolve) => {
+      resolveCheck = resolve
+    }))
+    const registry = createCommandRegistry(ctx)
+
+    const commandPromise = registry.ai_ask_selection()
+    expect(ctx.getCurrentSelectionText).toHaveBeenCalledTimes(1)
+    expect(ctx.openAiChatDialog).not.toHaveBeenCalled()
+
+    resolveCheck?.({ ok: true, message: 'sel ok' })
+    await commandPromise
+
+    expect(ctx.openAiChatDialog).toHaveBeenCalledWith({
+      entryMode: 'selection',
+      initialContext: { type: 'selection', content: 'selected' },
+    })
   })
 
   it('ai_session_globalMemory commands should call openGlobalMemoryDialog or show fallback', () => {

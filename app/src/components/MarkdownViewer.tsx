@@ -39,6 +39,8 @@ export interface MarkdownViewerProps {
   onLineClick?: (line: number) => void
   /** 预览区域文字选中变更回调 */
   onSelectionChange?: (text: string | null) => void
+  /** 注册读取预览区当前实时选区的 getter */
+  onSelectionGetterReady?: (getter: (() => string | null) | null) => void
 }
 
 export interface MarkdownViewerHandle {
@@ -986,6 +988,7 @@ const MarkdownViewerComponent = React.forwardRef<
     mode = 'rendered',
     onLineClick,
     onSelectionChange,
+    onSelectionGetterReady,
   } = props
   const plainTextMode = isPlainTextFile(filePath)
   const [performanceSettings, setPerformanceSettings] = useState<PerformanceSettings>(getDefaultPerformanceSettings())
@@ -1689,6 +1692,27 @@ const MarkdownViewerComponent = React.forwardRef<
       onSelectionChange(null)
     }
   }, [onSelectionChange, mode])
+
+  // Ask AI About Selection 必须读取浏览器当前选区，不能使用上一次同步到上层的快照。
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container || !onSelectionGetterReady || mode !== 'rendered') return
+
+    const getLiveSelectionText = () => {
+      if (typeof window === 'undefined') return null
+      const selection = window.getSelection()
+      if (!selection || selection.isCollapsed || selection.rangeCount === 0) return null
+      const anchorNode = selection.anchorNode
+      const focusNode = selection.focusNode
+      if (!anchorNode || !focusNode) return null
+      if (!container.contains(anchorNode) || !container.contains(focusNode)) return null
+      const text = selection.toString().trim()
+      return text || null
+    }
+
+    onSelectionGetterReady(getLiveSelectionText)
+    return () => onSelectionGetterReady(null)
+  }, [mode, onSelectionGetterReady])
 
   return (
     <FilePathContext.Provider value={filePath ?? null}>
