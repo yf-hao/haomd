@@ -663,7 +663,6 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
                 .accelerator("CmdOrCtrl+Alt+s")
                 .build(app)?,
         )
-        .item(&export_menu)
         .separator()
         .item(
             &MenuItemBuilder::new(texts.close_file)
