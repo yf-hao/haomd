@@ -305,6 +305,73 @@
   letter-spacing: 0.05em;
 }
 
+.word-style-accordion-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.word-style-accordion {
+  border: 1px solid var(--theme-border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.word-style-accordion-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border: 0;
+  background: var(--theme-surface-raised);
+  color: var(--theme-text-primary);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.word-style-accordion-header:hover {
+  background: var(--theme-surface-hover);
+}
+
+.word-style-accordion-content {
+  display: grid;
+  gap: 14px;
+  padding: 14px 12px;
+  border-top: 1px solid var(--theme-border-subtle);
+}
+
+.word-style-setting-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.word-style-setting-row .settings-number-input {
+  min-width: 0;
+}
+
+.word-style-reset-button {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.word-style-reset-button .btn-icon {
+  margin: 0;
+}
+
+.word-style-reset-button svg {
+  width: 16px;
+  height: 16px;
+}
+
 .settings-subsection {
   margin-top: 20px;
   padding-top: 18px;

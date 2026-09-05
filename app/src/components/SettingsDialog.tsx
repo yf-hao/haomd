@@ -45,7 +45,9 @@ import {
   type ThemeBackgroundSize,
   type ThemeSettings,
   type UiTypographySettings,
+  type WordParagraphCommonSettings,
   type WordExportStyleSettings,
+  type WordStyleSettings,
 } from '../modules/settings/editorSettings'
 import { emitPerformanceSettingsChanged } from '../modules/settings/performanceRuntime'
 import { getWorkspaceMountedRoots } from '../modules/workspace/workspaceMountedRoots'
@@ -66,6 +68,8 @@ export type SettingsDialogProps = {
 type SettingsSectionId = 'theme' | 'typography' | 'performance' | 'word-export' | 'search' | 'backup'
 type ThemePanelTabId = 'theme-preset' | 'backgrounds'
 type WordExportTabId = 'document' | 'layout' | 'diagrams' | 'templates'
+type WordStyleId = 'title' | 'heading1' | 'heading2' | 'heading3' | 'normal'
+type WordAccordionId = WordStyleId | 'common'
 type BackupPanelTabId = 'sync' | 'settings'
 type WordTemplateOption = {
   id: string
@@ -84,6 +88,25 @@ type BackgroundTarget =
   | 'sidebarBackground'
 
 const DEFAULT_WEBDAV_USER_AGENT = 'Zotero/8.0'
+
+const WORD_FONT_SIZE_NAMES: Record<number, string> = {
+  42: '初号',
+  36: '小初',
+  26: '一号',
+  24: '小一',
+  22: '二号',
+  18: '小二',
+  16: '三号',
+  15: '小三',
+  14: '四号',
+  12: '小四',
+  10.5: '五号',
+  9: '小五',
+  7.5: '六号',
+  6.5: '小六',
+}
+
+const WORD_FONT_SIZE_OPTIONS = [42, 36, 26, 24, 22, 18, 16, 15, 14, 12, 11, 10.5, 9, 7.5, 6.5]
 
 function normalizeWorkspaceRoot(root: string): string {
   return root.trim().replace(/\\/g, '/').replace(/[\\/]+$/, '')
@@ -150,7 +173,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   onLanguageModeChange,
   onUiTypographyChange,
 }) => {
-  const { t } = useI18n()
+  const { t, resolvedLanguage } = useI18n()
   const [settings, setSettings] = useState<EditorSettings>({})
   const [theme, setTheme] = useState<ThemeSettings>(getDefaultThemeSettings())
   const [languageMode, setLanguageMode] = useState<LanguageMode>(getDefaultLanguageSetting())
@@ -164,6 +187,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('theme')
   const [activeThemeTab, setActiveThemeTab] = useState<ThemePanelTabId>('theme-preset')
   const [activeWordExportTab, setActiveWordExportTab] = useState<WordExportTabId>('document')
+  const [expandedWordStyleId, setExpandedWordStyleId] = useState<WordAccordionId | null>('common')
   const [activeBackupTab, setActiveBackupTab] = useState<BackupPanelTabId>('sync')
   const [wordTemplates, setWordTemplates] = useState<WordTemplateOption[]>([])
   const [wordTemplateAuthoringOpen, setWordTemplateAuthoringOpen] = useState(false)
@@ -709,21 +733,193 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     }
   }
 
-  const updateNumber =
-    (key: keyof WordExportStyleSettings) =>
+  const updateWordNumber =
+    (key: 'codeFontSizePt' | 'pageMarginCm') =>
       (event: ChangeEvent<HTMLInputElement>) => {
         const value = Number(event.target.value)
+        if (!Number.isFinite(value)) return
+        setWordExport((prev) => ({ ...prev, [key]: value }))
+      }
+
+  const updateWordCommonNumber =
+    (key: keyof WordParagraphCommonSettings) =>
+      (event: ChangeEvent<HTMLInputElement>) => {
+        const value = Number(event.target.value)
+        if (!Number.isFinite(value)) return
         setWordExport((prev) => ({
           ...prev,
-          [key]: Number.isFinite(value) ? value : prev[key],
+          common: { ...prev.common, [key]: value },
         }))
       }
 
-  const updateFontFamily = (key: 'bodyFontFamily' | 'headingFontFamily') => (value: string) => {
+  const updateWordStyleNumber =
+    (styleId: WordStyleId, key: 'fontSizePt' | 'spacingBeforePt' | 'spacingAfterPt' | 'lineSpacing' | 'firstLineIndentChars') =>
+      (event: { target: { value: string } }) => {
+        const value = Number(event.target.value)
+        if (!Number.isFinite(value)) return
+        setWordExport((prev) => ({
+          ...prev,
+          [styleId]: { ...prev[styleId], [key]: value },
+        }))
+      }
+
+  const updateWordStyleFont = (styleId: WordStyleId) => (value: string) => {
     setWordExport((prev) => ({
       ...prev,
-      [key]: value,
+      [styleId]: { ...prev[styleId], fontFamily: value },
     }))
+  }
+
+  const resetWordStyleField =
+    (styleId: WordStyleId, key: 'spacingBeforePt' | 'spacingAfterPt' | 'lineSpacing' | 'firstLineIndentChars') =>
+      () => {
+        setWordExport((prev) => ({
+          ...prev,
+          [styleId]: { ...prev[styleId], [key]: null },
+        }))
+      }
+
+  const updateWordStyleAlignment = (styleId: WordStyleId) => (event: ChangeEvent<HTMLSelectElement>) => {
+    const value = event.target.value
+    setWordExport((prev) => ({
+      ...prev,
+      [styleId]: {
+        ...prev[styleId],
+        alignment: value === '' ? null : value as WordStyleSettings['alignment'],
+      },
+    }))
+  }
+
+  const renderWordFontSizeSelect = (styleId: WordStyleId) => {
+    const value = wordExport[styleId].fontSizePt
+    const isChineseUi = resolvedLanguage === 'zh-CN'
+    const formatSize = (size: number) => isChineseUi
+      ? (WORD_FONT_SIZE_NAMES[size] ?? `${size} pt`)
+      : `${size} pt`
+    const options = WORD_FONT_SIZE_OPTIONS.includes(value)
+      ? WORD_FONT_SIZE_OPTIONS
+      : [value, ...WORD_FONT_SIZE_OPTIONS]
+    return (
+      <select
+        className="field-select"
+        value={value}
+        onChange={updateWordStyleNumber(styleId, 'fontSizePt')}
+      >
+        {options.map((size) => <option key={size} value={size}>{formatSize(size)}</option>)}
+      </select>
+    )
+  }
+
+  const renderWordCommonAccordion = () => {
+    const fields: Array<{ key: keyof WordParagraphCommonSettings; label: string; min: number; max: number; step: number }> = [
+      { key: 'spacingBeforePt', label: t('wordExport.spacingBeforePt'), min: 0, max: 72, step: 0.5 },
+      { key: 'spacingAfterPt', label: t('wordExport.spacingAfterPt'), min: 0, max: 72, step: 0.5 },
+      { key: 'lineSpacing', label: t('wordExport.lineSpacing'), min: 1, max: 3, step: 0.05 },
+      { key: 'firstLineIndentChars', label: t('wordExport.firstLineIndentChars'), min: 0, max: 10, step: 0.5 },
+    ]
+    return (
+      <div className="word-style-accordion">
+        <button
+          type="button"
+          className="word-style-accordion-header"
+          aria-expanded={expandedWordStyleId === 'common'}
+          onClick={() => setExpandedWordStyleId((prev) => (prev === 'common' ? null : 'common'))}
+        >
+          <span>{t('wordExport.commonSettings')}</span>
+          <span aria-hidden="true">{expandedWordStyleId === 'common' ? '−' : '+'}</span>
+        </button>
+        {expandedWordStyleId === 'common' && (
+          <div className="word-style-accordion-content">
+            {fields.map((field) => (
+              <div style={fieldGridStyle} key={field.key}>
+                <div className="settings-field-label">{field.label}</div>
+                <input className="field-input settings-number-input" type="number" min={field.min} max={field.max} step={field.step} value={wordExport.common[field.key]} onChange={updateWordCommonNumber(field.key)} />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const renderWordStyleAccordion = (styleId: WordStyleId, label: string) => {
+    const style = wordExport[styleId]
+    const spacingFields: Array<{
+      key: 'spacingBeforePt' | 'spacingAfterPt' | 'lineSpacing' | 'firstLineIndentChars'
+      label: string
+      min: number
+      max: number
+      step: number
+    }> = [
+      { key: 'spacingBeforePt', label: t('wordExport.spacingBeforePt'), min: 0, max: 72, step: 0.5 },
+      { key: 'spacingAfterPt', label: t('wordExport.spacingAfterPt'), min: 0, max: 72, step: 0.5 },
+      { key: 'lineSpacing', label: t('wordExport.lineSpacing'), min: 1, max: 3, step: 0.05 },
+      { key: 'firstLineIndentChars', label: t('wordExport.firstLineIndentChars'), min: 0, max: 10, step: 0.5 },
+    ]
+    return (
+      <div className="word-style-accordion" key={styleId}>
+        <button
+          type="button"
+          className="word-style-accordion-header"
+          aria-expanded={expandedWordStyleId === styleId}
+          onClick={() => setExpandedWordStyleId((prev) => (prev === styleId ? null : styleId))}
+        >
+          <span>{label}</span>
+          <span aria-hidden="true">{expandedWordStyleId === styleId ? '−' : '+'}</span>
+        </button>
+        {expandedWordStyleId === styleId && (
+          <div className="word-style-accordion-content">
+            <div style={fieldGridStyle}>
+              <div className="settings-field-label">{t('wordExport.fontFamily')}</div>
+              <FontSelectField value={style.fontFamily} onChange={updateWordStyleFont(styleId)} />
+            </div>
+            <div style={fieldGridStyle}>
+              <div className="settings-field-label">{t('wordExport.fontSize')}</div>
+              {renderWordFontSizeSelect(styleId)}
+            </div>
+            {spacingFields.map((field) => {
+              const inherited = style[field.key] === null
+              const value = style[field.key] ?? wordExport.common[field.key]
+              const needsReset = !inherited && style[field.key] !== wordExport.common[field.key]
+              return (
+                <div style={fieldGridStyle} key={field.key}>
+                  <div className="settings-field-label">{field.label}</div>
+                  <div className="word-style-setting-row">
+                    <input className="field-input settings-number-input" type="number" min={field.min} max={field.max} step={field.step} value={value} onChange={updateWordStyleNumber(styleId, field.key)} />
+                    {needsReset ? (
+                      <Button
+                        variant="tertiary"
+                        type="button"
+                        className="word-style-reset-button"
+                        aria-label={t('wordExport.inheritCommon')}
+                        title={t('wordExport.inheritCommon')}
+                        onClick={resetWordStyleField(styleId, field.key)}
+                        icon={(
+                          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <path d="M4 7h10a6 6 0 1 1 0 12H9" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                            <path d="M4 7l4-4M4 7l4 4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        )}
+                      />
+                    ) : null}
+                  </div>
+                </div>
+              )
+            })}
+            <div style={fieldGridStyle}>
+              <div className="settings-field-label">{t('wordExport.alignment')}</div>
+              <select className="field-select" value={style.alignment ?? ''} onChange={updateWordStyleAlignment(styleId)}>
+                <option value="">{t('wordExport.inheritAlignment')}</option>
+                <option value="left">{t('wordExport.alignments.left')}</option>
+                <option value="center">{t('wordExport.alignments.center')}</option>
+                <option value="right">{t('wordExport.alignments.right')}</option>
+                <option value="justify">{t('wordExport.alignments.justify')}</option>
+              </select>
+            </div>
+          </div>
+        )}
+      </div>
+    )
   }
 
   const updateThemeMode = (mode: ThemeMode) => {
@@ -1770,36 +1966,13 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
 
                   {activeWordExportTab === 'document' ? (
                     <div className="settings-subgroup">
-                      <div className="settings-subgroup-title">{t('wordExport.groups.document')}</div>
-                      <div style={{ display: 'grid', gap: 14 }}>
-                        <div style={fieldGridStyle}>
-                          <div className="settings-field-label">{t('wordExport.bodyFont')}</div>
-                          <FontSelectField value={wordExport.bodyFontFamily} onChange={updateFontFamily('bodyFontFamily')} />
-                        </div>
-                        <div style={fieldGridStyle}>
-                          <div className="settings-field-label">{t('wordExport.bodySizePt')}</div>
-                          <input className="field-input settings-number-input" type="number" min={8} max={48} step={0.5} value={wordExport.bodyFontSizePt} onChange={updateNumber('bodyFontSizePt')} />
-                        </div>
-                        <div style={fieldGridStyle}>
-                          <div className="settings-field-label">{t('wordExport.headingFont')}</div>
-                          <FontSelectField value={wordExport.headingFontFamily} onChange={updateFontFamily('headingFontFamily')} />
-                        </div>
-                        <div style={fieldGridStyle}>
-                          <div className="settings-field-label">{t('wordExport.heading1SizePt')}</div>
-                          <input className="field-input settings-number-input" type="number" min={10} max={48} step={0.5} value={wordExport.heading1SizePt} onChange={updateNumber('heading1SizePt')} />
-                        </div>
-                        <div style={fieldGridStyle}>
-                          <div className="settings-field-label">{t('wordExport.heading2SizePt')}</div>
-                          <input className="field-input settings-number-input" type="number" min={10} max={48} step={0.5} value={wordExport.heading2SizePt} onChange={updateNumber('heading2SizePt')} />
-                        </div>
-                        <div style={fieldGridStyle}>
-                          <div className="settings-field-label">{t('wordExport.heading3SizePt')}</div>
-                          <input className="field-input settings-number-input" type="number" min={10} max={48} step={0.5} value={wordExport.heading3SizePt} onChange={updateNumber('heading3SizePt')} />
-                        </div>
-                        <div style={fieldGridStyle}>
-                          <div className="settings-field-label">{t('wordExport.codeSizePt')}</div>
-                          <input className="field-input settings-number-input" type="number" min={8} max={32} step={0.5} value={wordExport.codeFontSizePt} onChange={updateNumber('codeFontSizePt')} />
-                        </div>
+                      <div className="word-style-accordion-list">
+                        {renderWordCommonAccordion()}
+                        {renderWordStyleAccordion('title', t('wordExport.styles.title'))}
+                        {renderWordStyleAccordion('heading1', t('wordExport.styles.heading1'))}
+                        {renderWordStyleAccordion('heading2', t('wordExport.styles.heading2'))}
+                        {renderWordStyleAccordion('heading3', t('wordExport.styles.heading3'))}
+                        {renderWordStyleAccordion('normal', t('wordExport.styles.normal'))}
                       </div>
                     </div>
                   ) : activeWordExportTab === 'layout' ? (
@@ -1807,16 +1980,12 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                       <div className="settings-subgroup-title">{t('wordExport.groups.layout')}</div>
                       <div style={{ display: 'grid', gap: 14 }}>
                         <div style={fieldGridStyle}>
-                          <div className="settings-field-label">{t('wordExport.paragraphSpacingAfterPt')}</div>
-                          <input className="field-input settings-number-input" type="number" min={0} max={72} step={0.5} value={wordExport.paragraphSpacingAfterPt} onChange={updateNumber('paragraphSpacingAfterPt')} />
-                        </div>
-                        <div style={fieldGridStyle}>
-                          <div className="settings-field-label">{t('wordExport.lineSpacing')}</div>
-                          <input className="field-input settings-number-input" type="number" min={1} max={3} step={0.05} value={wordExport.lineSpacing} onChange={updateNumber('lineSpacing')} />
+                          <div className="settings-field-label">{t('wordExport.codeSizePt')}</div>
+                          <input className="field-input settings-number-input" type="number" min={8} max={32} step={0.5} value={wordExport.codeFontSizePt} onChange={updateWordNumber('codeFontSizePt')} />
                         </div>
                         <div style={fieldGridStyle}>
                           <div className="settings-field-label">{t('wordExport.pageMarginCm')}</div>
-                          <input className="field-input settings-number-input" type="number" min={1} max={5} step={0.1} value={wordExport.pageMarginCm} onChange={updateNumber('pageMarginCm')} />
+                          <input className="field-input settings-number-input" type="number" min={1} max={5} step={0.1} value={wordExport.pageMarginCm} onChange={updateWordNumber('pageMarginCm')} />
                         </div>
                       </div>
                     </div>

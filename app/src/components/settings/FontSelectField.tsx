@@ -79,7 +79,13 @@ export function FontSelectField({
     const selectedIndex = [...groupedFonts.system]
       .findIndex((font) => font.family === value)
     updateHighlightedIndex(selectedIndex >= 0 ? selectedIndex : 0)
-  }, [fonts, searchKeyword, value])
+    if (selectedIndex < 0 && !searchKeyword.trim() && value.trim()) {
+      const fallback = fonts.find((font) => font.family.toLowerCase() === 'times new roman')
+      if (fallback) {
+        onChange(fallback.family)
+      }
+    }
+  }, [fonts, groupedFonts.system, searchKeyword, value, onChange])
 
   const handleSelectFont = (family: string) => {
     onChange(family)

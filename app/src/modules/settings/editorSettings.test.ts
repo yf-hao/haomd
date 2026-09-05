@@ -69,17 +69,18 @@ describe('editorSettings', () => {
             Ok: {
                 data: {
                     wordExport: {
-                        bodyFontFamily: 'Calibri',
-                        lineSpacing: 1.5,
+                        common: {
+                            lineSpacing: 1.5,
+                        },
                     }
                 }
             }
         })
 
         const settings = await getWordExportStyleSettings()
-        expect(settings.bodyFontFamily).toBe('Calibri')
-        expect(settings.lineSpacing).toBe(1.5)
-        expect(settings.bodyFontSizePt).toBe(12)
+        expect(settings.common.lineSpacing).toBe(1.5)
+        expect(settings.normal.fontSizePt).toBe(11)
+        expect(settings.normal.fontFamily).toBe('SimSun')
         expect(settings.pageMarginCm).toBe(2.54)
     })
 
@@ -166,8 +167,18 @@ describe('editorSettings', () => {
                 previewFontSize: 16,
             },
             wordExport: {
-                bodyFontFamily: 'Calibri',
-                bodyFontSizePt: 11,
+                common: {
+                    lineSpacing: 1.5,
+                },
+                normal: {
+                    fontFamily: 'Calibri',
+                    fontSizePt: 11,
+                    spacingBeforePt: 0,
+                    spacingAfterPt: 0,
+                    lineSpacing: 1.5,
+                    firstLineIndentChars: 2,
+                    alignment: null,
+                },
             }
         })
 
@@ -177,8 +188,18 @@ describe('editorSettings', () => {
                     previewFontSize: 16,
                 },
                 wordExport: {
-                    bodyFontFamily: 'Calibri',
-                    bodyFontSizePt: 11,
+                    common: {
+                        lineSpacing: 1.5,
+                    },
+                    normal: {
+                        fontFamily: 'Calibri',
+                        fontSizePt: 11,
+                        spacingBeforePt: 0,
+                        spacingAfterPt: 0,
+                        lineSpacing: 1.5,
+                        firstLineIndentChars: 2,
+                        alignment: null,
+                    },
                 }
             }
         })

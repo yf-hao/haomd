@@ -846,7 +846,7 @@ fn render_state_default_spacing_after_twips() -> u32 {
 }
 
 fn render_state_default_line_spacing_twips() -> u32 {
-    crate::editor_settings::line_spacing_to_twips(1.25)
+    crate::editor_settings::line_spacing_to_twips(1.15)
 }
 
 fn render_paragraph_border_xml(style: &WordParagraphStyleCfg) -> String {
@@ -1107,19 +1107,10 @@ fn font_size_pt_to_half_points(size_pt: Option<f32>) -> Option<u32> {
 
 fn render_word_font_family_xml(font_family: &str) -> String {
     let font_family = normalize_word_font_family(font_family);
-    // Times New Roman does not contain Chinese glyphs. Keep it for Latin text,
-    // but use the standard Chinese body font for East Asian text so Word does
-    // not fall back to a platform-dependent font with different line metrics.
-    let east_asia_font = if font_family.eq_ignore_ascii_case("times new roman") {
-        "宋体"
-    } else {
-        font_family.as_str()
-    };
     let escaped = crate::escape_xml_attr(&font_family);
-    let escaped_east_asia = crate::escape_xml_attr(east_asia_font);
     format!(
-        r#"<w:rFonts w:ascii="{0}" w:hAnsi="{0}" w:cs="{0}" w:eastAsia="{1}" w:hint="eastAsia"/><w:lang w:eastAsia="zh-CN"/>"#,
-        escaped, escaped_east_asia
+        r#"<w:rFonts w:ascii="{0}" w:hAnsi="{0}" w:cs="{0}" w:eastAsia="{0}" w:hint="eastAsia"/><w:lang w:eastAsia="zh-CN"/>"#,
+        escaped
     )
 }
 
@@ -2217,42 +2208,95 @@ pub(crate) fn build_app_props_xml() -> String {
 }
 
 pub(crate) fn build_word_styles_xml(settings: &WordExportStyleSettingsResolved) -> String {
-    let body_font_rpr = render_word_font_family_xml(&settings.body_font_family);
-    let heading_font_rpr = render_word_font_family_xml(&settings.heading_font_family);
+    let common_rpr = render_word_font_family_xml(&settings.normal.font_family);
+    let title_rpr = format!(
+        "{}<w:sz w:val=\"{}\"/><w:szCs w:val=\"{}\"/>",
+        render_word_font_family_xml(&settings.title.font_family),
+        settings.title.font_size_half_points,
+        settings.title.font_size_half_points
+    );
+    let heading1_rpr = format!(
+        "{}<w:b/><w:sz w:val=\"{}\"/><w:szCs w:val=\"{}\"/>",
+        render_word_font_family_xml(&settings.heading1.font_family),
+        settings.heading1.font_size_half_points,
+        settings.heading1.font_size_half_points
+    );
+    let heading2_rpr = format!(
+        "{}<w:b/><w:sz w:val=\"{}\"/><w:szCs w:val=\"{}\"/>",
+        render_word_font_family_xml(&settings.heading2.font_family),
+        settings.heading2.font_size_half_points,
+        settings.heading2.font_size_half_points
+    );
+    let heading3_rpr = format!(
+        "{}<w:b/><w:sz w:val=\"{}\"/><w:szCs w:val=\"{}\"/>",
+        render_word_font_family_xml(&settings.heading3.font_family),
+        settings.heading3.font_size_half_points,
+        settings.heading3.font_size_half_points
+    );
+    let normal_rpr = format!(
+        "{}<w:sz w:val=\"{}\"/><w:szCs w:val=\"{}\"/>",
+        common_rpr, settings.normal.font_size_half_points, settings.normal.font_size_half_points
+    );
+    let normal_ppr = render_word_style_ppr(&settings.normal);
+    let title_ppr = render_word_style_ppr(&settings.title);
+    let heading1_ppr = render_word_style_ppr(&settings.heading1);
+    let heading2_ppr = render_word_style_ppr(&settings.heading2);
+    let heading3_ppr = render_word_style_ppr(&settings.heading3);
     format!(
         concat!(
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
             r#"<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">"#,
-            r#"<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/>"#,
-            r#"<w:pPr><w:spacing w:after="{}" w:line="{}" w:lineRule="auto"/></w:pPr>"#,
-            r#"<w:rPr>{}<w:sz w:val="{}"/></w:rPr></w:style>"#,
-            r#"<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr>{}<w:b/><w:sz w:val="{}"/></w:rPr></w:style>"#,
-            r#"<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr>{}<w:b/><w:sz w:val="{}"/></w:rPr></w:style>"#,
-            r#"<w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr>{}<w:b/><w:sz w:val="{}"/></w:rPr></w:style>"#,
-            r#"<w:style w:type="paragraph" w:styleId="Heading4"><w:name w:val="heading 4"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr>{}<w:b/><w:sz w:val="{}"/></w:rPr></w:style>"#,
-            r#"<w:style w:type="paragraph" w:styleId="Heading5"><w:name w:val="heading 5"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr>{}<w:b/><w:sz w:val="{}"/></w:rPr></w:style>"#,
-            r#"<w:style w:type="paragraph" w:styleId="Heading6"><w:name w:val="heading 6"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr>{}<w:b/><w:sz w:val="{}"/></w:rPr></w:style>"#,
+            r#"<w:docDefaults><w:rPrDefault><w:rPr>{}</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:before="{}" w:after="{}" w:line="{}" w:lineRule="auto"/><w:ind w:firstLineChars="{}"/></w:pPr></w:pPrDefault></w:docDefaults>"#,
+            r#"<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/>{}<w:rPr>{}</w:rPr></w:style>"#,
+            r#"<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="10"/><w:qFormat/>{}<w:rPr>{}</w:rPr></w:style>"#,
+            r#"<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/>{}<w:rPr>{}</w:rPr></w:style>"#,
+            r#"<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/>{}<w:rPr>{}</w:rPr></w:style>"#,
+            r#"<w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/>{}<w:rPr>{}</w:rPr></w:style>"#,
+            r#"<w:style w:type="paragraph" w:styleId="Heading4"><w:name w:val="heading 4"/><w:basedOn w:val="Heading3"/><w:uiPriority w:val="9"/><w:qFormat/>{}<w:rPr>{}</w:rPr></w:style>"#,
+            r#"<w:style w:type="paragraph" w:styleId="Heading5"><w:name w:val="heading 5"/><w:basedOn w:val="Heading3"/><w:uiPriority w:val="9"/><w:qFormat/>{}<w:rPr>{}</w:rPr></w:style>"#,
+            r#"<w:style w:type="paragraph" w:styleId="Heading6"><w:name w:val="heading 6"/><w:basedOn w:val="Heading3"/><w:uiPriority w:val="9"/><w:qFormat/>{}<w:rPr>{}</w:rPr></w:style>"#,
             r#"<w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:basedOn w:val="DefaultParagraphFont"/><w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:rPr><w:color w:val="0563C1"/><w:u w:val="single"/></w:rPr></w:style>"#,
             r#"<w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/><w:tblPr><w:tblInd w:w="0" w:type="dxa"/><w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="108" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style>"#,
             r#"<w:style w:type="table" w:styleId="TableGrid"><w:name w:val="Table Grid"/><w:basedOn w:val="TableNormal"/><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:right w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="auto"/></w:tblBorders></w:tblPr></w:style>"#,
             r#"</w:styles>"#
         ),
-        settings.paragraph_spacing_after_twips,
-        settings.line_spacing_twips,
-        body_font_rpr,
-        settings.body_font_size_half_points,
-        heading_font_rpr.clone(),
-        settings.heading1_size_half_points,
-        heading_font_rpr.clone(),
-        settings.heading2_size_half_points,
-        heading_font_rpr.clone(),
-        settings.heading3_size_half_points,
-        heading_font_rpr.clone(),
-        settings.heading3_size_half_points,
-        heading_font_rpr.clone(),
-        settings.heading3_size_half_points,
-        heading_font_rpr,
-        settings.heading3_size_half_points.saturating_sub(2),
+        common_rpr,
+        settings.common_spacing_before_twips,
+        settings.common_spacing_after_twips,
+        settings.common_line_spacing_twips,
+        settings.common_first_line_indent_chars,
+        normal_ppr,
+        normal_rpr,
+        title_ppr,
+        title_rpr,
+        heading1_ppr,
+        heading1_rpr,
+        heading2_ppr,
+        heading2_rpr,
+        heading3_ppr,
+        heading3_rpr,
+        heading3_ppr,
+        heading3_rpr,
+        heading3_ppr,
+        heading3_rpr,
+        heading3_ppr,
+        heading3_rpr,
+    )
+}
+
+fn render_word_style_ppr(style: &crate::word::WordParagraphStyleResolved) -> String {
+    let alignment_xml = style
+        .alignment
+        .as_deref()
+        .map(|value| format!(r#"<w:jc w:val="{}"/>"#, value))
+        .unwrap_or_default();
+    format!(
+        r#"<w:pPr><w:spacing w:before="{}" w:after="{}" w:line="{}" w:lineRule="auto"/><w:ind w:firstLineChars="{}"/>{}</w:pPr>"#,
+        style.spacing_before_twips,
+        style.spacing_after_twips,
+        style.line_spacing_twips,
+        style.first_line_indent_chars,
+        alignment_xml
     )
 }
 

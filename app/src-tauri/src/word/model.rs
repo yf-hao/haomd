@@ -254,15 +254,27 @@ pub(crate) struct WordAssetRuntime {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct WordExportStyleSettingsResolved {
-    pub(crate) body_font_family: String,
-    pub(crate) body_font_size_half_points: u32,
-    pub(crate) heading_font_family: String,
-    pub(crate) heading1_size_half_points: u32,
-    pub(crate) heading2_size_half_points: u32,
-    pub(crate) heading3_size_half_points: u32,
-    pub(crate) paragraph_spacing_after_twips: u32,
+pub(crate) struct WordParagraphStyleResolved {
+    pub(crate) font_family: String,
+    pub(crate) font_size_half_points: u32,
+    pub(crate) spacing_before_twips: u32,
+    pub(crate) spacing_after_twips: u32,
     pub(crate) line_spacing_twips: u32,
+    pub(crate) first_line_indent_chars: u32,
+    pub(crate) alignment: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct WordExportStyleSettingsResolved {
+    pub(crate) common_spacing_before_twips: u32,
+    pub(crate) common_spacing_after_twips: u32,
+    pub(crate) common_line_spacing_twips: u32,
+    pub(crate) common_first_line_indent_chars: u32,
+    pub(crate) title: WordParagraphStyleResolved,
+    pub(crate) heading1: WordParagraphStyleResolved,
+    pub(crate) heading2: WordParagraphStyleResolved,
+    pub(crate) heading3: WordParagraphStyleResolved,
+    pub(crate) normal: WordParagraphStyleResolved,
     pub(crate) code_font_size_half_points: u32,
     pub(crate) page_margin_twips: u32,
 }
@@ -303,23 +315,51 @@ pub(crate) struct WordTemplateConventionStylesResolved {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct WordExportStyleSettingsCfg {
+pub(crate) struct WordParagraphCommonSettingsCfg {
     #[serde(default)]
-    pub(crate) body_font_family: Option<String>,
+    pub(crate) spacing_before_pt: Option<f32>,
     #[serde(default)]
-    pub(crate) body_font_size_pt: Option<f32>,
-    #[serde(default)]
-    pub(crate) heading_font_family: Option<String>,
-    #[serde(default)]
-    pub(crate) heading1_size_pt: Option<f32>,
-    #[serde(default)]
-    pub(crate) heading2_size_pt: Option<f32>,
-    #[serde(default)]
-    pub(crate) heading3_size_pt: Option<f32>,
-    #[serde(default)]
-    pub(crate) paragraph_spacing_after_pt: Option<f32>,
+    pub(crate) spacing_after_pt: Option<f32>,
     #[serde(default)]
     pub(crate) line_spacing: Option<f32>,
+    #[serde(default)]
+    pub(crate) first_line_indent_chars: Option<f32>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WordStyleSettingsCfg {
+    #[serde(default)]
+    pub(crate) font_family: Option<String>,
+    #[serde(default)]
+    pub(crate) font_size_pt: Option<f32>,
+    #[serde(default)]
+    pub(crate) spacing_before_pt: Option<f32>,
+    #[serde(default)]
+    pub(crate) spacing_after_pt: Option<f32>,
+    #[serde(default)]
+    pub(crate) line_spacing: Option<f32>,
+    #[serde(default)]
+    pub(crate) first_line_indent_chars: Option<f32>,
+    #[serde(default)]
+    pub(crate) alignment: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WordExportStyleSettingsCfg {
+    #[serde(default)]
+    pub(crate) common: Option<WordParagraphCommonSettingsCfg>,
+    #[serde(default)]
+    pub(crate) title: Option<WordStyleSettingsCfg>,
+    #[serde(default)]
+    pub(crate) heading1: Option<WordStyleSettingsCfg>,
+    #[serde(default)]
+    pub(crate) heading2: Option<WordStyleSettingsCfg>,
+    #[serde(default)]
+    pub(crate) heading3: Option<WordStyleSettingsCfg>,
+    #[serde(default)]
+    pub(crate) normal: Option<WordStyleSettingsCfg>,
     #[serde(default)]
     pub(crate) code_font_size_pt: Option<f32>,
     #[serde(default)]

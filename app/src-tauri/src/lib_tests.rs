@@ -777,14 +777,49 @@ fn should_apply_custom_word_style_settings_to_styles_and_layout() {
         ],
         assets: vec![],
         style_settings: Some(WordExportStyleSettingsCfg {
-            body_font_family: Some("Calibri".to_string()),
-            body_font_size_pt: Some(11.0),
-            heading_font_family: Some("Times New Roman".to_string()),
-            heading1_size_pt: Some(20.0),
-            heading2_size_pt: Some(18.0),
-            heading3_size_pt: Some(16.0),
-            paragraph_spacing_after_pt: Some(12.0),
-            line_spacing: Some(1.5),
+            common: Some(WordParagraphCommonSettingsCfg {
+                spacing_before_pt: Some(0.0),
+                spacing_after_pt: Some(12.0),
+                line_spacing: Some(1.5),
+                first_line_indent_chars: Some(0.0),
+            }),
+            title: None,
+            heading1: Some(WordStyleSettingsCfg {
+                font_family: Some("Times New Roman".to_string()),
+                font_size_pt: Some(20.0),
+                spacing_before_pt: None,
+                spacing_after_pt: None,
+                line_spacing: None,
+                first_line_indent_chars: None,
+                alignment: None,
+            }),
+            heading2: Some(WordStyleSettingsCfg {
+                font_family: Some("Times New Roman".to_string()),
+                font_size_pt: Some(18.0),
+                spacing_before_pt: None,
+                spacing_after_pt: None,
+                line_spacing: None,
+                first_line_indent_chars: None,
+                alignment: None,
+            }),
+            heading3: Some(WordStyleSettingsCfg {
+                font_family: Some("Times New Roman".to_string()),
+                font_size_pt: Some(16.0),
+                spacing_before_pt: None,
+                spacing_after_pt: None,
+                line_spacing: None,
+                first_line_indent_chars: None,
+                alignment: None,
+            }),
+            normal: Some(WordStyleSettingsCfg {
+                font_family: Some("Calibri".to_string()),
+                font_size_pt: Some(11.0),
+                spacing_before_pt: None,
+                spacing_after_pt: None,
+                line_spacing: None,
+                first_line_indent_chars: None,
+                alignment: None,
+            }),
             code_font_size_pt: Some(9.0),
             page_margin_cm: Some(3.0),
             enable_inkscape_for_word_export: Some(false),
@@ -802,10 +837,12 @@ fn should_apply_custom_word_style_settings_to_styles_and_layout() {
         .expect("document xml should exist");
 
     assert!(styles_xml.contains(
-        r#"<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri" w:eastAsia="Calibri"/><w:sz w:val="22"/>"#
+        r#"<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri" w:eastAsia="Calibri""#
     ));
-    assert!(styles_xml.contains(r#"<w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman" w:eastAsia="Times New Roman"/><w:b/><w:sz w:val="40"/>"#));
-    assert!(styles_xml.contains(r#"<w:spacing w:after="240" w:line="360" w:lineRule="auto"/>"#));
+    assert!(styles_xml.contains(r#"<w:sz w:val="22"/><w:szCs w:val="22"/>"#));
+    assert!(styles_xml.contains(r#"<w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman" w:eastAsia="Times New Roman""#));
+    assert!(styles_xml
+        .contains(r#"<w:spacing w:before="0" w:after="240" w:line="360" w:lineRule="auto"/>"#));
     assert!(document_xml
         .contains(r#"<w:pgMar w:top="1701" w:right="1701" w:bottom="1701" w:left="1701""#));
     assert!(document_xml

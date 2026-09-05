@@ -65,21 +65,45 @@ export type ThemeBackgroundSettings = {
 export type ThemeEditorBackgroundSize = ThemeBackgroundSize
 export type ThemeEditorBackgroundSettings = ThemeBackgroundSettings
 
-export type WordExportStyleSettings = {
-  bodyFontFamily: string
-  bodyFontSizePt: number
-  headingFontFamily: string
-  heading1SizePt: number
-  heading2SizePt: number
-  heading3SizePt: number
-  paragraphSpacingAfterPt: number
+export type WordParagraphCommonSettings = {
+  spacingBeforePt: number
+  spacingAfterPt: number
   lineSpacing: number
+  firstLineIndentChars: number
+}
+
+export type WordStyleSettings = {
+  fontFamily: string
+  fontSizePt: number
+  spacingBeforePt: number | null
+  spacingAfterPt: number | null
+  lineSpacing: number | null
+  firstLineIndentChars: number | null
+  alignment: 'left' | 'center' | 'right' | 'justify' | null
+}
+
+export type WordExportStyleSettings = {
+  common: WordParagraphCommonSettings
+  title: WordStyleSettings
+  heading1: WordStyleSettings
+  heading2: WordStyleSettings
+  heading3: WordStyleSettings
+  normal: WordStyleSettings
   codeFontSizePt: number
   pageMarginCm: number
   enableInkscapeForWordExport: boolean
   mermaidExportFormat: 'png' | 'svg' | 'emf'
   inkscapeFallback: 'ask' | 'png' | 'cancel'
   selectedWordTemplateId: string | null
+}
+
+export type WordExportStyleSettingsPatch = Partial<Omit<WordExportStyleSettings, 'common' | 'title' | 'heading1' | 'heading2' | 'heading3' | 'normal'>> & {
+  common?: Partial<WordParagraphCommonSettings>
+  title?: Partial<WordStyleSettings>
+  heading1?: Partial<WordStyleSettings>
+  heading2?: Partial<WordStyleSettings>
+  heading3?: Partial<WordStyleSettings>
+  normal?: Partial<WordStyleSettings>
 }
 
 export type WebDavBackupSettings = {
@@ -120,7 +144,7 @@ export type EditorSettings = {
   language?: LanguageMode
   theme?: Partial<ThemeSettings>
   uiTypography?: Partial<UiTypographySettings>
-  wordExport?: Partial<WordExportStyleSettings>
+  wordExport?: WordExportStyleSettingsPatch
   backup?: Partial<BackupSettings>
   search?: Partial<SearchSettings>
   performance?: Partial<PerformanceSettings>
@@ -224,14 +248,59 @@ const defaultUiTypography: UiTypographySettings = {
 }
 
 const defaultWordExport: WordExportStyleSettings = {
-  bodyFontFamily: 'Times New Roman',
-  bodyFontSizePt: 12,
-  headingFontFamily: 'Calibri',
-  heading1SizePt: 16,
-  heading2SizePt: 15,
-  heading3SizePt: 14,
-  paragraphSpacingAfterPt: 8,
-  lineSpacing: 1.25,
+  // Defaults are copied from /Users/yfhao/Downloads/模板.docx. Style-level
+  // nulls intentionally inherit the corresponding common paragraph value.
+  common: {
+    spacingBeforePt: 0,
+    spacingAfterPt: 0,
+    lineSpacing: 1.15,
+    firstLineIndentChars: 0,
+  },
+  title: {
+    fontFamily: 'SimHei',
+    fontSizePt: 16,
+    spacingBeforePt: null,
+    spacingAfterPt: 0,
+    lineSpacing: 1.15,
+    firstLineIndentChars: 0,
+    alignment: 'center',
+  },
+  heading1: {
+    fontFamily: 'SimSun',
+    fontSizePt: 16,
+    spacingBeforePt: null,
+    spacingAfterPt: 0,
+    lineSpacing: 1.15,
+    firstLineIndentChars: 0,
+    alignment: null,
+  },
+  heading2: {
+    fontFamily: 'SimSun',
+    fontSizePt: 15,
+    spacingBeforePt: null,
+    spacingAfterPt: 0,
+    lineSpacing: 1.15,
+    firstLineIndentChars: 0,
+    alignment: null,
+  },
+  heading3: {
+    fontFamily: 'SimSun',
+    fontSizePt: 12,
+    spacingBeforePt: null,
+    spacingAfterPt: 0,
+    lineSpacing: 1.15,
+    firstLineIndentChars: 0,
+    alignment: null,
+  },
+  normal: {
+    fontFamily: 'SimSun',
+    fontSizePt: 11,
+    spacingBeforePt: 0,
+    spacingAfterPt: 0,
+    lineSpacing: 1.5,
+    firstLineIndentChars: 2,
+    alignment: null,
+  },
   codeFontSizePt: 10.5,
   pageMarginCm: 2.54,
   enableInkscapeForWordExport: false,
@@ -410,14 +479,12 @@ export async function getWordExportStyleSettings(): Promise<WordExportStyleSetti
   const cfg = settings.wordExport ?? {}
   const mermaidExportFormat = cfg.mermaidExportFormat ?? defaultWordExport.mermaidExportFormat
   return {
-    bodyFontFamily: cfg.bodyFontFamily ?? defaultWordExport.bodyFontFamily,
-    bodyFontSizePt: cfg.bodyFontSizePt ?? defaultWordExport.bodyFontSizePt,
-    headingFontFamily: cfg.headingFontFamily ?? defaultWordExport.headingFontFamily,
-    heading1SizePt: cfg.heading1SizePt ?? defaultWordExport.heading1SizePt,
-    heading2SizePt: cfg.heading2SizePt ?? defaultWordExport.heading2SizePt,
-    heading3SizePt: cfg.heading3SizePt ?? defaultWordExport.heading3SizePt,
-    paragraphSpacingAfterPt: cfg.paragraphSpacingAfterPt ?? defaultWordExport.paragraphSpacingAfterPt,
-    lineSpacing: cfg.lineSpacing ?? defaultWordExport.lineSpacing,
+    common: { ...defaultWordExport.common, ...cfg.common },
+    title: { ...defaultWordExport.title, ...cfg.title },
+    heading1: { ...defaultWordExport.heading1, ...cfg.heading1 },
+    heading2: { ...defaultWordExport.heading2, ...cfg.heading2 },
+    heading3: { ...defaultWordExport.heading3, ...cfg.heading3 },
+    normal: { ...defaultWordExport.normal, ...cfg.normal },
     codeFontSizePt: cfg.codeFontSizePt ?? defaultWordExport.codeFontSizePt,
     pageMarginCm: cfg.pageMarginCm ?? defaultWordExport.pageMarginCm,
     enableInkscapeForWordExport:

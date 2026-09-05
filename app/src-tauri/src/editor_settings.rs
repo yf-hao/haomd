@@ -1,7 +1,8 @@
 use crate::haomd_paths::{haomd_config_file, haomd_config_subdir};
 use crate::{
     err_payload, new_trace_id, ok, word::WordExportStyleSettingsCfg,
-    word::WordExportStyleSettingsResolved, ErrorCode, ResultPayload,
+    word::WordExportStyleSettingsResolved, word::WordParagraphCommonSettingsCfg,
+    word::WordParagraphStyleResolved, word::WordStyleSettingsCfg, ErrorCode, ResultPayload,
 };
 use image::ImageFormat;
 use serde::{Deserialize, Serialize};
@@ -302,14 +303,57 @@ pub fn default_ui_typography_settings_cfg() -> UiTypographySettingsCfg {
 
 pub fn default_word_export_style_settings_cfg() -> WordExportStyleSettingsCfg {
     WordExportStyleSettingsCfg {
-        body_font_family: Some("Times New Roman".to_string()),
-        body_font_size_pt: Some(12.0),
-        heading_font_family: Some("Calibri".to_string()),
-        heading1_size_pt: Some(16.0),
-        heading2_size_pt: Some(15.0),
-        heading3_size_pt: Some(14.0),
-        paragraph_spacing_after_pt: Some(8.0),
-        line_spacing: Some(1.25),
+        common: Some(WordParagraphCommonSettingsCfg {
+            spacing_before_pt: Some(0.0),
+            spacing_after_pt: Some(0.0),
+            line_spacing: Some(1.15),
+            first_line_indent_chars: Some(0.0),
+        }),
+        title: Some(WordStyleSettingsCfg {
+            font_family: Some("SimHei".to_string()),
+            font_size_pt: Some(16.0),
+            spacing_before_pt: None,
+            spacing_after_pt: Some(0.0),
+            line_spacing: Some(1.15),
+            first_line_indent_chars: Some(0.0),
+            alignment: Some("center".to_string()),
+        }),
+        heading1: Some(WordStyleSettingsCfg {
+            font_family: Some("SimSun".to_string()),
+            font_size_pt: Some(16.0),
+            spacing_before_pt: None,
+            spacing_after_pt: Some(0.0),
+            line_spacing: Some(1.15),
+            first_line_indent_chars: Some(0.0),
+            alignment: None,
+        }),
+        heading2: Some(WordStyleSettingsCfg {
+            font_family: Some("SimSun".to_string()),
+            font_size_pt: Some(15.0),
+            spacing_before_pt: None,
+            spacing_after_pt: Some(0.0),
+            line_spacing: Some(1.15),
+            first_line_indent_chars: Some(0.0),
+            alignment: None,
+        }),
+        heading3: Some(WordStyleSettingsCfg {
+            font_family: Some("SimSun".to_string()),
+            font_size_pt: Some(12.0),
+            spacing_before_pt: None,
+            spacing_after_pt: Some(0.0),
+            line_spacing: Some(1.15),
+            first_line_indent_chars: Some(0.0),
+            alignment: None,
+        }),
+        normal: Some(WordStyleSettingsCfg {
+            font_family: Some("SimSun".to_string()),
+            font_size_pt: Some(11.0),
+            spacing_before_pt: Some(0.0),
+            spacing_after_pt: Some(0.0),
+            line_spacing: Some(1.5),
+            first_line_indent_chars: Some(2.0),
+            alignment: None,
+        }),
         code_font_size_pt: Some(10.5),
         page_margin_cm: Some(2.54),
         enable_inkscape_for_word_export: Some(false),
@@ -324,50 +368,75 @@ pub fn resolve_word_export_style_settings(
 ) -> WordExportStyleSettingsResolved {
     let default_cfg = default_word_export_style_settings_cfg();
     let cfg = cfg.cloned().unwrap_or(default_cfg.clone());
-    let body_font_family = cfg
-        .body_font_family
-        .filter(|v| !v.trim().is_empty())
-        .or(default_cfg.body_font_family)
-        .unwrap_or_else(|| "Times New Roman".to_string());
-    let heading_font_family = cfg
-        .heading_font_family
-        .filter(|v| !v.trim().is_empty())
-        .or(default_cfg.heading_font_family)
-        .unwrap_or_else(|| "Calibri".to_string());
+    let common_cfg = cfg.common.as_ref().or(default_cfg.common.as_ref());
+    let common_spacing_before_twips =
+        pt_to_twips(common_cfg.and_then(|v| v.spacing_before_pt).unwrap_or(0.0));
+    let common_spacing_after_twips =
+        pt_to_twips(common_cfg.and_then(|v| v.spacing_after_pt).unwrap_or(0.0));
+    let common_line_spacing_twips =
+        line_spacing_to_twips(common_cfg.and_then(|v| v.line_spacing).unwrap_or(1.15));
+    let common_first_line_indent_chars = chars_to_word_chars(
+        common_cfg
+            .and_then(|v| v.first_line_indent_chars)
+            .unwrap_or(0.0),
+    );
+
+    let normal_fallback = default_cfg.normal.as_ref();
+    let title_fallback = default_cfg.title.as_ref();
+    let heading1_fallback = default_cfg.heading1.as_ref();
+    let heading2_fallback = default_cfg.heading2.as_ref();
+    let heading3_fallback = default_cfg.heading3.as_ref();
+    let normal = resolve_word_style(
+        cfg.normal.as_ref(),
+        normal_fallback,
+        common_spacing_before_twips,
+        common_spacing_after_twips,
+        common_line_spacing_twips,
+        common_first_line_indent_chars,
+    );
+    let title = resolve_word_style(
+        cfg.title.as_ref(),
+        title_fallback,
+        common_spacing_before_twips,
+        common_spacing_after_twips,
+        common_line_spacing_twips,
+        common_first_line_indent_chars,
+    );
+    let heading1 = resolve_word_style(
+        cfg.heading1.as_ref(),
+        heading1_fallback,
+        common_spacing_before_twips,
+        common_spacing_after_twips,
+        common_line_spacing_twips,
+        common_first_line_indent_chars,
+    );
+    let heading2 = resolve_word_style(
+        cfg.heading2.as_ref(),
+        heading2_fallback,
+        common_spacing_before_twips,
+        common_spacing_after_twips,
+        common_line_spacing_twips,
+        common_first_line_indent_chars,
+    );
+    let heading3 = resolve_word_style(
+        cfg.heading3.as_ref(),
+        heading3_fallback,
+        common_spacing_before_twips,
+        common_spacing_after_twips,
+        common_line_spacing_twips,
+        common_first_line_indent_chars,
+    );
 
     WordExportStyleSettingsResolved {
-        body_font_family,
-        body_font_size_half_points: pt_to_half_points(
-            cfg.body_font_size_pt
-                .or(default_cfg.body_font_size_pt)
-                .unwrap_or(12.0),
-        ),
-        heading_font_family,
-        heading1_size_half_points: pt_to_half_points(
-            cfg.heading1_size_pt
-                .or(default_cfg.heading1_size_pt)
-                .unwrap_or(16.0),
-        ),
-        heading2_size_half_points: pt_to_half_points(
-            cfg.heading2_size_pt
-                .or(default_cfg.heading2_size_pt)
-                .unwrap_or(14.0),
-        ),
-        heading3_size_half_points: pt_to_half_points(
-            cfg.heading3_size_pt
-                .or(default_cfg.heading3_size_pt)
-                .unwrap_or(13.0),
-        ),
-        paragraph_spacing_after_twips: pt_to_twips(
-            cfg.paragraph_spacing_after_pt
-                .or(default_cfg.paragraph_spacing_after_pt)
-                .unwrap_or(8.0),
-        ),
-        line_spacing_twips: line_spacing_to_twips(
-            cfg.line_spacing
-                .or(default_cfg.line_spacing)
-                .unwrap_or(1.25),
-        ),
+        common_spacing_before_twips,
+        common_spacing_after_twips,
+        common_line_spacing_twips,
+        common_first_line_indent_chars,
+        title,
+        heading1,
+        heading2,
+        heading3,
+        normal,
         code_font_size_half_points: pt_to_half_points(
             cfg.code_font_size_pt
                 .or(default_cfg.code_font_size_pt)
@@ -381,12 +450,72 @@ pub fn resolve_word_export_style_settings(
     }
 }
 
+fn resolve_word_style(
+    cfg: Option<&WordStyleSettingsCfg>,
+    fallback: Option<&WordStyleSettingsCfg>,
+    common_spacing_before_twips: u32,
+    common_spacing_after_twips: u32,
+    common_line_spacing_twips: u32,
+    common_first_line_indent_chars: u32,
+) -> WordParagraphStyleResolved {
+    let style = cfg.or(fallback);
+    let fallback_style = if cfg.is_none() { fallback } else { None };
+    let font_family = style
+        .and_then(|v| v.font_family.as_deref())
+        .filter(|v| !v.trim().is_empty())
+        .or_else(|| fallback_style.and_then(|v| v.font_family.as_deref()))
+        .unwrap_or("Times New Roman")
+        .to_string();
+    let font_size_pt = style
+        .and_then(|v| v.font_size_pt)
+        .or_else(|| fallback_style.and_then(|v| v.font_size_pt))
+        .unwrap_or(11.0);
+    let spacing_before_twips = style
+        .and_then(|v| v.spacing_before_pt)
+        .or_else(|| fallback_style.and_then(|v| v.spacing_before_pt))
+        .map(pt_to_twips)
+        .unwrap_or(common_spacing_before_twips);
+    let spacing_after_twips = style
+        .and_then(|v| v.spacing_after_pt)
+        .or_else(|| fallback_style.and_then(|v| v.spacing_after_pt))
+        .map(pt_to_twips)
+        .unwrap_or(common_spacing_after_twips);
+    let line_spacing_twips = style
+        .and_then(|v| v.line_spacing)
+        .or_else(|| fallback_style.and_then(|v| v.line_spacing))
+        .map(line_spacing_to_twips)
+        .unwrap_or(common_line_spacing_twips);
+    let first_line_indent_chars = style
+        .and_then(|v| v.first_line_indent_chars)
+        .or_else(|| fallback_style.and_then(|v| v.first_line_indent_chars))
+        .map(chars_to_word_chars)
+        .unwrap_or(common_first_line_indent_chars);
+    let alignment = style
+        .and_then(|v| v.alignment.clone())
+        .or_else(|| fallback_style.and_then(|v| v.alignment.clone()))
+        .filter(|v| matches!(v.as_str(), "left" | "center" | "right" | "justify"));
+
+    WordParagraphStyleResolved {
+        font_family,
+        font_size_half_points: pt_to_half_points(font_size_pt),
+        spacing_before_twips,
+        spacing_after_twips,
+        line_spacing_twips,
+        first_line_indent_chars,
+        alignment,
+    }
+}
+
 pub(crate) fn pt_to_half_points(value: f32) -> u32 {
     (value.clamp(8.0, 48.0) * 2.0).round() as u32
 }
 
 pub(crate) fn pt_to_twips(value: f32) -> u32 {
     (value.clamp(0.0, 72.0) * 20.0).round() as u32
+}
+
+pub(crate) fn chars_to_word_chars(value: f32) -> u32 {
+    (value.clamp(0.0, 20.0) * 100.0).round() as u32
 }
 
 pub(crate) fn line_spacing_to_twips(value: f32) -> u32 {
@@ -900,54 +1029,6 @@ async fn load_editor_settings_cfg(app: &AppHandle) -> Result<EditorSettingsCfg, 
                                 changed = true;
                             }
                         }
-                    }
-                }
-            }
-
-            // 为 word_export 填充新增字段的默认值，避免写回时丢失
-            if let Some(ref mut word_export) = cfg.word_export {
-                if let Some(ref default_word_export) = default_cfg.word_export {
-                    if word_export.body_font_family.is_none() {
-                        word_export.body_font_family = default_word_export.body_font_family.clone();
-                        changed = true;
-                    }
-                    if word_export.body_font_size_pt.is_none() {
-                        word_export.body_font_size_pt = default_word_export.body_font_size_pt;
-                        changed = true;
-                    }
-                    if word_export.heading_font_family.is_none() {
-                        word_export.heading_font_family =
-                            default_word_export.heading_font_family.clone();
-                        changed = true;
-                    }
-                    if word_export.heading1_size_pt.is_none() {
-                        word_export.heading1_size_pt = default_word_export.heading1_size_pt;
-                        changed = true;
-                    }
-                    if word_export.heading2_size_pt.is_none() {
-                        word_export.heading2_size_pt = default_word_export.heading2_size_pt;
-                        changed = true;
-                    }
-                    if word_export.heading3_size_pt.is_none() {
-                        word_export.heading3_size_pt = default_word_export.heading3_size_pt;
-                        changed = true;
-                    }
-                    if word_export.paragraph_spacing_after_pt.is_none() {
-                        word_export.paragraph_spacing_after_pt =
-                            default_word_export.paragraph_spacing_after_pt;
-                        changed = true;
-                    }
-                    if word_export.line_spacing.is_none() {
-                        word_export.line_spacing = default_word_export.line_spacing;
-                        changed = true;
-                    }
-                    if word_export.code_font_size_pt.is_none() {
-                        word_export.code_font_size_pt = default_word_export.code_font_size_pt;
-                        changed = true;
-                    }
-                    if word_export.page_margin_cm.is_none() {
-                        word_export.page_margin_cm = default_word_export.page_margin_cm;
-                        changed = true;
                     }
                 }
             }
