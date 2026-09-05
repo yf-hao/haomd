@@ -185,6 +185,11 @@ fn render_table_xml(
     render_state: &mut WordRenderState,
     quote_depth: usize,
 ) -> Result<String, String> {
+    let column_widths = resolve_table_column_widths(
+        rows,
+        table_style,
+        render_state.style_settings.page_margin_twips,
+    );
     let mut rows_xml = String::new();
     for row in rows {
         if row.cells.is_empty() {
@@ -192,6 +197,7 @@ fn render_table_xml(
         }
 
         let mut normalized_cells = String::new();
+        let mut column_index = 0usize;
         for cell in &row.cells {
             let cell_content = render_table_cell_blocks_xml(
                 &cell.blocks,
@@ -209,8 +215,10 @@ fn render_table_xml(
                 cell.col_span,
                 cell.row_span,
                 cell.merge_continue,
+                cell_width_for_span(&column_widths, column_index, cell.col_span),
             );
             normalized_cells.push_str(&format!("<w:tc>{}{}</w:tc>", tc_pr, content));
+            column_index += cell.col_span.unwrap_or(1) as usize;
         }
         rows_xml.push_str(&format!("<w:tr>{}</w:tr>", normalized_cells));
     }
@@ -225,7 +233,7 @@ fn render_table_xml(
         ),
         render_table_properties_xml(table_style, render_state.style_settings.page_margin_twips).0,
         render_table_borders_xml(table_style),
-        render_table_grid_xml(table_style, render_state.style_settings.page_margin_twips),
+        render_table_grid_xml(&column_widths),
         rows_xml
     ))
 }
@@ -236,7 +244,11 @@ fn render_table_borders_xml(table_style: Option<&WordTableStyleCfg>) -> String {
         .map(str::trim)
         .filter(|value| !value.is_empty());
 
-    if matches!(border_color, Some(value) if value.eq_ignore_ascii_case("none")) {
+    let Some(border_color) = border_color else {
+        return String::new();
+    };
+
+    if border_color.eq_ignore_ascii_case("none") {
         return concat!(
             r#"<w:tblBorders>"#,
             r#"<w:top w:val="nil"/>"#,
@@ -250,8 +262,7 @@ fn render_table_borders_xml(table_style: Option<&WordTableStyleCfg>) -> String {
         .to_string();
     }
 
-    let color = border_color.unwrap_or("D9D9D9");
-    let color = crate::escape_xml_attr(color);
+    let color = crate::escape_xml_attr(border_color);
     format!(
         concat!(
             r#"<w:tblBorders>"#,
@@ -273,7 +284,11 @@ pub(crate) fn render_table_properties_xml(
 ) -> (String, u32) {
     let mut tbl_pr = String::new();
     let (table_width, resolved_width_twips) = resolve_table_width_xml(style, page_margin_twips);
+    tbl_pr.push_str(r#"<w:tblStyle w:val="TableGrid"/>"#);
     tbl_pr.push_str(&table_width);
+    tbl_pr.push_str(
+        r#"<w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="1" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>"#,
+    );
 
     if let Some(align) = style
         .and_then(|style| style.align.as_deref())
@@ -301,33 +316,79 @@ fn resolve_table_width_xml(
     (r#"<w:tblW w:w="0" w:type="auto"/>"#.to_string(), body_twips)
 }
 
-fn render_table_grid_xml(style: Option<&WordTableStyleCfg>, page_margin_twips: u32) -> String {
-    let Some(style) = style else {
+fn render_table_grid_xml(column_widths: &[u32]) -> String {
+    if column_widths.is_empty() {
         return String::new();
-    };
-    let Some(column_widths) = style
-        .column_widths
-        .as_ref()
-        .filter(|widths| !widths.is_empty())
-    else {
-        return String::new();
-    };
-
-    let (_, table_width_twips) = resolve_table_width_xml(Some(style), page_margin_twips);
-    let mut cols_xml = String::new();
-    let mut has_any = false;
-    for width in column_widths {
-        if let Some(grid_width) = resolve_table_column_width_twips(width, table_width_twips) {
-            has_any = true;
-            cols_xml.push_str(&format!(r#"<w:gridCol w:w="{}"/>"#, grid_width.max(1)));
-        }
     }
 
-    if has_any {
-        format!("<w:tblGrid>{}</w:tblGrid>", cols_xml)
-    } else {
-        String::new()
+    let cols_xml = column_widths
+        .iter()
+        .map(|width| format!(r#"<w:gridCol w:w="{}"/>"#, (*width).max(1)))
+        .collect::<String>();
+    format!("<w:tblGrid>{}</w:tblGrid>", cols_xml)
+}
+
+fn resolve_table_column_widths(
+    rows: &[WordTableRowCfg],
+    style: Option<&WordTableStyleCfg>,
+    page_margin_twips: u32,
+) -> Vec<u32> {
+    let column_count = rows
+        .iter()
+        .map(|row| {
+            row.cells
+                .iter()
+                .map(|cell| cell.col_span.unwrap_or(1) as usize)
+                .sum::<usize>()
+        })
+        .max()
+        .unwrap_or(0);
+    if column_count == 0 {
+        return Vec::new();
     }
+
+    let (_, table_width_twips) = resolve_table_width_xml(style, page_margin_twips);
+    let configured = style
+        .and_then(|table_style| table_style.column_widths.as_ref())
+        .map(|column_widths| {
+            column_widths
+                .iter()
+                .take(column_count)
+                .map(|width| resolve_table_column_width_twips(width, table_width_twips))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    if configured.len() == column_count && configured.iter().all(Option::is_some) {
+        return configured.into_iter().map(Option::unwrap).collect();
+    }
+
+    let equal_width = (table_width_twips / column_count as u32).max(1);
+    configured
+        .into_iter()
+        .chain(std::iter::repeat(None))
+        .take(column_count)
+        .map(|width| width.unwrap_or(equal_width).max(1))
+        .collect()
+}
+
+fn cell_width_for_span(
+    column_widths: &[u32],
+    column_index: usize,
+    col_span: Option<u32>,
+) -> Option<u32> {
+    let span = col_span.unwrap_or(1) as usize;
+    if column_index >= column_widths.len() {
+        return None;
+    }
+
+    Some(
+        column_widths[column_index..column_index.saturating_add(span).min(column_widths.len())]
+            .iter()
+            .copied()
+            .sum::<u32>()
+            .max(1),
+    )
 }
 
 fn resolve_table_column_width_twips(
@@ -483,8 +544,12 @@ pub(crate) fn render_table_cell_properties_xml(
     col_span: Option<u32>,
     row_span: Option<u32>,
     merge_continue: Option<bool>,
+    width_twips: Option<u32>,
 ) -> String {
     let mut tc_pr = String::new();
+    if let Some(width_twips) = width_twips {
+        tc_pr.push_str(&format!(r#"<w:tcW w:w="{}" w:type="dxa"/>"#, width_twips));
+    }
     if let Some(col_span) = col_span.filter(|value| *value > 1) {
         tc_pr.push_str(&format!(r#"<w:gridSpan w:val="{}"/>"#, col_span));
     }
@@ -2119,6 +2184,8 @@ pub(crate) fn build_word_styles_xml(settings: &WordExportStyleSettingsResolved) 
             r#"<w:style w:type="paragraph" w:styleId="Heading5"><w:name w:val="heading 5"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr>{}<w:b/><w:sz w:val="{}"/></w:rPr></w:style>"#,
             r#"<w:style w:type="paragraph" w:styleId="Heading6"><w:name w:val="heading 6"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:rPr>{}<w:b/><w:sz w:val="{}"/></w:rPr></w:style>"#,
             r#"<w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:basedOn w:val="DefaultParagraphFont"/><w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:rPr><w:color w:val="0563C1"/><w:u w:val="single"/></w:rPr></w:style>"#,
+            r#"<w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/><w:tblPr><w:tblInd w:w="0" w:type="dxa"/><w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="108" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style>"#,
+            r#"<w:style w:type="table" w:styleId="TableGrid"><w:name w:val="Table Grid"/><w:basedOn w:val="TableNormal"/><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:right w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="auto"/></w:tblBorders></w:tblPr></w:style>"#,
             r#"</w:styles>"#
         ),
         settings.paragraph_spacing_after_twips,

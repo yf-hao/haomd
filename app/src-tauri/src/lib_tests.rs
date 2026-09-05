@@ -377,10 +377,15 @@ fn should_generate_editable_word_xml_for_core_blocks() {
     assert!(document_xml.contains(r#"<w:numId w:val="1"/>"#));
     assert!(document_xml.contains("<w:tbl>"));
     assert!(document_xml.contains(r#"<w:gridSpan w:val="2"/>"#));
+    assert!(document_xml.contains(r#"<w:tblStyle w:val="TableGrid"/>"#));
     assert!(document_xml.contains(r#"<w:tblW w:w="0" w:type="auto"/>"#));
+    assert!(document_xml.contains(
+        r#"<w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="1" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>"#,
+    ));
     assert!(document_xml.contains(r#"<w:tblLayout w:type="fixed"/>"#));
     assert!(document_xml
-        .contains(r#"<w:tblGrid><w:gridCol w:w="2808"/><w:gridCol w:w="6552"/></w:tblGrid>"#));
+        .contains(r#"<w:tblGrid><w:gridCol w:w="2708"/><w:gridCol w:w="6318"/></w:tblGrid>"#));
+    assert!(document_xml.contains(r#"<w:tcW w:w="9026" w:type="dxa"/>"#));
     assert!(document_xml.contains(r#"<w:shd w:val="clear" w:color="auto" w:fill="E0F2FE"/>"#));
     assert!(
         document_xml.contains(r#"<w:top w:val="single" w:sz="4" w:space="0" w:color="D1D5DB"/>"#)
@@ -516,8 +521,8 @@ fn should_resolve_percentage_based_image_widths() {
 
 #[test]
 fn should_render_rowspan_as_vertical_merge() {
-    let tc_start = render_table_cell_properties_xml(None, None, Some(2), None);
-    let tc_continue = render_table_cell_properties_xml(None, None, None, Some(true));
+    let tc_start = render_table_cell_properties_xml(None, None, Some(2), None, None);
+    let tc_continue = render_table_cell_properties_xml(None, None, None, Some(true), None);
 
     assert!(tc_start.contains(r#"<w:vMerge w:val="restart"/>"#));
     assert!(tc_continue.contains(r#"<w:vMerge/>"#));
