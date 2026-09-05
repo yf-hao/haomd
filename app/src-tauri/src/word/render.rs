@@ -964,7 +964,7 @@ fn render_inline_runs_xml(runs: &[WordInlineRunCfg], render_state: &mut WordRend
                 let rel_id = next_relationship_id(render_state);
                 render_state.hyperlinks.push((rel_id.clone(), href.clone()));
                 xml.push_str(&format!(
-                    r#"<w:hyperlink r:id="{}" w:history="1"><w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t xml:space="preserve">{}</w:t></w:r></w:hyperlink>"#,
+                    r#"<w:hyperlink r:id="{}" w:history="1"><w:r><w:rPr><w:rStyle w:val="Hyperlink"/><w:lang w:eastAsia="zh-CN"/></w:rPr><w:t xml:space="preserve">{}</w:t></w:r></w:hyperlink>"#,
                     rel_id,
                     crate::escape_xml_text(value)
                 ));
@@ -1027,11 +1027,14 @@ pub(crate) fn render_text_run_xml(options: RenderTextRunOptions<'_>) -> String {
             crate::escape_xml_attr(background_color)
         ));
     }
-    if !code && font_family.is_none() {
-        rpr.push_str(r#"<w:rFonts w:hint="eastAsia"/>"#);
+    let explicit_font_family = font_family.filter(|value| !value.trim().is_empty());
+    if !code && explicit_font_family.is_none() {
+        rpr.push_str(r#"<w:lang w:eastAsia="zh-CN"/>"#);
     }
-    if let Some(font_family) = font_family.filter(|value| !value.trim().is_empty()) {
+    if let Some(font_family) = explicit_font_family {
         rpr.push_str(&render_word_font_family_xml(font_family));
+    } else if !code {
+        rpr.push_str(r#"<w:rFonts w:hint="eastAsia"/>"#);
     }
     if let Some(font_size_half_points) = font_size_pt_to_half_points(font_size_pt) {
         rpr.push_str(&format!(r#"<w:sz w:val="{}"/>"#, font_size_half_points));
@@ -1107,10 +1110,19 @@ fn font_size_pt_to_half_points(size_pt: Option<f32>) -> Option<u32> {
 
 fn render_word_font_family_xml(font_family: &str) -> String {
     let font_family = normalize_word_font_family(font_family);
+    // Times New Roman does not contain Chinese glyphs. Keep it for Latin text,
+    // but use the standard Chinese body font for East Asian text so Word does
+    // not fall back to a platform-dependent font with different line metrics.
+    let east_asia_font = if font_family.eq_ignore_ascii_case("times new roman") {
+        "宋体"
+    } else {
+        font_family.as_str()
+    };
     let escaped = crate::escape_xml_attr(&font_family);
+    let escaped_east_asia = crate::escape_xml_attr(east_asia_font);
     format!(
-        r#"<w:rFonts w:ascii="{0}" w:hAnsi="{0}" w:cs="{0}" w:eastAsia="{0}" w:hint="eastAsia"/>"#,
-        escaped
+        r#"<w:rFonts w:ascii="{0}" w:hAnsi="{0}" w:cs="{0}" w:eastAsia="{1}" w:hint="eastAsia"/><w:lang w:eastAsia="zh-CN"/>"#,
+        escaped, escaped_east_asia
     )
 }
 
