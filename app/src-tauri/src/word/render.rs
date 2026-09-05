@@ -15,7 +15,7 @@ pub(crate) fn build_document_xml_with_section_properties(
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| {
             format!(
-                r#"<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="{}" w:right="{}" w:bottom="{}" w:left="{}" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>"#,
+                r#"<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="{}" w:right="{}" w:bottom="{}" w:left="{}" w:header="708" w:footer="708" w:gutter="0"/><w:cols w:space="708"/><w:docGrid w:linePitch="360"/></w:sectPr>"#,
                 margin, margin, margin, margin
             )
         });
@@ -92,7 +92,14 @@ fn render_word_block(
         )),
         WordBlockCfg::Paragraph { text, style } => Ok(render_paragraph_xml(
             render_inline_runs_xml(text, render_state),
-            resolve_paragraph_style_id(render_state, quote_depth, list_info, false, false),
+            resolve_paragraph_style_id(render_state, quote_depth, list_info, false, false).or_else(
+                || {
+                    render_state
+                        .template_styles
+                        .is_none()
+                        .then(|| "Normal".to_string())
+                },
+            ),
             style.as_ref(),
             quote_depth,
             list_info,
@@ -499,7 +506,13 @@ fn render_word_block_in_table_cell(
             let merged_style = merge_paragraph_style(style.as_ref(), cell_paragraph_style.as_ref());
             Ok(render_paragraph_xml(
                 render_inline_runs_xml(text, render_state),
-                resolve_paragraph_style_id(render_state, quote_depth, list_info, false, false),
+                resolve_paragraph_style_id(render_state, quote_depth, list_info, false, false)
+                    .or_else(|| {
+                        render_state
+                            .template_styles
+                            .is_none()
+                            .then(|| "Normal".to_string())
+                    }),
                 merged_style.as_ref(),
                 quote_depth,
                 list_info,
@@ -1014,6 +1027,9 @@ pub(crate) fn render_text_run_xml(options: RenderTextRunOptions<'_>) -> String {
             crate::escape_xml_attr(background_color)
         ));
     }
+    if !code && font_family.is_none() {
+        rpr.push_str(r#"<w:rFonts w:hint="eastAsia"/>"#);
+    }
     if let Some(font_family) = font_family.filter(|value| !value.trim().is_empty()) {
         rpr.push_str(&render_word_font_family_xml(font_family));
     }
@@ -1093,7 +1109,7 @@ fn render_word_font_family_xml(font_family: &str) -> String {
     let font_family = normalize_word_font_family(font_family);
     let escaped = crate::escape_xml_attr(&font_family);
     format!(
-        r#"<w:rFonts w:ascii="{0}" w:hAnsi="{0}" w:cs="{0}" w:eastAsia="{0}"/>"#,
+        r#"<w:rFonts w:ascii="{0}" w:hAnsi="{0}" w:cs="{0}" w:eastAsia="{0}" w:hint="eastAsia"/>"#,
         escaped
     )
 }
