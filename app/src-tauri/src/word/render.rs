@@ -506,13 +506,10 @@ fn render_word_block_in_table_cell(
             let merged_style = merge_paragraph_style(style.as_ref(), cell_paragraph_style.as_ref());
             Ok(render_paragraph_xml(
                 render_inline_runs_xml(text, render_state),
-                resolve_paragraph_style_id(render_state, quote_depth, list_info, false, false)
-                    .or_else(|| {
-                        render_state
-                            .template_styles
-                            .is_none()
-                            .then(|| "Normal".to_string())
-                    }),
+                // Cell paragraphs must inherit TableGrid's compact paragraph
+                // spacing. Falling back to Normal here adds the body
+                // paragraph's after-spacing to every cell.
+                resolve_paragraph_style_id(render_state, quote_depth, list_info, false, false),
                 merged_style.as_ref(),
                 quote_depth,
                 list_info,
