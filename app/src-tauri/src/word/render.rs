@@ -1297,11 +1297,21 @@ fn convert_mathml_node(node: &MathMlNode) -> String {
         "mtd" => convert_mathml_table_cell(node),
         "mrow" => convert_mathml_row(node),
         "annotation" => String::new(),
-        "mi" | "mn" | "mo" | "mtext" => render_omml_text_run(
+        "mi" => render_omml_text_run(
             &collect_mathml_text(node),
             node.attrs
                 .get("mathvariant")
                 .and_then(|value| mathvariant_to_omml(value)),
+        ),
+        // MathML text, numbers, and operators are upright in the reference
+        // Word document. Without an explicit plain style, OMML applies the
+        // default mathematical italic style to these runs as well.
+        "mn" | "mo" | "mtext" => render_omml_text_run(
+            &collect_mathml_text(node),
+            node.attrs
+                .get("mathvariant")
+                .and_then(|value| mathvariant_to_omml(value))
+                .or(Some("p")),
         ),
         "msup" => {
             let base = node
@@ -1404,6 +1414,14 @@ fn convert_mathml_node(node: &MathMlNode) -> String {
         "munder" => render_nary_or_limit(node, true, false, &[]),
         "mover" if is_mathml_true(node.attrs.get("accent")) => render_mathml_accent(node),
         "mover" => render_nary_or_limit(node, false, true, &[]),
+        // The reference Word document keeps the content of \boxed{} but does
+        // not render its outer border.
+        "menclose" if is_box_notation(node.attrs.get("notation")) => node
+            .children
+            .iter()
+            .map(convert_mathml_node)
+            .collect::<Vec<_>>()
+            .join(""),
         _ => {
             if !node.children.is_empty() {
                 node.children
@@ -1420,6 +1438,12 @@ fn convert_mathml_node(node: &MathMlNode) -> String {
 
 fn is_mathml_true(value: Option<&String>) -> bool {
     matches!(value.map(String::as_str), Some("true") | Some("1"))
+}
+
+fn is_box_notation(value: Option<&String>) -> bool {
+    value
+        .map(|notation| notation.split_whitespace().any(|item| item == "box"))
+        .unwrap_or(false)
 }
 
 fn render_mathml_accent(node: &MathMlNode) -> String {
@@ -1881,7 +1905,7 @@ fn render_omml_text_run(text: &str, mathvariant: Option<&str>) -> String {
         })
         .unwrap_or_default();
     format!(
-        r#"<m:r>{}<m:t>{}</m:t></m:r>"#,
+        r#"<m:r>{}<w:rPr><w:rFonts w:ascii="Cambria Math" w:hAnsi="Cambria Math"/></w:rPr><m:t>{}</m:t></m:r>"#,
         properties,
         crate::escape_xml_text(text)
     )
