@@ -294,49 +294,10 @@ pub(crate) fn render_table_properties_xml(
 }
 
 fn resolve_table_width_xml(
-    style: Option<&WordTableStyleCfg>,
+    _style: Option<&WordTableStyleCfg>,
     page_margin_twips: u32,
 ) -> (String, u32) {
-    let Some(style) = style else {
-        let body_twips = WORD_PAGE_WIDTH_TWIPS.saturating_sub(page_margin_twips * 2);
-        return (r#"<w:tblW w:w="0" w:type="auto"/>"#.to_string(), body_twips);
-    };
-
     let body_twips = WORD_PAGE_WIDTH_TWIPS.saturating_sub(page_margin_twips * 2);
-    let max_percent = style
-        .max_width_percent
-        .filter(|value| value.is_finite() && *value > 0.0)
-        .map(|value| value.min(100.0));
-
-    if let Some(width_percent) = style
-        .width_percent
-        .filter(|value| value.is_finite() && *value > 0.0)
-        .map(|value| value.min(100.0))
-    {
-        let width_percent = max_percent
-            .map(|max| width_percent.min(max))
-            .unwrap_or(width_percent);
-        let pct = ((width_percent * 50.0).round() as u32).max(1);
-        let resolved = ((body_twips as f32) * (width_percent / 100.0)).round() as u32;
-        return (
-            format!(r#"<w:tblW w:w="{}" w:type="pct"/>"#, pct),
-            resolved.max(1),
-        );
-    }
-
-    if let Some(width_px) = style.width_px.filter(|value| *value > 0) {
-        let mut width_twips = width_px.saturating_mul(TWIPS_PER_PX_AT_96_DPI);
-        if let Some(max_percent) = max_percent {
-            let max_twips = ((body_twips as f32) * (max_percent / 100.0)).round() as u32;
-            width_twips = width_twips.min(max_twips.max(1));
-        }
-        let width_twips = width_twips.max(1);
-        return (
-            format!(r#"<w:tblW w:w="{}" w:type="dxa"/>"#, width_twips),
-            width_twips,
-        );
-    }
-
     (r#"<w:tblW w:w="0" w:type="auto"/>"#.to_string(), body_twips)
 }
 

@@ -377,10 +377,10 @@ fn should_generate_editable_word_xml_for_core_blocks() {
     assert!(document_xml.contains(r#"<w:numId w:val="1"/>"#));
     assert!(document_xml.contains("<w:tbl>"));
     assert!(document_xml.contains(r#"<w:gridSpan w:val="2"/>"#));
-    assert!(document_xml.contains(r#"<w:tblW w:w="4000" w:type="pct"/>"#));
+    assert!(document_xml.contains(r#"<w:tblW w:w="0" w:type="auto"/>"#));
     assert!(document_xml.contains(r#"<w:tblLayout w:type="fixed"/>"#));
     assert!(document_xml
-        .contains(r#"<w:tblGrid><w:gridCol w:w="2166"/><w:gridCol w:w="5055"/></w:tblGrid>"#));
+        .contains(r#"<w:tblGrid><w:gridCol w:w="2808"/><w:gridCol w:w="6552"/></w:tblGrid>"#));
     assert!(document_xml.contains(r#"<w:shd w:val="clear" w:color="auto" w:fill="E0F2FE"/>"#));
     assert!(
         document_xml.contains(r#"<w:top w:val="single" w:sz="4" w:space="0" w:color="D1D5DB"/>"#)
