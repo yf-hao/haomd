@@ -623,6 +623,27 @@ fn should_render_square_root_with_hidden_default_degree() {
 }
 
 #[test]
+fn should_render_boxed_mathml_as_word_math_box() {
+    let math_ml = concat!(
+        r#"<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics>"#,
+        r#"<menclose notation="box"><mrow><mtext>含盐率</mtext><mo>=</mo>"#,
+        r#"<mfrac><mtext>盐的质量</mtext><mtext>盐水的质量</mtext></mfrac>"#,
+        r#"<mo>×</mo><mn>100</mn><mo>%</mo></mrow></menclose>"#,
+        r#"</semantics></math>"#
+    );
+
+    let omml = mathml_to_omml(math_ml).expect("boxed MathML should convert");
+
+    assert!(omml.contains(
+        r#"<m:borderBox><m:borderBoxPr><m:ctrlPr><w:rPr><w:rFonts w:ascii="Cambria Math" w:hAnsi="Cambria Math"/><w:i/></w:rPr></m:ctrlPr></m:borderBoxPr><m:e>"#
+    ));
+    assert!(!omml.contains("<m:box>"));
+    assert!(omml.contains("<m:t>含盐率</m:t>"));
+    assert!(omml.contains("<m:f>"));
+    assert!(omml.contains("<m:t>100</m:t>"));
+}
+
+#[test]
 fn should_convert_mathml_alignment_table_to_word_matrix() {
     let math_ml = "<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\"><semantics><mtable rowspacing=\"0.25em\" columnalign=\"right left\" columnspacing=\"0em\"><mtr><mtd></mtd><mtd><mstyle scriptlevel=\"0\" displaystyle=\"true\"><mi>a</mi></mstyle></mtd><mtd><mstyle scriptlevel=\"0\" displaystyle=\"true\"><mrow><mrow></mrow><mo>=</mo><mi>b</mi><mo>+</mo><mi>c</mi></mrow></mstyle></mtd><mtd></mtd><mtd></mtd></mtr><mtr><mtd></mtd><mtd><mstyle scriptlevel=\"0\" displaystyle=\"true\"><mrow><mi>d</mi><mo>+</mo><mi>e</mi></mrow></mstyle></mtd><mtd><mstyle scriptlevel=\"0\" displaystyle=\"true\"><mrow><mrow></mrow><mo>=</mo><mi>f</mi></mrow></mstyle></mtd><mtd></mtd><mtd></mtd></mtr></mtable></semantics></math>";
 
@@ -778,6 +799,7 @@ fn should_apply_custom_word_style_settings_to_styles_and_layout() {
         assets: vec![],
         style_settings: Some(WordExportStyleSettingsCfg {
             common: Some(WordParagraphCommonSettingsCfg {
+                bold: Some(0),
                 spacing_before_pt: Some(0.0),
                 spacing_after_pt: Some(12.0),
                 line_spacing: Some(1.5),
@@ -787,38 +809,38 @@ fn should_apply_custom_word_style_settings_to_styles_and_layout() {
             heading1: Some(WordStyleSettingsCfg {
                 font_family: Some("Times New Roman".to_string()),
                 font_size_pt: Some(20.0),
+                bold: Some(1),
                 spacing_before_pt: None,
                 spacing_after_pt: None,
                 line_spacing: None,
                 first_line_indent_chars: None,
-                alignment: None,
             }),
             heading2: Some(WordStyleSettingsCfg {
                 font_family: Some("Times New Roman".to_string()),
                 font_size_pt: Some(18.0),
+                bold: None,
                 spacing_before_pt: None,
                 spacing_after_pt: None,
                 line_spacing: None,
                 first_line_indent_chars: None,
-                alignment: None,
             }),
             heading3: Some(WordStyleSettingsCfg {
                 font_family: Some("Times New Roman".to_string()),
                 font_size_pt: Some(16.0),
+                bold: None,
                 spacing_before_pt: None,
                 spacing_after_pt: None,
                 line_spacing: None,
                 first_line_indent_chars: None,
-                alignment: None,
             }),
             normal: Some(WordStyleSettingsCfg {
                 font_family: Some("Calibri".to_string()),
                 font_size_pt: Some(11.0),
+                bold: None,
                 spacing_before_pt: None,
                 spacing_after_pt: None,
                 line_spacing: None,
                 first_line_indent_chars: None,
-                alignment: None,
             }),
             code_font_size_pt: Some(9.0),
             page_margin_cm: Some(3.0),

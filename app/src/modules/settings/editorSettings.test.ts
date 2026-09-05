@@ -177,7 +177,6 @@ describe('editorSettings', () => {
                     spacingAfterPt: 0,
                     lineSpacing: 1.5,
                     firstLineIndentChars: 2,
-                    alignment: null,
                 },
             }
         })

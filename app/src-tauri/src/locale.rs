@@ -8,10 +8,8 @@ pub enum MenuLocale {
 }
 
 pub fn detect_system_menu_locale() -> MenuLocale {
-    let locale_value = ["LC_ALL", "LC_MESSAGES", "LANG"]
-        .into_iter()
-        .find_map(|key| std::env::var(key).ok())
-        .unwrap_or_default()
+    let locale_value = sys_locale::get_locale()
+        .unwrap_or_else(|| "en-US".to_string())
         .to_ascii_lowercase();
 
     if locale_value.starts_with("zh") {

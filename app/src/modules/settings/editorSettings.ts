@@ -66,6 +66,7 @@ export type ThemeEditorBackgroundSize = ThemeBackgroundSize
 export type ThemeEditorBackgroundSettings = ThemeBackgroundSettings
 
 export type WordParagraphCommonSettings = {
+  bold: number
   spacingBeforePt: number
   spacingAfterPt: number
   lineSpacing: number
@@ -75,11 +76,11 @@ export type WordParagraphCommonSettings = {
 export type WordStyleSettings = {
   fontFamily: string
   fontSizePt: number
+  bold: number | null
   spacingBeforePt: number | null
   spacingAfterPt: number | null
   lineSpacing: number | null
   firstLineIndentChars: number | null
-  alignment: 'left' | 'center' | 'right' | 'justify' | null
 }
 
 export type WordExportStyleSettings = {
@@ -251,6 +252,7 @@ const defaultWordExport: WordExportStyleSettings = {
   // Defaults are copied from /Users/yfhao/Downloads/模板.docx. Style-level
   // nulls intentionally inherit the corresponding common paragraph value.
   common: {
+    bold: 0,
     spacingBeforePt: 0,
     spacingAfterPt: 0,
     lineSpacing: 1.15,
@@ -259,47 +261,47 @@ const defaultWordExport: WordExportStyleSettings = {
   title: {
     fontFamily: 'SimHei',
     fontSizePt: 16,
+    bold: null,
     spacingBeforePt: null,
     spacingAfterPt: 0,
     lineSpacing: 1.15,
     firstLineIndentChars: 0,
-    alignment: 'center',
   },
   heading1: {
     fontFamily: 'SimSun',
     fontSizePt: 16,
+    bold: null,
     spacingBeforePt: null,
     spacingAfterPt: 0,
     lineSpacing: 1.15,
     firstLineIndentChars: 0,
-    alignment: null,
   },
   heading2: {
     fontFamily: 'SimSun',
     fontSizePt: 15,
+    bold: null,
     spacingBeforePt: null,
     spacingAfterPt: 0,
     lineSpacing: 1.15,
     firstLineIndentChars: 0,
-    alignment: null,
   },
   heading3: {
     fontFamily: 'SimSun',
     fontSizePt: 12,
+    bold: null,
     spacingBeforePt: null,
     spacingAfterPt: 0,
     lineSpacing: 1.15,
     firstLineIndentChars: 0,
-    alignment: null,
   },
   normal: {
     fontFamily: 'SimSun',
     fontSizePt: 11,
+    bold: null,
     spacingBeforePt: 0,
     spacingAfterPt: 0,
     lineSpacing: 1.5,
     firstLineIndentChars: 2,
-    alignment: null,
   },
   codeFontSizePt: 10.5,
   pageMarginCm: 2.54,

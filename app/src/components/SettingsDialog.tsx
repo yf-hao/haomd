@@ -47,7 +47,6 @@ import {
   type UiTypographySettings,
   type WordParagraphCommonSettings,
   type WordExportStyleSettings,
-  type WordStyleSettings,
 } from '../modules/settings/editorSettings'
 import { emitPerformanceSettingsChanged } from '../modules/settings/performanceRuntime'
 import { getWorkspaceMountedRoots } from '../modules/workspace/workspaceMountedRoots'
@@ -753,7 +752,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
       }
 
   const updateWordStyleNumber =
-    (styleId: WordStyleId, key: 'fontSizePt' | 'spacingBeforePt' | 'spacingAfterPt' | 'lineSpacing' | 'firstLineIndentChars') =>
+    (styleId: WordStyleId, key: 'fontSizePt' | 'bold' | 'spacingBeforePt' | 'spacingAfterPt' | 'lineSpacing' | 'firstLineIndentChars') =>
       (event: { target: { value: string } }) => {
         const value = Number(event.target.value)
         if (!Number.isFinite(value)) return
@@ -771,24 +770,13 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   }
 
   const resetWordStyleField =
-    (styleId: WordStyleId, key: 'spacingBeforePt' | 'spacingAfterPt' | 'lineSpacing' | 'firstLineIndentChars') =>
+    (styleId: WordStyleId, key: 'bold' | 'spacingBeforePt' | 'spacingAfterPt' | 'lineSpacing' | 'firstLineIndentChars') =>
       () => {
         setWordExport((prev) => ({
           ...prev,
           [styleId]: { ...prev[styleId], [key]: null },
         }))
       }
-
-  const updateWordStyleAlignment = (styleId: WordStyleId) => (event: ChangeEvent<HTMLSelectElement>) => {
-    const value = event.target.value
-    setWordExport((prev) => ({
-      ...prev,
-      [styleId]: {
-        ...prev[styleId],
-        alignment: value === '' ? null : value as WordStyleSettings['alignment'],
-      },
-    }))
-  }
 
   const renderWordFontSizeSelect = (styleId: WordStyleId) => {
     const value = wordExport[styleId].fontSizePt
@@ -812,6 +800,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
 
   const renderWordCommonAccordion = () => {
     const fields: Array<{ key: keyof WordParagraphCommonSettings; label: string; min: number; max: number; step: number }> = [
+      { key: 'bold', label: t('wordExport.bold'), min: 0, max: 1, step: 1 },
       { key: 'spacingBeforePt', label: t('wordExport.spacingBeforePt'), min: 0, max: 72, step: 0.5 },
       { key: 'spacingAfterPt', label: t('wordExport.spacingAfterPt'), min: 0, max: 72, step: 0.5 },
       { key: 'lineSpacing', label: t('wordExport.lineSpacing'), min: 1, max: 3, step: 0.05 },
@@ -845,12 +834,13 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const renderWordStyleAccordion = (styleId: WordStyleId, label: string) => {
     const style = wordExport[styleId]
     const spacingFields: Array<{
-      key: 'spacingBeforePt' | 'spacingAfterPt' | 'lineSpacing' | 'firstLineIndentChars'
+      key: 'bold' | 'spacingBeforePt' | 'spacingAfterPt' | 'lineSpacing' | 'firstLineIndentChars'
       label: string
       min: number
       max: number
       step: number
     }> = [
+      { key: 'bold', label: t('wordExport.bold'), min: 0, max: 1, step: 1 },
       { key: 'spacingBeforePt', label: t('wordExport.spacingBeforePt'), min: 0, max: 72, step: 0.5 },
       { key: 'spacingAfterPt', label: t('wordExport.spacingAfterPt'), min: 0, max: 72, step: 0.5 },
       { key: 'lineSpacing', label: t('wordExport.lineSpacing'), min: 1, max: 3, step: 0.05 },
@@ -906,16 +896,6 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                 </div>
               )
             })}
-            <div style={fieldGridStyle}>
-              <div className="settings-field-label">{t('wordExport.alignment')}</div>
-              <select className="field-select" value={style.alignment ?? ''} onChange={updateWordStyleAlignment(styleId)}>
-                <option value="">{t('wordExport.inheritAlignment')}</option>
-                <option value="left">{t('wordExport.alignments.left')}</option>
-                <option value="center">{t('wordExport.alignments.center')}</option>
-                <option value="right">{t('wordExport.alignments.right')}</option>
-                <option value="justify">{t('wordExport.alignments.justify')}</option>
-              </select>
-            </div>
           </div>
         )}
       </div>

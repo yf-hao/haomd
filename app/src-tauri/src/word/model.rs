@@ -257,15 +257,16 @@ pub(crate) struct WordAssetRuntime {
 pub(crate) struct WordParagraphStyleResolved {
     pub(crate) font_family: String,
     pub(crate) font_size_half_points: u32,
+    pub(crate) bold: bool,
     pub(crate) spacing_before_twips: u32,
     pub(crate) spacing_after_twips: u32,
     pub(crate) line_spacing_twips: u32,
     pub(crate) first_line_indent_chars: u32,
-    pub(crate) alignment: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct WordExportStyleSettingsResolved {
+    pub(crate) common_bold: bool,
     pub(crate) common_spacing_before_twips: u32,
     pub(crate) common_spacing_after_twips: u32,
     pub(crate) common_line_spacing_twips: u32,
@@ -317,6 +318,8 @@ pub(crate) struct WordTemplateConventionStylesResolved {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WordParagraphCommonSettingsCfg {
     #[serde(default)]
+    pub(crate) bold: Option<u8>,
+    #[serde(default)]
     pub(crate) spacing_before_pt: Option<f32>,
     #[serde(default)]
     pub(crate) spacing_after_pt: Option<f32>,
@@ -334,6 +337,8 @@ pub(crate) struct WordStyleSettingsCfg {
     #[serde(default)]
     pub(crate) font_size_pt: Option<f32>,
     #[serde(default)]
+    pub(crate) bold: Option<u8>,
+    #[serde(default)]
     pub(crate) spacing_before_pt: Option<f32>,
     #[serde(default)]
     pub(crate) spacing_after_pt: Option<f32>,
@@ -341,8 +346,6 @@ pub(crate) struct WordStyleSettingsCfg {
     pub(crate) line_spacing: Option<f32>,
     #[serde(default)]
     pub(crate) first_line_indent_chars: Option<f32>,
-    #[serde(default)]
-    pub(crate) alignment: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

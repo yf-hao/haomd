@@ -1402,14 +1402,27 @@ fn convert_mathml_node(node: &MathMlNode) -> String {
         "munder" => render_nary_or_limit(node, true, false, &[]),
         "mover" if is_mathml_true(node.attrs.get("accent")) => render_mathml_accent(node),
         "mover" => render_nary_or_limit(node, false, true, &[]),
-        // The reference Word document keeps the content of \boxed{} but does
-        // not render its outer border.
-        "menclose" if is_box_notation(node.attrs.get("notation")) => node
-            .children
-            .iter()
-            .map(convert_mathml_node)
-            .collect::<Vec<_>>()
-            .join(""),
+        // MathML represents LaTeX's \boxed{} as menclose[notation="box"].
+        // Use OMML's borderBox element so Word draws a border around the
+        // formula itself instead of treating it as a layout-only box.
+        "menclose" if is_box_notation(node.attrs.get("notation")) => {
+            let body = node
+                .children
+                .iter()
+                .map(convert_mathml_node)
+                .collect::<Vec<_>>()
+                .join("");
+            format!(
+                concat!(
+                    r#"<m:borderBox><m:borderBoxPr>"#,
+                    r#"<m:ctrlPr><w:rPr>"#,
+                    r#"<w:rFonts w:ascii="Cambria Math" w:hAnsi="Cambria Math"/>"#,
+                    r#"<w:i/></w:rPr></m:ctrlPr>"#,
+                    r#"</m:borderBoxPr><m:e>{}</m:e></m:borderBox>"#
+                ),
+                body
+            )
+        }
         _ => {
             if !node.children.is_empty() {
                 node.children
@@ -2208,40 +2221,21 @@ pub(crate) fn build_app_props_xml() -> String {
 }
 
 pub(crate) fn build_word_styles_xml(settings: &WordExportStyleSettingsResolved) -> String {
-    let common_rpr = render_word_font_family_xml(&settings.normal.font_family);
-    let title_rpr = format!(
-        "{}<w:sz w:val=\"{}\"/><w:szCs w:val=\"{}\"/>",
-        render_word_font_family_xml(&settings.title.font_family),
-        settings.title.font_size_half_points,
-        settings.title.font_size_half_points
+    let common_rpr = format!(
+        "{}{}",
+        render_word_font_family_xml(&settings.normal.font_family),
+        render_word_bold_xml(settings.common_bold)
     );
-    let heading1_rpr = format!(
-        "{}<w:b/><w:sz w:val=\"{}\"/><w:szCs w:val=\"{}\"/>",
-        render_word_font_family_xml(&settings.heading1.font_family),
-        settings.heading1.font_size_half_points,
-        settings.heading1.font_size_half_points
-    );
-    let heading2_rpr = format!(
-        "{}<w:b/><w:sz w:val=\"{}\"/><w:szCs w:val=\"{}\"/>",
-        render_word_font_family_xml(&settings.heading2.font_family),
-        settings.heading2.font_size_half_points,
-        settings.heading2.font_size_half_points
-    );
-    let heading3_rpr = format!(
-        "{}<w:b/><w:sz w:val=\"{}\"/><w:szCs w:val=\"{}\"/>",
-        render_word_font_family_xml(&settings.heading3.font_family),
-        settings.heading3.font_size_half_points,
-        settings.heading3.font_size_half_points
-    );
-    let normal_rpr = format!(
-        "{}<w:sz w:val=\"{}\"/><w:szCs w:val=\"{}\"/>",
-        common_rpr, settings.normal.font_size_half_points, settings.normal.font_size_half_points
-    );
-    let normal_ppr = render_word_style_ppr(&settings.normal);
-    let title_ppr = render_word_style_ppr(&settings.title);
-    let heading1_ppr = render_word_style_ppr(&settings.heading1);
-    let heading2_ppr = render_word_style_ppr(&settings.heading2);
-    let heading3_ppr = render_word_style_ppr(&settings.heading3);
+    let title_rpr = render_word_style_rpr(&settings.title);
+    let heading1_rpr = render_word_style_rpr(&settings.heading1);
+    let heading2_rpr = render_word_style_rpr(&settings.heading2);
+    let heading3_rpr = render_word_style_rpr(&settings.heading3);
+    let normal_rpr = render_word_style_rpr(&settings.normal);
+    let normal_ppr = render_word_style_ppr(&settings.normal, None);
+    let title_ppr = render_word_style_ppr(&settings.title, Some("center"));
+    let heading1_ppr = render_word_style_ppr(&settings.heading1, None);
+    let heading2_ppr = render_word_style_ppr(&settings.heading2, None);
+    let heading3_ppr = render_word_style_ppr(&settings.heading3, None);
     format!(
         concat!(
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
@@ -2284,10 +2278,11 @@ pub(crate) fn build_word_styles_xml(settings: &WordExportStyleSettingsResolved) 
     )
 }
 
-fn render_word_style_ppr(style: &crate::word::WordParagraphStyleResolved) -> String {
-    let alignment_xml = style
-        .alignment
-        .as_deref()
+fn render_word_style_ppr(
+    style: &crate::word::WordParagraphStyleResolved,
+    alignment: Option<&str>,
+) -> String {
+    let alignment_xml = alignment
         .map(|value| format!(r#"<w:jc w:val="{}"/>"#, value))
         .unwrap_or_default();
     format!(
@@ -2298,6 +2293,24 @@ fn render_word_style_ppr(style: &crate::word::WordParagraphStyleResolved) -> Str
         style.first_line_indent_chars,
         alignment_xml
     )
+}
+
+fn render_word_style_rpr(style: &crate::word::WordParagraphStyleResolved) -> String {
+    format!(
+        "{}{}<w:sz w:val=\"{}\"/><w:szCs w:val=\"{}\"/>",
+        render_word_font_family_xml(&style.font_family),
+        render_word_bold_xml(style.bold),
+        style.font_size_half_points,
+        style.font_size_half_points
+    )
+}
+
+fn render_word_bold_xml(bold: bool) -> &'static str {
+    if bold {
+        "<w:b/>"
+    } else {
+        ""
+    }
 }
 
 pub(crate) fn build_word_numbering_xml() -> String {

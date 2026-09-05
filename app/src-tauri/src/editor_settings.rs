@@ -304,6 +304,7 @@ pub fn default_ui_typography_settings_cfg() -> UiTypographySettingsCfg {
 pub fn default_word_export_style_settings_cfg() -> WordExportStyleSettingsCfg {
     WordExportStyleSettingsCfg {
         common: Some(WordParagraphCommonSettingsCfg {
+            bold: Some(0),
             spacing_before_pt: Some(0.0),
             spacing_after_pt: Some(0.0),
             line_spacing: Some(1.15),
@@ -312,47 +313,47 @@ pub fn default_word_export_style_settings_cfg() -> WordExportStyleSettingsCfg {
         title: Some(WordStyleSettingsCfg {
             font_family: Some("SimHei".to_string()),
             font_size_pt: Some(16.0),
+            bold: None,
             spacing_before_pt: None,
             spacing_after_pt: Some(0.0),
             line_spacing: Some(1.15),
             first_line_indent_chars: Some(0.0),
-            alignment: Some("center".to_string()),
         }),
         heading1: Some(WordStyleSettingsCfg {
             font_family: Some("SimSun".to_string()),
             font_size_pt: Some(16.0),
+            bold: None,
             spacing_before_pt: None,
             spacing_after_pt: Some(0.0),
             line_spacing: Some(1.15),
             first_line_indent_chars: Some(0.0),
-            alignment: None,
         }),
         heading2: Some(WordStyleSettingsCfg {
             font_family: Some("SimSun".to_string()),
             font_size_pt: Some(15.0),
+            bold: None,
             spacing_before_pt: None,
             spacing_after_pt: Some(0.0),
             line_spacing: Some(1.15),
             first_line_indent_chars: Some(0.0),
-            alignment: None,
         }),
         heading3: Some(WordStyleSettingsCfg {
             font_family: Some("SimSun".to_string()),
             font_size_pt: Some(12.0),
+            bold: None,
             spacing_before_pt: None,
             spacing_after_pt: Some(0.0),
             line_spacing: Some(1.15),
             first_line_indent_chars: Some(0.0),
-            alignment: None,
         }),
         normal: Some(WordStyleSettingsCfg {
             font_family: Some("SimSun".to_string()),
             font_size_pt: Some(11.0),
+            bold: None,
             spacing_before_pt: Some(0.0),
             spacing_after_pt: Some(0.0),
             line_spacing: Some(1.5),
             first_line_indent_chars: Some(2.0),
-            alignment: None,
         }),
         code_font_size_pt: Some(10.5),
         page_margin_cm: Some(2.54),
@@ -371,6 +372,7 @@ pub fn resolve_word_export_style_settings(
     let common_cfg = cfg.common.as_ref().or(default_cfg.common.as_ref());
     let common_spacing_before_twips =
         pt_to_twips(common_cfg.and_then(|v| v.spacing_before_pt).unwrap_or(0.0));
+    let common_bold = common_cfg.and_then(|v| v.bold).unwrap_or(0) != 0;
     let common_spacing_after_twips =
         pt_to_twips(common_cfg.and_then(|v| v.spacing_after_pt).unwrap_or(0.0));
     let common_line_spacing_twips =
@@ -393,6 +395,7 @@ pub fn resolve_word_export_style_settings(
         common_spacing_after_twips,
         common_line_spacing_twips,
         common_first_line_indent_chars,
+        common_bold,
     );
     let title = resolve_word_style(
         cfg.title.as_ref(),
@@ -401,6 +404,7 @@ pub fn resolve_word_export_style_settings(
         common_spacing_after_twips,
         common_line_spacing_twips,
         common_first_line_indent_chars,
+        common_bold,
     );
     let heading1 = resolve_word_style(
         cfg.heading1.as_ref(),
@@ -409,6 +413,7 @@ pub fn resolve_word_export_style_settings(
         common_spacing_after_twips,
         common_line_spacing_twips,
         common_first_line_indent_chars,
+        common_bold,
     );
     let heading2 = resolve_word_style(
         cfg.heading2.as_ref(),
@@ -417,6 +422,7 @@ pub fn resolve_word_export_style_settings(
         common_spacing_after_twips,
         common_line_spacing_twips,
         common_first_line_indent_chars,
+        common_bold,
     );
     let heading3 = resolve_word_style(
         cfg.heading3.as_ref(),
@@ -425,9 +431,11 @@ pub fn resolve_word_export_style_settings(
         common_spacing_after_twips,
         common_line_spacing_twips,
         common_first_line_indent_chars,
+        common_bold,
     );
 
     WordExportStyleSettingsResolved {
+        common_bold,
         common_spacing_before_twips,
         common_spacing_after_twips,
         common_line_spacing_twips,
@@ -457,6 +465,7 @@ fn resolve_word_style(
     common_spacing_after_twips: u32,
     common_line_spacing_twips: u32,
     common_first_line_indent_chars: u32,
+    common_bold: bool,
 ) -> WordParagraphStyleResolved {
     let style = cfg.or(fallback);
     let fallback_style = if cfg.is_none() { fallback } else { None };
@@ -470,6 +479,11 @@ fn resolve_word_style(
         .and_then(|v| v.font_size_pt)
         .or_else(|| fallback_style.and_then(|v| v.font_size_pt))
         .unwrap_or(11.0);
+    let bold = style
+        .and_then(|v| v.bold)
+        .or_else(|| fallback_style.and_then(|v| v.bold))
+        .map(|value| value != 0)
+        .unwrap_or(common_bold);
     let spacing_before_twips = style
         .and_then(|v| v.spacing_before_pt)
         .or_else(|| fallback_style.and_then(|v| v.spacing_before_pt))
@@ -490,19 +504,14 @@ fn resolve_word_style(
         .or_else(|| fallback_style.and_then(|v| v.first_line_indent_chars))
         .map(chars_to_word_chars)
         .unwrap_or(common_first_line_indent_chars);
-    let alignment = style
-        .and_then(|v| v.alignment.clone())
-        .or_else(|| fallback_style.and_then(|v| v.alignment.clone()))
-        .filter(|v| matches!(v.as_str(), "left" | "center" | "right" | "justify"));
-
     WordParagraphStyleResolved {
         font_family,
         font_size_half_points: pt_to_half_points(font_size_pt),
+        bold,
         spacing_before_twips,
         spacing_after_twips,
         line_spacing_twips,
         first_line_indent_chars,
-        alignment,
     }
 }
 
