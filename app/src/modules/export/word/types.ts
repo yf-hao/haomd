@@ -45,6 +45,7 @@ export type WordBlock =
   | { type: 'heading'; level: 1 | 2 | 3 | 4 | 5 | 6; text: InlineRun[]; style?: ParagraphStyle }
   | { type: 'paragraph'; text: InlineRun[]; style?: ParagraphStyle }
   | { type: 'blockquote'; children: WordBlock[] }
+  | { type: 'callout'; children: WordBlock[] }
   | { type: 'math'; content: string; mathMl?: string }
   | { type: 'code'; language?: string; content: string }
   | { type: 'list'; ordered: boolean; items: WordBlock[][] }

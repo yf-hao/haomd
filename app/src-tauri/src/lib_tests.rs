@@ -169,6 +169,46 @@ fn should_build_docx_package_with_chinese_text_and_embedded_image() {
     assert!(document_xml.contains("第一章 绪论"));
     assert!(document_xml.contains("这是一个用于 Windows CI 验证的中文段落。"));
 
+    for part in [
+        "word/settings.xml",
+        "word/fontTable.xml",
+        "word/theme/theme1.xml",
+        "word/webSettings.xml",
+    ] {
+        assert!(archive.by_name(part).is_ok(), "{part} should exist");
+    }
+
+    let mut document_rels_xml = String::new();
+    archive
+        .by_name("word/_rels/document.xml.rels")
+        .expect("document relationships should exist")
+        .read_to_string(&mut document_rels_xml)
+        .expect("document relationships should be readable");
+    assert!(document_rels_xml.contains("relationships/settings"));
+    assert!(document_rels_xml.contains("relationships/fontTable"));
+    assert!(document_rels_xml.contains("relationships/theme"));
+
+    let mut settings_xml = String::new();
+    archive
+        .by_name("word/settings.xml")
+        .expect("settings should exist")
+        .read_to_string(&mut settings_xml)
+        .expect("settings should be readable");
+    assert!(settings_xml.contains("compatibilityMode"));
+
+    let mut font_table_xml = String::new();
+    archive
+        .by_name("word/fontTable.xml")
+        .expect("font table should exist")
+        .read_to_string(&mut font_table_xml)
+        .expect("font table should be readable");
+    for font in ["Symbol", "Courier New", "Wingdings"] {
+        assert!(
+            font_table_xml.contains(&format!(r#"<w:font w:name="{}">"#, font)),
+            "font table should declare {font}"
+        );
+    }
+
     let image_entry = archive
         .by_name("word/media/figure.png")
         .expect("embedded image should exist");
@@ -364,6 +404,10 @@ fn should_generate_editable_word_xml_for_core_blocks() {
 
     let document_xml = fs::read_to_string(work_dir.join("word").join("document.xml"))
         .expect("document xml should exist");
+    let styles_xml = fs::read_to_string(work_dir.join("word").join("styles.xml"))
+        .expect("styles xml should exist");
+    let numbering_xml = fs::read_to_string(work_dir.join("word").join("numbering.xml"))
+        .expect("numbering xml should exist");
     let rels_xml = fs::read_to_string(
         work_dir
             .join("word")
@@ -374,7 +418,15 @@ fn should_generate_editable_word_xml_for_core_blocks() {
 
     assert!(document_xml.contains(r#"<w:pStyle w:val="Heading2"/>"#));
     assert!(document_xml.contains(r#"<w:hyperlink r:id=""#));
-    assert!(document_xml.contains(r#"<w:numId w:val="1"/>"#));
+    assert!(document_xml.contains(r#"<w:pStyle w:val="ListParagraph"/>"#));
+    assert!(document_xml.contains(r#"<w:numId w:val="2"/>"#));
+    assert!(document_xml.contains(r#"<w:ind w:left="567" w:firstLineChars="0" w:hanging="127"/>"#));
+    assert!(styles_xml.contains(
+        r#"<w:style w:type="paragraph" w:styleId="ListParagraph"><w:name w:val="List Paragraph"/><w:basedOn w:val="Normal"/>"#
+    ));
+    assert!(numbering_xml.contains(r#"<w:lvlText w:val="•"/>"#));
+    assert!(!numbering_xml.contains(r#"<w:rFonts w:ascii="Symbol" w:hAnsi="Symbol""#));
+    assert!(numbering_xml.contains(r#"<w:ind w:left="440" w:firstLine="0"/>"#));
     assert!(document_xml.contains("<w:tbl>"));
     assert!(document_xml.contains(r#"<w:gridSpan w:val="2"/>"#));
     assert!(document_xml.contains(r#"<w:tblStyle w:val="TableGrid"/>"#));
@@ -411,6 +463,49 @@ fn should_generate_editable_word_xml_for_core_blocks() {
     ));
 
     let _ = std::fs::remove_dir_all(&work_dir);
+}
+
+#[test]
+fn should_render_markdown_callout_as_reference_style_table() {
+    let work_dir = unique_test_path("haomd-word-callout", None);
+    let payload = WordDocPayloadCfg {
+        title: "Callout".to_string(),
+        blocks: vec![WordBlockCfg::Callout {
+            children: vec![WordBlockCfg::Paragraph {
+                text: vec![WordInlineRunCfg::Text {
+                    value: "小明在科学课上配制了含盐率 16% 的盐水 200克。".to_string(),
+                    bold: None,
+                    italic: None,
+                    code: None,
+                    strike: None,
+                    underline: None,
+                    color: None,
+                    background_color: None,
+                    font_size_pt: None,
+                    font_family: None,
+                }],
+                style: None,
+            }],
+        }],
+        assets: vec![],
+        style_settings: None,
+    };
+
+    build_word_export_workspace(&work_dir, &payload).expect("workspace should build");
+
+    let document_xml = fs::read_to_string(work_dir.join("word").join("document.xml"))
+        .expect("document xml should exist");
+    assert!(document_xml.contains(r#"<w:tblW w:w="0" w:type="auto"/>"#));
+    assert!(document_xml.contains(r#"<w:shd w:val="clear" w:color="auto" w:fill="B8CCE4"/>"#));
+    assert!(
+        document_xml.contains(r#"<w:left w:val="single" w:sz="24" w:space="0" w:color="17365D"/>"#)
+    );
+    assert!(document_xml.contains(r#"<w:vAlign w:val="center"/>"#));
+    assert!(document_xml.contains(r#"<w:ind w:left="0" w:firstLine="0"/>"#));
+    assert!(!document_xml.contains(r#"<w:pBdr>"#));
+    assert!(document_xml.contains("小明在科学课上配制了含盐率"));
+
+    let _ = fs::remove_dir_all(&work_dir);
 }
 
 #[test]
@@ -601,12 +696,21 @@ fn should_include_math_content_in_document_xml() {
 
     assert!(document_xml.contains("<m:oMath>"));
     assert!(document_xml.contains("<m:oMathPara><m:oMath>"));
+    assert_eq!(
+        document_xml.matches("<m:oMathPara>").count(),
+        1,
+        "only the block formula should use oMathPara"
+    );
+    assert_eq!(
+        document_xml.matches("<m:oMath>").count(),
+        2,
+        "the inline and block formulas should both be emitted as math"
+    );
     assert!(document_xml.contains("<m:sSup>"));
     assert!(document_xml.contains("<m:nary>"));
     assert!(document_xml.contains("<m:f>"));
     assert!(document_xml.contains("E"));
     assert!(document_xml.contains("∑"));
-    assert!(document_xml.contains(r#"<m:e><m:sSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sup><m:r><m:t>i</m:t></m:r></m:sup></m:sSup>"#));
     assert!(document_xml.contains(r#"<w:jc w:val="left"/>"#));
 
     let _ = std::fs::remove_dir_all(&work_dir);

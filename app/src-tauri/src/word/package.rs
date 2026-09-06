@@ -29,6 +29,10 @@ fn build_word_export_workspace_internal(
         .map_err(|e| format!("创建 word/_rels 目录失败: {e}"))?;
     std::fs::create_dir_all(dir.join("word").join("media"))
         .map_err(|e| format!("创建 word/media 目录失败: {e}"))?;
+    if template_overlay.is_none() {
+        std::fs::create_dir_all(dir.join("word").join("theme"))
+            .map_err(|e| format!("创建 word/theme 目录失败: {e}"))?;
+    }
 
     let mut content_type_defaults = std::collections::BTreeMap::<String, String>::new();
     content_type_defaults.insert(
@@ -40,7 +44,7 @@ fn build_word_export_workspace_internal(
     let mut render_state = WordRenderState {
         next_rel_id: template_overlay
             .map(|overlay| overlay.next_available_relationship_id)
-            .unwrap_or(3),
+            .unwrap_or(7),
         next_doc_pr_id: 1,
         style_settings: crate::resolve_word_export_style_settings(payload.style_settings.as_ref()),
         template_styles: template_overlay.map(|overlay| overlay.convention_styles.clone()),
@@ -73,14 +77,16 @@ fn build_word_export_workspace_internal(
         template_overlay.map(|overlay| overlay.document_relationships.as_slice()),
         template_overlay.map(|overlay| overlay.styles_relationship_id),
         template_overlay.map(|overlay| overlay.numbering_relationship_id),
+        template_overlay.is_none(),
     );
     let styles_xml = template_overlay
         .and_then(|overlay| overlay.styles_xml.clone())
         .unwrap_or_else(|| build_word_styles_xml(&render_state.style_settings));
-    let numbering_xml = build_word_numbering_xml();
+    let numbering_xml = build_word_numbering_xml(&render_state.style_settings);
     let content_types_xml = build_content_types_xml_with_template(
         &content_type_defaults,
         template_overlay.map(|overlay| &overlay.content_type_overrides),
+        template_overlay.is_none(),
     );
     let root_rels_xml = build_root_relationships_xml();
     let core_xml = build_core_props_xml(&payload.title);
@@ -100,6 +106,28 @@ fn build_word_export_workspace_internal(
         .map_err(|e| format!("写入 styles.xml 失败: {e}"))?;
     std::fs::write(dir.join("word").join("numbering.xml"), numbering_xml)
         .map_err(|e| format!("写入 numbering.xml 失败: {e}"))?;
+    if template_overlay.is_none() {
+        std::fs::write(
+            dir.join("word").join("settings.xml"),
+            build_word_settings_xml(),
+        )
+        .map_err(|e| format!("写入 settings.xml 失败: {e}"))?;
+        std::fs::write(
+            dir.join("word").join("fontTable.xml"),
+            build_word_font_table_xml(&render_state.style_settings),
+        )
+        .map_err(|e| format!("写入 fontTable.xml 失败: {e}"))?;
+        std::fs::write(
+            dir.join("word").join("webSettings.xml"),
+            build_word_web_settings_xml(),
+        )
+        .map_err(|e| format!("写入 webSettings.xml 失败: {e}"))?;
+        std::fs::write(
+            dir.join("word").join("theme").join("theme1.xml"),
+            build_word_theme_xml(),
+        )
+        .map_err(|e| format!("写入 theme1.xml 失败: {e}"))?;
+    }
     std::fs::write(
         dir.join("word").join("_rels").join("document.xml.rels"),
         document_rels_xml,

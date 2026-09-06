@@ -98,6 +98,14 @@ export async function renderWordDiagramAssets(options: {
         continue
       }
 
+      if (block.type === 'callout') {
+        output.push({
+          ...block,
+          children: await replaceBlocks(block.children),
+        })
+        continue
+      }
+
       if (block.type === 'list') {
         output.push({
           ...block,

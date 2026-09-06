@@ -93,6 +93,31 @@ describe('export/word - markdownToWordModel', () => {
     })
   })
 
+  it('should map markdown blockquotes to callouts', () => {
+    const payload = markdownToWordModel(
+      '> 小明在科学课上配制了含盐率 **16%** 的盐水 **200克**。',
+      'Callout',
+    )
+
+    expect(payload.blocks).toEqual([
+      {
+        type: 'callout',
+        children: [
+          {
+            type: 'paragraph',
+            text: [
+              { type: 'text', value: '小明在科学课上配制了含盐率 ' },
+              { type: 'text', value: '16%', bold: true },
+              { type: 'text', value: ' 的盐水 ' },
+              { type: 'text', value: '200克', bold: true },
+              { type: 'text', value: '。' },
+            ],
+          },
+        ],
+      },
+    ])
+  })
+
   it('should resolve reference links and keep inline line breaks', () => {
     const markdown = [
       'Line one  ',
@@ -218,6 +243,38 @@ describe('export/word - markdownToWordModel', () => {
         mathMl: expect.stringContaining('<mfrac>'),
       }),
     )
+  })
+
+  it('should keep single-dollar formulas inline when delimiters are on separate lines', () => {
+    const markdown = [
+      '$',
+      '\\boxed{\\text{含盐率}=\\frac{\\text{盐的质量}}{\\text{盐水的质量}}\\times100\\%}',
+      '$',
+      '即：',
+      '$',
+      '\\boxed{\\text{浓度}=\\frac{\\text{溶质}}{\\text{溶液}}\\times100\\%}',
+      '$',
+    ].join('\n')
+
+    const payload = markdownToWordModel(markdown, 'Inline math')
+
+    expect(payload.blocks).toHaveLength(1)
+    expect(payload.blocks[0]).toEqual({
+      type: 'paragraph',
+      text: [
+        expect.objectContaining({
+          type: 'math',
+          value: '\\boxed{\\text{含盐率}=\\frac{\\text{盐的质量}}{\\text{盐水的质量}}\\times100\\%}',
+          mathMl: expect.stringContaining('<math'),
+        }),
+        { type: 'text', value: ' 即： ' },
+        expect.objectContaining({
+          type: 'math',
+          value: '\\boxed{\\text{浓度}=\\frac{\\text{溶质}}{\\text{溶液}}\\times100\\%}',
+          mathMl: expect.stringContaining('<math'),
+        }),
+      ],
+    })
   })
 
   it('should preserve inline math inside markdown table cells', () => {

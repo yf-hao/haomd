@@ -176,6 +176,11 @@ function applyHeadingStyleToBlock(block: WordBlock, childHeadingBold: boolean): 
         ...block,
         children: block.children.map((child) => applyHeadingStyleToBlock(child, childHeadingBold)),
       }
+    case 'callout':
+      return {
+        ...block,
+        children: block.children.map((child) => applyHeadingStyleToBlock(child, childHeadingBold)),
+      }
     case 'list':
       return {
         ...block,
@@ -270,6 +275,13 @@ function flattenWordBlock(block: WordBlock, depth: number): WordBlock[] {
         return flattenListItemBlocks(item, prefix, depth)
       })
     case 'blockquote':
+      return [
+        {
+          ...block,
+          children: flattenListBlocksForTemplate(block.children),
+        },
+      ]
+    case 'callout':
       return [
         {
           ...block,

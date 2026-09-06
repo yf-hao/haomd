@@ -81,7 +81,7 @@ fn render_word_block(
     list_info: Option<(bool, usize)>,
 ) -> Result<String, String> {
     match block {
-        WordBlockCfg::Heading { level, text, style } => Ok(render_paragraph_xml(
+        WordBlockCfg::Heading { level, text, style } => Ok(render_paragraph_xml_for_state(
             render_inline_runs_xml(text, render_state),
             resolve_heading_style_id(render_state, *level),
             style.as_ref(),
@@ -89,8 +89,9 @@ fn render_word_block(
             list_info,
             false,
             false,
+            render_state,
         )),
-        WordBlockCfg::Paragraph { text, style } => Ok(render_paragraph_xml(
+        WordBlockCfg::Paragraph { text, style } => Ok(render_paragraph_xml_for_state(
             render_inline_runs_xml(text, render_state),
             resolve_paragraph_style_id(render_state, quote_depth, list_info, false, false).or_else(
                 || {
@@ -105,10 +106,11 @@ fn render_word_block(
             list_info,
             false,
             false,
+            render_state,
         )),
         WordBlockCfg::Math { content, math_ml } => {
             let paragraph_style = crate::left_aligned_math_paragraph_style();
-            Ok(render_paragraph_xml(
+            Ok(render_paragraph_xml_for_state(
                 render_math_run_xml(content, math_ml.as_deref(), true),
                 resolve_paragraph_style_id(render_state, quote_depth, list_info, false, true),
                 Some(&paragraph_style),
@@ -116,6 +118,7 @@ fn render_word_block(
                 list_info,
                 false,
                 true,
+                render_state,
             ))
         }
         WordBlockCfg::Code {
@@ -140,8 +143,10 @@ fn render_word_block(
                     paragraph_style: Some(&code_style),
                     quote_depth,
                     list_info,
+                    list_indentation: resolve_list_indentation(render_state, list_info),
                     code_block: true,
                     center: false,
+                    callout_paragraph: false,
                 },
                 render_state.template_styles.is_none(),
             ))
@@ -168,6 +173,7 @@ fn render_word_block(
         WordBlockCfg::Blockquote { children } => {
             render_word_blocks(children, render_state, quote_depth + 1, list_info)
         }
+        WordBlockCfg::Callout { children } => render_callout_xml(children, render_state),
         WordBlockCfg::List { ordered, items } => {
             let mut xml = String::new();
             for item in items {
@@ -184,6 +190,95 @@ fn render_word_block(
             render_table_xml(rows, style.as_ref(), render_state, quote_depth)
         }
     }
+}
+
+fn render_callout_xml(
+    children: &[WordBlockCfg],
+    render_state: &mut WordRenderState,
+) -> Result<String, String> {
+    let content = render_callout_blocks(children, render_state)?;
+    let width_twips = WORD_PAGE_WIDTH_TWIPS.saturating_sub(
+        render_state
+            .style_settings
+            .page_margin_twips
+            .saturating_mul(2),
+    );
+    let content = if content.trim().is_empty() {
+        "<w:p/>".to_string()
+    } else {
+        content
+    };
+
+    Ok(format!(
+        concat!(
+            r#"<w:tbl><w:tblPr>"#,
+            r#"<w:tblStyle w:val="TableGrid"/>"#,
+            r#"<w:tblW w:w="0" w:type="auto"/>"#,
+            r#"<w:tblBorders>"#,
+            r#"<w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/>"#,
+            r#"<w:right w:val="nil"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/>"#,
+            r#"</w:tblBorders>"#,
+            r#"<w:shd w:val="clear" w:color="auto" w:fill="B8CCE4"/>"#,
+            r#"<w:tblCellMar><w:top w:w="108" w:type="dxa"/>"#,
+            r#"<w:left w:w="108" w:type="dxa"/><w:bottom w:w="108" w:type="dxa"/>"#,
+            r#"<w:right w:w="108" w:type="dxa"/></w:tblCellMar>"#,
+            r#"<w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0""#,
+            r#" w:firstColumn="1" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>"#,
+            r#"</w:tblPr><w:tblGrid><w:gridCol w:w="{}"/></w:tblGrid>"#,
+            r#"<w:tr><w:tc><w:tcPr><w:tcW w:w="{}" w:type="dxa"/>"#,
+            r#"<w:tcBorders><w:top w:val="nil"/><w:left w:val="single""#,
+            r#" w:sz="24" w:space="0" w:color="17365D"/>"#,
+            r#"<w:bottom w:val="nil"/><w:right w:val="nil"/></w:tcBorders>"#,
+            r#"<w:shd w:val="clear" w:color="auto" w:fill="B8CCE4"/>"#,
+            r#"<w:vAlign w:val="center"/></w:tcPr>{}</w:tc></w:tr></w:tbl>"#
+        ),
+        width_twips, width_twips, content
+    ))
+}
+
+fn render_callout_blocks(
+    blocks: &[WordBlockCfg],
+    render_state: &mut WordRenderState,
+) -> Result<String, String> {
+    let mut xml = String::new();
+    for block in blocks {
+        match block {
+            WordBlockCfg::Paragraph { text, .. } => {
+                xml.push_str(&render_callout_paragraph_xml(render_inline_runs_xml(
+                    text,
+                    render_state,
+                )));
+            }
+            WordBlockCfg::Heading { text, .. } => {
+                xml.push_str(&render_callout_paragraph_xml(render_inline_runs_xml(
+                    text,
+                    render_state,
+                )));
+            }
+            WordBlockCfg::Blockquote { children } | WordBlockCfg::Callout { children } => {
+                xml.push_str(&render_callout_blocks(children, render_state)?);
+            }
+            _ => xml.push_str(&render_word_block(block, render_state, 0, None)?),
+        }
+    }
+    Ok(xml)
+}
+
+fn render_callout_paragraph_xml(content_xml: String) -> String {
+    render_paragraph_xml_with_code_shading(
+        content_xml,
+        RenderParagraphXmlOptions {
+            style: None,
+            paragraph_style: None,
+            quote_depth: 0,
+            list_info: None,
+            list_indentation: None,
+            code_block: false,
+            center: false,
+            callout_paragraph: true,
+        },
+        false,
+    )
 }
 
 fn render_table_xml(
@@ -433,13 +528,22 @@ fn resolve_paragraph_style_id(
     code_block: bool,
     math_block: bool,
 ) -> Option<String> {
-    let styles = render_state.template_styles.as_ref()?;
     if code_block {
-        return styles.code_block_style_id.clone();
+        return render_state
+            .template_styles
+            .as_ref()
+            .and_then(|styles| styles.code_block_style_id.clone());
     }
     if math_block {
-        return styles.formula_block_style_id.clone();
+        return render_state
+            .template_styles
+            .as_ref()
+            .and_then(|styles| styles.formula_block_style_id.clone());
     }
+    if list_info.is_some() && render_state.template_styles.is_none() {
+        return Some("ListParagraph".to_string());
+    }
+    let styles = render_state.template_styles.as_ref()?;
     if list_info.is_some() {
         return styles
             .list_paragraph_style_id
@@ -492,7 +596,7 @@ fn render_word_block_in_table_cell(
     match block {
         WordBlockCfg::Heading { level, text, style } => {
             let merged_style = merge_paragraph_style(style.as_ref(), cell_paragraph_style.as_ref());
-            Ok(render_paragraph_xml(
+            Ok(render_paragraph_xml_for_state(
                 render_inline_runs_xml(text, render_state),
                 resolve_heading_style_id(render_state, *level),
                 merged_style.as_ref(),
@@ -500,11 +604,12 @@ fn render_word_block_in_table_cell(
                 list_info,
                 false,
                 false,
+                render_state,
             ))
         }
         WordBlockCfg::Paragraph { text, style } => {
             let merged_style = merge_paragraph_style(style.as_ref(), cell_paragraph_style.as_ref());
-            Ok(render_paragraph_xml(
+            Ok(render_paragraph_xml_for_state(
                 render_inline_runs_xml(text, render_state),
                 // Cell paragraphs must inherit TableGrid's compact paragraph
                 // spacing. Falling back to Normal here adds the body
@@ -515,6 +620,7 @@ fn render_word_block_in_table_cell(
                 list_info,
                 false,
                 false,
+                render_state,
             ))
         }
         WordBlockCfg::Blockquote { children } => {
@@ -530,6 +636,7 @@ fn render_word_block_in_table_cell(
             }
             Ok(xml)
         }
+        WordBlockCfg::Callout { children } => render_callout_xml(children, render_state),
         WordBlockCfg::List { ordered, items } => {
             let mut xml = String::new();
             for item in items {
@@ -727,6 +834,7 @@ fn merge_paragraph_style(
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn render_paragraph_xml(
     content_xml: String,
     style: Option<String>,
@@ -743,8 +851,10 @@ pub(crate) fn render_paragraph_xml(
             paragraph_style,
             quote_depth,
             list_info,
+            list_indentation: None,
             code_block,
             center,
+            callout_paragraph: false,
         },
         true,
     )
@@ -755,8 +865,57 @@ struct RenderParagraphXmlOptions<'a> {
     paragraph_style: Option<&'a WordParagraphStyleCfg>,
     quote_depth: usize,
     list_info: Option<(bool, usize)>,
+    list_indentation: Option<(u32, u32)>,
     code_block: bool,
     center: bool,
+    callout_paragraph: bool,
+}
+
+fn render_paragraph_xml_for_state(
+    content_xml: String,
+    style: Option<String>,
+    paragraph_style: Option<&WordParagraphStyleCfg>,
+    quote_depth: usize,
+    list_info: Option<(bool, usize)>,
+    code_block: bool,
+    center: bool,
+    render_state: &WordRenderState,
+) -> String {
+    render_paragraph_xml_with_code_shading(
+        content_xml,
+        RenderParagraphXmlOptions {
+            style,
+            paragraph_style,
+            quote_depth,
+            list_info,
+            list_indentation: resolve_list_indentation(render_state, list_info),
+            code_block,
+            center,
+            callout_paragraph: false,
+        },
+        true,
+    )
+}
+
+fn resolve_list_indentation(
+    render_state: &WordRenderState,
+    list_info: Option<(bool, usize)>,
+) -> Option<(u32, u32)> {
+    let (_, level) = list_info?;
+    let body_indent_twips = word_body_first_line_indent_twips(&render_state.style_settings);
+    let level_indent_twips = u64::from(level as u32).saturating_mul(720);
+    let marker_gap_twips = 127_u64;
+    let numbering_left_twips = body_indent_twips.saturating_add(level_indent_twips);
+    let paragraph_left_twips = numbering_left_twips.saturating_add(marker_gap_twips);
+    Some((
+        paragraph_left_twips.min(u64::from(u32::MAX)) as u32,
+        marker_gap_twips as u32,
+    ))
+}
+
+fn word_body_first_line_indent_twips(settings: &WordExportStyleSettingsResolved) -> u64 {
+    let char_width_twips = u64::from(settings.normal.font_size_half_points.saturating_mul(10));
+    (u64::from(settings.normal.first_line_indent_chars) * char_width_twips + 50) / 100
 }
 
 fn render_paragraph_xml_with_code_shading(
@@ -769,8 +928,10 @@ fn render_paragraph_xml_with_code_shading(
         paragraph_style,
         quote_depth,
         list_info,
+        list_indentation,
         code_block,
         center,
+        callout_paragraph,
     } = options;
     let mut ppr = String::new();
     if let Some(style_id) = style {
@@ -780,12 +941,29 @@ fn render_paragraph_xml_with_code_shading(
         ppr.push_str(&format!(
             r#"<w:numPr><w:ilvl w:val="{}"/><w:numId w:val="{}"/></w:numPr>"#,
             level,
-            if ordered { 2 } else { 1 }
+            if ordered { 1 } else { 2 }
         ));
     }
     if quote_depth > 0 || code_block {
-        let left = (quote_depth as i32 * 720 + if code_block { 360 } else { 0 }).max(0);
-        ppr.push_str(&format!(r#"<w:ind w:left="{}"/>"#, left));
+        let extra_left = quote_depth as u64 * 720 + if code_block { 360 } else { 0 };
+        if let Some((left, hanging)) = list_indentation {
+            ppr.push_str(&format!(
+                r#"<w:ind w:left="{}" w:firstLineChars="0" w:hanging="{}"/>"#,
+                u64::from(left).saturating_add(extra_left),
+                hanging
+            ));
+        } else {
+            ppr.push_str(&format!(r#"<w:ind w:left="{}"/>"#, extra_left));
+        }
+    } else if let Some((left, hanging)) = list_indentation {
+        ppr.push_str(&format!(
+            r#"<w:ind w:left="{}" w:firstLineChars="0" w:hanging="{}"/>"#,
+            left, hanging
+        ));
+    }
+    if callout_paragraph {
+        ppr.push_str(r#"<w:ind w:left="0" w:firstLine="0"/>"#);
+        ppr.push_str(r#"<w:spacing w:before="0" w:after="0" w:line="276" w:lineRule="auto"/>"#);
     }
     if quote_depth > 0 {
         ppr.push_str(
@@ -1365,7 +1543,15 @@ fn convert_mathml_node(node: &MathMlNode) -> String {
                 .get(1)
                 .map(convert_mathml_node)
                 .unwrap_or_default();
-            format!(r#"<m:f><m:num>{}</m:num><m:den>{}</m:den></m:f>"#, num, den)
+            format!(
+                concat!(
+                    r#"<m:f><m:fPr><m:ctrlPr><w:rPr>"#,
+                    r#"<w:rFonts w:ascii="Cambria Math" w:hAnsi="Cambria Math"/>"#,
+                    r#"</w:rPr></m:ctrlPr></m:fPr>"#,
+                    r#"<m:num>{}</m:num><m:den>{}</m:den></m:f>"#
+                ),
+                num, den
+            )
         }
         "msqrt" => {
             let body = node
@@ -1985,7 +2171,7 @@ fn render_image_paragraph_xml(options: RenderImageParagraphOptions<'_>) -> Resul
         cy
     );
 
-    Ok(render_paragraph_xml(
+    Ok(render_paragraph_xml_for_state(
         drawing,
         style_id,
         None,
@@ -1993,6 +2179,7 @@ fn render_image_paragraph_xml(options: RenderImageParagraphOptions<'_>) -> Resul
         list_info,
         false,
         true,
+        render_state,
     ))
 }
 
@@ -2081,6 +2268,7 @@ pub(crate) fn build_document_relationships_xml_with_template(
     template_relationships: Option<&[WordTemplateDocxRelationship]>,
     styles_relationship_id: Option<u32>,
     numbering_relationship_id: Option<u32>,
+    include_standard_parts: bool,
 ) -> String {
     let styles_relationship_id = styles_relationship_id.unwrap_or(1);
     let numbering_relationship_id = numbering_relationship_id.unwrap_or(2);
@@ -2096,6 +2284,20 @@ pub(crate) fn build_document_relationships_xml_with_template(
         r#"<Relationship Id="rId{}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>"#,
         numbering_relationship_id
     ));
+    if include_standard_parts {
+        xml.push_str(
+            r#"<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>"#,
+        );
+        xml.push_str(
+            r#"<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/webSettings" Target="webSettings.xml"/>"#,
+        );
+        xml.push_str(
+            r#"<Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable" Target="fontTable.xml"/>"#,
+        );
+        xml.push_str(
+            r#"<Relationship Id="rId6" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/>"#,
+        );
+    }
     if let Some(template_relationships) = template_relationships {
         for rel in template_relationships {
             xml.push_str(&format!(
@@ -2130,6 +2332,7 @@ pub(crate) fn build_document_relationships_xml_with_template(
 pub(crate) fn build_content_types_xml_with_template(
     defaults: &std::collections::BTreeMap<String, String>,
     template_overrides: Option<&std::collections::BTreeMap<String, String>>,
+    include_standard_parts: bool,
 ) -> String {
     let mut defaults_xml = String::new();
     for (ext, mime) in defaults {
@@ -2147,6 +2350,10 @@ pub(crate) fn build_content_types_xml_with_template(
                 "/word/document.xml"
                     | "/word/styles.xml"
                     | "/word/numbering.xml"
+                    | "/word/settings.xml"
+                    | "/word/webSettings.xml"
+                    | "/word/fontTable.xml"
+                    | "/word/theme/theme1.xml"
                     | "/docProps/core.xml"
                     | "/docProps/app.xml"
             ) {
@@ -2167,13 +2374,113 @@ pub(crate) fn build_content_types_xml_with_template(
             r#"<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>"#,
             r#"<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>"#,
             r#"<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>"#,
+            "{}",
             r#"<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>"#,
             r#"<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>"#,
             "{}",
             r#"</Types>"#
         ),
-        defaults_xml, overrides_xml
+        defaults_xml,
+        if include_standard_parts {
+            concat!(
+                r#"<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>"#,
+                r#"<Override PartName="/word/webSettings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.webSettings+xml"/>"#,
+                r#"<Override PartName="/word/fontTable.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml"/>"#,
+                r#"<Override PartName="/word/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>"#
+            )
+        } else {
+            ""
+        },
+        overrides_xml
     )
+}
+
+pub(crate) fn build_word_settings_xml() -> String {
+    concat!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+        r#"<w:settings xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" "#,
+        r#"xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">"#,
+        r#"<w:zoom w:percent="100"/>"#,
+        r#"<w:proofState w:spelling="clean" w:grammar="clean"/>"#,
+        r#"<w:defaultTabStop w:val="720"/>"#,
+        r#"<w:compat>"#,
+        r#"<w:useFELayout/>"#,
+        r#"<w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/>"#,
+        r#"<w:compatSetting w:name="overrideTableStyleFontSizeAndJustification" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/>"#,
+        r#"<w:compatSetting w:name="enableOpenTypeFeatures" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/>"#,
+        r#"<w:compatSetting w:name="doNotFlipMirrorIndents" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/>"#,
+        r#"<w:compatSetting w:name="differentiateMultirowTableHeaders" w:uri="http://schemas.microsoft.com/office/word" w:val="1"/>"#,
+        r#"<w:compatSetting w:name="useWord2013TrackBottomHyphenation" w:uri="http://schemas.microsoft.com/office/word" w:val="0"/>"#,
+        r#"</w:compat>"#,
+        r#"<m:mathPr><m:mathFont m:val="Cambria Math"/><m:brkBin m:val="before"/><m:brkBinSub m:val="--"/><m:smallFrac m:val="0"/><m:dispDef/><m:lMargin m:val="0"/><m:rMargin m:val="0"/><m:defJc m:val="centerGroup"/><m:wrapIndent m:val="1440"/><m:intLim m:val="subSup"/><m:naryLim m:val="undOvr"/></m:mathPr>"#,
+        r#"<w:themeFontLang w:val="en-CN" w:eastAsia="zh-CN"/>"#,
+        r#"<w:decimalSymbol w:val="."/><w:listSeparator w:val=","/>"#,
+        r#"</w:settings>"#
+    )
+    .to_string()
+}
+
+pub(crate) fn build_word_font_table_xml(settings: &WordExportStyleSettingsResolved) -> String {
+    let mut font_names = std::collections::BTreeSet::new();
+    font_names.insert("Cambria Math".to_string());
+    font_names.insert("Times New Roman".to_string());
+    // Nested list levels use these fonts for their bullet glyphs. They must
+    // be declared in fontTable.xml as well as referenced from numbering.xml.
+    for name in ["Courier New", "Wingdings"] {
+        font_names.insert(name.to_string());
+    }
+    for style in [
+        &settings.title,
+        &settings.heading1,
+        &settings.heading2,
+        &settings.heading3,
+        &settings.normal,
+    ] {
+        font_names.insert(style.font_family.clone());
+    }
+
+    let fonts = font_names
+        .into_iter()
+        .map(|name| {
+            format!(
+                r#"<w:font w:name="{}"><w:family w:val="auto"/><w:pitch w:val="variable"/></w:font>"#,
+                crate::escape_xml_attr(&name)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("");
+    format!(
+        concat!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+            r#"<w:fonts xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">"#,
+            "{}",
+            r#"</w:fonts>"#
+        ),
+        fonts
+    )
+}
+
+pub(crate) fn build_word_web_settings_xml() -> String {
+    concat!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+        r#"<w:webSettings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">"#,
+        r#"<w:optimizeForBrowser/><w:allowPNG/>"#,
+        r#"</w:webSettings>"#
+    )
+    .to_string()
+}
+
+pub(crate) fn build_word_theme_xml() -> String {
+    concat!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+        r#"<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office Theme">"#,
+        r#"<a:themeElements>"#,
+        r#"<a:clrScheme name="Office"><a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="1F497D"/></a:dk2><a:lt2><a:srgbClr val="EEECE1"/></a:lt2><a:accent1><a:srgbClr val="4F81BD"/></a:accent1><a:accent2><a:srgbClr val="C0504D"/></a:accent2><a:accent3><a:srgbClr val="9BBB59"/></a:accent3><a:accent4><a:srgbClr val="8064A2"/></a:accent4><a:accent5><a:srgbClr val="4BACC6"/></a:accent5><a:accent6><a:srgbClr val="F79646"/></a:accent6><a:hlink><a:srgbClr val="0000FF"/></a:hlink><a:folHlink><a:srgbClr val="800080"/></a:folHlink></a:clrScheme>"#,
+        r#"<a:fontScheme name="Office"><a:majorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme>"#,
+        r#"<a:fmtScheme name="Office"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln w="6350" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/></a:ln><a:ln w="12700" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/></a:ln><a:ln w="19050" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme>"#,
+        r#"</a:themeElements><a:objectDefaults/><a:extraClrSchemeLst/></a:theme>"#
+    )
+    .to_string()
 }
 
 pub(crate) fn build_root_relationships_xml() -> String {
@@ -2242,6 +2549,7 @@ pub(crate) fn build_word_styles_xml(settings: &WordExportStyleSettingsResolved) 
             r#"<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">"#,
             r#"<w:docDefaults><w:rPrDefault><w:rPr>{}</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:before="{}" w:after="{}" w:line="{}" w:lineRule="auto"/><w:ind w:firstLineChars="{}"/></w:pPr></w:pPrDefault></w:docDefaults>"#,
             r#"<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/>{}<w:rPr>{}</w:rPr></w:style>"#,
+            r#"<w:style w:type="paragraph" w:styleId="ListParagraph"><w:name w:val="List Paragraph"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="34"/><w:qFormat/><w:pPr><w:contextualSpacing/></w:pPr></w:style>"#,
             r#"<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="10"/><w:qFormat/>{}<w:rPr>{}</w:rPr></w:style>"#,
             r#"<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/>{}<w:rPr>{}</w:rPr></w:style>"#,
             r#"<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/>{}<w:rPr>{}</w:rPr></w:style>"#,
@@ -2313,22 +2621,71 @@ fn render_word_bold_xml(bold: bool) -> &'static str {
     }
 }
 
-pub(crate) fn build_word_numbering_xml() -> String {
-    concat!(
-        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
-        r#"<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">"#,
-        r#"<w:abstractNum w:abstractNumId="0"><w:multiLevelType w:val="hybridMultilevel"/>"#,
-        r#"<w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl>"#,
-        r#"<w:lvl w:ilvl="1"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="◦"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="1440" w:hanging="360"/></w:pPr></w:lvl>"#,
-        r#"<w:lvl w:ilvl="2"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="▪"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="2160" w:hanging="360"/></w:pPr></w:lvl>"#,
-        r#"</w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>"#,
-        r#"<w:abstractNum w:abstractNumId="1"><w:multiLevelType w:val="hybridMultilevel"/>"#,
-        r#"<w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl>"#,
-        r#"<w:lvl w:ilvl="1"><w:start w:val="1"/><w:numFmt w:val="lowerLetter"/><w:lvlText w:val="%2."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="1440" w:hanging="360"/></w:pPr></w:lvl>"#,
-        r#"<w:lvl w:ilvl="2"><w:start w:val="1"/><w:numFmt w:val="lowerRoman"/><w:lvlText w:val="%3."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="2160" w:hanging="360"/></w:pPr></w:lvl>"#,
-        r#"</w:abstractNum><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>"#
+pub(crate) fn build_word_numbering_xml(settings: &WordExportStyleSettingsResolved) -> String {
+    const BULLET_LEVELS: [(&str, Option<&str>); 3] = [
+        ("•", None),
+        ("o", Some("Courier New")),
+        ("", Some("Wingdings")),
+    ];
+
+    let body_indent_twips = word_body_first_line_indent_twips(settings);
+    let bullet_levels = BULLET_LEVELS
+        .iter()
+        .enumerate()
+        .map(|(level, (marker, font))| {
+            let left = body_indent_twips.saturating_add(level as u64 * 720);
+            format!(
+                concat!(
+                    r#"<w:lvl w:ilvl="{}"><w:start w:val="1"/><w:numFmt w:val="bullet"/>"#,
+                    r#"<w:lvlText w:val="{}"/><w:lvlJc w:val="left"/>"#,
+                    r#"<w:pPr><w:ind w:left="{}" w:firstLine="0"/></w:pPr>"#,
+                    r#"{}</w:lvl>"#
+                ),
+                level,
+                marker,
+                left,
+                font.map(|name| format!(
+                    r#"<w:rPr><w:rFonts w:ascii="{}" w:hAnsi="{}" w:hint="default"/></w:rPr>"#,
+                    name, name
+                ))
+                .unwrap_or_default()
+            )
+        })
+        .collect::<String>();
+
+    let ordered_levels = ["decimal", "lowerLetter", "lowerRoman"]
+        .iter()
+        .enumerate()
+        .map(|(level, format_name)| {
+            let left = body_indent_twips.saturating_add(level as u64 * 720);
+            format!(
+                concat!(
+                    r#"<w:lvl w:ilvl="{}"><w:start w:val="1"/><w:numFmt w:val="{}"/>"#,
+                    r#"<w:lvlText w:val="%{}."/><w:lvlJc w:val="left"/>"#,
+                    r#"<w:pPr><w:ind w:left="{}" w:firstLine="0"/></w:pPr></w:lvl>"#
+                ),
+                level,
+                format_name,
+                level + 1,
+                left
+            )
+        })
+        .collect::<String>();
+
+    format!(
+        concat!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+            r#"<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">"#,
+            r#"<w:abstractNum w:abstractNumId="0"><w:multiLevelType w:val="hybridMultilevel"/>"#,
+            "{}",
+            r#"</w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>"#,
+            r#"<w:abstractNum w:abstractNumId="1"><w:multiLevelType w:val="hybridMultilevel"/>"#,
+            "{}",
+            r#"</w:abstractNum><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num>"#,
+            r#"</w:numbering>"#
+        ),
+        ordered_levels, bullet_levels
     )
-    .to_string()
 }
 
 pub(crate) fn detect_asset_extension(

@@ -115,7 +115,7 @@ function transformBlock(node: Content, ctx: ParseContext): WordBlock[] {
       }]
     case 'blockquote':
       return [{
-        type: 'blockquote',
+        type: 'callout',
         children: transformBlocks(node.children, ctx),
       }]
     case 'math':
@@ -226,10 +226,15 @@ function transformInline(nodes: PhrasingContent[], ctx: ParseContext, marks: Tex
     switch (node.type) {
       case 'text':
         if (node.value) {
+          // A plain newline in a Markdown paragraph is a soft line break. It
+          // should collapse to a space in Word, just as it does in rendered
+          // Markdown. Explicit hard breaks are represented by the `break`
+          // node below and remain real Word line breaks.
+          const value = node.value.replace(/\r\n?/g, '\n').replace(/\n/g, ' ')
           if (htmlLinkHref) {
-            runs.push({ type: 'link', value: node.value, href: htmlLinkHref })
+            runs.push({ type: 'link', value, href: htmlLinkHref })
           } else {
-            runs.push({ type: 'text', value: node.value, ...mergeMarks(marks, htmlMarks) })
+            runs.push({ type: 'text', value, ...mergeMarks(marks, htmlMarks) })
           }
         }
         break
@@ -246,7 +251,14 @@ function transformInline(nodes: PhrasingContent[], ctx: ParseContext, marks: Tex
         runs.push({ type: 'text', value: node.value, ...mergeMarks(marks, htmlMarks, { code: true }) })
         break
       case 'inlineMath':
-        runs.push({ type: 'math', value: node.value, mathMl: renderMathMl(node.value, false) })
+        {
+          const value = normalizeInlineMathExpression(node.value)
+        runs.push({
+          type: 'math',
+          value,
+          mathMl: renderMathMl(value, false),
+        })
+        }
         break
       case 'break':
         runs.push({ type: 'text', value: '\n', ...mergeMarks(marks, htmlMarks) })
@@ -481,4 +493,11 @@ function renderMathMl(expression: string, displayMode: boolean): string | undefi
   } catch {
     return undefined
   }
+}
+
+function normalizeInlineMathExpression(expression: string): string {
+  return expression
+    .replace(/\r\n?/g, '\n')
+    .replace(/\n/g, ' ')
+    .trim()
 }

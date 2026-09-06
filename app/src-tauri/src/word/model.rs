@@ -46,6 +46,9 @@ pub(crate) enum WordBlockCfg {
     Blockquote {
         children: Vec<WordBlockCfg>,
     },
+    Callout {
+        children: Vec<WordBlockCfg>,
+    },
     Math {
         content: String,
         #[serde(default)]
