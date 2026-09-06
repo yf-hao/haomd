@@ -5,7 +5,17 @@ import remarkMath from 'remark-math'
 import katex from 'katex'
 import { replaceTextColorSyntaxWithHtml } from '../../markdown/extensions/colorMark'
 import { normalizeLatexDelimiters } from '../../markdown/normalizeLatexDelimiters'
-import type { Root, Content, Image, List, ListItem, PhrasingContent, TableCell, TableRow } from 'mdast'
+import type {
+  Root,
+  Content,
+  Image,
+  ImageReference,
+  List,
+  ListItem,
+  PhrasingContent,
+  TableCell,
+  TableRow,
+} from 'mdast'
 import { toString } from 'mdast-util-to-string'
 import type { InlineRun, WordAsset, WordBlock, WordDocPayload } from './types'
 import { htmlFragmentToBlocks, htmlFragmentToInlineRuns, type HtmlWordModelContext } from './htmlToWordModel'
@@ -105,14 +115,7 @@ function transformBlock(node: Content, ctx: ParseContext): WordBlock[] {
         text: transformInline(node.children, ctx),
       }]
     case 'paragraph':
-      if (node.children.length === 1 && node.children[0]?.type === 'image') {
-        const imageBlock = imageNodeToBlock(node.children[0], ctx)
-        return imageBlock ? [imageBlock] : []
-      }
-      return [{
-        type: 'paragraph',
-        text: transformInline(node.children, ctx),
-      }]
+      return paragraphToWordBlocks(node.children, ctx)
     case 'blockquote':
       return [{
         type: 'callout',
@@ -175,8 +178,37 @@ function tableRowToModel(row: TableRow, ctx: ParseContext): { cells: { blocks: W
 }
 
 function tableCellToBlocks(cell: TableCell, ctx: ParseContext): WordBlock[] {
-  const text = transformInline(cell.children, ctx)
-  return text.length > 0 ? [{ type: 'paragraph', text }] : []
+  return paragraphToWordBlocks(cell.children, ctx)
+}
+
+function paragraphToWordBlocks(
+  nodes: PhrasingContent[],
+  ctx: ParseContext,
+): WordBlock[] {
+  const blocks: WordBlock[] = []
+  let inlineNodes: PhrasingContent[] = []
+
+  const flushInlineNodes = () => {
+    if (inlineNodes.length === 0) return
+    const text = transformInline(inlineNodes, ctx)
+    if (text.length > 0) {
+      blocks.push({ type: 'paragraph', text })
+    }
+    inlineNodes = []
+  }
+
+  for (const node of nodes) {
+    const imageBlock = imagePhrasingNodeToBlock(node, ctx)
+    if (imageBlock) {
+      flushInlineNodes()
+      blocks.push(imageBlock)
+      continue
+    }
+    inlineNodes.push(node)
+  }
+
+  flushInlineNodes()
+  return blocks
 }
 
 function paragraphToAlignedTabRows(node: Content): ReturnType<typeof splitAlignedTabInlineNodes<PhrasingContent>> {
@@ -427,20 +459,42 @@ function htmlContextFromParseContext(ctx: ParseContext): HtmlWordModelContext {
   }
 }
 
+function imagePhrasingNodeToBlock(
+  node: PhrasingContent,
+  ctx: ParseContext,
+): WordBlock | null {
+  if (node.type === 'image') return imageNodeToBlock(node, ctx)
+  if (node.type === 'imageReference') return imageReferenceNodeToBlock(node, ctx)
+  return null
+}
+
 function imageNodeToBlock(node: Image, ctx: ParseContext): WordBlock | null {
-  if (!node.url) return null
+  return createImageBlock(node.url, node.alt, ctx)
+}
+
+function imageReferenceNodeToBlock(node: ImageReference, ctx: ParseContext): WordBlock | null {
+  const sourcePath = ctx.definitions.get(normalizeIdentifier(node.identifier))
+  return createImageBlock(sourcePath, node.alt, ctx)
+}
+
+function createImageBlock(
+  sourcePath: string | undefined,
+  alt: string | null | undefined,
+  ctx: ParseContext,
+): WordBlock | null {
+  if (!sourcePath) return null
 
   const assetId = `asset_${ctx.assetCounter++}`
   ctx.assets.push({
     id: assetId,
     kind: 'image',
-    sourcePath: node.url,
+    sourcePath,
   })
 
   return {
     type: 'image',
     assetId,
-    alt: node.alt || undefined,
+    alt: alt || undefined,
   }
 }
 

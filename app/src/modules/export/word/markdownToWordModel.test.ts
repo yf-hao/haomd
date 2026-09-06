@@ -118,6 +118,26 @@ describe('export/word - markdownToWordModel', () => {
     ])
   })
 
+  it('should export images embedded in paragraphs without requiring blank lines', () => {
+    const payload = markdownToWordModel(
+      '前面的说明。\n![图片](images/image_分数与率_3.png)\n后面的说明。',
+      'Images without blank lines',
+    )
+
+    expect(payload.blocks.map((block) => block.type)).toEqual([
+      'paragraph',
+      'image',
+      'paragraph',
+    ])
+    expect(payload.assets).toEqual([
+      {
+        id: 'asset_0',
+        kind: 'image',
+        sourcePath: 'images/image_分数与率_3.png',
+      },
+    ])
+  })
+
   it('should resolve reference links and keep inline line breaks', () => {
     const markdown = [
       'Line one  ',
