@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.13.0] - 2026-09-06
+
+### 中文
+
+本次更新重点完善 Word 导出、AI 会话管理和长内容渲染体验。
+
+#### 主要更新
+
+* **Word 导出增强**：完善普通文档和模板文档的段落、字体、表格、公式、代码块、Callout 及占位符处理。
+* **公式与表格优化**：恢复公式方框导出，改善行内公式、表格自动宽度、单元格间距和中文字体回退效果。
+* **图片导出修复**：支持段落中紧邻文本的 Markdown 图片以及图片引用导出到 Word。
+* **AI 会话管理**：支持当前会话内容的历史导入导出，使用当前会话标题命名导出文件，并排除系统提示词。
+* **AI 交互优化**：改善提示词角色保持、选中内容询问和普通文本发送按钮的可用性。
+* **长内容体验**：优化 AI 会话历史和 Markdown 内容较多时的渲染、滚动和切换稳定性。
+* **界面与发布修复**：清理重复文件导出入口，完善应用品牌、菜单状态和跨平台构建相关问题。
+
+### English
+
+This release improves Word export, AI session management, and rendering performance for long content.
+
+#### Key Updates
+
+* **Word Export Improvements**: Refined paragraphs, fonts, tables, formulas, code blocks, callouts, and template placeholder handling.
+* **Formula and Table Rendering**: Restored boxed formula export and improved inline formulas, automatic table width, cell spacing, and CJK font fallback.
+* **Image Export Fix**: Markdown images embedded directly in paragraphs and image references can now be exported to Word.
+* **AI Session Management**: Added current-session history import and export, current-session title based filenames, and system prompt exclusion.
+* **AI Interaction Improvements**: Improved prompt role preservation, selection-based questions, and plain-text send button availability.
+* **Long Content Experience**: Improved rendering, scrolling, and switching stability for large AI conversations and Markdown documents.
+* **UI and Release Fixes**: Removed duplicate file export entries and refined branding, menu state, and cross-platform release behavior.
+
 ## [v0.12.9] - 2026-07-25
 
 ### 中文

@@ -1,110 +1,159 @@
-# 发布流程
+# HaoMD 发布流程
 
-这份文档记录 HaoMD 的标准发布步骤，后续每次发版都按这里执行。
+本文档记录 HaoMD 的正式发布流程。项目发布由 GitHub Actions 自动完成。
 
-## 适用范围
+## 一、发布机制
 
-- 适用于从 `main` 分支触发的正式发布
-- 适用于 `app/package.json` 中的版本号发布
-- 适用于 GitHub Actions 自动构建和上传安装包
+`.github/workflows/release.yml` 监听 `main` 分支的 push：
 
-## 发布前准备
+1. 读取 `app/package.json` 中的版本号。
+2. 生成对应标签 `v<version>`。
+3. 检查远端是否已经存在该标签。
+4. 如果标签不存在，提取 `CHANGELOG.md` 顶部的版本说明。
+5. 构建各平台安装包并创建 GitHub Release。
 
-1. 确认本次改动已经完成并通过自测。
-2. 更新 `CHANGELOG.md` 顶部的最新版本块，确保它是完整的发布说明。
-3. 将 `app/package.json` 的版本号更新到目标版本，例如 `0.12.4`。
-4. 同步 `app/src-tauri/Cargo.toml` 的版本号。
+因此，发布新版本的核心操作是：**更新版本号和变更日志，然后将提交推送到 `main` 分支**。
 
-### 同步版本号
+## 二、版本号规则
 
-在 `app/` 目录下执行：
+- 修复问题或小幅优化：递增补丁版本，例如 `0.12.9` → `0.12.10`。
+- 增加较大功能或包含较大行为变化：递增次版本，例如 `0.12.9` → `0.13.0`。
+- 不要提前手动创建对应的 Git 标签，否则 CI 会认为该版本已经发布并跳过发布。
+
+## 三、发布前准备
+
+### 1. 更新版本号
+
+在 `app` 目录执行：
+
+```bash
+cd app
+npm version 0.13.0 --no-git-tag-version
+```
+
+将示例中的 `0.13.0` 替换为实际发布版本。该命令会更新 `app/package.json` 和 `app/package-lock.json`，且不会自动创建 Git 标签。
+
+### 2. 同步 Tauri 版本
 
 ```bash
 npm run sync-version
 ```
 
-这个脚本会把 `app/package.json` 的 `version` 同步到 `app/src-tauri/Cargo.toml`。
+该脚本会把 `app/package.json` 的版本号同步到 `app/src-tauri/Cargo.toml`。
 
-## 发布步骤
+### 3. 更新变更日志
 
-1. 检查版本文件和 changelog。
-2. 提交改动到 `main` 分支。
-3. 推送到远端仓库。
-4. 等待 GitHub Actions 的 `Release` workflow 自动运行。
+在根目录 `CHANGELOG.md` 顶部增加最新版本块，格式如下：
 
-### 推荐提交内容
+```md
+## [v0.13.0] - 2026-09-06
 
-- `app/package.json`
-- `app/src-tauri/Cargo.toml`
-- `app/src-tauri/Cargo.lock`
-- `CHANGELOG.md`
-- 其他本次发布相关的代码文件
+### 中文
 
-### 推送命令
+本次更新说明。
+
+#### 主要更新
+
+* **功能或修复**：具体说明。
+
+### English
+
+Release summary.
+
+#### Key Updates
+
+* **Feature or Fix**: Details.
+```
+
+最新版本块必须放在文件最上方。发布脚本 `scripts/extract-changelog.mjs` 只会提取顶部的版本块作为 GitHub Release 的说明。
+
+## 四、本地检查
+
+在提交前执行：
 
 ```bash
-git add app/package.json app/src-tauri/Cargo.toml app/src-tauri/Cargo.lock CHANGELOG.md RELEASE.md
-git commit -m "Prepare v0.12.4 release"
+npm run type-check --prefix app
+npm run test:run --prefix app
+npm run build --prefix app
+```
+
+如果需要验证完整的 Tauri 构建，再执行：
+
+```bash
+npm run tauri:build --prefix app
+```
+
+## 五、提交并推送
+
+确认版本文件、变更日志和代码都正确后：
+
+```bash
+git status
+git add app/package.json app/package-lock.json app/src-tauri/Cargo.toml CHANGELOG.md
+git commit -m "chore: release v0.13.0"
 git push origin main
 ```
 
-## GitHub Actions 发布逻辑
+如果 `app/src-tauri/Cargo.lock` 因构建或依赖变化发生修改，也应一并提交：
 
-仓库的 `.github/workflows/release.yml` 会在 `main` 分支 push 后执行：
-
-1. 读取 `app/package.json` 的版本号。
-2. 检查对应的 tag `v<version>` 是否已存在。
-3. 如果 tag 不存在，提取 `CHANGELOG.md` 顶部版本块。
-4. 使用 `tauri-apps/tauri-action` 构建并创建 GitHub Release。
-
-### 产物说明
-
-- macOS Apple Silicon: `*_aarch64.dmg`
-- macOS Intel: `*_x64.dmg`
-- Windows: `*_x64-setup.exe`
-- Linux Debian/Ubuntu: `*.deb`
-- Linux AppImage: `*.AppImage`
-
-## 发布检查清单
-
-- `app/package.json` 版本号已更新
-- `app/src-tauri/Cargo.toml` 版本号已同步
-- `app/src-tauri/Cargo.lock` 已随同步更新
-- `CHANGELOG.md` 顶部版本说明完整
-- 工作区没有不相关的脏改动
-- 已提交并推送到 `main`
-- GitHub Actions 发布成功
-
-## 常见问题
-
-### 1. 为什么没有触发 Release
-
-- 先检查 `app/package.json` 的版本号是否真的发生变化。
-- 再检查远端是否已经存在同名 tag `v<version>`。
-- Workflow 只会在 `main` 分支 push 后自动执行。
-
-### 2. 为什么 release body 是空的
-
-- `scripts/extract-changelog.mjs` 只会提取 `CHANGELOG.md` 中最上方的第一个版本块。
-- 确保第一段版本标题格式是：
-
-```md
-## [v0.12.4] - 2026-07-14
+```bash
+git add app/src-tauri/Cargo.lock
 ```
 
-### 3. 版本号不同步怎么办
+提交信息中的版本号应与 `app/package.json` 保持一致。
 
-- 重新运行：
+## 六、CI 自动生成的发布产物
+
+推送到 `main` 后，GitHub Actions 会构建并发布：
+
+- macOS Apple Silicon：`*_aarch64.dmg`
+- macOS Intel：`*_x64.dmg`
+- Windows：`*_x64-setup.exe`
+- Linux Debian/Ubuntu：`*.deb`
+- Linux AppImage：`*.AppImage`
+
+Release 名称格式为：
+
+```text
+HaoMD v0.13.0
+```
+
+## 七、发布后检查
+
+在 GitHub 仓库中确认：
+
+1. `Release` workflow 执行成功。
+2. `v<version>` 标签已经生成。
+3. GitHub Release 已创建。
+4. macOS、Windows 和 Linux 安装包均已上传。
+5. 至少在目标平台安装并启动一次，确认应用可以正常打开。
+
+## 八、常见问题
+
+### 没有触发发布
+
+检查以下内容：
+
+- 是否推送到了 `main` 分支；
+- `app/package.json` 的版本号是否发生变化；
+- 远端是否已经存在同名标签；
+- GitHub Actions 是否因为 CI 检查失败而中断。
+
+### Release 说明为空
+
+检查 `CHANGELOG.md`：
+
+- 最新版本块是否位于文件顶部；
+- 标题是否使用 `## [vX.Y.Z] - YYYY-MM-DD` 格式；
+- 版本号是否与 `app/package.json` 一致。
+
+### 应用显示的版本号没有更新
+
+重新执行：
 
 ```bash
 cd app
 npm run sync-version
 ```
 
-- 然后重新提交 `app/src-tauri/Cargo.toml` 和 `app/src-tauri/Cargo.lock`
-
-## 版本命名建议
-
-- 补丁修复用 `x.y.z` 的末位递增，例如 `0.12.3 -> 0.12.4`
-- 如果包含明显的新能力或较大行为变化，再考虑升到下一个小版本
-
+确认 `app/src-tauri/Cargo.toml` 已同步修改，然后重新提交并推送。
