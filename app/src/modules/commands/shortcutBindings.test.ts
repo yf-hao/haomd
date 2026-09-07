@@ -4,6 +4,8 @@ import {
   FORMAT_SHORTCUT_ACTIONS,
   FORMAT_SHORTCUT_BINDINGS,
   GLOBAL_MENU_ACCELERATORS,
+  MAC_TEXT_COLOR_MENU_ACCELERATORS,
+  MAC_TEXT_COLOR_SHORTCUT_BINDINGS,
   PANEL_SHORTCUT_BINDINGS,
 } from './shortcutBindings'
 import menuSource from '../../../src-tauri/src/menu.rs?raw'
@@ -12,7 +14,7 @@ function expectAcceleratorsToMatch(accelerators: Readonly<Record<string, string>
   const normalizedMenuSource = menuSource.toLowerCase()
   for (const [action, accelerator] of Object.entries(accelerators)) {
     expect(menuSource).toContain(`.id("${action}")`)
-    expect(normalizedMenuSource).toContain(`.accelerator("${accelerator.toLowerCase()}")`)
+    expect(normalizedMenuSource).toContain(`"${accelerator.toLowerCase()}"`)
   }
 }
 
@@ -87,6 +89,33 @@ describe('format shortcut bindings', () => {
     expect(customBinding?.matches(optionShiftB, 'ı')).toBe(true)
     expect(clearBinding?.matches(optionShiftZero, 'º')).toBe(true)
     expect(yellowBinding?.matches(optionShiftThree, '£')).toBe(true)
+  })
+
+  it('should recognize macOS text color letter shortcuts by physical key', () => {
+    const cases = [
+      ['format_text_color_cycle', 'KeyX', 'x'],
+      ['format_text_color_red', 'KeyR', 'r'],
+      ['format_text_color_orange', 'KeyO', 'o'],
+      ['format_text_color_yellow', 'KeyY', 'y'],
+      ['format_text_color_green', 'KeyG', 'g'],
+      ['format_text_color_cyan', 'KeyC', 'ç'],
+      ['format_text_color_blue', 'KeyB', '∫'],
+      ['format_text_color_purple', 'KeyV', '√'],
+      ['format_text_color_clear', 'KeyN', 'n'],
+    ] as const
+
+    cases.forEach(([action, code, key]) => {
+      const binding = MAC_TEXT_COLOR_SHORTCUT_BINDINGS.find((item) => item.action === action)
+      expect(binding).toBeDefined()
+      expect(binding?.matches({ altKey: true, shiftKey: false, code } as KeyboardEvent, key)).toBe(true)
+    })
+
+    const customBinding = MAC_TEXT_COLOR_SHORTCUT_BINDINGS.find((item) => item.action === 'format_text_color_custom')
+    expect(customBinding?.matches({ altKey: true, shiftKey: true, code: 'KeyC' } as KeyboardEvent, 'Ç')).toBe(true)
+  })
+
+  it('should declare macOS text color letter menu accelerators', () => {
+    expectAcceleratorsToMatch(MAC_TEXT_COLOR_MENU_ACCELERATORS)
   })
 })
 

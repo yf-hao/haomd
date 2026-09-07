@@ -787,54 +787,58 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         )
         .build()?;
 
+    let macos_shortcut = |macos: &'static str, other: &'static str| {
+        if cfg!(target_os = "macos") { macos } else { other }
+    };
+
     let text_color_menu = SubmenuBuilder::new(app, texts.text_color)
         .item(
             &MenuItemBuilder::new(texts.text_color_cycle)
                 .id("format_text_color_cycle")
-                .accelerator("CmdOrCtrl+Alt+C")
+                .accelerator(macos_shortcut("CmdOrCtrl+Alt+X", "CmdOrCtrl+Alt+C"))
                 .build(app)?,
         )
         .separator()
         .item(
             &MenuItemBuilder::new(texts.text_color_red)
                 .id("format_text_color_red")
-                .accelerator("CmdOrCtrl+Alt+1")
+                .accelerator(macos_shortcut("CmdOrCtrl+Alt+R", "CmdOrCtrl+Alt+1"))
                 .build(app)?,
         )
         .item(
             &MenuItemBuilder::new(texts.text_color_orange)
                 .id("format_text_color_orange")
-                .accelerator("CmdOrCtrl+Alt+2")
+                .accelerator(macos_shortcut("CmdOrCtrl+Alt+O", "CmdOrCtrl+Alt+2"))
                 .build(app)?,
         )
         .item(
             &MenuItemBuilder::new(texts.text_color_yellow)
                 .id("format_text_color_yellow")
-                .accelerator("CmdOrCtrl+Alt+3")
+                .accelerator(macos_shortcut("CmdOrCtrl+Alt+Y", "CmdOrCtrl+Alt+3"))
                 .build(app)?,
         )
         .item(
             &MenuItemBuilder::new(texts.text_color_green)
                 .id("format_text_color_green")
-                .accelerator("CmdOrCtrl+Alt+4")
+                .accelerator(macos_shortcut("CmdOrCtrl+Alt+G", "CmdOrCtrl+Alt+4"))
                 .build(app)?,
         )
         .item(
             &MenuItemBuilder::new(texts.text_color_cyan)
                 .id("format_text_color_cyan")
-                .accelerator("CmdOrCtrl+Alt+5")
+                .accelerator(macos_shortcut("CmdOrCtrl+Alt+C", "CmdOrCtrl+Alt+5"))
                 .build(app)?,
         )
         .item(
             &MenuItemBuilder::new(texts.text_color_blue)
                 .id("format_text_color_blue")
-                .accelerator("CmdOrCtrl+Alt+6")
+                .accelerator(macos_shortcut("CmdOrCtrl+Alt+B", "CmdOrCtrl+Alt+6"))
                 .build(app)?,
         )
         .item(
             &MenuItemBuilder::new(texts.text_color_purple)
                 .id("format_text_color_purple")
-                .accelerator("CmdOrCtrl+Alt+7")
+                .accelerator(macos_shortcut("CmdOrCtrl+Alt+V", "CmdOrCtrl+Alt+7"))
                 .build(app)?,
         )
         .item(
@@ -847,7 +851,7 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         .item(
             &MenuItemBuilder::new(texts.text_color_clear)
                 .id("format_text_color_clear")
-                .accelerator("CmdOrCtrl+Alt+0")
+                .accelerator(macos_shortcut("CmdOrCtrl+Alt+N", "CmdOrCtrl+Alt+0"))
                 .build(app)?,
         )
         .build()?;
@@ -1180,7 +1184,7 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         .item(
             &MenuItemBuilder::new(texts.repeat_reminders)
                 .id("tools_repeat_reminders")
-                .accelerator("CmdOrCtrl+Alt+R")
+                .accelerator(macos_shortcut("CmdOrCtrl+Alt+Shift+R", "CmdOrCtrl+Alt+R"))
                 .build(app)?,
         )
         .item(

@@ -3,6 +3,7 @@ import type { CommandContext, CommandRegistry } from '../modules/commands/regist
 import { createCommandRegistry } from '../modules/commands/registry'
 import {
   EDITOR_SHORTCUT_SCOPE_SELECTORS,
+  MAC_TEXT_COLOR_SHORTCUT_BINDINGS,
   FORMAT_SHORTCUT_ACTIONS,
   FORMAT_SHORTCUT_BINDINGS,
   PANEL_SHORTCUT_BINDINGS,
@@ -408,15 +409,24 @@ export function useCommandSystem(params: CommandSystemParams) {
 
   const dispatchAction = useCallback(
     async (action: string, source: 'local' | 'menu' = 'local') => {
-      if (source === 'menu' && menuDedupActions.has(action)) {
+      const isMacTauri = typeof isTauriEnv === 'function' && isTauriEnv()
+        && typeof navigator !== 'undefined'
+        && /macintosh|mac os x/i.test(navigator.userAgent)
+      const isMacTextColorAction = isMacTauri && action.startsWith('format_text_color_')
+
+      if (menuDedupActions.has(action)) {
         const lastLocalTs = recentLocalDispatchRef.current.get(action)
-        if (typeof lastLocalTs === 'number' && Date.now() - lastLocalTs <= MENU_DUPLICATE_WINDOW_MS) {
+        const shouldCheckRecentDispatch = source === 'menu' || isMacTextColorAction
+        if (
+          shouldCheckRecentDispatch &&
+          typeof lastLocalTs === 'number' &&
+          Date.now() - lastLocalTs <= MENU_DUPLICATE_WINDOW_MS
+        ) {
           return
         }
-      }
-
-      if (source === 'local' && menuDedupActions.has(action)) {
-        recentLocalDispatchRef.current.set(action, Date.now())
+        if (source === 'local' || isMacTextColorAction) {
+          recentLocalDispatchRef.current.set(action, Date.now())
+        }
       }
 
       const handler = commands[action]
@@ -491,13 +501,21 @@ export function useCommandSystem(params: CommandSystemParams) {
         return
       }
 
-      const formatBinding = FORMAT_SHORTCUT_BINDINGS.find((binding) => binding.matches(e, key))
+      const macTextColorBinding = prefersMenuAccelerator
+        ? MAC_TEXT_COLOR_SHORTCUT_BINDINGS.find((binding) => binding.matches(e, key))
+        : undefined
+      const formatBinding = macTextColorBinding ?? FORMAT_SHORTCUT_BINDINGS.find((binding) => {
+        // macOS numeric text-color accelerators are intentionally disabled;
+        // the native menu uses the letter bindings above instead.
+        if (prefersMenuAccelerator && binding.action.startsWith('format_text_color_')) return false
+        return binding.matches(e, key)
+      })
 
       if (formatBinding) {
         if (formatBinding.requireEditorContext && !isEditorShortcutContext(activeElement)) {
           return
         }
-        if (prefersMenuAccelerator) return
+        if (prefersMenuAccelerator && !formatBinding.action.startsWith('format_text_color_')) return
         if (formatBinding.action === 'format_insert_code_block' && isWysiwygMode) return
         e.preventDefault()
         void dispatchAction(formatBinding.action)

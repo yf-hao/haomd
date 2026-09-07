@@ -218,6 +218,63 @@ export const FORMAT_SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
   },
 ] as const
 
+/**
+ * macOS 原生菜单无法稳定区分 Command+Option+数字与 Command+数字。
+ * 因此 macOS Tauri 使用字母快捷键，其他平台继续使用上面的数字快捷键。
+ */
+export const MAC_TEXT_COLOR_SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
+  {
+    action: 'format_text_color_cycle',
+    matches: (event, key) => matchesPhysicalKey(event, key, 'KeyX') && event.altKey && !event.shiftKey,
+    requireEditorContext: true,
+  },
+  {
+    action: 'format_text_color_red',
+    matches: (event, key) => matchesPhysicalKey(event, key, 'KeyR') && event.altKey && !event.shiftKey,
+    requireEditorContext: true,
+  },
+  {
+    action: 'format_text_color_orange',
+    matches: (event, key) => matchesPhysicalKey(event, key, 'KeyO') && event.altKey && !event.shiftKey,
+    requireEditorContext: true,
+  },
+  {
+    action: 'format_text_color_yellow',
+    matches: (event, key) => matchesPhysicalKey(event, key, 'KeyY') && event.altKey && !event.shiftKey,
+    requireEditorContext: true,
+  },
+  {
+    action: 'format_text_color_green',
+    matches: (event, key) => matchesPhysicalKey(event, key, 'KeyG') && event.altKey && !event.shiftKey,
+    requireEditorContext: true,
+  },
+  {
+    action: 'format_text_color_cyan',
+    matches: (event, key) => matchesPhysicalKey(event, key, 'KeyC') && event.altKey && !event.shiftKey,
+    requireEditorContext: true,
+  },
+  {
+    action: 'format_text_color_blue',
+    matches: (event, key) => matchesPhysicalKey(event, key, 'KeyB') && event.altKey && !event.shiftKey,
+    requireEditorContext: true,
+  },
+  {
+    action: 'format_text_color_purple',
+    matches: (event, key) => matchesPhysicalKey(event, key, 'KeyV') && event.altKey && !event.shiftKey,
+    requireEditorContext: true,
+  },
+  {
+    action: 'format_text_color_custom',
+    matches: (event, key) => matchesPhysicalKey(event, key, 'KeyC') && event.altKey && event.shiftKey,
+    requireEditorContext: true,
+  },
+  {
+    action: 'format_text_color_clear',
+    matches: (event, key) => matchesPhysicalKey(event, key, 'KeyN') && event.altKey && !event.shiftKey,
+    requireEditorContext: true,
+  },
+] as const
+
 export const EDITOR_SHORTCUT_SCOPE_SELECTORS = [
   '.cm-editor',
   '.code-editor',
@@ -259,6 +316,19 @@ export const FORMAT_MENU_ACCELERATORS: Readonly<Record<string, string>> = {
   format_background_color_cyan: 'CmdOrCtrl+Alt+Shift+5',
   format_background_color_blue: 'CmdOrCtrl+Alt+Shift+6',
   format_background_color_purple: 'CmdOrCtrl+Alt+Shift+7',
+}
+
+export const MAC_TEXT_COLOR_MENU_ACCELERATORS: Readonly<Record<string, string>> = {
+  format_text_color_cycle: 'CmdOrCtrl+Alt+X',
+  format_text_color_red: 'CmdOrCtrl+Alt+R',
+  format_text_color_orange: 'CmdOrCtrl+Alt+O',
+  format_text_color_yellow: 'CmdOrCtrl+Alt+Y',
+  format_text_color_green: 'CmdOrCtrl+Alt+G',
+  format_text_color_cyan: 'CmdOrCtrl+Alt+C',
+  format_text_color_blue: 'CmdOrCtrl+Alt+B',
+  format_text_color_purple: 'CmdOrCtrl+Alt+V',
+  format_text_color_custom: 'CmdOrCtrl+Alt+Shift+C',
+  format_text_color_clear: 'CmdOrCtrl+Alt+N',
 }
 
 export const GLOBAL_MENU_ACCELERATORS: Readonly<Record<string, string>> = {

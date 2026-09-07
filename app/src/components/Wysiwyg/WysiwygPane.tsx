@@ -1682,12 +1682,13 @@ function WysiwygEditor({
             const selection = view.state.selection as typeof view.state.selection & { main?: { from: number; to: number } }
             const from = selection.main?.from ?? selection.from
             const to = selection.main?.to ?? selection.to
-            if (from === to) return
+            const target = getEffectiveTextColorTarget(from, to)
+            if (!target) return
 
             const markType = textColorMark.type(ctx)
             let foundText = false
             let needsChange = false
-            view.state.doc.nodesBetween(from, to, (node) => {
+            view.state.doc.nodesBetween(target.from, target.to, (node) => {
               if (!node.isText) return
               foundText = true
               const currentColor = normalizeTextColor(
@@ -1700,7 +1701,12 @@ function WysiwygEditor({
             if (!foundText || !needsChange) return
 
             const mark = markType.create({ color: normalizedColor })
-            const tr = view.state.tr.removeMark(from, to, markType).addMark(from, to, mark).scrollIntoView()
+            const tr = view.state.tr
+              .removeMark(target.from, target.to, markType)
+              .addMark(target.from, target.to, mark)
+              .scrollIntoView()
+            preserveTextColorTargetOnNextDocChangeRef.current = true
+            textColorTargetRef.current = target
             view.dispatch(tr)
             view.focus()
           })
@@ -1713,12 +1719,13 @@ function WysiwygEditor({
             const selection = view.state.selection as typeof view.state.selection & { main?: { from: number; to: number } }
             const from = selection.main?.from ?? selection.from
             const to = selection.main?.to ?? selection.to
-            if (from === to) return
+            const target = getEffectiveTextColorTarget(from, to)
+            if (!target) return
 
             const markType = textColorMark.type(ctx)
             let foundText = false
             let hasColor = false
-            view.state.doc.nodesBetween(from, to, (node) => {
+            view.state.doc.nodesBetween(target.from, target.to, (node) => {
               if (!node.isText) return
               foundText = true
               if (node.marks.some((mark) => mark.type === markType)) {
@@ -1727,7 +1734,9 @@ function WysiwygEditor({
             })
             if (!foundText || !hasColor) return
 
-            view.dispatch(view.state.tr.removeMark(from, to, markType).scrollIntoView())
+            preserveTextColorTargetOnNextDocChangeRef.current = true
+            textColorTargetRef.current = target
+            view.dispatch(view.state.tr.removeMark(target.from, target.to, markType).scrollIntoView())
             view.focus()
           })
         })
