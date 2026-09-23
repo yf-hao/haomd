@@ -58,6 +58,8 @@ pub(crate) enum WordBlockCfg {
     Code {
         language: Option<String>,
         content: String,
+        #[serde(default)]
+        tokens: Option<Vec<WordCodeRunCfg>>,
     },
     List {
         ordered: bool,
@@ -83,6 +85,20 @@ pub(crate) enum WordBlockCfg {
         #[serde(rename = "maxWidthPercent")]
         max_width_percent: Option<f32>,
     },
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WordCodeRunCfg {
+    pub(crate) value: String,
+    #[serde(default)]
+    pub(crate) color: Option<String>,
+    #[serde(default)]
+    pub(crate) background_color: Option<String>,
+    #[serde(default)]
+    pub(crate) bold: Option<bool>,
+    #[serde(default)]
+    pub(crate) italic: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

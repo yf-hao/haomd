@@ -124,10 +124,12 @@ fn render_word_block(
         WordBlockCfg::Code {
             language: _,
             content,
+            tokens,
         } => {
             let code_style = code_block_paragraph_style();
             let runs = render_code_block_runs_xml(
                 content,
+                tokens.as_deref(),
                 render_state.style_settings.code_font_size_half_points,
             );
             Ok(render_paragraph_xml_with_code_shading(
@@ -1255,11 +1257,43 @@ fn code_block_paragraph_style() -> WordParagraphStyleCfg {
     }
 }
 
-fn render_code_block_runs_xml(content: &str, code_font_size_half_points: u32) -> String {
+fn render_code_block_runs_xml(
+    content: &str,
+    tokens: Option<&[WordCodeRunCfg]>,
+    code_font_size_half_points: u32,
+) -> String {
     // Markdown parsers normally normalize line endings, but payloads can also
     // come from imported/plain-text documents. Normalize them here so CRLF and
     // lone CR become the same visible Word line breaks without changing spaces.
     let normalized_content = content.replace("\r\n", "\n").replace('\r', "\n");
+
+    if let Some(tokens) = tokens {
+        let token_content = tokens
+            .iter()
+            .map(|token| token.value.as_str())
+            .collect::<String>();
+        if token_content == normalized_content {
+            return tokens
+                .iter()
+                .map(|token| {
+                    render_text_run_xml(RenderTextRunOptions {
+                        value: &token.value,
+                        bold: token.bold.unwrap_or(false),
+                        italic: token.italic.unwrap_or(false),
+                        code: true,
+                        strike: false,
+                        underline: false,
+                        color: token.color.as_deref(),
+                        background_color: token.background_color.as_deref(),
+                        font_size_pt: None,
+                        font_family: None,
+                        code_font_size_half_points,
+                    })
+                })
+                .collect();
+        }
+    }
+
     render_text_run_xml(RenderTextRunOptions {
         value: &normalized_content,
         bold: false,

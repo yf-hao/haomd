@@ -898,6 +898,7 @@ fn should_apply_custom_word_style_settings_to_styles_and_layout() {
             WordBlockCfg::Code {
                 language: Some("ts".to_string()),
                 content: "const value = 1;".to_string(),
+                tokens: None,
             },
         ],
         assets: vec![],
@@ -986,6 +987,7 @@ fn should_preserve_text_code_block_layout_in_word_xml() {
         blocks: vec![WordBlockCfg::Code {
             language: Some("text".to_string()),
             content: content.to_string(),
+            tokens: None,
         }],
         assets: vec![],
         style_settings: None,
@@ -1004,6 +1006,54 @@ fn should_preserve_text_code_block_layout_in_word_xml() {
     assert!(document_xml.contains("<w:rFonts w:ascii=\"Menlo\" w:hAnsi=\"Menlo\" w:cs=\"Menlo\"/>"));
     assert!(document_xml.contains("<w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"F6F8FA\"/>"));
     assert!(!document_xml.contains("<w:tbl>"));
+
+    let _ = std::fs::remove_dir_all(&work_dir);
+}
+
+#[test]
+fn should_render_syntax_highlighted_code_tokens_in_word_xml() {
+    let work_dir = unique_test_path("haomd-word-highlighted-code", None);
+    let payload = WordDocPayloadCfg {
+        title: "Highlighted code".to_string(),
+        blocks: vec![WordBlockCfg::Code {
+            language: Some("java".to_string()),
+            content: "public class Student".to_string(),
+            tokens: Some(vec![
+                WordCodeRunCfg {
+                    value: "public".to_string(),
+                    color: Some("D73A49".to_string()),
+                    background_color: None,
+                    bold: Some(true),
+                    italic: None,
+                },
+                WordCodeRunCfg {
+                    value: " class ".to_string(),
+                    color: None,
+                    background_color: None,
+                    bold: None,
+                    italic: None,
+                },
+                WordCodeRunCfg {
+                    value: "Student".to_string(),
+                    color: Some("6F42C1".to_string()),
+                    background_color: None,
+                    bold: None,
+                    italic: None,
+                },
+            ]),
+        }],
+        assets: vec![],
+        style_settings: None,
+    };
+
+    build_word_export_workspace(&work_dir, &payload).expect("workspace should build");
+    let document_xml = fs::read_to_string(work_dir.join("word").join("document.xml"))
+        .expect("document xml should exist");
+
+    assert!(document_xml.contains(r#"<w:color w:val="D73A49"/>"#));
+    assert!(document_xml.contains(r#"<w:color w:val="6F42C1"/>"#));
+    assert!(document_xml.contains("public"));
+    assert!(document_xml.contains("Student"));
 
     let _ = std::fs::remove_dir_all(&work_dir);
 }
@@ -1086,7 +1136,8 @@ fn should_normalize_songti_font_to_word_cjk_font() {
     });
 
     assert!(run_xml
-        .contains(r#"<w:rFonts w:ascii="宋体" w:hAnsi="宋体" w:cs="宋体" w:eastAsia="宋体"/>"#));
+        .contains(r#"<w:rFonts w:ascii="宋体" w:hAnsi="宋体" w:cs="宋体" w:eastAsia="宋体" w:hint="eastAsia"/>"#));
+    assert!(run_xml.contains(r#"<w:lang w:eastAsia="zh-CN"/>"#));
 }
 
 #[test]

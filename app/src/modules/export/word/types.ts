@@ -41,13 +41,21 @@ export type TableStyle = {
   layout?: 'fixed' | 'auto'
 }
 
+export type WordCodeRun = {
+  value: string
+  color?: string
+  backgroundColor?: string
+  bold?: boolean
+  italic?: boolean
+}
+
 export type WordBlock =
   | { type: 'heading'; level: 1 | 2 | 3 | 4 | 5 | 6; text: InlineRun[]; style?: ParagraphStyle }
   | { type: 'paragraph'; text: InlineRun[]; style?: ParagraphStyle }
   | { type: 'blockquote'; children: WordBlock[] }
   | { type: 'callout'; children: WordBlock[] }
   | { type: 'math'; content: string; mathMl?: string }
-  | { type: 'code'; language?: string; content: string }
+  | { type: 'code'; language?: string; content: string; tokens?: WordCodeRun[] }
   | { type: 'list'; ordered: boolean; items: WordBlock[][] }
   | { type: 'table'; rows: { cells: { blocks: WordBlock[]; style?: TableCellStyle; colSpan?: number; rowSpan?: number; mergeContinue?: boolean }[] }[]; style?: TableStyle }
   | {

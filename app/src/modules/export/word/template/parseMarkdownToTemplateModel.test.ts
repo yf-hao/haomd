@@ -33,7 +33,7 @@ describe('export/word - template markdown parsing', () => {
     const blocks = parsed.richBlocksByField['sections.discussion'] ?? []
     const code = blocks.find((block) => block.type === 'code')
 
-    expect(code).toEqual({
+    expect(code).toEqual(expect.objectContaining({
       type: 'code',
       language: 'java',
       content: [
@@ -43,6 +43,6 @@ describe('export/word - template markdown parsing', () => {
         '    }',
         '}',
       ].join('\n'),
-    })
+    }))
   })
 })

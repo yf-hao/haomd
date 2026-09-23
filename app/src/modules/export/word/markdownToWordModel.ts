@@ -3,6 +3,7 @@ import remarkParse from 'remark-parse'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import katex from 'katex'
+import hljs from 'highlight.js'
 import { replaceTextColorSyntaxWithHtml } from '../../markdown/extensions/colorMark'
 import { normalizeLatexDelimiters } from '../../markdown/normalizeLatexDelimiters'
 import type {
@@ -17,19 +18,54 @@ import type {
   TableRow,
 } from 'mdast'
 import { toString } from 'mdast-util-to-string'
-import type { InlineRun, WordAsset, WordBlock, WordDocPayload } from './types'
+import type { InlineRun, WordAsset, WordBlock, WordCodeRun, WordDocPayload } from './types'
 import { htmlFragmentToBlocks, htmlFragmentToInlineRuns, type HtmlWordModelContext } from './htmlToWordModel'
 import { parseHtmlTextStyle } from './htmlStyleParser'
 import { splitAlignedTabInlineNodes } from '../../markdown/alignedTab'
 
 type TextRun = Extract<InlineRun, { type: 'text' }>
 type TextMarks = Pick<TextRun, 'bold' | 'italic' | 'code' | 'strike' | 'underline' | 'color' | 'backgroundColor' | 'fontSizePt' | 'fontFamily'>
+type WordCodeStyle = Omit<WordCodeRun, 'value'>
 
 type ParseContext = {
   definitions: Map<string, string>
   assets: WordAsset[]
   assetCounter: number
 }
+
+const CODE_HIGHLIGHT_COLORS: Record<string, string> = {
+  'hljs-keyword': 'D73A49',
+  'hljs-doctag': 'D73A49',
+  'hljs-type': 'D73A49',
+  'hljs-variable.language_': 'D73A49',
+  'hljs-title': '6F42C1',
+  'hljs-attr': '005CC5',
+  'hljs-attribute': '005CC5',
+  'hljs-literal': '005CC5',
+  'hljs-meta': '005CC5',
+  'hljs-number': '005CC5',
+  'hljs-operator': '005CC5',
+  'hljs-variable': '005CC5',
+  'hljs-regexp': '032F62',
+  'hljs-string': '032F62',
+  'hljs-built_in': 'E36209',
+  'hljs-symbol': 'E36209',
+  'hljs-comment': '6A737D',
+  'hljs-code': '6A737D',
+  'hljs-formula': '6A737D',
+  'hljs-name': '22863A',
+  'hljs-quote': '22863A',
+  'hljs-selector-tag': '22863A',
+  'hljs-selector-pseudo': '22863A',
+  'hljs-bullet': '735C0F',
+  'hljs-addition': '22863A',
+  'hljs-deletion': 'B31D28',
+}
+
+const CODE_HIGHLIGHT_BOLD = new Set(['hljs-section', 'hljs-strong'])
+const CODE_HIGHLIGHT_ITALIC = new Set(['hljs-emphasis'])
+
+const NON_HIGHLIGHTED_LANGUAGES = new Set(['text', 'txt', 'plain', 'plaintext'])
 
 export function markdownToWordModel(markdown: string, title: string): WordDocPayload {
   const normalizedMarkdown = replaceTextColorSyntaxWithHtml(normalizeLatexDelimiters(markdown))
@@ -132,6 +168,7 @@ function transformBlock(node: Content, ctx: ParseContext): WordBlock[] {
         type: 'code',
         language: node.lang || undefined,
         content: node.value,
+        ...(highlightCodeForWord(node.value, node.lang) ?? {}),
       }]
     case 'list':
       return [listNodeToBlock(node, ctx)]
@@ -154,6 +191,88 @@ function transformBlock(node: Content, ctx: ParseContext): WordBlock[] {
       }] : []
     }
   }
+}
+
+function highlightCodeForWord(content: string, language: string | null | undefined): { tokens: WordCodeRun[] } | undefined {
+  const normalizedLanguage = language?.trim().split(/\s+/)[0].toLowerCase()
+  if (!normalizedLanguage || NON_HIGHLIGHTED_LANGUAGES.has(normalizedLanguage)) return undefined
+  if (normalizedLanguage === 'mermaid' || normalizedLanguage === 'mind') return undefined
+  if (!hljs.getLanguage(normalizedLanguage) || typeof document === 'undefined') return undefined
+
+  try {
+    const highlighted = hljs.highlight(content, {
+      language: normalizedLanguage,
+      ignoreIllegals: true,
+    }).value
+    const template = document.createElement('template')
+    template.innerHTML = highlighted
+    const runs: WordCodeRun[] = []
+    collectHighlightedCodeRuns(template.content, {}, runs)
+    const merged = mergeAdjacentCodeRuns(runs)
+    return merged.length > 0 ? { tokens: merged } : undefined
+  } catch {
+    // Unknown or malformed language grammars should never prevent Word export.
+    return undefined
+  }
+}
+
+function collectHighlightedCodeRuns(
+  node: Node,
+  inherited: WordCodeStyle,
+  output: WordCodeRun[],
+): void {
+  if (node.nodeType === Node.TEXT_NODE) {
+    const value = node.textContent ?? ''
+    if (value) output.push({ value, ...inherited })
+    return
+  }
+
+  if (node.nodeType === Node.DOCUMENT_FRAGMENT_NODE || node.nodeType === Node.DOCUMENT_NODE) {
+    for (const child of Array.from(node.childNodes)) {
+      collectHighlightedCodeRuns(child, inherited, output)
+    }
+    return
+  }
+
+  if (node.nodeType !== Node.ELEMENT_NODE) return
+
+  const element = node as HTMLElement
+  const nextStyle = codeRunStyleForClasses(element.className.split(/\s+/), inherited)
+  for (const child of Array.from(element.childNodes)) {
+    collectHighlightedCodeRuns(child, nextStyle, output)
+  }
+}
+
+function codeRunStyleForClasses(classes: string[], inherited: WordCodeStyle): WordCodeStyle {
+  const style: WordCodeStyle = { ...inherited }
+  for (const className of classes) {
+    const color = CODE_HIGHLIGHT_COLORS[className]
+    if (color) style.color = color
+    if (CODE_HIGHLIGHT_BOLD.has(className)) style.bold = true
+    if (CODE_HIGHLIGHT_ITALIC.has(className)) style.italic = true
+    if (className === 'hljs-addition') style.backgroundColor = 'F0FFF4'
+    if (className === 'hljs-deletion') style.backgroundColor = 'FFEEF0'
+  }
+  return style
+}
+
+function mergeAdjacentCodeRuns(runs: WordCodeRun[]): WordCodeRun[] {
+  const merged: WordCodeRun[] = []
+  for (const run of runs) {
+    const previous = merged[merged.length - 1]
+    if (
+      previous &&
+      previous.color === run.color &&
+      previous.backgroundColor === run.backgroundColor &&
+      previous.bold === run.bold &&
+      previous.italic === run.italic
+    ) {
+      previous.value += run.value
+    } else {
+      merged.push({ ...run })
+    }
+  }
+  return merged
 }
 
 function listNodeToBlock(node: List, ctx: ParseContext): WordBlock {

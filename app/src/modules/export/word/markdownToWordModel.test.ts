@@ -93,6 +93,33 @@ describe('export/word - markdownToWordModel', () => {
     })
   })
 
+  it('should add syntax-highlighted runs without changing fenced code text', () => {
+    const content = [
+      'public class Student {',
+      '  // note',
+      '  String name = "张三";',
+      '}',
+    ].join('\n')
+
+    const payload = markdownToWordModel(`\`\`\`java\n${content}\n\`\`\``, 'Highlighted code')
+    const code = payload.blocks[0]
+
+    expect(code).toEqual(expect.objectContaining({
+      type: 'code',
+      language: 'java',
+      content,
+    }))
+    if (code.type !== 'code') return
+
+    expect(code.tokens?.map((token) => token.value).join('')).toBe(content)
+    expect(code.tokens).toEqual(expect.arrayContaining([
+      expect.objectContaining({ value: 'public', color: 'D73A49' }),
+      expect.objectContaining({ value: 'Student', color: '6F42C1' }),
+      expect.objectContaining({ value: '// note', color: '6A737D' }),
+      expect.objectContaining({ value: '"张三"', color: '032F62' }),
+    ]))
+  })
+
   it('should map markdown blockquotes to callouts', () => {
     const payload = markdownToWordModel(
       '> 小明在科学课上配制了含盐率 **16%** 的盐水 **200克**。',
