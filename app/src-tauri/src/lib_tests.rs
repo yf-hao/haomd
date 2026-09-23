@@ -420,7 +420,8 @@ fn should_generate_editable_word_xml_for_core_blocks() {
     assert!(document_xml.contains(r#"<w:hyperlink r:id=""#));
     assert!(document_xml.contains(r#"<w:pStyle w:val="ListParagraph"/>"#));
     assert!(document_xml.contains(r#"<w:numId w:val="2"/>"#));
-    assert!(document_xml.contains(r#"<w:ind w:left="567" w:firstLineChars="0" w:hanging="127"/>"#));
+    assert!(document_xml
+        .contains(r#"<w:ind w:left="567" w:firstLine="0" w:firstLineChars="0" w:hanging="127"/>"#));
     assert!(styles_xml.contains(
         r#"<w:style w:type="paragraph" w:styleId="ListParagraph"><w:name w:val="List Paragraph"/><w:basedOn w:val="Normal"/>"#
     ));
@@ -501,7 +502,7 @@ fn should_render_markdown_callout_as_reference_style_table() {
         document_xml.contains(r#"<w:left w:val="single" w:sz="24" w:space="0" w:color="17365D"/>"#)
     );
     assert!(document_xml.contains(r#"<w:vAlign w:val="center"/>"#));
-    assert!(document_xml.contains(r#"<w:ind w:left="0" w:firstLine="0"/>"#));
+    assert!(document_xml.contains(r#"<w:ind w:left="0" w:firstLine="0" w:firstLineChars="0"/>"#));
     assert!(!document_xml.contains(r#"<w:pBdr>"#));
     assert!(document_xml.contains("小明在科学课上配制了含盐率"));
 
@@ -546,8 +547,8 @@ fn should_clear_first_line_indent_for_code_and_blockquote() {
 
     let document_xml = fs::read_to_string(work_dir.join("word").join("document.xml"))
         .expect("document xml should exist");
-    assert!(document_xml.contains(r#"<w:ind w:left="360" w:firstLine="0"/>"#));
-    assert!(document_xml.contains(r#"<w:ind w:left="720" w:firstLine="0"/>"#));
+    assert!(document_xml.contains(r#"<w:ind w:left="360" w:firstLine="0" w:firstLineChars="0"/>"#));
+    assert!(document_xml.contains(r#"<w:ind w:left="720" w:firstLine="0" w:firstLineChars="0"/>"#));
 
     let _ = fs::remove_dir_all(&work_dir);
 }

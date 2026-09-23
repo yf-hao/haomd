@@ -950,24 +950,24 @@ fn render_paragraph_xml_with_code_shading(
         let extra_left = quote_depth as u64 * 720 + if code_block { 360 } else { 0 };
         if let Some((left, hanging)) = list_indentation {
             ppr.push_str(&format!(
-                r#"<w:ind w:left="{}" w:firstLineChars="0" w:hanging="{}"/>"#,
+                r#"<w:ind w:left="{}" w:firstLine="0" w:firstLineChars="0" w:hanging="{}"/>"#,
                 u64::from(left).saturating_add(extra_left),
                 hanging
             ));
         } else {
             ppr.push_str(&format!(
-                r#"<w:ind w:left="{}" w:firstLine="0"/>"#,
+                r#"<w:ind w:left="{}" w:firstLine="0" w:firstLineChars="0"/>"#,
                 extra_left
             ));
         }
     } else if let Some((left, hanging)) = list_indentation {
         ppr.push_str(&format!(
-            r#"<w:ind w:left="{}" w:firstLineChars="0" w:hanging="{}"/>"#,
+            r#"<w:ind w:left="{}" w:firstLine="0" w:firstLineChars="0" w:hanging="{}"/>"#,
             left, hanging
         ));
     }
     if callout_paragraph {
-        ppr.push_str(r#"<w:ind w:left="0" w:firstLine="0"/>"#);
+        ppr.push_str(r#"<w:ind w:left="0" w:firstLine="0" w:firstLineChars="0"/>"#);
         ppr.push_str(r#"<w:spacing w:before="0" w:after="0" w:line="276" w:lineRule="auto"/>"#);
     }
     if quote_depth > 0 {
