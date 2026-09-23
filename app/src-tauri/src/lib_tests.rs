@@ -509,6 +509,50 @@ fn should_render_markdown_callout_as_reference_style_table() {
 }
 
 #[test]
+fn should_clear_first_line_indent_for_code_and_blockquote() {
+    let work_dir = unique_test_path("haomd-word-structural-indent", None);
+    let plain_text = |value: &str| WordInlineRunCfg::Text {
+        value: value.to_string(),
+        bold: None,
+        italic: None,
+        code: None,
+        strike: None,
+        underline: None,
+        color: None,
+        background_color: None,
+        font_size_pt: None,
+        font_family: None,
+    };
+    let payload = WordDocPayloadCfg {
+        title: "Structural blocks".to_string(),
+        blocks: vec![
+            WordBlockCfg::Code {
+                language: Some("text".to_string()),
+                content: "code".to_string(),
+                tokens: None,
+            },
+            WordBlockCfg::Blockquote {
+                children: vec![WordBlockCfg::Paragraph {
+                    text: vec![plain_text("quote")],
+                    style: None,
+                }],
+            },
+        ],
+        assets: vec![],
+        style_settings: None,
+    };
+
+    build_word_export_workspace(&work_dir, &payload).expect("workspace should build");
+
+    let document_xml = fs::read_to_string(work_dir.join("word").join("document.xml"))
+        .expect("document xml should exist");
+    assert!(document_xml.contains(r#"<w:ind w:left="360" w:firstLine="0"/>"#));
+    assert!(document_xml.contains(r#"<w:ind w:left="720" w:firstLine="0"/>"#));
+
+    let _ = fs::remove_dir_all(&work_dir);
+}
+
+#[test]
 fn should_reject_remote_images_for_word_export() {
     let work_dir = unique_test_path("haomd-word-remote", None);
     let payload = WordDocPayloadCfg {

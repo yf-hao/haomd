@@ -955,7 +955,10 @@ fn render_paragraph_xml_with_code_shading(
                 hanging
             ));
         } else {
-            ppr.push_str(&format!(r#"<w:ind w:left="{}"/>"#, extra_left));
+            ppr.push_str(&format!(
+                r#"<w:ind w:left="{}" w:firstLine="0"/>"#,
+                extra_left
+            ));
         }
     } else if let Some((left, hanging)) = list_indentation {
         ppr.push_str(&format!(
