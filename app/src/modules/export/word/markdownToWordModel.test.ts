@@ -93,6 +93,18 @@ describe('export/word - markdownToWordModel', () => {
     })
   })
 
+  it('should omit standalone toc placeholders from Word output', () => {
+    const payload = markdownToWordModel(
+      ['前言', '', '[toc]', '', '[TOC]', '', '正文'].join('\n'),
+      'Without TOC',
+    )
+
+    expect(payload.blocks).toEqual([
+      { type: 'paragraph', text: [{ type: 'text', value: '前言' }] },
+      { type: 'paragraph', text: [{ type: 'text', value: '正文' }] },
+    ])
+  })
+
   it('should add syntax-highlighted runs without changing fenced code text', () => {
     const content = [
       'public class Student {',

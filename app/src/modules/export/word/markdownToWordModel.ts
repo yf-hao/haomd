@@ -151,6 +151,7 @@ function transformBlock(node: Content, ctx: ParseContext): WordBlock[] {
         text: transformInline(node.children, ctx),
       }]
     case 'paragraph':
+      if (isTocPlaceholder(node)) return []
       return paragraphToWordBlocks(node.children, ctx)
     case 'blockquote':
       return [{
@@ -191,6 +192,10 @@ function transformBlock(node: Content, ctx: ParseContext): WordBlock[] {
       }] : []
     }
   }
+}
+
+function isTocPlaceholder(node: Extract<Content, { type: 'paragraph' }>): boolean {
+  return toString(node).trim().toLowerCase() === '[toc]'
 }
 
 function highlightCodeForWord(content: string, language: string | null | undefined): { tokens: WordCodeRun[] } | undefined {
