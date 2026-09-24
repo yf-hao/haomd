@@ -497,6 +497,7 @@ fn should_render_markdown_callout_as_reference_style_table() {
     let document_xml = fs::read_to_string(work_dir.join("word").join("document.xml"))
         .expect("document xml should exist");
     assert!(document_xml.contains(r#"<w:tblW w:w="0" w:type="auto"/>"#));
+    assert!(document_xml.contains(r#"<w:tblInd w:w="440" w:type="dxa"/>"#));
     assert!(document_xml.contains(r#"<w:shd w:val="clear" w:color="auto" w:fill="B8CCE4"/>"#));
     assert!(
         document_xml.contains(r#"<w:left w:val="single" w:sz="24" w:space="0" w:color="17365D"/>"#)

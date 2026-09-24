@@ -205,6 +205,9 @@ fn render_callout_xml(
             .page_margin_twips
             .saturating_mul(2),
     );
+    let block_indent_twips = word_body_first_line_indent_twips(&render_state.style_settings)
+        .min(u64::from(u32::MAX)) as u32;
+    let table_width_twips = width_twips.saturating_sub(block_indent_twips);
     let content = if content.trim().is_empty() {
         "<w:p/>".to_string()
     } else {
@@ -216,6 +219,7 @@ fn render_callout_xml(
             r#"<w:tbl><w:tblPr>"#,
             r#"<w:tblStyle w:val="TableGrid"/>"#,
             r#"<w:tblW w:w="0" w:type="auto"/>"#,
+            r#"<w:tblInd w:w="{}" w:type="dxa"/>"#,
             r#"<w:tblBorders>"#,
             r#"<w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/>"#,
             r#"<w:right w:val="nil"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/>"#,
@@ -234,7 +238,7 @@ fn render_callout_xml(
             r#"<w:shd w:val="clear" w:color="auto" w:fill="B8CCE4"/>"#,
             r#"<w:vAlign w:val="center"/></w:tcPr>{}</w:tc></w:tr></w:tbl>"#
         ),
-        width_twips, width_twips, content
+        block_indent_twips, table_width_twips, table_width_twips, content
     ))
 }
 
