@@ -30,7 +30,7 @@ import { WorkflowsPanel } from './WorkflowsPanel'
 import { SidebarBackgroundShell } from './SidebarBackgroundShell'
 import { Welcome } from './Welcome'
 import { SearchBar } from './Editor/SearchBar'
-import type { SearchController } from './Editor/searchController'
+import { createCodeMirrorSearchController, type SearchController } from './Editor/searchController'
 import type { EditorTransientSearchQuery } from './EditorPane'
 import { buildSearchScope } from '../modules/search/searchScopeService'
 import type { SearchScope } from '../modules/search/types'
@@ -885,6 +885,7 @@ export function WorkspaceShell({
   const handleSourceEditorViewChange = useCallback((view: EditorView | null) => {
     sourceEditorEpochRef.current += 1
     sourceEditorTabIdRef.current = view ? activeIdRef.current : null
+    setSourceSearchController(view ? createCodeMirrorSearchController(view) : null)
   }, [])
 
   const openAboutDialog = useCallback(() => {
@@ -1073,6 +1074,7 @@ export function WorkspaceShell({
   const [confirmDialog, setConfirmDialog] = useState<any>(null)
   const [searchPrefillText, setSearchPrefillText] = useState('')
   const [searchPrefillVersion, setSearchPrefillVersion] = useState(0)
+  const [sourceSearchController, setSourceSearchController] = useState<SearchController | null>(null)
   const [wysiwygSearchController, setWysiwygSearchController] = useState<SearchController | null>(null)
   const handleWysiwygSearchControllerReady = useCallback((controller: SearchController | null) => {
     setWysiwygSearchController(controller)
@@ -4814,7 +4816,7 @@ export function WorkspaceShell({
                           onTabClose={closeTabWithAiSession}
                           onRequestSaveAndClose={handleTabSaveAndClose}
                         />
-                        {isSearchOpen && wysiwygSearchController && (
+                        {isSearchOpen && (
                           <SearchBar
                             controller={wysiwygSearchController}
                             prefillText={searchPrefillText}
@@ -4896,7 +4898,7 @@ export function WorkspaceShell({
                       )}
                       {isSearchOpen && (
                         <SearchBar
-                          view={getActiveSourceView()}
+                          controller={sourceSearchController}
                           prefillText={searchPrefillText}
                           prefillVersion={searchPrefillVersion}
                           onClose={() => setIsSearchOpen(false)}
