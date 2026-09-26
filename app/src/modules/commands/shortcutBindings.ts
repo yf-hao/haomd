@@ -65,6 +65,29 @@ export const PANEL_SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
   { action: 'toggle_panel_workflows', matches: (event) => event.shiftKey && !event.altKey && event.code === 'F8' },
 ] as const
 
+function matchesLayoutArrow(event: KeyboardEvent, code: string): boolean {
+  return event.altKey && event.shiftKey && event.code === code
+}
+
+export const LAYOUT_SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
+  {
+    action: 'layout_preview_left',
+    matches: (event) => matchesLayoutArrow(event, 'ArrowLeft'),
+  },
+  {
+    action: 'layout_preview_right',
+    matches: (event) => matchesLayoutArrow(event, 'ArrowRight'),
+  },
+  {
+    action: 'layout_editor_only',
+    matches: (event) => matchesLayoutArrow(event, 'ArrowUp'),
+  },
+  {
+    action: 'layout_preview_only',
+    matches: (event) => matchesLayoutArrow(event, 'ArrowDown'),
+  },
+] as const
+
 export const FORMAT_SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
   {
     action: 'format_heading_paragraph',
@@ -361,4 +384,11 @@ export const GLOBAL_MENU_ACCELERATORS: Readonly<Record<string, string>> = {
   tools_repeat_reminders: 'CmdOrCtrl+Alt+R',
   tools_music_player: 'CmdOrCtrl+Alt+M',
   tools_pomodoro: 'CmdOrCtrl+Alt+P',
+}
+
+export const LAYOUT_MENU_ACCELERATORS: Readonly<Record<string, string>> = {
+  layout_preview_left: 'CmdOrCtrl+Alt+Shift+Left',
+  layout_preview_right: 'CmdOrCtrl+Alt+Shift+Right',
+  layout_editor_only: 'CmdOrCtrl+Alt+Shift+Up',
+  layout_preview_only: 'CmdOrCtrl+Alt+Shift+Down',
 }

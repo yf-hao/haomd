@@ -4,6 +4,8 @@ import {
   FORMAT_SHORTCUT_ACTIONS,
   FORMAT_SHORTCUT_BINDINGS,
   GLOBAL_MENU_ACCELERATORS,
+  LAYOUT_MENU_ACCELERATORS,
+  LAYOUT_SHORTCUT_BINDINGS,
   MAC_TEXT_COLOR_MENU_ACCELERATORS,
   MAC_TEXT_COLOR_SHORTCUT_BINDINGS,
   PANEL_SHORTCUT_BINDINGS,
@@ -122,6 +124,28 @@ describe('format shortcut bindings', () => {
 describe('global shortcut accelerators', () => {
   it('should match Rust global menu accelerators', () => {
     expectAcceleratorsToMatch(GLOBAL_MENU_ACCELERATORS)
+  })
+})
+
+describe('layout shortcut bindings', () => {
+  it('should match Rust layout menu accelerators', () => {
+    expectAcceleratorsToMatch(LAYOUT_MENU_ACCELERATORS)
+  })
+
+  it('should map modified arrow keys to layout actions', () => {
+    const expected = [
+      ['layout_preview_left', 'ArrowLeft'],
+      ['layout_preview_right', 'ArrowRight'],
+      ['layout_editor_only', 'ArrowUp'],
+      ['layout_preview_only', 'ArrowDown'],
+    ] as const
+
+    expected.forEach(([action, code]) => {
+      const binding = LAYOUT_SHORTCUT_BINDINGS.find((item) => item.action === action)
+      expect(binding).toBeDefined()
+      expect(binding?.matches({ altKey: true, shiftKey: true, code } as KeyboardEvent, '')).toBe(true)
+      expect(binding?.matches({ altKey: true, shiftKey: false, code } as KeyboardEvent, '')).toBe(false)
+    })
   })
 })
 

@@ -957,21 +957,25 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         .item(
             &MenuItemBuilder::new(texts.preview_left)
                 .id("layout_preview_left")
+                .accelerator("CmdOrCtrl+Alt+Shift+Left")
                 .build(app)?,
         )
         .item(
             &MenuItemBuilder::new(texts.preview_right)
                 .id("layout_preview_right")
+                .accelerator("CmdOrCtrl+Alt+Shift+Right")
                 .build(app)?,
         )
         .item(
             &MenuItemBuilder::new(texts.editor_only)
                 .id("layout_editor_only")
+                .accelerator("CmdOrCtrl+Alt+Shift+Up")
                 .build(app)?,
         )
         .item(
             &MenuItemBuilder::new(texts.preview_only)
                 .id("layout_preview_only")
+                .accelerator("CmdOrCtrl+Alt+Shift+Down")
                 .build(app)?,
         )
         .build()?;

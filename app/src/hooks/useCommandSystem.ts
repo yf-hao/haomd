@@ -3,6 +3,7 @@ import type { CommandContext, CommandRegistry } from '../modules/commands/regist
 import { createCommandRegistry } from '../modules/commands/registry'
 import {
   EDITOR_SHORTCUT_SCOPE_SELECTORS,
+  LAYOUT_SHORTCUT_BINDINGS,
   MAC_TEXT_COLOR_SHORTCUT_BINDINGS,
   FORMAT_SHORTCUT_ACTIONS,
   FORMAT_SHORTCUT_BINDINGS,
@@ -110,6 +111,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     'tools_repeat_reminders',
     'tools_pomodoro',
     'find',
+    ...LAYOUT_SHORTCUT_BINDINGS.map((binding) => binding.action),
     ...FORMAT_SHORTCUT_ACTIONS,
   ])
   const {
@@ -498,6 +500,14 @@ export function useCommandSystem(params: CommandSystemParams) {
         if (prefersMenuAccelerator) return
         e.preventDefault()
         void dispatchAction(panelBinding.action)
+        return
+      }
+
+      const layoutBinding = LAYOUT_SHORTCUT_BINDINGS.find((binding) => binding.matches(e, key))
+      if (layoutBinding) {
+        if (prefersMenuAccelerator) return
+        e.preventDefault()
+        void dispatchAction(layoutBinding.action)
         return
       }
 
