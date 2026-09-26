@@ -14,6 +14,8 @@ export type PreviewPaneProps = {
   activeLine: number
   previewWidth: number
   effectiveLayout: LayoutType
+  /** 通过 CSS 隐藏预览，但保持组件和 MarkdownViewer 挂载，避免切换时重新初始化。 */
+  visible?: boolean
   loading?: boolean
   loadingLabel?: string
   filePath?: string | null
@@ -55,6 +57,7 @@ function PreviewPaneComponent({
   activeLine,
   previewWidth,
   effectiveLayout,
+  visible = true,
   loading = false,
   loadingLabel,
   filePath,
@@ -70,9 +73,9 @@ function PreviewPaneComponent({
   const markdownViewerRef = useRef<MarkdownViewerHandle | null>(null)
 
   useLayoutEffect(() => {
-    if (effectiveLayout === 'editor-only') return
+    if (!visible || effectiveLayout === 'editor-only') return
     markdownViewerRef.current?.updateActiveLine(activeLine)
-  }, [activeLine, effectiveLayout])
+  }, [activeLine, effectiveLayout, visible])
 
   if (effectiveLayout === 'preview-only') {
     style.gridColumn = '1 / -1'
@@ -128,15 +131,11 @@ function PreviewPaneComponent({
     previewBackgroundUrl,
   ])
 
-  if (effectiveLayout === 'editor-only') {
-    return null
-  }
-
   return (
     <section
       ref={previewRootRef}
       className={`pane preview ${previewBackground?.enabled && previewBackgroundUrl ? 'has-preview-background' : ''} ${previewBackgroundFitClass}`}
-      style={{ ...style, ...previewBackgroundStyle }}
+      style={{ ...style, ...previewBackgroundStyle, ...(visible ? {} : { display: 'none' }) }}
     >
       {effectiveLayout !== 'preview-only' && <div className="preview-top-offset" aria-hidden />}
       {previewBackground?.enabled && previewBackgroundUrl ? (
@@ -216,6 +215,7 @@ export const PreviewPane = memo(
     prev.activeLine === next.activeLine &&
     prev.previewWidth === next.previewWidth &&
     prev.effectiveLayout === next.effectiveLayout &&
+    prev.visible === next.visible &&
     prev.loading === next.loading &&
     prev.loadingLabel === next.loadingLabel &&
     prev.filePath === next.filePath &&

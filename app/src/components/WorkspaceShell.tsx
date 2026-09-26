@@ -4927,14 +4927,14 @@ export function WorkspaceShell({
                     </Suspense>
                   </section>
 
-                  {showPreview && (
-                    <PreviewErrorBoundary>
+                  <PreviewErrorBoundary>
                     <Suspense fallback={<LoadingFallback className="preview-loading-fallback" label={t('workspace.loadingPreview')} />}>
                       <PreviewPaneLazy
                         previewStore={previewStore}
                         activeLine={previewActiveLine}
                         previewWidth={previewWidthForRender}
                         effectiveLayout={effectiveLayout}
+                        visible={showPreview}
                         loading={isPreviewLoading}
                         loadingLabel={t('workspace.loadingPreview')}
                         filePath={filePath}
@@ -4944,8 +4944,7 @@ export function WorkspaceShell({
                         onSelectionGetterReady={handlePreviewSelectionGetterReady}
                       />
                     </Suspense>
-                    </PreviewErrorBoundary>
-                  )}
+                  </PreviewErrorBoundary>
                     </>
                   )}
 

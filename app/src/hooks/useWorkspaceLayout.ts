@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from 'react'
 
 export type LayoutType = 'preview-left' | 'preview-right' | 'editor-only' | 'preview-only'
 
@@ -9,24 +9,59 @@ const STORAGE_WIDTH = 'haomd:layout:width'
 const STORAGE_SHOW = 'haomd:layout:show'
 const STORAGE_SHOW_EDITOR = 'haomd:layout:show-editor'
 
+function isLayoutType(value: string | null): value is LayoutType {
+  return value === 'preview-left' || value === 'preview-right' || value === 'editor-only' || value === 'preview-only'
+}
+
+type LayoutState = {
+  layout: LayoutType
+  showEditor: boolean
+  showPreview: boolean
+}
+
+function readInitialLayoutState(): LayoutState {
+  if (typeof localStorage === 'undefined') {
+    return { layout: 'preview-left', showEditor: true, showPreview: true }
+  }
+
+  const storedLayout = localStorage.getItem(STORAGE_LAYOUT)
+  const layout = isLayoutType(storedLayout) ? storedLayout : 'preview-left'
+  const storedShowPreview = localStorage.getItem(STORAGE_SHOW)
+  const storedShowEditor = localStorage.getItem(STORAGE_SHOW_EDITOR)
+  const showPreview = storedShowPreview == null ? true : storedShowPreview !== 'false'
+  const showEditor = storedShowEditor == null ? layout !== 'preview-only' : storedShowEditor !== 'false'
+
+  return { layout, showEditor, showPreview }
+}
+
 export function useWorkspaceLayout() {
-  const [layout, setLayout] = useState<LayoutType>(() => {
-    if (typeof localStorage === 'undefined') return 'preview-left'
-    const stored = localStorage.getItem(STORAGE_LAYOUT) as LayoutType | null
-    return stored ?? 'preview-left'
-  })
-  const [showPreview, setShowPreview] = useState<boolean>(() => {
-    if (typeof localStorage === 'undefined') return true
-    const storedShow = localStorage.getItem(STORAGE_SHOW)
-    if (storedShow == null) return true
-    return storedShow !== 'false'
-  })
-  const [showEditor, setShowEditor] = useState<boolean>(() => {
-    if (typeof localStorage === 'undefined') return true
-    const storedShowEditor = localStorage.getItem(STORAGE_SHOW_EDITOR)
-    if (storedShowEditor != null) return storedShowEditor !== 'false'
-    return localStorage.getItem(STORAGE_LAYOUT) !== 'preview-only'
-  })
+  // 布局方向和面板可见性使用同一个状态对象，始终从同一快照计算布局。
+  const [layoutState, setLayoutState] = useState<LayoutState>(readInitialLayoutState)
+  const { layout, showEditor, showPreview } = layoutState
+
+  const setLayout = useCallback((value: SetStateAction<LayoutType>) => {
+    setLayoutState((currentState) => ({
+      ...currentState,
+      layout: typeof value === 'function' ? value(currentState.layout) : value,
+    }))
+  }, [])
+
+  // 保留旧的 setter API，命令系统可以继续使用函数式更新，但实际只更新 layout 一次。
+  const setShowEditor = useCallback((value: SetStateAction<boolean>) => {
+    setLayoutState((currentState) => {
+      const currentVisible = currentState.showEditor
+      const nextVisible = typeof value === 'function' ? value(currentVisible) : value
+      return { ...currentState, showEditor: nextVisible }
+    })
+  }, [])
+  const setShowPreview = useCallback((value: SetStateAction<boolean>) => {
+    setLayoutState((currentState) => {
+      const currentVisible = currentState.showPreview
+      const nextVisible = typeof value === 'function' ? value(currentVisible) : value
+      return { ...currentState, showPreview: nextVisible }
+    })
+  }, [])
+
   const [editorWidth, setEditorWidth] = useState<number>(() => {
     if (typeof localStorage === 'undefined') return 55
     const storedWidth = localStorage.getItem(STORAGE_WIDTH)
@@ -82,9 +117,9 @@ export function useWorkspaceLayout() {
     if (!showEditor && !showPreview) return '0 0'
     if (!showEditor) return '1fr 0'
     if (!showPreview) return '0 1fr'
-    if (effectiveLayout === 'preview-left') return `${previewCol} ${editorCol}`
+    if (layout === 'preview-left') return `${previewCol} ${editorCol}`
     return `${editorCol} ${previewCol}`
-  }, [clampedEditorWidth, clampedPreviewWidth, effectiveLayout, showEditor, showPreview])
+  }, [clampedEditorWidth, clampedPreviewWidth, layout, showEditor, showPreview])
 
   useEffect(() => {
     const handleMove = (e: MouseEvent) => {
