@@ -505,7 +505,9 @@ export function useCommandSystem(params: CommandSystemParams) {
 
       const layoutBinding = LAYOUT_SHORTCUT_BINDINGS.find((binding) => binding.matches(e, key))
       if (layoutBinding) {
-        if (prefersMenuAccelerator) return
+        // Layout commands are absolute state updates rather than toggles. Let the
+        // webview handle them immediately on macOS as well; if the native menu
+        // accelerator also emits an action, menuDedupActions filters the duplicate.
         e.preventDefault()
         void dispatchAction(layoutBinding.action)
         return
