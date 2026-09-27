@@ -505,9 +505,11 @@ export function useCommandSystem(params: CommandSystemParams) {
 
       const layoutBinding = LAYOUT_SHORTCUT_BINDINGS.find((binding) => binding.matches(e, key))
       if (layoutBinding) {
-        // Layout commands are absolute state updates rather than toggles. Let the
-        // webview handle them immediately on macOS as well; if the native menu
-        // accelerator also emits an action, menuDedupActions filters the duplicate.
+        // Tauri's native menu is the single owner of desktop layout accelerators
+        // on macOS, Windows, and Linux. Handling them here as well would cause
+        // two dispatches for one key press and make rapid switching feel delayed.
+        // Keep the WebView path as a fallback for the browser build.
+        if (isTauri) return
         e.preventDefault()
         void dispatchAction(layoutBinding.action)
         return
