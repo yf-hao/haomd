@@ -788,7 +788,11 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         .build()?;
 
     let macos_shortcut = |macos: &'static str, other: &'static str| {
-        if cfg!(target_os = "macos") { macos } else { other }
+        if cfg!(target_os = "macos") {
+            macos
+        } else {
+            other
+        }
     };
 
     let text_color_menu = SubmenuBuilder::new(app, texts.text_color)

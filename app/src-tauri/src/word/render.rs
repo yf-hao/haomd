@@ -877,6 +877,7 @@ struct RenderParagraphXmlOptions<'a> {
     callout_paragraph: bool,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_paragraph_xml_for_state(
     content_xml: String,
     style: Option<String>,
@@ -2467,7 +2468,7 @@ pub(crate) fn build_word_font_table_xml(settings: &WordExportStyleSettingsResolv
     font_names.insert("Times New Roman".to_string());
     // Nested list levels use these fonts for their bullet glyphs. They must
     // be declared in fontTable.xml as well as referenced from numbering.xml.
-    for name in ["Courier New", "Wingdings"] {
+    for name in ["Courier New", "Symbol", "Wingdings"] {
         font_names.insert(name.to_string());
     }
     for style in [

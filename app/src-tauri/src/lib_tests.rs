@@ -1159,8 +1159,9 @@ fn should_render_text_run_color_and_underline_styles() {
     assert!(run_xml.contains(r#"<w:color w:val="1D4ED8"/>"#));
     assert!(run_xml.contains(r#"<w:shd w:val="clear" w:color="auto" w:fill="FFF59D"/>"#));
     assert!(run_xml.contains(
-        r#"<w:rFonts w:ascii="Microsoft YaHei" w:hAnsi="Microsoft YaHei" w:cs="Microsoft YaHei" w:eastAsia="Microsoft YaHei"/>"#
+        r#"<w:rFonts w:ascii="Microsoft YaHei" w:hAnsi="Microsoft YaHei" w:cs="Microsoft YaHei" w:eastAsia="Microsoft YaHei" w:hint="eastAsia"/>"#
     ));
+    assert!(run_xml.contains(r#"<w:lang w:eastAsia="zh-CN"/>"#));
     assert!(run_xml.contains(r#"<w:sz w:val="27"/>"#));
     assert!(run_xml.contains("Styled"));
 }
