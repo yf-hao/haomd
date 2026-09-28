@@ -961,25 +961,25 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         .item(
             &MenuItemBuilder::new(texts.preview_left)
                 .id("layout_preview_left")
-                .accelerator("CmdOrCtrl+Alt+Shift+Left")
+                .accelerator("CmdOrCtrl+Shift+H")
                 .build(app)?,
         )
         .item(
             &MenuItemBuilder::new(texts.preview_right)
                 .id("layout_preview_right")
-                .accelerator("CmdOrCtrl+Alt+Shift+Right")
+                .accelerator("CmdOrCtrl+Shift+L")
                 .build(app)?,
         )
         .item(
             &MenuItemBuilder::new(texts.editor_only)
                 .id("layout_editor_only")
-                .accelerator("CmdOrCtrl+Alt+Shift+Up")
+                .accelerator("CmdOrCtrl+Shift+K")
                 .build(app)?,
         )
         .item(
             &MenuItemBuilder::new(texts.preview_only)
                 .id("layout_preview_only")
-                .accelerator("CmdOrCtrl+Alt+Shift+Down")
+                .accelerator("CmdOrCtrl+Shift+J")
                 .build(app)?,
         )
         .build()?;
@@ -994,13 +994,13 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         .item(
             &MenuItemBuilder::new(texts.dock_left)
                 .id("view_ai_chat_dock_left")
-                .accelerator("CmdOrCtrl+Shift+L")
+                .accelerator("CmdOrCtrl+Shift+[")
                 .build(app)?,
         )
         .item(
             &MenuItemBuilder::new(texts.dock_right)
                 .id("view_ai_chat_dock_right")
-                .accelerator("CmdOrCtrl+Shift+R")
+                .accelerator("CmdOrCtrl+Shift+]")
                 .build(app)?,
         )
         .build()?;

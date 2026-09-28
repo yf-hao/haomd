@@ -65,26 +65,41 @@ export const PANEL_SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
   { action: 'toggle_panel_workflows', matches: (event) => event.shiftKey && !event.altKey && event.code === 'F8' },
 ] as const
 
-function matchesLayoutArrow(event: KeyboardEvent, code: string): boolean {
-  return event.altKey && event.shiftKey && event.code === code
+function matchesLayoutDirection(event: KeyboardEvent, code: string): boolean {
+  return event.shiftKey && !event.altKey && event.code === code
 }
 
 export const LAYOUT_SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
   {
     action: 'layout_preview_left',
-    matches: (event) => matchesLayoutArrow(event, 'ArrowLeft'),
+    matches: (event) => matchesLayoutDirection(event, 'KeyH'),
   },
   {
     action: 'layout_preview_right',
-    matches: (event) => matchesLayoutArrow(event, 'ArrowRight'),
+    matches: (event) => matchesLayoutDirection(event, 'KeyL'),
   },
   {
     action: 'layout_editor_only',
-    matches: (event) => matchesLayoutArrow(event, 'ArrowUp'),
+    matches: (event) => matchesLayoutDirection(event, 'KeyK'),
   },
   {
     action: 'layout_preview_only',
-    matches: (event) => matchesLayoutArrow(event, 'ArrowDown'),
+    matches: (event) => matchesLayoutDirection(event, 'KeyJ'),
+  },
+] as const
+
+export const AI_CHAT_DOCK_SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
+  {
+    action: 'view_ai_chat_floating',
+    matches: (event) => event.shiftKey && !event.altKey && event.code === 'KeyF',
+  },
+  {
+    action: 'view_ai_chat_dock_left',
+    matches: (event) => event.shiftKey && !event.altKey && event.code === 'BracketLeft',
+  },
+  {
+    action: 'view_ai_chat_dock_right',
+    matches: (event) => event.shiftKey && !event.altKey && event.code === 'BracketRight',
   },
 ] as const
 
@@ -387,8 +402,14 @@ export const GLOBAL_MENU_ACCELERATORS: Readonly<Record<string, string>> = {
 }
 
 export const LAYOUT_MENU_ACCELERATORS: Readonly<Record<string, string>> = {
-  layout_preview_left: 'CmdOrCtrl+Alt+Shift+Left',
-  layout_preview_right: 'CmdOrCtrl+Alt+Shift+Right',
-  layout_editor_only: 'CmdOrCtrl+Alt+Shift+Up',
-  layout_preview_only: 'CmdOrCtrl+Alt+Shift+Down',
+  layout_preview_left: 'CmdOrCtrl+Shift+H',
+  layout_preview_right: 'CmdOrCtrl+Shift+L',
+  layout_editor_only: 'CmdOrCtrl+Shift+K',
+  layout_preview_only: 'CmdOrCtrl+Shift+J',
+}
+
+export const AI_CHAT_DOCK_MENU_ACCELERATORS: Readonly<Record<string, string>> = {
+  view_ai_chat_floating: 'CmdOrCtrl+Shift+F',
+  view_ai_chat_dock_left: 'CmdOrCtrl+Shift+[',
+  view_ai_chat_dock_right: 'CmdOrCtrl+Shift+]',
 }

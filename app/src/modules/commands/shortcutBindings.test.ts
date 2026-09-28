@@ -4,6 +4,8 @@ import {
   FORMAT_SHORTCUT_ACTIONS,
   FORMAT_SHORTCUT_BINDINGS,
   GLOBAL_MENU_ACCELERATORS,
+  AI_CHAT_DOCK_MENU_ACCELERATORS,
+  AI_CHAT_DOCK_SHORTCUT_BINDINGS,
   LAYOUT_MENU_ACCELERATORS,
   LAYOUT_SHORTCUT_BINDINGS,
   MAC_TEXT_COLOR_MENU_ACCELERATORS,
@@ -132,19 +134,36 @@ describe('layout shortcut bindings', () => {
     expectAcceleratorsToMatch(LAYOUT_MENU_ACCELERATORS)
   })
 
-  it('should map modified arrow keys to layout actions', () => {
+  it('should map H/J/K/L to layout actions', () => {
     const expected = [
-      ['layout_preview_left', 'ArrowLeft'],
-      ['layout_preview_right', 'ArrowRight'],
-      ['layout_editor_only', 'ArrowUp'],
-      ['layout_preview_only', 'ArrowDown'],
+      ['layout_preview_left', 'KeyH'],
+      ['layout_preview_right', 'KeyL'],
+      ['layout_editor_only', 'KeyK'],
+      ['layout_preview_only', 'KeyJ'],
     ] as const
 
     expected.forEach(([action, code]) => {
       const binding = LAYOUT_SHORTCUT_BINDINGS.find((item) => item.action === action)
       expect(binding).toBeDefined()
-      expect(binding?.matches({ altKey: true, shiftKey: true, code } as KeyboardEvent, '')).toBe(true)
-      expect(binding?.matches({ altKey: true, shiftKey: false, code } as KeyboardEvent, '')).toBe(false)
+      expect(binding?.matches({ altKey: false, shiftKey: true, code } as KeyboardEvent, '')).toBe(true)
+      expect(binding?.matches({ altKey: true, shiftKey: true, code } as KeyboardEvent, '')).toBe(false)
+    })
+  })
+
+  it('should match the AI chat dock accelerators', () => {
+    expectAcceleratorsToMatch(AI_CHAT_DOCK_MENU_ACCELERATORS)
+
+    const expected = [
+      ['view_ai_chat_floating', 'KeyF'],
+      ['view_ai_chat_dock_left', 'BracketLeft'],
+      ['view_ai_chat_dock_right', 'BracketRight'],
+    ] as const
+
+    expected.forEach(([action, code]) => {
+      const binding = AI_CHAT_DOCK_SHORTCUT_BINDINGS.find((item) => item.action === action)
+      expect(binding).toBeDefined()
+      expect(binding?.matches({ altKey: false, shiftKey: true, code } as KeyboardEvent, '')).toBe(true)
+      expect(binding?.matches({ altKey: true, shiftKey: true, code } as KeyboardEvent, '')).toBe(false)
     })
   })
 })

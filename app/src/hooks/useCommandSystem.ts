@@ -3,6 +3,7 @@ import type { CommandContext, CommandRegistry } from '../modules/commands/regist
 import { createCommandRegistry } from '../modules/commands/registry'
 import {
   EDITOR_SHORTCUT_SCOPE_SELECTORS,
+  AI_CHAT_DOCK_SHORTCUT_BINDINGS,
   LAYOUT_SHORTCUT_BINDINGS,
   MAC_TEXT_COLOR_SHORTCUT_BINDINGS,
   FORMAT_SHORTCUT_ACTIONS,
@@ -512,6 +513,15 @@ export function useCommandSystem(params: CommandSystemParams) {
         if (isTauri) return
         e.preventDefault()
         void dispatchAction(layoutBinding.action)
+        return
+      }
+
+      const aiChatDockBinding = AI_CHAT_DOCK_SHORTCUT_BINDINGS.find((binding) => binding.matches(e, key))
+      if (aiChatDockBinding) {
+        // Tauri's native menu owns desktop accelerators; keep this for the browser build.
+        if (isTauri) return
+        e.preventDefault()
+        void dispatchAction(aiChatDockBinding.action)
         return
       }
 
