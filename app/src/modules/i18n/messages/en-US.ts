@@ -1027,18 +1027,21 @@ export const enUSMessages: MessageDictionary = {
     reviseTitle: 'AI Revise Template',
     request: 'Template Request',
     requestPlaceholder:
-      'Describe the document type, front matter fields, section structure, and which fields should map to text or richText.',
+      'Describe the document type, front matter fields, and section structure, and which content suits plain text (text) or rich text (richText).',
+    tableHint:
+      'table: maps Markdown table columns to a Word table. Describe the table and its columns; AI generates the header markers and English placeholders.',
+    tableExample: 'Example: The body contains one table with columns for number, date range, and task.',
     requestRequired: 'Please enter a template request.',
     createHint:
       'Be explicit about document type, metadata fields, section headings, and field mapping rules.',
     createExample:
-      'Example: Generate a meeting notes template. Put title, date, and host in front matter. Add Attendees, Decisions, and Action Items sections, with Decisions and Action Items mapped as richText.',
+      'Example: Generate a project application template. Put the title and date in front matter; include Project Introduction and Research Plan sections, as well as short fields such as author and project name; add a table with number, date range, and task columns.',
     textHint:
-      'text: suitable for single-value or short text fields such as title, date, author, or department.',
+      'Plain text (text): suitable for single values such as a title, date, or author, and short fields such as author or project name anywhere in the body.',
     frontMatterHint:
-      'front matter: structured metadata at the top of the document, suitable for short fields like title, date, and author.',
+      'front matter: structured information at the start of a document, such as title, date, and author. Example: include title, date, and author in the document metadata.',
     richTextHint:
-      'richText: rich body content from a section, suitable for paragraphs, lists, or an entire chapter block.',
+      'Rich text (richText): suited to body paragraphs, lists, or a full chapter. Example: Project Introduction is one paragraph, while Research Plan contains several paragraphs and a list.',
     richTextStyleRequestHint:
       'Describe rich-text formatting in your request; Normal style is used by default. For example: “Use the Word placeholder paragraph formatting for all rich text,” or “Use placeholder formatting for Project Introduction and Normal style for Research Plan.” Put a placeholder in its own paragraph and format its paragraph and text when using placeholder formatting.',
     reviseHint:

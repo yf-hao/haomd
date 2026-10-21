@@ -1,0 +1,18 @@
+{
+  "templateId": "project-application-all-features",
+  "name": "项目申请书（全功能示例）",
+  "bindings": [
+    { "field": "meta.title", "placeholder": "{{title}}", "type": "text", "source": { "kind": "frontMatter", "key": "title" } },
+    { "field": "meta.applicationDate", "placeholder": "{{applicationDate}}", "type": "text", "source": { "kind": "frontMatter", "key": "applicationDate" } },
+    { "field": "meta.department", "placeholder": "{{department}}", "type": "text", "source": { "kind": "frontMatter", "key": "department" } },
+    { "field": "meta.author", "placeholder": "{{author}}", "type": "text", "source": { "kind": "inline", "label": "作者" } },
+    { "field": "meta.projectName", "placeholder": "{{projectName}}", "type": "text", "source": { "kind": "inline", "label": "项目名称" } },
+    { "field": "meta.projectLeader", "placeholder": "{{projectLeader}}", "type": "text", "source": { "kind": "inline", "label": "项目负责人" } },
+    { "field": "sections.introduction", "placeholder": "{{introduction}}", "type": "richText", "richTextStyleSource": "placeholder", "source": { "kind": "heading", "match": "课题简介", "includeHeading": false } },
+    { "field": "sections.researchPlan", "placeholder": "{{researchPlan}}", "type": "richText", "richTextStyleSource": "normal", "source": { "kind": "heading", "match": "研究计划", "includeHeading": false } },
+    { "field": "sections.expectedOutcomes", "placeholder": "{{expectedOutcomes}}", "type": "richText", "richTextStyleSource": "normal", "source": { "kind": "heading", "match": "预期成果", "includeHeading": false } },
+    { "field": "tables.sequence", "placeholder": "{{sequence}}", "type": "text", "source": { "kind": "table", "header": "{{序号}}" } },
+    { "field": "tables.dateRange", "placeholder": "{{dateRange}}", "type": "text", "source": { "kind": "table", "header": "{{起止日期}}" } },
+    { "field": "tables.task", "placeholder": "{{task}}", "type": "text", "source": { "kind": "table", "header": "{{任务}}" } }
+  ]
+}

@@ -29,6 +29,18 @@ export function parseMarkdownToTemplateModel(
       continue
     }
 
+    if (source.kind === 'table') {
+      const key = getLastFieldSegment(binding.field)
+      if (key) model.tables[key] = findMatchingTableColumn(body, source.header)
+      continue
+    }
+
+    if (source.kind === 'inline') {
+      const value = findInlineFieldValue(body, source.label)
+      if (value != null) setModelValue(model, binding.field, value)
+      continue
+    }
+
     const section = findMatchingSection(sections, binding)
     if (!section) continue
     const normalizedContent = normalizeSectionContent(section.content)
@@ -52,6 +64,24 @@ export function parseMarkdownToTemplateModel(
   }
 }
 
+export function findInlineFieldValue(markdown: string, label: string): string | null {
+  if (typeof label !== 'string') return null
+  const expectedLabel = label.trim()
+  if (!expectedLabel) return null
+  const markerPattern = /\{\{([^{}]*?)\}\}/g
+  let match: RegExpExecArray | null
+
+  while ((match = markerPattern.exec(markdown)) !== null) {
+    const separatorIndex = match[1].search(/[:：]/)
+    if (separatorIndex < 0) continue
+    const markerLabel = match[1].slice(0, separatorIndex).trim()
+    if (markerLabel !== expectedLabel) continue
+    return match[1].slice(separatorIndex + 1).trim()
+  }
+
+  return null
+}
+
 export function resolveWordTemplateId(
   markdown: string,
 ): string | null {
@@ -65,7 +95,58 @@ function createEmptyTemplateContentModel(): TemplateContentModel {
   return {
     meta: {},
     sections: {},
+    tables: {},
   }
+}
+
+function findMatchingTableColumn(markdownBody: string, headerMarker: string): string[] {
+  if (typeof headerMarker !== 'string' || !headerMarker.trim()) return []
+  const lines = markdownBody.replace(/\r\n/g, '\n').split('\n')
+  const expectedHeader = headerMarker.trim()
+
+  for (let index = 0; index < lines.length - 1; index += 1) {
+    const headers = splitMarkdownTableRow(lines[index])
+    if (!headers || !isMarkdownTableDivider(lines[index + 1])) continue
+    const columnIndex = headers.findIndex((header) => header.trim() === expectedHeader)
+    if (columnIndex < 0) continue
+
+    const values: string[] = []
+    for (let rowIndex = index + 2; rowIndex < lines.length; rowIndex += 1) {
+      const cells = splitMarkdownTableRow(lines[rowIndex])
+      if (!cells) break
+      values.push(cells[columnIndex]?.trim() ?? '')
+    }
+    return values
+  }
+
+  return []
+}
+
+function splitMarkdownTableRow(line: string): string[] | null {
+  const trimmed = line.trim()
+  if (!trimmed.includes('|')) return null
+  const cells: string[] = []
+  let current = ''
+  let escaped = false
+  for (const character of trimmed) {
+    if (character === '|' && !escaped) {
+      cells.push(current.trim())
+      current = ''
+    } else {
+      current += character
+    }
+    if (character === '\\' && !escaped) escaped = true
+    else escaped = false
+  }
+  cells.push(current.trim())
+  if (cells[0] === '') cells.shift()
+  if (cells[cells.length - 1] === '') cells.pop()
+  return cells
+}
+
+function isMarkdownTableDivider(line: string): boolean {
+  const cells = splitMarkdownTableRow(line)
+  return !!cells?.length && cells.every((cell) => /^:?-{3,}:?$/.test(cell.trim()))
 }
 
 function setModelValue(model: TemplateContentModel, path: string, value: string) {

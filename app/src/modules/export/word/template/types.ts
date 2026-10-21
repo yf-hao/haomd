@@ -14,6 +14,14 @@ export type TemplateContentSource =
       headingFontSizePt?: number | null
       childHeadingBold?: boolean
     }
+  | {
+      kind: 'table'
+      header: string
+    }
+  | {
+      kind: 'inline'
+      label: string
+    }
 
 export type RichTextStyleSource = 'normal' | 'placeholder'
 
@@ -34,6 +42,7 @@ export type WordTemplateConfig = {
 export type TemplateContentModel = {
   meta: Record<string, string>
   sections: Record<string, string>
+  tables: Record<string, string[]>
 }
 
 export type ParsedTemplateMarkdown = {

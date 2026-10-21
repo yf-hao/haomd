@@ -46,6 +46,8 @@ describe('templateAuthoringPrompt', () => {
 
     expect(prompt.system).toContain('输出必须是严格 JSON 对象')
     expect(prompt.system).toContain('Word 模板配置格式')
+    expect(prompt.system).toContain('用户可以只用自然语言描述表格数量和列名')
+    expect(prompt.system).toContain('同时接受半角冒号 : 和全角冒号 ：')
     expect(prompt.user).toContain('生成一个新的 HaoMD Word 模板配置草稿')
     expect(prompt.user).toContain('会议纪要模板')
   })

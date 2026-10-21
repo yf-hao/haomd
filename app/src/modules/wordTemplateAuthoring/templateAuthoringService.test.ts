@@ -44,7 +44,12 @@ const validDraft: WordTemplateDraft = {
   },
   usageMarkdown:
     '# 使用说明\n\n' +
+    '- 在 `template.docx` 中按原样放置 `{{title}}` 和 `{{decisions}}` 占位符\n' +
+    '- 占位符支持 `{{key}}` 和 `${key}`；key 前后的多个空格会被忽略\n' +
+    '- placeholder key 使用英文 ASCII 标识符\n' +
+    '- `text` 占位符可放在段落文字中；`richText` 占位符必须独占一个段落\n' +
     '- front matter 中填写 `title`\n' +
+    '- front matter 键名使用英文 ASCII 标识符，允许下划线；值可以是中文\n' +
     '- 使用 `# 决议` 标题组织正文\n' +
     '- `meta.title` 对应 front matter 的 `title`\n' +
     '- `sections.decisions` 对应标题为 `决议` 的章节\n' +

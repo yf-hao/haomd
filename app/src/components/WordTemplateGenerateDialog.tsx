@@ -47,6 +47,14 @@ export function WordTemplateGenerateDialog({
       ? t('wordTemplateAuthoring.generateTitle')
       : t('wordTemplateAuthoring.reviseTitle')
   const placeholderSeparator = '\n\n----------------\n\n'
+  const richTextGuidance = [
+    t('wordTemplateAuthoring.richTextHint'),
+    t('wordTemplateAuthoring.richTextStyleRequestHint'),
+  ].join(' ')
+  const tableGuidance = [
+    t('wordTemplateAuthoring.tableHint'),
+    t('wordTemplateAuthoring.tableExample'),
+  ].join(' ')
   const requestPlaceholder = [
     mode === 'create'
       ? [
@@ -55,11 +63,15 @@ export function WordTemplateGenerateDialog({
           [
             t('wordTemplateAuthoring.frontMatterHint'),
             t('wordTemplateAuthoring.textHint'),
-            t('wordTemplateAuthoring.richTextHint'),
+            richTextGuidance,
+            tableGuidance,
           ].join('\n\n'),
         ].join(placeholderSeparator)
-      : t('wordTemplateAuthoring.requestPlaceholder'),
-    t('wordTemplateAuthoring.richTextStyleRequestHint'),
+      : [
+          t('wordTemplateAuthoring.requestPlaceholder'),
+          richTextGuidance,
+          tableGuidance,
+        ].join(placeholderSeparator),
   ].join(placeholderSeparator)
 
   const statusLabel = useMemo(() => {

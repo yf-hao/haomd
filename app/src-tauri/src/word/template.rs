@@ -58,9 +58,22 @@ pub(crate) fn build_template_replacements(
                 style_source: binding.rich_text_style_source,
             });
         } else {
-            let raw_value = get_json_value_by_path(model, &binding.field)
-                .map(stringify_template_value)
-                .unwrap_or_default();
+            let raw_value = get_json_value_by_path(model, &binding.field);
+            if binding.field.starts_with("tables.") {
+                if let Some(values) = raw_value.and_then(serde_json::Value::as_array) {
+                    for (row_index, value) in values.iter().enumerate() {
+                        replacements.push(TemplateReplacement::Text {
+                            placeholder: numbered_table_placeholder(
+                                &binding.placeholder,
+                                row_index + 1,
+                            )?,
+                            value: crate::escape_xml_text(&stringify_template_value(value)),
+                        });
+                    }
+                    continue;
+                }
+            }
+            let raw_value = raw_value.map(stringify_template_value).unwrap_or_default();
             replacements.push(TemplateReplacement::Text {
                 placeholder: binding.placeholder.clone(),
                 value: crate::escape_xml_text(&raw_value),
@@ -69,6 +82,17 @@ pub(crate) fn build_template_replacements(
     }
 
     Ok(replacements)
+}
+
+fn numbered_table_placeholder(placeholder: &str, row_index: usize) -> Result<String, String> {
+    let key =
+        placeholder_key(placeholder).ok_or_else(|| format!("无效的表格占位符: {placeholder}"))?;
+    let trimmed = placeholder.trim();
+    if trimmed.starts_with("${") {
+        Ok(format!("${{{key}{row_index}}}"))
+    } else {
+        Ok(format!("{{{{{key}{row_index}}}}}"))
+    }
 }
 
 fn get_json_value_by_path<'a>(
@@ -105,7 +129,10 @@ fn stringify_template_value(value: &serde_json::Value) -> String {
 }
 
 pub(crate) enum TemplateReplacement {
-    Text { placeholder: String, value: String },
+    Text {
+        placeholder: String,
+        value: String,
+    },
     Paragraph {
         placeholder: String,
         xml: String,
@@ -790,8 +817,8 @@ fn merge_property_into_element(
     };
 
     let existing_children = direct_child_elements(&existing_properties);
-    let has_placeholder_style = property_name == "pPr"
-        && default_children.iter().any(|(name, _)| name == "pStyle");
+    let has_placeholder_style =
+        property_name == "pPr" && default_children.iter().any(|(name, _)| name == "pStyle");
     let remove_normal_style = property_name == "pPr" && !has_placeholder_style;
     let mut merged = Vec::<(String, String)>::new();
     for (name, child) in default_children {
@@ -873,15 +900,12 @@ fn parse_xml_attributes(fragment: &str) -> Vec<(String, String)> {
     let mut attributes = Vec::new();
     let mut cursor = 0usize;
     while cursor < bytes.len() {
-        while cursor < bytes.len()
-            && (bytes[cursor].is_ascii_whitespace() || bytes[cursor] == b'/')
+        while cursor < bytes.len() && (bytes[cursor].is_ascii_whitespace() || bytes[cursor] == b'/')
         {
             cursor += 1;
         }
         let name_start = cursor;
-        while cursor < bytes.len()
-            && bytes[cursor] != b'='
-            && !bytes[cursor].is_ascii_whitespace()
+        while cursor < bytes.len() && bytes[cursor] != b'=' && !bytes[cursor].is_ascii_whitespace()
         {
             cursor += 1;
         }
@@ -1291,6 +1315,40 @@ fn iter_paragraph_ranges(document_xml: &str) -> Vec<(usize, usize)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn should_build_numbered_table_replacements_from_configured_keys() {
+        let template_cfg = WordTemplateConfigCfg {
+            template_id: "project-application".to_string(),
+            name: None,
+            bindings: vec![WordTemplateFillBindingCfg {
+                field: "tables.deadline".to_string(),
+                placeholder: "{{dateRange}}".to_string(),
+                binding_type: "text".to_string(),
+                rich_text_style_source: WordTemplateRichTextStyleSource::Normal,
+            }],
+        };
+        let model = serde_json::json!({
+            "tables": {
+                "deadline": ["2025年10月13日-2025年11月09日", "2025年11月10日-2025年12月21日"]
+            }
+        });
+
+        let replacements =
+            build_template_replacements(&template_cfg, &model, &HashMap::new(), None)
+                .expect("table bindings should produce replacements");
+
+        assert!(matches!(
+            &replacements[0],
+            TemplateReplacement::Text { placeholder, value }
+                if placeholder == "{{dateRange1}}" && value == "2025年10月13日-2025年11月09日"
+        ));
+        assert!(matches!(
+            &replacements[1],
+            TemplateReplacement::Text { placeholder, value }
+                if placeholder == "{{dateRange2}}" && value == "2025年11月10日-2025年12月21日"
+        ));
+    }
 
     #[test]
     fn should_replace_text_placeholder_split_across_word_runs() {
