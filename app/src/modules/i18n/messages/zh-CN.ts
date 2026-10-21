@@ -1025,6 +1025,8 @@ export const zhCNMessages: MessageDictionary = {
     textHint: 'text：适合单值或短文本字段，一般用于标题、日期、作者、部门等简单内容。',
     frontMatterHint: 'front matter：文档顶部的结构化元数据，适合放标题、日期、作者等短字段。',
     richTextHint: 'richText：正文章节里的富文本内容块，适合放多段落、列表或整段章节内容。',
+    richTextStyleRequestHint:
+      '富文本格式来源可直接写在需求中，未说明时默认使用 Normal 样式。例如：“所有富文本沿用 Word 占位符所在段落的格式”；或“课题简介沿用占位段格式，研究计划使用 Normal 样式”。使用占位段格式时，占位符需单独成段并设置好段落和文字格式。',
     reviseHint: '描述你希望如何修改当前模板配置、使用说明或示例 Markdown。',
     currentStatus: '当前状态',
     validationErrors: '校验错误',

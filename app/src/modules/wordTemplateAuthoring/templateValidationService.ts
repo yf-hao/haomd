@@ -19,6 +19,16 @@ function addError(
   errors.push({ file, code, message, path })
 }
 
+function getPlaceholderKey(placeholder: string): string | null {
+  const inner = placeholder
+    .trim()
+    .replace(/^\$\{([\s\S]*)\}$/, '$1')
+    .replace(/^\{\{([\s\S]*)\}\}$/, '$1')
+  if (inner === placeholder.trim()) return null
+  const key = inner.trim()
+  return key || null
+}
+
 function validateTemplateJson(draft: WordTemplateDraft): TemplateValidationError[] {
   const errors: TemplateValidationError[] = []
   const { templateJson } = draft
@@ -50,8 +60,24 @@ function validateTemplateJson(draft: WordTemplateDraft): TemplateValidationError
 
   templateJson.bindings.forEach((binding, index) => {
     const pathPrefix = `bindings[${index}]`
-    if (typeof binding.field !== 'string' || !binding.field.trim()) {
+    const field = typeof binding.field === 'string' ? binding.field.trim() : ''
+    const fieldParts = field.split('.')
+    const scope = fieldParts[0]
+    const fieldKey = fieldParts[1]
+    if (!field) {
       addError(errors, 'template.json', 'missing_binding_field', 'binding.field 不能为空', `${pathPrefix}.field`)
+    } else if (
+      fieldParts.length !== 2 ||
+      (scope !== 'meta' && scope !== 'sections') ||
+      !fieldKey?.trim()
+    ) {
+      addError(
+        errors,
+        'template.json',
+        'invalid_binding_field_path',
+        'binding.field 必须是两段路径：meta.<字段名> 或 sections.<字段名>',
+        `${pathPrefix}.field`,
+      )
     }
     if (typeof binding.placeholder !== 'string' || !binding.placeholder.trim()) {
       addError(
@@ -61,6 +87,25 @@ function validateTemplateJson(draft: WordTemplateDraft): TemplateValidationError
         'binding.placeholder 不能为空',
         `${pathPrefix}.placeholder`,
       )
+    } else {
+      const placeholderKey = getPlaceholderKey(binding.placeholder)
+      if (!placeholderKey) {
+        addError(
+          errors,
+          'template.json',
+          'invalid_placeholder_format',
+          'binding.placeholder 必须使用 {{englishKey}} 或 ${englishKey} 格式',
+          `${pathPrefix}.placeholder`,
+        )
+      } else if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(placeholderKey)) {
+        addError(
+          errors,
+          'template.json',
+          'invalid_placeholder_key',
+          'placeholder key 必须是英文标识符，格式为 ^[A-Za-z][A-Za-z0-9_]*$，不能包含中文、空格或连字符',
+          `${pathPrefix}.placeholder`,
+        )
+      }
     }
     if (binding.type !== 'text' && binding.type !== 'richText') {
       addError(
@@ -69,6 +114,28 @@ function validateTemplateJson(draft: WordTemplateDraft): TemplateValidationError
         'invalid_binding_type',
         'binding.type 只能是 text 或 richText',
         `${pathPrefix}.type`,
+      )
+    }
+    if (binding.type === 'richText') {
+      if (
+        binding.richTextStyleSource !== 'normal' &&
+        binding.richTextStyleSource !== 'placeholder'
+      ) {
+        addError(
+          errors,
+          'template.json',
+          'invalid_richtext_style_source',
+          'richText binding 必须设置 richTextStyleSource 为 normal 或 placeholder',
+          `${pathPrefix}.richTextStyleSource`,
+        )
+      }
+    } else if (binding.richTextStyleSource != null) {
+      addError(
+        errors,
+        'template.json',
+        'richtext_style_source_on_text_binding',
+        'richTextStyleSource 只能用于 richText binding',
+        `${pathPrefix}.richTextStyleSource`,
       )
     }
 
@@ -85,6 +152,15 @@ function validateTemplateJson(draft: WordTemplateDraft): TemplateValidationError
     }
 
     if (binding.source.kind === 'frontMatter') {
+      if (scope !== 'meta') {
+        addError(
+          errors,
+          'template.json',
+          'binding_field_source_mismatch',
+          'frontMatter 来源的 binding.field 必须使用 meta.<字段名>',
+          `${pathPrefix}.field`,
+        )
+      }
       if (
         binding.source.key != null &&
         (typeof binding.source.key !== 'string' || !binding.source.key.trim())
@@ -101,6 +177,15 @@ function validateTemplateJson(draft: WordTemplateDraft): TemplateValidationError
     }
 
     if (binding.source.kind === 'heading') {
+      if (scope !== 'sections') {
+        addError(
+          errors,
+          'template.json',
+          'binding_field_source_mismatch',
+          'heading 来源的 binding.field 必须使用 sections.<字段名>',
+          `${pathPrefix}.field`,
+        )
+      }
       const hasMatch =
         typeof binding.source.match === 'string' && binding.source.match.trim().length > 0
       const hasMatchAny =
@@ -155,6 +240,45 @@ function validateUsageMarkdown(draft: WordTemplateDraft): TemplateValidationErro
     return errors
   }
 
+  if (!/template\.docx/i.test(text) || !/(占位符|placeholder)/i.test(text)) {
+    addError(
+      errors,
+      'usage.md',
+      'missing_docx_placeholder_guidance',
+      'usageMarkdown 必须说明如何在 template.docx 中放置占位符',
+    )
+  }
+
+  if (!text.includes('{{') || !text.includes('${') || !/(空格|空白)/.test(text)) {
+    addError(
+      errors,
+      'usage.md',
+      'missing_placeholder_syntax_guidance',
+      'usageMarkdown 必须说明 {{key}}、${key} 两种写法及 key 两侧空格会被忽略',
+    )
+  }
+
+  if (!/(英文|ASCII)/i.test(text)) {
+    addError(
+      errors,
+      'usage.md',
+      'missing_english_placeholder_key_guidance',
+      'usageMarkdown 必须说明 placeholder key 使用英文标识符',
+    )
+  }
+
+  if (
+    draft.templateJson.bindings.some((binding) => binding.type === 'richText') &&
+    (!/(richText|富文本)/i.test(text) || !/段落/.test(text))
+  ) {
+    addError(
+      errors,
+      'usage.md',
+      'missing_richtext_placeholder_guidance',
+      'usageMarkdown 必须说明 richText 占位符需要独占一个段落',
+    )
+  }
+
   if (!/(front[\s-]?matter|frontmatter|标题区|元数据|前置字段)/i.test(text)) {
     addError(
       errors,
@@ -182,6 +306,31 @@ function validateUsageMarkdown(draft: WordTemplateDraft): TemplateValidationErro
         `usageMarkdown 缺少字段说明: ${binding.field}`,
         binding.field,
       )
+    }
+    if (
+      typeof binding.placeholder === 'string' &&
+      binding.placeholder.trim() &&
+      !text.includes(binding.placeholder)
+    ) {
+      addError(
+        errors,
+        'usage.md',
+        'missing_placeholder_mapping',
+        `usageMarkdown 缺少占位符说明: ${binding.placeholder}`,
+        binding.placeholder,
+      )
+    }
+    if (binding.type === 'richText') {
+      const modeName = binding.richTextStyleSource === 'placeholder' ? '占位段格式' : 'Normal 样式'
+      if (!text.includes(modeName)) {
+        addError(
+          errors,
+          'usage.md',
+          'missing_richtext_style_source_guidance',
+          `usageMarkdown 缺少 ${binding.field} 的 richText 格式来源说明: ${modeName}`,
+          binding.field,
+        )
+      }
     }
   }
 
@@ -254,9 +403,7 @@ function validateSampleMarkdown(draft: WordTemplateDraft): TemplateValidationErr
   return errors
 }
 
-export function validateWordTemplateDraft(
-  draft: WordTemplateDraft,
-): WordTemplateValidationResult {
+export function validateWordTemplateDraft(draft: WordTemplateDraft): WordTemplateValidationResult {
   const errors: TemplateValidationError[] = []
   errors.push(...validateTemplateJson(draft))
   errors.push(...validateUsageMarkdown(draft))

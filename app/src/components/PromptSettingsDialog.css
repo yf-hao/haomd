@@ -5,9 +5,11 @@
   width: 900px;
   min-width: 760px;
   padding: 20px 24px 18px;
+  box-sizing: border-box;
   font-size: var(--ui-font-settings);
   display: flex;
   flex-direction: column;
+  height: 72vh;
   max-height: 72vh;
   overflow: hidden;
 }
@@ -90,6 +92,7 @@
 /* 单个角色 item，用于放插入预览线 */
 .prompt-role-item {
   position: relative;
+  flex: 0 0 auto;
 }
 
 .prompt-role-item-dragging {
@@ -157,27 +160,6 @@
   color: var(--theme-text-default);
   font-size: var(--ui-font-settings);
   white-space: pre-wrap;
-}
-
-/* 展开详情独立滚动，保持提示词预览仍只展示前 5 行 */
-.modal.modal-prompt-settings .provider-details {
-  max-height: 240px;
-  overflow-y: scroll;
-  scrollbar-width: thin;
-  scrollbar-color: var(--theme-border-input-strong) transparent;
-}
-
-.modal.modal-prompt-settings .provider-details::-webkit-scrollbar {
-  width: 8px;
-}
-
-.modal.modal-prompt-settings .provider-details::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.modal.modal-prompt-settings .provider-details::-webkit-scrollbar-thumb {
-  background-color: var(--theme-border-input-strong);
-  border-radius: 4px;
 }
 
 @media (max-width: 960px) {

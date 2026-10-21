@@ -15,10 +15,13 @@ export type TemplateContentSource =
       childHeadingBold?: boolean
     }
 
+export type RichTextStyleSource = 'normal' | 'placeholder'
+
 export type WordTemplateBinding = {
   field: string
   placeholder: string
   type: 'text' | 'richText'
+  richTextStyleSource?: RichTextStyleSource
   source?: TemplateContentSource
 }
 

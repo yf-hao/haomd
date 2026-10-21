@@ -55,6 +55,7 @@ pub(crate) fn build_template_replacements(
             replacements.push(TemplateReplacement::Paragraph {
                 placeholder: binding.placeholder.clone(),
                 xml: rendered,
+                style_source: binding.rich_text_style_source,
             });
         } else {
             let raw_value = get_json_value_by_path(model, &binding.field)
@@ -105,7 +106,11 @@ fn stringify_template_value(value: &serde_json::Value) -> String {
 
 pub(crate) enum TemplateReplacement {
     Text { placeholder: String, value: String },
-    Paragraph { placeholder: String, xml: String },
+    Paragraph {
+        placeholder: String,
+        xml: String,
+        style_source: WordTemplateRichTextStyleSource,
+    },
 }
 
 #[derive(Debug, Clone, Default)]
@@ -241,8 +246,9 @@ fn apply_template_replacements(document_xml: &str, replacements: &[TemplateRepla
             TemplateReplacement::Paragraph {
                 placeholder,
                 xml: rendered,
+                style_source,
             } => {
-                xml = replace_placeholder_paragraph(&xml, placeholder, rendered);
+                xml = replace_placeholder_paragraph(&xml, placeholder, rendered, *style_source);
             }
         }
     }
@@ -252,7 +258,7 @@ fn apply_template_replacements(document_xml: &str, replacements: &[TemplateRepla
 fn replace_text_placeholder(document_xml: &str, placeholder: &str, value: &str) -> String {
     let paragraph_ranges = iter_paragraph_ranges(document_xml);
     if paragraph_ranges.is_empty() {
-        return document_xml.replace(placeholder, value);
+        return replace_placeholder_tokens(document_xml, placeholder, value);
     }
 
     let mut output = String::with_capacity(document_xml.len());
@@ -271,7 +277,63 @@ fn replace_text_placeholder(document_xml: &str, placeholder: &str, value: &str) 
 
     // Keep supporting placeholders outside a paragraph, which was the behavior
     // of the original direct replacement path.
-    output.replace(placeholder, value)
+    replace_placeholder_tokens(&output, placeholder, value)
+}
+
+fn placeholder_key(placeholder: &str) -> Option<&str> {
+    let key = placeholder
+        .strip_prefix("${")
+        .and_then(|value| value.strip_suffix('}'))
+        .or_else(|| {
+            placeholder
+                .strip_prefix("{{")
+                .and_then(|value| value.strip_suffix("}}"))
+        })?
+        .trim();
+    (!key.is_empty()).then_some(key)
+}
+
+fn find_placeholder_range(text: &str, placeholder: &str) -> Option<(usize, usize)> {
+    let Some(expected_key) = placeholder_key(placeholder) else {
+        let start = text.find(placeholder)?;
+        return Some((start, start + placeholder.len()));
+    };
+
+    for (start, _) in text.char_indices() {
+        let (opening, closing) = if text[start..].starts_with("{{") {
+            ("{{", "}}")
+        } else if text[start..].starts_with("${") {
+            ("${", "}")
+        } else {
+            continue;
+        };
+        let content_start = start + opening.len();
+        let Some(close_offset) = text[content_start..].find(closing) else {
+            continue;
+        };
+        let content_end = close_offset + content_start;
+        if text[content_start..content_end].trim() == expected_key {
+            return Some((start, content_end + closing.len()));
+        }
+    }
+
+    None
+}
+
+fn replace_placeholder_tokens(text: &str, placeholder: &str, value: &str) -> String {
+    let mut output = String::with_capacity(text.len());
+    let mut cursor = 0usize;
+    while let Some((relative_start, relative_end)) =
+        find_placeholder_range(&text[cursor..], placeholder)
+    {
+        let start = cursor + relative_start;
+        let end = cursor + relative_end;
+        output.push_str(&text[cursor..start]);
+        output.push_str(value);
+        cursor = end;
+    }
+    output.push_str(&text[cursor..]);
+    output
 }
 
 fn read_optional_docx_entry_as_string<R: Read + std::io::Seek>(
@@ -586,16 +648,29 @@ fn replace_placeholder_paragraph(
     document_xml: &str,
     placeholder: &str,
     replacement_xml: &str,
+    style_source: WordTemplateRichTextStyleSource,
 ) -> String {
     let mut xml = document_xml.to_string();
     while let Some((paragraph_start, paragraph_end)) =
         find_paragraph_containing_placeholder(&xml, placeholder)
     {
         let paragraph = &xml[paragraph_start..paragraph_end];
+        let formatted_replacement = if style_source == WordTemplateRichTextStyleSource::Placeholder
+        {
+            let (paragraph_properties, run_properties) =
+                extract_placeholder_format(paragraph, placeholder);
+            apply_placeholder_format(
+                replacement_xml,
+                paragraph_properties.as_deref(),
+                run_properties.as_deref(),
+            )
+        } else {
+            replacement_xml.to_string()
+        };
         let replacement = if replacement_xml.is_empty() {
             empty_paragraph_with_properties(paragraph)
         } else {
-            replacement_xml.to_string()
+            formatted_replacement
         };
         let mut out = String::with_capacity(
             xml.len().saturating_sub(paragraph_end - paragraph_start) + replacement.len(),
@@ -605,7 +680,308 @@ fn replace_placeholder_paragraph(
         out.push_str(&xml[paragraph_end..]);
         xml = out;
     }
-    xml.replace(placeholder, replacement_xml)
+    replace_placeholder_tokens(&xml, placeholder, replacement_xml)
+}
+
+fn extract_placeholder_format(
+    paragraph: &str,
+    placeholder: &str,
+) -> (Option<String>, Option<String>) {
+    let paragraph_properties = extract_property_element(paragraph, "pPr");
+    let text_nodes = iter_text_node_ranges(paragraph);
+    let mut combined_text = String::new();
+    let node_ranges = text_nodes
+        .into_iter()
+        .map(|(start, end)| {
+            let combined_start = combined_text.len();
+            combined_text.push_str(&paragraph[start..end]);
+            (start, end, combined_start, combined_text.len())
+        })
+        .collect::<Vec<_>>();
+    let run_properties =
+        find_placeholder_range(&combined_text, placeholder).and_then(|(start, end)| {
+            let first_placeholder_node = node_ranges
+                .iter()
+                .find(|(_, _, node_start, node_end)| *node_start < end && start < *node_end)?;
+            let run = iter_run_ranges(paragraph).into_iter().find(|run| {
+                run.start <= first_placeholder_node.0 && first_placeholder_node.1 <= run.end
+            })?;
+            extract_property_element(&paragraph[run.start..run.end], "rPr")
+        });
+    (paragraph_properties, run_properties)
+}
+
+fn apply_placeholder_format(
+    replacement_xml: &str,
+    paragraph_properties: Option<&str>,
+    run_properties: Option<&str>,
+) -> String {
+    let paragraphs = iter_paragraph_ranges(replacement_xml);
+    if paragraphs.is_empty() {
+        return replacement_xml.to_string();
+    }
+
+    let mut output = String::with_capacity(replacement_xml.len());
+    let mut cursor = 0usize;
+    for (start, end) in paragraphs {
+        output.push_str(&replacement_xml[cursor..start]);
+        let paragraph = &replacement_xml[start..end];
+        let paragraph = merge_property_into_element(paragraph, "pPr", paragraph_properties);
+        let paragraph = if let Some(default_run_properties) = run_properties {
+            apply_run_properties(&paragraph, default_run_properties)
+        } else {
+            paragraph
+        };
+        output.push_str(&paragraph);
+        cursor = end;
+    }
+    output.push_str(&replacement_xml[cursor..]);
+    output
+}
+
+fn apply_run_properties(paragraph: &str, default_run_properties: &str) -> String {
+    let runs = iter_run_ranges(paragraph);
+    if runs.is_empty() {
+        return paragraph.to_string();
+    }
+
+    let mut output = String::with_capacity(paragraph.len());
+    let mut cursor = 0usize;
+    for range in runs {
+        output.push_str(&paragraph[cursor..range.start]);
+        let run = &paragraph[range.start..range.end];
+        output.push_str(&merge_property_into_element(
+            run,
+            "rPr",
+            Some(default_run_properties),
+        ));
+        cursor = range.end;
+    }
+    output.push_str(&paragraph[cursor..]);
+    output
+}
+
+fn merge_property_into_element(
+    element: &str,
+    property_name: &str,
+    defaults: Option<&str>,
+) -> String {
+    let property_tag = format!("w:{property_name}");
+    let default_children = defaults.map(direct_child_elements).unwrap_or_default();
+    if default_children.is_empty() {
+        if property_name == "pPr" {
+            return strip_normal_paragraph_style(element);
+        }
+        return element.to_string();
+    }
+    let Some(defaults) = defaults else {
+        return element.to_string();
+    };
+
+    let Some(existing_properties) = extract_property_element(element, property_name) else {
+        let Some(open_end) = element.find('>') else {
+            return element.to_string();
+        };
+        let mut result = String::with_capacity(element.len() + defaults.len());
+        result.push_str(&element[..=open_end]);
+        result.push_str(defaults);
+        result.push_str(&element[open_end + 1..]);
+        return result;
+    };
+
+    let existing_children = direct_child_elements(&existing_properties);
+    let has_placeholder_style = property_name == "pPr"
+        && default_children.iter().any(|(name, _)| name == "pStyle");
+    let remove_normal_style = property_name == "pPr" && !has_placeholder_style;
+    let mut merged = Vec::<(String, String)>::new();
+    for (name, child) in default_children {
+        if let Some(existing) = existing_children
+            .iter()
+            .find(|(existing_name, _)| *existing_name == name)
+        {
+            if name == "pStyle" {
+                if has_placeholder_style {
+                    merged.push((name, child));
+                    continue;
+                }
+                if remove_normal_style && style_id(&existing.1) == Some("Normal") {
+                    continue;
+                }
+            }
+            let merged_child = if property_name == "rPr" && name == "rFonts" {
+                merge_run_font_attributes(&child, &existing.1)
+            } else if property_name == "rPr" && name == "lang" {
+                child
+            } else {
+                existing.1.clone()
+            };
+            merged.push((name, merged_child));
+        } else {
+            merged.push((name, child));
+        }
+    }
+    for (name, child) in existing_children {
+        if !merged.iter().any(|(merged_name, _)| *merged_name == name) {
+            if !(remove_normal_style && name == "pStyle" && style_id(&child) == Some("Normal")) {
+                merged.push((name, child));
+            }
+        }
+    }
+
+    let mut properties = format!("<{property_tag}>");
+    for (_, child) in merged {
+        properties.push_str(&child);
+    }
+    properties.push_str(&format!("</{property_tag}>"));
+    element.replacen(&existing_properties, &properties, 1)
+}
+
+fn merge_run_font_attributes(defaults: &str, generated: &str) -> String {
+    let Some(default_tag_end) = defaults.find('>') else {
+        return generated.to_string();
+    };
+    let Some(generated_tag_end) = generated.find('>') else {
+        return defaults.to_string();
+    };
+    let mut attributes = Vec::<(String, String)>::new();
+    for attribute in parse_xml_attributes(&defaults["<w:rFonts".len()..default_tag_end]) {
+        set_xml_attribute(&mut attributes, attribute);
+    }
+    for attribute in parse_xml_attributes(&generated["<w:rFonts".len()..generated_tag_end]) {
+        set_xml_attribute(&mut attributes, attribute);
+    }
+    let attributes = attributes
+        .into_iter()
+        .map(|(name, value)| format!(" {name}=\"{value}\""))
+        .collect::<String>();
+    format!("<w:rFonts{attributes}/>")
+}
+
+fn set_xml_attribute(attributes: &mut Vec<(String, String)>, attribute: (String, String)) {
+    if let Some(existing) = attributes
+        .iter_mut()
+        .find(|(name, _)| name.as_str() == attribute.0.as_str())
+    {
+        existing.1 = attribute.1;
+    } else {
+        attributes.push(attribute);
+    }
+}
+
+fn parse_xml_attributes(fragment: &str) -> Vec<(String, String)> {
+    let bytes = fragment.as_bytes();
+    let mut attributes = Vec::new();
+    let mut cursor = 0usize;
+    while cursor < bytes.len() {
+        while cursor < bytes.len()
+            && (bytes[cursor].is_ascii_whitespace() || bytes[cursor] == b'/')
+        {
+            cursor += 1;
+        }
+        let name_start = cursor;
+        while cursor < bytes.len()
+            && bytes[cursor] != b'='
+            && !bytes[cursor].is_ascii_whitespace()
+        {
+            cursor += 1;
+        }
+        if cursor == name_start || cursor >= bytes.len() || bytes[cursor] != b'=' {
+            break;
+        }
+        let name = &fragment[name_start..cursor];
+        cursor += 1;
+        if cursor >= bytes.len() || !matches!(bytes[cursor], b'"' | b'\'') {
+            break;
+        }
+        let quote = bytes[cursor];
+        cursor += 1;
+        let value_start = cursor;
+        while cursor < bytes.len() && bytes[cursor] != quote {
+            cursor += 1;
+        }
+        if cursor >= bytes.len() {
+            break;
+        }
+        attributes.push((name.to_string(), fragment[value_start..cursor].to_string()));
+        cursor += 1;
+    }
+    attributes
+}
+
+fn strip_normal_paragraph_style(paragraph: &str) -> String {
+    let Some(existing_properties) = extract_property_element(paragraph, "pPr") else {
+        return paragraph.to_string();
+    };
+    let children = direct_child_elements(&existing_properties);
+    if !children
+        .iter()
+        .any(|(name, child)| name == "pStyle" && style_id(child) == Some("Normal"))
+    {
+        return paragraph.to_string();
+    }
+    let mut properties = String::from("<w:pPr>");
+    for (name, child) in children {
+        if name != "pStyle" || style_id(&child) != Some("Normal") {
+            properties.push_str(&child);
+        }
+    }
+    properties.push_str("</w:pPr>");
+    paragraph.replacen(&existing_properties, &properties, 1)
+}
+
+fn style_id(style_element: &str) -> Option<&str> {
+    let value_start = style_element.find("w:val=\"")? + "w:val=\"".len();
+    let value_end = style_element[value_start..].find('"')? + value_start;
+    Some(&style_element[value_start..value_end])
+}
+
+fn extract_property_element(xml: &str, property_name: &str) -> Option<String> {
+    let tag = format!("w:{property_name}");
+    direct_child_elements(xml)
+        .into_iter()
+        .find_map(|(name, element)| (name == tag).then_some(element))
+}
+
+fn direct_child_elements(xml: &str) -> Vec<(String, String)> {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(false);
+    let mut children = Vec::new();
+    let mut depth = 0usize;
+    let mut child_start = None;
+    let mut child_name = String::new();
+    loop {
+        let event_start = reader.buffer_position() as usize;
+        match reader.read_event() {
+            Ok(Event::Start(event)) => {
+                if depth == 1 {
+                    child_start = Some(event_start);
+                    child_name = String::from_utf8_lossy(event.name().as_ref()).into_owned();
+                }
+                depth += 1;
+            }
+            Ok(Event::Empty(event)) => {
+                if depth == 1 {
+                    let end = reader.buffer_position() as usize;
+                    children.push((
+                        String::from_utf8_lossy(event.name().as_ref()).into_owned(),
+                        xml[event_start..end].to_string(),
+                    ));
+                }
+            }
+            Ok(Event::End(_)) => {
+                depth = depth.saturating_sub(1);
+                if depth == 1 {
+                    if let Some(start) = child_start.take() {
+                        let end = reader.buffer_position() as usize;
+                        children.push((child_name.clone(), xml[start..end].to_string()));
+                    }
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+    }
+    children
 }
 
 fn empty_paragraph_with_properties(paragraph: &str) -> String {
@@ -671,8 +1047,7 @@ fn replace_placeholder_in_paragraph(
         });
     }
 
-    let match_start = combined.find(placeholder)?;
-    let match_end = match_start + placeholder.len();
+    let (match_start, match_end) = find_placeholder_range(&combined, placeholder)?;
     let first_node = nodes
         .iter()
         .position(|node| node.combined_start <= match_start && match_start < node.combined_end)?;
@@ -1001,6 +1376,7 @@ mod tests {
             &[TemplateReplacement::Paragraph {
                 placeholder: "${teaching_requirements}".to_string(),
                 xml: r#"<w:p><w:r><w:t>教学内容</w:t></w:r></w:p>"#.to_string(),
+                style_source: WordTemplateRichTextStyleSource::Normal,
             }],
         );
 
@@ -1028,6 +1404,7 @@ mod tests {
             &[TemplateReplacement::Paragraph {
                 placeholder: "${teaching_postscript}".to_string(),
                 xml: String::new(),
+                style_source: WordTemplateRichTextStyleSource::Normal,
             }],
         );
 

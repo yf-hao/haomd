@@ -27,6 +27,7 @@ const validDraft = JSON.stringify({
         field: 'sections.decisions',
         placeholder: '{{decisions}}',
         type: 'richText',
+        richTextStyleSource: 'normal',
         source: {
           kind: 'heading',
           match: '决议',
@@ -39,7 +40,8 @@ const validDraft = JSON.stringify({
     '- front matter 中填写 `title`\n' +
     '- 使用 `# 决议` 标题组织正文\n' +
     '- `meta.title` 对应 front matter 的 `title`\n' +
-    '- `sections.decisions` 对应标题为 `决议` 的章节\n',
+    '- `sections.decisions` 对应标题为 `决议` 的章节\n' +
+    '- `sections.decisions` 使用 Normal 样式作为富文本格式来源\n',
   sampleMarkdown:
     '---\n' +
     'title: 周会纪要\n' +

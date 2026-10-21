@@ -122,7 +122,7 @@ export function InsertTableDialog({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
+    <div className="modal-backdrop insert-table-dialog-backdrop">
       <div
         ref={dialogRef}
         className="modal modal-confirm"

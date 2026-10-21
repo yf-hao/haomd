@@ -1039,6 +1039,8 @@ export const enUSMessages: MessageDictionary = {
       'front matter: structured metadata at the top of the document, suitable for short fields like title, date, and author.',
     richTextHint:
       'richText: rich body content from a section, suitable for paragraphs, lists, or an entire chapter block.',
+    richTextStyleRequestHint:
+      'Describe rich-text formatting in your request; Normal style is used by default. For example: “Use the Word placeholder paragraph formatting for all rich text,” or “Use placeholder formatting for Project Introduction and Normal style for Research Plan.” Put a placeholder in its own paragraph and format its paragraph and text when using placeholder formatting.',
     reviseHint:
       'Describe how you want to revise the current template JSON, usage notes, or sample Markdown.',
     currentStatus: 'Current Status',

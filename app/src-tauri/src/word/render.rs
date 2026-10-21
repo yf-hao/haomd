@@ -4,6 +4,8 @@ use quick_xml::events::Event;
 use quick_xml::Reader;
 use std::collections::HashMap;
 
+const WORD_TABLE_SPACING_TWIPS: u32 = 120;
+
 pub(crate) fn build_document_xml_with_section_properties(
     payload: &WordDocPayloadCfg,
     render_state: &mut WordRenderState,
@@ -55,7 +57,18 @@ pub(crate) fn render_word_blocks(
 ) -> Result<String, String> {
     let mut xml = String::new();
     let mut first_list_consumed = false;
-    for block in blocks {
+    for (index, block) in blocks.iter().enumerate() {
+        let is_table_block = is_table_like_block(block);
+        let previous_is_table_block = index
+            .checked_sub(1)
+            .and_then(|previous_index| blocks.get(previous_index))
+            .map(is_table_like_block)
+            .unwrap_or(false);
+
+        if is_table_block || previous_is_table_block {
+            xml.push_str(&render_table_spacing_paragraph_xml());
+        }
+
         let current_list = if !first_list_consumed {
             list_info
         } else {
@@ -70,8 +83,26 @@ pub(crate) fn render_word_blocks(
             quote_depth,
             current_list,
         )?);
+
+        if is_table_block && index + 1 == blocks.len() {
+            xml.push_str(&render_table_spacing_paragraph_xml());
+        }
     }
     Ok(xml)
+}
+
+fn is_table_like_block(block: &WordBlockCfg) -> bool {
+    matches!(
+        block,
+        WordBlockCfg::Table { .. } | WordBlockCfg::Callout { .. }
+    )
+}
+
+fn render_table_spacing_paragraph_xml() -> String {
+    format!(
+        r#"<w:p><w:pPr><w:spacing w:before="{}" w:after="0" w:line="1" w:lineRule="exact"/></w:pPr></w:p>"#,
+        WORD_TABLE_SPACING_TWIPS
+    )
 }
 
 fn render_word_block(

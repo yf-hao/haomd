@@ -111,6 +111,9 @@ export function useCommandSystem(params: CommandSystemParams) {
     'tools_calendar',
     'tools_repeat_reminders',
     'tools_pomodoro',
+    'view_ai_chat_floating',
+    'view_ai_chat_dock_left',
+    'view_ai_chat_dock_right',
     'find',
     ...LAYOUT_SHORTCUT_BINDINGS.map((binding) => binding.action),
     ...FORMAT_SHORTCUT_ACTIONS,
@@ -118,6 +121,7 @@ export function useCommandSystem(params: CommandSystemParams) {
   const {
     layout,
     setLayout,
+    setWorkspaceLayout,
     setShowEditor,
     setShowPreview,
     setStatusMessage,
@@ -197,7 +201,7 @@ export function useCommandSystem(params: CommandSystemParams) {
   } = params
 
   const aiChatOpeningRef = useRef(false)
-  const recentLocalDispatchRef = useRef(new Map<string, number>())
+  const recentDispatchRef = useRef(new Map<string, { source: 'local' | 'menu'; timestamp: number }>())
   const isAiChatOpen = useCallback(() => aiChatOpen, [aiChatOpen])
   const isAiChatOpening = useCallback(() => aiChatOpeningRef.current, [])
   const setAiChatOpening = useCallback((opening: boolean) => {
@@ -247,6 +251,7 @@ export function useCommandSystem(params: CommandSystemParams) {
       createCommandRegistry({
         layout,
         setLayout,
+        setWorkspaceLayout,
         setShowEditor,
         setShowPreview,
         setStatusMessage,
@@ -329,6 +334,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     [
       layout,
       setLayout,
+      setWorkspaceLayout,
       setShowEditor,
       setShowPreview,
       setStatusMessage,
@@ -412,24 +418,16 @@ export function useCommandSystem(params: CommandSystemParams) {
 
   const dispatchAction = useCallback(
     async (action: string, source: 'local' | 'menu' = 'local') => {
-      const isMacTauri = typeof isTauriEnv === 'function' && isTauriEnv()
-        && typeof navigator !== 'undefined'
-        && /macintosh|mac os x/i.test(navigator.userAgent)
-      const isMacTextColorAction = isMacTauri && action.startsWith('format_text_color_')
-
       if (menuDedupActions.has(action)) {
-        const lastLocalTs = recentLocalDispatchRef.current.get(action)
-        const shouldCheckRecentDispatch = source === 'menu' || isMacTextColorAction
+        const recentDispatch = recentDispatchRef.current.get(action)
         if (
-          shouldCheckRecentDispatch &&
-          typeof lastLocalTs === 'number' &&
-          Date.now() - lastLocalTs <= MENU_DUPLICATE_WINDOW_MS
+          recentDispatch &&
+          recentDispatch.source !== source &&
+          Date.now() - recentDispatch.timestamp <= MENU_DUPLICATE_WINDOW_MS
         ) {
           return
         }
-        if (source === 'local' || isMacTextColorAction) {
-          recentLocalDispatchRef.current.set(action, Date.now())
-        }
+        recentDispatchRef.current.set(action, { source, timestamp: Date.now() })
       }
 
       const handler = commands[action]
@@ -506,11 +504,8 @@ export function useCommandSystem(params: CommandSystemParams) {
 
       const layoutBinding = LAYOUT_SHORTCUT_BINDINGS.find((binding) => binding.matches(e, key))
       if (layoutBinding) {
-        // Tauri's native menu is the single owner of desktop layout accelerators
-        // on macOS, Windows, and Linux. Handling them here as well would cause
-        // two dispatches for one key press and make rapid switching feel delayed.
-        // Keep the WebView path as a fallback for the browser build.
-        if (isTauri) return
+        // Dispatch at keydown time for immediate feedback. If the native menu
+        // also emits the same action, dispatchAction suppresses the duplicate.
         e.preventDefault()
         void dispatchAction(layoutBinding.action)
         return
@@ -518,8 +513,6 @@ export function useCommandSystem(params: CommandSystemParams) {
 
       const aiChatDockBinding = AI_CHAT_DOCK_SHORTCUT_BINDINGS.find((binding) => binding.matches(e, key))
       if (aiChatDockBinding) {
-        // Tauri's native menu owns desktop accelerators; keep this for the browser build.
-        if (isTauri) return
         e.preventDefault()
         void dispatchAction(aiChatDockBinding.action)
         return

@@ -4220,6 +4220,11 @@ button:disabled {
   animation: fadeIn 0.15s ease;
 }
 
+.modal-backdrop.insert-table-dialog-backdrop {
+  background: transparent;
+  backdrop-filter: none;
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;

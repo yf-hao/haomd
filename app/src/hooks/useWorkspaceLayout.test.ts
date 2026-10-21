@@ -65,6 +65,18 @@ describe('useWorkspaceLayout', () => {
     expect(window.localStorage.getItem(STORAGE_SHOW_EDITOR)).toBe('false')
   })
 
+  it('should apply layout and visibility atomically', () => {
+    const { result } = renderHook(() => useWorkspaceLayout())
+
+    act(() => {
+      result.current.setWorkspaceLayout('preview-only')
+    })
+
+    expect(result.current.layout).toBe('preview-only')
+    expect(result.current.showEditor).toBe(false)
+    expect(result.current.showPreview).toBe(true)
+  })
+
   it('should update editorWidth while dragging based on mouse position and layout', () => {
     const { result } = renderHook(() => useWorkspaceLayout())
 

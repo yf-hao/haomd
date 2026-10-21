@@ -47,7 +47,7 @@ export function WordTemplateGenerateDialog({
       ? t('wordTemplateAuthoring.generateTitle')
       : t('wordTemplateAuthoring.reviseTitle')
   const placeholderSeparator = '\n\n----------------\n\n'
-  const requestPlaceholder =
+  const requestPlaceholder = [
     mode === 'create'
       ? [
           t('wordTemplateAuthoring.requestPlaceholder'),
@@ -58,7 +58,9 @@ export function WordTemplateGenerateDialog({
             t('wordTemplateAuthoring.richTextHint'),
           ].join('\n\n'),
         ].join(placeholderSeparator)
-      : t('wordTemplateAuthoring.requestPlaceholder')
+      : t('wordTemplateAuthoring.requestPlaceholder'),
+    t('wordTemplateAuthoring.richTextStyleRequestHint'),
+  ].join(placeholderSeparator)
 
   const statusLabel = useMemo(() => {
     if (!session) return t('wordTemplateAuthoring.status.idle')
@@ -123,7 +125,10 @@ export function WordTemplateGenerateDialog({
       const nextSession =
         mode === 'create'
           ? await startCreateWordTemplateBuild(trimmed)
-          : await startReviseWordTemplateBuild(await loadWordTemplateDraft(templateId ?? ''), trimmed)
+          : await startReviseWordTemplateBuild(
+              await loadWordTemplateDraft(templateId ?? ''),
+              trimmed,
+            )
       setSession(nextSession)
     } catch (e) {
       setError(String(e))
@@ -143,7 +148,10 @@ export function WordTemplateGenerateDialog({
     setRunning(true)
     setError('')
     try {
-      const nextSession = await continueWordTemplateBuildRefinement(session, trimmed)
+      const nextSession = await continueWordTemplateBuildRefinement(
+        session,
+        trimmed,
+      )
       setSession(nextSession)
     } catch (e) {
       setError(String(e))

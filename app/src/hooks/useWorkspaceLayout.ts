@@ -46,6 +46,37 @@ export function useWorkspaceLayout() {
     }))
   }, [])
 
+  // Layout commands change the orientation and visibility as one snapshot.
+  // Keeping this atomic avoids intermediate renders while a shortcut is being handled.
+  const setWorkspaceLayout = useCallback((nextLayout: LayoutType) => {
+    setLayoutState((currentState) => {
+      if (nextLayout === 'preview-left' || nextLayout === 'preview-right') {
+        return {
+          ...currentState,
+          layout: nextLayout,
+          showEditor: true,
+          showPreview: true,
+        }
+      }
+
+      if (nextLayout === 'editor-only') {
+        return {
+          ...currentState,
+          layout: nextLayout,
+          showEditor: true,
+          showPreview: false,
+        }
+      }
+
+      return {
+        ...currentState,
+        layout: nextLayout,
+        showEditor: false,
+        showPreview: true,
+      }
+    })
+  }, [])
+
   // 保留旧的 setter API，命令系统可以继续使用函数式更新，但实际只更新 layout 一次。
   const setShowEditor = useCallback((value: SetStateAction<boolean>) => {
     setLayoutState((currentState) => {
@@ -151,6 +182,7 @@ export function useWorkspaceLayout() {
   return {
     layout,
     setLayout,
+    setWorkspaceLayout,
     showEditor,
     setShowEditor,
     showPreview,

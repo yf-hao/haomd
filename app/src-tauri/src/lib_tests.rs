@@ -511,6 +511,60 @@ fn should_render_markdown_callout_as_reference_style_table() {
 }
 
 #[test]
+fn should_add_vertical_spacing_around_table_blocks() {
+    let work_dir = unique_test_path("haomd-word-table-spacing", None);
+    let plain_text = |value: &str| WordInlineRunCfg::Text {
+        value: value.to_string(),
+        bold: None,
+        italic: None,
+        code: None,
+        strike: None,
+        underline: None,
+        color: None,
+        background_color: None,
+        font_size_pt: None,
+        font_family: None,
+    };
+    let payload = WordDocPayloadCfg {
+        title: "Table spacing".to_string(),
+        blocks: vec![
+            WordBlockCfg::Table {
+                rows: vec![WordTableRowCfg {
+                    cells: vec![WordTableCellCfg {
+                        blocks: vec![WordBlockCfg::Paragraph {
+                            text: vec![plain_text("table")],
+                            style: None,
+                        }],
+                        style: None,
+                        col_span: None,
+                        row_span: None,
+                        merge_continue: None,
+                    }],
+                }],
+                style: None,
+            },
+            WordBlockCfg::Callout {
+                children: vec![WordBlockCfg::Paragraph {
+                    text: vec![plain_text("callout")],
+                    style: None,
+                }],
+            },
+        ],
+        assets: vec![],
+        style_settings: None,
+    };
+
+    build_word_export_workspace(&work_dir, &payload).expect("workspace should build");
+
+    let document_xml = fs::read_to_string(work_dir.join("word").join("document.xml"))
+        .expect("document xml should exist");
+    let spacing = r#"<w:p><w:pPr><w:spacing w:before="120" w:after="0" w:line="1" w:lineRule="exact"/></w:pPr></w:p>"#;
+    assert_eq!(document_xml.matches(spacing).count(), 3);
+
+    let _ = fs::remove_dir_all(&work_dir);
+}
+
+#[test]
 fn should_clear_first_line_indent_for_code_and_blockquote() {
     let work_dir = unique_test_path("haomd-word-structural-indent", None);
     let plain_text = |value: &str| WordInlineRunCfg::Text {

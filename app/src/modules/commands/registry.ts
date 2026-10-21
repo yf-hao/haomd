@@ -31,6 +31,7 @@ export type PanelCommandContext = StatusContext & {
 export type LayoutCommandContext = StatusContext & {
   layout: string
   setLayout: (layout: string) => void
+  setWorkspaceLayout?: (layout: string) => void
   setShowEditor: (value: boolean | ((prev: boolean) => boolean)) => void
   setShowPreview: (value: boolean | ((prev: boolean) => boolean)) => void
   aiChatMode: 'floating' | 'docked'
@@ -313,33 +314,37 @@ function createLayoutCommands(ctx: LayoutCommandContext): CommandRegistry {
     ctx.setShowPreview((visible) => !visible)
   }
 
+  const applyWorkspaceLayout = (nextLayout: string, showEditor: boolean, showPreview: boolean) => {
+    if (ctx.setWorkspaceLayout) {
+      ctx.setWorkspaceLayout(nextLayout)
+      return
+    }
+
+    // Backward-compatible fallback for isolated command consumers and tests.
+    ctx.setLayout(nextLayout)
+    ctx.setShowEditor(showEditor)
+    ctx.setShowPreview(showPreview)
+  }
+
   return {
     layout_preview_left: () => {
       if (preventRealtimeEditingLayoutChange()) return
-      ctx.setLayout('preview-left')
-      ctx.setShowEditor(true)
-      ctx.setShowPreview(true)
+      applyWorkspaceLayout('preview-left', true, true)
       ctx.setStatusMessage(tr(ctx, 'commands.layoutPreviewLeft', '布局：预览在左'))
     },
     layout_preview_right: () => {
       if (preventRealtimeEditingLayoutChange()) return
-      ctx.setLayout('preview-right')
-      ctx.setShowEditor(true)
-      ctx.setShowPreview(true)
+      applyWorkspaceLayout('preview-right', true, true)
       ctx.setStatusMessage(tr(ctx, 'commands.layoutPreviewRight', '布局：预览在右'))
     },
     layout_editor_only: () => {
       if (preventRealtimeEditingLayoutChange()) return
-      ctx.setLayout('editor-only')
-      ctx.setShowEditor(true)
-      ctx.setShowPreview(false)
+      applyWorkspaceLayout('editor-only', true, false)
       ctx.setStatusMessage(tr(ctx, 'commands.layoutEditorOnly', '布局：仅编辑器'))
     },
     layout_preview_only: () => {
       if (preventRealtimeEditingLayoutChange()) return
-      ctx.setLayout('preview-only')
-      ctx.setShowEditor(false)
-      ctx.setShowPreview(true)
+      applyWorkspaceLayout('preview-only', false, true)
       ctx.setStatusMessage(tr(ctx, 'commands.layoutPreviewOnly', '布局：仅预览'))
     },
     find: () => {

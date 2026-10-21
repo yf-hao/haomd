@@ -453,6 +453,7 @@ export function WorkspaceShell({
   const {
     layout,
     setLayout,
+    setWorkspaceLayout,
     showEditor,
     setShowEditor,
     showPreview,
@@ -3805,7 +3806,7 @@ export function WorkspaceShell({
   )
 
   const { dispatchAction } = useCommandSystem({
-    layout, setLayout: setLayout as any, setShowEditor, setShowPreview, setStatusMessage,
+    layout, setLayout: setLayout as any, setWorkspaceLayout, setShowEditor, setShowPreview, setStatusMessage,
     aiChatMode, setAiChatMode, aiChatDockSide, setAiChatDockSide, aiChatOpen, aiChatOpenRef,
     editorZoom, setEditorZoom,
     isPdfActive,

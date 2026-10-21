@@ -19,6 +19,16 @@ pub(crate) struct WordTemplateFillBindingCfg {
     pub(crate) placeholder: String,
     #[serde(rename = "type")]
     pub(crate) binding_type: String,
+    #[serde(default)]
+    pub(crate) rich_text_style_source: WordTemplateRichTextStyleSource,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum WordTemplateRichTextStyleSource {
+    #[default]
+    Normal,
+    Placeholder,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
