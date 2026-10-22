@@ -188,8 +188,8 @@ struct MenuTexts {
 fn menu_texts(locale: MenuLocale) -> MenuTexts {
     match locale {
         MenuLocale::ZhCn => MenuTexts {
-            app_name: "好记",
-            about_haomd: "关于好记",
+            app_name: "HaoMD",
+            about_haomd: "关于HaoMD",
             settings: "设置...",
             quit: "退出",
             open_recent: "打开最近文件",

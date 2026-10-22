@@ -14,6 +14,7 @@ All notable changes to this project will be documented in this file.
 * **粘贴并匹配样式**：修复原生快捷键触发与编辑器焦点恢复问题，提供 macOS、Windows 和 Linux 的独立快捷键。
 * **实时编辑快捷键**：将切换快捷键调整为 `Cmd/Ctrl+Shift+E`，避免与 Windows 系统快捷键冲突。
 * **界面与快捷键优化**：改进 AI 面板布局及相关快捷键行为。
+* **品牌名称统一**：中文界面与 macOS 显示名称统一使用 HaoMD。
 
 ### English
 
@@ -25,6 +26,7 @@ This release improves Word template authoring and filling, and refines cross-pla
 * **Paste and Match Style**: Fixed native shortcut dispatch and editor focus restoration, with platform-specific shortcuts for macOS, Windows, and Linux.
 * **Live Editing Shortcut**: Changed the toggle shortcut to `Cmd/Ctrl+Shift+E` to avoid conflicts with Windows system shortcuts.
 * **UI and Shortcuts**: Improved AI panel layout and related shortcut behavior.
+* **Branding**: Unified the product name as HaoMD in the Chinese interface and macOS display name.
 
 ## [v0.13.0] - 2026-09-06
 
