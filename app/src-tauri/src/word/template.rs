@@ -848,10 +848,10 @@ fn merge_property_into_element(
         }
     }
     for (name, child) in existing_children {
-        if !merged.iter().any(|(merged_name, _)| *merged_name == name) {
-            if !(remove_normal_style && name == "pStyle" && style_id(&child) == Some("Normal")) {
-                merged.push((name, child));
-            }
+        if !merged.iter().any(|(merged_name, _)| *merged_name == name)
+            && !(remove_normal_style && name == "pStyle" && style_id(&child) == Some("Normal"))
+        {
+            merged.push((name, child));
         }
     }
 
