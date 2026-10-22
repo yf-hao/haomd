@@ -11,6 +11,8 @@ import {
   MAC_TEXT_COLOR_MENU_ACCELERATORS,
   MAC_TEXT_COLOR_SHORTCUT_BINDINGS,
   PANEL_SHORTCUT_BINDINGS,
+  PASTE_MATCH_STYLE_SHORTCUT,
+  TOGGLE_WYSIWYG_SHORTCUT,
 } from './shortcutBindings'
 import menuSource from '../../../src-tauri/src/menu.rs?raw'
 
@@ -126,6 +128,56 @@ describe('format shortcut bindings', () => {
 describe('global shortcut accelerators', () => {
   it('should match Rust global menu accelerators', () => {
     expectAcceleratorsToMatch(GLOBAL_MENU_ACCELERATORS)
+  })
+
+  it('should use distinct Paste and Match Style shortcuts on macOS and Windows/Linux', () => {
+    expect(PASTE_MATCH_STYLE_SHORTCUT.matches({
+      metaKey: true,
+      ctrlKey: true,
+      shiftKey: true,
+      altKey: false,
+    } as KeyboardEvent, 'v')).toBe(true)
+    expect(PASTE_MATCH_STYLE_SHORTCUT.matches({
+      metaKey: false,
+      ctrlKey: true,
+      shiftKey: true,
+      altKey: true,
+    } as KeyboardEvent, 'v')).toBe(true)
+    expect(PASTE_MATCH_STYLE_SHORTCUT.matches({
+      metaKey: true,
+      ctrlKey: false,
+      shiftKey: true,
+      altKey: false,
+    } as KeyboardEvent, 'v')).toBe(false)
+    expect(PASTE_MATCH_STYLE_SHORTCUT.matches({
+      metaKey: false,
+      ctrlKey: true,
+      shiftKey: true,
+      altKey: false,
+    } as KeyboardEvent, 'v')).toBe(false)
+    expect(menuSource).toContain('"CmdOrCtrl+Ctrl+v"')
+  })
+
+  it('should route CmdOrCtrl+Shift+E to Live Editing on every platform', () => {
+    expect(TOGGLE_WYSIWYG_SHORTCUT.matches({
+      metaKey: true,
+      ctrlKey: false,
+      shiftKey: true,
+      altKey: false,
+    } as KeyboardEvent, 'e')).toBe(true)
+    expect(TOGGLE_WYSIWYG_SHORTCUT.matches({
+      metaKey: false,
+      ctrlKey: true,
+      shiftKey: true,
+      altKey: false,
+    } as KeyboardEvent, 'e')).toBe(true)
+    expect(TOGGLE_WYSIWYG_SHORTCUT.matches({
+      metaKey: false,
+      ctrlKey: true,
+      shiftKey: true,
+      altKey: true,
+    } as KeyboardEvent, 'e')).toBe(false)
+    expect(menuSource).toContain('"CmdOrCtrl+Shift+E"')
   })
 })
 

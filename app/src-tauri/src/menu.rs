@@ -682,7 +682,11 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         .item(
             &MenuItemBuilder::new(texts.paste_match_style)
                 .id("paste_match_style")
-                .accelerator("CmdOrCtrl+Shift+v")
+                .accelerator(if cfg!(target_os = "macos") {
+                    "CmdOrCtrl+Ctrl+v"
+                } else {
+                    "CmdOrCtrl+Alt+Shift+v"
+                })
                 .build(app)?,
         )
         .separator()
@@ -1101,7 +1105,7 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
             &CheckMenuItemBuilder::new(texts.toggle_wysiwyg)
                 .id("toggle_wysiwyg")
                 .checked(WYSIWYG_MENU_CHECKED.load(Ordering::Relaxed))
-                .accelerator("CmdOrCtrl+Alt+W")
+                .accelerator("CmdOrCtrl+Shift+E")
                 .build(app)?,
         )
         .separator()

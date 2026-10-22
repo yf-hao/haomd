@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.15.0] - 2026-10-22
+
+### 中文
+
+本次更新完善 Word 模板创建与填充体验，并调整跨平台编辑快捷键。
+
+#### 主要更新
+
+* **Word 模板增强**：扩展模板占位符能力，支持表格数据行绑定和正文短字段映射，并改进 AI 模板生成指引。
+* **粘贴并匹配样式**：修复原生快捷键触发与编辑器焦点恢复问题，提供 macOS、Windows 和 Linux 的独立快捷键。
+* **实时编辑快捷键**：将切换快捷键调整为 `Cmd/Ctrl+Shift+E`，避免与 Windows 系统快捷键冲突。
+* **界面与快捷键优化**：改进 AI 面板布局及相关快捷键行为。
+
+### English
+
+This release improves Word template authoring and filling, and refines cross-platform editor shortcuts.
+
+#### Key Updates
+
+* **Word Templates**: Expanded placeholder support with table-row bindings and inline short-field mappings, and improved AI template-generation guidance.
+* **Paste and Match Style**: Fixed native shortcut dispatch and editor focus restoration, with platform-specific shortcuts for macOS, Windows, and Linux.
+* **Live Editing Shortcut**: Changed the toggle shortcut to `Cmd/Ctrl+Shift+E` to avoid conflicts with Windows system shortcuts.
+* **UI and Shortcuts**: Improved AI panel layout and related shortcut behavior.
+
 ## [v0.13.0] - 2026-09-06
 
 ### 中文

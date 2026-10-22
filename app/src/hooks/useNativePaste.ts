@@ -39,6 +39,19 @@ export function useNativePaste(
     const getCurrentView = () => getEditorView ? getEditorView() : editorViewRef.current
     let detachPreventDefaultPaste: (() => void) | undefined
     let specialPasteInFlight = false
+    let lastFocusedEditorElement: HTMLElement | null = null
+    let lastEditorFocusAt = 0
+
+    const rememberEditorFocus = (event: FocusEvent) => {
+      const target = event.target
+      if (!(target instanceof HTMLElement)) return
+      const currentView = getCurrentView()
+      if (currentView?.dom.contains(target) || target.closest('.wysiwyg-editor')) {
+        lastFocusedEditorElement = target
+        lastEditorFocusAt = Date.now()
+      }
+    }
+    document.addEventListener('focusin', rememberEditorFocus, true)
 
     // Windows WebView2 does not reliably fire paste events for images, and its
     // built-in accelerator handling intercepts Ctrl+V before Tauri menu items
@@ -67,11 +80,9 @@ export function useNativePaste(
     if (isTauriEnv() && isWindows) {
       const handleKeyDown = async (event: KeyboardEvent) => {
         const currentView = getCurrentView()
-        console.log('[useNativePaste] keydown on document:', event.key, 'ctrl=', event.ctrlKey, 'view=', currentView)
         if ((!event.ctrlKey && !event.metaKey) || (event.key !== 'v' && event.key !== 'V')) return
 
         const active = typeof document !== 'undefined' ? document.activeElement : null
-        console.log('[useNativePaste] Ctrl+V, active=', active?.tagName, 'inEditor=', active ? currentView?.dom.contains(active) : false)
         if (!active || !currentView || !currentView.dom.contains(active)) return
         if (event.shiftKey) {
           // Let useCommandSystem dispatch the special-paste command. Handling
@@ -81,39 +92,31 @@ export function useNativePaste(
 
         // 优先尝试图片粘贴（合并路径：一次 IPC 完成检测+保存）
         if (tryPasteImage) {
-          console.log('[useNativePaste] trying tryPasteImage...')
           try {
             const pasted = await tryPasteImage()
             if (pasted) {
-              console.log('[useNativePaste] tryPasteImage succeeded')
               event.preventDefault()
               event.stopPropagation()
               return
             }
-            console.log('[useNativePaste] tryPasteImage returned false, falling back to readClipboardForPaste')
           } catch (err) {
             console.error('[useNativePaste] tryPasteImage error:', err)
           }
         }
 
-        console.log('[useNativePaste] intercepting Ctrl+V in editor')
         event.preventDefault()
         event.stopPropagation()
 
-        console.log('[useNativePaste] calling readClipboardForPaste()...')
         void readClipboardForPaste()
           .then((content) => {
             if (getCurrentView() !== currentView) return
-            console.log('[useNativePaste] readClipboardForPaste returned:', JSON.stringify(content))
             if (content.kind === 'image') {
-              console.log('[useNativePaste] dispatching native://paste_image')
               return dispatchNativePasteImage()
             }
             if (content.kind !== 'text' || !content.text) {
               console.warn('[useNativePaste] unexpected/empty clipboard content')
               return
             }
-            console.log('[useNativePaste] inserting text, len=', content.text.length)
             insertText(content.text, currentView)
           })
           .catch((err) => {
@@ -159,8 +162,17 @@ export function useNativePaste(
     }
 
     const handleSpecialPasteRequest = () => {
-      const currentView = getCurrentView()
-      const active = typeof document !== 'undefined' ? document.activeElement : null
+      let currentView = getCurrentView()
+      let active = typeof document !== 'undefined' ? document.activeElement : null
+      if (
+        active === document.body &&
+        lastFocusedEditorElement?.isConnected &&
+        Date.now() - lastEditorFocusAt <= 1000
+      ) {
+        lastFocusedEditorElement.focus()
+        active = document.activeElement
+        currentView = getCurrentView()
+      }
       const inSourceEditor = Boolean(active && currentView?.dom.contains(active))
       const inWysiwygEditor = Boolean(active?.closest('.wysiwyg-editor'))
       if ((!currentView || !inSourceEditor) && !inWysiwygEditor) return
@@ -177,7 +189,9 @@ export function useNativePaste(
             onPasteMatchStyleUnavailable?.()
             return
           }
-          return pasteMatchStyle(content, currentView)
+          return pasteMatchStyle(content, currentView).then((inserted) => {
+            if (!inserted) onPasteMatchStyleUnavailable?.()
+          })
         })
         .catch((err) => {
           console.warn('[useNativePaste] native match-style paste failed', err)
@@ -192,7 +206,6 @@ export function useNativePaste(
 
     const unPaste = onNativePaste((text) => {
       const view = getCurrentView()
-      console.log('[useNativePaste] native://paste handler fired, view =', view, 'len=', text?.length)
       if (!text) return
 
       if (typeof document !== 'undefined') {
@@ -202,7 +215,6 @@ export function useNativePaste(
         // textarea 由各组件自行处理（通过 onNativePaste + setInput），此处仅处理 input
         if (active && !(view && view.dom.contains(active))) {
           if (active instanceof HTMLElement && active.closest('.modal')) {
-            console.log('[native://paste] skip: active element is inside modal dialog')
             return
           }
 
@@ -223,11 +235,9 @@ export function useNativePaste(
             }
 
             el.dispatchEvent(new Event('input', { bubbles: true }))
-            console.log('[native://paste] inserted into active input outside editor')
             return
           }
 
-          console.log('[native://paste] skip: active element is outside editor and not editable input')
           return
         }
       }
@@ -249,6 +259,7 @@ export function useNativePaste(
 
     return () => {
       detachPreventDefaultPaste?.()
+      document.removeEventListener('focusin', rememberEditorFocus, true)
       window.removeEventListener('haomd:paste-match-style', handleSpecialPasteRequest)
       unPaste()
       unError()

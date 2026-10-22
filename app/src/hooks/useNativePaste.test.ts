@@ -129,6 +129,54 @@ describe('useNativePaste', () => {
     ))
   })
 
+  it('restores the recently focused editor if the native shortcut temporarily blurs it', async () => {
+    const pasteMatchStyle = vi.fn().mockResolvedValue(true)
+    vi.mocked(readClipboardForMatchStyle).mockResolvedValue({ html: '<p>text</p>', text: 'text' })
+    const editor = createEditorView()
+
+    renderHook(() => useNativePaste(
+      { current: editor.view },
+      vi.fn(),
+      { pasteMatchStyle },
+    ))
+
+    editor.content.focus()
+    editor.content.blur()
+    expect(document.activeElement).toBe(document.body)
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('haomd:paste-match-style'))
+    })
+
+    await waitFor(() => expect(pasteMatchStyle).toHaveBeenCalledWith(
+      { html: '<p>text</p>', text: 'text' },
+      editor.view,
+    ))
+    expect(document.activeElement).toBe(editor.content)
+  })
+
+  it('does not restore editor focus over another active input', () => {
+    const pasteMatchStyle = vi.fn().mockResolvedValue(true)
+    const editor = createEditorView()
+    const otherInput = document.createElement('input')
+    document.body.appendChild(otherInput)
+
+    renderHook(() => useNativePaste(
+      { current: editor.view },
+      vi.fn(),
+      { pasteMatchStyle },
+    ))
+
+    editor.content.focus()
+    otherInput.focus()
+    act(() => {
+      window.dispatchEvent(new CustomEvent('haomd:paste-match-style'))
+    })
+
+    expect(document.activeElement).toBe(otherInput)
+    expect(pasteMatchStyle).not.toHaveBeenCalled()
+  })
+
   it('does not apply delayed clipboard content to a replacement editor view', async () => {
     let resolveClipboard: ((content: { kind: 'text'; text: string }) => void) | undefined
     vi.mocked(readClipboardForPaste).mockImplementation(

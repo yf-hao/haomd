@@ -10,6 +10,8 @@ import {
   FORMAT_SHORTCUT_BINDINGS,
   PANEL_SHORTCUT_BINDINGS,
   PDF_SHORTCUT_BINDINGS,
+  PASTE_MATCH_STYLE_SHORTCUT,
+  TOGGLE_WYSIWYG_SHORTCUT,
 } from '../modules/commands/shortcutBindings'
 import { onMenuAction } from '../modules/platform/menuEvents'
 import type { IAiClient } from '../modules/ai/client'
@@ -90,6 +92,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     'new_file',
     'close_file',
     'paste_match_style',
+    'toggle_wysiwyg',
     'toggle_editor',
     'toggle_preview',
     'toggle_preview_only',
@@ -493,6 +496,12 @@ export function useCommandSystem(params: CommandSystemParams) {
 
       if (!meta) return
 
+      if (TOGGLE_WYSIWYG_SHORTCUT.matches(e, key)) {
+        e.preventDefault()
+        void dispatchAction('toggle_wysiwyg')
+        return
+      }
+
       const prefersMenuAccelerator = isTauri && isMac
       const panelBinding = PANEL_SHORTCUT_BINDINGS.find((binding) => binding.matches(e, key))
       if (panelBinding) {
@@ -595,12 +604,6 @@ export function useCommandSystem(params: CommandSystemParams) {
         if (isEditableElement(active)) {
           void dispatchAction('cut')
         }
-      } else if (key === 'v' && e.shiftKey) {
-        // macOS uses the native menu accelerator; other platforms use this
-        // JavaScript fallback when the native accelerator is unreliable.
-        if (isTauri && isMac) return
-        e.preventDefault()
-        void dispatchAction('paste_match_style')
       } else if (key === 'v') {
         // Tauri 下的粘贴交给系统 / WebView 处理，避免与原生快捷键或菜单重复触发。
         if (isTauri) return
@@ -666,8 +669,35 @@ export function useCommandSystem(params: CommandSystemParams) {
       }
     }
 
+    const onPasteMatchStyleKeyDown = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase()
+      const matchesPasteMatchStyle = PASTE_MATCH_STYLE_SHORTCUT.matches(event, key)
+      if (!matchesPasteMatchStyle) return
+      const activeElement = typeof document !== 'undefined'
+        ? (document.activeElement as Element | null)
+        : null
+      const eventTarget = event.target instanceof Element ? event.target : null
+      const editorTarget = isEditorShortcutContext(activeElement)
+        ? activeElement
+        : isEditorShortcutContext(eventTarget)
+          ? eventTarget
+          : null
+      if (!editorTarget) {
+        return
+      }
+      if (editorTarget !== activeElement && editorTarget instanceof HTMLElement) {
+        editorTarget.focus()
+      }
+      event.preventDefault()
+      void dispatchAction('paste_match_style')
+    }
+
+    window.addEventListener('keydown', onPasteMatchStyleKeyDown, true)
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onPasteMatchStyleKeyDown, true)
+      window.removeEventListener('keydown', onKey)
+    }
   }, [adjustWysiwygFontSize, dispatchAction, editMode, isPdfActive, isTauriEnv])
 
   // 统一处理来自 Tauri 原生菜单的命令分发

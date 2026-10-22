@@ -321,6 +321,25 @@ export const EDITOR_SHORTCUT_SCOPE_SELECTORS = [
   '.wysiwyg-editor',
 ].join(', ')
 
+export const PASTE_MATCH_STYLE_SHORTCUT: ShortcutBinding = {
+  action: 'paste_match_style',
+  matches: (event, key) =>
+    key === 'v' &&
+    event.shiftKey &&
+    event.ctrlKey &&
+    (event.metaKey ? !event.altKey : event.altKey),
+  requireEditorContext: true,
+}
+
+export const TOGGLE_WYSIWYG_SHORTCUT: ShortcutBinding = {
+  action: 'toggle_wysiwyg',
+  matches: (event, key) =>
+    key === 'e' &&
+    event.shiftKey &&
+    !event.altKey &&
+    (event.metaKey || event.ctrlKey),
+}
+
 export const FORMAT_SHORTCUT_ACTIONS = FORMAT_SHORTCUT_BINDINGS.map((binding) => binding.action)
 
 export const FORMAT_MENU_ACCELERATORS: Readonly<Record<string, string>> = {
@@ -377,7 +396,8 @@ export const GLOBAL_MENU_ACCELERATORS: Readonly<Record<string, string>> = {
   save_as: 'CmdOrCtrl+Alt+S',
   toggle_sidebar: 'CmdOrCtrl+Shift+S',
   close_file: 'CmdOrCtrl+W',
-  paste_match_style: 'CmdOrCtrl+Shift+V',
+  paste_match_style: 'CmdOrCtrl+Alt+Shift+V',
+  toggle_wysiwyg: 'CmdOrCtrl+Shift+E',
   find: 'CmdOrCtrl+F',
   toggle_editor: 'CmdOrCtrl+P',
   toggle_preview: 'CmdOrCtrl+Shift+P',
