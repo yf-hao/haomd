@@ -38,13 +38,17 @@ function tryParseStdoutJson(stdout: string): unknown {
   }
 }
 
-function buildWorkflowOutput(workflow: WorkflowDocument, steps: WorkflowStepRunResult[]) {
+function buildWorkflowOutput(workflow: WorkflowDocument, input: unknown, steps: WorkflowStepRunResult[]) {
   if (!workflow.outputFrom.trim()) return ''
   const stepMap = Object.fromEntries(steps.map((step) => [step.stepId, step]))
-  return resolveWorkflowReference(workflow.outputFrom.trim(), {
-    input: {},
-    steps: stepMap,
-  })
+  const context = { input, steps: stepMap }
+  const outputFrom = workflow.outputFrom.trim()
+  try {
+    const outputTemplate = JSON.parse(outputFrom) as unknown
+    return resolveWorkflowTemplateValue(outputTemplate, context)
+  } catch {
+    return resolveWorkflowReference(outputFrom, context)
+  }
 }
 
 export async function runWorkflow(
@@ -142,7 +146,7 @@ export async function runWorkflow(
   const firstError = steps.find((step) => !step.ok)?.error
   return {
     ok: !firstError,
-    output: buildWorkflowOutput(workflow, steps),
+    output: buildWorkflowOutput(workflow, input, steps),
     steps,
     error: firstError,
   }

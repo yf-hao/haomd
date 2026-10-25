@@ -1,17 +1,17 @@
 {
   "id": "cnki-reference-search",
   "name": "cnki-reference-search",
-  "description": "按课题题目的技术、业务场景和系统类型三组检索 CNKI，按相关性筛选并核验最多 10 条 GB/T 7714 引文，最终只返回排序后的引文。",
+  "description": "按课题题目的技术、业务场景、系统类型及相关学术表达最多六组检索 CNKI，按相关性筛选并核验 GB/T 7714 引文。",
   "enabled": true,
   "load_policy": "on_demand",
   "scripts": [
     {
       "id": "search",
-      "label": "CNKI 主题检索",
+      "label": "CNKI 多组主题检索并导出引文",
       "runtime": "builtin-js",
       "entry": "scripts/search.js",
       "approval_policy": "ask",
-      "args_schema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"keyword\": {\n      \"type\": \"string\",\n      \"description\": \"一组知网主题检索词\"\n    },\n    \"page\": {\n      \"type\": \"integer\",\n      \"minimum\": 1,\n      \"description\": \"页码，默认 1\"\n    }\n  },\n  \"required\": [\n    \"keyword\"\n  ],\n  \"additionalProperties\": false\n}"
+      "args_schema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"keyword\": {\n      \"type\": \"string\",\n      \"description\": \"兼容单组知网主题检索词；推荐使用 keywords\"\n    },\n    \"keywords\": {\n      \"type\": \"array\",\n      \"items\": { \"type\": \"string\", \"minLength\": 1, \"maxLength\": 200 },\n      \"minItems\": 1,\n      \"maxItems\": 6,\n      \"description\": \"一到六组知网主题检索词；逐组检索、合并去重，并在请求预算内导出 GB/T 7714 引文\"\n    },\n    \"page\": {\n      \"type\": \"integer\",\n      \"minimum\": 1,\n      \"description\": \"页码，默认 1\"\n    }\n  },\n  \"anyOf\": [\n    { \"required\": [\"keyword\"] },\n    { \"required\": [\"keywords\"] }\n  ],\n  \"additionalProperties\": false\n}"
     },
     {
       "id": "export-reference",

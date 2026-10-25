@@ -122,6 +122,131 @@ async fn read_workflow_document_from_dir(
     })
 }
 
+fn invalid_workflow(
+    message: impl Into<String>,
+    trace: String,
+) -> ResultPayload<WorkflowSummaryCfg> {
+    err_payload(ErrorCode::InvalidPath, message, trace)
+}
+
+async fn read_import_file(path: &std::path::Path, label: &str) -> Result<Vec<u8>, String> {
+    match fs::symlink_metadata(path).await {
+        Ok(metadata) if metadata.is_file() && !metadata.file_type().is_symlink() => {}
+        Ok(_) => return Err(format!("{label} 必须是普通文件")),
+        Err(err) => return Err(format!("读取 {label} 失败: {err}")),
+    }
+    fs::read(path)
+        .await
+        .map_err(|err| format!("读取 {label} 失败: {err}"))
+}
+
+#[tauri::command]
+pub async fn import_workflow_from_directory(
+    app: AppHandle,
+    source_dir: String,
+) -> ResultPayload<WorkflowSummaryCfg> {
+    let trace = new_trace_id();
+    let source = match fs::canonicalize(PathBuf::from(source_dir)).await {
+        Ok(path) if path.is_dir() => path,
+        Ok(_) => return invalid_workflow("所选路径不是目录", trace),
+        Err(err) => return invalid_workflow(format!("无法访问所选目录: {err}"), trace),
+    };
+    let workflow_bytes =
+        match read_import_file(&source.join("workflow.json"), "workflow.json").await {
+            Ok(bytes) => bytes,
+            Err(err) => return invalid_workflow(err, trace),
+        };
+    let mut definition: WorkflowDefinitionFile = match serde_json::from_slice(&workflow_bytes) {
+        Ok(definition) => definition,
+        Err(err) => return invalid_workflow(format!("解析 workflow.json 失败: {err}"), trace),
+    };
+    let markdown_path = source.join("WORKFLOW.md");
+    let markdown = match read_import_file(&markdown_path, "WORKFLOW.md").await {
+        Ok(bytes) => match String::from_utf8(bytes) {
+            Ok(markdown) => markdown,
+            Err(err) => {
+                return invalid_workflow(format!("WORKFLOW.md 不是 UTF-8 文本: {err}"), trace)
+            }
+        },
+        Err(err) => return invalid_workflow(err, trace),
+    };
+    if definition.id.trim().is_empty() || definition.name.trim().is_empty() {
+        return invalid_workflow("workflow.json 必须包含非空的 id 和 name", trace);
+    }
+
+    let root = match workflows_root_dir(&app) {
+        Ok(root) => root,
+        Err(err) => {
+            return err_payload(
+                ErrorCode::IoError,
+                format!("获取 Workflows 目录失败: {err}"),
+                trace,
+            )
+        }
+    };
+    if let Err(err) = fs::create_dir_all(&root).await {
+        return err_payload(
+            ErrorCode::IoError,
+            format!("创建 Workflows 目录失败: {err}"),
+            trace,
+        );
+    }
+    let id = sanitize_workflow_id(&definition.id);
+    let destination = root.join(&id);
+    if let Err(err) = fs::create_dir(&destination).await {
+        if err.kind() == std::io::ErrorKind::AlreadyExists {
+            return invalid_workflow(format!("Workflow 已存在: {}", definition.name), trace);
+        }
+        return err_payload(
+            ErrorCode::IoError,
+            format!("创建 Workflow 目录失败: {err}"),
+            trace,
+        );
+    }
+
+    // Imported workflows require an explicit enable action in the panel.
+    definition.id = id.clone();
+    definition.enabled = false;
+    let definition_bytes = match serde_json::to_vec_pretty(&definition) {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            let _ = fs::remove_dir_all(&destination).await;
+            return err_payload(
+                ErrorCode::IoError,
+                format!("序列化 Workflow 失败: {err}"),
+                trace,
+            );
+        }
+    };
+    if let Err(err) = fs::write(destination.join("workflow.json"), definition_bytes).await {
+        let _ = fs::remove_dir_all(&destination).await;
+        return err_payload(
+            ErrorCode::IoError,
+            format!("写入 workflow.json 失败: {err}"),
+            trace,
+        );
+    }
+    if let Err(err) = fs::write(destination.join("WORKFLOW.md"), markdown).await {
+        let _ = fs::remove_dir_all(&destination).await;
+        return err_payload(
+            ErrorCode::IoError,
+            format!("写入 WORKFLOW.md 失败: {err}"),
+            trace,
+        );
+    }
+
+    ok(
+        WorkflowSummaryCfg {
+            id,
+            name: definition.name,
+            description: definition.description,
+            enabled: false,
+            step_count: definition.steps.len(),
+        },
+        trace,
+    )
+}
+
 #[tauri::command]
 pub async fn list_workflows(app: AppHandle) -> ResultPayload<Vec<WorkflowSummaryCfg>> {
     let trace = new_trace_id();

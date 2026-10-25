@@ -25,6 +25,40 @@ function yearOf(work) {
   return null
 }
 
+function authorName(author) {
+  if (author.name) return cleanText(author.name)
+  const family = cleanText(author.family)
+  const given = cleanText(author.given)
+  if (!family) return ''
+  if (/[\u3400-\u9fff]/.test(family + given)) return family + given
+  const initials = given.split(/[\s.\-]+/).filter(Boolean).map((part) => [...part][0].toUpperCase()).join(' ')
+  return family.toUpperCase() + (initials ? ' ' + initials : '')
+}
+
+function citationOf(work) {
+  const title = field(work.title).replace(/[.。]+$/, '')
+  const source = field(work['container-title']).replace(/[.。]+$/, '')
+  const year = yearOf(work)
+  const authors = Array.isArray(work.author) ? work.author : []
+  const names = authors.slice(0, 3).map(authorName)
+  if (!title || !source || !year || !names.length || names.some((name) => !name)) return ''
+  if (!['journal-article', 'proceedings-article'].includes(work.type)) return ''
+  let authorText = names.join(', ')
+  if (authors.length > 3) authorText += names.every((name) => /[\u3400-\u9fff]/.test(name)) ? ', 等' : ', et al.'
+  const page = field(work.page) || field(work['article-number'])
+  let publication
+  if (work.type === 'journal-article') {
+    const volume = field(work.volume)
+    const issue = field(work.issue)
+    publication = source + ', ' + year + (volume ? ', ' + volume : '') + (issue ? '(' + issue + ')' : '')
+  } else {
+    const location = field(work['publisher-location'])
+    const publisher = field(work.publisher)
+    publication = source + (publisher ? '. ' + (location ? location + ': ' : '') + publisher : '') + ', ' + year
+  }
+  return authorText + '. ' + title + (work.type === 'journal-article' ? '[J]. ' : '[C]//') + publication + (page ? ': ' + page : '') + '.'
+}
+
 function compactRecord(work, query) {
   return {
     doi: normalizeDoi(work.DOI),
@@ -39,6 +73,7 @@ function compactRecord(work, query) {
     issue: field(work.issue),
     page: field(work.page),
     articleNumber: field(work['article-number']),
+    citation: citationOf(work),
     matchedQueries: [query],
   }
 }

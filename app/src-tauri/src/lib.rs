@@ -172,6 +172,7 @@ macro_rules! app_invoke_handler {
             list_workflows,
             read_workflow,
             save_workflow,
+            import_workflow_from_directory,
             delete_workflow,
             run_skill_script,
             ai_http_request,

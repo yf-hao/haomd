@@ -116,15 +116,62 @@ function readRows(html) {
   return records
 }
 
+function cleanCitation(value) {
+  const plain = decodeHtml(value.replace(/<br\s*\/?\s*>/gi, ' ').replace(/<[^>]*>/g, ''))
+    .replace(/\s+/g, ' ')
+    .trim()
+  return plain
+    .replace(/\.?https?:\/\/\S+/g, '')
+    .replace(/DOI:\S+/g, '')
+    .replace(/\s*,\s*/g, ',')
+    .replace(/\s*\.\s*/g, '.')
+    .replace(/(\d+)-(\d+)\[(\d{4})-(\d{2})-(\d{2})\]/g, '$3,$1-$2')
+    .replace(/^\[\d+\]\s*/, '')
+    .trim()
+}
+
+function exportCitation(filename, cookie, userAgent) {
+  const response = http.request({
+    url: 'https://kns.cnki.net/dm8/API/GetExport',
+    method: 'POST',
+    headers: {
+      Accept: '*/*',
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      Cookie: cookie,
+      Referer: 'https://kns.cnki.net/kns8s/defaultresult/index',
+      'User-Agent': userAgent,
+      'X-Requested-With': 'XMLHttpRequest',
+    },
+    form: { filename, displaymode: 'GBTREFER,MLA,APA', uniplatform: 'NZKPT' },
+  })
+  if (isVerificationResponse(response)) return { citation: '', error: 'verification_required', status: response.status }
+  if (!response.ok) return { citation: '', error: 'export_failed', status: response.status }
+  let payload
+  try {
+    payload = JSON.parse(response.body)
+  } catch (_) {
+    return { citation: '', error: 'invalid_export_response', status: response.status }
+  }
+  const mode = Array.isArray(payload.data) ? payload.data.find((item) => item.mode === 'GBTREFER') : null
+  const value = Array.isArray(mode?.value) ? mode.value[0] : mode?.value
+  const citation = typeof value === 'string' ? cleanCitation(value) : ''
+  return payload.code === 1 && citation
+    ? { citation }
+    : { citation: '', error: 'citation_missing', status: response.status }
+}
+
 function run(args) {
-  const keyword = typeof args?.keyword === 'string' ? args.keyword.trim() : ''
+  const keywords = Array.isArray(args?.keywords)
+    ? args.keywords.map((value) => typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '')
+    : typeof args?.keyword === 'string' ? [args.keyword.trim().replace(/\s+/g, ' ')] : []
   const cookie = typeof args?.cookie === 'string' ? args.cookie : ''
   const page = Number.isInteger(args?.page) && args.page > 0 ? args.page : 1
-  if (!keyword) {
-    return { ok: false, stdout: '', stderr: 'Missing required arg: keyword', exitCode: 1 }
+  const uniqueKeywords = [...new Map(keywords.filter(Boolean).map((keyword) => [keyword.toLowerCase(), keyword])).values()]
+  if (!uniqueKeywords.length || uniqueKeywords.length > 6) {
+    return { ok: false, stdout: '', stderr: 'keywords must contain one to six nonempty search groups.', exitCode: 1 }
   }
-  if (keyword.length > 200) {
-    return { ok: false, stdout: '', stderr: 'keyword must be 200 characters or fewer', exitCode: 1 }
+  if (uniqueKeywords.some((keyword) => keyword.length > 200)) {
+    return { ok: false, stdout: '', stderr: 'Each keyword must be 200 characters or fewer', exitCode: 1 }
   }
   if (!cookie.trim()) {
     return { ok: false, stdout: '', stderr: 'CNKI Cookie is missing. Add the current Cookie header value to this Skill\'s cookie.txt file.', exitCode: 1 }
@@ -134,9 +181,12 @@ function run(args) {
   }
 
   const userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36'
-  const referer = 'https://kns.cnki.net/kns8s/defaultresult/index?crossids=YSTT4HG0%2CLSTPFY1C%2CEMRPGLPA%2CJUP3MUPD%2CMPMFIG1A%2CWQ0UVIAA%2CBLZOG7CK%2CPWFIRAGL%2CNLBO1Z6R%2CNN3FJMUV&korder=SU&kw=' + encodeURIComponent(keyword)
-
-  const query = {
+  const searches = []
+  const errors = []
+  const recordsByKey = new Map()
+  for (const keyword of uniqueKeywords) {
+    const referer = 'https://kns.cnki.net/kns8s/defaultresult/index?crossids=YSTT4HG0%2CLSTPFY1C%2CEMRPGLPA%2CJUP3MUPD%2CMPMFIG1A%2CWQ0UVIAA%2CBLZOG7CK%2CPWFIRAGL%2CNLBO1Z6R%2CNN3FJMUV&korder=SU&kw=' + encodeURIComponent(keyword)
+    const query = {
     Platform: '',
     Resource: 'CROSSDB',
     Classid: 'WD0FTY92',
@@ -168,9 +218,8 @@ function run(args) {
     Expands: {},
     View: 'changeDBCh',
     SearchFrom: 1,
-  }
-
-  const search = http.request({
+    }
+    const search = http.request({
     url: 'https://kns.cnki.net/kns8s/brief/grid',
     method: 'POST',
     headers: {
@@ -208,36 +257,79 @@ function run(args) {
       uniplatform: '',
       CurPage: '1',
     },
-  })
+    })
 
-  if (isVerificationResponse(search)) {
-    return {
-      ok: false,
-      stdout: JSON.stringify({ stage: 'search', keyword, status: search.status, location: search.headers?.location, cookies: search.cookies }),
-      stderr: 'CNKI returned a verification page for the search request. Cookie receipt does not mean verification passed.',
-      exitCode: 2,
+    if (isVerificationResponse(search)) {
+      errors.push({ keyword, stage: 'search', error: 'verification_required', status: search.status })
+      searches.push({ keyword, status: search.status, cookies: search.cookies })
+      break
+    }
+    if (!search.ok) {
+      errors.push({ keyword, stage: 'search', error: 'search_failed', status: search.status })
+      searches.push({ keyword, status: search.status, cookies: search.cookies })
+      continue
+    }
+
+    const records = readRows(search.body)
+    searches.push({ keyword, status: search.status, count: records.length, cookies: search.cookies })
+    for (const record of records) {
+      if (!record.title || !record.filename) continue
+      const normalized = (value) => String(value || '').toLowerCase().replace(/\s+/g, '')
+      const key = normalized(record.title) + '|' + normalized(record.authors) + '|' + String(record.date || '').slice(0, 4)
+      const existing = recordsByKey.get(key)
+      if (existing) {
+        if (!existing.matchedKeywords.includes(keyword)) existing.matchedKeywords.push(keyword)
+      } else {
+        recordsByKey.set(key, { ...record, matchedKeywords: [keyword] })
+      }
     }
   }
-  if (!search.ok) {
-    return {
-      ok: false,
-      stdout: JSON.stringify({ stage: 'search', keyword, status: search.status, cookies: search.cookies }),
-      stderr: 'CNKI search request failed.',
-      exitCode: 1,
+
+  const uniqueRecords = [...recordsByKey.values()]
+  const records = []
+  const selectedKeys = new Set()
+  const exportLimit = Math.min(20, 24 - uniqueKeywords.length)
+  for (let offset = 0; records.length < exportLimit; offset += 1) {
+    let foundAtOffset = false
+    for (const keyword of uniqueKeywords) {
+      const candidate = uniqueRecords.filter((record) => record.matchedKeywords.includes(keyword))[offset]
+      if (!candidate) continue
+      foundAtOffset = true
+      const normalized = (value) => String(value || '').toLowerCase().replace(/\s+/g, '')
+      const key = normalized(candidate.title) + '|' + normalized(candidate.authors) + '|' + String(candidate.date || '').slice(0, 4)
+      if (!selectedKeys.has(key)) {
+        selectedKeys.add(key)
+        records.push(candidate)
+        if (records.length >= exportLimit) break
+      }
+    }
+    if (!foundAtOffset) break
+  }
+  const exported = []
+  for (const record of records) {
+    const result = exportCitation(record.filename, cookie, userAgent)
+    if (result.citation) {
+      exported.push({ ...record, citation: result.citation })
+    } else {
+      errors.push({ title: record.title, stage: 'export', error: result.error, status: result.status })
+      if (result.error === 'verification_required') break
     }
   }
-
-  const records = readRows(search.body)
+  const verificationRequired = errors.some((error) => error.error === 'verification_required')
   return {
-    ok: true,
+    ok: exported.length > 0,
     stdout: JSON.stringify({
-      keyword,
+      source: 'cnki',
+      keywords: uniqueKeywords,
       page,
-      count: records.length,
-      cookies: search.cookies,
-      records,
+      count: exported.length,
+      searches,
+      records: exported,
+      errors,
     }, null, 2),
-    stderr: '',
-    exitCode: 0,
+    stderr: exported.length ? '' : verificationRequired
+      ? 'CNKI returned a verification page. Check or refresh cookie.txt.'
+      : 'CNKI did not return any verifiable GB/T 7714 citations.',
+    exitCode: exported.length ? 0 : verificationRequired ? 2 : 1,
   }
 }

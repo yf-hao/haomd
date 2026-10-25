@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.16.0] - 2026-10-25
+
+### 中文
+
+本次更新增加 Skills 与 Workflows 的导入能力，并完善跨来源参考文献检索工作流。
+
+#### 主要更新
+
+* **Skills 与 Workflows**：支持从文件夹导入 Skill 和 Workflow；导入的 Workflow 默认禁用，需检查后手动启用。
+* **参考文献检索**：扩展 CNKI 多关键词检索与引文导出能力，新增 Crossref 与 CNKI 联合检索工作流，并按中文、英文分组整理引文。
+* **Workflow 编辑体验**：保存成功后自动关闭编辑面板，精简侧边栏提示与 AI 菜单入口。
+
+### English
+
+This release adds Skills and Workflows import support and improves cross-source reference search.
+
+#### Key Updates
+
+* **Skills and Workflows**: Import Skills and Workflows from folders. Imported Workflows are disabled by default until reviewed and enabled.
+* **Reference Search**: Improved multi-query CNKI searches and citation export, and added a Crossref plus CNKI workflow that groups Chinese and English citations.
+* **Workflow Editing**: Close the editor after saving and simplify the sidebar hints and AI menu.
+
 ## [v0.15.0] - 2026-10-22
 
 ### 中文

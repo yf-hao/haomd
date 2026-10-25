@@ -6,6 +6,7 @@ import type { WorkflowDocument, WorkflowRunResult } from '../modules/workflows/d
 import { createDefaultWorkflow, createDefaultWorkflowStep, createWorkflowRunInputTemplate, normalizeWorkflowBeforeSave } from '../modules/workflows/application/workflowsService'
 import { deleteWorkflow, listWorkflows, readWorkflow, saveWorkflow } from '../modules/workflows/storage/workflowsRepo'
 import { runWorkflow } from '../modules/workflows/application/workflowRuntimeService'
+import { pickAndImportWorkflow } from '../modules/workflows/application/workflowImportService'
 import { useDesktopTextEditingBridge } from '../hooks/useDesktopTextEditingBridge'
 
 export type WorkflowsPanelProps = {
@@ -104,6 +105,16 @@ export const WorkflowsPanel = memo(function WorkflowsPanel({ panelWidth }: Workf
     setRunResult(null)
   }, [])
 
+  const handleImportWorkflow = useCallback(async () => {
+    setError('')
+    try {
+      const imported = await pickAndImportWorkflow(t('workflows.importWorkflowDialogTitle'))
+      if (imported) await refreshWorkflows(imported.id, true)
+    } catch (e) {
+      setError(`${t('workflows.importWorkflowFailed')}: ${String(e)}`)
+    }
+  }, [refreshWorkflows, t])
+
   const handleSelectWorkflow = useCallback((workflowId: string) => {
     setError('')
     if (selectedWorkflowId === workflowId) {
@@ -124,9 +135,11 @@ export const WorkflowsPanel = memo(function WorkflowsPanel({ panelWidth }: Workf
       if (previousWorkflowId && previousWorkflowId !== normalized.id) {
         await deleteWorkflow(previousWorkflowId)
       }
-      await refreshWorkflows(normalized.id, true)
-      setDraft(normalized)
-      setRunInput((prev) => (prev.trim() ? prev : createWorkflowRunInputTemplate(normalized.inputSchema)))
+      await refreshWorkflows(null, false)
+      setDraft(null)
+      setEditorOpen(false)
+      setRunResult(null)
+      setRunInput(createWorkflowRunInputTemplate(normalized.inputSchema))
     } catch (e) {
       setError(String(e))
     } finally {
@@ -199,13 +212,19 @@ export const WorkflowsPanel = memo(function WorkflowsPanel({ panelWidth }: Workf
       <SidebarBackgroundShell className="skills-panel workflows-panel" style={style}>
         <div className="skills-panel-header">
           <span>{t('workflows.title')}</span>
-          <button type="button" className="notes-action-btn" onClick={handleNewWorkflow} title={t('workflows.newWorkflow')}>
-            +
-          </button>
+          <div className="skills-header-actions">
+            <button type="button" className="notes-action-btn" onClick={handleImportWorkflow} title={t('workflows.importWorkflow')}>
+              ↓
+            </button>
+            <button type="button" className="notes-action-btn" onClick={handleNewWorkflow} title={t('workflows.newWorkflow')}>
+              +
+            </button>
+          </div>
         </div>
 
         <div className="skills-panel-body">
           <div className="skills-list-pane skills-list-pane-full">
+            {error && !editorOpen && <div className="skills-import-hint" role="alert">{error}</div>}
             {loading ? (
               <div className="skills-empty">{t('workflows.loading')}</div>
             ) : workflows.length === 0 ? (
@@ -343,9 +362,6 @@ export const WorkflowsPanel = memo(function WorkflowsPanel({ panelWidth }: Workf
               </button>
               <button type="button" className="ghost primary" onClick={handleSave} disabled={saving}>
                 {saving ? t('common.saving') : t('common.save')}
-              </button>
-              <button type="button" className="ghost" onClick={() => setEditorOpen(false)}>
-                {t('workflows.closeEditor')}
               </button>
             </div>
           </div>

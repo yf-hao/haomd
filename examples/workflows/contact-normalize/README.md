@@ -71,14 +71,7 @@ steps.wrap.stdout
 
 ## 使用方式
 
-你可以：
-
-1. 在 Workflow 面板里手动创建一个 `contact-normalize` Workflow
-2. 直接参考本目录里的：
-   - `workflow.json`
-   - `WORKFLOW.md`
-3. 先在 Workflow 面板中手动运行
-4. 再在 AI Chat 中测试：
+在 Workflows 面板点击导入按钮，选择本目录 `contact-normalize` 文件夹。导入后默认禁用；检查步骤引用的 Skills 已导入后，再启用。然后可在面板中手动运行，也可以在 AI Chat 中测试：
 
 ```text
 请使用合适的 workflow，从这段话中提取联系人并输出格式化结果：张三，邮箱 zhangsan@example.com，电话 13800138000

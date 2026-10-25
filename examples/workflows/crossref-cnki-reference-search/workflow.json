@@ -1,0 +1,26 @@
+{
+  "id": "crossref-cnki-reference-search",
+  "name": "Crossref + CNKI Reference Search",
+  "description": "调用 CNKI 与 Crossref Skill 获取 GB/T 7714 引文，返回 10 条中文引文和 5 条英文引文。",
+  "enabled": true,
+  "approval_policy": "ask",
+  "failure_policy": "continue",
+  "input_schema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"topic\": {\n      \"type\": \"string\",\n      \"description\": \"用户提供的研究课题\"\n    },\n    \"crossrefQueries\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      },\n      \"minItems\": 1,\n      \"maxItems\": 3,\n      \"description\": \"由 AI 从课题生成的英文检索词组：技术与业务、业务与系统类型、技术与系统类型\"\n    },\n    \"cnkiKeywords\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      },\n      \"minItems\": 1,\n      \"maxItems\": 6,\n      \"description\": \"AI 根据课题生成的 1–6 组中文检索词，覆盖核心技术、学业指导/发展/支持等领域表达及系统类型\"\n    }\n  },\n  \"required\": [\n    \"topic\",\n    \"crossrefQueries\",\n    \"cnkiKeywords\"\n  ]\n}",
+  "output_from": "{\n  \"topic\": \"{{input.topic}}\",\n  \"crossref\": \"{{steps.crossref.stdout}}\",\n  \"cnki\": \"{{steps.cnki.stdout}}\"\n}",
+  "steps": [
+    {
+      "id": "crossref",
+      "type": "skill",
+      "skill_id": "crossref-reference-search",
+      "script_id": "search",
+      "input_template": "{\n  \"queries\": \"{{input.crossrefQueries}}\",\n  \"rows\": 20\n}"
+    },
+    {
+      "id": "cnki",
+      "type": "skill",
+      "skill_id": "cnki-reference-search",
+      "script_id": "search",
+      "input_template": "{\n  \"keywords\": \"{{input.cnkiKeywords}}\",\n  \"page\": 1\n}"
+    }
+  ]
+}

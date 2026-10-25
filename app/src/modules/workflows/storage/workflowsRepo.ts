@@ -111,6 +111,14 @@ export async function saveWorkflow(doc: WorkflowDocument): Promise<void> {
   }
 }
 
+export async function importWorkflowFromDirectory(sourceDir: string): Promise<WorkflowSummary> {
+  const resp = await invoke<BackendResult<WorkflowSummaryCfg>>('import_workflow_from_directory', { sourceDir })
+  if ('Ok' in resp) {
+    return fromSummaryCfg(resp.Ok.data)
+  }
+  throw new Error(resp.Err.error.message)
+}
+
 export async function deleteWorkflow(workflowId: string): Promise<void> {
   const resp = await invoke<BackendResult<null>>('delete_workflow', { workflowId })
   if (!('Ok' in resp)) {

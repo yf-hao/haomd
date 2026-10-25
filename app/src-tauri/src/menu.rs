@@ -174,7 +174,6 @@ struct MenuTexts {
     provider_settings: &'static str,
     prompt_settings: &'static str,
     mcp_settings: &'static str,
-    skills_manager: &'static str,
     open_ai_chat: &'static str,
     ask_ai_about_file: &'static str,
     ask_ai_about_selection: &'static str,
@@ -306,7 +305,6 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             provider_settings: "模型服务设置",
             prompt_settings: "提示词设置",
             mcp_settings: "MCP 设置",
-            skills_manager: "Skills...",
             open_ai_chat: "打开 AI 对话",
             ask_ai_about_file: "向 AI 询问文件",
             ask_ai_about_selection: "向 AI 询问选中内容",
@@ -435,7 +433,6 @@ fn menu_texts(locale: MenuLocale) -> MenuTexts {
             provider_settings: "Provider Settings",
             prompt_settings: "Prompt Settings",
             mcp_settings: "MCP Settings",
-            skills_manager: "Skills...",
             open_ai_chat: "Open AI Chat",
             ask_ai_about_file: "Ask AI About File",
             ask_ai_about_selection: "Ask AI About Selection",
@@ -1217,12 +1214,6 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
         .build()?;
 
     let ai_menu = SubmenuBuilder::new(app, texts.ai)
-        .item(
-            &MenuItemBuilder::new(texts.skills_manager)
-                .id("open_skills_manager")
-                .build(app)?,
-        )
-        .separator()
         .item(
             &MenuItemBuilder::new(texts.provider_settings)
                 .id("ai_settings")
