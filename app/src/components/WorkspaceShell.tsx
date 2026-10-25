@@ -3827,6 +3827,9 @@ export function WorkspaceShell({
     openFile, importWordFile, openImportedWordDocument, save: saveWithPdfGuard, saveAs: saveAsWithPdfGuard, handleShowRecent: undefined, clearRecentAll,
     createTab, updateActiveMeta, openFolderInSidebar, toggleSidebarVisible, closeCurrentTab,
     toggleLeftPanel: onLeftPanelToggle,
+    openLeftPanel: (panel: Exclude<LeftPanelId, null>) => {
+      if (activeLeftPanel !== panel) onLeftPanelToggle(panel)
+    },
     openSearch: openSearchWithSelection,
     openInsertTableDialog,
     openMathSymbolDialog,

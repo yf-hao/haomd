@@ -46,6 +46,8 @@ mod protocol;
 mod search_commands;
 mod search_db;
 mod shared_audio;
+mod skill_http;
+mod skill_import;
 mod skill_scripts;
 mod skills;
 mod state_store;
@@ -95,6 +97,8 @@ use pomodoro_storage::*;
 use protocol::*;
 use search_commands::*;
 use serde::{Deserialize, Serialize};
+use skill_http::*;
+use skill_import::*;
 use skill_scripts::*;
 use skills::*;
 use state_store::*;
@@ -164,11 +168,13 @@ macro_rules! app_invoke_handler {
             read_skill,
             save_skill,
             delete_skill,
+            import_skill_from_directory,
             list_workflows,
             read_workflow,
             save_workflow,
             delete_workflow,
             run_skill_script,
+            ai_http_request,
             run_modelscope_image_generation,
             load_backup_settings,
             save_backup_settings,

@@ -14,7 +14,7 @@ export const skillsSearchToolSchema: OpenAIToolDef = {
     description:
       '搜索当前已启用的 Skills。' +
       '当用户需求可能对应某个预置工作流、Markdown 模板、文本处理或自动化技能时，先调用此工具查找。' +
-      '如果用户明确提到某个 skill 名称，也可以先用此工具确认它是否存在以及是否 trusted。',
+      '如果用户明确提到某个 skill 名称，也可以先用此工具确认它是否存在以及是否已启用。',
     parameters: {
       type: 'object',
       properties: {
@@ -35,7 +35,7 @@ export const skillsReadToolSchema: OpenAIToolDef = {
     description:
       '读取某个 Skill 的详细 Markdown 说明和脚本摘要。' +
       '当你已经确定了 skillId，需要了解其使用说明、脚本入口和参数约定时调用。' +
-      '如果某个 trusted skill 的描述已经足够明确，也可以在读取后直接决定是否执行它。',
+      '如果某个已启用 skill 的描述已经足够明确，也可以在读取后直接决定是否执行它。',
     parameters: {
       type: 'object',
       properties: {
@@ -56,7 +56,7 @@ export const skillsRunToolSchema: OpenAIToolDef = {
     description:
       '执行某个 Skill 中的脚本。' +
       '调用前应优先通过 skills_search / skills_read 确认 skill 的适用场景和参数。' +
-      '仅允许执行已启用且标记为 trusted 的 skill。' +
+      '仅允许执行已启用的 skill。' +
       '在调用前，必须根据该 skill 的 SKILL.md 和 argsSchema 先整理出结构化参数。' +
       '除非某个 skill 明确要求接收原始文本，否则不要把整句自然语言直接传给脚本。',
     parameters: {
@@ -161,7 +161,7 @@ export async function buildDynamicSkillScriptTools(
 
   for (const skillId of readSkillIds) {
     const skill = await readSkill(skillId)
-    if (!skill || !skill.enabled || !skill.trusted) continue
+    if (!skill || !skill.enabled) continue
 
     for (const script of skill.scripts) {
       if (script.approvalPolicy === 'manual_only') continue
@@ -204,9 +204,8 @@ export async function executeSkillsSearch(args: { query?: string }): Promise<str
       id: skill.id,
       name: skill.name,
       description: skill.description ?? '',
-      trusted: skill.trusted,
       scriptCount: skill.scriptCount,
-      runnable: skill.trusted,
+      runnable: true,
     })),
     null,
     2,
@@ -233,9 +232,8 @@ export async function executeSkillsRead(
       id: skill.id,
       name: skill.name,
       description: skill.description ?? '',
-      trusted: skill.trusted,
       markdown: skill.markdown,
-      executable: skill.trusted,
+      executable: true,
       scripts: skill.scripts.map((script) => ({
         id: script.id,
         label: script.label,
@@ -244,7 +242,7 @@ export async function executeSkillsRead(
         entry: script.entry,
         approvalPolicy: script.approvalPolicy,
         argsSchema: script.argsSchema ?? '',
-        runnable: script.approvalPolicy !== 'manual_only' && skill.trusted,
+        runnable: script.approvalPolicy !== 'manual_only',
       })),
     },
     null,
@@ -273,10 +271,6 @@ export async function executeSkillsRun(args: {
   if (!skill || !skill.enabled) {
     return `⚠️ 未找到已启用的 Skill：${skillId}`
   }
-  if (!skill.trusted) {
-    return `⚠️ Skill ${skillId} 尚未标记为 trusted，已拒绝执行脚本。`
-  }
-
   const script = skill.scripts.find((item) => item.id === scriptId)
   if (!script) {
     return `⚠️ Skill ${skillId} 中不存在脚本：${scriptId}`

@@ -19,14 +19,13 @@ describe('buildSkillsToolCatalogPrompt', () => {
     await expect(buildSkillsToolCatalogPrompt()).resolves.toBe('')
   })
 
-  it('should include generic workflow rules and trusted/untrusted skill lists', async () => {
+  it('should list enabled skills without a separate trust state', async () => {
     mockedListSkills.mockResolvedValue([
       {
         id: 'hello-skill',
         name: 'Hello Skill',
         description: '问候语测试 skill',
         enabled: true,
-        trusted: true,
         scriptCount: 1,
       },
       {
@@ -34,7 +33,6 @@ describe('buildSkillsToolCatalogPrompt', () => {
         name: 'Unsafe Skill',
         description: '未授权脚本',
         enabled: true,
-        trusted: false,
         scriptCount: 1,
       },
       {
@@ -42,7 +40,6 @@ describe('buildSkillsToolCatalogPrompt', () => {
         name: 'Disabled Skill',
         description: 'disabled',
         enabled: false,
-        trusted: false,
         scriptCount: 0,
       },
     ])
@@ -52,10 +49,9 @@ describe('buildSkillsToolCatalogPrompt', () => {
     expect(prompt).toContain('先 skills_search，再 skills_read')
     expect(prompt).toContain('脚本级工具')
     expect(prompt).toContain('根据该 skill 的 SKILL.md 和 argsSchema')
-    expect(prompt).toContain('hello-skill: Hello Skill — 问候语测试 skill [trusted]')
-    expect(prompt).toContain('unsafe-skill: Unsafe Skill — 未授权脚本 [untrusted]')
+    expect(prompt).toContain('hello-skill: Hello Skill — 问候语测试 skill')
+    expect(prompt).toContain('unsafe-skill: Unsafe Skill — 未授权脚本')
     expect(prompt).not.toContain('disabled-skill')
-    expect(prompt).toContain('可直接自动执行的 trusted skills：hello-skill')
-    expect(prompt).toContain('未自动授权执行的 skills：unsafe-skill')
+    expect(prompt).toContain('只有已启用的 Skill 才可被使用和执行脚本')
   })
 })

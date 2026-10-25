@@ -13,7 +13,6 @@ const validArtifact = JSON.stringify({
     name: 'Extract Contact',
     description: '联系人信息提取测试 skill',
     enabled: true,
-    trusted: true,
     load_policy: 'on_demand',
     scripts: [
       {
@@ -97,7 +96,6 @@ describe('skillBuildSessionService', () => {
           name: 'Bad Skill',
           description: 'bad',
           enabled: true,
-          trusted: true,
           load_policy: 'on_demand',
           scripts: [],
         },
@@ -142,7 +140,6 @@ describe('skillBuildSessionService', () => {
             name: 'Broken Skill',
             description: 'bad',
             enabled: true,
-            trusted: true,
             load_policy: 'on_demand',
             scripts: [],
           },

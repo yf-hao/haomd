@@ -15,8 +15,7 @@ export function createDefaultSkill(): SkillDocument {
     id,
     name: 'New Skill',
     description: '一句短摘要',
-    enabled: true,
-    trusted: false,
+    enabled: false,
     loadPolicy: 'on_demand',
     markdown:
       '# New Skill\n\n' +

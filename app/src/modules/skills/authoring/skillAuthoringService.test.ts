@@ -15,7 +15,6 @@ const validArtifact: SkillArtifact = {
     name: 'Hello Skill',
     description: '问候语测试 skill',
     enabled: true,
-    trusted: true,
     load_policy: 'on_demand',
     scripts: [
       {

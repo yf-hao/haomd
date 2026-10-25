@@ -26,7 +26,6 @@ pub struct SkillDocumentCfg {
     #[serde(default)]
     pub description: Option<String>,
     pub enabled: bool,
-    pub trusted: bool,
     pub load_policy: String,
     #[serde(default)]
     pub markdown: String,
@@ -41,25 +40,27 @@ pub struct SkillSummaryCfg {
     #[serde(default)]
     pub description: Option<String>,
     pub enabled: bool,
-    pub trusted: bool,
     pub script_count: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-struct SkillDefinitionFile {
+pub(crate) struct SkillDefinitionFile {
     pub id: String,
     pub name: String,
     #[serde(default)]
     pub description: Option<String>,
     pub enabled: bool,
-    pub trusted: bool,
+    // Read legacy manifests once so Skills that were explicitly untrusted do
+    // not become executable merely because the separate trust flag was removed.
+    #[serde(default, rename = "trusted", skip_serializing)]
+    pub legacy_trusted: Option<bool>,
     pub load_policy: String,
     #[serde(default)]
     pub scripts: Vec<SkillDefinitionScriptCfg>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-struct SkillDefinitionScriptCfg {
+pub(crate) struct SkillDefinitionScriptCfg {
     pub id: String,
     pub label: String,
     pub runtime: String,
@@ -67,6 +68,10 @@ struct SkillDefinitionScriptCfg {
     pub approval_policy: String,
     #[serde(default)]
     pub args_schema: Option<String>,
+}
+
+fn skill_is_enabled(definition: &SkillDefinitionFile) -> bool {
+    definition.enabled && definition.legacy_trusted.unwrap_or(true)
 }
 
 pub(crate) fn skills_root_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
@@ -130,6 +135,7 @@ pub(crate) async fn read_skill_document_from_dir(dir: &Path) -> Result<SkillDocu
         Err(err) => return Err(format!("读取 SKILL.md 失败: {err}")),
     };
 
+    let enabled = skill_is_enabled(&definition);
     let mut scripts = Vec::new();
     for script in definition.scripts {
         let entry_path = ensure_relative_script_entry(&script.entry)?;
@@ -153,8 +159,7 @@ pub(crate) async fn read_skill_document_from_dir(dir: &Path) -> Result<SkillDocu
         id: definition.id,
         name: definition.name,
         description: definition.description,
-        enabled: definition.enabled,
-        trusted: definition.trusted,
+        enabled,
         load_policy: definition.load_policy,
         markdown,
         scripts,
@@ -198,7 +203,6 @@ pub async fn list_skills(app: AppHandle) -> ResultPayload<Vec<SkillSummaryCfg>> 
                         name: doc.name,
                         description: doc.description,
                         enabled: doc.enabled,
-                        trusted: doc.trusted,
                         script_count: doc.scripts.len(),
                     }),
                     Err(_) => continue,
@@ -328,7 +332,7 @@ pub async fn save_skill(app: AppHandle, cfg: SkillDocumentCfg) -> ResultPayload<
         name: cfg.name.trim().to_string(),
         description: cfg.description.filter(|v| !v.trim().is_empty()),
         enabled: cfg.enabled,
-        trusted: cfg.trusted,
+        legacy_trusted: None,
         load_policy: if cfg.load_policy.trim().is_empty() {
             "on_demand".to_string()
         } else {

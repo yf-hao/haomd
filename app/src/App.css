@@ -669,6 +669,17 @@ button:disabled {
   line-height: 1.5;
 }
 
+.skills-import-hint {
+  padding: 8px 12px;
+  font-size: calc(var(--ui-font-sidebar) - 2px);
+  color: var(--theme-text-muted);
+  line-height: 1.45;
+}
+
+.skills-import-hint[role='alert'] {
+  color: var(--theme-danger, #d33);
+}
+
 .skills-editor {
   display: flex;
   flex-direction: column;

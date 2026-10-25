@@ -62,6 +62,7 @@ function createMockCtx(): CommandContext & {
     // AppLifecycleCommandContext
     toggleSidebarVisible: vi.fn(),
     toggleLeftPanel: vi.fn(),
+    openLeftPanel: vi.fn(),
     closeCurrentTab: vi.fn(),
     onRequestCloseCurrentTab: vi.fn(),
     onRequestQuit: vi.fn(),
@@ -93,6 +94,16 @@ describe('command registry - layout & view', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     vi.clearAllMocks()
+  })
+
+  it('open_skills_manager opens the skills panel without toggling it closed', () => {
+    const ctx = createMockCtx()
+    const registry = createCommandRegistry(ctx)
+
+    registry.open_skills_manager?.()
+
+    expect(ctx.openLeftPanel).toHaveBeenCalledWith('skills')
+    expect(ctx.toggleLeftPanel).not.toHaveBeenCalled()
   })
 
   it('layout commands should update layout and preview state', () => {

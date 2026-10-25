@@ -3,7 +3,6 @@
   "name": "Wrap Text",
   "description": "文本包裹测试 skill",
   "enabled": true,
-  "trusted": true,
   "load_policy": "on_demand",
   "scripts": [
     {

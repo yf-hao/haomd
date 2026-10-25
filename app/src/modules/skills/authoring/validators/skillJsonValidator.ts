@@ -43,10 +43,6 @@ export function validateSkillJson(skillJsonText: string): ValidationError[] {
   if (typeof skill.enabled !== 'boolean') {
     errors.push(buildError('invalid_type', 'enabled', 'enabled 必须是 boolean'))
   }
-  if (typeof skill.trusted !== 'boolean') {
-    errors.push(buildError('invalid_type', 'trusted', 'trusted 必须是 boolean'))
-  }
-
   const scripts = skill.scripts
   if (!Array.isArray(scripts) || scripts.length === 0) {
     errors.push(buildError('missing_required_field', 'scripts', 'scripts 必须是非空数组'))

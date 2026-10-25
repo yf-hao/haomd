@@ -5,6 +5,7 @@ import { SkillGenerateDialog } from './SkillGenerateDialog'
 import { useI18n } from '../modules/i18n/I18nContext'
 import type { SkillDocument } from '../modules/skills/domain/types'
 import { createDefaultScript, createDefaultSkill, normalizeSkillBeforeSave } from '../modules/skills/application/skillsService'
+import { pickAndImportSkill } from '../modules/skills/application/skillImportService'
 import { deleteSkill, listSkills, readSkill, saveSkill } from '../modules/skills/storage/skillsRepo'
 import { useDesktopTextEditingBridge } from '../hooks/useDesktopTextEditingBridge'
 
@@ -106,6 +107,16 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
     setError('')
   }, [])
 
+  const handleImportSkill = useCallback(async () => {
+    setError('')
+    try {
+      const imported = await pickAndImportSkill(t('skills.importSkillDialogTitle'))
+      if (imported) await refreshSkills(undefined, true)
+    } catch (e) {
+      setError(`${t('skills.importSkillFailed')}: ${String(e)}`)
+    }
+  }, [refreshSkills, t])
+
   const handleOpenRevise = useCallback(() => {
     if (!draft?.id) return
     setAuthoringMode('revise')
@@ -132,8 +143,9 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
       if (previousSkillId && previousSkillId !== normalized.id) {
         await deleteSkill(previousSkillId)
       }
-      await refreshSkills(normalized.id, true)
-      setDraft(normalized)
+      await refreshSkills(null, false)
+      setDraft(null)
+      setEditorOpen(false)
     } catch (e) {
       setError(String(e))
     } finally {
@@ -195,6 +207,9 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
         <div className="skills-panel-header">
           <span>{t('skills.title')}</span>
           <div className="skills-header-actions">
+            <button type="button" className="notes-action-btn" onClick={handleImportSkill} title={t('skills.importSkill')}>
+              ↓
+            </button>
             <button type="button" className="notes-action-btn" onClick={handleOpenGenerate} title={t('skillsAuthoring.generateSkill')}>
               AI
             </button>
@@ -206,6 +221,8 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
 
         <div className="skills-panel-body">
           <div className="skills-list-pane skills-list-pane-full">
+            {error && <div className="skills-import-hint" role="alert">{error}</div>}
+            <div className="skills-import-hint">{t('skills.importSkillHint')}</div>
             {loading ? (
               <div className="skills-empty">{t('skills.loading')}</div>
             ) : skills.length === 0 ? (
@@ -277,24 +294,14 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
                       onChange={(e) => updateDraft({ description: e.target.value })}
                     />
 
-                    <div className="skills-row-grid">
-                      <label className="skills-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={draft.enabled}
-                          onChange={(e) => updateDraft({ enabled: e.target.checked })}
-                        />
-                        <span>{t('skills.enable')}</span>
-                      </label>
-                      <label className="skills-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={draft.trusted}
-                          onChange={(e) => updateDraft({ trusted: e.target.checked })}
-                        />
-                        <span>{t('skills.trusted')}</span>
-                      </label>
-                    </div>
+                    <label className="skills-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={draft.enabled}
+                        onChange={(e) => updateDraft({ enabled: e.target.checked })}
+                      />
+                      <span>{t('skills.enable')}</span>
+                    </label>
 
                     <div className="skills-markdown-section">
                       <label className="field-label">{t('skills.markdown')}</label>
@@ -348,6 +355,7 @@ export const SkillsPanel = memo(function SkillsPanel({ panelWidth }: SkillsPanel
                               onChange={(e) => handleScriptChange(script.id, 'argsSchema', e.target.value)}
                             />
                             <label className="field-label">{t('skills.scriptContent')}</label>
+                            <div className="skills-empty-inline">{t('skills.httpRequestHint')}</div>
                             <textarea
                               className="field-textarea skills-script-content"
                               value={script.content}

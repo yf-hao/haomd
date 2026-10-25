@@ -15,7 +15,6 @@ function createSkill(overrides: Partial<SkillDocument> = {}): SkillDocument {
     name: 'Hello Skill',
     description: '问候语测试 skill',
     enabled: true,
-    trusted: true,
     loadPolicy: 'on_demand',
     markdown: '# Hello Skill',
     scripts: [
@@ -51,7 +50,6 @@ describe('skillsBuiltinTool', () => {
         name: 'Hello Skill',
         description: '问候语测试 skill',
         enabled: true,
-        trusted: true,
         scriptCount: 1,
       },
       {
@@ -59,7 +57,6 @@ describe('skillsBuiltinTool', () => {
         name: 'Disabled Skill',
         description: 'disabled',
         enabled: false,
-        trusted: false,
         scriptCount: 0,
       },
     ])
@@ -67,12 +64,9 @@ describe('skillsBuiltinTool', () => {
     const result = JSON.parse(await executeSkillsSearch({ query: 'ignored' }))
 
     expect(result).toEqual([
-      expect.objectContaining({
-        id: 'hello-skill',
-        trusted: true,
-        runnable: true,
-      }),
+      expect.objectContaining({ id: 'hello-skill', runnable: true }),
     ])
+    expect(result[0]).not.toHaveProperty('trusted')
   })
 
   it('executeSkillsRead should record read skill id and expose script toolName', async () => {
@@ -127,7 +121,7 @@ describe('skillsBuiltinTool', () => {
     })
   })
 
-  it('buildDynamicSkillScriptTools should derive concrete tools from read trusted skills', async () => {
+  it('buildDynamicSkillScriptTools should derive concrete tools from read enabled skills', async () => {
     vi.spyOn(skillsRepo, 'readSkill').mockResolvedValue(
       createSkill({
         scripts: [

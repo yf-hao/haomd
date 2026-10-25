@@ -23,6 +23,7 @@ export type CurrentSelectionReadOptions = {
 
 export type PanelCommandContext = StatusContext & {
   toggleLeftPanel?: (panel: WorkspacePanelId) => void
+  openLeftPanel?: (panel: WorkspacePanelId) => void
 }
 
 /**
@@ -224,6 +225,13 @@ function createPanelCommands(ctx: PanelCommandContext): CommandRegistry {
     }
     ctx.toggleLeftPanel(panel)
   }
+  const openPanel = (panel: WorkspacePanelId) => {
+    if (!ctx.openLeftPanel) {
+      ctx.setStatusMessage(tr(ctx, 'commands.panelUnavailable', '当前面板不可用'))
+      return
+    }
+    ctx.openLeftPanel(panel)
+  }
 
   return {
     toggle_panel_files: () => togglePanel('files'),
@@ -233,6 +241,7 @@ function createPanelCommands(ctx: PanelCommandContext): CommandRegistry {
     toggle_panel_sessions: () => togglePanel('sessions'),
     toggle_panel_notes: () => togglePanel('notes'),
     toggle_panel_skills: () => togglePanel('skills'),
+    open_skills_manager: () => openPanel('skills'),
     toggle_panel_workflows: () => togglePanel('workflows'),
   }
 }

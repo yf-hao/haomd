@@ -7,7 +7,6 @@ const RAW_ARTIFACT = JSON.stringify({
     name: 'Extract Contact',
     description: '联系人信息提取测试 skill',
     enabled: true,
-    trusted: true,
     load_policy: 'on_demand',
     scripts: [
       {

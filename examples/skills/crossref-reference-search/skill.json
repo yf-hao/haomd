@@ -1,0 +1,25 @@
+{
+  "id": "crossref-reference-search",
+  "name": "crossref-reference-search",
+  "description": "从课题自动构建三组英文关键词查询 Crossref，按 DOI 去重并按课题相关性排序，最终只返回最多 10 条 GB/T 7714 引文。",
+  "enabled": true,
+  "load_policy": "on_demand",
+  "scripts": [
+    {
+      "id": "search",
+      "label": "三组关键词检索与 DOI 去重",
+      "runtime": "builtin-js",
+      "entry": "scripts/search.js",
+      "approval_policy": "ask",
+      "args_schema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"queries\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\",\n        \"minLength\": 1,\n        \"maxLength\": 200\n      },\n      \"minItems\": 1,\n      \"maxItems\": 3,\n      \"description\": \"AI 根据课题构建的三组英文关键词，依次为技术＋业务、业务＋系统类型、技术＋系统类型。\"\n    },\n    \"rows\": {\n      \"type\": \"integer\",\n      \"minimum\": 1,\n      \"maximum\": 20,\n      \"description\": \"每组候选数，默认 10。\"\n    },\n    \"offset\": {\n      \"type\": \"integer\",\n      \"minimum\": 0,\n      \"maximum\": 100,\n      \"description\": \"同组查询分页偏移，默认 0。\"\n    },\n    \"type\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"journal-article\",\n        \"proceedings-article\"\n      ],\n      \"description\": \"默认 journal-article；不足时可补充会议论文。\"\n    },\n    \"fromYear\": {\n      \"type\": \"integer\",\n      \"minimum\": 1000,\n      \"maximum\": 9999,\n      \"description\": \"可选，起始出版年。\"\n    },\n    \"untilYear\": {\n      \"type\": \"integer\",\n      \"minimum\": 1000,\n      \"maximum\": 9999,\n      \"description\": \"可选，截止出版年。\"\n    }\n  },\n  \"required\": [\n    \"queries\"\n  ],\n  \"additionalProperties\": false\n}"
+    },
+    {
+      "id": "export-reference",
+      "label": "核对 DOI 并生成 GB/T 7714 引文",
+      "runtime": "builtin-js",
+      "entry": "scripts/export-reference.js",
+      "approval_policy": "ask",
+      "args_schema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"doi\": {\n      \"type\": \"string\",\n      \"description\": \"从检索结果中选出的真实 DOI。\"\n    },\n    \"index\": {\n      \"type\": \"integer\",\n      \"minimum\": 1,\n      \"maximum\": 100,\n      \"description\": \"按相关性排序后的连续引文编号。\"\n    }\n  },\n  \"required\": [\n    \"doi\",\n    \"index\"\n  ],\n  \"additionalProperties\": false\n}"
+    }
+  ]
+}

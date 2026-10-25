@@ -1,0 +1,25 @@
+{
+  "id": "cnki-reference-search",
+  "name": "cnki-reference-search",
+  "description": "按课题题目的技术、业务场景和系统类型三组检索 CNKI，按相关性筛选并核验最多 10 条 GB/T 7714 引文，最终只返回排序后的引文。",
+  "enabled": true,
+  "load_policy": "on_demand",
+  "scripts": [
+    {
+      "id": "search",
+      "label": "CNKI 主题检索",
+      "runtime": "builtin-js",
+      "entry": "scripts/search.js",
+      "approval_policy": "ask",
+      "args_schema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"keyword\": {\n      \"type\": \"string\",\n      \"description\": \"一组知网主题检索词\"\n    },\n    \"page\": {\n      \"type\": \"integer\",\n      \"minimum\": 1,\n      \"description\": \"页码，默认 1\"\n    }\n  },\n  \"required\": [\n    \"keyword\"\n  ],\n  \"additionalProperties\": false\n}"
+    },
+    {
+      "id": "export-reference",
+      "label": "导出 GB/T 7714 引文",
+      "runtime": "builtin-js",
+      "entry": "scripts/export-reference.js",
+      "approval_policy": "ask",
+      "args_schema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"filename\": {\n      \"type\": \"string\",\n      \"description\": \"知网搜索结果中该文献的 CookieName 标识\"\n    }\n  },\n  \"required\": [\n    \"filename\"\n  ],\n  \"additionalProperties\": false\n}"
+    }
+  ]
+}

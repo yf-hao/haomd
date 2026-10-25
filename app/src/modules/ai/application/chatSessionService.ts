@@ -82,6 +82,12 @@ import {
 import { buildWorkflowToolCatalogPrompt } from './workflowToolCatalog'
 import { buildDocumentToolCatalogPrompt } from './documentToolCatalog'
 import {
+  HTTP_REQUEST_TOOL_NAME,
+  httpRequestToolSchema,
+  executeHttpRequest,
+} from './httpRequestBuiltinTool'
+import type { HttpRequestArgs } from '../platform/httpRequestService'
+import {
   SAVE_OR_EXPORT_CURRENT_DOCUMENT_TOOL_NAME,
   saveOrExportCurrentDocumentToolSchema,
   executeSaveOrExportCurrentDocument,
@@ -536,6 +542,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
   }
 
   const MAX_TOOL_ROUNDS = 10
+  const MAX_HTTP_REQUESTS_PER_CHAT_TURN = 24
 
   /**
    * Multi-round tool calling loop for OpenAI providers with MCP role active.
@@ -557,6 +564,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
     const routingTools = allTools ?? schemaTools
     const readSkillIds = new Set<string>()
     const readWorkflowIds = new Set<string>()
+    let httpRequestCount = 0
     const conversationMessages = engineHistoryToChatMessages(state.engineHistory)
 
     try {
@@ -613,7 +621,9 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
             break
           }
 
-          const toolLabel = tc.function.name.replace(/^mcp__/, '').replace(/__/g, '/')
+          const toolLabel = tc.function.name === HTTP_REQUEST_TOOL_NAME
+            ? (options.t?.('ai.httpRequestTool') ?? 'HTTP request')
+            : tc.function.name.replace(/^mcp__/, '').replace(/__/g, '/')
           state = upsertAssistantToolExecution(state, assistantId, {
             id: tc.id,
             label: toolLabel,
@@ -656,6 +666,12 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
                 parsedArgs as { skillId?: string; scriptId?: string; args?: unknown },
                 readSkillIds,
               )
+            } else if (tc.function.name === HTTP_REQUEST_TOOL_NAME) {
+              if (httpRequestCount >= MAX_HTTP_REQUESTS_PER_CHAT_TURN) {
+                throw new Error(`单次对话最多发起 ${MAX_HTTP_REQUESTS_PER_CHAT_TURN} 次 HTTP 请求`)
+              }
+              httpRequestCount += 1
+              toolResult = await executeHttpRequest(parsedArgs as HttpRequestArgs)
             } else if (dynamicSkillToolMap.has(tc.function.name)) {
               const dynamicTool = dynamicSkillToolMap.get(tc.function.name)!
               toolResult = await executeSkillsRun(
@@ -1083,6 +1099,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       const builtinTools: OpenAIToolDef[] = isOpenAIProvider
         ? [
           writeToNotesToolSchema,
+          httpRequestToolSchema,
           workflowSearchToolSchema,
           workflowReadToolSchema,
           workflowRunToolSchema,

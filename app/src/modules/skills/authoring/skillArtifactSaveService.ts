@@ -17,7 +17,7 @@ type SkillJsonDocument = {
   name: string
   description?: string | null
   enabled: boolean
-  trusted: boolean
+  trusted?: boolean
   load_policy: string
   markdown?: string
   scripts: SkillJsonScript[]
@@ -35,8 +35,7 @@ export function artifactToSkillDocument(artifact: SkillArtifact): SkillDocument 
     id: parsed.id,
     name: parsed.name,
     description: parsed.description ?? undefined,
-    enabled: parsed.enabled,
-    trusted: parsed.trusted,
+    enabled: parsed.enabled && parsed.trusted !== false,
     loadPolicy: parsed.load_policy === 'on_demand' ? 'on_demand' : 'on_demand',
     markdown: artifact.skillMarkdown,
     scripts: (parsed.scripts ?? []).map((script) => ({
@@ -64,7 +63,6 @@ export function skillDocumentToArtifact(doc: SkillDocument): SkillArtifact {
         name: doc.name,
         description: doc.description ?? '',
         enabled: doc.enabled,
-        trusted: doc.trusted,
         load_policy: doc.loadPolicy,
         scripts: doc.scripts.map((script) => ({
           id: script.id,

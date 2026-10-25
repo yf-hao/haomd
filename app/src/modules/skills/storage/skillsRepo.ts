@@ -17,7 +17,6 @@ type SkillDocumentCfg = {
   name: string
   description?: string | null
   enabled: boolean
-  trusted: boolean
   load_policy: string
   markdown: string
   scripts: SkillScriptCfg[]
@@ -28,7 +27,6 @@ type SkillSummaryCfg = {
   name: string
   description?: string | null
   enabled: boolean
-  trusted: boolean
   script_count: number
 }
 
@@ -38,7 +36,6 @@ function fromSummaryCfg(cfg: SkillSummaryCfg): SkillSummary {
     name: cfg.name,
     description: cfg.description ?? undefined,
     enabled: cfg.enabled,
-    trusted: cfg.trusted,
     scriptCount: cfg.script_count,
   }
 }
@@ -49,7 +46,6 @@ function fromDocumentCfg(cfg: SkillDocumentCfg): SkillDocument {
     name: cfg.name,
     description: cfg.description ?? undefined,
     enabled: cfg.enabled,
-    trusted: cfg.trusted,
     loadPolicy: cfg.load_policy === 'on_demand' ? 'on_demand' : 'on_demand',
     markdown: cfg.markdown,
     scripts: (cfg.scripts ?? []).map((script) => ({
@@ -75,7 +71,6 @@ function toDocumentCfg(doc: SkillDocument): SkillDocumentCfg {
     name: doc.name,
     description: doc.description ?? null,
     enabled: doc.enabled,
-    trusted: doc.trusted,
     load_policy: doc.loadPolicy,
     markdown: doc.markdown,
     scripts: doc.scripts.map((script) => ({
@@ -118,5 +113,13 @@ export async function deleteSkill(skillId: string): Promise<void> {
   if (!('Ok' in resp)) {
     throw new Error(resp.Err.error.message)
   }
+}
+
+export async function importSkillFromDirectory(sourceDir: string): Promise<SkillSummary> {
+  const resp = await invoke<BackendResult<SkillSummaryCfg>>('import_skill_from_directory', { sourceDir })
+  if ('Ok' in resp) {
+    return fromSummaryCfg(resp.Ok.data)
+  }
+  throw new Error(resp.Err.error.message)
 }
 

@@ -27,7 +27,6 @@ function createValidatedSession(skillId = 'generated-skill'): SkillBuildSession 
         name: 'Generated Skill',
         description: '一句短摘要',
         enabled: true,
-        trusted: true,
         load_policy: 'on_demand',
         scripts: [],
       }),

@@ -47,7 +47,6 @@ export type ParsedSkillArtifact = {
     name: string
     description?: string
     enabled: boolean
-    trusted: boolean
     load_policy: string
     scripts: Array<{
       id: string

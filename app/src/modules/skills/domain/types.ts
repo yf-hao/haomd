@@ -19,7 +19,6 @@ export type SkillDocument = {
   name: string
   description?: string
   enabled: boolean
-  trusted: boolean
   loadPolicy: SkillLoadPolicy
   markdown: string
   scripts: SkillScript[]
@@ -30,7 +29,6 @@ export type SkillSummary = {
   name: string
   description?: string
   enabled: boolean
-  trusted: boolean
   scriptCount: number
 }
 

@@ -26,7 +26,6 @@ const SKILL_SHAPE = `Skill 架构：
   - name
   - description
   - enabled
-  - trusted
   - load_policy
   - scripts[]
 - 每个 script 字段：
@@ -36,6 +35,11 @@ const SKILL_SHAPE = `Skill 架构：
   - entry
   - approval_policy
   - args_schema
+- builtin-js 脚本可同步调用全局 http.request({ url, method, headers, body, form }) 发起 HTTP 请求；form 会自动编码为 application/x-www-form-urlencoded，不能与 body 同时使用
+- 新建 Skill 默认设置 enabled 为 false；不要自行启用，只有用户明确要求启用时才设为 true
+- http.request 返回 { ok, status, statusText, headers, body }；HTTP 非 2xx 仍返回 response，网络或参数错误会抛异常
+- HTTP API 仅支持 HTTP/HTTPS 公网地址；每次 Skill 执行最多 24 次请求，总运行时间最多 60 秒，请处理状态码和异常
+- HTTP response body 最大 2 MiB，request body 最大 1 MiB；单次执行内 Cookie 会自动保存在内存中，不要把 Cookie、密钥或令牌写入 Skill
 - SKILL.md 必须包含：
   - ## 适用场景
   - ## 使用原则
