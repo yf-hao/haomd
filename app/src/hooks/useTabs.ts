@@ -110,6 +110,18 @@ export function useTabs(options?: UseTabsOptions) {
     [activeId, activateTab, tabs],
   )
 
+  const closeTabs = useCallback((ids: string[]) => {
+    const closing = new Set(ids)
+    const next = tabs.filter((tab) => !closing.has(tab.id))
+    if (next.length === tabs.length) return
+    setTabs(next)
+    if (activeId && closing.has(activeId)) {
+      const fallback = next[next.length - 1] ?? null
+      onBeforeActiveTabChangeRef.current?.(fallback?.id ?? null)
+      setActiveId(fallback?.id ?? null)
+    }
+  }, [activeId, tabs])
+
   const updateTabContent = useCallback(
     (id: string, content: string, options?: { markDirty?: boolean }) => {
       const shouldMarkDirty = options?.markDirty ?? true
@@ -280,6 +292,7 @@ export function useTabs(options?: UseTabsOptions) {
     createTab,
     setActiveTab,
     closeTab,
+    closeTabs,
     closeCurrentTab,
     getUnsavedTabs,
     updateTabContent,

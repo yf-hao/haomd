@@ -13,6 +13,43 @@
   box-sizing: border-box;
 }
 
+.tab-context-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-popover);
+}
+
+.tab-context-menu {
+  position: fixed;
+  min-width: 196px;
+  padding: 6px;
+  border: 1px solid var(--theme-border-subtle);
+  border-radius: 10px;
+  background: var(--theme-surface-panel);
+  box-shadow: var(--theme-shadow-card);
+  color: var(--theme-text-default);
+}
+
+.tab-context-menu button {
+  display: block;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--theme-text-default);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tab-context-menu button:hover,
+.tab-context-menu button:focus-visible {
+  outline: none;
+  background: var(--theme-surface-card);
+}
+
 .tab-bar-list {
   display: flex;
   align-items: center;

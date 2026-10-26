@@ -8,18 +8,20 @@ export type TabBarProps = {
   activeId: string | null
   onTabClick: (id: string) => void
   onTabClose: (id: string) => void
+  onCloseTabs?: (ids: string[]) => void
   onRequestSaveAndClose?: (id: string) => void
 }
 
 const OVERFLOW_BUTTON_WIDTH = 36
 
-export const TabBar = memo(function TabBar({ tabs, activeId, onTabClick, onTabClose, onRequestSaveAndClose }: TabBarProps) {
+export const TabBar = memo(function TabBar({ tabs, activeId, onTabClick, onTabClose, onCloseTabs, onRequestSaveAndClose }: TabBarProps) {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const measureRefs = useRef(new Map<string, HTMLDivElement | null>())
   const menuRef = useRef<HTMLDivElement | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [containerWidth, setContainerWidth] = useState(0)
   const [tabWidths, setTabWidths] = useState<Record<string, number>>({})
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; tabId: string } | null>(null)
 
   useLayoutEffect(() => {
     const nextWidths: Record<string, number> = {}
@@ -83,6 +85,15 @@ export const TabBar = memo(function TabBar({ tabs, activeId, onTabClick, onTabCl
     setMenuOpen(false)
   }, [tabs, activeId])
 
+  useEffect(() => {
+    if (!contextMenu) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setContextMenu(null)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [contextMenu])
+
   const { visibleTabs, hiddenTabs } = useMemo(() => {
     if (tabs.length === 0) {
       return { visibleTabs: [] as typeof tabs, hiddenTabs: [] as typeof tabs }
@@ -136,6 +147,16 @@ export const TabBar = memo(function TabBar({ tabs, activeId, onTabClick, onTabCl
       key={tab.id}
       className={`tab-item ${tab.id === activeId ? 'active' : ''}`}
       onClick={() => onTabClick(tab.id)}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        const width = 196
+        const height = 84
+        setContextMenu({
+          x: Math.max(8, Math.min(event.clientX, window.innerWidth - width - 8)),
+          y: Math.max(8, Math.min(event.clientY, window.innerHeight - height - 8)),
+          tabId: tab.id,
+        })
+      }}
     >
       <span className="tab-title">
         {tab.dirty && <span className="tab-dirty-dot" />}
@@ -168,6 +189,20 @@ export const TabBar = memo(function TabBar({ tabs, activeId, onTabClick, onTabCl
 
   return (
     <div className="tab-bar" ref={rootRef}>
+      {contextMenu && (
+        <div className="tab-context-backdrop" onMouseDown={() => setContextMenu(null)} onContextMenu={(event) => event.preventDefault()}>
+          <div className="tab-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} role="menu" onMouseDown={(event) => event.stopPropagation()}>
+            <button type="button" role="menuitem" onClick={() => {
+              onCloseTabs?.(tabs.filter((tab) => tab.id !== contextMenu.tabId).map((tab) => tab.id))
+              setContextMenu(null)
+            }}>关闭其它标签页</button>
+            <button type="button" role="menuitem" onClick={() => {
+              onCloseTabs?.(tabs.map((tab) => tab.id))
+              setContextMenu(null)
+            }}>关闭所有标签页</button>
+          </div>
+        </div>
+      )}
       <div className="tab-bar-list">
         {visibleTabs.map(renderTab)}
       </div>

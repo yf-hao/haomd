@@ -697,6 +697,7 @@ export function WorkspaceShell({
     createTab,
     setActiveTab,
     closeTab,
+    closeTabs,
     closeCurrentTab,
     getUnsavedTabs,
     updateTabContent,
@@ -4294,6 +4295,37 @@ export function WorkspaceShell({
     }
   }, [activeId, tabs, closeTabWithAiSession, handleCurrentTabClose, t])
 
+  const handleCloseTabs = useCallback((ids: string[]) => {
+    const targets = tabs.filter((tab) => ids.includes(tab.id))
+    if (targets.length === 0) return
+    const dirtyTabs = targets.filter((tab) => tab.dirty)
+    const closeTargets = () => {
+      for (const tab of targets) {
+        aiChatSessionManager.deleteSession(tab.id)
+        const imported = importedWordTabsRef.current[tab.id]
+        if (imported) {
+          void cleanupImportedWordTemp(imported.tempDir).catch((error) => console.warn('[word-import] cleanup temp failed on tab close', error))
+        }
+      }
+      setImportedWordTabs((prev) => {
+        const next = { ...prev }
+        for (const tab of targets) delete next[tab.id]
+        return next
+      })
+      closeTabs(targets.map((tab) => tab.id))
+    }
+    if (dirtyTabs.length === 0) {
+      closeTargets()
+      return
+    }
+    setConfirmDialog({
+      title: t('workspace.discardAndClose'),
+      message: `${t('workspace.closeAndDiscardChanges', { title: dirtyTabs.map((tab) => tab.title).join(', ') })}`,
+      confirmText: t('workspace.discardAndClose'),
+      onConfirm: () => { setConfirmDialog(null); closeTargets() },
+    })
+  }, [tabs, closeTabs, aiChatSessionManager, setConfirmDialog, t])
+
   const initialActionHandledRef = useRef(false)
   useEffect(() => {
     if (!initialAction || initialActionHandledRef.current) return
@@ -4730,6 +4762,7 @@ export function WorkspaceShell({
                   activeId={activeId}
                   onTabClick={setActiveTab}
                   onTabClose={closeTabWithAiSession}
+                  onCloseTabs={handleCloseTabs}
                   onRequestSaveAndClose={handleTabSaveAndClose}
                 />
               )}
@@ -4783,6 +4816,7 @@ export function WorkspaceShell({
                           activeId={activeId}
                           onTabClick={setActiveTab}
                           onTabClose={closeTabWithAiSession}
+                          onCloseTabs={handleCloseTabs}
                           onRequestSaveAndClose={handleTabSaveAndClose}
                         />
                         {activeTab?.path && (
@@ -4818,6 +4852,7 @@ export function WorkspaceShell({
                           activeId={activeId}
                           onTabClick={setActiveTab}
                           onTabClose={closeTabWithAiSession}
+                          onCloseTabs={handleCloseTabs}
                           onRequestSaveAndClose={handleTabSaveAndClose}
                         />
                         {isSearchOpen && (
@@ -4897,6 +4932,7 @@ export function WorkspaceShell({
                           activeId={activeId}
                           onTabClick={setActiveTab}
                           onTabClose={closeTabWithAiSession}
+                          onCloseTabs={handleCloseTabs}
                           onRequestSaveAndClose={handleTabSaveAndClose}
                         />
                       )}
