@@ -8,6 +8,12 @@
   color: var(--theme-text-default);
   font-size: var(--ui-font-preview);
   --markdown-code-font-size: var(--ui-font-preview);
+  /* github-markdown-css follows the operating system color scheme by default.
+     Bind its table colors to the app theme instead. */
+  --bgColor-default: var(--theme-surface-preview);
+  --bgColor-muted: var(--theme-surface-card);
+  --borderColor-default: var(--theme-border-subtle);
+  --borderColor-muted: var(--theme-border-subtle);
 }
 
 .preview.has-preview-background .markdown-body.gh-markdown {
