@@ -832,7 +832,7 @@ async fn send_stream_request(
     }
 
     let mut stream = response.bytes_stream();
-    let mut buffer = String::new();
+    let mut line_buffer = Vec::new();
     let mut full_content = String::new();
     let mut tool_calls_map = HashMap::<usize, OpenAICompatToolCallOutput>::new();
     let mut first_payload_logged = false;
@@ -858,16 +858,10 @@ async fn send_stream_request(
             )
         })?;
 
-        buffer.push_str(&String::from_utf8_lossy(&bytes));
-        let mut lines = buffer
-            .split('\n')
-            .map(|line| line.trim_end_matches('\r').to_string())
-            .collect::<Vec<_>>();
-        buffer = if buffer.ends_with('\n') {
-            String::new()
-        } else {
-            lines.pop().unwrap_or_default()
-        };
+        // HTTP chunks may end in the middle of a UTF-8 character. Keep raw bytes
+        // until a complete SSE line is available, then decode the whole line.
+        line_buffer.extend_from_slice(&bytes);
+        let lines = drain_complete_sse_lines(&mut line_buffer);
 
         for line in lines {
             let trimmed = line.trim();
@@ -971,6 +965,31 @@ async fn send_stream_request(
             }
         },
     })
+}
+
+fn drain_complete_sse_lines(buffer: &mut Vec<u8>) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut line_start = 0;
+
+    for (index, byte) in buffer.iter().enumerate() {
+        if *byte != b'\n' {
+            continue;
+        }
+
+        let line_end = if index > line_start && buffer[index - 1] == b'\r' {
+            index - 1
+        } else {
+            index
+        };
+        lines.push(String::from_utf8_lossy(&buffer[line_start..line_end]).into_owned());
+        line_start = index + 1;
+    }
+
+    if line_start > 0 {
+        buffer.drain(..line_start);
+    }
+
+    lines
 }
 
 async fn run_openai_compat_stream(
