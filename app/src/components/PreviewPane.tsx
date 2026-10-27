@@ -11,6 +11,7 @@ import { type PreviewStore, usePreviewValue } from '../hooks/usePreviewStore'
 
 export type PreviewPaneProps = {
   previewStore: PreviewStore
+  documentKey?: string | null
   activeLine: number
   previewWidth: number
   effectiveLayout: LayoutType
@@ -54,6 +55,7 @@ function HtmlPreview({ html }: HtmlPreviewProps) {
 
 function PreviewPaneComponent({
   previewStore,
+  documentKey,
   activeLine,
   previewWidth,
   effectiveLayout,
@@ -189,6 +191,7 @@ function PreviewPaneComponent({
         ) : (
           <MarkdownViewer
             value={value}
+            documentKey={documentKey}
             ref={markdownViewerRef}
             previewWidth={previewWidth}
             filePath={filePath}
@@ -212,6 +215,7 @@ export const PreviewPane = memo(
   PreviewPaneComponent,
   (prev, next) => (
     prev.previewStore === next.previewStore &&
+    prev.documentKey === next.documentKey &&
     prev.activeLine === next.activeLine &&
     prev.previewWidth === next.previewWidth &&
     prev.effectiveLayout === next.effectiveLayout &&

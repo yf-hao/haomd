@@ -52,6 +52,8 @@ import { CodeBlockView } from './views/CodeBlockView'
 import { ImageView } from './views/ImageView'
 import { normalizeCodeBlockLanguage } from './codeLanguage'
 import { BlockCacheManager } from './blockCache'
+import { createLatestTaskScheduler } from '../../modules/document/taskScheduler'
+import { createDocumentSnapshot } from '../../modules/document/documentSnapshot'
 import { composeMarkdownWithFrontMatter } from '../../modules/markdown/frontMatter'
 import { dispatchNativePasteImage, onNativePaste } from '../../modules/platform/clipboardEvents'
 import {
@@ -65,7 +67,7 @@ import {
   loadDefaultImagePathStrategyConfig,
   resolveImageTarget,
 } from '../../modules/images/imagePasteStrategy'
-import { buildHeadingsFromWysiwygDoc } from '../../modules/outline/wysiwygOutline'
+import { createWysiwygOutlineReader } from '../../modules/outline/wysiwygOutline'
 import type { RemoveBlankLinesScope } from '../../modules/document/application/removeBlankLinesService'
 import {
   createProseMirrorSearchController,
@@ -93,6 +95,7 @@ export interface WysiwygPaneProps {
   onSearchControllerReady?: (controller: SearchController | null) => void
   onOutlineNavigatorReady?: (navigator: ((target: { headingIndex: number; text: string; level: 1 | 2 | 3 | 4 | 5 | 6 }) => boolean) | null) => void
   onOutlineItemsChange?: (items: OutlineHeading[]) => void
+  outlineEnabled?: boolean
   skipUnmountFlushRef?: { current: boolean } | null
   /** Called with a flush function when the editor mounts, null on unmount.
    *  Calling flush() synchronously serializes the current ProseMirror doc
@@ -649,6 +652,7 @@ function WysiwygEditor({
   onSearchControllerReady,
   onOutlineNavigatorReady,
   onOutlineItemsChange,
+  outlineEnabled = true,
   skipUnmountFlushRef,
   onFlushReady,
   onDirty,
@@ -739,6 +743,11 @@ function WysiwygEditor({
   const onOutlineItemsChangeRef = useRef(onOutlineItemsChange)
   onOutlineItemsChangeRef.current = onOutlineItemsChange
   const lastOutlineItemsRef = useRef<OutlineHeading[]>([])
+  const outlineEnabledRef = useRef(outlineEnabled)
+  outlineEnabledRef.current = outlineEnabled
+  const outlineReader = useMemo(() => createWysiwygOutlineReader(), [])
+  const docKeyRef = useRef(docKey)
+  docKeyRef.current = docKey
 
   const isInternalUpdate = useRef(false)
   const textColorTargetRef = useRef<TextColorTarget | null>(null)
@@ -747,10 +756,10 @@ function WysiwygEditor({
   // Track the last value we synced TO the editor (to avoid needless getMarkdown)
   const lastSyncedValueRef = useRef(value)
   const hasUserInteractedRef = useRef(false)
-  const idleCallbackRef = useRef<IdleHandle | null>(null)
+  const serializationScheduler = useMemo(() => createLatestTaskScheduler(), [])
   const delayedSyncTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null)
   const serializationEpochRef = useRef(0)
-  const outlineEmitFrameRef = useRef<number | null>(null)
+  const outlineScheduler = useMemo(() => createLatestTaskScheduler(), [])
   const initialCacheBuildIdleRef = useRef<IdleHandle | null>(null)
   const initialOutlineEmitIdleRef = useRef<IdleHandle | null>(null)
   const isEditorReadyRef = useRef(false)
@@ -812,7 +821,10 @@ function WysiwygEditor({
       return lastSyncedValueRef.current
     }
     try {
-      return editor.action(getMarkdown())
+      return editor.action(ctx => {
+        const doc = ctx.get(editorViewCtx).state.doc
+        return blockCacheRef.current.incrementalUpdate(doc, doc, ctx.get(serializerCtx))
+      })
     } catch (error) {
       console.warn('[WysiwygPane] markdown serialization unavailable', error)
       return lastSyncedValueRef.current
@@ -832,16 +844,14 @@ function WysiwygEditor({
   }, [getCurrentMarkdownBody, getReadyEditor])
 
   const emitOutlineItems = useCallback((expectedEditor?: Editor | null) => {
+    if (!outlineEnabledRef.current || !onOutlineItemsChangeRef.current) return
     const editor = getReadyEditor(expectedEditor)
     if (!editor) return
 
     editor.action((ctx) => {
       const view = ctx.get(editorViewCtx)
       const headingType = headingSchema.type(ctx)
-      const items = buildHeadingsFromWysiwygDoc({
-        doc: view.state.doc,
-        headingType,
-      })
+      const items = outlineReader(view.state.doc, headingType)
       const previousItems = lastOutlineItemsRef.current
       if (previousItems.length === items.length) {
         let isSame = true
@@ -868,18 +878,20 @@ function WysiwygEditor({
       lastOutlineItemsRef.current = items
       onOutlineItemsChangeRef.current?.(items)
     })
-  }, [getReadyEditor])
+  }, [getReadyEditor, outlineReader])
 
   const scheduleOutlineEmit = useCallback((expectedEditor?: Editor | null) => {
-    if (outlineEmitFrameRef.current !== null) {
-      cancelAnimationFrame(outlineEmitFrameRef.current)
-    }
+    if (!outlineEnabledRef.current) return
     const editor = expectedEditor ?? editorRef.current
-    outlineEmitFrameRef.current = requestAnimationFrame(() => {
-      outlineEmitFrameRef.current = null
-      emitOutlineItems(editor)
+    outlineScheduler.schedule(() => emitOutlineItems(editor), {
+      minIntervalMs: 300, trailingDelayMs: 300, maxWaitMs: 1000,
     })
-  }, [emitOutlineItems])
+  }, [emitOutlineItems, outlineScheduler])
+
+  useEffect(() => {
+    if (outlineEnabled && editorReady) emitOutlineItems()
+    return () => outlineScheduler.cancel()
+  }, [outlineEnabled, editorReady, emitOutlineItems, outlineScheduler])
 
   const scheduleInitialCacheBuild = useCallback(() => {
     if (initialCacheBuildIdleRef.current !== null) {
@@ -945,31 +957,16 @@ function WysiwygEditor({
 
     let md: string
     try {
-      md = editor.action((ctx) => {
-        const serializer = ctx.get(serializerCtx)
-        const cache = blockCacheRef.current
-
-        let nextMarkdown: string
-        if (!prevDoc || !cache.isInitialized) {
-          nextMarkdown = cache.buildFull(newDoc, serializer)
-        } else {
-          nextMarkdown = cache.incrementalUpdate(prevDoc, newDoc, serializer)
-        }
-
-        // Dev-mode verification: compare incremental result against full serialization
-        if (import.meta.env.DEV && prevDoc && cache.isInitialized) {
-          const fullMd = serializer(newDoc)
-          if (nextMarkdown !== fullMd) {
-            console.warn(
-              '[BlockCache] Incremental/full mismatch detected — rebuilding cache.\n' +
-              `  incremental length: ${nextMarkdown.length}, full length: ${fullMd.length}`,
-            )
-            nextMarkdown = cache.buildFull(newDoc, serializer)
-          }
-        }
-
-        return nextMarkdown
-      })
+      const snapshot = createDocumentSnapshot(
+        { documentId: docKeyRef.current ?? '', sessionId: String(initRunIdRef.current), revision: serializationEpochRef.current },
+        newDoc,
+        doc => editor.action(ctx => {
+          const serializer = ctx.get(serializerCtx)
+          const cache = blockCacheRef.current
+          return cache.incrementalUpdate(prevDoc ?? doc, doc, serializer)
+        }),
+      )
+      md = snapshot.readMarkdown()
     } catch (error) {
       console.warn('[WysiwygPane] incremental serialization unavailable', error)
       return
@@ -987,7 +984,7 @@ function WysiwygEditor({
     queueMicrotask(() => { isInternalUpdate.current = false })
   }, [getReadyEditor])
 
-  // Full serialization (used by flushPending, scheduleDelayedSync, and format actions)
+  // Materialize the current native snapshot for saves and formatting boundaries.
   const serializeAndPush = useCallback((
     requireInteraction = true,
     expectedEditor?: Editor | null,
@@ -996,21 +993,9 @@ function WysiwygEditor({
     if (!editor) return
     if (requireInteraction && !hasUserInteractedRef.current) return
 
-    // Full serialization via getMarkdown() — also rebuilds block cache
+    // Reuse the cache when this native document has already been serialized.
     const md = getCurrentMarkdownBody()
 
-    // Rebuild cache so subsequent incremental updates have a correct baseline
-    if (getReadyEditor(editor) !== editor) return
-    try {
-      editor.action((ctx) => {
-        const view = ctx.get(editorViewCtx)
-        const ser = ctx.get(serializerCtx)
-        blockCacheRef.current.buildFull(view.state.doc, ser)
-      })
-    } catch (error) {
-      console.warn('[WysiwygPane] cache rebuild unavailable', error)
-      return
-    }
     const nextMarkdown = composeMarkdownWithFrontMatter(frontMatterBlockRef.current, md)
     if (md === lastSyncedValueRef.current) return
 
@@ -1023,16 +1008,13 @@ function WysiwygEditor({
 
   const flushPending = useCallback(() => {
     serializationEpochRef.current += 1
-    if (idleCallbackRef.current !== null) {
-      cancelIdleWork(idleCallbackRef.current)
-      idleCallbackRef.current = null
-    }
+    serializationScheduler.cancel()
     if (delayedSyncTimerRef.current !== null) {
       window.clearTimeout(delayedSyncTimerRef.current)
       delayedSyncTimerRef.current = null
     }
     serializeAndPush(false)
-  }, [serializeAndPush])
+  }, [serializeAndPush, serializationScheduler])
 
   const scheduleDelayedSync = useCallback((delayMs = 180) => {
     const epoch = ++serializationEpochRef.current
@@ -1041,17 +1023,14 @@ function WysiwygEditor({
       window.clearTimeout(delayedSyncTimerRef.current)
       delayedSyncTimerRef.current = null
     }
-    if (idleCallbackRef.current !== null) {
-      cancelIdleWork(idleCallbackRef.current)
-      idleCallbackRef.current = null
-    }
+    serializationScheduler.cancel()
     if (!expectedEditor) return
     delayedSyncTimerRef.current = window.setTimeout(() => {
       delayedSyncTimerRef.current = null
       if (epoch !== serializationEpochRef.current) return
       serializeAndPush(true, expectedEditor)
     }, delayMs)
-  }, [getReadyEditor, serializeAndPush])
+  }, [getReadyEditor, serializeAndPush, serializationScheduler])
 
   const removeBlankLineBlocks = useCallback<WysiwygBlankLineAction>((scope = 'all') => {
     const editor = getReadyEditor()
@@ -1087,16 +1066,13 @@ function WysiwygEditor({
 
   const getSaveSnapshot = useCallback(() => {
     serializationEpochRef.current += 1
-    if (idleCallbackRef.current !== null) {
-      cancelIdleWork(idleCallbackRef.current)
-      idleCallbackRef.current = null
-    }
+    serializationScheduler.cancel()
     if (delayedSyncTimerRef.current !== null) {
       window.clearTimeout(delayedSyncTimerRef.current)
       delayedSyncTimerRef.current = null
     }
     return getCurrentMarkdown()
-  }, [getCurrentMarkdown])
+  }, [getCurrentMarkdown, serializationScheduler])
 
   const runAction = useCallback((runner: (editor: Editor) => void) => {
     const editor = getReadyEditor()
@@ -1454,19 +1430,13 @@ function WysiwygEditor({
           }
 
           onDirtyRef.current?.()
-          if (idleCallbackRef.current !== null) {
-            cancelIdleWork(idleCallbackRef.current)
-            idleCallbackRef.current = null
-          }
           const epoch = ++serializationEpochRef.current
           const ownerEditor = editorRef.current
           if (!ownerEditor) return
-          idleCallbackRef.current = requestIdleWork(() => {
-            idleCallbackRef.current = null
+          serializationScheduler.schedule(() => {
             if (epoch !== serializationEpochRef.current) return
-            // Use incremental serialization: only re-serialize changed blocks
             incrementalSerializeAndPush(doc, prevDoc, ownerEditor)
-          }, 2000)
+          }, { minIntervalMs: 180, trailingDelayMs: 180, maxWaitMs: 600 })
           scheduleOutlineEmit(ownerEditor)
         })
       })
@@ -1512,7 +1482,7 @@ function WysiwygEditor({
 
     scheduleInitialCacheBuild()
     scheduleInitialOutlineEmit()
-  }, [incrementalSerializeAndPush, scheduleDelayedSync, scheduleInitialCacheBuild, scheduleInitialOutlineEmit, scheduleOutlineEmit, serializeAndPush])
+  }, [incrementalSerializeAndPush, scheduleDelayedSync, scheduleInitialCacheBuild, scheduleInitialOutlineEmit, scheduleOutlineEmit, serializeAndPush, serializationScheduler])
 
   useEffect(() => {
     onFlushReadyRef.current?.(flushPending)
@@ -1866,10 +1836,8 @@ function WysiwygEditor({
         flushPending()
       }
       hasUserInteractedRef.current = false
-      if (outlineEmitFrameRef.current !== null) {
-        cancelAnimationFrame(outlineEmitFrameRef.current)
-        outlineEmitFrameRef.current = null
-      }
+      outlineScheduler.cancel()
+      serializationScheduler.cancel()
       if (initialCacheBuildIdleRef.current !== null) {
         cancelIdleWork(initialCacheBuildIdleRef.current)
         initialCacheBuildIdleRef.current = null
@@ -1895,7 +1863,7 @@ function WysiwygEditor({
         editor.destroy()
       }
     }
-  }, [flushPending, initEditor])
+  }, [flushPending, initEditor, outlineScheduler, serializationScheduler])
 
   // Sync external value changes (e.g. tab switch, file reload)
   useEffect(() => {

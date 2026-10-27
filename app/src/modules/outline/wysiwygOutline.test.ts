@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
-import { buildHeadingsFromWysiwygDoc } from './wysiwygOutline'
+import { describe, expect, it, vi } from 'vitest'
+import { Schema } from '@milkdown/prose/model'
+import { buildHeadingsFromWysiwygDoc, createWysiwygOutlineReader } from './wysiwygOutline'
 
 type FakeNode = {
   type: unknown
@@ -22,6 +23,27 @@ function createFakeDoc(nodes: FakeNode[]): FakeDoc {
 }
 
 describe('buildHeadingsFromWysiwygDoc', () => {
+  it('reuses immutable subtrees and keeps heading order after insertions', () => {
+    const schema = new Schema({ nodes: {
+      doc: { content: 'block*' }, text: {},
+      paragraph: { content: 'text*', group: 'block' },
+      heading: { content: 'text*', group: 'block', attrs: { level: { default: 1 } } },
+      blockquote: { content: 'block*', group: 'block' },
+    } })
+    const title = schema.node('heading', null, schema.text('标题'))
+    const nested = schema.node('blockquote', null, schema.node('heading', { level: 2 }, schema.text('子标题')))
+    const body = schema.node('paragraph', null, schema.text('正文'))
+    const read = createWysiwygOutlineReader()
+    const first = read(schema.node('doc', null, [title, nested, body]), schema.nodes.heading)
+    const visitNested = vi.spyOn(nested, 'forEach')
+    const edited = schema.node('paragraph', null, schema.text('修改正文'))
+    expect(read(schema.node('doc', null, [title, nested, edited]), schema.nodes.heading)).toBe(first)
+    expect(visitNested).not.toHaveBeenCalled()
+    const next = schema.node('doc', null, [schema.node('heading', null, schema.text('新增')), title, nested, edited])
+    expect(read(next, schema.nodes.heading)).toEqual(buildHeadingsFromWysiwygDoc({ doc: next, headingType: schema.nodes.heading }))
+    visitNested.mockRestore()
+  })
+
   it('should return an empty list for a document without headings', () => {
     const headingType = { name: 'heading' }
     const doc = createFakeDoc([

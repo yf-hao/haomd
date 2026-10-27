@@ -60,9 +60,16 @@ function useRecentFilesState(setStatusMessage: (msg: string) => void) {
   }
 }
 
+export type SavedDocumentSnapshot = {
+  documentKey: string | null
+  content: string
+  latestContent?: string
+}
+
 export type FilePersistenceOptions = {
-  onSaved?: (path: string) => void
+  onSaved?: (path: string, snapshot: SavedDocumentSnapshot) => void
   getLatestMarkdown?: () => string
+  getDocumentKey?: () => string | null
 }
 
 export function useFilePersistence(markdown: string, options?: FilePersistenceOptions) {
@@ -119,6 +126,9 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
       }
       saveInFlightRef.current = true
       try {
+        const owner = optionsRef.current
+        const documentKey = owner?.getDocumentKey?.() ?? null
+        const originalPath = pathRef.current
         const pathToUse = targetPath ?? pathRef.current
         const contentToWrite = contentOverride ?? markdownRef.current
         const resp = await writeFile({
@@ -128,13 +138,20 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
           expectedMtime: currentMtime,
         })
         if (resp.ok) {
+          const sameDocument = owner?.getDocumentKey
+            ? documentKey === optionsRef.current?.getDocumentKey?.()
+            : pathRef.current === originalPath
+          const latestContent = sameDocument
+            ? optionsRef.current?.getLatestMarkdown?.() ?? markdownRef.current
+            : undefined
           // 先更新 ref，避免紧接着触发的下一次保存仍判断为"未命名"
-          pathRef.current = pathToUse
+          if (sameDocument) pathRef.current = pathToUse
           // 用 batchedUpdates 将多个 setState 合并为一次渲染，避免 async 函数中
           // 逐个 flush 导致多次布局重排（保存时抖动的根本原因）
           unstable_batchedUpdates(() => {
+            if (!sameDocument) return
             setFilePath(pathToUse)
-            setDirty(false)
+            setDirty(latestContent !== contentToWrite)
             setSaveStatus('saved')
             setStatusMessage('已保存')
             setCurrentHash(resp.data.hash)
@@ -149,7 +166,7 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
           upsertRecentLocalRef.current()
 
           // 通知外层：保存成功，可用于更新多标签元信息
-          optionsRef.current?.onSaved?.(pathToUse)
+          owner?.onSaved?.(pathToUse, { documentKey, content: contentToWrite, latestContent })
         }
         return resp
       } finally {
@@ -293,18 +310,7 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
         setSaveStatus('saving')
         setStatusMessage('自动保存中...')
       },
-      onSuccess: (res) => {
-        unstable_batchedUpdates(() => {
-          setDirty(false)
-          setSaveStatus('saved')
-          setStatusMessage('自动保存完成')
-          setCurrentHash(res.hash)
-          setCurrentMtime(res.mtimeMs)
-          setLastSavedAt(Date.now())
-        })
-        // 同步清除标签页脏标记（与手动保存保持一致）
-        optionsRef.current?.onSaved?.(res.path)
-      },
+      // handleSave publishes the saved snapshot once, including edits made in flight.
       onConflict: (error) => {
         setSaveStatus('conflict')
         setConflictError(error)

@@ -182,6 +182,14 @@ export function useTabs(options?: UseTabsOptions) {
     [activeId],
   )
 
+  const markTabSaved = useCallback((id: string, path: string, savedContent: string, latestContent?: string) => {
+    setTabs(prev => prev.map(tab => {
+      if (tab.id !== id) return tab
+      const content = latestContent ?? tab.content
+      return { ...tab, path, title: deriveTitleFromPath(path), content, dirty: content !== savedContent }
+    }))
+  }, [])
+
   const updateTabsPathByPath = useCallback(
     (oldPath: string, newPath: string) => {
       if (!oldPath || !newPath) return
@@ -298,6 +306,7 @@ export function useTabs(options?: UseTabsOptions) {
     updateTabContent,
     updateActiveContent,
     updateActiveMeta,
+    markTabSaved,
     updateTabsPathByPath,
     markActiveTabDirty,
   }

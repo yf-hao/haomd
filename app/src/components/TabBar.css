@@ -73,6 +73,8 @@
   flex: 0 0 auto;
   min-height: calc(var(--theme-component-tabbar-height) - 1px);
   box-sizing: border-box;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .tab-item:hover {

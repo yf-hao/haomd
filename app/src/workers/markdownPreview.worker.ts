@@ -1,45 +1,20 @@
 /// <reference lib="webworker" />
 
 import { preparePreviewMarkdown } from '../modules/markdown/previewPipeline'
+import { createPreviewEncoder } from '../modules/markdown/preview/previewTransport'
 
 type PreviewWorkerRequest = {
   id: number
   value: string
 }
 
-type PreviewWorkerResponse = {
-  id: number
-  processedMarkdown: string
-  hasMath: boolean
-  hasRawHtml: boolean
-  containsToc: boolean
-  sourceLineOffset: number
-  lineCount: number
-  blockChunks: Array<{
-    id: string
-    startLine: number
-    endLine: number
-    markdown: string
-    signature: string
-  }>
-}
-
 const workerScope = self as DedicatedWorkerGlobalScope
+const encode = createPreviewEncoder()
 
 workerScope.addEventListener('message', (event: MessageEvent<PreviewWorkerRequest>) => {
   const { id, value } = event.data
   const result = preparePreviewMarkdown(value)
-  const response: PreviewWorkerResponse = {
-    id,
-    processedMarkdown: result.processedMarkdown,
-    hasMath: result.hasMath,
-    hasRawHtml: result.hasRawHtml,
-    containsToc: result.containsToc,
-    sourceLineOffset: result.sourceLineOffset,
-    lineCount: result.lineCount,
-    blockChunks: result.blockChunks,
-  }
-  workerScope.postMessage(response)
+  workerScope.postMessage(encode(id, result))
 })
 
 export {}

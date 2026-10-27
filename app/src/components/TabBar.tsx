@@ -147,6 +147,9 @@ export const TabBar = memo(function TabBar({ tabs, activeId, onTabClick, onTabCl
       key={tab.id}
       className={`tab-item ${tab.id === activeId ? 'active' : ''}`}
       onClick={() => onTabClick(tab.id)}
+      onMouseDown={(event) => {
+        if (event.button === 2) event.preventDefault()
+      }}
       onContextMenu={(event) => {
         event.preventDefault()
         const width = 196

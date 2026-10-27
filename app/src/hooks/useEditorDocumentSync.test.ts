@@ -150,6 +150,7 @@ describe('useEditorDocumentSync', () => {
       const view = mutableView as unknown as EditorView
       const activeIdRef = { current: 'doc-1' }
       const updateActiveContent = vi.fn()
+      const schedulePreviewDocument = vi.fn()
 
       const { result } = renderHook(() => useEditorDocumentSync({
         activeIdRef,
@@ -171,7 +172,7 @@ describe('useEditorDocumentSync', () => {
         markActiveTabDirty: vi.fn(),
         markDirty: vi.fn(),
         applyChunkEdit: () => null,
-        schedulePreviewDocument: vi.fn(),
+        schedulePreviewDocument,
       }))
 
       const secondUpdate = createDocumentUpdate(
@@ -192,10 +193,18 @@ describe('useEditorDocumentSync', () => {
         result.current.handleSourceDocumentChange(secondUpdate)
         mutableView.state.doc = thirdDoc
         result.current.handleSourceDocumentChange(thirdUpdate)
+        // An earlier scheduled consumer must still see its captured immutable version.
+        expect(schedulePreviewDocument.mock.calls[0][3]()).toBe('before one')
+        expect(schedulePreviewDocument.mock.calls[1][3]()).toBe('before one more')
         vi.advanceTimersByTime(150)
       })
 
       expect(updateActiveContent).toHaveBeenCalledWith('before one more', { markDirty: true })
+      // A native composition can change the document before its public change event.
+      mutableView.state.doc = thirdDoc.append(Text.of(['中文']))
+      act(() => {
+        expect(result.current.flushSourceDocumentSync()).toBe('before one more中文')
+      })
     } finally {
       vi.useRealTimers()
     }

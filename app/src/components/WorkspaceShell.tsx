@@ -36,6 +36,7 @@ import { buildSearchScope } from '../modules/search/searchScopeService'
 import type { SearchScope } from '../modules/search/types'
 import { useOutlineModel } from '../hooks/useOutlineModel'
 import { useEditorDocumentSync } from '../hooks/useEditorDocumentSync'
+import { createPreviewScheduler } from '../modules/markdown/preview/previewScheduler'
 import { createPreviewStore } from '../hooks/usePreviewStore'
 import type { OutlineItem } from '../modules/outline/parser'
 import type { OutlineHeading } from '../modules/outline/outlineSource'
@@ -599,6 +600,7 @@ export function WorkspaceShell({
 
   const isPreviewVisible = showPreview
   const prevIsPreviewVisibleRef = useRef(isPreviewVisible)
+  const previewScheduler = useMemo(() => createPreviewScheduler(), [])
   const previewSyncTimerRef = useRef<number | null>(null)
   const previewFrameRef = useRef<number | null>(null)
   const skipNextPreviewThrottleRef = useRef(false)
@@ -608,6 +610,7 @@ export function WorkspaceShell({
   }, [previewStore])
 
   const clearPreviewSyncTimer = useCallback(() => {
+    previewScheduler.cancel()
     if (previewSyncTimerRef.current != null) {
       window.clearTimeout(previewSyncTimerRef.current)
       previewSyncTimerRef.current = null
@@ -616,7 +619,7 @@ export function WorkspaceShell({
       window.cancelAnimationFrame(previewFrameRef.current)
       previewFrameRef.current = null
     }
-  }, [])
+  }, [previewScheduler])
 
   const schedulePreviewDocument = useCallback((
     tabId: string,
@@ -626,11 +629,7 @@ export function WorkspaceShell({
   ) => {
     if (!isPreviewVisible) return
 
-    if (previewFrameRef.current != null) {
-      window.cancelAnimationFrame(previewFrameRef.current)
-    }
     const commit = () => {
-      previewFrameRef.current = null
       if (
         activeIdRef.current !== tabId ||
         editorViewRef.current !== view ||
@@ -641,11 +640,8 @@ export function WorkspaceShell({
       commitPreviewValue(getContent())
     }
 
-    previewFrameRef.current = window.requestAnimationFrame(() => {
-      previewFrameRef.current = null
-      commit()
-    })
-  }, [commitPreviewValue, isPreviewVisible])
+    previewScheduler.schedule(commit)
+  }, [commitPreviewValue, isPreviewVisible, previewScheduler])
 
   // 在 editor/preview 区域统一处理滚轮：如果鼠标横坐标落在编辑器列内，就把滚动量转发给编辑器的 .cm-scroller
   useEffect(() => {
@@ -705,6 +701,7 @@ export function WorkspaceShell({
     updateActiveMeta,
     updateTabsPathByPath,
     markActiveTabDirty,
+    markTabSaved,
   } = useTabs({
     onRequestCloseCurrentTab: () => {
       if (closeCurrentTabRef.current) {
@@ -925,6 +922,9 @@ export function WorkspaceShell({
     if (editModeRef.current === 'source' && !isPdfActiveRef.current) {
       return flushSourceEditorRef.current?.() ?? getCurrentMarkdown()
     }
+    if (editModeRef.current === 'wysiwyg' && !isPdfActiveRef.current) {
+      return wysiwygMarkdownGetterRef.current?.() ?? markdownRef.current
+    }
     return getCurrentMarkdown()
   }, [getCurrentMarkdown])
   const getCurrentFileName = useCallback(() => {
@@ -1018,7 +1018,7 @@ export function WorkspaceShell({
     wysiwygHeadings: wysiwygOutlineHeadings,
     enabled: isOutlinePanelVisible && !isPdfActive,
     documentKey: activeId,
-    debounceMs: editMode === 'source' ? 0 : 300,
+    debounceMs: 300,
   })
 
   const activePdfOutlineId = useMemo(() => {
@@ -1206,7 +1206,8 @@ export function WorkspaceShell({
         clearPreviewSyncTimer()
         skipNextPreviewThrottleRef.current = true
         setIsPreviewLoading(true)
-        requestAnimationFrame(() => {
+        previewFrameRef.current = requestAnimationFrame(() => {
+          previewFrameRef.current = null
           previewSyncTimerRef.current = window.setTimeout(() => {
             previewSyncTimerRef.current = null
             commitPreviewValue(tab.content)
@@ -1291,12 +1292,17 @@ export function WorkspaceShell({
     newDocument,
   } = useFilePersistence(markdown, {
     getLatestMarkdown: getLatestPersistableMarkdown,
-    onSaved: (path: string) => {
+    getDocumentKey: () => activeIdRef.current,
+    onSaved: (path, snapshot) => {
       // 方案2：在父组件处理保存后的逻辑
 
       // 1. 更新标签元数据（名称和 dirty 状态）
-      resetSourceDirtyTrackingRef.current?.()
-      updateActiveMeta(path, false)
+      if (snapshot.documentKey) {
+        markTabSaved(snapshot.documentKey, path, snapshot.content, snapshot.latestContent)
+      }
+      if (snapshot.documentKey === activeIdRef.current && snapshot.latestContent === snapshot.content) {
+        resetSourceDirtyTrackingRef.current?.()
+      }
 
       // 2. 处理侧边栏文件列表
       const normalizedPath = path.replace(/\\/g, '/')
@@ -2537,32 +2543,34 @@ export function WorkspaceShell({
     })
   }, [isCreatingTab, getUnsavedTabs, isTauriEnv, setActiveTab, setConfirmDialog, cleanupAllImportedWordTemps, t])
 
-  // 预览内容只在预览可见时按帧同步，避免 editor-only 模式下做无意义渲染。
-  // 不使用固定时间防抖，保证连续输入时预览仍然实时跟随最新内容。
+  // Live preview is submitted on the next frame, without a typing delay. Source updates
+  // already supply a lazy native snapshot and skip this React snapshot path.
   useEffect(() => {
-    if (!isPreviewVisible) return
+    if (!isPreviewVisible) {
+      previewScheduler.cancel()
+      return
+    }
     if (skipNextPreviewThrottleRef.current) {
       skipNextPreviewThrottleRef.current = false
       return
     }
-
-    clearPreviewSyncTimer()
-    const frame = window.requestAnimationFrame(() => {
-      previewFrameRef.current = null
-      commitPreviewValue(markdown)
+    const tabId = activeIdRef.current
+    previewScheduler.schedule(() => {
+      if (tabId === activeIdRef.current) commitPreviewValue(markdown)
     })
-    previewFrameRef.current = frame
-    return () => window.cancelAnimationFrame(frame)
-  }, [markdown, isPreviewVisible, clearPreviewSyncTimer, commitPreviewValue])
+  }, [markdown, isPreviewVisible, previewScheduler, commitPreviewValue])
 
-  // 当预览从不可见切换为可见时，立即用最新 markdown 做一次全量同步
   useEffect(() => {
     if (!prevIsPreviewVisibleRef.current && isPreviewVisible) {
-      commitPreviewValue(markdownRef.current)
+      const latest = editModeRef.current === 'source'
+        ? flushSourceEditorRef.current?.() ?? markdownRef.current
+        : markdownRef.current
+      previewScheduler.cancel()
+      commitPreviewValue(latest)
       setIsPreviewLoading(false)
     }
     prevIsPreviewVisibleRef.current = isPreviewVisible
-  }, [isPreviewVisible, markdown, commitPreviewValue])
+  }, [isPreviewVisible, commitPreviewValue, previewScheduler])
 
   useEffect(() => {
     return () => {
@@ -2608,7 +2616,8 @@ export function WorkspaceShell({
       clearPreviewSyncTimer()
       skipNextPreviewThrottleRef.current = true
       setIsPreviewLoading(true)
-      requestAnimationFrame(() => {
+      previewFrameRef.current = requestAnimationFrame(() => {
+        previewFrameRef.current = null
         previewSyncTimerRef.current = window.setTimeout(() => {
           previewSyncTimerRef.current = null
           commitPreviewValue(content)
@@ -4892,6 +4901,7 @@ export function WorkspaceShell({
                             wysiwygOutlineNavigatorRef.current = navigator
                           }}
                           onOutlineItemsChange={handleWysiwygOutlineItemsChange}
+                          outlineEnabled={isOutlinePanelVisible}
                           onFormatActionsReady={(actions) => {
                             wysiwygFormatActionsRef.current = actions
                           }}
@@ -4971,6 +4981,7 @@ export function WorkspaceShell({
                     <Suspense fallback={<LoadingFallback className="preview-loading-fallback" label={t('workspace.loadingPreview')} />}>
                       <PreviewPaneLazy
                         previewStore={previewStore}
+                        documentKey={activeId}
                         activeLine={previewActiveLine}
                         previewWidth={previewWidthForRender}
                         effectiveLayout={effectiveLayout}

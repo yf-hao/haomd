@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, forwardRef } from 'react'
+import { useEffect, useMemo, useRef, useCallback, forwardRef } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import type { Extension } from '@codemirror/state'
 import type { EditorView, ViewUpdate } from '@codemirror/view'
@@ -41,8 +41,9 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
     editorZoom,
   } = props
   const themeMode = useResolvedThemeMode()
-  const [, setEditorValue] = useState(value)
-  const editorValueRef = useRef(value)
+  // The wrapper initializes the native document once. External replacements are
+  // applied below, so an unrelated React render cannot replay a stale value.
+  const initialValueRef = useRef(value)
   const editorViewRef = useRef<EditorView | null>(null)
   const onViewReadyRef = useRef(onViewReady)
   const onChangeRef = useRef(onChange)
@@ -53,6 +54,7 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
   const lastDocumentKeyRef = useRef(documentKey)
   const hasLocalDocumentChangesRef = useRef(false)
   const pendingExternalValueRef = useRef<string | null>(null)
+  const pendingDocumentSwitchRef = useRef(false)
   const applyingExternalValueRef = useRef(false)
 
   useEffect(() => {
@@ -96,13 +98,14 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
 
     if (isComposingRef.current || view?.composing) {
       pendingExternalValueRef.current = value
+      pendingDocumentSwitchRef.current ||= documentChanged
       return
     }
 
     pendingExternalValueRef.current = null
+    pendingDocumentSwitchRef.current = false
     hasLocalDocumentChangesRef.current = false
     lastForwardedValueRef.current = value
-    editorValueRef.current = value
     if (view && currentDocument !== value) {
       applyingExternalValueRef.current = true
       try {
@@ -117,46 +120,60 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
         applyingExternalValueRef.current = false
       }
     }
-    setEditorValue(value)
   }, [documentKey, preserveLocalDocument, value])
 
-  const forwardChange = (nextValue: string) => {
+  const forwardChange = useCallback((nextValue: string) => {
     if (nextValue === lastForwardedValueRef.current) return
     lastForwardedValueRef.current = nextValue
     onChangeRef.current?.(nextValue)
-  }
+  }, [])
 
-  const flushComposition = () => {
+  const flushComposition = useCallback(() => {
+    const expectedView = editorViewRef.current
+    const expectedKey = lastDocumentKeyRef.current
     queueMicrotask(() => {
       const view = editorViewRef.current
-      if (!view || view.dom.isConnected === false) return
-      const nextValue = view.state.doc.toString()
-      editorValueRef.current = nextValue
-      setEditorValue(nextValue)
-      forwardChange(nextValue)
-      onDocumentChangeRef.current?.(view)
+      if (!view || view !== expectedView || expectedKey !== lastDocumentKeyRef.current || !view.dom.isConnected) return
+      // A composition from the outgoing document must not be reported to the new tab.
+      if (!pendingDocumentSwitchRef.current) {
+        if (onChangeRef.current) forwardChange(view.state.doc.toString())
+        onDocumentChangeRef.current?.(view)
+      }
 
       const pendingExternalValue = pendingExternalValueRef.current
       pendingExternalValueRef.current = null
-      if (pendingExternalValue !== null && pendingExternalValue !== nextValue) {
+      if (pendingDocumentSwitchRef.current) hasLocalDocumentChangesRef.current = false
+      pendingDocumentSwitchRef.current = false
+      if (pendingExternalValue !== null && pendingExternalValue !== view.state.doc.toString()) {
         applyingExternalValueRef.current = true
         try {
-          view.dispatch({
-            changes: {
-              from: 0,
-              to: view.state.doc.length,
-              insert: pendingExternalValue,
-            },
-          })
+          view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: pendingExternalValue } })
         } finally {
           applyingExternalValueRef.current = false
         }
-        editorValueRef.current = pendingExternalValue
-        setEditorValue(pendingExternalValue)
         lastForwardedValueRef.current = pendingExternalValue
       }
     })
-  }
+  }, [forwardChange])
+
+  const handleChange = useCallback((val: string) => {
+    if (!applyingExternalValueRef.current && !isComposingRef.current && !editorViewRef.current?.composing) {
+      forwardChange(val)
+    }
+  }, [forwardChange])
+
+  const handleUpdate = useCallback((update: ViewUpdate) => {
+    if (!update.docChanged || applyingExternalValueRef.current) return
+    hasLocalDocumentChangesRef.current = true
+    if (!isComposingRef.current && !update.view.compositionStarted && !update.view.composing) {
+      onDocumentChangeRef.current?.(update)
+    }
+  }, [])
+
+  const handleCreateEditor = useCallback((view: EditorView) => {
+    editorViewRef.current = view
+    onViewReadyRef.current?.(view)
+  }, [])
 
   const mergedExtensions = useMemo(() => {
     if (extensions && extensions.length) return extensions
@@ -204,32 +221,10 @@ export const CodeEditor = forwardRef<HTMLDivElement, Readonly<CodeEditorProps>>(
         readOnly={readOnly}
         placeholder={placeholder}
         extensions={mergedExtensions}
-        value={preserveLocalDocument || onChange ? editorValueRef.current : value}
-        onChange={(val) => {
-          editorValueRef.current = val
-          if (onChangeRef.current) {
-            setEditorValue(val)
-          }
-          if (!isComposingRef.current && !editorViewRef.current?.composing) {
-            forwardChange(val)
-          }
-        }}
-        onUpdate={(update) => {
-          isComposingRef.current = update.view.compositionStarted
-          if (
-            update.docChanged &&
-            !update.view.compositionStarted &&
-            !update.view.composing &&
-            !applyingExternalValueRef.current
-          ) {
-            hasLocalDocumentChangesRef.current = true
-            onDocumentChangeRef.current?.(update)
-          }
-        }}
-        onCreateEditor={(view) => {
-          editorViewRef.current = view
-          onViewReadyRef.current?.(view)
-        }}
+        value={initialValueRef.current}
+        onChange={onChange ? handleChange : undefined}
+        onUpdate={handleUpdate}
+        onCreateEditor={handleCreateEditor}
       />
     </div>
   )

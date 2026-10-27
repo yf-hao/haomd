@@ -1,6 +1,7 @@
 import { useCallback, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import type { Text } from '@codemirror/state'
 import type { EditorView, ViewUpdate } from '@codemirror/view'
+import { createDocumentSnapshot, type DocumentSnapshot } from '../modules/document/documentSnapshot'
 
 type EditorMode = 'source' | 'wysiwyg'
 
@@ -42,6 +43,7 @@ type SourceDocumentSnapshot = {
   revision: number
   doc: Text
   editorDoc: Text
+  content: DocumentSnapshot
 }
 
 type SourceContentCache = {
@@ -49,6 +51,7 @@ type SourceContentCache = {
   view: EditorView
   revision: number
   content: string
+  doc: Text
 }
 
 export function useEditorDocumentSync({
@@ -77,23 +80,24 @@ export function useEditorDocumentSync({
   const sourceDocumentSyncSnapshotRef = useRef<SourceDocumentSnapshot | null>(null)
   const sourceContentCacheRef = useRef<SourceContentCache | null>(null)
   const sourceDirtyTabRef = useRef<string | null>(null)
+  const sessionRef = useRef({ view: null as EditorView | null, id: 0 })
 
-  const getSourceDocumentContent = useCallback((tabId: string, view: EditorView, revision: number) => {
+  const getSourceDocumentContent = useCallback((tabId: string, view: EditorView, revision: number, captured?: SourceDocumentSnapshot) => {
+    const pending = captured ?? sourceDocumentSyncSnapshotRef.current
+    const matchingSnapshot = pending?.tabId === tabId && pending.view === view && pending.revision === revision &&
+      (captured !== undefined || pending.editorDoc === view.state.doc)
+      ? pending : null
+    const doc = matchingSnapshot?.doc ?? view.state.doc
     const cached = sourceContentCacheRef.current
-    if (cached?.tabId === tabId && cached.view === view && cached.revision === revision) {
+    if (cached?.tabId === tabId && cached.view === view && cached.revision === revision && cached.doc === doc) {
       return cached.content
     }
 
-    const pending = sourceDocumentSyncSnapshotRef.current
-    const rawContent = (
-      pending?.tabId === tabId &&
-      pending.view === view &&
-      pending.revision === revision
-        ? pending.doc
-        : view.state.doc
-    ).toString()
+    // Native IME edits can precede the next published revision. A boundary read
+    // must not reuse that revision's cache if the native document already changed.
+    const rawContent = matchingSnapshot ? matchingSnapshot.content.readMarkdown() : doc.toString()
     const content = applyChunkEdit(rawContent) ?? rawContent
-    sourceContentCacheRef.current = { tabId, view, revision, content }
+    sourceContentCacheRef.current = { tabId, view, revision, doc, content }
     return content
   }, [applyChunkEdit])
 
@@ -206,6 +210,9 @@ export function useEditorDocumentSync({
     const revision = sourceEditorRevisionRef.current + 1
     sourceEditorRevisionRef.current = revision
     const previousSnapshot = sourceDocumentSyncSnapshotRef.current
+    if (sessionRef.current.view !== view) {
+      sessionRef.current = { view, id: sessionRef.current.id + 1 }
+    }
     const nextDoc = 'changes' in change
       ? change.changes.apply(
         previousSnapshot?.tabId === tabId &&
@@ -221,8 +228,14 @@ export function useEditorDocumentSync({
       revision,
       doc: nextDoc,
       editorDoc: view.state.doc,
+      content: createDocumentSnapshot(
+        { documentId: tabId, sessionId: String(sessionRef.current.id), revision },
+        nextDoc,
+        doc => doc.toString(),
+      ),
     }
-    const getContent = () => getSourceDocumentContent(tabId, view, revision)
+    const captured = sourceDocumentSyncSnapshotRef.current
+    const getContent = () => getSourceDocumentContent(tabId, view, revision, captured)
 
     if (!activeTabDirty && sourceDirtyTabRef.current !== tabId) {
       markActiveTabDirty()

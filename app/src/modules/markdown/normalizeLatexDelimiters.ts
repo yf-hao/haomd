@@ -4,7 +4,7 @@ type Segment = {
 }
 
 export function normalizeLatexDelimiters(markdown: string): string {
-  if (!markdown) return markdown
+  if (!markdown || (!markdown.includes('\\(') && !markdown.includes('\\['))) return markdown
 
   return splitFencedCodeBlocks(markdown)
     .map((segment) => (segment.kind === 'code' ? segment.value : normalizeTextSegment(segment.value)))

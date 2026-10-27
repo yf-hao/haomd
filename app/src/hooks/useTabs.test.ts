@@ -4,6 +4,21 @@ import { describe, expect, it, vi } from 'vitest'
 import { useTabs } from './useTabs'
 
 describe('useTabs', () => {
+  it('marks the saved version of its owning tab without clearing newer edits', () => {
+    const { result } = renderHook(() => useTabs())
+    act(() => { result.current.createTab({ content: 'original', path: '/a.md' }) })
+    const firstId = result.current.activeId!
+    act(() => {
+      result.current.updateTabContent(firstId, 'newer')
+      result.current.createTab({ content: 'other', path: '/b.md' })
+    })
+    act(() => { result.current.markTabSaved(firstId, '/saved.md', 'original') })
+    expect(result.current.activeTab?.path).toBe('/b.md')
+    expect(result.current.tabs.find(tab => tab.id === firstId)).toMatchObject({ path: '/saved.md', dirty: true, content: 'newer' })
+    act(() => { result.current.markTabSaved(firstId, '/saved.md', 'newer') })
+    expect(result.current.tabs.find(tab => tab.id === firstId)?.dirty).toBe(false)
+  })
+
   it('runs the transition hook before creating an active tab', () => {
     const onBeforeActiveTabChange = vi.fn()
     const { result } = renderHook(() => useTabs({ onBeforeActiveTabChange }))

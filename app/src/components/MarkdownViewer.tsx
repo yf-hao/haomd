@@ -1,4 +1,4 @@
-import React, { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -6,7 +6,8 @@ import rehypeRaw from 'rehype-raw'
 import 'github-markdown-css/github-markdown.css'
 import './MarkdownViewer.css'
 import { getRenderer } from '../modules/markdown/plugins'
-import { cachePreviewMarkdown, getCachedPreviewMarkdown, preparePreviewMarkdown, type PreviewBlockChunk, type PreviewMarkdownResult } from '../modules/markdown/previewPipeline'
+import type { PreviewBlockChunk } from '../modules/markdown/previewPipeline'
+import { useMarkdownPreview } from '../hooks/useMarkdownPreview'
 import { getDefaultPerformanceSettings, getPerformanceSettings, type PerformanceSettings } from '../modules/settings/editorSettings'
 import { subscribePerformanceSettingsChanged } from '../modules/settings/performanceRuntime'
 import { remarkToc } from '../modules/markdown/remarkToc'
@@ -31,6 +32,7 @@ export type MarkdownViewerMode = 'rendered' | 'source'
 
 export interface MarkdownViewerProps {
   value: string
+  documentKey?: string | null
   previewWidth?: number
   filePath?: string | null
   foldRegions?: FoldRegion[]
@@ -80,18 +82,10 @@ type ActiveSourceLine = {
   elements: HTMLElement[]
 }
 
-type PreviewWorkerRequest = {
-  id: number
-  value: string
-}
-
 const LARGE_DOCUMENT_PREVIEW_WORKER_THRESHOLD = 16_000
 
-function getCachedPreviewResult(value: string): PreviewMarkdownResult {
-  return getCachedPreviewMarkdown(value) ?? preparePreviewMarkdown(value)
-}
-
-const FoldContext = React.createContext<FoldRegion[]>([])
+const EMPTY_FOLD_REGIONS: FoldRegion[] = []
+const FoldContext = React.createContext<FoldRegion[]>(EMPTY_FOLD_REGIONS)
 const FilePathContext = React.createContext<string | null>(null)
 const useFoldRegions = () => React.useContext(FoldContext)
 
@@ -129,24 +123,6 @@ function findActiveLineRangeEntry(
   return best
 }
 
-function collectSourceLineIndex(container: HTMLElement): SourceLineIndex {
-  const index: SourceLineIndex = new Map()
-  const elements = Array.from(container.querySelectorAll<HTMLElement>(`[${SOURCE_LINE_ATTRIBUTE}]`))
-
-  for (const element of elements) {
-    const parentMarker = element.parentElement?.closest<HTMLElement>(`[${SOURCE_LINE_ATTRIBUTE}]`)
-    if (parentMarker && container.contains(parentMarker)) continue
-
-    const line = Number(element.dataset.sourceLineLocal)
-    if (!Number.isInteger(line) || line < 1) continue
-
-    const lineElements = index.get(line) ?? []
-    lineElements.push(element)
-    index.set(line, lineElements)
-  }
-
-  return index
-}
 
 function collectSourceLineElements(container: HTMLElement, line: number): HTMLElement[] {
   const elements = Array.from(container.querySelectorAll<HTMLElement>(
@@ -746,6 +722,7 @@ type MarkdownBlockChunkProps = {
     element: HTMLElement | null,
     startLine: number,
     endLine: number,
+    contentChanged?: boolean,
   ) => void
 }
 
@@ -805,27 +782,25 @@ const MarkdownBlockChunkView = memo(({
 
   useLayoutEffect(() => {
     const element = isFolded ? null : elementRef.current
-    onElementChange(chunkId, element, chunkStartLine, chunkEndLine)
+    const report = () => onElementChange(chunkId, element,
+      Number(element?.dataset.chunkStartLine) || 1, Number(element?.dataset.chunkEndLine) || 1)
+    report()
     if (!element || typeof MutationObserver === 'undefined') {
       return () => {
-        onElementChange(chunkId, null, chunkStartLine, chunkEndLine)
+        onElementChange(chunkId, null, 0, 0)
       }
     }
 
-    const observer = new MutationObserver(() => {
-      onElementChange(chunkId, element, chunkStartLine, chunkEndLine)
-    })
+    const observer = new MutationObserver(report)
     observer.observe(element, { childList: true, subtree: true })
 
     return () => {
       observer.disconnect()
-      onElementChange(chunkId, null, chunkStartLine, chunkEndLine)
+      onElementChange(chunkId, null, 0, 0)
     }
   }, [
     chunkId,
     chunk.markdown,
-    chunkStartLine,
-    chunkEndLine,
     components,
     filePath,
     isFolded,
@@ -833,6 +808,11 @@ const MarkdownBlockChunkView = memo(({
     rehypePlugins,
     remarkPlugins,
   ])
+
+  useLayoutEffect(() => {
+    const element = elementRef.current
+    if (!isFolded && element) onElementChange(chunkId, element, chunkStartLine, chunkEndLine, false)
+  }, [chunkId, chunkStartLine, chunkEndLine, isFolded, onElementChange])
 
   if (isFolded) return null
 
@@ -857,6 +837,10 @@ const MarkdownBlockChunkView = memo(({
   )
 }, (prev, next) =>
   prev.chunk.id === next.chunk.id &&
+  prev.chunk.startLine === next.chunk.startLine &&
+  prev.chunk.endLine === next.chunk.endLine &&
+  prev.documentLineOffset === next.documentLineOffset &&
+  prev.onElementChange === next.onElementChange &&
   prev.chunk.markdown === next.chunk.markdown &&
   prev.filePath === next.filePath &&
   prev.components === next.components &&
@@ -880,6 +864,7 @@ type MarkdownDocumentProps = {
     element: HTMLElement | null,
     startLine: number,
     endLine: number,
+    contentChanged?: boolean,
   ) => void
 }
 
@@ -973,15 +958,11 @@ const MarkdownViewerComponent = React.forwardRef<
   const activeLineRafRef = useRef<number | null>(null)
   const chunkLineIndexMapRef = useRef(new Map<string, ChunkLineIndex>())
   const sourceLineOffsetRef = useRef(0)
-  const previewWorkerRef = useRef<Worker | null>(null)
-  const previewRequestIdRef = useRef(0)
-  const previewWorkerValuesRef = useRef(new Map<number, string>())
-  const previewWorkerBusyRef = useRef(false)
-  const pendingPreviewWorkerRequestRef = useRef<PreviewWorkerRequest | null>(null)
   const previewNearBottomRef = useRef(true)
 
   const {
     value,
+    documentKey,
     previewWidth,
     filePath,
     foldRegions,
@@ -992,7 +973,6 @@ const MarkdownViewerComponent = React.forwardRef<
   } = props
   const plainTextMode = isPlainTextFile(filePath)
   const [performanceSettings, setPerformanceSettings] = useState<PerformanceSettings>(getDefaultPerformanceSettings())
-  const [previewResult, setPreviewResult] = useState<PreviewMarkdownResult>(() => getCachedPreviewResult(value))
   const shouldUsePreviewWorker =
     performanceSettings.experimentalPreviewOptimization ||
     value.length >= LARGE_DOCUMENT_PREVIEW_WORKER_THRESHOLD
@@ -1011,145 +991,11 @@ const MarkdownViewerComponent = React.forwardRef<
     }
   }, [])
 
-  useEffect(() => {
-    if (
-      !shouldUsePreviewWorker
-      || mode !== 'rendered'
-      || typeof Worker === 'undefined'
-      || getCachedPreviewMarkdown(value)
-    ) {
-      previewWorkerRef.current?.terminate()
-      previewWorkerRef.current = null
-      previewWorkerBusyRef.current = false
-      pendingPreviewWorkerRequestRef.current = null
-      return
-    }
-
-    if (previewWorkerRef.current) return
-
-    const worker = new Worker(new URL('../workers/markdownPreview.worker.ts', import.meta.url), { type: 'module' })
-    previewWorkerRef.current = worker
-    worker.onmessage = (
-      event: MessageEvent<{
-        id: number
-        processedMarkdown: string
-        hasMath: boolean
-        hasRawHtml: boolean
-        containsToc: boolean
-        sourceLineOffset: number
-        lineCount: number
-        blockChunks: PreviewBlockChunk[]
-      }>,
-    ) => {
-      const stale = event.data.id !== previewRequestIdRef.current
-
-      const pendingRequest = pendingPreviewWorkerRequestRef.current
-      if (pendingRequest) {
-        pendingPreviewWorkerRequestRef.current = null
-        worker.postMessage(pendingRequest)
-      } else {
-        previewWorkerBusyRef.current = false
-      }
-
-      const requestedValue = previewWorkerValuesRef.current.get(event.data.id)
-      previewWorkerValuesRef.current.delete(event.data.id)
-      if (requestedValue != null) {
-        cachePreviewMarkdown(requestedValue, {
-          processedMarkdown: event.data.processedMarkdown,
-          hasMath: event.data.hasMath,
-          hasRawHtml: event.data.hasRawHtml,
-          containsToc: event.data.containsToc,
-          sourceLineOffset: event.data.sourceLineOffset,
-          lineCount: event.data.lineCount,
-          blockChunks: event.data.blockChunks,
-        })
-      }
-      if (stale) return
-      startTransition(() => {
-        if (event.data.id !== previewRequestIdRef.current) return
-        setPreviewResult({
-          processedMarkdown: event.data.processedMarkdown,
-          hasMath: event.data.hasMath,
-          hasRawHtml: event.data.hasRawHtml,
-          containsToc: event.data.containsToc,
-          sourceLineOffset: event.data.sourceLineOffset,
-          lineCount: event.data.lineCount,
-          blockChunks: event.data.blockChunks,
-        })
-      })
-    }
-
-    return () => {
-      worker.terminate()
-      previewWorkerValuesRef.current.clear()
-      if (previewWorkerRef.current === worker) {
-        previewWorkerRef.current = null
-        previewWorkerBusyRef.current = false
-        pendingPreviewWorkerRequestRef.current = null
-      }
-    }
-  }, [
-    mode,
-    shouldUsePreviewWorker,
-    value,
-  ])
-
-  useEffect(() => {
-    if (mode !== 'rendered') return
-
-    const requestId = ++previewRequestIdRef.current
-    if (!shouldUsePreviewWorker) {
-      const nextResult = getCachedPreviewResult(value)
-      startTransition(() => {
-        if (requestId !== previewRequestIdRef.current) return
-        setPreviewResult(nextResult)
-      })
-      return
-    }
-
-    const cachedResult = getCachedPreviewMarkdown(value)
-    if (cachedResult) {
-      startTransition(() => {
-        if (requestId !== previewRequestIdRef.current) return
-        setPreviewResult(cachedResult)
-      })
-      return
-    }
-
-    const worker = previewWorkerRef.current
-    if (!worker) {
-      const nextResult = getCachedPreviewResult(value)
-      startTransition(() => {
-        if (requestId !== previewRequestIdRef.current) return
-        setPreviewResult(nextResult)
-      })
-      return
-    }
-
-    const request: PreviewWorkerRequest = {
-      id: requestId,
-      value,
-    }
-    previewWorkerValuesRef.current.set(requestId, value)
-    if (previewWorkerBusyRef.current) {
-      pendingPreviewWorkerRequestRef.current = request
-      return
-    }
-
-    previewWorkerBusyRef.current = true
-    worker.postMessage(request)
-  }, [
-    mode,
-    value,
-    shouldUsePreviewWorker,
-  ])
-
-  useEffect(() => {
-    return () => {
-      previewWorkerRef.current?.terminate()
-      previewWorkerRef.current = null
-    }
-  }, [])
+  const previewResult = useMarkdownPreview(value, {
+    enabled: mode === 'rendered',
+    useWorker: shouldUsePreviewWorker,
+    documentKey: documentKey ?? filePath,
+  })
 
   const renderedValue = previewResult.processedMarkdown
   const sourceLineOffset = previewResult.sourceLineOffset
@@ -1364,21 +1210,33 @@ const MarkdownViewerComponent = React.forwardRef<
     element: HTMLElement | null,
     startLine: number,
     endLine: number,
+    contentChanged = true,
   ) => {
     if (!element) {
       chunkLineIndexMapRef.current.delete(chunkId)
       return
     }
-
     const domStartLine = Number(element.dataset.chunkStartLine)
     const domEndLine = Number(element.dataset.chunkEndLine)
+    const indexed = chunkLineIndexMapRef.current.get(chunkId)
+    if (indexed?.element === element) {
+      // Keep the object shared by the ordered index. A local DOM mutation only
+      // invalidates local lookup caches; moving a block preserves them entirely.
+      indexed.startLine = Number.isInteger(domStartLine) ? domStartLine : startLine
+      indexed.endLine = Number.isInteger(domEndLine) ? domEndLine : endLine
+      if (contentChanged) {
+        indexed.sourceLineIndex.clear()
+        indexed.lineRanges = []
+      }
+      return
+    }
     chunkLineIndexMapRef.current.set(chunkId, {
       id: chunkId,
       startLine: Number.isInteger(domStartLine) ? domStartLine : startLine,
       endLine: Number.isInteger(domEndLine) ? domEndLine : endLine,
       element,
-      sourceLineIndex: collectSourceLineIndex(element),
-      lineRanges: collectLineRangeIndex(element),
+      sourceLineIndex: new Map(),
+      lineRanges: [],
     })
   }, [])
 
@@ -1483,33 +1341,8 @@ const MarkdownViewerComponent = React.forwardRef<
     [hasMath, plainTextMode, previewResult.containsToc],
   )
 
-  // Earlier edits can shift later chunks without changing their markdown.
-  // Update only their line metadata so those chunks stay memoized.
-  useLayoutEffect(() => {
-    if (!blockRenderingEnabled) return
-
-    const activeChunkIds = new Set(blockChunks.map((chunk) => chunk.id))
-    for (const chunk of blockChunks) {
-      const indexed = chunkLineIndexMapRef.current.get(chunk.id)
-      if (!indexed) continue
-
-      const startLine = sourceLineOffset + chunk.startLine
-      const endLine = sourceLineOffset + chunk.endLine
-      indexed.startLine = startLine
-      indexed.endLine = endLine
-      indexed.element.dataset.lineStart = String(startLine)
-      indexed.element.dataset.lineEnd = String(endLine)
-      indexed.element.dataset.chunkStartLine = String(startLine)
-      indexed.element.dataset.chunkEndLine = String(endLine)
-    }
-
-    for (const chunkId of chunkLineIndexMapRef.current.keys()) {
-      if (!activeChunkIds.has(chunkId)) {
-        chunkLineIndexMapRef.current.delete(chunkId)
-      }
-    }
-  }, [blockChunks, blockRenderingEnabled, sourceLineOffset])
-
+  // React updates attributes only on blocks whose positions changed. Child
+  // effects keep the index in sync; no whole-document DOM write pass is needed.
   useLayoutEffect(() => {
     const container = containerRef.current
     if (!container || mode !== 'rendered' || !blockRenderingEnabled) return
@@ -1517,10 +1350,10 @@ const MarkdownViewerComponent = React.forwardRef<
     previewLineIndexRef.current = blockChunks
       .map((chunk) => chunkLineIndexMapRef.current.get(chunk.id) ?? null)
       .filter((chunk): chunk is ChunkLineIndex => chunk !== null)
-      .sort((left, right) => left.startLine - right.startLine)
   }, [
     blockChunks,
     blockRenderingEnabled,
+    foldRegions,
     mode,
   ])
 
@@ -1716,7 +1549,7 @@ const MarkdownViewerComponent = React.forwardRef<
 
   return (
     <FilePathContext.Provider value={filePath ?? null}>
-      <FoldContext.Provider value={foldRegions ?? []}>
+      <FoldContext.Provider value={foldRegions ?? EMPTY_FOLD_REGIONS}>
         <div className="markdown-body gh-markdown" ref={containerRef} data-preview-width={previewWidth}>
           <MemoizedMarkdownDocument
             mode={mode}
@@ -1741,6 +1574,7 @@ export const MarkdownViewer = memo(
   MarkdownViewerComponent,
   (prev, next) => (
     prev.value === next.value &&
+    prev.documentKey === next.documentKey &&
     prev.filePath === next.filePath &&
     prev.mode === next.mode &&
     prev.foldRegions === next.foldRegions

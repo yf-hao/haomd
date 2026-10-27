@@ -5,7 +5,7 @@
  * this module caches per-block markdown and only re-serializes blocks that
  * actually changed (detected via ProseMirror's node.eq()).
  *
- * Typical edits touch 1-2 blocks, yielding 15-50x speedup on large documents.
+ * Reuses immutable blocks across edits, insertions and deletions.
  */
 import type { Node as ProseMirrorNode } from '@milkdown/prose/model'
 import { Fragment } from '@milkdown/prose/model'
@@ -24,123 +24,71 @@ export interface BlockCacheEntry {
 
 /* ---------- Block cache manager ---------- */
 
+// Unknown/container blocks use the document serializer so list separators,
+// reference definitions and future extensions retain their global semantics.
+const independentBlocks = new Set(['paragraph', 'heading', 'code_block', 'math_display', 'hr'])
+
 export class BlockCacheManager {
   private entries: BlockCacheEntry[] = []
-  private docNodeType: ProseMirrorNode['type'] | null = null
+  private doc: ProseMirrorNode | null = null
+  private serializer: Serializer | null = null
+  private markdown = ''
+  private incremental = false
 
-  /**
-   * Build the full cache from scratch.
-   * Called on initial load, after replaceAll, or when incremental update
-   * determines a full rebuild is needed.
-   */
   buildFull(doc: ProseMirrorNode, serializer: Serializer): string {
-    this.docNodeType = doc.type
+    this.doc = doc
+    this.serializer = serializer
+    this.markdown = serializer(doc)
     this.entries = []
-
-    for (let i = 0; i < doc.childCount; i++) {
-      const block = doc.child(i)
-      this.entries.push({
-        node: block,
-        markdown: this.serializeBlock(block, serializer),
-      })
+    let independent = true
+    doc.forEach(block => { if (!independentBlocks.has(block.type.name)) independent = false })
+    if (independent) {
+      doc.forEach(block => this.entries.push({ node: block, markdown: this.serializeBlock(block, doc, serializer) }))
     }
-
-    return this.joinBlocks()
+    // Verify the serializer's separator/trailing-newline convention once at the
+    // cache boundary, never on every keystroke. Unsupported output uses full serialization.
+    this.incremental = independent && this.joinBlocks() === this.markdown
+    return this.markdown
   }
 
-  /**
-   * Incrementally update the cache based on changes between oldDoc and newDoc.
-   * Returns the full markdown string.
-   *
-   * Falls back to full rebuild if the diff is too large (> 30% of blocks changed
-   * or structural change is ambiguous), or if the cache is stale (doesn't match oldDoc).
-   */
   incrementalUpdate(
-    oldDoc: ProseMirrorNode,
+    _oldDoc: ProseMirrorNode,
     newDoc: ProseMirrorNode,
     serializer: Serializer,
   ): string {
-    this.docNodeType = newDoc.type
-
-    // If cache is empty or corrupted, do a full build
-    if (this.entries.length === 0 || this.entries.length !== oldDoc.childCount) {
+    if (this.doc === newDoc && this.serializer === serializer) return this.markdown
+    if (!this.incremental || !this.doc?.sameMarkup(newDoc) || this.serializer !== serializer) {
       return this.buildFull(newDoc, serializer)
     }
-
-    // Verify cache actually represents oldDoc (guards against stale cache when
-    // rapid edits cancel pending idle callbacks — each new callback receives a
-    // different oldDoc but the cache was never updated for the skipped version)
-    if (!this.cacheMatchesDoc(oldDoc)) {
-      return this.buildFull(newDoc, serializer)
-    }
-
-    const diff = diffTopLevelBlocks(oldDoc, newDoc)
-
-    // Fallback: if too many blocks changed, or the diff is complex (insertions/deletions),
-    // a full rebuild is safer and not much slower
-    const totalBlocks = Math.max(oldDoc.childCount, newDoc.childCount)
-    const changedCount = diff.changed.length + diff.inserted.length + diff.deleted.length
-    if (changedCount > totalBlocks * 0.3 || diff.inserted.length > 0 || diff.deleted.length > 0) {
-      return this.buildFull(newDoc, serializer)
-    }
-
-    // Fast path: only re-serialize changed blocks
-    for (const idx of diff.changed) {
-      const block = newDoc.child(idx)
-      this.entries[idx] = {
-        node: block,
-        markdown: this.serializeBlock(block, serializer),
-      }
-    }
-
-    return this.joinBlocks()
+    // Compare to the actual cache baseline, even when intermediate jobs were skipped.
+    const cached = new Map(this.entries.map(entry => [entry.node, entry]))
+    const entries: BlockCacheEntry[] = []
+    let independent = true
+    newDoc.forEach(block => {
+      if (!independent || !independentBlocks.has(block.type.name)) { independent = false; return }
+      const entry = cached.get(block) ?? { node: block, markdown: this.serializeBlock(block, newDoc, serializer) }
+      if (!entry.markdown.trim()) independent = false
+      entries.push(entry)
+    })
+    if (!independent) return this.buildFull(newDoc, serializer)
+    this.entries = entries
+    this.doc = newDoc
+    this.markdown = this.joinBlocks()
+    return this.markdown
   }
 
-  /** Get the cached full markdown without re-serializing */
-  getFullMarkdown(): string {
-    return this.joinBlocks()
-  }
+  getFullMarkdown(): string { return this.markdown }
+  get isInitialized(): boolean { return this.doc !== null }
+  get blockCount(): number { return this.doc?.childCount ?? 0 }
 
-  /** Check if cache is initialized */
-  get isInitialized(): boolean {
-    return this.entries.length > 0
-  }
-
-  /** Number of cached blocks */
-  get blockCount(): number {
-    return this.entries.length
-  }
-
-  /**
-   * Verify that cached node references match the given doc's top-level blocks.
-   * Uses ProseMirror node identity (===) for a fast O(n) check.
-   * If any cached node doesn't match, the cache is stale.
-   */
-  private cacheMatchesDoc(doc: ProseMirrorNode): boolean {
-    if (this.entries.length !== doc.childCount) return false
-    for (let i = 0; i < doc.childCount; i++) {
-      if (this.entries[i].node !== doc.child(i)) return false
-    }
-    return true
-  }
-
-  /**
-   * Serialize a single block by wrapping it in a temporary doc node.
-   * This mirrors Milkdown's getMarkdown(range) approach.
-   */
-  private serializeBlock(block: ProseMirrorNode, serializer: Serializer): string {
-    if (!this.docNodeType) return ''
-    const miniDoc = this.docNodeType.createAndFill(null, Fragment.from(block))
+  private serializeBlock(block: ProseMirrorNode, doc: ProseMirrorNode, serializer: Serializer): string {
+    const miniDoc = doc.type.createAndFill(doc.attrs, Fragment.from(block))
     if (!miniDoc) return ''
-    // serializer returns the full markdown of the mini-doc;
-    // trim trailing whitespace/newlines that remark-stringify may add
     return serializer(miniDoc).replace(/\n+$/, '')
   }
 
-  /** Join all cached block markdowns with double-newline separators */
   private joinBlocks(): string {
-    if (this.entries.length === 0) return ''
-    return this.entries.map((e) => e.markdown).join('\n\n') + '\n'
+    return this.entries.length === 0 ? '' : this.entries.map(entry => entry.markdown).join('\n\n') + '\n'
   }
 }
 

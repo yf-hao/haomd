@@ -53,8 +53,8 @@ function isBlockStartLine(line: string): boolean {
   )
 }
 
-function containsTocPlaceholder(markdown: string): boolean {
-  return markdown.split(/\r?\n/).some((line) => /^\s*\[(?:toc)([^\]]*)?\]\s*$/i.test(line))
+function containsTocPlaceholder(lines: string[]): boolean {
+  return lines.some((line) => /^\s*\[(?:toc)([^\]]*)?\]\s*$/i.test(line))
 }
 
 function containsRawHtml(markdown: string): boolean {
@@ -74,9 +74,7 @@ function getChunkSignature(markdown: string): string {
   return `${markdown.length}:${hashMarkdownChunk(markdown)}`
 }
 
-function splitMarkdownIntoBlockChunks(markdown: string): Array<Omit<PreviewBlockChunk, 'id' | 'signature'>> {
-  const normalized = markdown.replace(/\r\n/g, '\n')
-  const lines = normalized.split('\n')
+function splitMarkdownIntoBlockChunks(lines: string[]): Array<Omit<PreviewBlockChunk, 'id' | 'signature'>> {
   if (lines.length === 0) return []
 
   const chunks: Array<Omit<PreviewBlockChunk, 'id' | 'signature'>> = []
@@ -151,9 +149,11 @@ function assignStableChunkIds(
     const occurrence = signatureCounts.get(signature) ?? 0
     signatureCounts.set(signature, occurrence + 1)
     return {
-      ...chunk,
       id: `${signature}:${occurrence}`,
       signature,
+      startLine: chunk.startLine,
+      endLine: chunk.endLine,
+      markdown: chunk.markdown,
     }
   })
 }
@@ -188,13 +188,14 @@ export function preparePreviewMarkdown(value: string): PreviewMarkdownResult {
     ? document.rawBlock.split(/\r?\n/).length - 1
     : 0
   const processedMarkdown = replaceTextColorSyntaxWithHtml(normalizeLatexDelimiters(bodyMarkdown))
-  const lineCount = processedMarkdown.split(/\r?\n/).length
-  const containsToc = containsTocPlaceholder(processedMarkdown)
+  const lines = processedMarkdown.split(/\r?\n/)
+  const lineCount = lines.length
+  const containsToc = processedMarkdown.includes('[') && containsTocPlaceholder(lines)
   const shouldBuildChunks =
     !containsToc &&
     (lineCount >= MARKDOWN_BLOCK_RENDER_MIN_LINES || processedMarkdown.length >= MARKDOWN_BLOCK_RENDER_MIN_CHARS)
   const chunks = shouldBuildChunks
-    ? splitMarkdownIntoBlockChunks(processedMarkdown)
+    ? splitMarkdownIntoBlockChunks(lines)
     : []
   const blockChunks = chunks.length > 1 ? assignStableChunkIds(chunks) : []
   const result: PreviewMarkdownResult = {

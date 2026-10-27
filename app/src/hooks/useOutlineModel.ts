@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createLatestTaskScheduler } from '../modules/document/taskScheduler'
 import type { OutlineItem } from '../modules/outline/parser'
 import {
   buildHeadingsFromMarkdown,
@@ -24,11 +25,11 @@ export function useOutlineModel(args: {
     documentKey,
   } = args
   const [debouncedMarkdown, setDebouncedMarkdown] = useState(markdown)
-  const markdownHeadingSignature = useMemo(
-    () => (enabled && mode === 'source' ? getMarkdownHeadingSignature(markdown) : ''),
-    [enabled, markdown, mode],
-  )
-  const renderedHeadingSignatureRef = useRef(markdownHeadingSignature)
+  const [initialSignature] = useState(() => enabled && mode === 'source'
+    ? getMarkdownHeadingSignature(markdown) : '')
+  const renderedHeadingSignatureRef = useRef(initialSignature)
+  const scheduler = useMemo(() => createLatestTaskScheduler(), [])
+  useEffect(() => () => scheduler.cancel(), [scheduler, enabled, mode, documentKey])
   const previousContextRef = useRef({
     enabled,
     mode,
@@ -51,20 +52,21 @@ export function useOutlineModel(args: {
       previous.mode !== mode ||
       previous.documentKey !== documentKey
 
-    if (shouldSyncImmediately) {
-      renderedHeadingSignatureRef.current = markdownHeadingSignature
+    const sync = () => {
+      const signature = getMarkdownHeadingSignature(markdown)
+      if (!shouldSyncImmediately && signature === renderedHeadingSignatureRef.current) return
+      renderedHeadingSignatureRef.current = signature
       setDebouncedMarkdown(markdown)
-      return
     }
-
-    if (markdownHeadingSignature === renderedHeadingSignatureRef.current) return
-
-    const timer = setTimeout(() => {
-      renderedHeadingSignatureRef.current = markdownHeadingSignature
-      setDebouncedMarkdown(markdown)
-    }, debounceMs)
-    return () => clearTimeout(timer)
-  }, [debounceMs, documentKey, enabled, markdown, markdownHeadingSignature, mode])
+    if (shouldSyncImmediately) {
+      scheduler.cancel()
+      sync()
+    } else {
+      scheduler.schedule(sync, {
+        minIntervalMs: debounceMs, trailingDelayMs: debounceMs, maxWaitMs: Math.max(debounceMs, 1000),
+      })
+    }
+  }, [debounceMs, documentKey, enabled, markdown, mode, scheduler])
 
   return useMemo(() => {
     if (!enabled || documentKey === null) {
@@ -74,5 +76,5 @@ export function useOutlineModel(args: {
       return buildOutlineTreeFromHeadings(wysiwygHeadings)
     }
     return buildOutlineTreeFromHeadings(buildHeadingsFromMarkdown(debouncedMarkdown))
-  }, [enabled, debouncedMarkdown, mode, wysiwygHeadings])
+  }, [enabled, documentKey, debouncedMarkdown, mode, wysiwygHeadings])
 }
