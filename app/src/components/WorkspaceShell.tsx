@@ -3217,6 +3217,8 @@ export function WorkspaceShell({
         return
       }
 
+      sidebar.addFileToTree(fullPath)
+
       const existingTab = tabs.find((t) => t.path === fullPath)
       if (existingTab) {
         setActiveTab(existingTab.id)
@@ -3240,7 +3242,7 @@ export function WorkspaceShell({
 
       setInlineNewFileDir(null)
     })()
-  }, [inlineNewFileDir, tabs, setActiveTab, createTab, setStatusMessage, sidebar.folderRoots, sidebar])
+  }, [inlineNewFileDir, tabs, setActiveTab, createTab, setStatusMessage, sidebar])
 
   const handleInlineNewFileCancel = useCallback(() => {
     setInlineNewFileDir(null)

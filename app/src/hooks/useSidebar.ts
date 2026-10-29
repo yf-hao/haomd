@@ -229,6 +229,37 @@ export function useSidebar() {
     }))
   }, [])
 
+  const addFileToTree = useCallback((filePath: string) => {
+    const path = normalizePath(filePath)
+    const parent = dirname(path)
+    if (!parent) return
+    // 新建之前发起的扫描可能不包含该文件，禁止其覆盖本地插入结果。
+    for (const [root, version] of refreshVersions.current) {
+      if (isUnderRoot(root, path)) refreshVersions.current.set(root, version + 1)
+    }
+    setTreesByRoot((prev) => {
+      const next = { ...prev }
+      for (const rootPath of Object.keys(prev)) {
+        if (!isUnderRoot(rootPath, path)) continue
+        const insert = (directory: string, nodes: FileTreeNode[]): FileTreeNode[] => {
+          const copy = [...nodes]
+          if (normalizePath(directory) === parent) {
+            if (!copy.some(node => normalizePath(node.path) === path)) {
+              copy.push({ id: path, name: path.split('/').pop() ?? path, path, kind: 'file' })
+              copy.sort((a, b) => a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === 'dir' ? -1 : 1)
+            }
+            return copy
+          }
+          return copy.map(node => node.kind === 'dir' && isUnderRoot(node.path, parent)
+            ? { ...node, children: insert(node.path, node.children ?? []) }
+            : node)
+        }
+        next[rootPath] = insert(rootPath, prev[rootPath])
+      }
+      return next
+    })
+  }, [])
+
   const applyFileMove = useCallback((oldPath: string, newPath: string) => {
     const old = normalizePath(oldPath)
     const next = normalizePath(newPath)
@@ -323,6 +354,7 @@ export function useSidebar() {
     removeFolderRoot,
     markFileVisited,
     refreshFolderTree,
+    addFileToTree,
     applyFileMove,
   }
 }

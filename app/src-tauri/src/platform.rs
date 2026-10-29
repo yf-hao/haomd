@@ -27,6 +27,19 @@ pub(crate) struct WordTemplateEntry {
     pub(crate) markdown_path: String,
 }
 
+#[cfg(any(target_os = "windows", test))]
+fn windows_explorer_path(target_path: &str) -> String {
+    let path = target_path.replace('/', "\\");
+    // Explorer 使用普通 Win32 路径，不直接传入 canonicalize 产生的扩展前缀。
+    if let Some(unc) = path.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{}", unc)
+    } else if let Some(drive) = path.strip_prefix(r"\\?\") {
+        drive.to_string()
+    } else {
+        path
+    }
+}
+
 pub(crate) fn open_path_in_file_explorer(target_path: &str) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
@@ -38,8 +51,8 @@ pub(crate) fn open_path_in_file_explorer(target_path: &str) -> Result<(), String
 
     #[cfg(target_os = "windows")]
     {
-        Command::new("explorer")
-            .arg(target_path)
+        Command::new("explorer.exe")
+            .arg(windows_explorer_path(target_path))
             .spawn()
             .map_err(|e| format!("无法打开文件管理器: {e}"))?;
     }
@@ -266,6 +279,20 @@ pub(crate) async fn save_word_template_artifacts(
 mod tests {
     use super::*;
     use std::path::Path;
+
+    #[test]
+    fn normalizes_windows_explorer_paths() {
+        for (input, expected) in [
+            ("C:/Users/hao/My Notes/中文", r"C:\Users\hao\My Notes\中文"),
+            ("C:/", r"C:\"),
+            (r"C:\Notes", r"C:\Notes"),
+            ("//server/share/Notes", r"\\server\share\Notes"),
+            (r"\\?\C:\Notes", r"C:\Notes"),
+            (r"\\?\UNC\server\share\Notes", r"\\server\share\Notes"),
+        ] {
+            assert_eq!(windows_explorer_path(input), expected);
+        }
+    }
 
     #[test]
     fn should_build_word_template_asset_paths_from_template_dir() {

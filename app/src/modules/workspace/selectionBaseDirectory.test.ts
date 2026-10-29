@@ -2,6 +2,15 @@ import { describe, expect, it } from 'vitest'
 import { computeDirFromPath, resolveSelectionBaseDirectory } from './selectionBaseDirectory'
 
 describe('selectionBaseDirectory', () => {
+  it.each([
+    ['C:/doc.md', 'C:/'],
+    ['C:\\doc.md', 'C:\\'],
+    ['\\\\?\\C:\\doc.md', '\\\\?\\C:\\'],
+    ['//server/share/doc.md', '//server/share'],
+    ['/doc.md', '/'],
+  ])('preserves the parent root of %s', (path, parent) => {
+    expect(computeDirFromPath(path)).toBe(parent)
+  })
   it('returns selected folder path when a directory is selected', () => {
     expect(
       resolveSelectionBaseDirectory({
