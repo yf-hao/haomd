@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { relocateTreeFile, buildFileTree, computeParentsToExpand, expandedMapFromPaths, expandedPathsFromMap, toggleExpanded } from '../domain/sidebarTree'
+import { isVisibleTreePath, relocateTreeFile, buildFileTree, computeParentsToExpand, expandedMapFromPaths, expandedPathsFromMap, toggleExpanded } from '../domain/sidebarTree'
 import type { ExpandedMap, FileTreeNode } from '../domain/sidebarTree'
 import { listFolder, logRecentFile } from '../modules/files/service'
 import { loadSidebarState, saveSidebarState } from '../modules/sidebar/sidebarStateRepo'
@@ -240,7 +240,7 @@ export function useSidebar() {
     setTreesByRoot((prev) => {
       const next = { ...prev }
       for (const rootPath of Object.keys(prev)) {
-        if (!isUnderRoot(rootPath, path)) continue
+        if (!isVisibleTreePath(rootPath, path)) continue
         const insert = (directory: string, nodes: FileTreeNode[]): FileTreeNode[] => {
           const copy = [...nodes]
           if (normalizePath(directory) === parent) {

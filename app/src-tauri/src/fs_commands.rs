@@ -24,6 +24,10 @@ fn collect_entries(dir: &Path, acc: &mut Vec<FsEntry>) -> std::io::Result<()> {
         let entry = entry_res?;
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().into_owned();
+        // 不遍历隐藏目录，避免其后代进入文件浏览器的扁平条目列表。
+        if name.starts_with('.') {
+            continue;
+        }
         let meta = entry.metadata()?;
 
         if meta.is_dir() {
@@ -47,6 +51,30 @@ fn collect_entries(dir: &Path, acc: &mut Vec<FsEntry>) -> std::io::Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn skips_hidden_directories_and_all_descendants() {
+        let root = std::env::temp_dir().join(format!(
+            "haomd-hidden-{}-{}", std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        std::fs::create_dir_all(root.join("vgms/.git/hooks/deep")).unwrap();
+        std::fs::create_dir_all(root.join(".haomd/notes")).unwrap();
+        std::fs::write(root.join("vgms/.git/hooks/deep/note.md"), "hidden").unwrap();
+        std::fs::write(root.join(".hidden.md"), "hidden").unwrap();
+        std::fs::write(root.join("vgms/visible.md"), "visible").unwrap();
+        let mut entries = Vec::new();
+        collect_entries(&root, &mut entries).unwrap();
+        let mut names: Vec<_> = entries.iter().map(|entry| entry.name.as_str()).collect();
+        names.sort();
+        assert_eq!(names, vec!["vgms", "visible.md"]);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }
 
 #[tauri::command]

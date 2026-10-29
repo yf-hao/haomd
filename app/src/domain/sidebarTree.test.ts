@@ -1,5 +1,41 @@
 import { expect, it } from 'vitest'
-import { buildFileTree, relocateTreeFile } from './sidebarTree'
+import { buildFileTree, isVisibleTreePath, relocateTreeFile } from './sidebarTree'
+
+it.each(['/demo', 'C:\\demo'])('hides entire hidden subtrees under %s', root => {
+  const separator = root.includes('\\') ? '\\' : '/'
+  const entry = (relative: string, kind: 'dir' | 'file') => ({
+    path: root + separator + relative.replaceAll('/', separator),
+    name: relative.split('/').pop()!, kind,
+  })
+  const tree = buildFileTree(root, [
+    entry('vgms', 'dir'), entry('vgms/.git', 'dir'), entry('vgms/.git/hooks', 'dir'),
+    entry('vgms/.git/hooks/deep', 'dir'), entry('vgms/.git/hooks/deep/note.md', 'file'),
+    entry('.hidden.md', 'file'), entry('.haomd/notes', 'dir'), entry('.haomd/notes/a.md', 'file'),
+    entry('vgms/visible.md', 'file'), entry('vgms/version.1.md', 'file'),
+  ])
+  expect(tree.map(node => node.name)).toEqual(['vgms'])
+  expect(tree[0].children?.map(node => node.name)).toEqual(['version.1.md', 'visible.md'])
+})
+
+it('does not promote descendants of a missing parent to the root', () => {
+  expect(buildFileTree('/root', [
+    { path: '/root/missing/sub', name: 'sub', kind: 'dir' },
+    { path: '/root/missing/sub/note.md', name: 'note.md', kind: 'file' },
+  ])).toEqual([])
+})
+
+it('applies visibility relative to the explicitly opened root', () => {
+  expect(isVisibleTreePath('/root/.config', '/root/.config/notes/a.md')).toBe(true)
+  expect(isVisibleTreePath('/root/.config', '/root/.config/notes/.hidden/a.md')).toBe(false)
+  expect(isVisibleTreePath('/root', '/root2/a.md')).toBe(false)
+  expect(isVisibleTreePath('/', '/a.md')).toBe(true)
+})
+
+it('removes a moved file without inserting a hidden destination', () => {
+  const tree = buildFileTree('/root', [{ path: '/root/a.md', name: 'a.md', kind: 'file' }])
+  expect(relocateTreeFile('/root', tree, '/root/a.md', '/root/.a.md')).toEqual([])
+  expect(relocateTreeFile('/root', tree, '/root/a.md', '/root/.git/a.md')).toEqual([])
+})
 
 it('moves a file between sorted branches and retains unrelated branch identities', () => {
   const tree = buildFileTree('/root', [

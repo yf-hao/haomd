@@ -22,6 +22,18 @@ beforeEach(() => {
   vi.mocked(listFolder).mockReset().mockResolvedValue({ ok: true, data: entries })
 })
 
+it('does not insert hidden files after creating or pasting them', async () => {
+  const { result } = renderHook(() => useSidebar())
+  await waitFor(() => expect(result.current.treesByRoot['/root']).toBeDefined())
+  const previous = result.current.treesByRoot['/root']
+  act(() => {
+    result.current.addFileToTree('/root/.hidden.md')
+    result.current.addFileToTree('/root/sub/.hidden.md')
+    result.current.addFileToTree('/root/sub/.git/hooks/a.md')
+  })
+  expect(result.current.treesByRoot['/root']).toBe(previous)
+})
+
 it.each(['/root/a.md', '/root/sub/a.md', '/root/sub/deep/a.md'])(
   'immediately inserts %s in its parent without duplicates', async path => {
     const { result } = renderHook(() => useSidebar())

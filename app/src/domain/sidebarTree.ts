@@ -30,6 +30,14 @@ const parentPathOf = (path: string): string | null => {
   return norm.slice(0, idx)
 }
 
+/** 隐藏规则仅检查打开的根目录之下的路径，不影响用户显式打开的根目录。 */
+export function isVisibleTreePath(root: string, path: string): boolean {
+  const normalizedRoot = normalizePath(root)
+  const normalizedPath = normalizePath(path)
+  if (normalizedPath === normalizedRoot || !isSubPath(normalizedRoot, normalizedPath)) return false
+  return !normalizedPath.slice(normalizedRoot.length + 1).split('/').some(part => part.startsWith('.'))
+}
+
 /**
  * 将扁平的文件/目录列表构造成层级树结构。
  * 约定：entries 中已经包含所有需要的目录节点（后端 collect_entries 会插入）。
@@ -37,9 +45,9 @@ const parentPathOf = (path: string): string | null => {
 export function buildFileTree(root: string, entries: FileEntry[]): FileTreeNode[] {
   const normRoot = normalizePath(root)
 
-  // 仅保留 root 子树内的条目，同时在 UI 层隐藏以 "." 开头的隐藏目录/文件（例如 .haomd、.git 等）
+  // 隐藏目录及其全部后代，不能仅检查条目自身的名称。
   const filtered = entries.filter(
-    (e) => isSubPath(normRoot, e.path) && normalizePath(e.path) !== normRoot && !e.name.startsWith('.'),
+    (e) => isVisibleTreePath(normRoot, e.path) && !e.name.startsWith('.'),
   )
 
   const nodeMap = new Map<string, FileTreeNode>()
@@ -62,18 +70,17 @@ export function buildFileTree(root: string, entries: FileEntry[]): FileTreeNode[
   // 第二遍：建立父子关系
   for (const node of nodeMap.values()) {
     const parentPath = parentPathOf(node.path)
-    if (!parentPath || parentPath === normRoot) {
+    if ((parentPath ?? '') === normRoot) {
       roots.push(node)
       continue
     }
+    if (!parentPath) continue
     const parent = nodeMap.get(parentPath)
     if (parent && parent.kind === 'dir') {
       if (!parent.children) parent.children = []
       parent.children.push(node)
-    } else {
-      // 找不到父节点（理论上不应发生），退化为根节点
-      roots.push(node)
     }
+    // 父目录缺失时不提升到根层，避免泄露被过滤目录的子节点。
   }
 
   // 保证同级节点的排序：目录在前，按名称字典序
@@ -117,7 +124,7 @@ export function relocateTreeFile(root: string, nodes: FileTreeNode[], oldPath: s
       }
       updated.push(node)
     }
-    if (directory === parent && !updated.some(node => node.path === next)) {
+    if (directory === parent && isVisibleTreePath(root, next) && !updated.some(node => node.path === next)) {
       updated.push({ id: next, path: next, name: next.split('/').pop()!, kind: 'file' })
       updated.sort((a, b) => a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === 'dir' ? -1 : 1)
       changed = true
