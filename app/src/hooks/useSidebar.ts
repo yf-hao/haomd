@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { buildFileTree, computeParentsToExpand, expandedMapFromPaths, expandedPathsFromMap, toggleExpanded } from '../domain/sidebarTree'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { relocateTreeFile, buildFileTree, computeParentsToExpand, expandedMapFromPaths, expandedPathsFromMap, toggleExpanded } from '../domain/sidebarTree'
 import type { ExpandedMap, FileTreeNode } from '../domain/sidebarTree'
 import { listFolder, logRecentFile } from '../modules/files/service'
 import { loadSidebarState, saveSidebarState } from '../modules/sidebar/sidebarStateRepo'
@@ -43,6 +43,7 @@ export function useSidebar() {
   const [folderRoots, setFolderRoots] = useState<string[]>([])
   const [highlightedFiles, setHighlightedFiles] = useState<string[]>([])
   const [hydrated, setHydrated] = useState(false)
+  const refreshVersions = useRef(new Map<string, number>())
 
   // 启动时加载持久化的侧边栏状态
   useEffect(() => {
@@ -214,7 +215,10 @@ export function useSidebar() {
 
   const refreshFolderTree = useCallback(async (folderPath: string) => {
     const normalized = normalizePath(folderPath)
+    const version = (refreshVersions.current.get(normalized) ?? 0) + 1
+    refreshVersions.current.set(normalized, version)
     const result = await listFolder(normalized)
+    if (refreshVersions.current.get(normalized) !== version) return
     if (!result.ok) {
       console.warn('[useSidebar] refreshFolderTree listFolder error:', result.error)
       return
@@ -224,6 +228,33 @@ export function useSidebar() {
       [normalized]: buildFileTree(normalized, result.data),
     }))
   }, [])
+
+  const applyFileMove = useCallback((oldPath: string, newPath: string) => {
+    const old = normalizePath(oldPath)
+    const next = normalizePath(newPath)
+    const name = next.split('/').pop()!
+    for (const [root, version] of refreshVersions.current) refreshVersions.current.set(root, version + 1)
+    setStandaloneFiles(files => files.map(file => normalizePath(file.path) === old ? { path: next, name } : file))
+    setHighlightedFiles(paths => paths.map(path => normalizePath(path) === old ? next : path))
+    setTreesByRoot(trees => {
+      const result = { ...trees }
+      for (const root of Object.keys(trees)) {
+        if (!isUnderRoot(root, old) && !isUnderRoot(root, next)) continue
+        result[root] = relocateTreeFile(root, trees[root], old, next)
+      }
+      return result
+    })
+    setExpanded(previous => {
+      const nextExpanded = { ...previous }
+      for (const root of folderRoots) {
+        if (isUnderRoot(root, next)) {
+          nextExpanded[root] = true
+          for (const path of computeParentsToExpand(root, next)) nextExpanded[path] = true
+        }
+      }
+      return nextExpanded
+    })
+  }, [folderRoots])
 
   const ensureFileVisible = useCallback(
     async (filePath: string) => {
@@ -292,5 +323,6 @@ export function useSidebar() {
     removeFolderRoot,
     markFileVisited,
     refreshFolderTree,
+    applyFileMove,
   }
 }

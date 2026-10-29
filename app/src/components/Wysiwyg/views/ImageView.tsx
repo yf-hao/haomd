@@ -4,36 +4,7 @@
  */
 import { memo, useEffect, useMemo, useState } from 'react'
 import { useNodeViewContext } from '@prosemirror-adapter/react'
-import { convertFileSrc } from '@tauri-apps/api/core'
-
-/**
- * Resolve a relative image path to a haomd:// URL via convertFileSrc.
- */
-function resolveImageSrc(src: string, filePath?: string | null): string {
-  if (!src) return src
-  if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('data:')) {
-    return src
-  }
-  if (!filePath) return src
-
-  const fileDir = filePath.replace(/[/\\][^/\\]+$/, '')
-  const sep = filePath.includes('\\') ? '\\' : '/'
-  let absPath = src
-
-  if (src.startsWith('.')) {
-    const parts = src.split(/[/\\]/)
-    let dir = fileDir
-    for (const part of parts) {
-      if (part === '..') dir = dir.replace(/[/\\][^/\\]+$/, '')
-      else if (part !== '.') dir = dir + sep + part
-    }
-    absPath = dir
-  } else if (!src.match(/^[a-zA-Z]:/)) {
-    absPath = fileDir + sep + src
-  }
-
-  return convertFileSrc(absPath.replace(/\\/g, '/'), 'haomd')
-}
+import { resolveDocumentMedia as resolveImageSrc } from '../../../modules/images/resolveDocumentMedia'
 
 interface ImageViewProps {
   filePath?: string | null

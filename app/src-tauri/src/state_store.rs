@@ -348,6 +348,28 @@ pub(crate) async fn write_file_virtual_assignments_store(
     fs::write(path, bytes).await
 }
 
+pub(crate) async fn relocate_file_records(app: &AppHandle, old: &str, new: &str) -> std::io::Result<()> {
+    if old == new { return Ok(()); }
+    let mut recent = read_recent_store(app).await?;
+    for entry in &mut recent {
+        if Path::new(&entry.path) == Path::new(old) {
+            entry.path = new.to_string();
+            entry.display_name = Path::new(new).file_name().unwrap_or_default().to_string_lossy().into();
+        }
+    }
+    write_recent_store(app, &recent).await?;
+    let mut assignments = read_file_virtual_assignments_store(app).await?;
+    for entry in &mut assignments { if Path::new(&entry.path) == Path::new(old) { entry.path = new.to_string(); } }
+    write_file_virtual_assignments_store(app, &assignments).await?;
+    let mut sidebar = read_sidebar_state(app).await?;
+    for path in sidebar.standalone_files.iter_mut().chain(sidebar.highlighted_files.iter_mut()) {
+        if Path::new(path) == Path::new(old) { *path = new.to_string(); }
+    }
+    write_sidebar_state(app, &sidebar).await?;
+    refresh_app_menu(app).await;
+    Ok(())
+}
+
 pub(crate) async fn upsert_pdf_recent(app: &AppHandle, path: &str) -> std::io::Result<()> {
     let mut list = read_pdf_recent_store(app).await?;
 

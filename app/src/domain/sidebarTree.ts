@@ -100,6 +100,33 @@ export function toggleExpanded(prev: ExpandedMap, path: string): ExpandedMap {
   return next
 }
 
+/** Only copy branches on the source/target paths; retain unrelated node identities. */
+export function relocateTreeFile(root: string, nodes: FileTreeNode[], oldPath: string, newPath: string): FileTreeNode[] {
+  const old = normalizePath(oldPath)
+  const next = normalizePath(newPath)
+  if (old === next) return nodes
+  const parent = parentPathOf(next)
+  const visit = (directory: string, children: FileTreeNode[]): FileTreeNode[] => {
+    let changed = false
+    const updated: FileTreeNode[] = []
+    for (const node of children) {
+      if (node.path === old) { changed = true; continue }
+      if (node.kind === 'dir' && (isSubPath(node.path, old) || isSubPath(node.path, next))) {
+        const descendants = visit(node.path, node.children ?? [])
+        if (descendants !== node.children) { updated.push({ ...node, children: descendants }); changed = true; continue }
+      }
+      updated.push(node)
+    }
+    if (directory === parent && !updated.some(node => node.path === next)) {
+      updated.push({ id: next, path: next, name: next.split('/').pop()!, kind: 'file' })
+      updated.sort((a, b) => a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === 'dir' ? -1 : 1)
+      changed = true
+    }
+    return changed ? updated : children
+  }
+  return visit(normalizePath(root), nodes)
+}
+
 export function expandedMapFromPaths(paths: string[]): ExpandedMap {
   const map: ExpandedMap = {}
   for (const p of paths) {

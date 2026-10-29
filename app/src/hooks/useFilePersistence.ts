@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react'
 import { unstable_batchedUpdates } from 'react-dom'
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 import { clearRecentRemote, deleteRecentRemote, logRecentFile, readFile, writeFile } from '../modules/files/service'
@@ -7,10 +7,13 @@ import { logPdfRecent } from '../modules/pdf/pdfRecentService'
 import { createAutoSaver, type AutoSaveHandle } from '../modules/files/autoSave'
 import type { RecentFile, Result, ServiceError, WriteResult } from '../modules/files/types'
 import { isTauriEnv } from '../modules/platform/runtime'
+import { workspaceDocumentOperations } from '../modules/document/documentOperationCoordinator'
+import type { MoveDocument } from '../modules/files/ports/fileMovePort'
 
 const DEFAULT_PATH = UNTITLED_FILE_PATH
 
 const isTauri = isTauriEnv
+const versionKey = (path: string) => path.replace(/\\/g, '/')
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'conflict'
 
@@ -78,7 +81,7 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
   const markdownRef = useRef(markdown)
   markdownRef.current = markdown
 
-  const [filePath, setFilePath] = useState<string>(DEFAULT_PATH)
+  const [filePath, setFilePathState] = useState<string>(DEFAULT_PATH)
   const pathRef = useRef<string>(DEFAULT_PATH)
   const [dirty, setDirty] = useState(false)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
@@ -86,6 +89,18 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null)
   const [currentHash, setCurrentHash] = useState<string | undefined>(undefined)
   const [currentMtime, setCurrentMtime] = useState<number | undefined>(undefined)
+  const versionRef = useRef({ hash: currentHash, mtime: currentMtime })
+  versionRef.current = { hash: currentHash, mtime: currentMtime }
+  const documentVersionsRef = useRef(new Map<string, { hash: string | undefined; mtime: number | undefined }>())
+  const setFilePath = useCallback((value: SetStateAction<string>) => {
+    const path = typeof value === 'function' ? value(pathRef.current) : value
+    pathRef.current = path
+    const version = documentVersionsRef.current.get(versionKey(path)) ?? { hash: undefined, mtime: undefined }
+    versionRef.current = version
+    setCurrentHash(version.hash)
+    setCurrentMtime(version.mtime)
+    setFilePathState(path)
+  }, [])
   const [conflictError, setConflictError] = useState<ServiceError | null>(null)
 
   const {
@@ -120,66 +135,90 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
   }, [filePath])
 
   const handleSave = useCallback(
-    async (targetPath?: string, contentOverride?: string): Promise<Result<WriteResult>> => {
-      if (saveInFlightRef.current) {
-        return { ok: false, error: { code: 'CANCELLED', message: '保存进行中，请稍后重试', traceId: undefined } }
-      }
-      saveInFlightRef.current = true
-      try {
-        const owner = optionsRef.current
-        const documentKey = owner?.getDocumentKey?.() ?? null
-        const originalPath = pathRef.current
-        const pathToUse = targetPath ?? pathRef.current
-        const contentToWrite = contentOverride ?? markdownRef.current
-        const resp = await writeFile({
-          path: pathToUse,
-          content: contentToWrite,
-          expectedHash: currentHash,
-          expectedMtime: currentMtime,
-        })
-        if (resp.ok) {
-          const sameDocument = owner?.getDocumentKey
-            ? documentKey === optionsRef.current?.getDocumentKey?.()
-            : pathRef.current === originalPath
-          const latestContent = sameDocument
-            ? optionsRef.current?.getLatestMarkdown?.() ?? markdownRef.current
-            : undefined
-          // 先更新 ref，避免紧接着触发的下一次保存仍判断为"未命名"
-          if (sameDocument) pathRef.current = pathToUse
-          // 用 batchedUpdates 将多个 setState 合并为一次渲染，避免 async 函数中
-          // 逐个 flush 导致多次布局重排（保存时抖动的根本原因）
-          unstable_batchedUpdates(() => {
-            if (!sameDocument) return
-            setFilePath(pathToUse)
-            setDirty(latestContent !== contentToWrite)
-            setSaveStatus('saved')
-            setStatusMessage('已保存')
-            setCurrentHash(resp.data.hash)
-            setCurrentMtime(resp.data.mtimeMs)
-            setLastSavedAt(Date.now())
-          })
-
-          // 记录最近文件：保存成功后也写入后端 recent.json 和本地热缓存
-          if (isTauri()) {
-            void logRecentFile(pathToUse, false)
-          }
-          upsertRecentLocalRef.current()
-
-          // 通知外层：保存成功，可用于更新多标签元信息
-          owner?.onSaved?.(pathToUse, { documentKey, content: contentToWrite, latestContent })
+    (targetPath?: string, contentOverride?: string): Promise<Result<WriteResult>> => {
+      const requestedDocument = optionsRef.current?.getDocumentKey?.()
+      const requestedPath = pathRef.current
+      return workspaceDocumentOperations.run(async () => {
+        if (requestedDocument !== optionsRef.current?.getDocumentKey?.()) {
+          return { ok: false, error: { code: 'CANCELLED', message: '文档已切换，请重新保存' } }
         }
-        return resp
-      } finally {
-        saveInFlightRef.current = false
-      }
+        if (saveInFlightRef.current) {
+          return { ok: false, error: { code: 'CANCELLED', message: '保存进行中，请稍后重试', traceId: undefined } }
+        }
+        saveInFlightRef.current = true
+        try {
+          const owner = optionsRef.current
+          const documentKey = owner?.getDocumentKey?.() ?? null
+          const originalPath = pathRef.current
+          const pathToUse = targetPath === requestedPath ? pathRef.current : targetPath ?? pathRef.current
+          const contentToWrite = owner?.getLatestMarkdown?.() ?? contentOverride ?? markdownRef.current
+          const resp = await writeFile({
+            path: pathToUse,
+            content: contentToWrite,
+            expectedHash: pathToUse === originalPath ? versionRef.current.hash : undefined,
+            expectedMtime: pathToUse === originalPath ? versionRef.current.mtime : undefined,
+          })
+          if (resp.ok) {
+            documentVersionsRef.current.set(versionKey(pathToUse), { hash: resp.data.hash, mtime: resp.data.mtimeMs })
+            const sameDocument = owner?.getDocumentKey
+              ? documentKey === optionsRef.current?.getDocumentKey?.()
+              : pathRef.current === originalPath
+            const latestContent = sameDocument
+              ? optionsRef.current?.getLatestMarkdown?.() ?? markdownRef.current
+              : undefined
+            // 先更新 ref，避免紧接着触发的下一次保存仍判断为"未命名"
+            if (sameDocument) pathRef.current = pathToUse
+            if (sameDocument) versionRef.current = { hash: resp.data.hash, mtime: resp.data.mtimeMs }
+            // 用 batchedUpdates 将多个 setState 合并为一次渲染，避免 async 函数中
+            // 逐个 flush 导致多次布局重排（保存时抖动的根本原因）
+            unstable_batchedUpdates(() => {
+              if (!sameDocument) return
+              setFilePath(pathToUse)
+              setDirty(latestContent !== contentToWrite)
+              setSaveStatus('saved')
+              setStatusMessage('已保存')
+              setCurrentHash(resp.data.hash)
+              setCurrentMtime(resp.data.mtimeMs)
+              setLastSavedAt(Date.now())
+            })
+
+            // 记录最近文件：保存成功后也写入后端 recent.json 和本地热缓存
+            if (isTauri()) {
+              void logRecentFile(pathToUse, false)
+            }
+            upsertRecentLocalRef.current()
+
+            // 通知外层：保存成功，可用于更新多标签元信息
+            owner?.onSaved?.(pathToUse, { documentKey, content: contentToWrite, latestContent })
+          }
+          return resp
+        } finally {
+          saveInFlightRef.current = false
+        }
+      })
     },
-    [currentHash, currentMtime],
+    [],
   )
+
+  const relocatePersistedDocument = useCallback((oldPath: string, document: MoveDocument, latestContent: string) => {
+    documentVersionsRef.current.delete(versionKey(oldPath))
+    documentVersionsRef.current.set(versionKey(document.path), { hash: document.hash, mtime: document.mtimeMs })
+    if (pathRef.current.replace(/\\/g, '/') !== oldPath.replace(/\\/g, '/')) return
+    pathRef.current = document.path
+    versionRef.current = { hash: document.hash, mtime: document.mtimeMs }
+    suppressDirtyOnceRef.current = false
+    relocationBaselineRef.current = { content: latestContent, dirty: latestContent !== document.content }
+    setFilePath(document.path)
+    setCurrentHash(document.hash)
+    setCurrentMtime(document.mtimeMs)
+    setDirty(latestContent !== document.content)
+  }, [])
 
   const dialogInFlightRef = useRef(false)
   const openDialogInFlightRef = useRef(false)
   const openInFlightRef = useRef(false)
   const suppressDirtyOnceRef = useRef(false)
+  const relocationBaselineRef = useRef<{ content: string; dirty: boolean } | null>(null)
 
   const hasRealPathNow = useCallback(() => !isTransientFilePath(pathRef.current), [])
 
@@ -332,6 +371,13 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
       firstRenderRef.current = false
       return
     }
+    const relocation = relocationBaselineRef.current
+    relocationBaselineRef.current = null
+    if (relocation?.content === markdown) {
+      setDirty(relocation.dirty)
+      if (relocation.dirty) saverRef.current?.schedule()
+      return
+    }
     if (suppressDirtyOnceRef.current) {
       suppressDirtyOnceRef.current = false
       setDirty(false)
@@ -369,6 +415,7 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
         }
 
         const nextPath = resp.data.path
+        documentVersionsRef.current.set(versionKey(nextPath), { hash: resp.data.hash, mtime: resp.data.mtimeMs })
         pathRef.current = nextPath
         setFilePath(nextPath)
         setCurrentHash(resp.data.hash)
@@ -514,6 +561,7 @@ export function useFilePersistence(markdown: string, options?: FilePersistenceOp
     setRecent,
     reloadRecentLocal,
     handleSave,
+    relocatePersistedDocument,
     save,
     saveToPath,
     saveAs,

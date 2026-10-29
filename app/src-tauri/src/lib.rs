@@ -18,6 +18,7 @@ mod doc_conversations;
 mod editor_settings;
 mod external_open;
 mod file_io;
+mod file_move;
 mod font_catalog;
 mod fs_commands;
 mod fs_types;
@@ -74,6 +75,7 @@ use doc_conversations::*;
 use editor_settings::*;
 use external_open::*;
 use file_io::*;
+use file_move::*;
 use fs_commands::*;
 use fs_types::{ErrorCode, FilePayload, ResultPayload, ServiceError, WriteResult};
 use gemini_compat::*;
@@ -151,6 +153,9 @@ macro_rules! app_invoke_handler {
             set_title,
             delete_fs_entry,
             rename_fs_entry,
+            prepare_file_move,
+            commit_file_move,
+            cancel_file_move,
             resolve_workspace_directory,
             create_workspace_directory,
             write_workspace_file,
@@ -309,6 +314,9 @@ fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::error:
 
     let _ = prepare_music_player_session(&handle);
     tauri::async_runtime::block_on(async {
+        if let Err(error) = file_move::recover_file_moves(&handle).await {
+            log::error!("文件移动恢复未完成，保留恢复记录：{error}");
+        }
         let menu = build_app_menu(&handle).await?;
         handle.set_menu(menu)?;
         let _ = restore_music_session(handle.clone()).await;

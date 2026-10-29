@@ -48,8 +48,20 @@ pub(crate) fn normalize_path(input: &str) -> Result<PathBuf, ServiceError> {
     Ok(normalized)
 }
 
-async fn file_lock(path: &Path) -> std::sync::Arc<Mutex<()>> {
-    let key = path.to_string_lossy().to_string();
+pub(crate) async fn file_identity(path: &Path) -> PathBuf {
+    if let Ok(canonical) = fs::canonicalize(path).await {
+        return canonical;
+    }
+    if let (Some(parent), Some(name)) = (path.parent(), path.file_name()) {
+        if let Ok(canonical) = fs::canonicalize(parent).await {
+            return canonical.join(name);
+        }
+    }
+    path.to_path_buf()
+}
+
+pub(crate) async fn file_lock(path: &Path) -> std::sync::Arc<Mutex<()>> {
+    let key = file_identity(path).await.to_string_lossy().to_string();
     let mut map = FILE_LOCKS.lock().await;
     map.entry(key)
         .or_insert_with(|| std::sync::Arc::new(Mutex::new(())))
@@ -62,7 +74,7 @@ pub(crate) fn hash_bytes(bytes: &[u8]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-fn mtime_ms(meta: &std::fs::Metadata) -> u64 {
+pub(crate) fn mtime_ms(meta: &std::fs::Metadata) -> u64 {
     use std::time::UNIX_EPOCH;
 
     meta.modified()
@@ -70,6 +82,54 @@ fn mtime_ms(meta: &std::fs::Metadata) -> u64 {
         .and_then(|m| m.duration_since(UNIX_EPOCH).ok())
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod relocation_save_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn a_stale_guarded_save_cannot_recreate_a_moved_file_but_new_files_are_allowed() {
+        let root = std::env::temp_dir().join(format!(
+            "haomd-save-move-{}-{}",
+            new_trace_id(),
+            rand::random::<u64>()
+        ));
+        fs::create_dir_all(&root).await.unwrap();
+        let old = root.join("old.md");
+        let next = root.join("new.md");
+        fs::write(&old, "before").await.unwrap();
+        fs::rename(&old, &next).await.unwrap();
+        let result = write_file_impl(
+            old.to_string_lossy().into(),
+            "stale".into(),
+            None,
+            Some(hash_bytes(b"before")),
+            None,
+        )
+        .await;
+        assert!(matches!(
+            result,
+            ResultPayload::Err {
+                error: ServiceError {
+                    code: ErrorCode::CONFLICT,
+                    ..
+                }
+            }
+        ));
+        assert!(!old.exists());
+        let result = write_file_impl(
+            old.to_string_lossy().into(),
+            "new document".into(),
+            None,
+            None,
+            None,
+        )
+        .await;
+        assert!(matches!(result, ResultPayload::Ok { .. }));
+        assert_eq!(fs::read_to_string(&next).await.unwrap(), "before");
+        fs::remove_dir_all(root).await.unwrap();
+    }
 }
 
 #[tauri::command]
@@ -188,6 +248,16 @@ async fn write_file_impl(
 
     let lock = file_lock(&normalized).await;
     let _guard = lock.lock().await;
+
+    if (expected_hash.is_some() || expected_mtime.is_some())
+        && matches!(fs::metadata(&normalized).await, Err(e) if e.kind() == std::io::ErrorKind::NotFound)
+    {
+        return err_payload(
+            ErrorCode::CONFLICT,
+            "文件已移动或删除，请重新打开后保存",
+            trace,
+        );
+    }
 
     if let Ok(meta) = fs::metadata(&normalized).await {
         if let Some(exp) = expected_mtime {

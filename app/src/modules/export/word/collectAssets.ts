@@ -1,3 +1,4 @@
+import { resolveLocalResource } from '../../markdown/references/resourcePath'
 import { invoke } from '@tauri-apps/api/core'
 import { dirname, resolve } from '@tauri-apps/api/path'
 import type { WordAsset, WordDocPayload } from './types'
@@ -51,7 +52,7 @@ async function resolveSourcePath(input: string, baseDir: string | null): Promise
   if (!input) return input
   if (/^(https?:|data:)/i.test(input)) return input
   if (!baseDir) return input
-  return await resolve(baseDir, input)
+  return resolveLocalResource(input, `${baseDir.replace(/\\/g, '/')}/__document__.md`)?.path ?? await resolve(baseDir, input)
 }
 
 function getMimeType(path: string): string {

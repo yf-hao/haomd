@@ -1,3 +1,5 @@
+import { relocateProseMirrorDocument } from './relocateDocument'
+import { relocateMarkdown, type FileRelocation } from '../../modules/markdown/references/relocationPlanner'
 import { useEffect, useRef, useCallback, useMemo, useState, type CSSProperties, type ChangeEvent } from 'react'
 import { Editor, rootCtx, defaultValueCtx, schemaCtx } from '@milkdown/kit/core'
 import { EditorStatus } from '@milkdown/core'
@@ -82,6 +84,7 @@ export interface WysiwygPaneProps {
   value: string
   frontMatterBlock?: string
   onChange: (markdown: string) => void
+  onRelocationReady?: (handler: ((move: FileRelocation, nextBody: string) => string) | null) => void
   filePath?: string | null
   docKey?: string | null
   focusAtEndRequest?: number
@@ -471,8 +474,10 @@ function isPlainTextFile(path: string | null | undefined): boolean {
 
 function PlainTextWysiwyg({
   value,
+  filePath,
   frontMatterBlock,
   onChange,
+  onRelocationReady,
   effectiveLayout,
   editorZoom,
   focusAtEndRequest,
@@ -581,6 +586,15 @@ function PlainTextWysiwyg({
   }
   style['--wysiwyg-zoom'] = String(editorZoom ?? 1)
 
+  useEffect(() => {
+    onRelocationReady?.(move => {
+      const content = composeMarkdownWithFrontMatter(frontMatterBlock ?? '', value)
+      const next = relocateMarkdown(content, filePath ?? move.oldPath, move)
+      return next
+    })
+    return () => onRelocationReady?.(null)
+  }, [onRelocationReady, frontMatterBlock, value, filePath, onChange])
+
   const handleChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     onChange(composeMarkdownWithFrontMatter(frontMatterBlock, event.target.value))
   }
@@ -639,6 +653,7 @@ function WysiwygEditor({
   value,
   frontMatterBlock,
   onChange,
+  onRelocationReady,
   filePath,
   docKey,
   effectiveLayout,
@@ -667,6 +682,7 @@ function WysiwygEditor({
         value={value}
         frontMatterBlock={frontMatterBlock}
         onChange={onChange}
+        onRelocationReady={onRelocationReady}
         filePath={filePath}
         docKey={docKey}
         focusAtEndRequest={focusAtEndRequest}
@@ -1864,6 +1880,27 @@ function WysiwygEditor({
       }
     }
   }, [flushPending, initEditor, outlineScheduler, serializationScheduler])
+
+  useEffect(() => {
+    if (!editorReady) return
+    onRelocationReady?.((move, nextBody) => {
+      const editor = getReadyEditor()
+      if (!editor || !filePathRef.current) throw new Error('编辑器尚未就绪')
+      serializationScheduler.cancel()
+      serializationEpochRef.current += 1
+      editor.action(ctx => {
+        const view = ctx.get(editorViewCtx)
+        relocateProseMirrorDocument(view, filePathRef.current!, move)
+        blockCacheRef.current.buildFull(view.state.doc, ctx.get(serializerCtx))
+      })
+      const body = editor.action(getMarkdown())
+      lastSyncedValueRef.current = nextBody
+      const result = composeMarkdownWithFrontMatter(frontMatterBlockRef.current, body)
+      lastValidMarkdownRef.current = result
+      return result
+    })
+    return () => onRelocationReady?.(null)
+  }, [editorReady, getReadyEditor, onRelocationReady, serializationScheduler])
 
   // Sync external value changes (e.g. tab switch, file reload)
   useEffect(() => {

@@ -1,3 +1,4 @@
+import { documentHistoryExtension } from './relocateDocument'
 import type { Extension } from '@codemirror/state'
 import { EditorState } from '@codemirror/state'
 import {
@@ -9,7 +10,7 @@ import {
   lineNumbers,
   ViewPlugin,
 } from '@codemirror/view'
-import { defaultKeymap, history, historyKeymap, deleteLine } from '@codemirror/commands'
+import { defaultKeymap, historyKeymap, deleteLine } from '@codemirror/commands'
 import { indentOnInput, foldGutter, foldKeymap, foldedRanges } from '@codemirror/language'
 import { closeBrackets, autocompletion } from '@codemirror/autocomplete'
 import { markdown } from '@codemirror/lang-markdown'
@@ -486,7 +487,7 @@ export function createExtensions(options: EditorOptions = {}): Extension[] {
     EditorState.tabSize.of(2),
     drawSelection(),
     indentOnInput(),
-    history(),
+    documentHistoryExtension(),
     keymap.of([
       ...customKeymap,
       ...filteredDefaultKeymap,

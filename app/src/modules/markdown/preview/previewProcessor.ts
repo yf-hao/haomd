@@ -3,7 +3,7 @@ import { createPreviewDecoder, type PreviewResponse } from './previewTransport'
 
 export type { PreviewResponse } from './previewTransport'
 
-export type PreviewRequest = { id: number; value: string }
+export type PreviewRequest = { id: number; value: string; resourcePath?: string | null }
 
 export interface PreviewWorkerPort {
   onmessage: ((event: MessageEvent<PreviewResponse>) => void) | null
@@ -17,7 +17,7 @@ export type PreviewProcessorDependencies = {
   prepare: (value: string) => PreviewMarkdownResult
   cached: (value: string) => PreviewMarkdownResult | null
   cache: (value: string, result: PreviewMarkdownResult) => void
-  publish: (result: PreviewMarkdownResult) => void
+  publish: (result: PreviewMarkdownResult, source: PreviewRequest) => void
   onError?: (error: unknown) => void
 }
 
@@ -32,14 +32,14 @@ export function createPreviewProcessor(deps: PreviewProcessorDependencies) {
   let workerFailed = false
   const decode = createPreviewDecoder()
 
-  const publish = (id: number, result: PreviewMarkdownResult) => {
+  const publish = (task: PreviewRequest, result: PreviewMarkdownResult) => {
     // Accept progress during continuous input, but never regress after a newer result.
-    if (disposed || id <= published) return
-    published = id
-    deps.publish(result)
+    if (disposed || task.id <= published) return
+    published = task.id
+    deps.publish(result, task)
   }
   const fallback = (task: PreviewRequest) => {
-    try { publish(task.id, deps.prepare(task.value)) } catch (error) { deps.onError?.(error) }
+    try { publish(task, deps.prepare(task.value)) } catch (error) { deps.onError?.(error) }
   }
   const stopWorker = () => {
     if (worker) {
@@ -78,7 +78,7 @@ export function createPreviewProcessor(deps: PreviewProcessorDependencies) {
         pending = null
         if (next) send(next)
         deps.cache(completed.value, result)
-        publish(completed.id, result)
+        publish(completed, result)
       }
       worker.onerror = fail
     } catch (error) { fail(error) }
@@ -86,13 +86,13 @@ export function createPreviewProcessor(deps: PreviewProcessorDependencies) {
   }
 
   return {
-    request(value: string, useWorker: boolean) {
+    request(value: string, useWorker: boolean, resourcePath?: string | null) {
       if (disposed) return
-      const task = { id: ++sequence, value }
+      const task = { id: ++sequence, value, resourcePath }
       const cached = deps.cached(value)
       if (cached) {
         pending = null
-        publish(task.id, cached)
+        publish(task, cached)
         // Warm the worker and its transport base while the cached preview is
         // already visible, so the first edit does not pay worker startup costs.
         if (useWorker && !worker && !workerFailed && getWorker()) send(task)

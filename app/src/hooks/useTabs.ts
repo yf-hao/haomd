@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { UNTITLED_FILE_PATH } from '../modules/files/filePathState'
+import { UNTITLED_FILE_PATH, isTransientFilePath } from '../modules/files/filePathState'
 import type { EditorTab } from '../types/tabs'
+import type { MoveOutcome } from '../modules/files/ports/fileMovePort'
+import { relocateMarkdown, sameFilePath } from '../modules/markdown/references/relocationPlanner'
 
 export type UseTabsOptions = {
   onRequestCloseCurrentTab?: () => void
@@ -215,6 +217,19 @@ export function useTabs(options?: UseTabsOptions) {
     [],
   )
 
+  const applyFileMove = useCallback((outcome: MoveOutcome, contentById: Map<string, string>) => {
+    setTabs(previous => previous.map(tab => {
+      if (!tab.path || isTransientFilePath(tab.path)) return tab
+      const moved = sameFilePath(tab.path, outcome.oldPath)
+      if (!moved) return tab
+      const path = outcome.newPath
+      const saved = outcome.documents.find(document => sameFilePath(document.path, path))
+      const content = contentById.get(tab.id) ?? relocateMarkdown(tab.content, tab.path, outcome)
+      return { ...tab, path, title: deriveTitleFromPath(path), content,
+        dirty: saved ? content !== saved.content : tab.dirty }
+    }))
+  }, [])
+
   const closeCurrentTab = useCallback(
     () => {
       if (import.meta.env.DEV) {
@@ -308,6 +323,7 @@ export function useTabs(options?: UseTabsOptions) {
     updateActiveMeta,
     markTabSaved,
     updateTabsPathByPath,
+    applyFileMove,
     markActiveTabDirty,
   }
 }

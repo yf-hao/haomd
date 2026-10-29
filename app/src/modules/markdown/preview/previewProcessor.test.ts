@@ -29,6 +29,16 @@ function fixture() {
 }
 
 describe('preview processor', () => {
+  it('publishes each asynchronous preview with its matching resource base', () => {
+    const { worker, dependencies, processor } = fixture()
+    processor.request('![image](images/a.png)', true, '/old/note.md')
+    processor.request('![image](../old/images/a.png)', true, '/new/note.md')
+    worker.complete(0)
+    expect(dependencies.publish.mock.lastCall?.[1].resourcePath).toBe('/old/note.md')
+    worker.complete(1)
+    expect(dependencies.publish.mock.lastCall?.[1].resourcePath).toBe('/new/note.md')
+    expect(dependencies.publish.mock.lastCall?.[0].processedMarkdown).toContain('../old/images/a.png')
+  })
   it('warms the worker from the initial cached preview before the first edit', () => {
     const { worker, cache, dependencies, processor } = fixture()
     cache.set('initial cached document', preparePreviewMarkdown('initial cached document'))
@@ -92,7 +102,7 @@ describe('preview processor', () => {
     worker.onmessage!(new MessageEvent<PreviewResponse>('message', { data: { id: worker.postMessage.mock.calls[0][0].id, ...metadata,
       chunkPatch: { baseId: 999, prefix: 1, suffix: 0, inserted: [] },
     } }))
-    expect(dependencies.publish).toHaveBeenCalledWith(preparePreviewMarkdown('newest transport input'))
+    expect(dependencies.publish).toHaveBeenCalledWith(preparePreviewMarkdown('newest transport input'), expect.objectContaining({ value: 'newest transport input' }))
     expect(worker.terminate).toHaveBeenCalledOnce()
   })
 
@@ -101,6 +111,6 @@ describe('preview processor', () => {
     const value = '---\ntitle: Test\n---\n\n[toc]\n\n# 标题\n\n$x^2$\n\n[链接][ref]\n\n[ref]: https://example.com'
     processor.request(value, useWorker)
     if (useWorker) worker.complete(0)
-    expect(dependencies.publish).toHaveBeenCalledWith(preparePreviewMarkdown(value))
+    expect(dependencies.publish).toHaveBeenCalledWith(preparePreviewMarkdown(value), expect.objectContaining({ value }))
   })
 })

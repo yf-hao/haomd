@@ -25,6 +25,7 @@ dependencies = [
  "rodio",
  "rquickjs",
  "rusqlite",
+ "same-file",
  "serde",
  "serde_json",
  "sha2",

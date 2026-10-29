@@ -6,6 +6,7 @@ import { useI18n } from '../modules/i18n/I18nContext'
 import type { FileVirtualFolder, FileVirtualAssignment } from '../modules/files/types'
 import { loadFileVirtualFolders, listFileVirtualAssignments, saveFileVirtualFolders, updateFileVirtualFolderForPath } from '../modules/files/service'
 import './Sidebar.css'
+import { useFileTreeDragDrop } from '../hooks/useFileTreeDragDrop'
 
 export type StandaloneFileItem = {
   path: string
@@ -72,6 +73,7 @@ export type SidebarProps = {
     folder: FileVirtualFolder
     onConfirm: () => void
   }) => void
+  onMoveFile?: (source: string, directory: string) => Promise<void>
   onNotify?: (msg: string) => void
 }
 
@@ -119,6 +121,7 @@ const TreeNode = memo(function TreeNode({ node, level, expanded, onToggle, onFil
           />
         ) : (
           <div
+            data-file-directory={node.path}
             className={`tree-row dir ${isActive ? 'active' : ''}`}
             style={{ paddingLeft }}
             onClick={() => {
@@ -202,6 +205,7 @@ const TreeNode = memo(function TreeNode({ node, level, expanded, onToggle, onFil
 
   return (
     <div
+      data-file-source={node.path}
       className={className}
       style={{ paddingLeft }}
       onClick={() => {
@@ -352,7 +356,11 @@ function InlineRenameRow({ level, isFolder, initialName, onConfirm, onCancel }: 
 }
 
 
-export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, onToggle, onFileClick, onDirClick, onContextAction, onToolbarNewFileInCurrentFolder, onToolbarNewFolderInCurrentFolder, onToolbarRefreshCurrentFolder, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel, inlineNewFolderDir, onInlineNewFolderConfirm, onInlineNewFolderCancel, inlineRenamePath, onInlineRenameConfirm, onInlineRenameCancel, activePath, panelWidth, highlightedPaths, onFileVisited, onRequestConfirmDeleteFileVirtualFolder, onNotify }: SidebarProps) {
+export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, onToggle, onFileClick, onDirClick, onContextAction, onToolbarNewFileInCurrentFolder, onToolbarNewFolderInCurrentFolder, onToolbarRefreshCurrentFolder, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel, inlineNewFolderDir, onInlineNewFolderConfirm, onInlineNewFolderCancel, inlineRenamePath, onInlineRenameConfirm, onInlineRenameCancel, activePath, panelWidth, highlightedPaths, onFileVisited, onRequestConfirmDeleteFileVirtualFolder, onMoveFile, onNotify }: SidebarProps) {
+  const dragHandlers = useFileTreeDragDrop({
+    disabled: Boolean(inlineRenamePath || inlineNewFileDir || inlineNewFolderDir),
+    expanded, expand: onToggle, move: onMoveFile, onError: onNotify,
+  })
   const { t } = useI18n()
   const hasStandalone = standaloneFiles.length > 0
   const hasTree = folderRoots.some((rootPath) => (treesByRoot[rootPath]?.length ?? 0) > 0)
@@ -382,6 +390,14 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
 
   const [fileVirtualFolders, setFileVirtualFolders] = useState<FileVirtualFolder[]>([])
   const [fileVirtualAssignments, setFileVirtualAssignments] = useState<FileVirtualAssignment[]>([])
+  useEffect(() => {
+    const moved = (event: Event) => {
+      const { oldPath, newPath } = (event as CustomEvent<{ oldPath: string; newPath: string }>).detail
+      setFileVirtualAssignments(items => items.map(item => item.path.replace(/\\/g, '/') === oldPath.replace(/\\/g, '/') ? { ...item, path: newPath.replace(/\\/g, '/') } : item))
+    }
+    window.addEventListener('haomd:file-relocated', moved)
+    return () => window.removeEventListener('haomd:file-relocated', moved)
+  }, [])
   const [collapsedFileVirtualFolders, setCollapsedFileVirtualFolders] = useState<Record<string, boolean>>(() => {
     if (typeof localStorage === 'undefined') return {}
     try {
@@ -713,6 +729,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
     return (
       <SidebarBackgroundShell
         as="aside"
+      {...dragHandlers}
         className="sidebar"
         style={asideStyle}
         onClick={closeMenu}
@@ -732,6 +749,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
   return (
     <SidebarBackgroundShell
       as="aside"
+      {...dragHandlers}
       className="sidebar"
       style={asideStyle}
       tabIndex={-1}
@@ -825,6 +843,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                     return (
                       <li
                         key={file.path}
+                        data-file-source={file.path}
                         className={`sidebar-file-row tree-row file ${isActive ? 'active' : ''}`}
                         onClick={() => onFileClick(file.path)}
                         onContextMenu={(e) => {
@@ -916,7 +935,8 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                                 {files.map((file) => (
                                   <li
                                     key={file.path}
-                                    className={`sidebar-file-row tree-row file ${activePath === file.path ? 'active' : ''}`}
+                                    data-file-source={file.path}
+                        className={`sidebar-file-row tree-row file ${activePath === file.path ? 'active' : ''}`}
                                     onClick={() => onFileClick(file.path)}
                                     onContextMenu={(e) => {
                                       e.preventDefault()
@@ -1010,6 +1030,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                     <li key={rootPath}>
                       <div
                         className={`sidebar-folder-row ${isActiveRoot ? 'active' : ''}`}
+                        data-file-directory={rootPath}
                         onClick={() => {
                           onToggle(rootPath)
                           onDirClick?.(rootPath)

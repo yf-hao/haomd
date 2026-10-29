@@ -1,6 +1,10 @@
 import { resolve } from 'node:path'
+import { createRequire } from 'node:module'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+
+const require = createRequire(import.meta.url)
+const markdownRequire = createRequire(require.resolve('micromark-util-decode-string'))
 
 const chunksMap: Record<string, string[]> = {
   'vendor-codemirror': [
@@ -27,6 +31,11 @@ const chunksMap: Record<string, string[]> = {
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    // Its browser export uses document.createElement. Resolve the DOM-free
+    // entry for both dev and production, including Markdown relocation workers.
+    alias: { 'decode-named-character-reference': markdownRequire.resolve('decode-named-character-reference') },
+  },
   server: {
     host: '127.0.0.1',
     port: 5173,

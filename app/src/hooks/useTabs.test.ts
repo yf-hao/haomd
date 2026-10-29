@@ -4,6 +4,23 @@ import { describe, expect, it, vi } from 'vitest'
 import { useTabs } from './useTabs'
 
 describe('useTabs', () => {
+  it('retains tab identity and unsaved text when moving an active file without changing a background reference', () => {
+    const { result } = renderHook(() => useTabs())
+    act(() => result.current.createTab({ path: '/index.md', content: '[note](old/n.md)' }))
+    const indexId = result.current.activeId!
+    act(() => result.current.createTab({ path: '/old/n.md', content: '[image](a.png) unsaved' }))
+    const noteId = result.current.activeId!
+    const untouched = result.current.tabs.find(tab => tab.id === indexId)
+    act(() => result.current.applyFileMove({ oldPath: '/old/n.md', newPath: '/new/n01.md', reconciliationRequired: false,
+      documents: [{ path: '/index.md', content: '[note](new/n01.md)', hash: 'i', mtimeMs: 1 },
+        { path: '/new/n01.md', content: '[image](../old/a.png)', hash: 'n', mtimeMs: 1 }],
+    }, new Map([[indexId, '[note](new/n01.md)'], [noteId, '[image](../old/a.png) unsaved']])) )
+    expect(result.current.activeId).toBe(noteId)
+    expect(result.current.tabs.find(tab => tab.id === noteId)).toMatchObject({ path: '/new/n01.md', title: 'n01.md', dirty: true })
+    expect(result.current.tabs.find(tab => tab.id === indexId)).toBe(untouched)
+    expect(result.current.tabs.find(tab => tab.id === indexId)?.content).toBe('[note](old/n.md)')
+  })
+
   it('marks the saved version of its owning tab without clearing newer edits', () => {
     const { result } = renderHook(() => useTabs())
     act(() => { result.current.createTab({ content: 'original', path: '/a.md' }) })

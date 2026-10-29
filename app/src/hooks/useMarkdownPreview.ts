@@ -6,10 +6,11 @@ export function useMarkdownPreview(value: string, options: {
   enabled: boolean
   useWorker: boolean
   documentKey?: string | null
+  resourcePath?: string | null
 }) {
-  const [result, setResult] = useState(() => preparePreviewMarkdown(value))
+  const [result, setResult] = useState(() => ({ ...preparePreviewMarkdown(value), resourcePath: options.resourcePath }))
   const processorRef = useRef<ReturnType<typeof createPreviewProcessor> | null>(null)
-  const { enabled, useWorker, documentKey } = options
+  const { enabled, useWorker, documentKey, resourcePath } = options
 
   // A text update submits a task; it never owns the lifetime of the executor.
   useLayoutEffect(() => {
@@ -22,7 +23,7 @@ export function useMarkdownPreview(value: string, options: {
       prepare: preparePreviewMarkdown,
       cached: getCachedPreviewMarkdown,
       cache: cachePreviewMarkdown,
-      publish: next => setResult(previous => disposed ? previous : next),
+      publish: (next, source) => setResult(previous => disposed ? previous : { ...next, resourcePath: source.resourcePath }),
       onError: error => console.warn('[MarkdownPreview] worker unavailable; using fallback', error),
     })
     processorRef.current = processor
@@ -34,8 +35,8 @@ export function useMarkdownPreview(value: string, options: {
   }, [documentKey, enabled])
 
   useLayoutEffect(() => {
-    processorRef.current?.request(value, useWorker)
-  }, [value, useWorker, documentKey, enabled])
+    processorRef.current?.request(value, useWorker, resourcePath)
+  }, [value, useWorker, documentKey, enabled, resourcePath])
 
   return result
 }

@@ -1,4 +1,10 @@
-import { lazy, Suspense, startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { moveWorkspaceFile } from '../modules/files/application/moveWorkspaceFile'
+import { tauriFileMovePort } from '../modules/files/adapters/tauriFileMovePort'
+import { workspaceDocumentOperations } from '../modules/document/documentOperationCoordinator'
+import { planWithWorker } from '../modules/files/application/relocationWorker'
+import { relocateMarkdown, sameFilePath, type FileRelocation } from '../modules/markdown/references/relocationPlanner'
+import { relocateCodeMirrorDocument } from './Editor/relocateDocument'
+import { lazy, Suspense, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { EditorView, type ViewUpdate } from '@codemirror/view'
 import { invoke } from '@tauri-apps/api/core'
@@ -414,6 +420,8 @@ export function WorkspaceShell({
   const guardedSaveRef = useRef<(() => Promise<any>) | null>(null)
   // Holds the flush function from WysiwygPane for forcing serialization before save
   const wysiwygFlushRef = useRef<(() => void) | null>(null)
+  const wysiwygRelocationRef = useRef<((move: FileRelocation, nextBody: string) => string) | null>(null)
+  const handleWysiwygRelocationReady = useCallback((handler: ((move: FileRelocation, nextBody: string) => string) | null) => { wysiwygRelocationRef.current = handler }, [])
   // Tracks the original markdown at the moment WYSIWYG mode was entered, per tab
   const wysiwygEntryMarkdownRef = useRef<string | null>(null)
   // Tracks whether the user has actually made edits while in WYSIWYG mode
@@ -700,6 +708,7 @@ export function WorkspaceShell({
     updateActiveContent,
     updateActiveMeta,
     updateTabsPathByPath,
+    applyFileMove: applyMoveToTabs,
     markActiveTabDirty,
     markTabSaved,
   } = useTabs({
@@ -814,6 +823,14 @@ export function WorkspaceShell({
   const activeIdRef = useRef<string | null>(null)
   activeIdRef.current = activeId
 
+  // The original source belongs to one rich-text session. Opening directly in
+  // rich-text mode and switching tabs must establish the same baseline as a
+  // source-to-rich-text switch, without serializing an untouched document.
+  useLayoutEffect(() => {
+    wysiwygEntryMarkdownRef.current = activeTab?.content ?? markdownRef.current
+    wysiwygIsDirtyRef.current = false
+  }, [activeId])
+
   const getActiveTextColorDocKey = useCallback(() => activeIdRef.current ?? null, [])
 
   useEffect(() => {
@@ -923,6 +940,7 @@ export function WorkspaceShell({
       return flushSourceEditorRef.current?.() ?? getCurrentMarkdown()
     }
     if (editModeRef.current === 'wysiwyg' && !isPdfActiveRef.current) {
+      if (!wysiwygIsDirtyRef.current) return wysiwygEntryMarkdownRef.current ?? markdownRef.current
       return wysiwygMarkdownGetterRef.current?.() ?? markdownRef.current
     }
     return getCurrentMarkdown()
@@ -1277,6 +1295,7 @@ export function WorkspaceShell({
   const {
     filePath,
     setFilePath,
+    relocatePersistedDocument,
     statusMessage,
     setStatusMessage,
     conflictError,
@@ -2608,6 +2627,8 @@ export function WorkspaceShell({
     clearSourceDocumentSync()
     resetDirtyTracking()
     markdownRef.current = content
+    wysiwygEntryMarkdownRef.current = content
+    wysiwygIsDirtyRef.current = false
     editorMarkdownRef.current = content
     setEditorMarkdown(content)
     setMarkdown(content)
@@ -3464,6 +3485,90 @@ export function WorkspaceShell({
       void sidebar.refreshFolderTree(root)
     }
   }, [getCurrentFolderForNewFile, sidebar.folderRoots, sidebar])
+
+  const moveUiRef = useRef({ tabs, getLatestPersistableMarkdown })
+  moveUiRef.current = { tabs, getLatestPersistableMarkdown }
+  const handleFileMove = useCallback(async (sourcePath: string, targetDirectory: string) => {
+    setStatusMessage('正在移动文件并更新链接…')
+    try {
+      const outcome = await moveWorkspaceFile({ sourcePath, targetDirectory }, {
+        files: tauriFileMovePort,
+        operations: workspaceDocumentOperations,
+        plan: planWithWorker,
+        onProgress: progress => {
+          const messages = {
+            waiting: '正在等待前一次保存完成…',
+            preparing: '正在读取要移动的文件…',
+            analyzing: '正在调整此文件的图片和链接…',
+            committing: '正在校验并提交文件移动…',
+            applying: '正在同步标签页和文件列表…',
+          }
+          setStatusMessage(messages[progress.phase])
+        },
+        validateOpenDocuments: move => {
+          for (const tab of moveUiRef.current.tabs) {
+            if (!tab.path || !sameFilePath(tab.path, move.oldPath)) continue
+            const value = tab.id === activeIdRef.current ? moveUiRef.current.getLatestPersistableMarkdown() : tab.content
+            relocateMarkdown(value, tab.path, move, true)
+          }
+        },
+        apply: outcome => {
+          const currentTabs = moveUiRef.current.tabs
+          const contentById = new Map<string, string>()
+          const active = currentTabs.find(tab => tab.id === activeIdRef.current)
+          for (const tab of currentTabs) {
+            if (!tab.path || !sameFilePath(tab.path, outcome.oldPath)) continue
+            const value = tab.id === activeIdRef.current ? moveUiRef.current.getLatestPersistableMarkdown() : tab.content
+            contentById.set(tab.id, relocateMarkdown(value, tab.path, outcome))
+          }
+          flushSync(() => {
+            if (active?.path && sameFilePath(active.path, outcome.oldPath) && !isPdfActiveRef.current) {
+              clearSourceDocumentSync()
+              clearPreviewSyncTimer()
+              const content = contentById.get(active.id) ?? active.content
+              const view = getActiveSourceView()
+              if (editModeRef.current === 'source' && view) {
+                relocateCodeMirrorDocument(view, active.path, outcome)
+              } else if (editModeRef.current === 'wysiwyg' && wysiwygRelocationRef.current) {
+                const wasDirty = wysiwygIsDirtyRef.current
+                if (wysiwygEntryMarkdownRef.current !== null) {
+                  wysiwygEntryMarkdownRef.current = relocateMarkdown(wysiwygEntryMarkdownRef.current, active.path, outcome)
+                }
+                wysiwygRelocationRef.current(outcome, extractFrontMatter(content).body)
+                wysiwygIsDirtyRef.current = wasDirty
+              }
+              // Native editor updates notify normal input listeners. The move
+              // supplies its own saved baseline and preview, so discard those
+              // scheduled input snapshots before they can mark a clean tab dirty.
+              clearSourceDocumentSync()
+              clearPreviewSyncTimer()
+              resetDirtyTracking()
+              markdownRef.current = content
+              editorMarkdownRef.current = content
+              setMarkdown(content)
+              setEditorMarkdown(content)
+              skipNextPreviewThrottleRef.current = true
+              commitPreviewValue(content)
+            }
+            for (const document of outcome.documents) {
+              const oldPath = sameFilePath(document.path, outcome.newPath) ? outcome.oldPath : document.path
+              const owner = currentTabs.find(tab => sameFilePath(tab.path, oldPath))
+              relocatePersistedDocument(oldPath, document, owner ? contentById.get(owner.id) ?? owner.content : document.content)
+            }
+            applyMoveToTabs(outcome, contentById)
+            sidebar.applyFileMove(outcome.oldPath, outcome.newPath)
+            setSelectedFolderPath(null)
+          })
+          window.dispatchEvent(new CustomEvent('haomd:file-relocated', { detail: outcome }))
+        },
+      })
+      const name = outcome.newPath.split(/[/\\]/).pop()
+      setStatusMessage(outcome.reconciliationRequired ? `已移动为 ${name}，部分记录需要刷新` : `已移动为 ${name}`)
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : String(error))
+    }
+  }, [sidebar, applyMoveToTabs, clearSourceDocumentSync, clearPreviewSyncTimer, getActiveSourceView,
+    commitPreviewValue, relocatePersistedDocument, resetDirtyTracking, setStatusMessage])
 
   const handleSidebarContextAction = useCallback(async (payload: SidebarContextActionPayload) => {
     const { path, kind, action } = payload
@@ -4383,6 +4488,7 @@ export function WorkspaceShell({
             treesByRoot={sidebar.treesByRoot} expanded={sidebar.expanded}
             onToggle={sidebar.toggleNode} onFileClick={openFileFromSidebar}
             onDirClick={handleDirClick}
+            onMoveFile={handleFileMove}
             onContextAction={handleSidebarContextAction} activePath={selectedFolderPath ?? activeTab?.path?.replace(/\\/g, '/') ?? null}
             panelWidth={sidebarWidth}
             highlightedPaths={sidebar.highlightedFiles}
@@ -4905,6 +5011,7 @@ export function WorkspaceShell({
                           onFormatActionsReady={(actions) => {
                             wysiwygFormatActionsRef.current = actions
                           }}
+                          onRelocationReady={handleWysiwygRelocationReady}
                           onFlushReady={(flush) => {
                             wysiwygFlushRef.current = flush
                           }}

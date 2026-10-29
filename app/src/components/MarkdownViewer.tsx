@@ -1,5 +1,8 @@
+import { resolveDocumentMedia } from '../modules/images/resolveDocumentMedia'
+import { resolveDocumentLink } from '../modules/markdown/references/resourcePath'
 import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import ReactMarkdown from 'react-markdown'
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
+import { relocateSrcset } from '../modules/markdown/references/relocateSrcset'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeRaw from 'rehype-raw'
@@ -22,7 +25,6 @@ import { DownloadOnClickUseCase, TauriWebviewOpener } from '../modules/download/
 import { ExamAttachmentLinkClassifier } from '../modules/download/linkClassifier'
 import { FetchTextDownloadService } from '../modules/download/downloadService'
 import { TauriFileSaveService } from '../modules/download/fileSaveService'
-import { convertFileSrc } from '@tauri-apps/api/core'
 
 export type Renderer = (code: string) => React.ReactNode
 
@@ -556,6 +558,15 @@ type DiagramBlockProps = {
   code: string
 }
 
+const transformMarkdownUrl = (url: string) => /^file:/i.test(url) || /^[a-z]:[\\/]/i.test(url) ? url : defaultUrlTransform(url)
+
+function MarkdownNativeMedia({ tag: Tag, node: _node, src, poster, srcSet, ...props }: any) {
+  const path = React.useContext(FilePathContext)
+  return <Tag {...props} src={src ? resolveDocumentMedia(src, path) : undefined}
+    poster={poster ? resolveDocumentMedia(poster, path) : undefined}
+    srcSet={srcSet ? relocateSrcset(srcSet, url => resolveDocumentMedia(url, path)) : undefined} />
+}
+
 // 提取稳定的媒体组件，避免受 foldRegions 变动影响导致视频重刷
 const MarkdownMedia = memo(({ node, filePath, ...props }: any) => {
   const [loadFailed, setLoadFailed] = useState(false)
@@ -564,26 +575,7 @@ const MarkdownMedia = memo(({ node, filePath, ...props }: any) => {
   const maxWidth = widthMatch ? widthMatch[1] : '100%'
   const cleanAlt = altText.replace(/\(([\d.]+(?:px|%|rem|vw))\)$/, '').trim()
   const src = props.src || ''
-  let finalSrc = src
-
-  if (filePath && src && !src.startsWith('http://') && !src.startsWith('https://') && !src.startsWith('data:')) {
-    const fileDir = filePath.replace(/[/\\][^/\\]+$/, '')
-    const sep = filePath.includes('\\') ? '\\' : '/'
-    let absPath = src
-    if (src.startsWith('.')) {
-      const parts = src.split(/[\/\\]/)
-      let dir = fileDir
-      for (const part of parts) {
-        if (part === '..') dir = dir.replace(/[/\\][^/\\]+$/, '')
-        else if (part !== '.') dir = dir + sep + part
-      }
-      absPath = dir
-    } else if (!src.match(/^[a-zA-Z]:/)) {
-      absPath = fileDir + sep + src
-    }
-
-    finalSrc = convertFileSrc(absPath.replace(/\\/g, '/'), 'haomd')
-  }
+  const finalSrc = resolveDocumentMedia(src, filePath)
 
   useEffect(() => {
     setLoadFailed(false)
@@ -634,7 +626,7 @@ const MarkdownMedia = memo(({ node, filePath, ...props }: any) => {
     )
   }
 
-  return <img {...props} src={finalSrc} loading="lazy" alt={cleanAlt} style={{ maxWidth, height: 'auto', display: 'block', margin: '0 auto' }} onError={() => { setLoadFailed(true) }} />
+  return <img {...props} src={finalSrc} srcSet={props.srcSet ? relocateSrcset(props.srcSet, url => resolveDocumentMedia(url, filePath)) : undefined} loading="lazy" alt={cleanAlt} style={{ maxWidth, height: 'auto', display: 'block', margin: '0 auto' }} onError={() => { setLoadFailed(true) }} />
 })
 
 const DiagramBlock = memo(
@@ -747,6 +739,7 @@ const MarkdownChunkContent = memo(({
   return (
     <FilePathContext.Provider value={filePath}>
       <ReactMarkdown
+        urlTransform={transformMarkdownUrl}
         remarkPlugins={remarkPlugins}
         remarkRehypeOptions={remarkRehypeOptions}
         rehypePlugins={chunkRehypePlugins}
@@ -915,6 +908,7 @@ const MarkdownDocument = ({
 
   return (
     <ReactMarkdown
+      urlTransform={transformMarkdownUrl}
       remarkPlugins={remarkPlugins}
       remarkRehypeOptions={remarkRehypeOptions}
       rehypePlugins={documentRehypePlugins}
@@ -995,6 +989,7 @@ const MarkdownViewerComponent = React.forwardRef<
     enabled: mode === 'rendered',
     useWorker: shouldUsePreviewWorker,
     documentKey: documentKey ?? filePath,
+    resourcePath: filePath,
   })
 
   const renderedValue = previewResult.processedMarkdown
@@ -1259,7 +1254,8 @@ const MarkdownViewerComponent = React.forwardRef<
       inlineMath: StableInlineMath,
       // rehypeRaw follows HTML parsing rules and lowercases custom tag names.
       inlinemath: StableInlineMath,
-      a: ({ href, children, ...props }: any) => {
+      a: function MarkdownAnchor({ href, children, ...props }: any) {
+        const resourcePath = React.useContext(FilePathContext)
         const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
           if (!href) return
 
@@ -1306,10 +1302,10 @@ const MarkdownViewerComponent = React.forwardRef<
 
           // 其他链接仍然走下载 / 外部打开逻辑
           e.preventDefault()
-          void markdownLinkClickHandler.handleClick(href)
+          void markdownLinkClickHandler.handleClick(resolveDocumentLink(href, resourcePath))
         }
         return (
-          <a href={href} onClick={handleClick} {...props}>
+          <a href={resolveDocumentLink(href ?? '', resourcePath)} onClick={handleClick} {...props}>
             {children}
           </a>
         )
@@ -1319,6 +1315,9 @@ const MarkdownViewerComponent = React.forwardRef<
           {path => <MarkdownMedia {...innerProps} filePath={path} />}
         </FilePathContext.Consumer>
       ),
+      video: (props: any) => <MarkdownNativeMedia tag="video" {...props} />,
+      audio: (props: any) => <MarkdownNativeMedia tag="audio" {...props} />,
+      source: (props: any) => <MarkdownNativeMedia tag="source" {...props} />,
       pre: (p: any) => <MarkdownBlockElement tag="pre" {...p} />,
       code: StableCode,
     }
@@ -1548,7 +1547,7 @@ const MarkdownViewerComponent = React.forwardRef<
   }, [mode, onSelectionGetterReady])
 
   return (
-    <FilePathContext.Provider value={filePath ?? null}>
+    <FilePathContext.Provider value={previewResult.resourcePath ?? null}>
       <FoldContext.Provider value={foldRegions ?? EMPTY_FOLD_REGIONS}>
         <div className="markdown-body gh-markdown" ref={containerRef} data-preview-width={previewWidth}>
           <MemoizedMarkdownDocument
@@ -1561,7 +1560,7 @@ const MarkdownViewerComponent = React.forwardRef<
             components={components}
             remarkPlugins={activeRemarkPlugins}
             rehypePlugins={rehypePlugins}
-            filePath={filePath ?? null}
+            filePath={previewResult.resourcePath ?? null}
             onElementChange={handleChunkElementChange}
           />
         </div>

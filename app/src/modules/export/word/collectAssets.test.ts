@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mockInvoke } from '../../../../vitest.setup'
 
 vi.mock('@tauri-apps/api/path', () => ({
@@ -22,14 +22,25 @@ class MockImage {
   }
 }
 
+const NativeURL = URL
+
 describe('export/word - collectWordAssets', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.stubGlobal('Image', MockImage)
-    vi.stubGlobal('URL', {
-      createObjectURL: vi.fn(() => 'blob:word-export-image'),
-      revokeObjectURL: vi.fn(),
+    vi.stubGlobal('URL', class extends NativeURL {
+      static createObjectURL = vi.fn(() => 'blob:word-export-image')
+      static revokeObjectURL = vi.fn()
     })
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('reads the original encoded image after relocating its document', async () => {
+    mockInvoke.mockResolvedValue({ Ok: { data: [137, 80, 78, 71] } })
+    const result = await collectWordAssets({ filePath: '/workspace/docs/moved.md', payload: {
+      title: 'Moved', blocks: [], assets: [{ id: 'image', kind: 'image', sourcePath: '../images/图%20%23%25.png?size=2#part' }],
+    } })
+    expect(result.assets[0]).toMatchObject({ sourcePath: '/workspace/images/图 #%.png' })
   })
 
   it('should resolve local image paths and measure dimensions', async () => {
