@@ -63,6 +63,7 @@ import { useFilePersistence } from '../hooks/useFilePersistence'
 import { useTabs } from '../hooks/useTabs'
 import { useCommandSystem } from '../hooks/useCommandSystem'
 import { useSidebar } from '../hooks/useSidebar'
+import { useSidebarClipboard } from '../hooks/useSidebarClipboard'
 import { onOpenRecentFile } from '../modules/platform/menuEvents'
 import { createFolder, deleteFsEntry, listFolder, writeFile, renameFsEntry } from '../modules/files/service'
 import { usePdfPanel } from '../hooks/usePdfPanel'
@@ -3572,9 +3573,32 @@ export function WorkspaceShell({
   }, [sidebar, applyMoveToTabs, clearSourceDocumentSync, clearPreviewSyncTimer, getActiveSourceView,
     commitPreviewValue, relocatePersistedDocument, resetDirtyTracking, setStatusMessage])
 
+  const fileClipboard = useSidebarClipboard({
+    notify: setStatusMessage,
+    onPasted: async (rawPath, directory, isDirectory) => {
+      const path = rawPath.replace(/\\/g, '/').replace(/^\/\/\?\/UNC\//, '//').replace(/^\/\/\?\//, '')
+      if (!isDirectory) sidebar.addFileToTree(path)
+      sidebar.expandPath(directory)
+      const normalized = directory.replace(/\\/g, '/').replace(/\/$/, '')
+      const roots = sidebar.folderRoots.filter(root => {
+        const value = root.replace(/\\/g, '/').replace(/\/$/, '')
+        return normalized === value || normalized.startsWith(value + '/')
+      })
+      if (roots.length === 0) {
+        if (isDirectory) await sidebar.openFolderAsRoot(path)
+        else sidebar.addStandaloneFile(path)
+      }
+      await Promise.all(roots.map(root => sidebar.refreshFolderTree(root)))
+    },
+  })
+
   const handleSidebarContextAction = useCallback(async (payload: SidebarContextActionPayload) => {
     const { path, kind, action } = payload
-    if (action === 'open') {
+    if (action === 'copy') {
+      fileClipboard.copy(payload)
+    } else if (action === 'paste') {
+      await fileClipboard.paste(payload)
+    } else if (action === 'open') {
       await openFileFromSidebar(path)
     } else if (action === 'new-file' || action === 'new-folder') {
       if (kind !== 'tree-dir' && kind !== 'folder-root') return
@@ -3638,6 +3662,7 @@ export function WorkspaceShell({
       setInlineRenamePath(path)
     }
   }, [
+    fileClipboard,
     openFileFromSidebar,
     sidebar,
     requestDeletePathWithConfirm,
@@ -4491,6 +4516,7 @@ export function WorkspaceShell({
             onToggle={sidebar.toggleNode} onFileClick={openFileFromSidebar}
             onDirClick={handleDirClick}
             onMoveFile={handleFileMove}
+            canPaste={fileClipboard.canPaste}
             onContextAction={handleSidebarContextAction} activePath={selectedFolderPath ?? activeTab?.path?.replace(/\\/g, '/') ?? null}
             panelWidth={sidebarWidth}
             highlightedPaths={sidebar.highlightedFiles}

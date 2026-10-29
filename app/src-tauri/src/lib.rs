@@ -18,6 +18,7 @@ mod doc_conversations;
 mod editor_settings;
 mod external_open;
 mod file_io;
+mod file_copy;
 mod file_move;
 mod font_catalog;
 mod fs_commands;
@@ -150,6 +151,7 @@ macro_rules! app_invoke_handler {
             save_sidebar_state,
             list_folder,
             create_folder,
+            copy_fs_entry,
             set_title,
             delete_fs_entry,
             rename_fs_entry,

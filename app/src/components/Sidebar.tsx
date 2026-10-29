@@ -17,6 +17,8 @@ export type SidebarContextTargetKind = 'standalone-file' | 'folder-root' | 'tree
 
 export type SidebarContextAction =
   | 'open'
+  | 'copy'
+  | 'paste'
   | 'remove'
   | 'delete'
   | 'rename'
@@ -39,6 +41,7 @@ export type SidebarProps = {
   onToggle: (path: string) => void
   onFileClick: (path: string) => void
   onDirClick?: (path: string) => void  // 文件夹点击回调（用于选中文件夹）
+  canPaste?: boolean
   onContextAction?: (payload: SidebarContextActionPayload) => void
   /** 顶部工具栏：在当前文件夹中新建文件 */
   onToolbarNewFileInCurrentFolder?: () => void
@@ -356,7 +359,39 @@ function InlineRenameRow({ level, isFolder, initialName, onConfirm, onCancel }: 
 }
 
 
-export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, onToggle, onFileClick, onDirClick, onContextAction, onToolbarNewFileInCurrentFolder, onToolbarNewFolderInCurrentFolder, onToolbarRefreshCurrentFolder, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel, inlineNewFolderDir, onInlineNewFolderConfirm, onInlineNewFolderCancel, inlineRenamePath, onInlineRenameConfirm, onInlineRenameCancel, activePath, panelWidth, highlightedPaths, onFileVisited, onRequestConfirmDeleteFileVirtualFolder, onMoveFile, onNotify }: SidebarProps) {
+export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, onToggle, onFileClick, onDirClick, onContextAction, canPaste = false, onToolbarNewFileInCurrentFolder, onToolbarNewFolderInCurrentFolder, onToolbarRefreshCurrentFolder, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel, inlineNewFolderDir, onInlineNewFolderConfirm, onInlineNewFolderCancel, inlineRenamePath, onInlineRenameConfirm, onInlineRenameCancel, activePath, panelWidth, highlightedPaths, onFileVisited, onRequestConfirmDeleteFileVirtualFolder, onMoveFile, onNotify }: SidebarProps) {
+  const keyboardTarget = useRef<{ path: string; kind: SidebarContextTargetKind } | null>(null)
+  const selectClipboardTarget = (event: React.MouseEvent<HTMLElement>) => {
+    const element = event.target as HTMLElement
+    if (element.closest('input, textarea, [contenteditable="true"]')) return
+    const row = element.closest<HTMLElement>('[data-file-source], [data-file-directory]')
+    if (!row) return
+    const directory = row.dataset.fileDirectory
+    const path = directory ?? row.dataset.fileSource!
+    keyboardTarget.current = { path, kind: directory
+      ? folderRoots.includes(path) ? 'folder-root' : 'tree-dir'
+      : standaloneFiles.some(file => file.path === path) ? 'standalone-file' : 'tree-file' }
+    event.currentTarget.focus({ preventScroll: true })
+  }
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || event.altKey || event.shiftKey
+        || !(event.ctrlKey || event.metaKey) || inlineRenamePath || inlineNewFileDir || inlineNewFolderDir) return
+      const active = document.activeElement as HTMLElement | null
+      if (!active?.closest('.sidebar') || active.closest('input, textarea, [contenteditable="true"]')) return
+      const key = event.key.toLowerCase()
+      if (key !== 'c' && key !== 'v') return
+      const target = keyboardTarget.current
+      if (!target || !onContextAction) return
+      event.preventDefault()
+      event.stopPropagation()
+      if (key === 'v' && !canPaste) return
+      onContextAction({ ...target, action: key === 'c' ? 'copy' : 'paste' })
+    }
+    // WebView2 的粘贴快捷键可能只到达 document，按焦点限制在文件浏览器内处理。
+    document.addEventListener('keydown', handleKeyDown, true)
+    return () => document.removeEventListener('keydown', handleKeyDown, true)
+  }, [canPaste, onContextAction, inlineRenamePath, inlineNewFileDir, inlineNewFolderDir])
   const dragHandlers = useFileTreeDragDrop({
     disabled: Boolean(inlineRenamePath || inlineNewFileDir || inlineNewFolderDir),
     expanded, expand: onToggle, move: onMoveFile, onError: onNotify,
@@ -752,7 +787,9 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
       {...dragHandlers}
       className="sidebar"
       style={asideStyle}
-      tabIndex={-1}
+      tabIndex={0}
+      onClickCapture={selectClipboardTarget}
+      onContextMenuCapture={selectClipboardTarget}
       onClick={closeMenu}
       onContextMenu={(e) => {
         e.preventDefault()
@@ -1116,7 +1153,9 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
               { id: 'open', label: t('sidebar.open'), onClick: () => triggerContextAction('open') },
               { id: 'open-in-file-manager', label: t('sidebar.openInFileManager'), onClick: () => triggerContextAction('open-in-file-manager') },
               { id: 'open-terminal', label: t('sidebar.openInTerminal'), onClick: () => triggerContextAction('open-terminal') },
-            ] as { id: string; label: string; onClick: () => void }[]
+              { id: 'copy', label: t('sidebar.copyEntry'), onClick: () => triggerContextAction('copy') },
+              { id: 'paste', label: t('sidebar.pasteEntry'), disabled: !canPaste, onClick: () => triggerContextAction('paste') },
+            ] as { id: string; label: string; disabled?: boolean; onClick: () => void }[]
 
             const isStandaloneFile = target.kind === 'standalone-file'
             const isFileTarget = target.kind === 'standalone-file' || target.kind === 'tree-file'

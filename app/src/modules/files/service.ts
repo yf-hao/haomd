@@ -322,6 +322,10 @@ export async function renameFsEntry(oldPath: string, newPath: string, traceId = 
   }
 }
 
+export async function copyFsEntry(sourcePath: string, targetDirectory: string): Promise<string> {
+  return invoke<string>('copy_fs_entry', { sourcePath, targetDirectory })
+}
+
 export async function createFolder(path: string, traceId = makeTraceId()): Promise<Result<null>> {
   if (!isTauri()) return notAvailable(traceId)
   try {

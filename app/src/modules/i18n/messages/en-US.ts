@@ -368,6 +368,11 @@ export const enUSMessages: MessageDictionary = {
     imageGenerationFailed: 'Image generation failed',
   },
   sidebar: {
+    copyEntry: 'Copy',
+    pasteEntry: 'Paste',
+    entryCopied: 'Copied. Choose a destination folder to paste.',
+    pasting: 'Pasting…',
+    entryPasted: 'Paste complete',
     fileBrowser: 'File Browser',
     files: 'Files',
     folders: 'Folders',

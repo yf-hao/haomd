@@ -161,6 +161,15 @@ pub async fn rename_fs_entry(
 }
 
 #[tauri::command]
+pub async fn copy_fs_entry(source_path: String, target_directory: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::file_copy::copy_entry(Path::new(&source_path), Path::new(&target_directory))
+            .map(|path| path.to_string_lossy().into_owned())
+            .map_err(|error| format!("复制失败: {error}"))
+    }).await.map_err(|error| format!("复制任务失败: {error}"))?
+}
+
+#[tauri::command]
 pub async fn create_folder(
     _app: AppHandle,
     path: String,

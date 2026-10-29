@@ -814,6 +814,12 @@
   color: #ffffff;
 }
 
+.sidebar-context-menu button:disabled {
+  opacity: 0.45;
+  cursor: default;
+  pointer-events: none;
+}
+
 .sidebar-context-menu button:focus {
   outline: none;
 }

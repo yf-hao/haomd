@@ -6,6 +6,7 @@ export type FileContextMenuItem = {
   label: string
   onClick: () => void | Promise<void>
   visible?: boolean
+  disabled?: boolean
 }
 
 export type FileContextMenuProps = {
@@ -96,6 +97,7 @@ export function FileContextMenu({ x, y, items, onRequestClose }: FileContextMenu
           key={item.id}
           type="button"
           role="menuitem"
+          disabled={item.disabled}
           onClick={() => {
             void item.onClick()
           }}

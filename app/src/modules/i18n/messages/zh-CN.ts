@@ -367,6 +367,11 @@ export const zhCNMessages: MessageDictionary = {
     imageGenerationFailed: '图片生成失败',
   },
   sidebar: {
+    copyEntry: '复制',
+    pasteEntry: '粘贴',
+    entryCopied: '已复制，可在目标文件夹中粘贴',
+    pasting: '正在粘贴…',
+    entryPasted: '粘贴完成',
     fileBrowser: '文件浏览器',
     files: '文件',
     folders: '文件夹',
