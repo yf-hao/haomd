@@ -301,12 +301,20 @@
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
+  overscroll-behavior-y: none;
+  /* History prepending restores its own message anchor; don't let the browser compensate too. */
+  overflow-anchor: none;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 
-.ai-chat-messages-scroll.ai-chat-messages-scroll-virtualized {
-  overflow-anchor: none;
+/* Chat history cannot use skipped-content placeholders: switching between an
+   intrinsic placeholder height and the real Markdown height moves the reader. */
+.ai-chat-messages-scroll .ai-chat-message,
+.ai-chat-messages-scroll .markdown-body.gh-markdown > *,
+.ai-chat-messages-scroll .markdown-body.gh-markdown .markdown-block-chunk {
+  content-visibility: visible;
+  contain-intrinsic-size: none;
 }
 
 .ai-chat-messages-scroll::-webkit-scrollbar {

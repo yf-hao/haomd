@@ -36,6 +36,11 @@ export const zhCNMessages: MessageDictionary = {
     appearanceDescription: '选择HaoMD的界面主题。`System` 会跟随系统外观。',
   },
   performance: {
+    aiChatRendering: 'AI Chat 聊天记录渲染',
+    aiChatStable: '稳定模式（默认）：分批加载历史消息，优先保证滚动稳定。',
+    aiChatPerformance: '性能模式（实验性）：仅渲染可见区域附近的消息，降低长对话的渲染开销。',
+    aiChatRenderingHint: '若浏览历史消息时出现上下跳动，请使用稳定模式。',
+
     title: '性能',
     description: '调节大文档相关的实验性性能行为。',
     experimentalPreviewOptimization: '启用实验性预览优化',
@@ -346,6 +351,7 @@ export const zhCNMessages: MessageDictionary = {
     openResultFailed: '打开搜索结果失败。',
   },
   ai: {
+    loadEarlier: '加载更早的消息',
     copyMarkdown: '复制为 Markdown',
     insertIntoEditor: '插入到编辑器',
     agentModeChat: '聊天',

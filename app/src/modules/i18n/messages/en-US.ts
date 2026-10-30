@@ -36,6 +36,11 @@ export const enUSMessages: MessageDictionary = {
     appearanceDescription: 'Choose how HaoMD should appear. `System` follows the OS appearance.',
   },
   performance: {
+    aiChatRendering: 'AI Chat message rendering',
+    aiChatStable: 'Stable (default): load history in batches for stable scrolling.',
+    aiChatPerformance: 'Performance (experimental): render nearby messages to reduce long-conversation rendering costs.',
+    aiChatRenderingHint: 'If scrolling through history jumps, use Stable mode.',
+
     title: 'Performance',
     description: 'Tune experimental performance behavior for large documents.',
     experimentalPreviewOptimization: 'Enable experimental preview optimization',
@@ -347,6 +352,7 @@ export const enUSMessages: MessageDictionary = {
     openResultFailed: 'Failed to open search result.',
   },
   ai: {
+    loadEarlier: 'Load earlier messages',
     copyMarkdown: 'Copy as Markdown',
     insertIntoEditor: 'Insert into editor',
     agentModeChat: 'Chat',

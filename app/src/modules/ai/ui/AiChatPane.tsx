@@ -1,5 +1,7 @@
+import { chatScrollController } from './chatScrollController'
+import { chatScrollDebug } from './chatScrollDebug'
 import type { FC, FormEvent, KeyboardEvent } from 'react'
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ChatEntryMode, ChatMessageView, ConversationState, EntryContext } from '../domain/chatSession'
 import { getDirKeyFromDocPath, normalizePersistableDocPath } from '../domain/docPathUtils'
 import type { AiChatSessionKey } from '../application/aiChatSessionService'
@@ -182,11 +184,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const paneRootRef = useRef<HTMLElement>(null)
   const shouldAutoScrollRef = useRef(true)
-  const programmaticScrollRef = useRef(false)
-  const lastScrollTopRef = useRef(0)
   const pendingInitialScrollRef = useRef(true)
-  const pendingScrollRafRef = useRef<number | null>(null)
-  const lastTouchYRef = useRef<number | null>(null)
   const isComposingRef = useRef(false)
   const lockEnterRef = useRef(false)
   const unlockEnterFrameRef = useRef<number | null>(null)
@@ -1349,88 +1347,41 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
   const hasLocalBackground = Boolean(themeSettings.aiChatBackground?.enabled && themeSettings.aiChatBackground?.path)
 
   const scrollMessagesToBottom = () => {
-    if (pendingScrollRafRef.current !== null) return
-    pendingScrollRafRef.current = requestAnimationFrame(() => {
-      pendingScrollRafRef.current = null
-      const el = messagesContainerRef.current
-      if (!el) return
-      programmaticScrollRef.current = true
-      el.scrollTop = el.scrollHeight
-      lastScrollTopRef.current = el.scrollTop
-      requestAnimationFrame(() => {
-        programmaticScrollRef.current = false
-      })
-    })
+    const container = messagesContainerRef.current
+    if (container) chatScrollController(container).scheduleBottom()
   }
 
-  useEffect(() => {
-    const el = messagesContainerRef.current
-    if (!el) return
-
-    const updateAutoScroll = () => {
-      const currentScrollTop = el.scrollTop
-      const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-      if (distanceToBottom <= 24) {
-        shouldAutoScrollRef.current = true
-      }
-      lastScrollTopRef.current = currentScrollTop
-    }
-
-    const handleWheel = (event: WheelEvent) => {
-      if (programmaticScrollRef.current) return
-      if (event.deltaY < 0) {
-        shouldAutoScrollRef.current = false
-      }
-    }
-
-    const handleTouchStart = (event: TouchEvent) => {
-      const touch = event.touches[0]
-      lastTouchYRef.current = touch?.clientY ?? null
-    }
-
-    const handleTouchMove = (event: TouchEvent) => {
-      if (programmaticScrollRef.current) return
-      const touch = event.touches[0]
-      if (!touch) return
-      const previousY = lastTouchYRef.current
-      lastTouchYRef.current = touch.clientY
-      if (previousY == null) return
-      if (touch.clientY - previousY > 4) {
-        shouldAutoScrollRef.current = false
-      }
-    }
-
-    updateAutoScroll()
-    el.addEventListener('scroll', updateAutoScroll, { passive: true })
-    el.addEventListener('wheel', handleWheel, { passive: true })
-    el.addEventListener('touchstart', handleTouchStart, { passive: true })
-    el.addEventListener('touchmove', handleTouchMove, { passive: true })
-    return () => {
-      el.removeEventListener('scroll', updateAutoScroll)
-      el.removeEventListener('wheel', handleWheel)
-      el.removeEventListener('touchstart', handleTouchStart)
-      el.removeEventListener('touchmove', handleTouchMove)
-    }
-  }, [sessionKey])
+  useLayoutEffect(() => {
+    const container = messagesContainerRef.current
+    if (container) return chatScrollController(container).attach(shouldAutoScrollRef)
+  }, [sessionKey, fullPage])
 
   useEffect(() => {
     shouldAutoScrollRef.current = true
-    lastScrollTopRef.current = 0
     pendingInitialScrollRef.current = true
   }, [sessionKey, fullPage])
 
   useEffect(() => {
     if (!pendingInitialScrollRef.current) return
     if (messages.length === 0) return
+    const container = messagesContainerRef.current
+    const controller = container ? chatScrollController(container) : null
+    const interactionVersion = controller?.userInteractionVersion
 
     const scrollToBottom = () => {
+      if (interactionVersion !== controller?.userInteractionVersion || !shouldAutoScrollRef.current) {
+        chatScrollDebug('initial bottom scroll cancelled', container, { capturedInteractionVersion: interactionVersion, currentInteractionVersion: controller?.userInteractionVersion, follow: shouldAutoScrollRef.current })
+        pendingInitialScrollRef.current = false
+        return
+      }
       scrollMessagesToBottom()
+      chatScrollDebug('initial bottom scroll scheduled', container, { messageCount: messages.length, lastMessageKey })
       pendingInitialScrollRef.current = false
     }
 
-    requestAnimationFrame(() => {
-      requestAnimationFrame(scrollToBottom)
-    })
+    let second: number | null = null
+    const first = requestAnimationFrame(() => { second = requestAnimationFrame(scrollToBottom) })
+    return () => { cancelAnimationFrame(first); if (second !== null) cancelAnimationFrame(second) }
   }, [sessionKey, fullPage, messages.length, lastMessageKey])
 
   useEffect(() => {
@@ -1439,8 +1390,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
   }, [lastMessageKey])
 
   useEffect(() => {
-    if (!latestStreamingAssistantId) return
-    shouldAutoScrollRef.current = true
+    if (!latestStreamingAssistantId || !shouldAutoScrollRef.current) return
     scrollMessagesToBottom()
   }, [latestStreamingAssistantId])
 
@@ -1452,6 +1402,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
 
     const observer = new ResizeObserver(() => {
       if (!shouldAutoScrollRef.current) return
+      chatScrollDebug('pane content resize schedules bottom', scrollContainer, { contentHeight: content.getBoundingClientRect().height })
       scrollMessagesToBottom()
     })
 

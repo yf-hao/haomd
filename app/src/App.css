@@ -3860,6 +3860,9 @@ button:disabled {
   min-height: 0;
   height: 100%;
   overflow-y: auto;
+  overscroll-behavior-y: none;
+  /* Chat history uses one explicit anchor-restoration path in both render modes. */
+  overflow-anchor: none;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -4019,6 +4022,7 @@ button:disabled {
   min-height: 0;
   height: 100%;
   overflow-y: auto;
+  overscroll-behavior-y: none;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }

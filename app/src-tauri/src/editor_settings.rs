@@ -151,6 +151,8 @@ pub struct SearchSettingsCfg {
 #[serde(rename_all = "camelCase")]
 pub struct PerformanceSettingsCfg {
     #[serde(default)]
+    pub ai_chat_virtualization: Option<bool>,
+    #[serde(default)]
     pub experimental_preview_optimization: Option<bool>,
 }
 
@@ -218,6 +220,7 @@ pub fn default_editor_settings() -> EditorSettingsCfg {
             parallel_scan_workers: None,
         }),
         performance: Some(PerformanceSettingsCfg {
+            ai_chat_virtualization: Some(false),
             experimental_preview_optimization: Some(false),
         }),
         extra: HashMap::new(),

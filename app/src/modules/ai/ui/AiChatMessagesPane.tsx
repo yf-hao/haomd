@@ -4,7 +4,7 @@ import { MarkdownViewer } from '../../../components/MarkdownViewer'
 import type { ChatMessageView } from '../domain/chatSession'
 import type { AssistantToolExecutionView } from '../domain/chatSession'
 import type { EphemeralAiChatMessage, EphemeralImageGenerationResultMessage } from './imageGenerationEphemeral'
-import { AiChatVirtualMessageList, AI_CHAT_VIRTUALIZATION_THRESHOLD } from './AiChatVirtualMessageList'
+import { AiChatVirtualMessageList } from './AiChatVirtualMessageList'
 
 export type MessageViewMode = 'rendered' | 'source'
 
@@ -33,6 +33,10 @@ export type AiChatMessagesPaneProps = {
   visibleMessages: ChatMessageView[]
   renderedMessages: ChatMessageView[]
   ephemeralMessages: EphemeralAiChatMessage[]
+  onLoadEarlier?: () => void
+  loadEarlierLabel?: string
+  virtualized?: boolean
+  initialAnchor?: { id: string; top: number } | null
   initialScrollKey?: string
   loading: boolean
   isResizing: boolean
@@ -132,7 +136,7 @@ const AiChatMessageItem = memo(({
   const showToolExecutions = toolExecutions.length > 0
 
   return (
-    <div className={`ai-chat-message ai-chat-message-${msg.role}`}>
+    <div data-chat-message-id={msg.id} className={`ai-chat-message ai-chat-message-${msg.role}`}>
       {msg.source === 'summary-preserved' && (
         <div className="ai-chat-message-badge ai-chat-message-badge-summary-preserved">
           {summaryPreservedUserInputLabel}
@@ -223,6 +227,10 @@ export const AiChatMessagesPane = memo(({
   renderedMessages,
   ephemeralMessages,
   initialScrollKey,
+  onLoadEarlier,
+  loadEarlierLabel,
+  virtualized = false,
+  initialAnchor,
   loading,
   isResizing,
   aiChatBackgroundUrl,
@@ -338,18 +346,21 @@ export const AiChatMessagesPane = memo(({
         </>
       ) : null}
       <div
-        className={`ai-chat-messages-scroll ${visibleMessages.length > AI_CHAT_VIRTUALIZATION_THRESHOLD ? 'ai-chat-messages-scroll-virtualized' : ''}`}
+        className={`ai-chat-messages-scroll ${virtualized ? 'ai-chat-messages-scroll-virtualized' : ''}`}
         ref={messagesContainerRef}
       >
         <div className="ai-chat-messages-content">
+          {onLoadEarlier && <button type="button" onClick={onLoadEarlier}>{loadEarlierLabel}</button>}
           {visibleMessages.length === 0 && !loading && (
             <div className="ai-chat-empty muted small"></div>
           )}
-          {visibleMessages.length > AI_CHAT_VIRTUALIZATION_THRESHOLD ? (
+          {virtualized ? (
             <AiChatVirtualMessageList
+              key={initialScrollKey}
               messages={visibleMessages}
               containerRef={messagesContainerRef}
               renderMessage={renderMessage}
+              initialAnchor={initialAnchor}
               initialScrollKey={initialScrollKey}
             />
           ) : (

@@ -1,3 +1,7 @@
+import { getPerformanceSettings } from '../../settings/editorSettings'
+import { subscribePerformanceSettingsChanged } from '../../settings/performanceRuntime'
+import { chatScrollController } from './chatScrollController'
+import { chatScrollDebug } from './chatScrollDebug'
 import type {
   FC,
   FormEvent,
@@ -6,7 +10,7 @@ import type {
   RefObject,
   CSSProperties,
 } from 'react'
-import { Profiler, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Profiler, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ChatMessageView } from '../domain/chatSession'
 import type { VisionMode, UploadedFileRef } from '../domain/types'
 import type {
@@ -89,8 +93,17 @@ export interface AiChatBodyProps {
   fullPage?: boolean
 }
 
-const INITIAL_HISTORY_RENDER_COUNT = 5
-const HISTORY_RENDER_INCREMENT = 10
+const INITIAL_VISIBLE_HISTORY_COUNT = 10
+const HISTORY_PRELOAD_COUNT = 20
+const HISTORY_RENDER_INCREMENT = 20
+const INITIAL_HISTORY_RENDER_COUNT = INITIAL_VISIBLE_HISTORY_COUNT + HISTORY_PRELOAD_COUNT
+
+type ChatReadingAnchor = {
+  id: string
+  top: number
+  rowTop: number
+  element: HTMLElement
+}
 
 export const AiChatBody: FC<AiChatBodyProps> = ({
   messages,
@@ -148,7 +161,12 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
   const { t } = useI18n()
   const [messageViewModes, setMessageViewModes] = useState<Record<string, MessageViewMode>>({})
   const [renderCount, setRenderCount] = useState(INITIAL_HISTORY_RENDER_COUNT)
-  const pendingPrependDeltaRef = useRef<number | null>(null)
+  const [virtualizationEnabled, setVirtualizationEnabled] = useState(false)
+  const modeRef = useRef(false)
+  const [switchAnchor, setSwitchAnchor] = useState<{ id: string; top: number } | null>(null)
+  const pendingModeRestore = useRef(false)
+  const pendingPrependDeltaRef = useRef<ChatReadingAnchor | null>(null)
+  const readingAnchorRef = useRef<ChatReadingAnchor | null>(null)
   const aiChatBackground = useMemo(
     () => resolveAiChatEffectiveBackground(themeSettings),
     [themeSettings],
@@ -164,6 +182,57 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
       }),
     [messages],
   )
+  const visibleRef = useRef(visibleMessages)
+  visibleRef.current = visibleMessages
+  const virtualized = virtualizationEnabled && visibleMessages.length > AI_CHAT_VIRTUALIZATION_THRESHOLD
+  useEffect(() => {
+    let active = true
+    let changed = false
+    const apply = (enabled: boolean) => {
+      if (!active || modeRef.current === enabled) return
+      const container = messagesContainerRef.current
+      let anchor: { id: string; top: number } | null = null
+      if (container) {
+        const controller = chatScrollController(container)
+        controller.cancel()
+        if (!controller.follow.current) {
+          const rect = container.getBoundingClientRect()
+          const row = Array.from(container.querySelectorAll<HTMLElement>('[data-chat-message-id]'))
+            .find(element => element.getBoundingClientRect().bottom > rect.top)
+          if (row) anchor = { id: row.dataset.chatMessageId!, top: row.getBoundingClientRect().top - rect.top }
+        }
+      }
+      if (anchor && !enabled) {
+        const index = visibleRef.current.findIndex(message => message.id === anchor!.id)
+        if (index >= 0) setRenderCount(count => Math.max(count, visibleRef.current.length - index + 1))
+      }
+      setSwitchAnchor(anchor)
+      pendingModeRestore.current = true
+      modeRef.current = enabled
+      setVirtualizationEnabled(enabled)
+    }
+    const unsubscribe = subscribePerformanceSettingsChanged(settings => {
+      changed = true
+      apply(settings.aiChatVirtualization === true)
+    })
+    void getPerformanceSettings().then(settings => { if (!changed) apply(settings.aiChatVirtualization === true) })
+    return () => { active = false; unsubscribe() }
+  }, [messagesContainerRef])
+
+  useLayoutEffect(() => {
+    if (!pendingModeRestore.current) return
+    pendingModeRestore.current = false
+    const container = messagesContainerRef.current
+    if (!container) return
+    const controller = chatScrollController(container)
+    if (controller.follow.current) { controller.scheduleBottom(); return }
+    if (!virtualized && switchAnchor) {
+      const row = Array.from(container.querySelectorAll<HTMLElement>('[data-chat-message-id]'))
+        .find(element => element.dataset.chatMessageId === switchAnchor.id)
+      if (row) controller.write(container.scrollTop + row.getBoundingClientRect().top - container.getBoundingClientRect().top - switchAnchor.top)
+    }
+  }, [virtualizationEnabled, virtualized, switchAnchor, messagesContainerRef])
+
   const latestDynamicAssistantId = useMemo(() => {
     if (activeDisplayAssistantId) return activeDisplayAssistantId
     return [...visibleMessages]
@@ -174,35 +243,158 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
     if (visibleMessages.length <= renderCount) return visibleMessages
     return visibleMessages.slice(-renderCount)
   }, [visibleMessages, renderCount])
+
+  useEffect(() => {
+    chatScrollDebug('history rows committed', messagesContainerRef.current, {
+      historyIdentity,
+      visibleCount: visibleMessages.length,
+      renderCount,
+      renderedCount: renderedMessages.length,
+      firstRenderedId: renderedMessages[0]?.id,
+      lastRenderedId: renderedMessages.at(-1)?.id,
+      virtualized,
+    })
+  }, [historyIdentity, messagesContainerRef, renderCount, renderedMessages, virtualized, visibleMessages.length])
+
+  const captureReadingAnchor = useCallback((container: HTMLElement) => {
+    const bounds = container.getBoundingClientRect()
+    const row = Array.from(container.querySelectorAll<HTMLElement>('[data-chat-message-id]'))
+      .find(element => {
+        const rect = element.getBoundingClientRect()
+        return rect.bottom > bounds.top && rect.top < bounds.bottom
+      })
+    if (!row) return null
+    const rowBounds = row.getBoundingClientRect()
+    const probeY = Math.min(bounds.bottom - 1, Math.max(bounds.top + 1, rowBounds.top + 1))
+    const hit = document.elementFromPoint(bounds.left + bounds.width / 2, probeY)
+    const visibleBlock = hit instanceof HTMLElement && row.contains(hit)
+      ? hit.closest<HTMLElement>('pre, p, li, img, table, blockquote, h1, h2, h3, h4, h5, h6')
+      : null
+    const element = visibleBlock ?? row
+    const anchor = {
+      id: row.dataset.chatMessageId!,
+      top: element.getBoundingClientRect().top - bounds.top,
+      rowTop: row.getBoundingClientRect().top - bounds.top,
+      element,
+    }
+    readingAnchorRef.current = anchor
+    return anchor
+  }, [])
+
+  // Keep the reader's visible message fixed while Markdown, code blocks, or images
+  // finish changing the heights of messages above it.
+  useEffect(() => {
+    const container = messagesContainerRef.current
+    if (!container || typeof ResizeObserver === 'undefined') return
+    let frame: number | null = null
+    const observed = new WeakSet<Element>()
+    const resize = new ResizeObserver(entries => {
+      const anchor = readingAnchorRef.current
+      chatScrollDebug('message rows resized', container, {
+        rows: entries.map(entry => ({
+          id: (entry.target as HTMLElement).dataset.chatMessageId,
+          height: Math.round(entry.contentRect.height * 10) / 10,
+        })),
+        anchorId: anchor?.id,
+        anchorElement: anchor?.element.tagName.toLowerCase(),
+      })
+      if (frame !== null) return
+      frame = requestAnimationFrame(() => {
+        frame = null
+        const anchor = readingAnchorRef.current
+        const controller = chatScrollController(container)
+        if (!anchor || controller.follow.current) return
+        const row = Array.from(container.querySelectorAll<HTMLElement>('[data-chat-message-id]'))
+          .find(element => element.dataset.chatMessageId === anchor.id)
+        if (!row) return
+        const hasAnchorElement = anchor.element.isConnected && row.contains(anchor.element)
+        const element = hasAnchorElement ? anchor.element : row
+        const top = element.getBoundingClientRect().top - container.getBoundingClientRect().top
+        const expectedTop = hasAnchorElement ? anchor.top : anchor.rowTop
+        const delta = top - expectedTop
+        if (Math.abs(delta) >= 0.5) {
+          chatScrollDebug('message resize anchor compensation', container, { id: anchor.id, anchorElement: `${element.tagName.toLowerCase()}${element.className && typeof element.className === 'string' ? `.${element.className.trim().replace(/\s+/g, '.')}` : ''}`, previousTop: anchor.top, currentTop: top, delta, follow: controller.follow.current })
+          controller.write(container.scrollTop + delta, 'AiChatBody.ResizeObserver')
+        }
+        readingAnchorRef.current = {
+          id: anchor.id,
+          top: element.getBoundingClientRect().top - container.getBoundingClientRect().top,
+          rowTop: row.getBoundingClientRect().top - container.getBoundingClientRect().top,
+          element,
+        }
+      })
+    })
+    const observeRows = () => {
+      for (const row of container.querySelectorAll('[data-chat-message-id]')) {
+        if (observed.has(row)) continue
+        observed.add(row)
+        resize.observe(row)
+      }
+    }
+    observeRows()
+    const mutations = new MutationObserver(observeRows)
+    mutations.observe(container, { childList: true, subtree: true })
+    return () => {
+      mutations.disconnect()
+      resize.disconnect()
+      if (frame !== null) cancelAnimationFrame(frame)
+    }
+  }, [messagesContainerRef])
+
   useEffect(() => {
     setRenderCount(INITIAL_HISTORY_RENDER_COUNT)
     pendingPrependDeltaRef.current = null
+    readingAnchorRef.current = null
+    setSwitchAnchor(null)
   }, [historyIdentity])
+
+  const loadEarlier = useCallback(() => {
+    const el = messagesContainerRef.current
+    if (!el || virtualized || visibleMessages.length <= renderCount || pendingPrependDeltaRef.current) return
+    const anchor = captureReadingAnchor(el)
+    chatScrollDebug('load earlier batch', el, { renderCount, nextRenderCount: Math.min(visibleMessages.length, renderCount + HISTORY_RENDER_INCREMENT), visibleCount: visibleMessages.length, anchor })
+    if (anchor) pendingPrependDeltaRef.current = anchor
+    chatScrollController(el).pause()
+    // Rendering a batch of Markdown messages can block wheel events. Let React
+    // yield to scrolling while it prepares the older rows.
+    startTransition(() => {
+      setRenderCount(prev => Math.min(visibleMessages.length, prev + HISTORY_RENDER_INCREMENT))
+    })
+  }, [captureReadingAnchor, messagesContainerRef, renderCount, visibleMessages.length, virtualized])
 
   useEffect(() => {
     const el = messagesContainerRef.current
     if (!el) return
-
-    const handleScroll = () => {
-      if (el.scrollTop > 80) return
-      if (visibleMessages.length > AI_CHAT_VIRTUALIZATION_THRESHOLD) return
-      if (visibleMessages.length <= renderCount) return
-      pendingPrependDeltaRef.current = el.scrollHeight
-      setRenderCount((prev) => Math.min(visibleMessages.length, prev + HISTORY_RENDER_INCREMENT))
+    const scroll = () => {
+      const anchor = captureReadingAnchor(el)
+      if (anchor) readingAnchorRef.current = anchor
+      if (virtualized || chatScrollController(el).follow.current || visibleMessages.length <= renderCount) return
+      const preloadedRows = Array.from(el.querySelectorAll<HTMLElement>('[data-chat-message-id]'))
+        .slice(0, HISTORY_PRELOAD_COUNT)
+      const preloadHeight = preloadedRows.reduce((height, row) => height + row.getBoundingClientRect().height, 0)
+      if (preloadedRows.length > 0 && el.scrollTop <= preloadHeight) loadEarlier()
     }
-
-    el.addEventListener('scroll', handleScroll, { passive: true })
-    return () => {
-      el.removeEventListener('scroll', handleScroll)
-    }
-  }, [messagesContainerRef, renderCount, visibleMessages.length])
+    el.addEventListener('scroll', scroll, { passive: true })
+    return () => el.removeEventListener('scroll', scroll)
+  }, [captureReadingAnchor, messagesContainerRef, loadEarlier])
 
   useLayoutEffect(() => {
-    const previousScrollHeight = pendingPrependDeltaRef.current
+    const capturedAnchor = pendingPrependDeltaRef.current
     const el = messagesContainerRef.current
-    if (!el || previousScrollHeight == null) return
-    const delta = el.scrollHeight - previousScrollHeight
-    el.scrollTop += delta
+    if (!el || !capturedAnchor) return
+    // Scrolling can continue while a concurrent render is in progress. Restore
+    // the latest reader anchor instead of the position captured at batch start.
+    const anchor = readingAnchorRef.current ?? capturedAnchor
+    const row = Array.from(el.querySelectorAll<HTMLElement>('[data-chat-message-id]'))
+      .find(element => element.dataset.chatMessageId === anchor.id)
+    if (row) {
+      const hasAnchorElement = anchor.element.isConnected && row.contains(anchor.element)
+      const element = hasAnchorElement ? anchor.element : row
+      const actualTop = element.getBoundingClientRect().top - el.getBoundingClientRect().top
+      const delta = actualTop - (hasAnchorElement ? anchor.top : anchor.rowTop)
+      chatScrollDebug('prepend anchor compensation', el, { id: anchor.id, capturedId: capturedAnchor.id, capturedTop: capturedAnchor.top, expectedTop: anchor.top, actualTop, delta, renderCount })
+      chatScrollController(el).write(el.scrollTop + delta, 'AiChatBody.prependRestore')
+    }
     pendingPrependDeltaRef.current = null
   }, [renderCount, messagesContainerRef])
 
@@ -244,6 +436,10 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
           visibleMessages={visibleMessages}
           renderedMessages={renderedMessages}
           ephemeralMessages={ephemeralMessages}
+          onLoadEarlier={!virtualized && renderCount < visibleMessages.length ? loadEarlier : undefined}
+          loadEarlierLabel={t('ai.loadEarlier')}
+          virtualized={virtualized}
+          initialAnchor={switchAnchor}
           initialScrollKey={historyIdentity}
           loading={loading}
           isResizing={isResizing}

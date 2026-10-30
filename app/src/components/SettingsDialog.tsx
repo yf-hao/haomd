@@ -1866,6 +1866,19 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                     <div className="settings-panel-description">{t('performance.description')}</div>
                   </div>
 
+                  <fieldset className="settings-subgroup">
+                    <legend>{t('performance.aiChatRendering')}</legend>
+                    {[false, true].map(enabled => (
+                      <label key={String(enabled)} className="settings-checkbox-label">
+                        <input type="radio" name="ai-chat-rendering"
+                          checked={Boolean(performanceSettings.aiChatVirtualization) === enabled}
+                          onChange={() => setPerformanceSettings(prev => ({ ...prev, aiChatVirtualization: enabled }))} />
+                        <span>{t(enabled ? 'performance.aiChatPerformance' : 'performance.aiChatStable')}</span>
+                      </label>
+                    ))}
+                    <div className="settings-panel-description">{t('performance.aiChatRenderingHint')}</div>
+                  </fieldset>
+
                   <div className="settings-subgroup">
                     <div style={{ display: 'grid', gap: 14 }}>
                       <label className="settings-checkbox-label">

@@ -1,3 +1,5 @@
+import { chatScrollController } from './chatScrollController'
+import { chatScrollDebug } from './chatScrollDebug'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import type { ChatMessageView } from '../domain/chatSession'
 import { prefetchMarkdownPreviews } from '../../markdown/markdownPreviewWorkerClient'
@@ -23,6 +25,7 @@ type VirtualMessageListProps = {
   messages: ChatMessageView[]
   containerRef: RefObject<HTMLDivElement>
   renderMessage: (message: ChatMessageView) => ReactNode
+  initialAnchor?: { id: string; top: number } | null
   initialScrollKey?: string
 }
 
@@ -48,11 +51,13 @@ export function AiChatVirtualMessageList({
   containerRef,
   renderMessage,
   initialScrollKey = 'ai-chat',
+  initialAnchor,
 }: VirtualMessageListProps) {
   const rowElementsRef = useRef(new Map<string, HTMLElement>())
   const scrollFrameRef = useRef<number | null>(null)
-  const pinToBottomRef = useRef(false)
-  const lastScrollTopRef = useRef(0)
+  const listRef = useRef<HTMLDivElement>(null)
+  const positionsRef = useRef<MessagePosition[]>([])
+  const heightsRef = useRef(new Map<string, number>())
   const scrollAnchorRef = useRef<ScrollAnchor | null>(null)
   const [viewport, setViewport] = useState({ scrollTop: 0, height: 0 })
   const [measuredHeights, setMeasuredHeights] = useState(() => new Map<string, number>())
@@ -74,21 +79,12 @@ export function AiChatVirtualMessageList({
   }, [containerRef])
 
   const captureScrollAnchor = useCallback(() => {
-    if (pinToBottomRef.current || scrollAnchorRef.current) return
-
     const container = containerRef.current
-    if (!container) return
-
-    const containerRect = container.getBoundingClientRect()
-    for (const [id, element] of rowElementsRef.current) {
-      const rect = element.getBoundingClientRect()
-      if (rect.bottom <= containerRect.top || rect.top >= containerRect.bottom) continue
-      scrollAnchorRef.current = {
-        id,
-        top: rect.top - containerRect.top,
-      }
-      return
-    }
+    const list = listRef.current
+    if (!container || !list || chatScrollController(container).follow.current || scrollAnchorRef.current) return
+    const origin = list.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop
+    const position = positionsRef.current.find(row => origin + row.top + row.height > container.scrollTop)
+    if (position) scrollAnchorRef.current = { id: position.id, top: origin + position.top - container.scrollTop }
   }, [containerRef])
 
   useEffect(() => {
@@ -96,11 +92,8 @@ export function AiChatVirtualMessageList({
     if (!container) return
 
     const handleScroll = () => {
-      const nextScrollTop = container.scrollTop
-      const isScrollingUp = nextScrollTop < lastScrollTopRef.current - 0.5
-      pinToBottomRef.current = !isScrollingUp
-        && container.scrollHeight - nextScrollTop - container.clientHeight <= 80
-      lastScrollTopRef.current = nextScrollTop
+      // A fresh user position supersedes any pending compensation anchor.
+      scrollAnchorRef.current = null
       if (scrollFrameRef.current !== null) return
       scrollFrameRef.current = window.requestAnimationFrame(() => {
         scrollFrameRef.current = null
@@ -113,7 +106,21 @@ export function AiChatVirtualMessageList({
 
     let resizeObserver: ResizeObserver | null = null
     if (typeof ResizeObserver !== 'undefined') {
-      resizeObserver = new ResizeObserver(updateViewport)
+      let width = container.clientWidth
+      resizeObserver = new ResizeObserver(() => {
+        if (Math.abs(container.clientWidth - width) > 1) {
+          width = container.clientWidth
+          captureScrollAnchor()
+          const next = new Map<string, number>()
+          for (const [id, element] of rowElementsRef.current) {
+            const height = element.getBoundingClientRect().height
+            if (height > 0) next.set(id, height)
+          }
+          heightsRef.current = next
+          setMeasuredHeights(next)
+        }
+        updateViewport()
+      })
       resizeObserver.observe(container)
     }
 
@@ -125,7 +132,7 @@ export function AiChatVirtualMessageList({
         scrollFrameRef.current = null
       }
     }
-  }, [containerRef, updateViewport])
+  }, [containerRef, updateViewport, captureScrollAnchor])
 
   const positions = useMemo(() => {
     return messages.reduce<MessagePosition[]>((result, message) => {
@@ -142,7 +149,10 @@ export function AiChatVirtualMessageList({
     : 0
   const viewportHeight = viewport.height || MIN_OVERSCAN_HEIGHT
   const isInitialScrollPending = initializedScrollKey !== initialScrollKey
-  const effectiveScrollTop = isInitialScrollPending
+    && (!containerRef.current || chatScrollController(containerRef.current).follow.current)
+  const anchorPosition = initializedScrollKey !== initialScrollKey && initialAnchor
+    ? positions.find(row => row.id === initialAnchor.id) : undefined
+  const effectiveScrollTop = anchorPosition && initialAnchor ? Math.max(0, anchorPosition.top - initialAnchor.top) : isInitialScrollPending
     ? Math.max(0, totalHeight - viewportHeight)
     : viewport.scrollTop
   const overscan = Math.max(MIN_OVERSCAN_HEIGHT, viewportHeight * OVERSCAN_VIEWPORT_MULTIPLIER)
@@ -168,75 +178,72 @@ export function AiChatVirtualMessageList({
       && messages.length > 0
       && initializedScrollKey !== initialScrollKey
     ) {
-      container.scrollTop = Math.max(0, totalHeight - container.clientHeight)
+      if (chatScrollController(container).follow.current) {
+        chatScrollDebug('virtual list initial bottom', container, { totalHeight, messageCount: messages.length })
+        chatScrollController(container).write(Math.max(0, totalHeight - container.clientHeight), 'VirtualList.initialBottom')
+      }
+      if (anchorPosition && initialAnchor && !chatScrollController(container).follow.current) {
+        chatScrollDebug('virtual list initial anchor restore', container, { id: initialAnchor.id, anchorPosition: anchorPosition.top, anchorTop: initialAnchor.top })
+        chatScrollController(container).write(Math.max(0, anchorPosition.top - initialAnchor.top), 'VirtualList.initialAnchor')
+      }
       setInitializedScrollKey(initialScrollKey)
-      pinToBottomRef.current = true
-      lastScrollTopRef.current = container.scrollTop
-      scrollAnchorRef.current = null
+      scrollAnchorRef.current = !chatScrollController(container).follow.current ? initialAnchor ?? null : null
       updateViewport()
     }
-  }, [containerRef, initialScrollKey, initializedScrollKey, messages.length, totalHeight, updateViewport])
+  }, [containerRef, initialScrollKey, initializedScrollKey, messages.length, totalHeight, updateViewport, anchorPosition, initialAnchor])
 
   useLayoutEffect(() => {
-    const updateHeight = (id: string, height: number) => {
-      if (!Number.isFinite(height) || height <= 0) return
-      setMeasuredHeights((previous) => {
-        const previousHeight = previous.get(id)
-        if (previousHeight != null && Math.abs(previousHeight - height) < 1) return previous
-        captureScrollAnchor()
-        const next = new Map(previous)
-        next.set(id, height)
-        return next
-      })
-    }
-
-    for (const [id, element] of rowElementsRef.current) {
-      updateHeight(id, element.getBoundingClientRect().height)
-    }
-
-    if (typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const id = entry.target.getAttribute('data-ai-message-id')
-        if (!id) continue
-        updateHeight(id, entry.contentRect.height)
+    let frame: number | null = null
+    const measure = () => {
+      frame = null
+      const next = new Map(heightsRef.current)
+      let changed = false
+      for (const [id, element] of rowElementsRef.current) {
+        const height = element.getBoundingClientRect().height
+        if (height > 0 && Number.isFinite(height) && Math.abs((next.get(id) ?? 0) - height) >= 1) {
+          next.set(id, height)
+          changed = true
+        }
       }
-    })
-
-    for (const element of rowElementsRef.current.values()) {
-      observer.observe(element)
+      if (!changed) return
+      chatScrollDebug('virtual list measured row heights', containerRef.current, { changedRows: [...next].filter(([id, height]) => heightsRef.current.get(id) !== height).length, mountedRows: rowElementsRef.current.size, messageCount: messages.length })
+      captureScrollAnchor()
+      heightsRef.current = next
+      setMeasuredHeights(next)
     }
-
-    return () => observer.disconnect()
-  }, [captureScrollAnchor, firstIndex, lastIndex, messages.length])
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => {
+      if (frame === null) frame = requestAnimationFrame(measure)
+    })
+    for (const element of rowElementsRef.current.values()) observer.observe(element)
+    return () => { observer.disconnect(); if (frame !== null) cancelAnimationFrame(frame) }
+  }, [captureScrollAnchor, firstIndex, lastIndex, messages.length, initialScrollKey])
 
   useLayoutEffect(() => {
     const anchor = scrollAnchorRef.current
     const container = containerRef.current
-    if (!anchor || !container) return
+    if (!anchor || !container || measuredHeights !== heightsRef.current) return
 
     scrollAnchorRef.current = null
-    if (pinToBottomRef.current) return
+    if (chatScrollController(container).follow.current) return
 
-    const element = rowElementsRef.current.get(anchor.id)
-    if (!element) return
-
-    const containerRect = container.getBoundingClientRect()
-    const currentTop = element.getBoundingClientRect().top - containerRect.top
-    const delta = currentTop - anchor.top
-    if (Math.abs(delta) < 0.5) return
-
-    container.scrollTop += delta
-    lastScrollTopRef.current = container.scrollTop
+    const position = positions.find(row => row.id === anchor.id)
+    const list = listRef.current
+    if (!position || !list) return
+    const origin = list.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop
+    const top = origin + position.top - anchor.top
+    if (Math.abs(top - container.scrollTop) < 0.5) return
+    chatScrollDebug('virtual list height anchor compensation', container, { id: anchor.id, anchorTop: anchor.top, targetTop: top })
+    chatScrollController(container).write(top, 'VirtualList.heightAnchor')
     updateViewport()
-  }, [containerRef, measuredHeights, updateViewport])
+  }, [containerRef, measuredHeights, positions, updateViewport])
 
   useLayoutEffect(() => {
     const container = containerRef.current
-    if (!container || !pinToBottomRef.current) return
-    container.scrollTop = container.scrollHeight
-    updateViewport()
-  }, [containerRef, measuredHeights, updateViewport])
+    positionsRef.current = positions
+    if (container) chatScrollController(container).scheduleBottom()
+  }, [containerRef, measuredHeights, positions])
 
   const renderedMessages = firstIndex <= lastIndex
     ? messages.slice(firstIndex, lastIndex + 1)
@@ -249,7 +256,7 @@ export function AiChatVirtualMessageList({
       )
       .filter((message) => message.role === 'assistant' && !message.streaming && message.content.trim())
       .map((message) => message.content)
-  ), [firstIndex, lastIndex, messages])
+  ), [firstIndex, lastIndex, messages.length, initialScrollKey])
 
   useEffect(() => {
     if (prefetchValues.length === 0) return
@@ -265,7 +272,7 @@ export function AiChatVirtualMessageList({
   const bottomSpacerHeight = Math.max(0, totalHeight - renderedBottom)
 
   return (
-    <div className="ai-chat-virtual-message-list" style={{ minHeight: totalHeight }}>
+    <div ref={listRef} className="ai-chat-virtual-message-list" style={{ minHeight: totalHeight }}>
       <div aria-hidden="true" style={{ height: topSpacerHeight }} />
       {renderedMessages.map((message) => (
         <div
@@ -273,6 +280,7 @@ export function AiChatVirtualMessageList({
           ref={(element) => setRowElement(message.id, element)}
           data-ai-message-id={message.id}
           className="ai-chat-virtual-message-row"
+          style={{ display: 'flow-root' }}
         >
           {renderMessage(message)}
         </div>

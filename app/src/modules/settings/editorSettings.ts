@@ -130,6 +130,7 @@ export type SearchSettings = {
 }
 
 export type PerformanceSettings = {
+  aiChatVirtualization?: boolean
   experimentalPreviewOptimization: boolean
 }
 
@@ -328,6 +329,7 @@ const defaultSearchSettings: SearchSettings = {
 }
 
 const defaultPerformanceSettings: PerformanceSettings = {
+  aiChatVirtualization: false,
   experimentalPreviewOptimization: false,
 }
 
@@ -511,6 +513,7 @@ export async function getPerformanceSettings(): Promise<PerformanceSettings> {
   const settings = await loadEditorSettings()
   const cfg = settings.performance ?? {}
   return {
+    aiChatVirtualization: cfg.aiChatVirtualization === true,
     experimentalPreviewOptimization:
       cfg.experimentalPreviewOptimization ?? defaultPerformanceSettings.experimentalPreviewOptimization,
   }

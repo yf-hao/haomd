@@ -62,6 +62,12 @@ describe('editorSettings', () => {
 
         const settings = await getPerformanceSettings()
         expect(settings.experimentalPreviewOptimization).toBe(false)
+        expect(settings.aiChatVirtualization).toBe(false)
+    })
+
+    it('loads the saved AI Chat rendering mode', async () => {
+        vi.mocked(mockInvoke).mockResolvedValue({ Ok: { data: { performance: { aiChatVirtualization: true } } } })
+        expect((await getPerformanceSettings()).aiChatVirtualization).toBe(true)
     })
 
     it('should merge word export settings with defaults', async () => {

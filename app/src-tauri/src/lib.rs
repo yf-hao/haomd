@@ -3,6 +3,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 mod ai_config;
+mod ai_chat_scroll_debug;
 mod ai_sessions;
 mod alarm_audio;
 mod alarm_paths;
@@ -62,6 +63,7 @@ mod workflows;
 mod workspace_io;
 
 use ai_config::*;
+use ai_chat_scroll_debug::*;
 use ai_sessions::*;
 use alarm_audio::*;
 use alarm_sound::*;
@@ -127,6 +129,7 @@ mod lib_tests;
 macro_rules! app_invoke_handler {
     () => {
         tauri::generate_handler![
+            append_ai_chat_scroll_debug,
             // File IO and app-local state
             read_file,
             read_binary_file,
