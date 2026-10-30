@@ -192,6 +192,12 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
   const docPathStabilizeTimerRef = useRef<number | null>(null)
   const previousBusyRef = useRef(false)
 
+  const beginNewChatTurnFollow = useCallback(() => {
+    shouldAutoScrollRef.current = true
+    const container = messagesContainerRef.current
+    if (container) chatScrollController(container).beginNewTurn()
+  }, [])
+
   const autoResizeInput = () => {
     const el = inputRef.current
     if (!el) return
@@ -622,7 +628,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
           status: 'running',
         },
       ])
-      shouldAutoScrollRef.current = true
+      beginNewChatTurnFollow()
       setImageGenerationRunning(true)
 
       try {
@@ -867,7 +873,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
 
     clearHistoryBrowse()
     clearDraft()
-    shouldAutoScrollRef.current = true
+    beginNewChatTurnFollow()
 
     const handled = await tryHandleSlashCommand(contentToSend, {
       // slash 命令与文档会话保持一致：按目录共享会话

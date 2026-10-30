@@ -1,18 +1,30 @@
 import { chatScrollDebug } from './chatScrollDebug'
+import { ChatAutoFollowPolicy, type ChatAutoFollowPolicyPort, type ChatFollowState } from './chatAutoFollowPolicy'
 
 /** One scroll writer and follow state per chat viewport. */
 export class ChatScrollController {
-  follow = { current: true }
+  private autoFollowPolicy: ChatAutoFollowPolicyPort
   private frame: number | null = null
   private lastTop: number
   private interactionVersion = 0
   private touchY: number | null = null
   private container: HTMLElement
-  constructor(container: HTMLElement) { this.container = container; this.lastTop = container.scrollTop }
+  constructor(container: HTMLElement, autoFollowPolicy: ChatAutoFollowPolicyPort = new ChatAutoFollowPolicy()) {
+    this.container = container
+    this.lastTop = container.scrollTop
+    this.autoFollowPolicy = autoFollowPolicy
+  }
+  get follow() { return this.autoFollowPolicy.state }
   pause = () => {
     chatScrollDebug('follow paused', this.container)
-    this.follow.current = false
+    this.autoFollowPolicy.pause()
     this.cancel()
+  }
+  beginNewTurn = () => {
+    this.cancel()
+    this.autoFollowPolicy.beginNewTurn()
+    chatScrollDebug('new turn follow started', this.container)
+    this.scheduleBottom()
   }
   cancel = () => {
     if (this.frame !== null) cancelAnimationFrame(this.frame)
@@ -38,20 +50,19 @@ export class ChatScrollController {
     })
   }
   attach(follow: { current: boolean }) {
-    this.follow = follow
+    this.autoFollowPolicy.bind(follow as ChatFollowState)
     const el = this.container
     const scroll = () => {
       const delta = el.scrollTop - this.lastTop
       const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight
       chatScrollDebug('scroll event', el, { delta: Math.round(delta * 10) / 10, distanceToBottom: Math.round(distanceToBottom * 10) / 10, follow: this.follow.current })
+      this.autoFollowPolicy.onScroll(delta, distanceToBottom)
       if (delta < -0.5) this.pauseForUser()
-      // WebKit can report scrollTop beyond the bottom during elastic overscroll.
-      // A negative distance is not proof that the reader returned to the bottom.
-      else if (delta > 0.5 && distanceToBottom >= -2 && distanceToBottom <= 2) this.follow.current = true
       this.lastTop = el.scrollTop
     }
     const wheel = (event: WheelEvent) => {
       chatScrollDebug('wheel input', el, { deltaY: Math.round(event.deltaY * 10) / 10, deltaX: Math.round(event.deltaX * 10) / 10, deltaMode: event.deltaMode, follow: this.follow.current })
+      this.autoFollowPolicy.onWheel(event.deltaY)
       if (event.deltaY < 0) this.pauseForUser()
     }
     const pointerDown = (event: PointerEvent) => {
