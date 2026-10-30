@@ -7,7 +7,11 @@ pub async fn save_remote_image_with_dialog(
     default_file_name: String,
     image_url: String,
 ) -> Result<(), String> {
-    let response = reqwest::get(&image_url)
+    let client = crate::http_client::shared_client(Default::default())
+        .map_err(|err| format!("创建图片下载客户端失败: {err}"))?;
+    let response = client
+        .get(&image_url)
+        .send()
         .await
         .map_err(|err| format!("下载图片失败: {err}"))?;
     if !response.status().is_success() {

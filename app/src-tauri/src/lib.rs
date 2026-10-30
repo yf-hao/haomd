@@ -26,6 +26,7 @@ mod fs_commands;
 mod fs_types;
 mod gemini_compat;
 mod haomd_paths;
+mod http_client;
 mod image_generation;
 mod inkscape;
 mod locale;

@@ -1,4 +1,4 @@
-use crate::skill_http::{create_cookie_jar, execute_http_request_json};
+use crate::skill_http::{execute_http_request_json, SkillHttpSession};
 use crate::skills::{read_skill_document_from_dir, sanitize_skill_id, skills_root_dir};
 use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
 use rquickjs::prelude::Func;
@@ -43,15 +43,14 @@ fn execute_builtin_js(script_source: &str, args: &Value) -> Result<SkillRunResul
     rt.set_memory_limit(SKILL_SCRIPT_MEMORY_LIMIT);
     rt.set_interrupt_handler(Some(Box::new(move || Instant::now() >= deadline)));
     let context = Context::full(&rt).map_err(|e| format!("创建 JS 上下文失败: {e}"))?;
-    let cookie_jar = create_cookie_jar();
+    let http_session = SkillHttpSession::default();
     let request_count = Arc::new(AtomicUsize::new(0));
 
     let result_text: String = context.with(|ctx| {
-        let http_cookie_jar = cookie_jar.clone();
         let http_request_count = request_count.clone();
         let http_request = Func::from(move |request_json: String| {
             execute_http_request_json(
-                http_cookie_jar.clone(),
+                &http_session,
                 &request_json,
                 &http_request_count,
                 deadline,

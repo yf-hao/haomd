@@ -1,7 +1,5 @@
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::time::Duration;
 
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -130,11 +128,7 @@ fn extract_gemini_error_message(status: u16, response_text: &str) -> String {
 pub async fn gemini_generate_content(
     request: GeminiGenerateContentRequest,
 ) -> Result<GeminiGenerateContentResponse, String> {
-    let client = Client::builder()
-        .use_rustls_tls()
-        .connect_timeout(Duration::from_secs(10))
-        .timeout(Duration::from_secs(20))
-        .build()
+    let client = crate::http_client::shared_client(crate::http_client::API_POLICY)
         .map_err(|err| format!("创建 Gemini HTTP 客户端失败: {err}"))?;
 
     let url = build_gemini_generate_content_url(&request.base_url, &request.model_id);

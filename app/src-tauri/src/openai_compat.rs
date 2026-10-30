@@ -998,7 +998,7 @@ async fn run_openai_compat_stream(
     request: OpenAICompatChatRequest,
 ) {
     let cancel_flag = get_cancel_flag(&request_id);
-    let client = match Client::builder().use_rustls_tls().build() {
+    let client = match crate::http_client::shared_client(Default::default()) {
         Ok(client) => client,
         Err(err) => {
             emit_error(&app, &request_id, format!("创建 HTTP 客户端失败: {err}"));

@@ -14,7 +14,7 @@ use futures_util::stream::{self, StreamExt};
 use once_cell::sync::Lazy;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_LENGTH, USER_AGENT};
 use reqwest::StatusCode;
-use reqwest::{Body, Client, Method};
+use reqwest::{Body, Method};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
@@ -423,7 +423,7 @@ fn webdav_upload_send_error_is_transient(err: &reqwest::Error) -> bool {
 
 async fn upload_webdav_file(
     app: AppHandle,
-    client: Client,
+    client: WebDavClient,
     root: PathBuf,
     base_url: String,
     username: String,
@@ -492,7 +492,7 @@ async fn upload_webdav_file(
 }
 
 async fn upload_webdav_delete(
-    client: Client,
+    client: WebDavClient,
     base_url: String,
     username: String,
     password: String,
@@ -1247,7 +1247,7 @@ fn join_remote_relative(root: &str, relative: &str) -> String {
 }
 
 fn webdav_request(
-    client: &Client,
+    client: &WebDavClient,
     method: Method,
     target: &str,
     username: &str,
@@ -1261,7 +1261,21 @@ fn webdav_request(
     }
 }
 
-fn webdav_client(user_agent: Option<&str>) -> Result<Client, String> {
+#[derive(Clone)]
+struct WebDavClient {
+    transport: reqwest::Client,
+    headers: HeaderMap,
+}
+
+impl WebDavClient {
+    fn request(&self, method: Method, target: &str) -> reqwest::RequestBuilder {
+        self.transport
+            .request(method, target)
+            .headers(self.headers.clone())
+    }
+}
+
+fn webdav_client(user_agent: Option<&str>) -> Result<WebDavClient, String> {
     let mut headers = HeaderMap::new();
     if let Some(user_agent) = user_agent.map(str::trim).filter(|value| !value.is_empty()) {
         let header_value = HeaderValue::from_str(user_agent)
@@ -1269,14 +1283,13 @@ fn webdav_client(user_agent: Option<&str>) -> Result<Client, String> {
         headers.insert(USER_AGENT, header_value);
         headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
     }
-    Client::builder()
-        .default_headers(headers)
-        .build()
-        .map_err(|err| format!("创建 WebDAV 客户端失败: {err}"))
+    let transport = crate::http_client::shared_client(Default::default())
+        .map_err(|err| format!("创建 WebDAV 客户端失败: {err}"))?;
+    Ok(WebDavClient { transport, headers })
 }
 
 async fn ensure_remote_dir(
-    client: &Client,
+    client: &WebDavClient,
     base_url: &str,
     username: &str,
     password: &str,
@@ -1704,7 +1717,7 @@ fn normalize_remote_sync_index(raw: WebDavSyncIndexCompat) -> WebDavSyncIndex {
 }
 
 async fn fetch_remote_sync_index(
-    client: &Client,
+    client: &WebDavClient,
     base_url: &str,
     username: &str,
     password: &str,
@@ -1741,7 +1754,7 @@ async fn fetch_remote_sync_index(
 }
 
 async fn remote_scope_sync_index_exists(
-    client: &Client,
+    client: &WebDavClient,
     base_url: &str,
     username: &str,
     password: &str,
@@ -1753,7 +1766,7 @@ async fn remote_scope_sync_index_exists(
 }
 
 async fn fetch_remote_manifest(
-    client: &Client,
+    client: &WebDavClient,
     base_url: &str,
     username: &str,
     password: &str,
@@ -2252,7 +2265,7 @@ async fn upload_directory_to_webdav(
 
 async fn download_directory_from_webdav(
     app: &AppHandle,
-    client: &Client,
+    client: &WebDavClient,
     root: &Path,
     base_url: &str,
     username: &str,
@@ -3469,6 +3482,34 @@ pub async fn start_export_settings_backup_to_webdav(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn webdav_headers_and_credentials_are_request_scoped() {
+        let first = super::webdav_client(Some("First-Agent")).unwrap();
+        let second = super::webdav_client(Some("Second-Agent")).unwrap();
+        let plain = super::webdav_client(None).unwrap();
+        let url = "https://example.com/dav";
+        let first = super::webdav_request(&first, reqwest::Method::GET, url, "alice", "secret")
+            .build()
+            .unwrap();
+        let second = super::webdav_request(&second, reqwest::Method::GET, url, "bob", "password")
+            .build()
+            .unwrap();
+        let plain = super::webdav_request(&plain, reqwest::Method::GET, url, "", "")
+            .build()
+            .unwrap();
+        assert_eq!(first.headers()[reqwest::header::USER_AGENT], "First-Agent");
+        assert_eq!(
+            second.headers()[reqwest::header::USER_AGENT],
+            "Second-Agent"
+        );
+        assert_ne!(
+            first.headers()[reqwest::header::AUTHORIZATION],
+            second.headers()[reqwest::header::AUTHORIZATION]
+        );
+        assert!(!plain.headers().contains_key(reqwest::header::AUTHORIZATION));
+        assert!(!plain.headers().contains_key(reqwest::header::USER_AGENT));
+    }
+
     use super::*;
 
     fn entry(path: &str, size: u64, modified: u64, sha256: &str) -> WebDavSyncFileEntry {

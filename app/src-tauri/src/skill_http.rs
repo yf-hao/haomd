@@ -6,12 +6,13 @@ use reqwest::header::{
 use reqwest::Method;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
+use std::collections::HashMap;
 use std::io::Read;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, ToSocketAddrs};
 use std::process::Command;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
-    Arc, OnceLock,
+    Arc, Mutex, OnceLock,
 };
 use std::time::{Duration, Instant};
 use url::{Host, Url};
@@ -464,11 +465,58 @@ fn parse_request(input: &str) -> Result<ParsedHttpRequest, String> {
     })
 }
 
-fn perform_http_request(
+// A session owns cookies and transports; scripts never share either with each other.
+#[derive(Default)]
+pub(crate) struct SkillHttpSession {
     cookie_jar: Arc<Jar>,
+    clients: Mutex<HashMap<TransportKey, Client>>,
+}
+
+#[derive(Hash, PartialEq, Eq)]
+struct TransportKey {
+    origin: String,
+    proxy: Option<String>,
+    addresses: Vec<SocketAddr>,
+}
+
+impl SkillHttpSession {
+    fn client(
+        &self,
+        url: &Url,
+        addresses: &[SocketAddr],
+        proxy: Option<&str>,
+    ) -> Result<Client, String> {
+        let mut addresses = addresses.to_vec();
+        addresses.sort_unstable();
+        addresses.dedup();
+        let key = TransportKey {
+            origin: url.origin().ascii_serialization(),
+            proxy: proxy.map(str::to_owned),
+            addresses,
+        };
+        let mut clients = self
+            .clients
+            .lock()
+            .map_err(|_| "HTTP 会话锁不可用".to_string())?;
+        if let Some(client) = clients.get(&key) {
+            return Ok(client.clone());
+        }
+        let client = request_client(url, &key.addresses, self.cookie_jar.clone(), proxy)?;
+        // AI HTTP sessions can outlive a single script. Bound retained transports.
+        if clients.len() >= MAX_REQUESTS_PER_SCRIPT {
+            clients.clear();
+        }
+        clients.insert(key, client.clone());
+        Ok(client)
+    }
+}
+
+fn perform_http_request(
+    session: &SkillHttpSession,
     input: &str,
     deadline: Instant,
 ) -> Result<Value, String> {
+    let cookie_jar = &session.cookie_jar;
     let mut parsed = parse_request(input)?;
     let proxy_url = configured_proxy_url(
         parsed.url.scheme(),
@@ -481,13 +529,8 @@ fn perform_http_request(
     if timeout.is_zero() {
         return Err("HTTP 请求已超过执行时间限制".to_string());
     }
-    let request_client = request_client(
-        &parsed.url,
-        &addresses,
-        cookie_jar.clone(),
-        proxy_url.as_deref(),
-    )?;
-    let cookies_sent = attach_cookie_header(&cookie_jar, &parsed.url, &mut parsed.headers);
+    let request_client = session.client(&parsed.url, &addresses, proxy_url.as_deref())?;
+    let cookies_sent = attach_cookie_header(cookie_jar, &parsed.url, &mut parsed.headers);
     let mut request = request_client
         .request(parsed.method, parsed.url)
         .headers(parsed.headers);
@@ -496,7 +539,7 @@ fn perform_http_request(
         request = request.body(body);
     }
     let response = request.send().map_err(describe_request_error)?;
-    response_to_value(response, &cookie_jar, cookies_sent)
+    response_to_value(response, cookie_jar, cookies_sent)
 }
 
 fn describe_request_error(error: reqwest::Error) -> String {
@@ -590,12 +633,13 @@ fn response_to_value(
     }))
 }
 
-pub(crate) fn create_cookie_jar() -> Arc<Jar> {
+#[cfg(test)]
+fn create_cookie_jar() -> Arc<Jar> {
     Arc::new(Jar::default())
 }
 
 pub(crate) fn execute_http_request_json(
-    cookie_jar: Arc<Jar>,
+    session: &SkillHttpSession,
     request_json: &str,
     request_count: &AtomicUsize,
     deadline: Instant,
@@ -603,7 +647,7 @@ pub(crate) fn execute_http_request_json(
     if request_count.fetch_add(1, Ordering::Relaxed) >= MAX_REQUESTS_PER_SCRIPT {
         return json!({ "error": "单次 Skill 最多发起 24 次 HTTP 请求" }).to_string();
     }
-    match perform_http_request(cookie_jar, request_json, deadline) {
+    match perform_http_request(session, request_json, deadline) {
         Ok(response) => json!({ "response": response }).to_string(),
         Err(error) => {
             log::warn!("[skill-http] {error}");
@@ -616,13 +660,13 @@ pub(crate) fn execute_http_request_json(
 pub async fn ai_http_request(request: Value) -> std::result::Result<Value, String> {
     let request_json =
         serde_json::to_string(&request).map_err(|_| "无法序列化 HTTP 请求参数".to_string())?;
-    static CHAT_COOKIE_JAR: OnceLock<Arc<Jar>> = OnceLock::new();
-    let cookie_jar = CHAT_COOKIE_JAR.get_or_init(create_cookie_jar).clone();
+    static CHAT_SESSION: OnceLock<SkillHttpSession> = OnceLock::new();
+    let session = CHAT_SESSION.get_or_init(SkillHttpSession::default);
     let request_count = Arc::new(AtomicUsize::new(0));
     let deadline = Instant::now() + REQUEST_TIMEOUT;
 
     tokio::task::spawn_blocking(move || {
-        let result = execute_http_request_json(cookie_jar, &request_json, &request_count, deadline);
+        let result = execute_http_request_json(session, &request_json, &request_count, deadline);
         let result: Value =
             serde_json::from_str(&result).map_err(|_| "解析 HTTP 请求结果失败".to_string())?;
         if let Some(error) = result.get("error").and_then(Value::as_str) {
@@ -639,6 +683,31 @@ pub async fn ai_http_request(request: Value) -> std::result::Result<Value, Strin
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn session_cache_separates_addresses_proxies_and_cookies() {
+        use reqwest::cookie::CookieStore;
+        let first = super::SkillHttpSession::default();
+        let second = super::SkillHttpSession::default();
+        let url = Url::parse("https://example.com").unwrap();
+        let address = "93.184.215.14:443".parse().unwrap();
+        first.client(&url, &[address], None).unwrap();
+        first.client(&url, &[address], None).unwrap();
+        assert_eq!(first.clients.lock().unwrap().len(), 1);
+        first
+            .client(&url, &["93.184.215.15:443".parse().unwrap()], None)
+            .unwrap();
+        first
+            .client(&url, &[], Some("http://127.0.0.1:8080"))
+            .unwrap();
+        assert_eq!(first.clients.lock().unwrap().len(), 3);
+        first
+            .cookie_jar
+            .add_cookie_str("session=first; Path=/", &url);
+        assert!(first.cookie_jar.cookies(&url).is_some());
+        assert!(second.cookie_jar.cookies(&url).is_none());
+        assert!(second.clients.lock().unwrap().is_empty());
+    }
+
     use super::{
         attach_cookie_header, create_cookie_jar, describe_request_error, is_public_ip,
         parse_request, request_client, resolve_public_addresses, response_to_value,

@@ -1,6 +1,5 @@
 use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::AppHandle;
@@ -116,7 +115,7 @@ pub async fn run_modelscope_image_generation(
     common_headers.insert(AUTHORIZATION, auth_value);
     common_headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
 
-    let client = match Client::builder().build() {
+    let client = match crate::http_client::shared_client(Default::default()) {
         Ok(client) => client,
         Err(err) => {
             return err_payload(
