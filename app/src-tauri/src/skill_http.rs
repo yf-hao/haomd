@@ -110,7 +110,16 @@ fn normalize_proxy_url(value: &str) -> Option<String> {
 }
 
 fn command_output(program: &str, args: &[&str]) -> Option<String> {
-    let output = Command::new(program).args(args).output().ok()?;
+    let mut command = Command::new(program);
+    command.args(args);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        // Background proxy discovery must not open a console in the GUI app.
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    let output = command.output().ok()?;
     output
         .status
         .success()
@@ -334,6 +343,7 @@ fn request_client(
     url: &Url,
     addresses: &[SocketAddr],
     cookie_jar: Arc<Jar>,
+    proxy_url: Option<&str>,
 ) -> Result<Client, String> {
     let mut builder = ClientBuilder::new()
         // Proxy selection is explicit below so reqwest's implicit environment
@@ -344,11 +354,11 @@ fn request_client(
         .connect_timeout(Duration::from_secs(8))
         .redirect(reqwest::redirect::Policy::none())
         .cookie_provider(cookie_jar);
-    if let Some(proxy) = configured_proxy_url(url.scheme(), url.host_str().unwrap_or_default())
+    if let Some(proxy) = proxy_url
         .filter(|_| matches!(url.host(), Some(Host::Domain(host)) if is_external_dns_name(host)))
     {
         builder =
-            builder.proxy(reqwest::Proxy::all(&proxy).map_err(|_| "系统代理配置无效".to_string())?);
+            builder.proxy(reqwest::Proxy::all(proxy).map_err(|_| "系统代理配置无效".to_string())?);
         log::debug!("[skill-http] using the configured network proxy");
     } else if let Some(Host::Domain(host)) = url.host() {
         if addresses.is_empty() {
@@ -460,19 +470,23 @@ fn perform_http_request(
     deadline: Instant,
 ) -> Result<Value, String> {
     let mut parsed = parse_request(input)?;
-    let proxy_configured = configured_proxy_url(
+    let proxy_url = configured_proxy_url(
         parsed.url.scheme(),
         parsed.url.host_str().unwrap_or_default(),
-    )
-    .is_some();
-    let addresses = resolve_public_addresses(&parsed.url, proxy_configured)?;
+    );
+    let addresses = resolve_public_addresses(&parsed.url, proxy_url.is_some())?;
     let timeout = deadline
         .saturating_duration_since(Instant::now())
         .min(REQUEST_TIMEOUT);
     if timeout.is_zero() {
         return Err("HTTP 请求已超过执行时间限制".to_string());
     }
-    let request_client = request_client(&parsed.url, &addresses, cookie_jar.clone())?;
+    let request_client = request_client(
+        &parsed.url,
+        &addresses,
+        cookie_jar.clone(),
+        proxy_url.as_deref(),
+    )?;
     let cookies_sent = attach_cookie_header(&cookie_jar, &parsed.url, &mut parsed.headers);
     let mut request = request_client
         .request(parsed.method, parsed.url)
@@ -723,7 +737,7 @@ mod tests {
         // remains enabled and is covered separately below.
         let jar = create_cookie_jar();
         let first_url = Url::parse(&format!("http://{address}/index")).unwrap();
-        let first_client = request_client(&first_url, &[address], jar.clone()).unwrap();
+        let first_client = request_client(&first_url, &[address], jar.clone(), None).unwrap();
         let response = first_client.get(first_url).send().unwrap();
         let first = response_to_value(response, &jar, false).unwrap();
         assert_eq!(first["status"], 302);
@@ -736,7 +750,7 @@ mod tests {
         let next_url = Url::parse(&format!("http://{address}/grid")).unwrap();
         let mut headers = HeaderMap::new();
         let sent = attach_cookie_header(&jar, &next_url, &mut headers);
-        let next_client = request_client(&next_url, &[address], jar.clone()).unwrap();
+        let next_client = request_client(&next_url, &[address], jar.clone(), None).unwrap();
         let response = next_client.post(next_url).headers(headers).send().unwrap();
         let second = response_to_value(response, &jar, sent).unwrap();
         assert_eq!(second["status"], 200);
