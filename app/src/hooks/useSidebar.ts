@@ -3,6 +3,7 @@ import { isVisibleTreePath, relocateTreeFile, buildFileTree, computeParentsToExp
 import type { ExpandedMap, FileTreeNode } from '../domain/sidebarTree'
 import { listFolder, logRecentFile } from '../modules/files/service'
 import { loadSidebarState, saveSidebarState } from '../modules/sidebar/sidebarStateRepo'
+import { entryContainsPath, type FileBrowserEntry } from '../domain/fileBrowserSelection'
 
 function normalizeSeparators(path: string): string {
   return path.replace(/\\/g, '/')
@@ -208,6 +209,23 @@ export function useSidebar() {
     })
   }, [folderRoots])
 
+  const applyEntriesDeleted = useCallback((entries: FileBrowserEntry[]) => {
+    const removed = (path: string) => entries.some(entry => entryContainsPath(entry, path))
+    const remainingRoots = folderRoots.filter(path => !removed(path))
+    for (const [root, version] of refreshVersions.current) refreshVersions.current.set(root, version + 1)
+    setFolderRoots(remainingRoots)
+    setRoot(previous => previous && removed(previous) ? remainingRoots[0] ?? null : previous)
+    setStandaloneFiles(previous => previous.filter(file => !removed(file.path)))
+    setHighlightedFiles(previous => previous.filter(path => !removed(path)))
+    setExpanded(previous => Object.fromEntries(Object.entries(previous).filter(([path]) => !removed(path))))
+    setTreesByRoot(previous => {
+      const prune = (nodes: FileTreeNode[]): FileTreeNode[] => nodes.filter(node => !removed(node.path))
+        .map(node => node.children ? { ...node, children: prune(node.children) } : node)
+      return Object.fromEntries(Object.entries(previous).filter(([path]) => !removed(path))
+        .map(([path, nodes]) => [path, prune(nodes)]))
+    })
+  }, [folderRoots])
+
   const markFileVisited = useCallback((filePath: string) => {
     const norm = normalizePath(filePath)
     setHighlightedFiles((prev) => prev.filter((p) => p !== norm))
@@ -352,6 +370,7 @@ export function useSidebar() {
     addStandaloneFile,
     removeStandaloneFile,
     removeFolderRoot,
+    applyEntriesDeleted,
     markFileVisited,
     refreshFolderTree,
     addFileToTree,

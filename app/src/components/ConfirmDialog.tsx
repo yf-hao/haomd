@@ -134,7 +134,7 @@ export function ConfirmDialog({
       >
         <div className="modal-title">{title}</div>
         <div className="modal-content">
-          <div className="modal-message">{message}</div>
+          <div className="modal-message" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: '50vh', overflowY: 'auto' }}>{message}</div>
         </div>
 
         <div className={`modal-actions ${isStacked ? 'modal-actions-stacked' : ''}`}>

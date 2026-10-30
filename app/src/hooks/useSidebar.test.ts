@@ -68,3 +68,20 @@ it('keeps the new file when a scan started before creation finishes late', async
   })
   expect(result.current.treesByRoot['/root'][0].children?.map(node => node.name)).toEqual(['deep', 'a.md'])
 })
+
+it('reconciles a deleted folder across the tree, standalone files and expanded paths', async () => {
+  const { result } = renderHook(() => useSidebar())
+  await waitFor(() => expect(result.current.treesByRoot['/root']).toBeDefined())
+  act(() => {
+    result.current.addStandaloneFile('/root/sub/deep/z.md')
+    result.current.addStandaloneFile('/other/keep.md')
+    result.current.expandPath('/root/sub/deep')
+  })
+  act(() => result.current.applyEntriesDeleted([{ path: '/root/sub', kind: 'tree-dir' }]))
+  expect(result.current.treesByRoot['/root']).toEqual([])
+  expect(result.current.standaloneFiles.map(file => file.path)).toEqual(['/other/keep.md'])
+  expect(result.current.expanded['/root/sub/deep']).toBeUndefined()
+  act(() => result.current.applyEntriesDeleted([{ path: '/root', kind: 'folder-root' }]))
+  expect(result.current.folderRoots).toEqual([])
+  expect(result.current.root).toBeNull()
+})

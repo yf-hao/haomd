@@ -64,8 +64,11 @@ import { useTabs } from '../hooks/useTabs'
 import { useCommandSystem } from '../hooks/useCommandSystem'
 import { useSidebar } from '../hooks/useSidebar'
 import { useSidebarClipboard } from '../hooks/useSidebarClipboard'
+import { useSidebarBatchDelete } from '../hooks/useSidebarBatchDelete'
+import { entryContainsPath, isDirectoryEntry } from '../domain/fileBrowserSelection'
+import { batchFailureDetails } from '../modules/files/application/fileBatchOperations'
 import { onOpenRecentFile } from '../modules/platform/menuEvents'
-import { createFolder, deleteFsEntry, listFolder, writeFile, renameFsEntry } from '../modules/files/service'
+import { copyFsEntry, createFolder, deleteFsEntry, listFolder, writeFile, renameFsEntry } from '../modules/files/service'
 import { usePdfPanel } from '../hooks/usePdfPanel'
 import { useAiChatPanel } from '../hooks/useAiChatPanel'
 import { useHugeDoc } from '../hooks/useHugeDoc'
@@ -3573,20 +3576,54 @@ export function WorkspaceShell({
   }, [sidebar, applyMoveToTabs, clearSourceDocumentSync, clearPreviewSyncTimer, getActiveSourceView,
     commitPreviewValue, relocatePersistedDocument, resetDirtyTracking, setStatusMessage])
 
-  const fileClipboard = useSidebarClipboard({
-    notify: setStatusMessage,
-    onPasted: async (rawPath, directory, isDirectory) => {
-      const path = rawPath.replace(/\\/g, '/').replace(/^\/\/\?\/UNC\//, '//').replace(/^\/\/\?\//, '')
-      if (!isDirectory) sidebar.addFileToTree(path)
-      sidebar.expandPath(directory)
-      const normalized = directory.replace(/\\/g, '/').replace(/\/$/, '')
-      const roots = sidebar.folderRoots.filter(root => {
-        const value = root.replace(/\\/g, '/').replace(/\/$/, '')
-        return normalized === value || normalized.startsWith(value + '/')
+  const deleteSelectedEntries = useSidebarBatchDelete({
+    confirm: entries => new Promise(resolve => {
+      const dirty = getUnsavedTabs().filter(tab => tab.path && entries.some(entry => entryContainsPath(entry, tab.path!)))
+      const paths = entries.slice(0, 8).map(entry => entry.path)
+      if (entries.length > 8) paths.push(t('sidebar.moreEntries', { count: entries.length - 8 }))
+      setConfirmDialog({
+        title: t('sidebar.batchDeleteTitle', { count: entries.length }),
+        message: [t('sidebar.batchDeleteMessage', { count: entries.length }), ...paths,
+          dirty.length ? t('sidebar.batchDeleteUnsaved', { count: dirty.length }) : '',
+        ].filter(Boolean).join('\n'),
+        confirmText: t('workspace.delete'),
+        onConfirm: () => { setConfirmDialog(null); resolve(true) },
+        onCancel: () => { setConfirmDialog(null); resolve(false) },
       })
-      if (roots.length === 0) {
-        if (isDirectory) await sidebar.openFolderAsRoot(path)
-        else sidebar.addStandaloneFile(path)
+    }),
+    remove: async entry => {
+      const result = await deleteFsEntry(entry.path)
+      if (!result.ok) throw new Error(result.error.message)
+    },
+    onDeleted: async entries => {
+      const removed = (path: string) => entries.some(entry => entryContainsPath(entry, path))
+      sidebar.applyEntriesDeleted(entries)
+      for (const tab of tabs) if (tab.path && removed(tab.path)) closeTabWithAiSession(tab.id)
+      if (selectedFolderPath && removed(selectedFolderPath)) setSelectedFolderPath(null)
+      const roots = sidebar.folderRoots.filter(root => !removed(root) && entries.some(entry =>
+        entryContainsPath({ path: root, kind: 'folder-root' }, entry.path)))
+      await Promise.all(roots.map(root => sidebar.refreshFolderTree(root)))
+    },
+    report: result => setStatusMessage([
+      t('sidebar.batchDeleteResult', { succeeded: result.succeeded.length, failed: result.failed.length }),
+      batchFailureDetails(result),
+    ].filter(Boolean).join('\n')),
+    onError: error => setStatusMessage(error instanceof Error ? error.message : String(error)),
+  })
+
+  const fileClipboard = useSidebarClipboard({
+    copyEntry: copyFsEntry,
+    notify: setStatusMessage,
+    onPasted: async (items, directory) => {
+      sidebar.expandPath(directory)
+      const roots = sidebar.folderRoots.filter(root => entryContainsPath({ path: root, kind: 'folder-root' }, directory))
+      for (const { entry, value: rawPath } of items) {
+        const path = rawPath.replace(/\\/g, '/').replace(/^\/\/\?\/UNC\//, '//').replace(/^\/\/\?\//, '')
+        if (!isDirectoryEntry(entry)) sidebar.addFileToTree(path)
+        if (roots.length === 0) {
+          if (isDirectoryEntry(entry)) await sidebar.openFolderAsRoot(path)
+          else sidebar.addStandaloneFile(path)
+        }
       }
       await Promise.all(roots.map(root => sidebar.refreshFolderTree(root)))
     },
@@ -3595,7 +3632,7 @@ export function WorkspaceShell({
   const handleSidebarContextAction = useCallback(async (payload: SidebarContextActionPayload) => {
     const { path, kind, action } = payload
     if (action === 'copy') {
-      fileClipboard.copy(payload)
+      fileClipboard.copy(payload.targets ?? [payload])
     } else if (action === 'paste') {
       await fileClipboard.paste(payload)
     } else if (action === 'open') {
@@ -3621,7 +3658,7 @@ export function WorkspaceShell({
       if (kind === 'standalone-file') sidebar.removeStandaloneFile(path)
       else sidebar.removeFolderRoot(path)
     } else if (action === 'delete') {
-      void requestDeletePathWithConfirm(path, kind)
+      await deleteSelectedEntries(payload.targets ?? [payload])
     } else if (action === 'open-terminal') {
       // 对文件：取所在目录；对文件夹：直接使用其自身路径
       const cwd = kind === 'standalone-file' || kind === 'tree-file'
@@ -3663,6 +3700,7 @@ export function WorkspaceShell({
     }
   }, [
     fileClipboard,
+    deleteSelectedEntries,
     openFileFromSidebar,
     sidebar,
     requestDeletePathWithConfirm,

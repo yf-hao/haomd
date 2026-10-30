@@ -7,13 +7,16 @@ import type { FileVirtualFolder, FileVirtualAssignment } from '../modules/files/
 import { loadFileVirtualFolders, listFileVirtualAssignments, saveFileVirtualFolders, updateFileVirtualFolderForPath } from '../modules/files/service'
 import './Sidebar.css'
 import { useFileTreeDragDrop } from '../hooks/useFileTreeDragDrop'
+import { useFileBrowserSelection } from '../hooks/useFileBrowserSelection'
+import { entryKey, type FileBrowserEntry } from '../domain/fileBrowserSelection'
+import { entryFromRow, fileBrowserRowSelector, visibleFileEntries } from './fileBrowserSelectionDom'
 
 export type StandaloneFileItem = {
   path: string
   name: string
 }
 
-export type SidebarContextTargetKind = 'standalone-file' | 'folder-root' | 'tree-file' | 'tree-dir'
+export type SidebarContextTargetKind = FileBrowserEntry['kind']
 
 export type SidebarContextAction =
   | 'open'
@@ -31,6 +34,7 @@ export type SidebarContextActionPayload = {
   path: string
   kind: SidebarContextTargetKind
   action: SidebarContextAction
+  targets?: FileBrowserEntry[]
 }
 
 export type SidebarProps = {
@@ -81,6 +85,7 @@ export type SidebarProps = {
 }
 
 type TreeNodeProps = {
+  selectedPaths: ReadonlySet<string>
   node: FileTreeNode
   level: number
   expanded: Record<string, boolean>
@@ -102,9 +107,9 @@ type TreeNodeProps = {
   onInlineRenameCancel?: () => void
 }
 
-const TreeNode = memo(function TreeNode({ node, level, expanded, onToggle, onFileClick, onDirClick, activePath, highlightedPaths, onFileVisited, onContextMenu, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel, inlineNewFolderDir, onInlineNewFolderConfirm, onInlineNewFolderCancel, inlineRenamePath, onInlineRenameConfirm, onInlineRenameCancel }: TreeNodeProps) {
+const TreeNode = memo(function TreeNode({ selectedPaths, node, level, expanded, onToggle, onFileClick, onDirClick, activePath, highlightedPaths, onFileVisited, onContextMenu, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel, inlineNewFolderDir, onInlineNewFolderConfirm, onInlineNewFolderCancel, inlineRenamePath, onInlineRenameConfirm, onInlineRenameCancel }: TreeNodeProps) {
   const isExpanded = !!expanded[node.path]
-  const isActive = activePath === node.path
+  const isActive = selectedPaths.size === 0 && activePath === node.path
   const isHighlighted = highlightedPaths?.includes(node.path.replace(/\\/g, '/')) ?? false
 
   const paddingLeft = 8 + level * 12
@@ -125,6 +130,8 @@ const TreeNode = memo(function TreeNode({ node, level, expanded, onToggle, onFil
         ) : (
           <div
             data-file-directory={node.path}
+            data-file-kind="tree-dir"
+            data-selected={selectedPaths.has(entryKey({ path: node.path, kind: 'tree-dir' }))}
             className={`tree-row dir ${isActive ? 'active' : ''}`}
             style={{ paddingLeft }}
             onClick={() => {
@@ -166,6 +173,7 @@ const TreeNode = memo(function TreeNode({ node, level, expanded, onToggle, onFil
               <TreeNode
                 key={child.id}
                 node={child}
+                selectedPaths={selectedPaths}
                 level={level + 1}
                 expanded={expanded}
                 onToggle={onToggle}
@@ -209,6 +217,8 @@ const TreeNode = memo(function TreeNode({ node, level, expanded, onToggle, onFil
   return (
     <div
       data-file-source={node.path}
+      data-file-kind="tree-file"
+      data-selected={selectedPaths.has(entryKey({ path: node.path, kind: 'tree-file' }))}
       className={className}
       style={{ paddingLeft }}
       onClick={() => {
@@ -360,40 +370,52 @@ function InlineRenameRow({ level, isFolder, initialName, onConfirm, onCancel }: 
 
 
 export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, onToggle, onFileClick, onDirClick, onContextAction, canPaste = false, onToolbarNewFileInCurrentFolder, onToolbarNewFolderInCurrentFolder, onToolbarRefreshCurrentFolder, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel, inlineNewFolderDir, onInlineNewFolderConfirm, onInlineNewFolderCancel, inlineRenamePath, onInlineRenameConfirm, onInlineRenameCancel, activePath, panelWidth, highlightedPaths, onFileVisited, onRequestConfirmDeleteFileVirtualFolder, onMoveFile, onNotify }: SidebarProps) {
-  const keyboardTarget = useRef<{ path: string; kind: SidebarContextTargetKind } | null>(null)
+  const selection = useFileBrowserSelection()
+  const selectedPaths = selection.selectedPaths
+  const sidebarElement = useRef<HTMLElement | null>(null)
+  const keyboardTarget = useRef<FileBrowserEntry | null>(null)
   const selectClipboardTarget = (event: React.MouseEvent<HTMLElement>) => {
     const element = event.target as HTMLElement
     if (element.closest('input, textarea, [contenteditable="true"]')) return
-    const row = element.closest<HTMLElement>('[data-file-source], [data-file-directory]')
+    const row = element.closest<HTMLElement>(fileBrowserRowSelector)
     if (!row) return
-    const directory = row.dataset.fileDirectory
-    const path = directory ?? row.dataset.fileSource!
-    keyboardTarget.current = { path, kind: directory
-      ? folderRoots.includes(path) ? 'folder-root' : 'tree-dir'
-      : standaloneFiles.some(file => file.path === path) ? 'standalone-file' : 'tree-file' }
+    sidebarElement.current = event.currentTarget
+    const target = entryFromRow(row)
+    keyboardTarget.current = target
+    const mode = event.type === 'contextmenu' ? 'context'
+      : event.shiftKey ? 'range' : event.ctrlKey || event.metaKey ? 'toggle' : 'single'
+    selection.select(target, visibleFileEntries(event.currentTarget), mode)
     event.currentTarget.focus({ preventScroll: true })
+    if (event.type !== 'contextmenu' && mode !== 'single') {
+      closeMenu()
+      event.preventDefault()
+      event.stopPropagation()
+    }
   }
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing || event.altKey || event.shiftKey
-        || !(event.ctrlKey || event.metaKey) || inlineRenamePath || inlineNewFileDir || inlineNewFolderDir) return
+        || inlineRenamePath || inlineNewFileDir || inlineNewFolderDir) return
       const active = document.activeElement as HTMLElement | null
       if (!active?.closest('.sidebar') || active.closest('input, textarea, [contenteditable="true"]')) return
       const key = event.key.toLowerCase()
-      if (key !== 'c' && key !== 'v') return
+      if (key === 'enter' && selection.entries.length > 1) { event.preventDefault(); event.stopPropagation(); return }
+      const deleting = (key === 'delete' || key === 'backspace') && !event.ctrlKey && !event.metaKey
+      if (!deleting && !((key === 'c' || key === 'v') && (event.ctrlKey || event.metaKey))) return
       const target = keyboardTarget.current
-      if (!target || !onContextAction) return
+      if (!onContextAction) return
       event.preventDefault()
       event.stopPropagation()
+      if (!target || !selection.entries.length) return
       if (key === 'v' && !canPaste) return
-      onContextAction({ ...target, action: key === 'c' ? 'copy' : 'paste' })
+      onContextAction({ ...target, action: deleting ? 'delete' : key === 'c' ? 'copy' : 'paste', targets: selection.entries })
     }
     // WebView2 的粘贴快捷键可能只到达 document，按焦点限制在文件浏览器内处理。
     document.addEventListener('keydown', handleKeyDown, true)
     return () => document.removeEventListener('keydown', handleKeyDown, true)
-  }, [canPaste, onContextAction, inlineRenamePath, inlineNewFileDir, inlineNewFolderDir])
+  }, [canPaste, onContextAction, inlineRenamePath, inlineNewFileDir, inlineNewFolderDir, selection.entries])
   const dragHandlers = useFileTreeDragDrop({
-    disabled: Boolean(inlineRenamePath || inlineNewFileDir || inlineNewFolderDir),
+    disabled: Boolean(inlineRenamePath || inlineNewFileDir || inlineNewFolderDir || selection.entries.length > 1),
     expanded, expand: onToggle, move: onMoveFile, onError: onNotify,
   })
   const { t } = useI18n()
@@ -458,6 +480,12 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
     targetPath: string | null
   }>({ visible: false, x: 0, y: 0, targetPath: null })
 
+  // Refresh/collapse/delete must not leave invisible entries selected.
+  useEffect(() => {
+    if (sidebarElement.current?.isConnected) selection.prune(visibleFileEntries(sidebarElement.current))
+  }, [treesByRoot, standaloneFiles, expanded, collapsedSections, collapsedFileVirtualFolders,
+    fileVirtualFolders, fileVirtualAssignments, selection.prune])
+
   const closeMenu = () => setMenuState({ visible: false, x: 0, y: 0, target: null })
 
   const toggleSectionCollapse = (section: 'files' | 'folders') => {
@@ -470,6 +498,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
       path: menuState.target.path,
       kind: menuState.target.kind,
       action,
+      targets: selection.entries,
     })
     closeMenu()
   }
@@ -788,6 +817,9 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
       className="sidebar"
       style={asideStyle}
       tabIndex={0}
+      onMouseDownCapture={(event) => {
+        if (event.shiftKey && (event.target as HTMLElement).closest(fileBrowserRowSelector)) event.preventDefault()
+      }}
       onClickCapture={selectClipboardTarget}
       onContextMenuCapture={selectClipboardTarget}
       onClick={closeMenu}
@@ -799,6 +831,9 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
       <div className="sidebar-header">
         <div className="pane-title">{t('sidebar.fileBrowser')}</div>
       </div>
+      {selection.entries.length > 1 && <div className="sidebar-selection-count" role="status">
+        {t('sidebar.selectedCount', { count: selectedPaths.size })}
+      </div>}
       <div className="sidebar-body">
         {hasStandalone && (
           <section className="sidebar-section">
@@ -862,7 +897,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
 
                 <ul className="sidebar-file-list">
                   {rootFiles.map((file) => {
-                    const isActive = activePath === file.path
+                    const isActive = selectedPaths.size === 0 && activePath === file.path
                     const isRenaming = inlineRenamePath === file.path
                     if (isRenaming) {
                       return (
@@ -881,6 +916,8 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                       <li
                         key={file.path}
                         data-file-source={file.path}
+                        data-file-kind="standalone-file"
+                        data-selected={selectedPaths.has(entryKey({ path: file.path, kind: 'standalone-file' }))}
                         className={`sidebar-file-row tree-row file ${isActive ? 'active' : ''}`}
                         onClick={() => onFileClick(file.path)}
                         onContextMenu={(e) => {
@@ -973,6 +1010,8 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                                   <li
                                     key={file.path}
                                     data-file-source={file.path}
+                                    data-file-kind="standalone-file"
+                        data-selected={selectedPaths.has(entryKey({ path: file.path, kind: 'standalone-file' }))}
                         className={`sidebar-file-row tree-row file ${activePath === file.path ? 'active' : ''}`}
                                     onClick={() => onFileClick(file.path)}
                                     onContextMenu={(e) => {
@@ -1061,13 +1100,15 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                 {folderRoots.map((rootPath) => {
                   const name = rootPath.split(/[/\\]/).pop() ?? rootPath
                   const isExpandedRoot = !!expanded[rootPath]
-                  const isActiveRoot = activePath === rootPath
+                  const isActiveRoot = selectedPaths.size === 0 && activePath === rootPath
                   const children = treesByRoot[rootPath] ?? []
                   return (
                     <li key={rootPath}>
                       <div
                         className={`sidebar-folder-row ${isActiveRoot ? 'active' : ''}`}
                         data-file-directory={rootPath}
+                        data-file-kind="folder-root"
+                        data-selected={selectedPaths.has(entryKey({ path: rootPath, kind: 'folder-root' }))}
                         onClick={() => {
                           onToggle(rootPath)
                           onDirClick?.(rootPath)
@@ -1111,6 +1152,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                             <TreeNode
                               key={node.id}
                               node={node}
+                              selectedPaths={selectedPaths}
                               level={1}
                               expanded={expanded}
                               onToggle={onToggle}
@@ -1192,8 +1234,8 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
               })
             }
 
-            if (isFileTarget || isTreeDir) {
-              items.push({ id: 'rename', label: t('sidebar.rename'), onClick: () => triggerContextAction('rename') })
+            if (isFileTarget || isTreeDir || isFolderRoot) {
+              if (selection.entries.length <= 1 && !isFolderRoot) items.push({ id: 'rename', label: t('sidebar.rename'), onClick: () => triggerContextAction('rename') })
               items.push({ id: 'delete', label: t('sidebar.deleteEntry'), onClick: () => triggerContextAction('delete') })
             }
             if (isStandaloneFile) {
@@ -1203,7 +1245,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
               items.push({ id: 'remove-folder', label: t('sidebar.removeFolder'), onClick: () => triggerContextAction('remove') })
             }
 
-            return items
+            return selection.entries.length > 1 ? items.filter(item => ['copy', 'paste', 'delete'].includes(item.id)) : items
           })()}
         />
       )}

@@ -979,3 +979,15 @@
 .file-drop-target { outline: 2px solid var(--theme-accent-primary, #628cff); outline-offset: -2px; background: var(--theme-surface-card-active); }
 .file-drag-ghost { position: fixed; top: 0; left: 0; pointer-events: none; z-index: 100000; padding: 7px 12px; border-radius: 6px; background: var(--theme-surface-card, #242833); color: var(--theme-text-default, white); border: 1px solid var(--theme-accent-primary, #628cff); box-shadow: 0 3px 12px #0004; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-drag-invalid { opacity: .6; }
+
+/* Selection is independent of the currently open editor document. */
+.sidebar [data-selected="true"] {
+  background: color-mix(in srgb, var(--theme-accent-success) 22%, transparent);
+  color: var(--theme-text-default);
+  box-shadow: inset 2px 0 0 var(--theme-accent-success);
+}
+.sidebar-selection-count {
+  padding: 4px 12px;
+  color: var(--theme-text-muted);
+  font-size: var(--ui-font-sidebar);
+}
