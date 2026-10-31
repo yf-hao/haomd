@@ -51,7 +51,7 @@ import {
   type StampKind,
   type AnnotationType,
 } from '../types/annotation'
-import { translatePdfSelection, type PdfTranslationEntry } from '../translationService'
+import { isDictionaryLikeSelection, translatePdfSelection, type PdfTranslationEntry } from '../translationService'
 import { suppressPdfSelectionChangeDispatch } from './pdfSelectionChangeDispatcher'
 
 type PdfReadingState = {
@@ -114,20 +114,6 @@ type PdfTranslationStatus = 'idle' | 'loading' | 'success' | 'error'
 type PdfTranslationSettings = {
   sourceLanguage: string
   targetLanguage: string
-}
-
-function formatPdfTranslationEntry(entry: PdfTranslationEntry) {
-  const lines = [entry.sourceText, entry.translation]
-  if (entry.partOfSpeech || entry.phonetic) {
-    lines.push([entry.partOfSpeech, entry.phonetic].filter(Boolean).join('  '))
-  }
-  if (entry.definition) {
-    lines.push(entry.definition)
-  }
-  if (entry.example) {
-    lines.push(entry.example)
-  }
-  return lines.filter((line) => line.trim()).join('\n')
 }
 
 function getPdfTranslationVoiceLang(entry: PdfTranslationEntry, sourceLanguage: string) {
@@ -973,6 +959,9 @@ function PdfViewerInner({
   const [translationSettings, setTranslationSettings] = useState<PdfTranslationSettings>(loadPdfTranslationSettings)
   const [translationSettingsOpen, setTranslationSettingsOpen] = useState(false)
   const [translationPronouncing, setTranslationPronouncing] = useState(false)
+  const translationMode = translationEntry?.mode ?? (
+    isDictionaryLikeSelection(translationSelectionDraft?.text ?? '') ? 'dictionary' : 'translation'
+  )
   const translationPopoverRef = useRef<HTMLDivElement | null>(null)
   const selectionSnapshotRef = useRef<string | null>(null)
   const translationSelectionSnapshotRef = useRef<string | null>(null)
@@ -3595,11 +3584,13 @@ function PdfViewerInner({
                   <div className="pdf-translation-headword">
                     {translationEntry?.sourceText ?? translationSelectionDraft.text}
                   </div>
-                  <div className="pdf-translation-meaning">
-                    {translationStatus === 'loading'
-                      ? t('pdf.translatingSelection')
-                      : translationEntry?.translation ?? ''}
-                  </div>
+                  {translationMode === 'dictionary' ? (
+                    <div className="pdf-translation-meaning">
+                      {translationStatus === 'loading'
+                        ? t('pdf.translatingSelection')
+                        : translationEntry?.translation ?? ''}
+                    </div>
+                  ) : null}
                   <div className="pdf-translation-meta">
                     {translationEntry?.partOfSpeech ? (
                       <span className="pdf-translation-part-of-speech">{translationEntry.partOfSpeech}</span>
@@ -3622,6 +3613,13 @@ function PdfViewerInner({
                   </div>
                 </div>
                 <div className="pdf-translation-column pdf-translation-column--right">
+                  {translationMode === 'translation' ? (
+                    <div className="pdf-translation-meaning pdf-translation-meaning--result">
+                      {translationStatus === 'loading'
+                        ? t('pdf.translatingSelection')
+                        : translationEntry?.translation ?? ''}
+                    </div>
+                  ) : null}
                   {translationEntry?.definition ? (
                     <div className="pdf-translation-block">
                       <div className="pdf-translation-label">{t('pdf.translationDefinition')}</div>
@@ -3644,7 +3642,7 @@ function PdfViewerInner({
                 {translationEntry ? (
                   <button
                     type="button"
-                    onClick={() => void navigator.clipboard?.writeText(formatPdfTranslationEntry(translationEntry))}
+                    onClick={() => void navigator.clipboard?.writeText(translationEntry.translation)}
                   >
                     {t('pdf.translationCopy')}
                   </button>

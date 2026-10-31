@@ -50,7 +50,7 @@ export type TranslatePdfSelectionOptions = {
   onDelta?: (text: string) => void
 }
 
-function isDictionaryLikeSelection(text: string) {
+export function isDictionaryLikeSelection(text: string) {
   const compact = text.trim()
   if (!compact) return false
   if (/[\n。！？!?]/.test(compact)) return false

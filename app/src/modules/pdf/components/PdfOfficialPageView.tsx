@@ -180,6 +180,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     const selectionDispatchSuppressedRef = useRef(selectionDispatchSuppressed)
   const textRectsRef = useRef<RectLike[]>([])
   const textRectsDirtyRef = useRef(true)
+  const retrySelectionAfterTextLayoutRef = useRef<(() => void) | null>(null)
   const visualTextLayoutRef = useRef<VisualTextLayout | null>(null)
   const isPointerSelectionActiveRef = useRef(false)
   const selectionAnchorCaretRef = useRef<TextCaret | null>(null)
@@ -680,6 +681,7 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         textRectFrame = 0
         if (!cancelled) {
           updateCachedTextRects()
+          retrySelectionAfterTextLayoutRef.current?.()
         }
       })
     }
@@ -757,7 +759,6 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     let frame = 0
     let selectionChangeFrame = 0
     let settledSelectionFrame = 0
-    let settledSelectionInnerFrame = 0
     let selectionMoveFrame = 0
     let isControlledTextDrag = false
     let pendingSelectionMove: { clientX: number; clientY: number } | null = null
@@ -892,11 +893,6 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         return
       }
       scheduleSelectionAssistRegionUpdate(pageRect, normalizedRawRects)
-      if (textRectsDirtyRef.current || textRectsRef.current.length === 0) {
-        return
-      }
-      const textRects = textRectsRef.current
-
       const rawRects = selectionRectsToAnnotationRects(normalizedRawRects, {
         left: pageRect.left,
         top: pageRect.top,
@@ -905,6 +901,10 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         width: pageRect.width,
         height: pageRect.height,
       })
+      const textRects = textRectsRef.current
+      if (rawRects.length === 0 && (textRectsDirtyRef.current || textRects.length === 0)) {
+        return
+      }
       const nextBlocks =
         rawRects.length > 0
           ? annotationRectsToSelectionBlocks(rawRects, pageRect.width, pageRect.height)
@@ -926,9 +926,9 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         rectsKey,
         previewKey,
       }
-      lastPublishedSelectionSnapshotRef.current = nextSelectionSnapshot
       applySelectionBlocks(nextBlocks)
       if (shouldDeferSelectionPublish) return
+      lastPublishedSelectionSnapshotRef.current = nextSelectionSnapshot
       publishSelection(text && rects.length > 0 ? { page: pageNumber, text, rects } : null)
       if (ENABLE_PDF_SELECTION_LATENCY_DEBUG) {
         console.debug('[input-debug][pdf-page] update-selection', {
@@ -1276,19 +1276,21 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       if (frame) return
       frame = window.requestAnimationFrame(updateSelectionBlocks)
     }
+    const retrySelectionAfterTextLayout = () => {
+      pendingSelectionPreview = null
+      scheduleUpdate()
+    }
+    retrySelectionAfterTextLayoutRef.current = retrySelectionAfterTextLayout
 
     const scheduleSettledSelectionUpdate = () => {
-      if (settledSelectionFrame || settledSelectionInnerFrame) return
+      if (settledSelectionFrame) return
       settledSelectionFrame = window.requestAnimationFrame(() => {
         settledSelectionFrame = 0
-        settledSelectionInnerFrame = window.requestAnimationFrame(() => {
-          settledSelectionInnerFrame = 0
-          if (frame) {
-            window.cancelAnimationFrame(frame)
-            frame = 0
-          }
-          updateSelectionBlocks()
-        })
+        if (frame) {
+          window.cancelAnimationFrame(frame)
+          frame = 0
+        }
+        updateSelectionBlocks()
       })
     }
 
@@ -1404,6 +1406,14 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
           }
         }
       }
+      // selectionchange is ignored during pointer drags, so refresh the
+      // selection overlay directly on this animation frame.
+      pendingSelectionPreview = null
+      if (frame) {
+        window.cancelAnimationFrame(frame)
+        frame = 0
+      }
+      updateSelectionBlocks()
       const rootNode = rootRef.current
       if (!rootNode) return
       const pageEl = rootNode.querySelector('.page') as HTMLElement | null
@@ -1747,6 +1757,8 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       lastValidSelectionCaretRef.current = anchorCaret
       lastSelectionCaretSample = null
       setPointerSelectingState(true)
+      pendingSelectionPreview = null
+      lastPublishedSelectionSnapshotRef.current = null
       clearSelectionBlocks()
     }
 
@@ -2170,6 +2182,9 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     document.addEventListener('pointercancel', handlePointerFinish)
     if (!selectionChangeActive) {
       return () => {
+        if (retrySelectionAfterTextLayoutRef.current === retrySelectionAfterTextLayout) {
+          retrySelectionAfterTextLayoutRef.current = null
+        }
         root.removeEventListener('pointerdown', handlePointerDown)
         root.removeEventListener('mousedown', handleTextSelectionMouseDown, true)
         root.removeEventListener('click', handleTextSelectionClick)
@@ -2182,9 +2197,6 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
         }
         if (settledSelectionFrame) {
           window.cancelAnimationFrame(settledSelectionFrame)
-        }
-        if (settledSelectionInnerFrame) {
-          window.cancelAnimationFrame(settledSelectionInnerFrame)
         }
       }
     }
@@ -2200,6 +2212,9 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
     }
 
     return () => {
+      if (retrySelectionAfterTextLayoutRef.current === retrySelectionAfterTextLayout) {
+        retrySelectionAfterTextLayoutRef.current = null
+      }
       root.removeEventListener('pointerdown', handlePointerDown)
       root.removeEventListener('mousedown', handleTextSelectionMouseDown, true)
       root.removeEventListener('click', handleTextSelectionClick)
@@ -2213,9 +2228,6 @@ export const PdfOfficialPageView = memo(function PdfOfficialPageView({
       }
       if (settledSelectionFrame) {
         window.cancelAnimationFrame(settledSelectionFrame)
-      }
-      if (settledSelectionInnerFrame) {
-        window.cancelAnimationFrame(settledSelectionInnerFrame)
       }
       if (selectionAssistRegionFrameRef.current) {
         window.cancelAnimationFrame(selectionAssistRegionFrameRef.current)
