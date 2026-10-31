@@ -64,6 +64,7 @@ export type LayoutCommandContext = StatusContext & {
  * 文件/标签相关命令所需的上下文。
  */
 export type FileCommandContext = StatusContext & {
+  openLeftPanel?: PanelCommandContext['openLeftPanel']
   confirmLoseChanges: () => boolean
   /**
    * 是否存在需要用户确认的未保存变更
@@ -534,6 +535,7 @@ function createFileCommands(ctx: FileCommandContext): CommandRegistry {
       ctx.createTab({ content: '' })
       ctx.applyOpenedContent('')
       ctx.newDocument()
+      ctx.openLeftPanel?.('files')
     },
     save: async () => {
       await ctx.save()

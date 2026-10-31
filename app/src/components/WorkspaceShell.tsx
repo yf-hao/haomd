@@ -330,13 +330,6 @@ export function WorkspaceShell({
     return importer(session.messages)
   }, [])
 
-  // Reset session key when switching away from the sessions panel
-  useEffect(() => {
-    if (activeLeftPanel !== 'sessions' && aiChatSessionKey.startsWith('session:')) {
-      setAiChatSessionKey('global')
-    }
-  }, [activeLeftPanel])
-
   useEffect(() => {
     if (activeLeftPanel !== 'search') {
       setTransientSearchQuery(null)
@@ -4896,6 +4889,7 @@ export function WorkspaceShell({
           ) : null}
           <div className="workspace-column-content">
           {aiChatSessionKey.startsWith('session:') ? (
+            <div style={{ display: activeLeftPanel === 'sessions' ? undefined : 'none', height: '100%' }}>
             <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13, height: '100%' }}>{t('workspace.loadingAiPane')}</div>}>
                 <AiChatPaneLazy
                 key={aiChatSessionKey}
@@ -4930,7 +4924,9 @@ export function WorkspaceShell({
                 fullPage
               />
             </Suspense>
-          ) : tabs.length === 0 ? (
+            </div>
+          ) : null}
+          {aiChatSessionKey.startsWith('session:') && activeLeftPanel === 'sessions' ? null : tabs.length === 0 ? (
             <Welcome
               onNewFile={() => createTab()}
               onOpenFile={() => void dispatchAction('open_file')}

@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.17.0] - 2026-10-31
+
+### 中文
+
+本次更新完善 AI 会话滚动与导航体验，并改进 HTTP 请求复用和 Windows 代理处理。
+
+#### 主要更新
+
+* **AI 会话体验**：修复回复流式生成期间布局变化导致自动跟随意外停止的问题；发送新消息后恢复跟随。
+* **会话与文件导航**：在 Sessions 中创建空白文件后切回 Files 并显示新标签，同时保留会话运行状态。
+* **HTTP 请求复用**：按网络策略复用 HTTP 客户端和连接池，并保持 Skill 会话的 Cookie 与地址校验隔离。
+* **Windows 代理修复**：隐藏系统代理检测的控制台窗口，避免 `reg.exe` 查询时反复闪窗。
+
+### English
+
+This release improves AI chat scrolling and navigation, and refines HTTP client reuse and Windows proxy handling.
+
+#### Key Updates
+
+* **AI Chat**: Fixed auto-follow stopping unexpectedly when layout changes during streaming; sending a new message resumes following.
+* **Session and File Navigation**: Creating a blank file from Sessions returns to Files and shows the new tab while keeping the session running.
+* **HTTP Client Reuse**: Reuses HTTP clients and connection pools by network policy while preserving Skill cookie and address-validation isolation.
+* **Windows Proxy Fix**: Hides the console window used for system proxy detection, preventing repeated `reg.exe` popups.
+
 ## [v0.16.0] - 2026-10-25
 
 ### 中文

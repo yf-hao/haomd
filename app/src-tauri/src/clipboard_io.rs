@@ -453,8 +453,7 @@ pub async fn download_remote_images(
         }
     }
 
-    let client = match crate::http_client::shared_client(crate::http_client::DOWNLOAD_POLICY)
-    {
+    let client = match crate::http_client::shared_client(crate::http_client::DOWNLOAD_POLICY) {
         Ok(client) => client,
         Err(error) => {
             return err_payload(

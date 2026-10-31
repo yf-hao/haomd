@@ -274,6 +274,7 @@ describe('command registry - file commands', () => {
     expect(ctx.createTab).toHaveBeenCalledWith({ content: '' })
     expect(ctx.applyOpenedContent).toHaveBeenCalledWith('')
     expect(ctx.newDocument).toHaveBeenCalled()
+    expect(ctx.openLeftPanel).toHaveBeenCalledWith('files')
   })
 
   it('save / save_as should delegate to ctx', async () => {
