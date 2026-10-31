@@ -183,7 +183,9 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
     [messages],
   )
   const visibleRef = useRef(visibleMessages)
-  visibleRef.current = visibleMessages
+  useEffect(() => {
+    visibleRef.current = visibleMessages
+  }, [visibleMessages])
   const virtualized = virtualizationEnabled && visibleMessages.length > AI_CHAT_VIRTUALIZATION_THRESHOLD
   useEffect(() => {
     let active = true

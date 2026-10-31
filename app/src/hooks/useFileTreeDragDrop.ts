@@ -8,7 +8,9 @@ export function useFileTreeDragDrop(options: {
   onError?: (message: string) => void
 }) {
   const latest = useRef(options)
-  latest.current = options
+  useEffect(() => {
+    latest.current = options
+  }, [options])
   const busy = useRef(false)
   const suppressClick = useRef(false)
   const drag = useRef<{

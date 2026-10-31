@@ -150,6 +150,7 @@ describe('Sidebar', () => {
             path: '/root/dir1',
             kind: 'tree-dir',
             action: 'delete',
+            targets: [{ path: '/root/dir1', kind: 'tree-dir' }],
         })
     })
 })

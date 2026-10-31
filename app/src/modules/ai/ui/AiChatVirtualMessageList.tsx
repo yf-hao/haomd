@@ -59,7 +59,7 @@ export function AiChatVirtualMessageList({
   const positionsRef = useRef<MessagePosition[]>([])
   const heightsRef = useRef(new Map<string, number>())
   const scrollAnchorRef = useRef<ScrollAnchor | null>(null)
-  const [viewport, setViewport] = useState({ scrollTop: 0, height: 0 })
+  const [viewport, setViewport] = useState({ scrollTop: 0, height: 0, following: true })
   const [measuredHeights, setMeasuredHeights] = useState(() => new Map<string, number>())
   const [initializedScrollKey, setInitializedScrollKey] = useState<string | null>(null)
 
@@ -71,8 +71,9 @@ export function AiChatVirtualMessageList({
       const next = {
         scrollTop: container.scrollTop,
         height: container.clientHeight,
+        following: chatScrollController(container).follow.current,
       }
-      return previous.scrollTop === next.scrollTop && previous.height === next.height
+      return previous.scrollTop === next.scrollTop && previous.height === next.height && previous.following === next.following
         ? previous
         : next
     })
@@ -149,7 +150,7 @@ export function AiChatVirtualMessageList({
     : 0
   const viewportHeight = viewport.height || MIN_OVERSCAN_HEIGHT
   const isInitialScrollPending = initializedScrollKey !== initialScrollKey
-    && (!containerRef.current || chatScrollController(containerRef.current).follow.current)
+    && viewport.following
   const anchorPosition = initializedScrollKey !== initialScrollKey && initialAnchor
     ? positions.find(row => row.id === initialAnchor.id) : undefined
   const effectiveScrollTop = anchorPosition && initialAnchor ? Math.max(0, anchorPosition.top - initialAnchor.top) : isInitialScrollPending

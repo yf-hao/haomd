@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { flushSync } from 'react-dom'
 import type { EditorView } from '@codemirror/view'
@@ -34,12 +34,14 @@ function Harness() {
   const [visible, setVisible] = useState(false)
   const [documentId, setDocumentId] = useState(0)
   const scheduler = useMemo(() => createPreviewScheduler(), [])
-  reset = (value, showPreview) => {
-    setSource(value)
-    setPreview(value)
-    setVisible(showPreview)
-    setDocumentId(id => id + 1)
-  }
+  useEffect(() => {
+    reset = (value, showPreview) => {
+      setSource(value)
+      setPreview(value)
+      setVisible(showPreview)
+      setDocumentId(id => id + 1)
+    }
+  }, [])
   return <div style={{ display: 'flex', height: '90vh' }}>
     <div style={{ width: '50%', height: '100%' }}>
       <CodeEditor value={source} documentKey={String(documentId)} preserveLocalDocument

@@ -60,8 +60,12 @@ mod tests {
     #[test]
     fn skips_hidden_directories_and_all_descendants() {
         let root = std::env::temp_dir().join(format!(
-            "haomd-hidden-{}-{}", std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+            "haomd-hidden-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         ));
         std::fs::create_dir_all(root.join("vgms/.git/hooks/deep")).unwrap();
         std::fs::create_dir_all(root.join(".haomd/notes")).unwrap();
@@ -189,12 +193,17 @@ pub async fn rename_fs_entry(
 }
 
 #[tauri::command]
-pub async fn copy_fs_entry(source_path: String, target_directory: String) -> Result<String, String> {
+pub async fn copy_fs_entry(
+    source_path: String,
+    target_directory: String,
+) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         crate::file_copy::copy_entry(Path::new(&source_path), Path::new(&target_directory))
             .map(|path| path.to_string_lossy().into_owned())
             .map_err(|error| format!("复制失败: {error}"))
-    }).await.map_err(|error| format!("复制任务失败: {error}"))?
+    })
+    .await
+    .map_err(|error| format!("复制任务失败: {error}"))?
 }
 
 #[tauri::command]

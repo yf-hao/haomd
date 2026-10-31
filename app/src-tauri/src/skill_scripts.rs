@@ -49,12 +49,7 @@ fn execute_builtin_js(script_source: &str, args: &Value) -> Result<SkillRunResul
     let result_text: String = context.with(|ctx| {
         let http_request_count = request_count.clone();
         let http_request = Func::from(move |request_json: String| {
-            execute_http_request_json(
-                &http_session,
-                &request_json,
-                &http_request_count,
-                deadline,
-            )
+            execute_http_request_json(&http_session, &request_json, &http_request_count, deadline)
         });
         ctx.globals()
             .set("__haomdHttpRequest", http_request)
