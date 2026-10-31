@@ -382,6 +382,12 @@ export const AiChatBody: FC<AiChatBodyProps> = ({
     const capturedAnchor = pendingPrependDeltaRef.current
     const el = messagesContainerRef.current
     if (!el || !capturedAnchor) return
+    // A new send supersedes any older history-loading transition.
+    if (chatScrollController(el).follow.current) {
+      pendingPrependDeltaRef.current = null
+      readingAnchorRef.current = null
+      return
+    }
     // Scrolling can continue while a concurrent render is in progress. Restore
     // the latest reader anchor instead of the position captured at batch start.
     const anchor = readingAnchorRef.current ?? capturedAnchor

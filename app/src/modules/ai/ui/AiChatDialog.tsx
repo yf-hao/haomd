@@ -1,9 +1,10 @@
 import type { FC, FormEvent, KeyboardEvent, MouseEventHandler, MouseEvent as ReactMouseEvent } from 'react'
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { getAiChatUiSettings } from '../../settings/editorSettings'
 import type { ChatEntryMode, ChatMessageView, EntryContext } from '../domain/chatSession'
 import { getDirKeyFromDocPath, normalizePersistableDocPath } from '../domain/docPathUtils'
 import { AiChatBody } from './AiChatBody'
+import { chatScrollController } from './chatScrollController'
 import type { AiChatComposerHandle } from './AiChatComposer'
 import { buildDisplayMessages } from './displayMessageOrder'
 import { useAiChatSession } from './hooks/useAiChatSession'
@@ -157,6 +158,12 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
   const composerHandleRef = useRef<AiChatComposerHandle | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const messagesContainerRef = useRef<HTMLDivElement | null>(null)
+  const shouldAutoScrollRef = useRef(true)
+  const beginNewChatTurnFollow = useCallback(() => {
+    shouldAutoScrollRef.current = true
+    const container = messagesContainerRef.current
+    if (container) chatScrollController(container).beginNewTurn()
+  }, [])
   const docPathStabilizeTimerRef = useRef<number | null>(null)
   const previousBusyRef = useRef(false)
   const selectedAgent = agents.find((agent) => agent.id === activeAgentId) ?? null
@@ -581,6 +588,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
           status: 'running',
         },
       ])
+      beginNewChatTurnFollow()
       setImageGenerationRunning(true)
 
       try {
@@ -826,6 +834,7 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
 
     clearHistoryBrowse()
     clearDraft()
+    beginNewChatTurnFollow()
 
     const handled = await tryHandleSlashCommand(contentToSend, {
       // slash 命令与文档会话保持一致：按目录共享会话
@@ -1306,8 +1315,6 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
       ? getDisplayContent(lastMessage.id, lastMessage.content).length
       : lastMessage?.content.length ?? 0
   const lastMessageKey = lastMessage ? `${lastMessage.id}:${lastMessageDisplayLength}` : ''
-  const shouldAutoScrollRef = useRef(true)
-  const autoScrollRafRef = useRef<number | null>(null)
 
   const handleStop = useCallback(() => {
     const activeMsg = messages.find((m) =>
@@ -1327,45 +1334,29 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
     stop()
   }, [isDifyProvider, messages, stop, stopAndTruncate, visibleLengths])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return
-    shouldAutoScrollRef.current = true
+    const container = messagesContainerRef.current
+    if (container) return chatScrollController(container).attach(shouldAutoScrollRef)
   }, [open])
 
   useEffect(() => {
-    const el = messagesContainerRef.current
-    if (!el) return
-
-    const handleScroll = () => {
-      const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-      shouldAutoScrollRef.current = distanceToBottom <= 80
-    }
-
-    el.addEventListener('scroll', handleScroll, { passive: true })
-    return () => el.removeEventListener('scroll', handleScroll)
-  }, [open])
+    if (open) beginNewChatTurnFollow()
+  }, [open, beginNewChatTurnFollow])
 
   useEffect(() => {
-    if (!shouldAutoScrollRef.current) return
-    const el = messagesContainerRef.current
-    if (!el) return
-    if (autoScrollRafRef.current !== null) {
-      window.cancelAnimationFrame(autoScrollRafRef.current)
-    }
-    autoScrollRafRef.current = window.requestAnimationFrame(() => {
-      autoScrollRafRef.current = null
-      const current = messagesContainerRef.current
-      if (current && shouldAutoScrollRef.current) {
-        current.scrollTop = current.scrollHeight
-      }
-    })
-    return () => {
-      if (autoScrollRafRef.current !== null) {
-        window.cancelAnimationFrame(autoScrollRafRef.current)
-        autoScrollRafRef.current = null
-      }
-    }
-  }, [lastMessageKey])
+    const container = messagesContainerRef.current
+    if (open && container) chatScrollController(container).scheduleBottom()
+  }, [open, lastMessageKey])
+
+  useEffect(() => {
+    const container = messagesContainerRef.current
+    const content = container?.firstElementChild
+    if (!open || !container || !content || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => chatScrollController(container).scheduleBottom())
+    observer.observe(content)
+    return () => observer.disconnect()
+  }, [open, messages.length])
 
   useEffect(() => {
     if (!open) return

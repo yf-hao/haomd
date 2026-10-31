@@ -5,7 +5,7 @@ export interface ChatAutoFollowPolicyPort {
   bind(state: ChatFollowState): void
   beginNewTurn(): void
   pause(): void
-  onScroll(delta: number, distanceToBottom: number): void
+  onScroll(delta: number, distanceToBottom: number, userScrollingDown: boolean): void
   onWheel(deltaY: number): void
 }
 
@@ -25,15 +25,12 @@ export class ChatAutoFollowPolicy implements ChatAutoFollowPolicyPort {
     this.state.current = false
   }
 
-  onScroll(delta: number, distanceToBottom: number) {
-    if (delta < -0.5) {
-      this.pause()
-      return
-    }
-
+  onScroll(delta: number, distanceToBottom: number, userScrollingDown: boolean) {
+    // Layout changes can reduce scrollTop even while the reader stays at the bottom.
+    // Only explicit input pauses following; scroll events alone do not show intent.
     // WebKit can report scrollTop beyond the bottom during elastic overscroll.
     // Only resume following when the viewport is genuinely at the bottom.
-    if (delta > 0.5 && distanceToBottom >= -2 && distanceToBottom <= 2) {
+    if (userScrollingDown && delta > 0.5 && distanceToBottom >= -2 && distanceToBottom <= 2) {
       this.state.current = true
     }
   }
