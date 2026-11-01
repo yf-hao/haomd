@@ -58,6 +58,7 @@ export type UseAiChatResult = {
    * 只包含未隐藏的 user/assistant 消息，并按时间顺序返回最后 limit 条。
    */
   getRecentMessagesForDigest: (limit: number) => ChatMessageView[]
+  clearCurrentConversation?: () => Promise<void>
 }
 
 export function useAiChat(options: UseAiChatOptions): UseAiChatResult {
