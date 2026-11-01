@@ -431,56 +431,11 @@
   list-style: none;
 }
 
-.sidebar-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: var(--theme-component-tabbar-height);
-  box-sizing: border-box;
-  padding: 0;
-  border-bottom: 1px solid var(--theme-border-subtle);
-}
-
-/* File Browser 顶部标题样式，略小一号 */
-.sidebar-header .pane-title {
-  font-size: calc(var(--ui-font-sidebar) - 1px);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--theme-text-subtle);
-}
-
-.sidebar-header-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.sidebar-header-toolbar .toolbar-btn {
-  width: 20px;
-  height: 20px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--theme-text-subtle);
-  cursor: pointer;
-  padding: 0;
-  font-size: calc(var(--ui-font-sidebar) - 2px);
-}
-
-.sidebar-header-toolbar .toolbar-btn:hover {
-  background: var(--theme-component-sidebar-hover);
-  color: var(--theme-text-default);
-}
-
 .sidebar-body {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding-top: 8px;
+  padding-top: 4px;
   padding-right: 4px;
   /* 侧边栏文件区域统一使用手型光标，避免点击后短暂退回箭头 */
   cursor: pointer;
@@ -491,6 +446,57 @@
 .sidebar-body::-webkit-scrollbar {
   width: 0;
   height: 0;
+}
+
+.sidebar-browser-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  gap: 12px;
+  padding: 0 4px;
+  border-bottom: 1px solid var(--theme-border-subtle);
+  background: transparent;
+}
+
+.sidebar-browser-tab {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  min-height: 0;
+  padding: 0 8px;
+  position: relative;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--theme-text-muted);
+  font: inherit;
+  font-size: calc(var(--ui-font-sidebar) - 1px);
+  font-weight: 600;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: color 0.12s ease-out;
+}
+
+.sidebar-browser-tab:hover {
+  color: var(--theme-text-default);
+}
+
+.sidebar-browser-tab.active {
+  color: var(--theme-text-default);
+  background: var(--theme-component-sidebar-active);
+}
+
+.sidebar-section-content {
+  min-height: 0;
+}
+
+.sidebar-empty-state {
+  padding: 10px 8px;
+  color: var(--theme-text-muted);
+  font-size: calc(var(--ui-font-sidebar) - 1px);
 }
 
 .sidebar-section+.sidebar-section {

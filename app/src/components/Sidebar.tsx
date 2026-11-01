@@ -419,25 +419,13 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
     expanded, expand: onToggle, move: onMoveFile, onError: onNotify,
   })
   const { t } = useI18n()
-  const hasStandalone = standaloneFiles.length > 0
-  const hasTree = folderRoots.some((rootPath) => (treesByRoot[rootPath]?.length ?? 0) > 0)
-  const [collapsedSections, setCollapsedSections] = useState<{ files: boolean; folders: boolean }>(() => {
-    if (typeof localStorage === 'undefined') {
-      return { files: false, folders: false }
-    }
+  const [browserSection, setBrowserSection] = useState<'files' | 'folders'>(() => {
     try {
-      const raw = localStorage.getItem('haomd:sidebar:collapsed-sections')
-      if (!raw) return { files: false, folders: false }
-      const parsed = JSON.parse(raw)
-      return {
-        files: !!parsed?.files,
-        folders: !!parsed?.folders,
-      }
+      return localStorage.getItem('haomd:sidebar:active-section') === 'folders' ? 'folders' : 'files'
     } catch {
-      return { files: false, folders: false }
+      return 'files'
     }
   })
-
   const [menuState, setMenuState] = useState<{
     visible: boolean
     x: number
@@ -483,14 +471,10 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
   // Refresh/collapse/delete must not leave invisible entries selected.
   useEffect(() => {
     if (sidebarElement.current?.isConnected) selection.prune(visibleFileEntries(sidebarElement.current))
-  }, [treesByRoot, standaloneFiles, expanded, collapsedSections, collapsedFileVirtualFolders,
+  }, [treesByRoot, standaloneFiles, expanded, collapsedFileVirtualFolders,
     fileVirtualFolders, fileVirtualAssignments, selection.prune])
 
   const closeMenu = () => setMenuState({ visible: false, x: 0, y: 0, target: null })
-
-  const toggleSectionCollapse = (section: 'files' | 'folders') => {
-    setCollapsedSections((prev) => ({ ...prev, [section]: !prev[section] }))
-  }
 
   const triggerContextAction = (action: SidebarContextAction) => {
     if (!menuState.visible || !menuState.target || !onContextAction) return
@@ -703,15 +687,6 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
   }, [collapsedFileVirtualFolders])
 
   useEffect(() => {
-    if (typeof localStorage === 'undefined') return
-    try {
-      localStorage.setItem('haomd:sidebar:collapsed-sections', JSON.stringify(collapsedSections))
-    } catch (e) {
-      console.warn('[Sidebar] persist collapsedSections failed', e)
-    }
-  }, [collapsedSections])
-
-  useEffect(() => {
     let cancelled = false
 
     const load = async () => {
@@ -789,27 +764,6 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
 
   const asideStyle = panelWidth ? { width: panelWidth } : undefined
 
-  if (!hasTree && !hasStandalone) {
-    return (
-      <SidebarBackgroundShell
-        as="aside"
-      {...dragHandlers}
-        className="sidebar"
-        style={asideStyle}
-        onClick={closeMenu}
-        onContextMenu={(e) => {
-          e.preventDefault()
-          closeMenu()
-        }}
-      >
-        <div className="sidebar-header">
-          <div className="pane-title">{t('sidebar.fileBrowser')}</div>
-        </div>
-        <div className="sidebar-body muted small">{t('sidebar.noFiles')}</div>
-      </SidebarBackgroundShell>
-    )
-  }
-
   return (
     <SidebarBackgroundShell
       as="aside"
@@ -828,32 +782,31 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
         closeMenu()
       }}
     >
-      <div className="sidebar-header">
-        <div className="pane-title">{t('sidebar.fileBrowser')}</div>
-      </div>
       {selection.entries.length > 1 && <div className="sidebar-selection-count" role="status">
         {t('sidebar.selectedCount', { count: selectedPaths.size })}
       </div>}
       <div className="sidebar-body">
-        {hasStandalone && (
+        <div className="sidebar-browser-tabs" role="tablist" aria-label={t('sidebar.fileBrowser')}>
+          {(['files', 'folders'] as const).map((section) => (
+            <button
+              key={section}
+              type="button"
+              role="tab"
+              aria-selected={browserSection === section}
+              className={`sidebar-browser-tab ${browserSection === section ? 'active' : ''}`}
+              onClick={() => {
+                setBrowserSection(section)
+                try { localStorage.setItem('haomd:sidebar:active-section', section) } catch { /* storage may be unavailable */ }
+              }}
+            >
+              {t(section === 'files' ? 'sidebar.files' : 'sidebar.folders')}
+            </button>
+          ))}
+        </div>
+        {browserSection === 'files' && (
           <section className="sidebar-section">
             <div className="sidebar-section-header">
-              <button
-                type="button"
-                className="sidebar-section-toggle"
-                aria-expanded={!collapsedSections.files}
-                aria-label={collapsedSections.files ? t('outline.expand') : t('outline.collapse')}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  e.preventDefault()
-                  toggleSectionCollapse('files')
-                }}
-              >
-                <span className={`sidebar-section-toggle-icon ${collapsedSections.files ? 'collapsed' : 'expanded'}`} aria-hidden="true">
-                  ▾
-                </span>
-                <span className="sidebar-section-title">{t('sidebar.files')}</span>
-              </button>
+              <span className="sidebar-section-title" aria-hidden="true" />
               <div className="files-section-actions">
                 <button
                   type="button"
@@ -870,8 +823,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
               </div>
             </div>
 
-            {collapsedSections.files ? null : (
-              <>
+            <div className="sidebar-section-content">
                 {creatingFileFolder && (
                   <div className="sidebar-virtual-folder-inline-create">
                     <input
@@ -938,6 +890,8 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                     )
                   })}
                 </ul>
+
+                {standaloneFiles.length === 0 && <div className="sidebar-empty-state">{t('sidebar.noFiles')}</div>}
 
                 {fileVirtualFolders.length > 0 && (
                   <div className="sidebar-virtual-folders">
@@ -1038,30 +992,14 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                     })}
                   </div>
                 )}
-              </>
-            )}
+            </div>
           </section>
         )}
 
-        {hasTree && (
+        {browserSection === 'folders' && (
           <section className="sidebar-section">
             <div className="sidebar-section-header">
-              <button
-                type="button"
-                className="sidebar-section-toggle"
-                aria-expanded={!collapsedSections.folders}
-                aria-label={collapsedSections.folders ? t('outline.expand') : t('outline.collapse')}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  e.preventDefault()
-                  toggleSectionCollapse('folders')
-                }}
-              >
-                <span className={`sidebar-section-toggle-icon ${collapsedSections.folders ? 'collapsed' : 'expanded'}`} aria-hidden="true">
-                  ▾
-                </span>
-                <span className="sidebar-section-title">{t('sidebar.folders')}</span>
-              </button>
+              <span className="sidebar-section-title" aria-hidden="true" />
               <div className="folder-section-actions">
                 <button
                   type="button"
@@ -1095,7 +1033,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                 />
               </div>
             </div>
-            {!collapsedSections.folders && folderRoots.length > 0 && (
+            {folderRoots.length > 0 && (
               <ul className="sidebar-folder-list">
                 {folderRoots.map((rootPath) => {
                   const name = rootPath.split(/[/\\]/).pop() ?? rootPath
@@ -1180,6 +1118,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                 })}
               </ul>
             )}
+            {folderRoots.length === 0 && <div className="sidebar-empty-state">{t('sidebar.noFiles')}</div>}
           </section>
         )}
       </div>
