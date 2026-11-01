@@ -210,18 +210,3 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-
-.tab-bar-measure {
-  position: absolute;
-  visibility: hidden;
-  pointer-events: none;
-  inset: 0 auto auto 0;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  overflow: hidden;
-}
-
-.tab-item-measure {
-  flex: 0 0 auto;
-}

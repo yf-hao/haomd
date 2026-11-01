@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 const MIN_SIDEBAR_WIDTH = 150
-const MAX_SIDEBAR_WIDTH = 400
 
 export interface UseSidebarResizeParams {
   activeLeftPanel: string | null
@@ -36,7 +35,6 @@ export function useSidebarResize({
       const delta = e.clientX - state.startX
       let next = state.startWidth + delta
       if (next < MIN_SIDEBAR_WIDTH) next = MIN_SIDEBAR_WIDTH
-      if (next > MAX_SIDEBAR_WIDTH) next = MAX_SIDEBAR_WIDTH
       setSidebarWidth(next)
     }
     const handleUp = () => {

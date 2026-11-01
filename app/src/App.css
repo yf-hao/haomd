@@ -1543,7 +1543,7 @@ button:disabled {
   --sidebar-panel-surface: color-mix(in srgb, var(--theme-surface-sidebar) 72%, var(--theme-surface-preview) 28%);
   width: 260px;
   min-width: 200px;
-  max-width: 320px;
+  flex-shrink: 0;
   border-right: 1px solid var(--theme-border-subtle);
   background: var(--sidebar-panel-surface);
   backdrop-filter: blur(8px);
@@ -1561,7 +1561,7 @@ button:disabled {
 .outline-panel {
   width: 220px;
   min-width: 180px;
-  max-width: 260px;
+  flex-shrink: 0;
   border-right: 1px solid var(--theme-border-subtle);
   background: var(--sidebar-panel-surface);
   backdrop-filter: blur(8px);

@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.18.0] - 2026-11-01
+
+### 中文
+
+本次更新加入深空蓝主题，改进文件浏览与标签性能，并完善 PDF 翻译和 AI Chat Dock 体验。
+
+#### 主要更新
+
+* **文件浏览器**：Files 与 Folders 可切换查看；优化文件图标和文件夹展开标记，并取消侧栏最大宽度限制。
+* **标签与编辑性能**：修复同一文件被重复打开到多个标签的问题；移除标签栏隐藏测量节点，减少标签内容同步造成的重复渲染。
+* **深空蓝主题**：新增深蓝表面与电光青强调色，并为选中状态增加克制的流动边缘效果。
+* **PDF 翻译**：改进 PDF 选区翻译与高亮行为，并加入工具栏翻译入口。
+* **AI Chat Dock**：增加与编辑器区分的侧边分隔线，并调整头部高度以对齐编辑器标签栏。
+
+### English
+
+This release adds the Deep Space theme, improves file browsing and tab performance, and refines PDF translation and AI Chat docking.
+
+#### Key Updates
+
+* **File Browser**: Switch between Files and Folders, refine file and folder disclosure icons, and remove the sidebar maximum-width limit.
+* **Tabs and Editor Performance**: Prevent duplicate tabs for the same file, remove hidden tab measurement nodes, and reduce redundant tab-state updates.
+* **Deep Space Theme**: Add deep blue surfaces with electric cyan accents and a restrained animated edge on selected items.
+* **PDF Translation**: Improve selection translation and highlighting, and add a translation action to the PDF toolbar.
+* **AI Chat Dock**: Add a subtle divider from the editor and align the chat header with the editor tab bar.
+
 ## [v0.17.0] - 2026-10-31
 
 ### 中文

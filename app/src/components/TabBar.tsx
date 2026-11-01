@@ -13,10 +13,55 @@ export type TabBarProps = {
 }
 
 const OVERFLOW_BUTTON_WIDTH = 36
+const TAB_TITLE_MAX_WIDTH = 160
+const TAB_HORIZONTAL_PADDING = 20
+const TAB_CONTENT_GAP = 6
+
+function measureTabWidths(
+  root: HTMLDivElement,
+  tabs: EditorTab[],
+  previous: Map<string, { title: string; dirty: boolean; width: number; font: string; closeWidth: number }>,
+): { widths: Record<string, number>; cache: Map<string, { title: string; dirty: boolean; width: number; font: string; closeWidth: number }> } {
+  const canvas = document.createElement('canvas')
+  const context = canvas.getContext('2d')
+  if (!context) {
+    const fallbackWidth = root.querySelector<HTMLElement>('.tab-item')?.getBoundingClientRect().width ?? 0
+    const widths: Record<string, number> = {}
+    const cache = new Map<string, { title: string; dirty: boolean; width: number; font: string; closeWidth: number }>()
+    for (const tab of tabs) {
+      const width = Math.ceil(fallbackWidth || Math.min(TAB_TITLE_MAX_WIDTH, tab.title.length * 8) + TAB_CONTENT_GAP + TAB_HORIZONTAL_PADDING + 11)
+      widths[tab.id] = width
+      cache.set(tab.id, { title: tab.title, dirty: tab.dirty, width, font: 'fallback', closeWidth: 11 })
+    }
+    return { widths, cache }
+  }
+
+  const sampleTitle = root.querySelector<HTMLElement>('.tab-title-text')
+  const fontStyle = sampleTitle ? getComputedStyle(sampleTitle) : getComputedStyle(root)
+  context.font = fontStyle.font || `${fontStyle.fontSize} ${fontStyle.fontFamily}`
+  const font = context.font
+  const closeButton = root.querySelector<HTMLElement>('.tab-close')
+  const closeWidth = closeButton ? Math.ceil(closeButton.getBoundingClientRect().width) : 11
+
+  const widths: Record<string, number> = {}
+  const cache = new Map<string, { title: string; dirty: boolean; width: number; font: string; closeWidth: number }>()
+  for (const tab of tabs) {
+    const cached = previous.get(tab.id)
+    const width = cached?.title === tab.title && cached.dirty === tab.dirty && cached.font === font && cached.closeWidth === closeWidth
+      ? cached.width
+      : Math.ceil(
+        Math.min(TAB_TITLE_MAX_WIDTH, context.measureText(tab.title).width + (tab.dirty ? 14 : 0)) +
+        TAB_CONTENT_GAP + TAB_HORIZONTAL_PADDING + closeWidth,
+      )
+    widths[tab.id] = width
+    cache.set(tab.id, { title: tab.title, dirty: tab.dirty, width, font, closeWidth })
+  }
+  return { widths, cache }
+}
 
 export const TabBar = memo(function TabBar({ tabs, activeId, onTabClick, onTabClose, onCloseTabs, onRequestSaveAndClose }: TabBarProps) {
   const rootRef = useRef<HTMLDivElement | null>(null)
-  const measureRefs = useRef(new Map<string, HTMLDivElement | null>())
+  const tabWidthCacheRef = useRef(new Map<string, { title: string; dirty: boolean; width: number; font: string; closeWidth: number }>())
   const menuRef = useRef<HTMLDivElement | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [containerWidth, setContainerWidth] = useState(0)
@@ -24,12 +69,11 @@ export const TabBar = memo(function TabBar({ tabs, activeId, onTabClick, onTabCl
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; tabId: string } | null>(null)
 
   useLayoutEffect(() => {
-    const nextWidths: Record<string, number> = {}
-    for (const tab of tabs) {
-      const el = measureRefs.current.get(tab.id)
-      if (!el) continue
-      nextWidths[tab.id] = Math.ceil(el.getBoundingClientRect().width)
-    }
+    const root = rootRef.current
+    if (!root) return
+    const measured = measureTabWidths(root, tabs, tabWidthCacheRef.current)
+    tabWidthCacheRef.current = measured.cache
+    const nextWidths = measured.widths
     setTabWidths((prev) => {
       const prevKeys = Object.keys(prev)
       const nextKeys = Object.keys(nextWidths)
@@ -242,25 +286,6 @@ export const TabBar = memo(function TabBar({ tabs, activeId, onTabClick, onTabCl
           )}
         </div>
       )}
-      <div className="tab-bar-measure" aria-hidden="true">
-        {tabs.map((tab) => (
-          <div
-            key={tab.id}
-            ref={(node) => {
-              measureRefs.current.set(tab.id, node)
-            }}
-            className={`tab-item tab-item-measure ${tab.id === activeId ? 'active' : ''}`}
-          >
-            <span className="tab-title">
-              {tab.dirty && <span className="tab-dirty-dot" />}
-              <span className="tab-title-text">{tab.title}</span>
-            </span>
-            <button type="button" className="tab-close" tabIndex={-1}>
-              ×
-            </button>
-          </div>
-        ))}
-      </div>
     </div>
   )
 })

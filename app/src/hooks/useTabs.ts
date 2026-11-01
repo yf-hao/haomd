@@ -28,16 +28,43 @@ function createEmptyTab(id: string): EditorTab {
   }
 }
 
+function createTabRecord(tab: EditorTab, contents: Map<string, string>, contentOverride?: string): EditorTab {
+  const hasInlineContent = Object.prototype.hasOwnProperty.call(tab, 'content')
+  const content = contentOverride ?? (hasInlineContent ? tab.content : contents.get(tab.id) ?? '')
+  const tabId = tab.id
+  contents.set(tab.id, content)
+
+  const record = {
+    id: tab.id,
+    title: tab.title,
+    path: tab.path,
+    dirty: tab.dirty,
+  } as EditorTab
+  Object.defineProperty(record, 'content', {
+    configurable: false,
+    enumerable: true,
+    get: () => contents.get(tabId) ?? '',
+  })
+  return record
+}
+
 export function useTabs(options?: UseTabsOptions) {
   // if (import.meta.env.DEV) {
   //   console.log('[useTabs] hook 已初始化')
   // }
   const idRef = useRef(1)
+  const contentsRef = useRef(new Map<string, string>())
   const [tabs, setTabs] = useState<EditorTab[]>(() => {
     // 初始不创建标签，返回空数组
     return []
   })
   const [activeId, setActiveId] = useState<string | null>(() => null)
+  useEffect(() => {
+    const openIds = new Set(tabs.map((tab) => tab.id))
+    for (const id of contentsRef.current.keys()) {
+      if (!openIds.has(id)) contentsRef.current.delete(id)
+    }
+  }, [tabs])
   const onBeforeActiveTabChange = options?.onBeforeActiveTabChange
   const onBeforeActiveTabChangeRef = useRef(onBeforeActiveTabChange)
   useEffect(() => {
@@ -59,27 +86,15 @@ export function useTabs(options?: UseTabsOptions) {
       const nextId = String(++idRef.current)
       const base = createEmptyTab(nextId)
       const path = opts?.path ?? base.path
-      const tab: EditorTab = {
+      const tab = createTabRecord({
         ...base,
         ...opts,
         path,
         title: opts?.title ?? (path ? deriveTitleFromPath(path) : base.title),
         content: opts?.content ?? base.content,
-      }
-      setTabs((prev) => {
-        if (import.meta.env.DEV) {
-          console.log('[createTab] 添加标签前:', prev.map(t => ({ id: t.id, title: t.title })))
-        }
-        const newTabs = [...prev, tab]
-        if (import.meta.env.DEV) {
-          console.log('[createTab] 添加标签后:', newTabs.map(t => ({ id: t.id, title: t.title })))
-        }
-        return newTabs
-      })
+      }, contentsRef.current)
+      setTabs((prev) => [...prev, tab])
       activateTab(nextId)
-      if (import.meta.env.DEV) {
-        console.log('[createTab] 设置 activeId 为:', nextId)
-      }
       return tab
     },
     [activateTab],
@@ -127,24 +142,16 @@ export function useTabs(options?: UseTabsOptions) {
   const updateTabContent = useCallback(
     (id: string, content: string, options?: { markDirty?: boolean }) => {
       const shouldMarkDirty = options?.markDirty ?? true
+      if (!contentsRef.current.has(id)) return
+      contentsRef.current.set(id, content)
       setTabs((prev) => {
-        let changed = false
-        const next = prev.map((t) => {
-          if (t.id !== id) return t
-
-          const nextDirty = shouldMarkDirty ? true : t.dirty
-          if (t.content === content && t.dirty === nextDirty) {
-            return t
-          }
-
-          changed = true
-          return {
-            ...t,
-            content,
-            dirty: nextDirty,
-          }
-        })
-        return changed ? next : prev
+        const current = prev.find((tab) => tab.id === id)
+        if (!current) return prev
+        const nextDirty = shouldMarkDirty ? true : current.dirty
+        if (current.dirty === nextDirty) return prev
+        return prev.map((tab) => tab.id === id
+          ? createTabRecord({ ...tab, dirty: nextDirty }, contentsRef.current)
+          : tab)
       })
     },
     [],
@@ -161,73 +168,81 @@ export function useTabs(options?: UseTabsOptions) {
   const updateActiveMeta = useCallback(
     (path: string, dirty: boolean) => {
       if (!activeId) return
-      setTabs((prev) =>
-        prev.map((t) => {
+      setTabs((prev) => {
+        let changed = false
+        const next = prev.map((t) => {
           if (t.id !== activeId) return t
           const nextTitle = deriveTitleFromPath(path)
-          if (import.meta.env.DEV) {
-            console.log('[useTabs.updateActiveMeta]', {
-              activeId,
-              old: { path: t.path, title: t.title, dirty: t.dirty },
-              next: { path, title: nextTitle, dirty },
-            })
-          }
-          return {
+          if (t.path === path && t.title === nextTitle && t.dirty === dirty) return t
+          changed = true
+          return createTabRecord({
             ...t,
             path,
             title: nextTitle,
             dirty,
-          }
-        }),
-      )
+          }, contentsRef.current)
+        })
+        return changed ? next : prev
+      })
     },
     [activeId],
   )
 
   const markTabSaved = useCallback((id: string, path: string, savedContent: string, latestContent?: string) => {
-    setTabs(prev => prev.map(tab => {
-      if (tab.id !== id) return tab
-      const content = latestContent ?? tab.content
-      return { ...tab, path, title: deriveTitleFromPath(path), content, dirty: content !== savedContent }
-    }))
+    if (!contentsRef.current.has(id)) return
+    if (latestContent !== undefined) contentsRef.current.set(id, latestContent)
+    setTabs(prev => {
+      let changed = false
+      const next = prev.map(tab => {
+        if (tab.id !== id) return tab
+        const content = contentsRef.current.get(id) ?? ''
+        const title = deriveTitleFromPath(path)
+        const dirty = content !== savedContent
+        if (tab.path === path && tab.title === title && tab.dirty === dirty) return tab
+        changed = true
+        return createTabRecord({ ...tab, path, title, dirty }, contentsRef.current)
+      })
+      return changed ? next : prev
+    })
   }, [])
 
   const updateTabsPathByPath = useCallback(
     (oldPath: string, newPath: string) => {
       if (!oldPath || !newPath) return
-      setTabs((prev) =>
-        prev.map((t) => {
+      setTabs((prev) => {
+        let changed = false
+        const next = prev.map((t) => {
           if (t.path !== oldPath) return t
           const nextTitle = deriveTitleFromPath(newPath)
-          if (import.meta.env.DEV) {
-            console.log('[useTabs.updateTabsPathByPath]', {
-              id: t.id,
-              old: { path: t.path, title: t.title },
-              next: { path: newPath, title: nextTitle },
-            })
-          }
-          return {
+          if (t.path === newPath && t.title === nextTitle) return t
+          changed = true
+          return createTabRecord({
             ...t,
             path: newPath,
             title: nextTitle,
-          }
-        }),
-      )
+          }, contentsRef.current)
+        })
+        return changed ? next : prev
+      })
     },
     [],
   )
 
   const applyFileMove = useCallback((outcome: MoveOutcome, contentById: Map<string, string>) => {
-    setTabs(previous => previous.map(tab => {
-      if (!tab.path || isTransientFilePath(tab.path)) return tab
-      const moved = sameFilePath(tab.path, outcome.oldPath)
-      if (!moved) return tab
-      const path = outcome.newPath
-      const saved = outcome.documents.find(document => sameFilePath(document.path, path))
-      const content = contentById.get(tab.id) ?? relocateMarkdown(tab.content, tab.path, outcome)
-      return { ...tab, path, title: deriveTitleFromPath(path), content,
-        dirty: saved ? content !== saved.content : tab.dirty }
-    }))
+    setTabs(previous => {
+      let changed = false
+      const next = previous.map(tab => {
+        if (!tab.path || isTransientFilePath(tab.path)) return tab
+        const moved = sameFilePath(tab.path, outcome.oldPath)
+        if (!moved) return tab
+        changed = true
+        const path = outcome.newPath
+        const saved = outcome.documents.find(document => sameFilePath(document.path, path))
+        const content = contentById.get(tab.id) ?? relocateMarkdown(tab.content, tab.path, outcome)
+        return createTabRecord({ ...tab, path, title: deriveTitleFromPath(path), dirty: saved ? content !== saved.content : tab.dirty }, contentsRef.current, content)
+      })
+      return changed ? next : previous
+    })
   }, [])
 
   const closeCurrentTab = useCallback(
@@ -302,7 +317,7 @@ export function useTabs(options?: UseTabsOptions) {
       const next = prev.map(t => {
         if (t.id !== activeId || t.dirty) return t
         changed = true
-        return { ...t, dirty: true }
+        return createTabRecord({ ...t, dirty: true }, contentsRef.current)
       })
       return changed ? next : prev
     })

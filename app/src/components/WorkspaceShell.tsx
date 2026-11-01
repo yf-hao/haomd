@@ -4502,6 +4502,25 @@ export function WorkspaceShell({
   }, [tabs, closeTabs, aiChatSessionManager, setConfirmDialog, t])
 
   const initialActionHandledRef = useRef(false)
+  const handleRequestConfirmDeleteFileVirtualFolder = useCallback(({
+    folder,
+    onConfirm,
+  }: {
+    folder: { name: string }
+    onConfirm: () => void
+  }) => {
+    setConfirmDialog({
+      title: t('workspace.deleteVirtualFolderTitle'),
+      message: t('workspace.deleteVirtualFolderMessage', { name: folder.name }),
+      confirmText: t('workspace.delete'),
+      cancelText: t('common.cancel'),
+      onConfirm: () => {
+        setConfirmDialog(null)
+        onConfirm()
+      },
+    })
+  }, [setConfirmDialog, t])
+
   useEffect(() => {
     if (!initialAction || initialActionHandledRef.current) return
     if (initialAction === 'new') createTab()
@@ -4567,18 +4586,7 @@ export function WorkspaceShell({
             inlineRenamePath={inlineRenamePath}
             onInlineRenameConfirm={handleInlineRenameConfirm}
             onInlineRenameCancel={handleInlineRenameCancel}
-            onRequestConfirmDeleteFileVirtualFolder={({ folder, onConfirm }) => {
-              setConfirmDialog({
-                title: t('workspace.deleteVirtualFolderTitle'),
-                message: t('workspace.deleteVirtualFolderMessage', { name: folder.name }),
-                confirmText: t('workspace.delete'),
-                cancelText: t('common.cancel'),
-                onConfirm: () => {
-                  setConfirmDialog(null)
-                  onConfirm()
-                },
-              })
-            }}
+            onRequestConfirmDeleteFileVirtualFolder={handleRequestConfirmDeleteFileVirtualFolder}
             onNotify={setStatusMessage}
           />
         )}
