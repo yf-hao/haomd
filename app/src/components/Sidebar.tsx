@@ -107,6 +107,25 @@ type TreeNodeProps = {
   onInlineRenameCancel?: () => void
 }
 
+function SidebarFileIcon() {
+  return (
+    <svg className="tree-icon file-icon" viewBox="0 0 16 18" aria-hidden="true">
+      <path d="M3 1.5h6l4 4v11H3z" />
+      <path d="M9 1.5v4h4M5.5 9h5M5.5 12h5" />
+    </svg>
+  )
+}
+
+function SidebarFolderPlusIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M2.75 6.5V18a1.5 1.5 0 0 0 1.5 1.5h15.5V8a1.5 1.5 0 0 0-1.5-1.5h-7l-2-2H4.25a1.5 1.5 0 0 0-1.5 1.5Z" />
+      <circle cx="18" cy="18" r="4" />
+      <path d="M18 16v4M16 18h4" />
+    </svg>
+  )
+}
+
 const TreeNode = memo(function TreeNode({ selectedPaths, node, level, expanded, onToggle, onFileClick, onDirClick, activePath, highlightedPaths, onFileVisited, onContextMenu, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel, inlineNewFolderDir, onInlineNewFolderConfirm, onInlineNewFolderCancel, inlineRenamePath, onInlineRenameConfirm, onInlineRenameCancel }: TreeNodeProps) {
   const isExpanded = !!expanded[node.path]
   const isActive = selectedPaths.size === 0 && activePath === node.path
@@ -234,7 +253,7 @@ const TreeNode = memo(function TreeNode({ selectedPaths, node, level, expanded, 
         onContextMenu(e, { path: node.path, kind: 'tree-file' })
       }}
     >
-      <span className="tree-icon">📄</span>
+      <SidebarFileIcon />
       <span className="tree-name">{node.name}</span>
     </div>
   )
@@ -785,44 +804,89 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
       {selection.entries.length > 1 && <div className="sidebar-selection-count" role="status">
         {t('sidebar.selectedCount', { count: selectedPaths.size })}
       </div>}
-      <div className="sidebar-body">
-        <div className="sidebar-browser-tabs" role="tablist" aria-label={t('sidebar.fileBrowser')}>
-          {(['files', 'folders'] as const).map((section) => (
+      <div className="sidebar-browser-tabs" role="tablist" aria-label={t('sidebar.fileBrowser')}>
+        {(['files', 'folders'] as const).map((section) => (
+          <button
+            key={section}
+            type="button"
+            role="tab"
+            aria-selected={browserSection === section}
+            className={`sidebar-browser-tab ${browserSection === section ? 'active' : ''}`}
+            onClick={() => {
+              setBrowserSection(section)
+              try { localStorage.setItem('haomd:sidebar:active-section', section) } catch { /* storage may be unavailable */ }
+            }}
+          >
+            {t(section === 'files' ? 'sidebar.files' : 'sidebar.folders')}
+          </button>
+        ))}
+      </div>
+      <div className="sidebar-toolbar-row">
+        {browserSection === 'files' ? (
+          <div className="files-section-actions">
             <button
-              key={section}
               type="button"
-              role="tab"
-              aria-selected={browserSection === section}
-              className={`sidebar-browser-tab ${browserSection === section ? 'active' : ''}`}
-              onClick={() => {
-                setBrowserSection(section)
-                try { localStorage.setItem('haomd:sidebar:active-section', section) } catch { /* storage may be unavailable */ }
+              className="files-virtual-folder-add-btn"
+              title={t('sidebar.newVirtualFolder')}
+              onClick={(e) => {
+                e.stopPropagation()
+                e.preventDefault()
+                handleCreateFileVirtualFolder()
               }}
             >
-              {t(section === 'files' ? 'sidebar.files' : 'sidebar.folders')}
+              <SidebarFolderPlusIcon />
             </button>
-          ))}
-        </div>
+          </div>
+        ) : (
+          <div className="folder-section-actions">
+            <button
+              type="button"
+              className="folder-action-btn icon-new-file"
+              title={t('sidebar.newFileInCurrentFolder')}
+              onClick={(e) => {
+                e.stopPropagation()
+                e.preventDefault()
+                onToolbarNewFileInCurrentFolder?.()
+              }}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 2.75h8.5L18 7.25v11.5H5zM13.5 2.75v4.5H18" />
+                <circle cx="18" cy="18" r="4" />
+                <path d="M18 16v4M16 18h4" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className="folder-action-btn icon-new-folder"
+              title={t('sidebar.newFolderInCurrentFolder')}
+              onClick={(e) => {
+                e.stopPropagation()
+                e.preventDefault()
+                onToolbarNewFolderInCurrentFolder?.()
+              }}
+            >
+              <SidebarFolderPlusIcon />
+            </button>
+            <button
+              type="button"
+              className="folder-action-btn icon-refresh"
+              title={t('sidebar.refreshCurrentFolder')}
+              onClick={(e) => {
+                e.stopPropagation()
+                e.preventDefault()
+                onToolbarRefreshCurrentFolder?.()
+              }}
+            >
+              <svg className="folder-refresh-icon" viewBox="0 0 1024 1024" aria-hidden="true">
+                <path d="M935.161672 427.51891c-14.511505-11.744485-37.643342-9.155521-49.1627 5.403057l-12.9438 16.20917c-.926092-5.842055-1.995447-11.625782-3.158946-17.325597C831.326792 245.594511 666.360623 110.434182 477.668077 110.434182c-27.455305 0-55.099922 2.885723-82.198094 8.562003C179.036629 164.405397 39.60195 378.546545 84.655052 596.34499c38.522362 186.222285 203.488531 321.383638 392.229173 321.383638 27.430746 0 55.076386-2.873444 82.174558-8.549723 75.144444-15.746636 144.18589-53.508681 198.288089-108.002806l1.87572-1.662873c1.757017-1.74576 2.778276-3.432169 2.588965-3.443425l1.781576-2.387373c2.137687-3.527336 4.65502-9.191336 4.65502-16.173354 0-17.361413-14.035668-31.479969-31.326473-31.479969-4.275373 0-8.454556.914836-12.325723 2.612501l-1.90028-1.318018-8.644891 8.65717c-46.359864 46.478568-104.261599 78.042447-167.484525 91.283006-22.657023 4.750187-45.766346 7.160073-68.684312 7.160073-157.818375 0-295.733445-113.073288-327.96145-268.87268-37.738509-182.291766 78.849836-361.484961 259.918751-399.448598 22.657023-4.750187 45.766346-7.160073 68.708871-7.160073 157.793816 0 295.709909 113.061009 327.96145 268.860401.427742 2.101871.855484 4.227278 1.258667 6.364965l-13.751189-11.091616c-14.511505-11.768021-37.59627-9.1678-49.1627 5.390777-12.017708 15.056927-9.619078 37.156248 5.343705 49.269124l78.089519 63.1032c.14224.106424.285502.213871.427742.332575l3.491521 2.814092h.712221c6.483668 3.657296 15.770172 4.964058 21.065781 4.322445 9.475815-.890276 17.954931-5.485945 23.940249-12.93152l62.723553-78.659501c11.91026-14.926967 9.464558-37.002752-5.426594-49.043996z" />
+              </svg>
+            </button>
+          </div>
+        )}
+      </div>
+      <div className="sidebar-body">
         {browserSection === 'files' && (
           <section className="sidebar-section">
-            <div className="sidebar-section-header">
-              <span className="sidebar-section-title" aria-hidden="true" />
-              <div className="files-section-actions">
-                <button
-                  type="button"
-                  className="files-virtual-folder-add-btn"
-                  title={t('sidebar.newVirtualFolder')}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    e.preventDefault()
-                    handleCreateFileVirtualFolder()
-                  }}
-                >
-                  +
-                </button>
-              </div>
-            </div>
-
             <div className="sidebar-section-content">
                 {creatingFileFolder && (
                   <div className="sidebar-virtual-folder-inline-create">
@@ -884,7 +948,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                         }}
                         title={file.path}
                       >
-                        <span className="tree-icon">📄</span>
+                        <SidebarFileIcon />
                         <span className="tree-name">{file.name}</span>
                       </li>
                     )
@@ -980,7 +1044,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                                     }}
                                     title={file.path}
                                   >
-                                    <span className="tree-icon">📄</span>
+                                    <SidebarFileIcon />
                                     <span className="tree-name">{file.name}</span>
                                   </li>
                                 ))}
@@ -998,41 +1062,6 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
 
         {browserSection === 'folders' && (
           <section className="sidebar-section">
-            <div className="sidebar-section-header">
-              <span className="sidebar-section-title" aria-hidden="true" />
-              <div className="folder-section-actions">
-                <button
-                  type="button"
-                  className="folder-action-btn icon-new-file"
-                  title={t('sidebar.newFileInCurrentFolder')}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    e.preventDefault()
-                    onToolbarNewFileInCurrentFolder?.()
-                  }}
-                />
-                <button
-                  type="button"
-                  className="folder-action-btn icon-new-folder"
-                  title={t('sidebar.newFolderInCurrentFolder')}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    e.preventDefault()
-                    onToolbarNewFolderInCurrentFolder?.()
-                  }}
-                />
-                <button
-                  type="button"
-                  className="folder-action-btn icon-refresh"
-                  title={t('sidebar.refreshCurrentFolder')}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    e.preventDefault()
-                    onToolbarRefreshCurrentFolder?.()
-                  }}
-                />
-              </div>
-            </div>
             {folderRoots.length > 0 && (
               <ul className="sidebar-folder-list">
                 {folderRoots.map((rootPath) => {

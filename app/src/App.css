@@ -249,8 +249,8 @@ button:disabled {
 }
 
 .activity-icon-pdf {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   display: block;
   overflow: visible;
 }
@@ -270,15 +270,15 @@ button:disabled {
 }
 
 .activity-icon-skills {
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   display: block;
   overflow: visible;
 }
 
 .activity-icon-workflows {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   display: block;
   overflow: visible;
 }
