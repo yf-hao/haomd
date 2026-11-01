@@ -3718,6 +3718,15 @@ button:disabled {
   height: 100%;
 }
 
+/* Separate docked AI Chat from the editor without adding a divider in floating mode. */
+.workspace:has(> .ai-chat-pane ~ .editor-preview-group) > .ai-chat-pane {
+  border-right: 1px solid var(--theme-border-subtle);
+}
+
+.workspace:has(> .editor-preview-group ~ .ai-chat-pane) > .ai-chat-pane {
+  border-left: 1px solid var(--theme-border-subtle);
+}
+
 .ai-chat-pane-header {
   display: flex;
   align-items: center;
@@ -3890,9 +3899,9 @@ button:disabled {
   margin-left: auto;
   /* 在 Dock 头部里靠右排列 */
   width: 28px;
-  height: 28px;
+  height: 27px;
   padding: 0;
-  flex: 0 0 28px;
+  flex: 0 0 27px;
   align-self: center;
 }
 
