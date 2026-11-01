@@ -30,6 +30,7 @@ function matchesPhysicalKey(event: KeyboardEvent, key: string, code: string): bo
 
 export const PDF_SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
   { action: 'pdf_tool_select', matches: (_event, key) => key === 'v' },
+  { action: 'pdf_translate_selection', matches: (_event, key) => key === 'g' },
   { action: 'pdf_tool_highlight', matches: (_event, key) => key === 'h' },
   { action: 'pdf_tool_underline', matches: (_event, key) => key === 'u' },
   { action: 'pdf_tool_strikeout', matches: (_event, key) => key === 'j' },

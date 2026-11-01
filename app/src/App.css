@@ -1651,30 +1651,10 @@ button:disabled {
   min-height: 0;
 }
 
-.pdf-translation-trigger,
 .pdf-translation-popover {
   position: absolute;
   z-index: var(--z-popover);
   box-shadow: var(--theme-shadow-modal);
-}
-
-.pdf-translation-trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 7px 10px;
-  border: 1px solid var(--theme-border-subtle);
-  border-radius: 8px;
-  background: var(--theme-surface-modal);
-  color: var(--theme-text-default);
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-}
-
-.pdf-translation-trigger:hover {
-  border-color: var(--theme-accent-primary);
-  color: var(--theme-accent-primary);
 }
 
 .pdf-translation-popover {

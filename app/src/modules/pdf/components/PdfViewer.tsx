@@ -575,24 +575,6 @@ function getAnchorRect(rects: readonly AnnotationRect[]) {
   })[0] ?? null
 }
 
-function getSelectionBounds(rects: readonly AnnotationRect[]) {
-  if (rects.length === 0) return null
-  return rects.reduce(
-    (bounds, rect) => ({
-      x1: Math.min(bounds.x1, rect.x1),
-      y1: Math.min(bounds.y1, rect.y1),
-      x2: Math.max(bounds.x2, rect.x2),
-      y2: Math.max(bounds.y2, rect.y2),
-    }),
-    {
-      x1: rects[0]!.x1,
-      y1: rects[0]!.y1,
-      x2: rects[0]!.x2,
-      y2: rects[0]!.y2,
-    },
-  )
-}
-
 function areAnnotationRectsEqual(left: readonly AnnotationRect[], right: readonly AnnotationRect[]) {
   if (left.length !== right.length) return false
   return left.every((rect, index) => {
@@ -905,6 +887,7 @@ export interface PdfViewerProps {
   } | null) => void
   onRegisterShortcutActions?: (actions: {
     selectTool: () => void
+    translateSelection: () => void
     activateMarkupTool: (tool: Extract<AnnotationType, 'highlight' | 'underline' | 'strikeout' | 'squiggly'>) => void
     activateShapeTool: (tool: Extract<AnnotationType, 'square' | 'circle' | 'line' | 'arrow'>) => void
     activateStampTool: () => void
@@ -954,7 +937,6 @@ function PdfViewerInner({
   const [translationEntry, setTranslationEntry] = useState<PdfTranslationEntry | null>(null)
   const [translationError, setTranslationError] = useState<string | null>(null)
   const [translationPosition, setTranslationPosition] = useState<NoteEditorPosition | null>(null)
-  const [translationDismissed, setTranslationDismissed] = useState(false)
   const [translationSelectionDispatchSuppressed, setTranslationSelectionDispatchSuppressed] = useState(false)
   const [translationSettings, setTranslationSettings] = useState<PdfTranslationSettings>(loadPdfTranslationSettings)
   const [translationSettingsOpen, setTranslationSettingsOpen] = useState(false)
@@ -1201,7 +1183,6 @@ function PdfViewerInner({
     setTranslationPosition(null)
     setTranslationSelectionDraft(null)
     translationSelectionSnapshotRef.current = null
-    setTranslationDismissed(true)
     setTranslationSettingsOpen(false)
   }, [])
 
@@ -1227,7 +1208,6 @@ function PdfViewerInner({
     const requestId = ++translationRequestIdRef.current
     setTranslationSelectionDraft(selection)
     setTranslationOpen(true)
-    setTranslationDismissed(false)
     setTranslationStatus('loading')
     setTranslationEntry(null)
     setTranslationError(null)
@@ -2415,7 +2395,6 @@ function PdfViewerInner({
       return
     }
     selectionSnapshotRef.current = nextSnapshotKey
-    setTranslationDismissed(false)
     if (pendingNoteDraft) {
       return
     }
@@ -2566,6 +2545,7 @@ function PdfViewerInner({
         title: t('pdf.shortcutsSections.tools'),
         items: [
           ['V', t('pdf.selectTextOnly')],
+          ['G', t('pdf.translateSelection')],
           ['H', t('pdf.annotationTypes.highlight')],
           ['U', t('pdf.annotationTypes.underline')],
           ['J', t('pdf.annotationTypes.strikeout')],
@@ -2707,6 +2687,7 @@ function PdfViewerInner({
     if (!onRegisterShortcutActions) return
     onRegisterShortcutActions({
       selectTool: activateSelectTextMode,
+      translateSelection: () => void startTranslation(),
       activateMarkupTool: handleShortcutActivateMarkupTool,
       activateShapeTool: handleShortcutActivateShapeTool,
       activateStampTool: () => activateStampTool(preferredStampKey),
@@ -2733,6 +2714,7 @@ function PdfViewerInner({
     handleShortcutActivateShapeTool,
     onRegisterShortcutActions,
     preferredStampKey,
+    startTranslation,
   ])
 
   const handleViewportAnnotationClick = useCallback((annotationId: string) => {
@@ -3004,55 +2986,31 @@ function PdfViewerInner({
   }, [])
 
   useEffect(() => {
-    const activeSelectionDraft = translationOpen ? translationSelectionDraft : selectionDraft
-    if (!activeSelectionDraft || !isSelectTextToolActive) {
+    if (!translationOpen || !translationSelectionDraft) {
       setTranslationPosition(null)
       return
     }
 
     const updatePosition = () => {
-      const metrics = viewportRef.current?.getRenderedPageMetrics(activeSelectionDraft.page)
-      const selectionBounds = getSelectionBounds(activeSelectionDraft.rects)
-      if (!metrics || !selectionBounds) {
+      const metrics = viewportRef.current?.getRenderedPageMetrics(translationSelectionDraft.page)
+      const mainWidth = viewportRef.current?.getContainerWidth() ?? metrics?.width ?? 0
+      const containerHeight = viewportRef.current?.getContainerHeight() ?? metrics?.height ?? 0
+      if (mainWidth <= 0 || containerHeight <= 0) {
         setTranslationPosition(null)
         return
       }
-      const mainWidth = viewportRef.current?.getContainerWidth() ?? metrics.width
-      const containerHeight = viewportRef.current?.getContainerHeight() ?? metrics.height
-      const measuredPopupHeight = translationOpen
-        ? Math.ceil(translationPopoverRef.current?.getBoundingClientRect().height || 0)
-        : 80
+      const measuredPopupHeight = Math.ceil(translationPopoverRef.current?.getBoundingClientRect().height || 0)
       const popupHeight = Math.max(80, measuredPopupHeight)
-      if (translationOpen) {
-        const popupWidth = Math.min(520, Math.max(80, mainWidth - 16))
-        setTranslationPosition(
-          getCenteredTranslationPosition(mainWidth, containerHeight, popupWidth, popupHeight),
-        )
-        return
-      }
-      const popupWidth = 80
-      const anchorLeft = metrics.left + selectionBounds.x2 * metrics.width
-      const anchorTop = metrics.viewportTop + selectionBounds.y2 * metrics.height
-      const belowTop = anchorTop + 10
-      const aboveTop = anchorTop - popupHeight - 12
-      const maxTop = Math.max(8, containerHeight - popupHeight - 8)
-      const hasSpaceBelow = belowTop + popupHeight <= containerHeight - 8
-      const hasSpaceAbove = aboveTop >= 8
-      const top = hasSpaceBelow
-        ? Math.min(belowTop, maxTop)
-        : hasSpaceAbove
-          ? Math.min(aboveTop, maxTop)
-          : Math.min(Math.max(8, belowTop), maxTop)
-      const left = Math.min(Math.max(8, anchorLeft + 8), Math.max(8, mainWidth - popupWidth - 8))
-      setTranslationPosition({ top, left })
+      const popupWidth = Math.min(520, Math.max(80, mainWidth - 16))
+      setTranslationPosition(
+        getCenteredTranslationPosition(mainWidth, containerHeight, popupWidth, popupHeight),
+      )
     }
 
     const frame = window.requestAnimationFrame(updatePosition)
     return () => window.cancelAnimationFrame(frame)
   }, [
-    selectionDraft,
     translationSelectionDraft,
-    isSelectTextToolActive,
     translationOpen,
     translationSettingsOpen,
     translationEntry,
@@ -3297,6 +3255,20 @@ function PdfViewerInner({
                 }
               />
               <button
+                type="button"
+                className="pdf-highlight-tool-btn"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => void startTranslation()}
+                aria-label={withShortcutLabel(t('pdf.translateSelection'), 'G')}
+                title={withShortcutLabel(t('pdf.translateSelection'), 'G')}
+                disabled={!selectionDraft?.text.trim() || translationOpen || translationStatus === 'loading'}
+              >
+                <svg className="pdf-markup-tool-icon" viewBox="0 0 20 20" aria-hidden="true">
+                  <circle cx="10" cy="10" r="7.1" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="M2.9 10H17.1M10 2.9C12 4.8 13.1 7.2 13.1 10S12 15.2 10 17.1C8 15.2 6.9 12.8 6.9 10S8 4.8 10 2.9Z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              <button
                 ref={shortcutHelpButtonRef}
                 type="button"
                 className={`pdf-highlight-tool-btn pdf-shortcuts-help-btn ${shortcutHelpOpen ? 'active' : ''}`}
@@ -3510,20 +3482,6 @@ function PdfViewerInner({
             onAnnotationDoubleClick={handleViewportAnnotationDoubleClick}
             onClearAnnotationSelection={handleViewportClearAnnotationSelection}
           />
-          {selectionDraft && translationPosition && !translationOpen && !translationDismissed ? (
-            <button
-              type="button"
-              className="pdf-translation-trigger"
-              data-pdf-selection-skip="true"
-              style={{ top: `${translationPosition.top}px`, left: `${translationPosition.left}px` }}
-              onPointerDownCapture={() => suppressTranslationSelectionDispatch()}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => void startTranslation()}
-            >
-              <span aria-hidden="true">🌐</span>
-              {t('pdf.translateSelection')}
-            </button>
-          ) : null}
           {translationSelectionDraft && translationOpen && translationPosition ? (
             <div
               ref={translationPopoverRef}

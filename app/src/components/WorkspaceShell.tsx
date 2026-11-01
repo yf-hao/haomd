@@ -390,6 +390,7 @@ export function WorkspaceShell({
   } | null>(null)
   const pdfShortcutActionsRef = useRef<{
     selectTool: () => void
+    translateSelection: () => void
     activateMarkupTool: (tool: 'highlight' | 'underline' | 'strikeout' | 'squiggly') => void
     activateShapeTool: (tool: 'square' | 'circle' | 'line' | 'arrow') => void
     activateStampTool: () => void
@@ -802,6 +803,7 @@ export function WorkspaceShell({
   }, [])
   const handlePdfRegisterShortcutActions = useCallback((actions: {
     selectTool: () => void
+    translateSelection: () => void
     activateMarkupTool: (tool: 'highlight' | 'underline' | 'strikeout' | 'squiggly') => void
     activateShapeTool: (tool: 'square' | 'circle' | 'line' | 'arrow') => void
     activateStampTool: () => void
@@ -3987,6 +3989,7 @@ export function WorkspaceShell({
     onPdfZoomOut: () => pdfZoomActionsRef.current?.zoomOut() ?? null,
     onPdfZoomReset: () => pdfZoomActionsRef.current?.zoomReset() ?? null,
     onPdfSelectTool: () => pdfShortcutActionsRef.current?.selectTool(),
+    onPdfTranslateSelection: () => pdfShortcutActionsRef.current?.translateSelection(),
     onPdfActivateMarkupTool: (tool: 'highlight' | 'underline' | 'strikeout' | 'squiggly') => pdfShortcutActionsRef.current?.activateMarkupTool(tool),
     onPdfActivateShapeTool: (tool: 'square' | 'circle' | 'line' | 'arrow') => pdfShortcutActionsRef.current?.activateShapeTool(tool),
     onPdfActivateStampTool: () => pdfShortcutActionsRef.current?.activateStampTool(),

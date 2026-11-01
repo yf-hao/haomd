@@ -48,6 +48,7 @@ export type LayoutCommandContext = StatusContext & {
   onPdfZoomOut?: () => number | null
   onPdfZoomReset?: () => number | null
   onPdfSelectTool?: () => void
+  onPdfTranslateSelection?: () => void
   onPdfActivateMarkupTool?: (tool: 'highlight' | 'underline' | 'strikeout' | 'squiggly') => void
   onPdfActivateShapeTool?: (tool: 'square' | 'circle' | 'line' | 'arrow') => void
   onPdfActivateStampTool?: () => void
@@ -424,6 +425,11 @@ function createLayoutCommands(ctx: LayoutCommandContext): CommandRegistry {
       if (!ctx.isPdfActive) return
       ctx.onPdfSelectTool?.()
       ctx.setStatusMessage(tr(ctx, 'pdf.selectTextOnly', '仅选择文本'))
+    },
+    pdf_translate_selection: () => {
+      if (!ctx.isPdfActive) return
+      ctx.onPdfTranslateSelection?.()
+      ctx.setStatusMessage(tr(ctx, 'pdf.translateSelection', '翻译选中文本'))
     },
     pdf_tool_highlight: () => {
       if (!ctx.isPdfActive) return
