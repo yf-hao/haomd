@@ -4000,7 +4000,7 @@ export function WorkspaceShell({
     onPdfSelectColorIndex: (index: number) => pdfShortcutActionsRef.current?.selectColorIndex(index),
     editMode, setEditMode: setEditModeWithFlush,
     confirmLoseChanges, hasUnsavedChanges, newDocument, setFilePath, applyOpenedContent,
-    openFile, importWordFile, openImportedWordDocument, save: saveWithPdfGuard, saveAs: saveAsWithPdfGuard, handleShowRecent: undefined, clearRecentAll,
+    openFile, openFileInNewTab, importWordFile, openImportedWordDocument, save: saveWithPdfGuard, saveAs: saveAsWithPdfGuard, handleShowRecent: undefined, clearRecentAll,
     createTab, updateActiveMeta, openFolderInSidebar, toggleSidebarVisible, closeCurrentTab,
     toggleLeftPanel: onLeftPanelToggle,
     openLeftPanel: (panel: Exclude<LeftPanelId, null>) => {

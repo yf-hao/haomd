@@ -75,6 +75,7 @@ export type FileCommandContext = StatusContext & {
   setFilePath: (path: string) => void
   applyOpenedContent: (content: string) => void
   openFile: () => Promise<any>
+  openFileInNewTab?: (path: string) => Promise<any>
   importWordFile?: () => Promise<any>
   openImportedWordDocument?: (path: string) => Promise<any>
   save: () => Promise<any>
@@ -566,6 +567,19 @@ function createFileCommands(ctx: FileCommandContext): CommandRegistry {
         const isPdf = typeof path === 'string' && path.toLowerCase().endsWith('.pdf')
         if (import.meta.env.DEV) {
           console.log('[commands.open_file] resolved path =', path, 'isPdf =', isPdf)
+        }
+
+        // Use WorkspaceShell's shared opener so duplicate paths activate the
+        // existing tab instead of creating a second editor instance.
+        if (ctx.openFileInNewTab) {
+          await ctx.openFileInNewTab(path)
+          if (isPdf && ctx.refreshPdfRecent) {
+            void ctx.refreshPdfRecent()
+            setTimeout(() => {
+              if (ctx.refreshPdfRecent) void ctx.refreshPdfRecent()
+            }, 500)
+          }
+          return
         }
 
         if (isPdf) {
