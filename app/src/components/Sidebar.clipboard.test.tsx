@@ -16,6 +16,7 @@ async function fixture(canPaste = true) {
     { id: '/root/note.md', path: '/root/note.md', name: 'note.md', kind: 'file' },
     { id: '/root/destination', path: '/root/destination', name: 'destination', kind: 'dir', children: [] },
   ] }} expanded={{ '/root': true }} onToggle={vi.fn()} onFileClick={vi.fn()} onContextAction={action} canPaste={canPaste} />)
+  fireEvent.click(screen.getByRole('tab', { name: 'sidebar.folders' }))
   await waitFor(() => expect(screen.getByText('note.md')).toBeTruthy())
   return action
 }
@@ -101,6 +102,7 @@ it('shift selection excludes collapsed descendants and does not open files or to
     ] },
   }
   const view = render(<Sidebar {...props} />)
+  fireEvent.click(screen.getByRole('tab', { name: 'sidebar.folders' }))
   await waitFor(() => expect(screen.getByText('z.md')).toBeTruthy())
   fireEvent.click(screen.getByText('z.md'))
   open.mockClear()

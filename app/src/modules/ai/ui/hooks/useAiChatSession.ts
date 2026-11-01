@@ -973,6 +973,50 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
     [state],
   )
 
+  const clearCurrentConversation = useCallback(async () => {
+    if (session) session.stopRunningStream()
+
+    if (isPersistedSessionKey(sessionKey)) {
+      const existing = await loadSession(sessionKey)
+      const now = Date.now()
+      await saveSession({
+        id: sessionKey,
+        title: existing?.title ?? null,
+        entryMode,
+        messages: [],
+        providerType,
+        activeRoleId: existing?.activeRoleId ?? null,
+        autoTitleStatus: existing?.autoTitleStatus ?? null,
+        autoTitleAttemptCount: existing?.autoTitleAttemptCount ?? null,
+        autoTitleLastAttemptAt: existing?.autoTitleLastAttemptAt ?? null,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      })
+    } else if (shouldUsePdfDocPersistence && sanitizedDocPath) {
+      const existing = await loadPdfSession(sanitizedDocPath)
+      const now = Date.now()
+      await savePdfSession({
+        id: sanitizedDocPath,
+        sourcePath: existing?.sourcePath ?? getCurrentFilePathRef.current?.() ?? null,
+        pdfHash: existing?.pdfHash ?? null,
+        title: existing?.title ?? getCurrentFileNameRef.current?.() ?? null,
+        entryMode,
+        messages: [],
+        providerType,
+        activeRoleId: existing?.activeRoleId ?? state?.activeRoleId ?? null,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      })
+    } else if (sanitizedDocPath && shouldUseDocPersistence) {
+      await docConversationService.clearByDocPath(sanitizedDocPath)
+      return
+    }
+
+    setState(null)
+    setPendingAttachments([])
+    setReloadToken((prev) => prev + 1)
+  }, [session, sessionKey, entryMode, providerType, shouldUsePdfDocPersistence, sanitizedDocPath, shouldUseDocPersistence, state])
+
   return {
     loading: isGenerating,
     state,
@@ -995,5 +1039,6 @@ export function useAiChatSession(options: UseAiChatSessionOptions): UseAiChatRes
     removeAttachment,
     isUploading: uploadingCount > 0,
     getRecentMessagesForDigest,
+    clearCurrentConversation,
   }
 }

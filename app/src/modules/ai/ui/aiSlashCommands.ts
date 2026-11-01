@@ -8,6 +8,7 @@ export type AiSlashCommandContext = {
   docPath?: string
   /** 运行已有的 App 命令（通过 WorkspaceShell 中的命令系统桥接） */
   runAppCommand?: AiChatCommandBridge['runAppCommand']
+  clearCurrentConversation?: AiChatCommandBridge['clearCurrentConversation']
   /** 在当前 AI Chat 中展示一条模态提示 */
   showModal?: (message: string) => void
   /**
@@ -32,8 +33,12 @@ export type AiSlashCommandDef = {
 const slashCommands: Record<string, AiSlashCommandDef> = {
   clear: {
     name: 'clear',
-    description: '清空当前文档的 AI 会话历史',
+    description: '清空当前 AI 会话历史',
     async handler(ctx) {
+      if (ctx.clearCurrentConversation) {
+        await ctx.clearCurrentConversation()
+        return
+      }
       if (!ctx.runAppCommand) return
       await ctx.runAppCommand('ai_conversation_clear')
     },

@@ -207,6 +207,8 @@ export function useCommandSystem(params: CommandSystemParams) {
 
   const aiChatOpeningRef = useRef(false)
   const recentDispatchRef = useRef(new Map<string, { source: 'local' | 'menu'; timestamp: number }>())
+  const lastSaveAsDispatchAtRef = useRef(0)
+  const saveAsDispatchInFlightRef = useRef(false)
   const isAiChatOpen = useCallback(() => aiChatOpen, [aiChatOpen])
   const isAiChatOpening = useCallback(() => aiChatOpeningRef.current, [])
   const setAiChatOpening = useCallback((opening: boolean) => {
@@ -444,11 +446,21 @@ export function useCommandSystem(params: CommandSystemParams) {
         setStatusMessage(t?.('commands.menuNotImplemented') ?? '暂未实现的菜单')
         return
       }
+      if (action === 'save_as') {
+        const now = Date.now()
+        if (saveAsDispatchInFlightRef.current) return
+        if (lastSaveAsDispatchAtRef.current > 0 && now - lastSaveAsDispatchAtRef.current <= 750) return
+        saveAsDispatchInFlightRef.current = true
+      }
       commandSourceRef.current = source
       try {
         await Promise.resolve(handler())
       } finally {
         commandSourceRef.current = 'local'
+        if (action === 'save_as') {
+          saveAsDispatchInFlightRef.current = false
+          lastSaveAsDispatchAtRef.current = Date.now()
+        }
       }
     },
     [commands, setStatusMessage, t],

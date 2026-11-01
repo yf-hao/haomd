@@ -293,6 +293,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
     removeAttachment,
     isUploading,
     getRecentMessagesForDigest,
+    clearCurrentConversation,
   } = useAiChatSession({
     sessionKey,
     entryMode,
@@ -879,6 +880,7 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
       // slash 命令与文档会话保持一致：按目录共享会话
       docPath: effectiveDocPath,
       runAppCommand: commandBridge?.runAppCommand,
+      clearCurrentConversation,
       showModal: (message: string) => setSlashModalMessage(message),
       getRecentMessagesForDigest: getRecentMessagesForDigest,
       openHistoryDialog: ({ docPath }) => {
@@ -1101,7 +1103,8 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
     })
   }, [agents])
 
-  const messageSource = state?.viewMessages ?? EMPTY_MESSAGES
+  // 在会话路径切换完成前隐藏旧会话，避免 PDF 的消息短暂显示在新文件下。
+  const messageSource = rawDocPath === stableDocPath ? state?.viewMessages ?? EMPTY_MESSAGES : EMPTY_MESSAGES
   const allMessages = useMemo(
     () => messageSource.filter((m) => !m.hidden),
     [messageSource],

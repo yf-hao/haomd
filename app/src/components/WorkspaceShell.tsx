@@ -2514,6 +2514,15 @@ export function WorkspaceShell({
     }
   }, [isCreatingTab, activeId, tabs, closeTabWithAiSession])
 
+  const previousLeftPanelRef = useRef(activeLeftPanel)
+  useEffect(() => {
+    const previousPanel = previousLeftPanelRef.current
+    previousLeftPanelRef.current = activeLeftPanel
+    if (previousPanel === 'pdf' && activeLeftPanel === 'files' && isPdfActive) {
+      handleCurrentTabClose()
+    }
+  }, [activeLeftPanel, isPdfActive, handleCurrentTabClose])
+
   closeCurrentTabRef.current = handleCurrentTabClose
 
   const handleQuit = useCallback(() => {
@@ -3766,6 +3775,7 @@ export function WorkspaceShell({
   }, [activeLeftPanel, requestDeleteSelectedFsEntry, startFsEntryInlineRename])
 
   const isExportingHtmlRef = useRef(false)
+  const isExportingWordRef = useRef(false)
   const activeTabPathRef = useRef<string | null>(null)
 
   // 同步 Ref 以保持回调函数稳定
@@ -3802,17 +3812,25 @@ export function WorkspaceShell({
   }, [setStatusMessage, getCurrentMarkdown, getCurrentFileName])
 
   const handleExportWord = useCallback(async () => {
+    if (isExportingWordRef.current) {
+      setStatusMessage(t('workspace.preparingExportPleaseWait'))
+      return
+    }
     if (isPdfActive) {
       setStatusMessage(t('workspace.exportWordUnsupportedPdf'))
       return
     }
 
+    isExportingWordRef.current = true
     try {
       const { exportToWord: dynamicWordExport } = await import('../modules/export/word')
       await dynamicWordExport({
         setStatusMessage,
         getCurrentMarkdown,
-        getCurrentFileName,
+        getCurrentFileName: () =>
+          activeImportedWordState?.kind === 'word-import'
+            ? activeTab?.title ?? null
+            : getCurrentFileName(),
         getFilePath: () => activeTabPathRef.current,
         confirmContinue: ({ title, message, confirmText, cancelText }) =>
           new Promise<boolean>((resolve) => {
@@ -3836,8 +3854,10 @@ export function WorkspaceShell({
     } catch (e) {
       console.error('[Export Word] 动态加载失败:', e)
       setStatusMessage(t('workspace.exportWordLoadFailed'))
+    } finally {
+      isExportingWordRef.current = false
     }
-  }, [isPdfActive, setStatusMessage, getCurrentMarkdown, getCurrentFileName, t])
+  }, [activeImportedWordState, activeTab?.title, isPdfActive, setStatusMessage, getCurrentMarkdown, getCurrentFileName, t])
 
   const openSearchWithSelection = useCallback(() => {
     const view = getActiveSourceView()

@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.18.1] - 2026-11-01
+
+### 中文
+
+本次补丁修复 PDF AI 会话清理、文件切换、Word 导出命名与重复保存对话框问题，并同步 Files/Folders 布局对应的测试。
+
+### English
+
+This patch fixes PDF AI chat clearing and file switching, Word export naming, and duplicate Save As dialogs. Sidebar tests now follow the Files/Folders layout.
+
 ## [v0.18.0] - 2026-11-01
 
 ### 中文

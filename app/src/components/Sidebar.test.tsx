@@ -41,6 +41,10 @@ function renderWithI18n(node: ReactNode) {
     )
 }
 
+function showFoldersSection() {
+    fireEvent.click(screen.getByRole('tab', { name: '文件夹' }))
+}
+
 describe('Sidebar', () => {
     const mockProps = {
         standaloneFiles: [],
@@ -86,6 +90,7 @@ describe('Sidebar', () => {
             onToggle
         }
         renderWithI18n(<Sidebar {...props} />)
+        showFoldersSection()
         const rootRow = screen.getByText('my-project')
         expect(rootRow).toBeDefined()
 
@@ -106,6 +111,7 @@ describe('Sidebar', () => {
             }
         }
         renderWithI18n(<Sidebar {...props} />)
+        showFoldersSection()
         expect(screen.getByText('file1.md')).toBeDefined()
         expect(screen.getByText('dir1')).toBeDefined()
     })
@@ -119,6 +125,7 @@ describe('Sidebar', () => {
             onToolbarNewFileInCurrentFolder
         }
         renderWithI18n(<Sidebar {...props} />)
+        showFoldersSection()
         const btn = screen.getByTitle('在当前文件夹中新建文件')
         fireEvent.click(btn)
         expect(onToolbarNewFileInCurrentFolder).toHaveBeenCalled()
@@ -139,6 +146,7 @@ describe('Sidebar', () => {
         }
 
         renderWithI18n(<Sidebar {...props} />)
+        showFoldersSection()
 
         const dirNode = screen.getByText('dir1')
         fireEvent.contextMenu(dirNode)
