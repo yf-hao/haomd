@@ -244,6 +244,10 @@ export const zhCNMessages: MessageDictionary = {
         title: 'AI Console',
         description: '使用深色中性工作台主题，层级克制，带控制台风格表面。',
       },
+      deepSpace: {
+        title: '深空蓝',
+        description: '深蓝工作区搭配电光青点缀，选中状态带有轻柔流动的边缘光。',
+      },
     },
   },
   wordExport: {

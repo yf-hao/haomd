@@ -244,6 +244,10 @@ export const enUSMessages: MessageDictionary = {
         title: 'AI Console',
         description: 'Use a deep neutral workspace preset with restrained contrast and console-style surfaces.',
       },
+      deepSpace: {
+        title: 'Deep Space',
+        description: 'A deep blue workspace with electric cyan accents and a subtle animated edge on selected items.',
+      },
     },
   },
   wordExport: {

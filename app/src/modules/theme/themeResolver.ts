@@ -12,6 +12,7 @@ export function resolveThemeMode(mode: ThemeMode, prefersDark: boolean): Resolve
   if (mode === 'electric-mint') return 'dark'
   if (mode === 'neon-pop') return 'dark'
   if (mode === 'ai-console') return 'dark'
+  if (mode === 'deep-space') return 'dark'
   if (mode === 'paper') return 'light'
   if (mode === 'focus') return 'dark'
   if (mode === 'high-contrast') return 'light'
@@ -40,6 +41,7 @@ export function resolveActiveTheme(mode: ThemeMode, prefersDark: boolean): Theme
   if (mode === 'electric-mint') return getBuiltinThemeDefinition('electric-mint')
   if (mode === 'neon-pop') return getBuiltinThemeDefinition('neon-pop')
   if (mode === 'ai-console') return getBuiltinThemeDefinition('ai-console')
+  if (mode === 'deep-space') return getBuiltinThemeDefinition('deep-space')
   if (mode === 'paper') return getBuiltinThemeDefinition('paper')
   if (mode === 'focus') return getBuiltinThemeDefinition('focus')
   if (mode === 'high-contrast') return getBuiltinThemeDefinition('high-contrast')

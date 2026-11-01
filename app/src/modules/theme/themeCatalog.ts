@@ -1,6 +1,7 @@
 import type { BuiltinThemeId, ThemeDefinition } from './schema'
 import { aiConsoleTheme } from './themes/aiConsoleTheme'
 import { darkTheme } from './themes/darkTheme'
+import { deepSpaceTheme } from './themes/deepSpaceTheme'
 import { electricMintTheme } from './themes/electricMintTheme'
 import { focusTheme } from './themes/focusTheme'
 import { highContrastTheme } from './themes/highContrastTheme'
@@ -17,6 +18,7 @@ const builtinThemes: Record<BuiltinThemeId, ThemeDefinition> = {
   'electric-mint': electricMintTheme,
   'neon-pop': neonPopTheme,
   'ai-console': aiConsoleTheme,
+  'deep-space': deepSpaceTheme,
   paper: paperTheme,
   focus: focusTheme,
   'high-contrast': highContrastTheme,

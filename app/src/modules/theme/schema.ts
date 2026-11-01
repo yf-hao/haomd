@@ -5,6 +5,7 @@ export type BuiltinThemeId =
   | 'electric-mint'
   | 'neon-pop'
   | 'ai-console'
+  | 'deep-space'
   | 'paper'
   | 'focus'
   | 'high-contrast'

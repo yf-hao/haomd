@@ -1479,6 +1479,11 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                           title: t('theme.presets.aiConsole.title'),
                           description: t('theme.presets.aiConsole.description'),
                         },
+                        {
+                          mode: 'deep-space',
+                          title: t('theme.presets.deepSpace.title'),
+                          description: t('theme.presets.deepSpace.description'),
+                        },
                       ] as const).map((option) => (
                         <button
                           key={option.mode}

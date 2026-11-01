@@ -116,6 +116,18 @@ function SidebarFileIcon() {
   )
 }
 
+function FolderDisclosureIcon({ expanded }: { expanded: boolean }) {
+  return (
+    <svg
+      className={`tree-icon tree-icon-chevron ${expanded ? 'expanded' : 'collapsed'}`}
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+    >
+      <path d="M5.25 3.75 10.5 8l-5.25 4.25z" />
+    </svg>
+  )
+}
+
 function SidebarFolderPlusIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -164,10 +176,7 @@ const TreeNode = memo(function TreeNode({ selectedPaths, node, level, expanded, 
               onContextMenu(e, { path: node.path, kind: 'tree-dir' })
             }}
           >
-            <span
-              className={`tree-icon tree-icon-chevron ${isExpanded ? 'expanded' : 'collapsed'}`}
-              aria-hidden="true"
-            />
+            <FolderDisclosureIcon expanded={isExpanded} />
             <span className="tree-name">{node.name}</span>
           </div>
         )}
@@ -1092,10 +1101,7 @@ export function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, o
                         }}
                         title={rootPath}
                       >
-                        <span
-                          className={`tree-icon tree-icon-chevron ${isExpandedRoot ? 'expanded' : 'collapsed'}`}
-                          aria-hidden="true"
-                        />
+                        <FolderDisclosureIcon expanded={isExpandedRoot} />
                         <span className="tree-name">{name}</span>
                       </div>
                       {isExpandedRoot && (
