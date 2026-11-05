@@ -241,6 +241,8 @@ const countDocumentChars = (text: string): number => {
   return noWhitespace.length
 }
 
+const PREVIEW_OPEN_DEFER_MS = 120
+
 const seed = ''
 
 function findOutlineItemByPage(items: OutlineItem[], page: number): OutlineItem | null {
@@ -626,6 +628,20 @@ export function WorkspaceShell({
       previewFrameRef.current = null
     }
   }, [previewScheduler])
+
+  const scheduleOpenedPreview = useCallback((content: string) => {
+    clearPreviewSyncTimer()
+    skipNextPreviewThrottleRef.current = true
+    setIsPreviewLoading(true)
+    previewFrameRef.current = requestAnimationFrame(() => {
+      previewFrameRef.current = null
+      previewSyncTimerRef.current = window.setTimeout(() => {
+        previewSyncTimerRef.current = null
+        commitPreviewValue(content)
+        setIsPreviewLoading(false)
+      }, PREVIEW_OPEN_DEFER_MS)
+    })
+  }, [clearPreviewSyncTimer, commitPreviewValue])
 
   const schedulePreviewDocument = useCallback((
     tabId: string,
@@ -1220,17 +1236,7 @@ export function WorkspaceShell({
       setEditorMarkdown(tab.content)
       setMarkdown(tab.content)
       if (isTabSwitch && isPreviewVisible) {
-        clearPreviewSyncTimer()
-        skipNextPreviewThrottleRef.current = true
-        setIsPreviewLoading(true)
-        previewFrameRef.current = requestAnimationFrame(() => {
-          previewFrameRef.current = null
-          previewSyncTimerRef.current = window.setTimeout(() => {
-            previewSyncTimerRef.current = null
-            commitPreviewValue(tab.content)
-            setIsPreviewLoading(false)
-          }, 0)
-        })
+        scheduleOpenedPreview(tab.content)
       } else {
         commitPreviewValue(tab.content)
         setIsPreviewLoading(false)
@@ -1241,7 +1247,7 @@ export function WorkspaceShell({
         restoreCursorRef.current?.(tab.path ?? null)
       }
     }
-  }, [activeId, tabs, isPreviewVisible, clearPreviewSyncTimer, commitPreviewValue])
+  }, [activeId, tabs, isPreviewVisible, scheduleOpenedPreview, commitPreviewValue])
 
   // Window Title：不再显示文件名，保持标题栏空白
   useEffect(() => {
@@ -2642,17 +2648,7 @@ export function WorkspaceShell({
     setMarkdown(content)
     setWysiwygFocusRequest((request) => request + 1)
     if (isPreviewVisible) {
-      clearPreviewSyncTimer()
-      skipNextPreviewThrottleRef.current = true
-      setIsPreviewLoading(true)
-      previewFrameRef.current = requestAnimationFrame(() => {
-        previewFrameRef.current = null
-        previewSyncTimerRef.current = window.setTimeout(() => {
-          previewSyncTimerRef.current = null
-          commitPreviewValue(content)
-          setIsPreviewLoading(false)
-        }, 0)
-      })
+      scheduleOpenedPreview(content)
     } else {
       commitPreviewValue(content)
       setIsPreviewLoading(false)
@@ -2663,10 +2659,10 @@ export function WorkspaceShell({
     // createTab({ path, content }) 创建了新标签并设置了内容。而 updateActiveContent
     // 闭包中的 activeId 仍指向旧标签，会误将旧标签内容覆写为新文件内容。
   }, [
-    clearPreviewSyncTimer,
     clearSourceDocumentSync,
     commitPreviewValue,
     isPreviewVisible,
+    scheduleOpenedPreview,
     resetDirtyTracking,
   ])
 
