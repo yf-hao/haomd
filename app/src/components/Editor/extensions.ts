@@ -52,13 +52,50 @@ function createBaseTheme(themeMode: ResolvedThemeMode) {
       '.cm-gutters': {
         backgroundColor: 'var(--theme-surface-editor-gutter)',
         color: 'var(--theme-editor-gutter-fg)',
-        borderRight: 'none',
+        borderRight: '1px solid var(--theme-border-subtle)',
         fontSize: 'var(--editor-gutter-font-size, calc(var(--ui-font-editor) - 2px))',
         margin: 0,
       },
-      '.cm-gutter .cm-activeLineGutter': {
-        backgroundColor: 'var(--theme-editor-active-gutter-bg)',
+      '.cm-lineNumbers .cm-gutterElement': {
+        boxSizing: 'border-box',
+        minWidth: '0',
+        padding: '0 3px',
+        textAlign: 'right',
+        fontVariantNumeric: 'tabular-nums',
+      },
+      '.cm-foldGutter': {
+        flex: '0 0 10px',
+        width: '10px',
+        minWidth: '10px',
+      },
+      '.cm-foldGutter .cm-gutterElement': {
+        boxSizing: 'border-box',
+        width: '10px',
+        minWidth: '10px',
+        padding: '0',
+        color: 'var(--theme-text-muted)',
+        cursor: 'pointer',
+        transition: 'color 120ms ease, background-color 120ms ease',
+      },
+      '.cm-foldGutter .cm-gutterElement span': {
+        display: 'inline-block',
+        opacity: '0.82',
+        fontSize: '13px',
+        lineHeight: '1',
+      },
+      '.cm-foldGutter .cm-gutterElement:hover': {
+        borderRadius: '4px',
+        backgroundColor: 'var(--theme-surface-hover)',
+        color: 'var(--theme-accent-text)',
+      },
+      '.cm-lineNumbers .cm-activeLineGutter': {
+        backgroundColor: 'color-mix(in srgb, var(--theme-editor-active-gutter-bg) 68%, var(--theme-accent-primary) 32%)',
+        color: 'var(--theme-text-primary, var(--theme-text-default))',
+        fontWeight: '700',
         position: 'relative',
+      },
+      '.cm-foldGutter .cm-activeLineGutter': {
+        backgroundColor: 'transparent',
       },
       '.cm-lineNumbers .cm-activeLineGutter::after': {
         content: '""',
@@ -66,7 +103,7 @@ function createBaseTheme(themeMode: ResolvedThemeMode) {
         top: 0,
         bottom: 0,
         right: '0px',
-        width: '2px',
+        width: '3px',
         backgroundColor: 'var(--theme-editor-active-line-marker)',
         boxShadow: '0 0 8px var(--theme-editor-active-line-marker)',
         pointerEvents: 'none',

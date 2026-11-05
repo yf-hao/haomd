@@ -1,4 +1,4 @@
-use crate::haomd_paths::haomd_data_root_dir;
+use crate::haomd_paths::haomd_config_root_dir;
 use crate::{err_payload, new_trace_id, ok, ErrorCode, ResultPayload};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -37,26 +37,38 @@ pub struct CalendarRepeatRuleRecord {
     pub updated_at: String,
 }
 
-fn calendar_data_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
-    Ok(haomd_data_root_dir(app)?.join("calendar"))
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarMarkerRecord {
+    pub id: String,
+    pub date: String,
+    pub title: String,
+    #[serde(default = "default_marker_color")]
+    pub color: String,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
-fn legacy_calendar_data_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
-    let mut dir = app
+fn default_marker_color() -> String {
+    "blue".to_string()
+}
+
+fn calendar_data_dir(app: &AppHandle) -> std::io::Result<PathBuf> {
+    Ok(haomd_config_root_dir(app)?.join("calendar"))
+}
+
+fn legacy_calendar_data_dirs(app: &AppHandle) -> std::io::Result<Vec<PathBuf>> {
+    let app_data_dir = app
         .path()
         .app_data_dir()
         .map_err(|err| std::io::Error::other(err.to_string()))?;
-    dir.push("calendar");
-    std::fs::create_dir_all(&dir)?;
-    Ok(dir)
-}
-
-fn reminders_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
-    Ok(calendar_data_dir(app)?.join("reminders.json"))
-}
-
-fn repeat_rules_store_path(app: &AppHandle) -> std::io::Result<PathBuf> {
-    Ok(calendar_data_dir(app)?.join("repeat-rules.json"))
+    let app_data_parent = app_data_dir
+        .parent()
+        .ok_or_else(|| std::io::Error::other("应用数据目录无父目录"))?;
+    Ok(vec![
+        app_data_parent.join("haomd").join("calendar"),
+        app_data_dir.join("calendar"),
+    ])
 }
 
 fn sort_reminders(mut reminders: Vec<CalendarReminderRecord>) -> Vec<CalendarReminderRecord> {
@@ -115,39 +127,31 @@ where
     fs::write(path, json).await
 }
 
-async fn migrate_legacy_calendar_data(app: &AppHandle, current_dir: &Path) -> std::io::Result<()> {
-    let legacy_dir = legacy_calendar_data_dir(app)?;
-    if legacy_dir == current_dir {
-        return Ok(());
-    }
-    if fs::metadata(current_dir).await.is_ok() {
-        return Ok(());
-    }
-    let Ok(metadata) = fs::metadata(&legacy_dir).await else {
-        return Ok(());
-    };
-    if !metadata.is_dir() {
-        return Ok(());
+async fn prepare_calendar_store_path(app: &AppHandle, file_name: &str) -> std::io::Result<PathBuf> {
+    let current_dir = calendar_data_dir(app)?;
+    fs::create_dir_all(&current_dir).await?;
+    let current_path = current_dir.join(file_name);
+    if fs::metadata(&current_path).await.is_ok() {
+        return Ok(current_path);
     }
 
-    fs::create_dir_all(current_dir).await?;
-    let legacy_reminders = legacy_dir.join("reminders.json");
-    let current_reminders = current_dir.join("reminders.json");
-    if fs::metadata(&legacy_reminders).await.is_ok() {
-        let _ = fs::copy(&legacy_reminders, &current_reminders).await;
+    for legacy_dir in legacy_calendar_data_dirs(app)? {
+        if legacy_dir == current_dir {
+            continue;
+        }
+        let legacy_path = legacy_dir.join(file_name);
+        if fs::metadata(&legacy_path).await.is_ok() {
+            fs::copy(&legacy_path, &current_path).await?;
+            break;
+        }
     }
-    let legacy_repeat_rules = legacy_dir.join("repeat-rules.json");
-    let current_repeat_rules = current_dir.join("repeat-rules.json");
-    if fs::metadata(&legacy_repeat_rules).await.is_ok() {
-        let _ = fs::copy(&legacy_repeat_rules, &current_repeat_rules).await;
-    }
-    Ok(())
+    Ok(current_path)
 }
 
 #[tauri::command]
 pub async fn load_calendar_reminders(app: AppHandle) -> ResultPayload<Vec<CalendarReminderRecord>> {
     let trace = new_trace_id();
-    let path = match reminders_store_path(&app) {
+    let path = match prepare_calendar_store_path(&app, "reminders.json").await {
         Ok(path) => path,
         Err(err) => {
             return err_payload(
@@ -157,16 +161,6 @@ pub async fn load_calendar_reminders(app: AppHandle) -> ResultPayload<Vec<Calend
             )
         }
     };
-
-    if let Some(parent) = path.parent() {
-        if let Err(err) = migrate_legacy_calendar_data(&app, parent).await {
-            return err_payload(
-                ErrorCode::IoError,
-                format!("迁移日历提醒数据失败: {err}"),
-                trace,
-            );
-        }
-    }
 
     match read_json_vec::<CalendarReminderRecord>(&path).await {
         Ok(reminders) => ok(sort_reminders(reminders), trace),
@@ -184,7 +178,7 @@ pub async fn save_calendar_reminders(
     reminders: Vec<CalendarReminderRecord>,
 ) -> ResultPayload<()> {
     let trace = new_trace_id();
-    let path = match reminders_store_path(&app) {
+    let path = match prepare_calendar_store_path(&app, "reminders.json").await {
         Ok(path) => path,
         Err(err) => {
             return err_payload(
@@ -211,7 +205,7 @@ pub async fn load_calendar_repeat_rules(
     app: AppHandle,
 ) -> ResultPayload<Vec<CalendarRepeatRuleRecord>> {
     let trace = new_trace_id();
-    let path = match repeat_rules_store_path(&app) {
+    let path = match prepare_calendar_store_path(&app, "repeat-rules.json").await {
         Ok(path) => path,
         Err(err) => {
             return err_payload(
@@ -221,16 +215,6 @@ pub async fn load_calendar_repeat_rules(
             )
         }
     };
-
-    if let Some(parent) = path.parent() {
-        if let Err(err) = migrate_legacy_calendar_data(&app, parent).await {
-            return err_payload(
-                ErrorCode::IoError,
-                format!("迁移重复提醒数据失败: {err}"),
-                trace,
-            );
-        }
-    }
 
     match read_json_vec::<CalendarRepeatRuleRecord>(&path).await {
         Ok(rules) => ok(sort_repeat_rules(rules), trace),
@@ -248,7 +232,7 @@ pub async fn save_calendar_repeat_rules(
     rules: Vec<CalendarRepeatRuleRecord>,
 ) -> ResultPayload<()> {
     let trace = new_trace_id();
-    let path = match repeat_rules_store_path(&app) {
+    let path = match prepare_calendar_store_path(&app, "repeat-rules.json").await {
         Ok(path) => path,
         Err(err) => {
             return err_payload(
@@ -265,6 +249,69 @@ pub async fn save_calendar_repeat_rules(
         Err(err) => err_payload(
             ErrorCode::IoError,
             format!("写入重复提醒失败: {err}"),
+            trace,
+        ),
+    }
+}
+
+#[tauri::command]
+pub async fn load_calendar_markers(app: AppHandle) -> ResultPayload<Vec<CalendarMarkerRecord>> {
+    let trace = new_trace_id();
+    let path = match prepare_calendar_store_path(&app, "markers.json").await {
+        Ok(path) => path,
+        Err(err) => {
+            return err_payload(
+                ErrorCode::IoError,
+                format!("获取日历标记路径失败: {err}"),
+                trace,
+            )
+        }
+    };
+    match read_json_vec::<CalendarMarkerRecord>(&path).await {
+        Ok(markers) => {
+            let mut markers = markers;
+            markers.sort_by(|a, b| {
+                a.date
+                    .cmp(&b.date)
+                    .then_with(|| a.created_at.cmp(&b.created_at))
+            });
+            ok(markers, trace)
+        }
+        Err(err) => err_payload(
+            ErrorCode::IoError,
+            format!("读取日历标记失败: {err}"),
+            trace,
+        ),
+    }
+}
+
+#[tauri::command]
+pub async fn save_calendar_markers(
+    app: AppHandle,
+    markers: Vec<CalendarMarkerRecord>,
+) -> ResultPayload<()> {
+    let trace = new_trace_id();
+    let path = match prepare_calendar_store_path(&app, "markers.json").await {
+        Ok(path) => path,
+        Err(err) => {
+            return err_payload(
+                ErrorCode::IoError,
+                format!("获取日历标记路径失败: {err}"),
+                trace,
+            )
+        }
+    };
+    let mut markers = markers;
+    markers.sort_by(|a, b| {
+        a.date
+            .cmp(&b.date)
+            .then_with(|| a.created_at.cmp(&b.created_at))
+    });
+    match write_json_vec(&path, &markers).await {
+        Ok(_) => ok((), trace),
+        Err(err) => err_payload(
+            ErrorCode::IoError,
+            format!("写入日历标记失败: {err}"),
             trace,
         ),
     }

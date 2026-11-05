@@ -20,6 +20,15 @@ import {
   type CalendarRepeatRule,
   type CalendarReminder,
 } from '../modules/tools/calendar/reminders'
+import {
+  createCalendarMarker,
+  loadCalendarMarkers,
+  markersForDate,
+  saveCalendarMarkers,
+  updateCalendarMarker,
+  type CalendarMarker,
+  type CalendarMarkerColor,
+} from '../modules/tools/calendar/markers'
 import './CalendarDialog.css'
 
 export type CalendarDialogProps = {
@@ -34,15 +43,21 @@ export function CalendarDialog({ open, onClose }: CalendarDialogProps) {
   const { resolvedLanguage: locale } = useI18n()
   const dialogRef = useRef<HTMLDivElement | null>(null)
   const titleInputRef = useRef<HTMLInputElement | null>(null)
+  const markerTitleInputRef = useRef<HTMLInputElement | null>(null)
   const today = new Date()
   const [visibleMonth, setVisibleMonth] = useState(() => monthStart(new Date()))
   const [selectedDate, setSelectedDate] = useState(() => new Date())
   const [reminders, setReminders] = useState<CalendarReminder[]>([])
   const [repeatRules, setRepeatRules] = useState<CalendarRepeatRule[]>([])
+  const [markers, setMarkers] = useState<CalendarMarker[]>([])
   const [draftTitle, setDraftTitle] = useState('')
   const [draftTime, setDraftTime] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [reminderPanelOpen, setReminderPanelOpen] = useState(false)
+  const [panelSection, setPanelSection] = useState<'reminders' | 'markers'>('reminders')
+  const [markerDraftTitle, setMarkerDraftTitle] = useState('')
+  const [markerDraftColor, setMarkerDraftColor] = useState<CalendarMarkerColor>('blue')
+  const [editingMarkerId, setEditingMarkerId] = useState<string | null>(null)
 
   const calendarDays = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth])
   const selectedDateKey = toDateKey(selectedDate)
@@ -53,6 +68,10 @@ export function CalendarDialog({ open, onClose }: CalendarDialogProps) {
   const selectedDateRepeatEntries = useMemo(
     () => calendarEntriesForDate(reminders, repeatRules, selectedDateKey).filter((entry) => entry.kind === 'repeat'),
     [reminders, repeatRules, selectedDateKey],
+  )
+  const selectedDateMarkers = useMemo(
+    () => markersForDate(markers, selectedDateKey),
+    [markers, selectedDateKey],
   )
   const weekdays = locale === 'en-US' ? WEEKDAYS_EN : WEEKDAYS_ZH
   const title = locale === 'en-US'
@@ -77,6 +96,16 @@ export function CalendarDialog({ open, onClose }: CalendarDialogProps) {
 
   useEffect(() => {
     let cancelled = false
+    void loadCalendarMarkers().then((items) => {
+      if (!cancelled) setMarkers(items)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
     const reload = () => {
       void loadCalendarRepeatRules().then((items) => {
         if (!cancelled) setRepeatRules(items)
@@ -93,8 +122,11 @@ export function CalendarDialog({ open, onClose }: CalendarDialogProps) {
 
   useEffect(() => {
     if (!reminderPanelOpen) return
-    queueMicrotask(() => titleInputRef.current?.focus())
-  }, [reminderPanelOpen])
+    queueMicrotask(() => {
+      if (panelSection === 'markers') markerTitleInputRef.current?.focus()
+      else titleInputRef.current?.focus()
+    })
+  }, [panelSection, reminderPanelOpen])
 
   function selectDate(date: Date) {
     setSelectedDate(date)
@@ -102,6 +134,8 @@ export function CalendarDialog({ open, onClose }: CalendarDialogProps) {
     setDraftTitle('')
     setDraftTime(getDefaultReminderTime())
     setEditingId(null)
+    setMarkerDraftTitle('')
+    setEditingMarkerId(null)
   }
 
   function openReminderPanel(date = selectedDate) {
@@ -114,6 +148,8 @@ export function CalendarDialog({ open, onClose }: CalendarDialogProps) {
     setDraftTitle('')
     setDraftTime(getDefaultReminderTime())
     setEditingId(null)
+    setMarkerDraftTitle('')
+    setEditingMarkerId(null)
     queueMicrotask(() => dialogRef.current?.focus())
   }
 
@@ -233,6 +269,43 @@ export function CalendarDialog({ open, onClose }: CalendarDialogProps) {
     setDraftTime(getDefaultReminderTime())
   }
 
+  function persistMarkers(next: CalendarMarker[]) {
+    setMarkers(next)
+    void saveCalendarMarkers(next)
+  }
+
+  function handleSubmitMarker() {
+    const titleText = markerDraftTitle.trim()
+    if (!titleText) return
+    if (editingMarkerId) {
+      const marker = markers.find((item) => item.id === editingMarkerId)
+      if (!marker) return
+      persistMarkers(markers.map((item) => item.id === marker.id
+        ? updateCalendarMarker(marker, { title: titleText, color: markerDraftColor })
+        : item))
+    } else {
+      persistMarkers([...markers, createCalendarMarker({ date: selectedDateKey, title: titleText, color: markerDraftColor })])
+    }
+    setMarkerDraftTitle('')
+    setMarkerDraftColor('blue')
+    setEditingMarkerId(null)
+  }
+
+  function handleEditMarker(marker: CalendarMarker) {
+    setEditingMarkerId(marker.id)
+    setMarkerDraftTitle(marker.title)
+    setMarkerDraftColor(marker.color)
+  }
+
+  function handleDeleteMarker(id: string) {
+    persistMarkers(markers.filter((marker) => marker.id !== id))
+    if (editingMarkerId === id) {
+      setEditingMarkerId(null)
+      setMarkerDraftTitle('')
+      setMarkerDraftColor('blue')
+    }
+  }
+
   if (!open) return null
 
   return (
@@ -276,6 +349,7 @@ export function CalendarDialog({ open, onClose }: CalendarDialogProps) {
               const dateKey = toDateKey(date)
               const dayEntries = calendarEntriesForDate(reminders, repeatRules, dateKey)
               const reminderCount = dayEntries.length
+              const dayMarkers = markersForDate(markers, dateKey)
               return (
                 <button
                   type="button"
@@ -286,13 +360,23 @@ export function CalendarDialog({ open, onClose }: CalendarDialogProps) {
                     isSelected ? 'selected' : '',
                     isToday ? 'today' : '',
                   ].filter(Boolean).join(' ')}
-                  aria-label={formatDateLabel(date, { isToday, isSelected, locale, reminderCount })}
+                  aria-label={formatDateLabel(date, { isToday, isSelected, locale, reminderCount, markerCount: dayMarkers.length })}
                   aria-selected={isSelected}
                   role="gridcell"
                   onClick={() => selectDate(date)}
                   onDoubleClick={() => openReminderPanel(date)}
                 >
                   <span className="calendar-day-number">{date.getDate()}</span>
+                  {dayMarkers.length > 0 ? (
+                    <span className="calendar-day-markers" aria-hidden="true">
+                      {dayMarkers.slice(0, 2).map((marker) => (
+                        <span key={marker.id} className={`calendar-day-marker-line marker-color-${marker.color}`}>
+                          <span className="calendar-marker-dot" />{marker.title}
+                        </span>
+                      ))}
+                      {dayMarkers.length > 2 ? <span className="calendar-day-marker-more">+{dayMarkers.length - 2}</span> : null}
+                    </span>
+                  ) : null}
                   {reminderCount > 0 ? (
                     <span className="calendar-day-reminders" aria-hidden="true">
                       {dayEntries.slice(0, 2).map((entry) => (
@@ -317,17 +401,29 @@ export function CalendarDialog({ open, onClose }: CalendarDialogProps) {
         <div className="calendar-reminder-panel" role="dialog" aria-modal="false">
           <div className="calendar-reminder-panel-header">
             <div>
-              <div className="calendar-reminder-kicker">{locale === 'en-US' ? 'Reminders' : '提醒'}</div>
+              <div className="calendar-reminder-kicker">{panelSection === 'markers' ? (locale === 'en-US' ? 'Markers' : '标记') : (locale === 'en-US' ? 'Reminders' : '提醒')}</div>
               <div className="calendar-reminder-date">{selectedDateTitle}</div>
             </div>
             <div className="calendar-reminder-panel-meta">
               <span className="calendar-reminder-count">
-                {locale === 'en-US' ? `${selectedDateEntries.length} item(s)` : `${selectedDateEntries.length} 条`}
+                {panelSection === 'markers'
+                  ? (locale === 'en-US' ? `${selectedDateMarkers.length} item(s)` : `${selectedDateMarkers.length} 条`)
+                  : (locale === 'en-US' ? `${selectedDateEntries.length} item(s)` : `${selectedDateEntries.length} 条`)}
               </span>
               <button className="calendar-reminder-close-btn" type="button" onClick={closeReminderPanel} aria-label="Close">×</button>
             </div>
           </div>
 
+          <div className="calendar-panel-tabs" role="tablist" aria-label={locale === 'en-US' ? 'Calendar details' : '日历内容'}>
+            <button type="button" role="tab" aria-selected={panelSection === 'reminders'} className={panelSection === 'reminders' ? 'active' : ''} onClick={() => setPanelSection('reminders')}>
+              {locale === 'en-US' ? 'Reminders' : '提醒'}
+            </button>
+            <button type="button" role="tab" aria-selected={panelSection === 'markers'} className={panelSection === 'markers' ? 'active' : ''} onClick={() => setPanelSection('markers')}>
+              {locale === 'en-US' ? 'Markers' : '标记'}{selectedDateMarkers.length > 0 ? ` (${selectedDateMarkers.length})` : ''}
+            </button>
+          </div>
+
+          {panelSection === 'reminders' ? <>
           <div className="calendar-reminder-form">
             <input
               className="calendar-reminder-time"
@@ -421,6 +517,48 @@ export function CalendarDialog({ open, onClose }: CalendarDialogProps) {
               </div>
             ))}
           </div>
+          </> : <>
+            <div className="calendar-marker-form">
+              <input
+                ref={markerTitleInputRef}
+                className="calendar-reminder-title-input"
+                type="text"
+                value={markerDraftTitle}
+                onChange={(event) => setMarkerDraftTitle(event.target.value)}
+                placeholder={locale === 'en-US' ? 'Marker title' : '标记内容'}
+                aria-label={locale === 'en-US' ? 'Marker title' : '标记内容'}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    handleSubmitMarker()
+                  }
+                }}
+              />
+              <div className="calendar-marker-colors" role="group" aria-label={locale === 'en-US' ? 'Marker color' : '标记颜色'}>
+                {(['blue', 'green', 'orange', 'purple', 'none'] as const).map((color) => (
+                  <button key={color} type="button" className={`calendar-marker-color ${color} ${markerDraftColor === color ? 'selected' : ''}`} onClick={() => setMarkerDraftColor(color)} aria-label={markerColorLabel(color, locale)} aria-pressed={markerDraftColor === color} />
+                ))}
+              </div>
+              <button className="calendar-reminder-save-btn" type="button" disabled={!markerDraftTitle.trim()} onClick={handleSubmitMarker}>
+                {editingMarkerId ? (locale === 'en-US' ? 'Save' : '保存标记') : (locale === 'en-US' ? 'Add' : '添加标记')}
+              </button>
+              {editingMarkerId ? <button className="calendar-reminder-cancel-btn" type="button" onClick={() => { setEditingMarkerId(null); setMarkerDraftTitle(''); setMarkerDraftColor('blue') }}>{locale === 'en-US' ? 'Cancel' : '取消'}</button> : null}
+            </div>
+            <div className="calendar-reminder-list">
+              {selectedDateMarkers.length === 0 ? <div className="calendar-reminder-empty">{locale === 'en-US' ? 'No markers for this day.' : '当天暂无标记。'}</div> : selectedDateMarkers.map((marker) => (
+                <div key={marker.id} className={`calendar-reminder-item ${editingMarkerId === marker.id ? 'editing' : ''}`}>
+                  <div className="calendar-reminder-item-main">
+                    <span className={`calendar-marker-dot marker-color-${marker.color}`} />
+                    <span className="calendar-reminder-item-title">{marker.title}</span>
+                  </div>
+                  <div className="calendar-reminder-item-actions">
+                    <button type="button" onClick={() => handleEditMarker(marker)}>{locale === 'en-US' ? 'Edit' : '修改'}</button>
+                    <button type="button" onClick={() => handleDeleteMarker(marker.id)}>{locale === 'en-US' ? 'Delete' : '删除'}</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>}
         </div>
       ) : null}
     </div>
@@ -441,7 +579,7 @@ function buildCalendarDays(visibleMonth: Date): Date[] {
 
 function formatDateLabel(
   date: Date,
-  options: { isToday: boolean; isSelected: boolean; locale: 'zh-CN' | 'en-US'; reminderCount: number },
+  options: { isToday: boolean; isSelected: boolean; locale: 'zh-CN' | 'en-US'; reminderCount: number; markerCount: number },
 ): string {
   if (options.locale === 'en-US') {
     const parts = [
@@ -449,6 +587,7 @@ function formatDateLabel(
       options.isToday ? 'today' : '',
       options.isSelected ? 'selected' : '',
       options.reminderCount > 0 ? `${options.reminderCount} reminder(s)` : '',
+      options.markerCount > 0 ? `${options.markerCount} marker(s)` : '',
     ].filter(Boolean)
     return parts.join(', ')
   }
@@ -458,8 +597,16 @@ function formatDateLabel(
     options.isToday ? '今天' : '',
     options.isSelected ? '已选中' : '',
     options.reminderCount > 0 ? `${options.reminderCount} 条提醒` : '',
+    options.markerCount > 0 ? `${options.markerCount} 个标记` : '',
   ].filter(Boolean)
   return parts.join('，')
+}
+
+function markerColorLabel(color: CalendarMarkerColor, locale: 'zh-CN' | 'en-US'): string {
+  const labels = locale === 'en-US'
+    ? { blue: 'Blue', green: 'Green', orange: 'Orange', purple: 'Purple', none: 'No color' }
+    : { blue: '蓝色', green: '绿色', orange: '橙色', purple: '紫色', none: '无颜色' }
+  return labels[color]
 }
 
 function formatDatePanelTitle(date: Date, locale: 'zh-CN' | 'en-US'): string {

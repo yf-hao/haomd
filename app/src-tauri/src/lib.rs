@@ -198,6 +198,8 @@ macro_rules! app_invoke_handler {
             save_calendar_reminders,
             load_calendar_repeat_rules,
             save_calendar_repeat_rules,
+            load_calendar_markers,
+            save_calendar_markers,
             load_alarm_rules,
             save_alarm_rules,
             list_alarm_sound_files,

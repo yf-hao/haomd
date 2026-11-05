@@ -179,6 +179,138 @@
   pointer-events: none;
 }
 
+.calendar-day-markers {
+  display: grid;
+  gap: 2px;
+  margin-top: 3px;
+  padding: 0 4px;
+  color: var(--theme-text-secondary);
+  font-size: 10px;
+  line-height: 1.2;
+  pointer-events: none;
+}
+
+.calendar-day-marker-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-day-marker-more {
+  color: var(--theme-text-muted);
+}
+
+.calendar-marker-dot {
+  display: inline-block;
+  flex: 0 0 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--marker-color, var(--theme-accent-text));
+}
+
+.marker-color-blue { --marker-color: #5b9aff; }
+.marker-color-green { --marker-color: #52b788; }
+.marker-color-orange { --marker-color: #f4a261; }
+.marker-color-purple { --marker-color: #a78bfa; }
+.marker-color-none { --marker-color: var(--theme-text-muted); }
+
+.calendar-panel-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 14px;
+  padding: 4px;
+  border: 1px solid var(--theme-border-subtle, var(--theme-border-default));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--theme-surface-primary) 74%, var(--theme-surface-card) 26%);
+}
+
+.calendar-panel-tabs button {
+  flex: 1;
+  min-height: 34px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--theme-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.calendar-panel-tabs button.active {
+  background: var(--theme-surface-card-active);
+  color: var(--theme-text-primary, var(--theme-text-default));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--theme-accent-text) 24%, transparent);
+}
+
+.calendar-panel-tabs button:focus-visible,
+.calendar-marker-color:focus-visible {
+  outline: 2px solid var(--theme-accent-text);
+  outline-offset: 2px;
+}
+
+.calendar-marker-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 10px;
+  border: 1px solid var(--theme-border-subtle, var(--theme-border-default));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--theme-surface-card) 72%, transparent);
+}
+
+.calendar-marker-form .calendar-reminder-title-input {
+  grid-column: 1 / -1;
+  min-height: 36px;
+}
+
+.calendar-marker-form .calendar-reminder-cancel-btn {
+  grid-column: 3;
+}
+
+.calendar-marker-colors {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 2px;
+}
+
+.calendar-marker-color {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: var(--marker-color);
+  cursor: pointer;
+}
+
+.calendar-marker-color.blue { --marker-color: #5b9aff; }
+.calendar-marker-color.green { --marker-color: #52b788; }
+.calendar-marker-color.orange { --marker-color: #f4a261; }
+.calendar-marker-color.purple { --marker-color: #a78bfa; }
+.calendar-marker-color.none {
+  --marker-color: var(--theme-text-muted);
+  background: transparent;
+  border-color: var(--theme-text-muted);
+}
+
+.calendar-marker-color.selected {
+  outline: 2px solid var(--theme-text-primary, var(--theme-text-default));
+  outline-offset: 2px;
+}
+
+.calendar-reminder-item-main .calendar-marker-dot {
+  margin-right: 2px;
+}
+
 .calendar-day-reminder-line,
 .calendar-day-reminder-more {
   display: block;
@@ -219,11 +351,12 @@
   width: min(400px, calc(100% - 36px));
   max-height: min(420px, calc(100% - 132px));
   overflow: auto;
-  padding: 14px;
-  border: 1px solid var(--theme-border-default);
-  border-radius: 12px;
-  background: var(--theme-surface-panel);
-  box-shadow: none;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--theme-border-default) 78%, var(--theme-accent-text) 22%);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--theme-surface-modal) 94%, var(--theme-surface-card-active) 6%);
+  box-shadow: var(--theme-shadow-elevated, 0 16px 40px rgba(0, 0, 0, 0.38));
+  backdrop-filter: blur(18px);
 }
 
 .calendar-reminder-panel-header {
@@ -231,14 +364,16 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
+  margin: -2px -2px 12px;
+  padding: 0 2px 12px;
+  border-bottom: 1px solid var(--theme-border-subtle, var(--theme-border-default));
 }
 
 .calendar-reminder-kicker {
-  color: var(--theme-text-muted);
+  color: var(--theme-accent-text);
   font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-weight: 650;
+  letter-spacing: 0.045em;
 }
 
 .calendar-reminder-date {
@@ -249,9 +384,12 @@
 }
 
 .calendar-reminder-count {
-  color: var(--theme-text-muted);
+  color: var(--theme-text-secondary, var(--theme-text-muted));
   font-size: 12px;
   white-space: nowrap;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--theme-surface-card);
 }
 
 .calendar-reminder-panel-meta {
@@ -261,17 +399,18 @@
 }
 
 .calendar-reminder-close-btn {
-  border: 1px solid var(--theme-border-default);
-  border-radius: 6px;
-  background: var(--theme-surface-primary);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
   color: var(--theme-text-secondary);
   cursor: pointer;
   font-size: 18px;
   line-height: 1;
-  padding: 3px 7px;
+  padding: 3px 8px;
 }
 
 .calendar-reminder-close-btn:hover {
+  border-color: var(--theme-border-default);
   background: var(--theme-surface-hover);
   color: var(--theme-text-primary);
 }
@@ -288,9 +427,17 @@
   min-height: 32px;
   border: 1px solid var(--theme-border-default);
   border-radius: 7px;
-  background: var(--theme-surface-primary);
+  background: var(--theme-surface-input, var(--theme-surface-primary));
   color: var(--theme-text-default);
   padding: 5px 8px;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.calendar-reminder-time:focus,
+.calendar-reminder-title-input:focus {
+  outline: none;
+  border-color: var(--theme-accent-text);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme-accent-text) 18%, transparent);
 }
 
 .calendar-reminder-time {
@@ -306,16 +453,18 @@
   min-height: 32px;
   border: 1px solid var(--theme-border-default);
   border-radius: 7px;
-  background: var(--theme-surface-primary);
+  background: var(--theme-surface-card);
   color: var(--theme-text-default);
   cursor: pointer;
   padding: 5px 10px;
 }
 
 .calendar-reminder-save-btn {
-  border-color: var(--theme-accent-text);
-  color: var(--theme-accent-text);
+  border-color: var(--theme-accent-primary, var(--theme-accent-text));
+  background: color-mix(in srgb, var(--theme-accent-primary, var(--theme-accent-text)) 16%, var(--theme-surface-card));
+  color: var(--theme-text-primary, var(--theme-text-default));
   font-weight: 650;
+  white-space: nowrap;
 }
 
 .calendar-reminder-save-btn:disabled {
@@ -328,6 +477,10 @@
 .calendar-reminder-cancel-btn:hover,
 .calendar-reminder-item-actions button:hover {
   background: var(--theme-surface-hover);
+}
+
+.calendar-reminder-save-btn:not(:disabled):hover {
+  background: color-mix(in srgb, var(--theme-accent-primary, var(--theme-accent-text)) 26%, var(--theme-surface-card));
 }
 
 .calendar-reminder-repeat-toggle {
@@ -418,7 +571,10 @@
 .calendar-reminder-empty {
   color: var(--theme-text-muted);
   font-size: 13px;
-  padding: 6px 0;
+  padding: 14px 10px;
+  border: 1px dashed var(--theme-border-default);
+  border-radius: 9px;
+  text-align: center;
 }
 
 .calendar-reminder-item {
@@ -426,14 +582,19 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
-  padding: 8px 10px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: var(--theme-surface-hover);
+  padding: 9px 10px;
+  border: 1px solid var(--theme-border-subtle, var(--theme-border-default));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--theme-surface-card) 72%, transparent);
+}
+
+.calendar-reminder-item + .calendar-reminder-item {
+  margin-top: 7px;
 }
 
 .calendar-reminder-item.editing {
-  border-color: var(--theme-accent-text);
+  border-color: color-mix(in srgb, var(--theme-accent-text) 55%, var(--theme-border-default));
+  background: color-mix(in srgb, var(--theme-accent-text) 8%, var(--theme-surface-card));
 }
 
 .calendar-reminder-item-main {
@@ -500,10 +661,21 @@
     inset: auto 12px 12px;
     width: auto;
     max-height: min(430px, calc(100% - 104px));
+    padding: 13px;
   }
 
   .calendar-reminder-item {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .calendar-marker-form {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 8px;
+    padding: 9px;
+  }
+
+  .calendar-marker-colors {
+    gap: 6px;
   }
 }
