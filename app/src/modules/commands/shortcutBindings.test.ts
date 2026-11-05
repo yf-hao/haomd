@@ -158,26 +158,26 @@ describe('global shortcut accelerators', () => {
     expect(menuSource).toContain('"CmdOrCtrl+Ctrl+v"')
   })
 
-  it('should route CmdOrCtrl+Shift+E to Live Editing on every platform', () => {
+  it('should route CmdOrCtrl+Alt+Shift+E to Live Editing on every platform', () => {
     expect(TOGGLE_WYSIWYG_SHORTCUT.matches({
       metaKey: true,
       ctrlKey: false,
       shiftKey: true,
-      altKey: false,
-    } as KeyboardEvent, 'e')).toBe(true)
-    expect(TOGGLE_WYSIWYG_SHORTCUT.matches({
-      metaKey: false,
-      ctrlKey: true,
-      shiftKey: true,
-      altKey: false,
+      altKey: true,
     } as KeyboardEvent, 'e')).toBe(true)
     expect(TOGGLE_WYSIWYG_SHORTCUT.matches({
       metaKey: false,
       ctrlKey: true,
       shiftKey: true,
       altKey: true,
+    } as KeyboardEvent, 'e')).toBe(true)
+    expect(TOGGLE_WYSIWYG_SHORTCUT.matches({
+      metaKey: false,
+      ctrlKey: true,
+      shiftKey: true,
+      altKey: false,
     } as KeyboardEvent, 'e')).toBe(false)
-    expect(menuSource).toContain('"CmdOrCtrl+Shift+E"')
+    expect(menuSource).toContain('"CmdOrCtrl+Alt+Shift+E"')
   })
 })
 

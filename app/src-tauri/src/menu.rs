@@ -1105,7 +1105,7 @@ pub async fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> 
             &CheckMenuItemBuilder::new(texts.toggle_wysiwyg)
                 .id("toggle_wysiwyg")
                 .checked(WYSIWYG_MENU_CHECKED.load(Ordering::Relaxed))
-                .accelerator("CmdOrCtrl+Shift+E")
+                .accelerator("CmdOrCtrl+Alt+Shift+E")
                 .build(app)?,
         )
         .separator()

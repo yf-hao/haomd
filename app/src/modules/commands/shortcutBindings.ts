@@ -337,7 +337,7 @@ export const TOGGLE_WYSIWYG_SHORTCUT: ShortcutBinding = {
   matches: (event, key) =>
     key === 'e' &&
     event.shiftKey &&
-    !event.altKey &&
+    event.altKey &&
     (event.metaKey || event.ctrlKey),
 }
 
@@ -398,7 +398,7 @@ export const GLOBAL_MENU_ACCELERATORS: Readonly<Record<string, string>> = {
   toggle_sidebar: 'CmdOrCtrl+Shift+S',
   close_file: 'CmdOrCtrl+W',
   paste_match_style: 'CmdOrCtrl+Alt+Shift+V',
-  toggle_wysiwyg: 'CmdOrCtrl+Shift+E',
+  toggle_wysiwyg: 'CmdOrCtrl+Alt+Shift+E',
   find: 'CmdOrCtrl+F',
   toggle_editor: 'CmdOrCtrl+P',
   toggle_preview: 'CmdOrCtrl+Shift+P',

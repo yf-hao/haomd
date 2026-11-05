@@ -838,6 +838,17 @@ export function WorkspaceShell({
   const activeIdRef = useRef<string | null>(null)
   activeIdRef.current = activeId
 
+  useEffect(() => {
+    if (!activeId || editMode !== 'source' || isPdfActive) return
+    const frame = window.requestAnimationFrame(() => {
+      const view = editorViewRef.current
+      if (activeIdRef.current === activeId && view?.dom.isConnected) {
+        sourceEditorTabIdRef.current = activeId
+      }
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [activeId, editMode, isPdfActive])
+
   // The original source belongs to one rich-text session. Opening directly in
   // rich-text mode and switching tabs must establish the same baseline as a
   // source-to-rich-text switch, without serializing an untouched document.
@@ -1838,9 +1849,8 @@ export function WorkspaceShell({
       })
     }
 
-    const runInsertBelow = (text: string) => {
-      const view = getActiveSourceView()
-      if (!view || !text) return
+    const runInsertBelow = (view: EditorView, text: string) => {
+      if (!text) return false
       const { state } = view
       const pos = state.selection.main.head
       const line = state.doc.lineAt(pos)
@@ -1848,8 +1858,40 @@ export function WorkspaceShell({
       view.dispatch(state.update({
         changes: { from: line.to, to: line.to, insert: insertText },
         selection: { anchor: line.to + insertText.length },
+        scrollIntoView: true,
       }))
+      view.focus()
       scrollEditorToSelection()
+      return true
+    }
+
+    const waitForSourceView = (targetTabId: string) => new Promise<EditorView | null>((resolve) => {
+      let attempts = 0
+      const check = () => {
+        if (attempts >= 60) {
+          resolve(null)
+          return
+        }
+        if (activeIdRef.current === targetTabId) {
+          const view = getActiveSourceView()
+          if (view) {
+            resolve(view)
+            return
+          }
+        }
+        attempts += 1
+        window.requestAnimationFrame(check)
+      }
+      check()
+    })
+
+    const insertIntoSourceEditor = async (targetTabId: string, text: string) => {
+      const view = await waitForSourceView(targetTabId)
+      if (!view || activeIdRef.current !== targetTabId) {
+        setStatusMessage('无法插入内容：当前编辑器尚未就绪')
+        return
+      }
+      if (runInsertBelow(view, text)) syncEditorToReactState()
     }
 
     const runReplaceSelection = (text: string) => {
@@ -1868,25 +1910,19 @@ export function WorkspaceShell({
       if (!text) return
 
       if (editModeRef.current === 'wysiwyg') {
-        wysiwygMutate((md) => md + '\n' + text)
+        const inserted = wysiwygFormatActionsRef.current?.insertMarkdown(text) ?? false
+        if (!inserted) setStatusMessage('无法将内容插入实时编辑器：编辑器尚未准备好')
         return
       }
 
       const hasSourceTab = !!sourceTabId && tabs.some((t) => t.id === sourceTabId)
       const targetTabId = hasSourceTab ? sourceTabId : activeIdRef.current
-      const performInsert = () => {
-        if (!targetTabId || activeIdRef.current !== targetTabId) return
-        runInsertBelow(text)
-        syncEditorToReactState()
-      }
+      if (!targetTabId) return
 
       if (hasSourceTab && activeIdRef.current !== sourceTabId) {
         setActiveTab(sourceTabId)
-        activeIdRef.current = sourceTabId
-        setTimeout(performInsert, 50)
-      } else {
-        performInsert()
       }
+      await insertIntoSourceEditor(targetTabId, text)
     })
 
     registerEditorReplaceSelection(async ({ text, sourceTabId }) => {
@@ -2287,6 +2323,7 @@ export function WorkspaceShell({
     handleMarkdownChange,
     handleSourceEditorDocumentChange,
     isCreatingTab,
+    setStatusMessage,
     setActiveTab,
     tabs,
   ])

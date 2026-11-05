@@ -13,7 +13,7 @@ import { clipboard } from '@milkdown/kit/plugin/clipboard'
 import { indent } from '@milkdown/kit/plugin/indent'
 import { trailing } from '@milkdown/kit/plugin/trailing'
 import { gapCursorPlugin } from '@milkdown/kit/plugin/cursor'
-import { replaceAll, getMarkdown, $view } from '@milkdown/kit/utils'
+import { replaceAll, getMarkdown, insert as insertMarkdown, $view } from '@milkdown/kit/utils'
 import { headingSchema, paragraphSchema, strongSchema } from '@milkdown/preset-commonmark'
 import { insertTableCommand, strikethroughSchema } from '@milkdown/preset-gfm'
 import { setBlockType, toggleMark } from '@milkdown/prose/commands'
@@ -122,6 +122,7 @@ export interface WysiwygFormatActions {
   clearTextColor: () => void
   applyBackgroundColor: (color: string) => void
   clearBackgroundColor: () => void
+  insertMarkdown: (markdown: string) => boolean
   insertImage: (src: string, alt?: string) => boolean
   pasteHtml: (content: { html: string; text: string }) => Promise<boolean>
   insertCodeBlock: () => void
@@ -1784,6 +1785,18 @@ function WysiwygEditor({
             view.focus()
           })
         })
+      },
+      insertMarkdown: (markdown) => {
+        if (!markdown) return false
+        const editor = getReadyEditor()
+        if (!editor) return false
+        hasUserInteractedRef.current = true
+        editor.action((ctx) => {
+          insertMarkdown(markdown)(ctx)
+          ctx.get(editorViewCtx).focus()
+        })
+        scheduleDelayedSync()
+        return true
       },
       insertImage: (src, alt = '图片') => {
         if (!src) return false
