@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.19.0] - 2026-11-08
+
+### 中文
+
+本次更新加入日历标记，并改进长文档预览、AI Chat 编辑和实时编辑模式切换体验。
+
+#### 主要更新
+
+* **日历标记**：可为日期添加自定义标记，并将标记数据纳入应用备份。
+* **Markdown 预览性能**：打开文档时优先显示编辑器，再渐进加载预览；大文档预览复用未变化的块，并通过差量传输减少全文复制。
+* **AI Chat 编辑**：改进将 AI 回复插入编辑器的行为，使内容按当前编辑器位置插入。
+* **编辑体验**：优化源码编辑器当前行号高亮，并提升实时编辑模式切换的状态同步稳定性。
+
+### English
+
+This release adds calendar markers and improves large-document previews, AI Chat editing, and Live Editing mode switching.
+
+#### Key Updates
+
+* **Calendar Markers**: Add custom markers to dates and include marker data in application backups.
+* **Markdown Preview Performance**: Show the editor first and load previews progressively; reuse unchanged blocks and transfer preview changes as deltas for large documents.
+* **AI Chat Editing**: Improve inserting AI responses at the current editor position.
+* **Editing Experience**: Refine active-line number highlighting and make Live Editing mode switching more reliable.
+
 ## [v0.18.1] - 2026-11-01
 
 ### 中文
