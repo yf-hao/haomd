@@ -212,3 +212,85 @@ export function preparePreviewMarkdown(value: string): PreviewMarkdownResult {
 
   return result
 }
+
+/**
+ * Incremental fast path for plain Markdown. The transformations above can span
+ * arbitrary lines, so documents using them deliberately keep the full parser.
+ * For plain Markdown, only re-split the edited block window and reuse the
+ * signatures/content of unaffected chunks.
+ */
+export function preparePreviewMarkdownIncremental(
+  value: string,
+  previousValue: string,
+  previousResult: PreviewMarkdownResult,
+): PreviewMarkdownResult | null {
+  if (
+    value === previousValue ||
+    value.startsWith('---\n') || value.startsWith('---\r\n') ||
+    previousValue.startsWith('---\n') || previousValue.startsWith('---\r\n') ||
+    value.includes('\\(') || value.includes('\\[') ||
+    previousValue.includes('\\(') || previousValue.includes('\\[') ||
+    /\{(?:color|background):/i.test(value) ||
+    /\{(?:color|background):/i.test(previousValue) ||
+    previousResult.blockChunks.length < 2
+  ) return null
+
+  const oldLines = previousValue.split(/\r?\n/)
+  const newLines = value.split(/\r?\n/)
+  let prefix = 0
+  while (prefix < oldLines.length && prefix < newLines.length && oldLines[prefix] === newLines[prefix]) prefix++
+  let suffix = 0
+  while (suffix < oldLines.length - prefix && suffix < newLines.length - prefix &&
+    oldLines[oldLines.length - suffix - 1] === newLines[newLines.length - suffix - 1]) suffix++
+
+  const oldChangedEnd = oldLines.length - suffix
+  const chunks = previousResult.blockChunks
+  const findChunk = (line: number) => {
+    const index = chunks.findIndex(chunk => line <= chunk.endLine)
+    return index < 0 ? chunks.length - 1 : index
+  }
+  const startIndex = Math.max(0, findChunk(prefix + 1) - 1)
+  const endIndex = Math.min(chunks.length - 1, findChunk(Math.max(prefix + 1, oldChangedEnd)) + 1)
+  const oldWindowStart = chunks[startIndex].startLine
+  const oldWindowEnd = chunks[endIndex].endLine
+  const lineDelta = newLines.length - oldLines.length
+  const newWindowEnd = Math.max(oldWindowStart, oldWindowEnd + lineDelta)
+  const windowChunks = splitMarkdownIntoBlockChunks(newLines.slice(oldWindowStart - 1, newWindowEnd))
+    .map(chunk => ({
+      startLine: chunk.startLine + oldWindowStart - 1,
+      endLine: chunk.endLine + oldWindowStart - 1,
+      markdown: chunk.markdown,
+    }))
+
+  const merged: Array<Omit<PreviewBlockChunk, 'id'>> = [
+    ...chunks.slice(0, startIndex),
+    ...windowChunks.map(chunk => ({ ...chunk, signature: getChunkSignature(chunk.markdown) })),
+    ...chunks.slice(endIndex + 1).map(chunk => ({
+      ...chunk,
+      startLine: chunk.startLine + lineDelta,
+      endLine: chunk.endLine + lineDelta,
+    })),
+  ]
+  const occurrences = new Map<string, number>()
+  const blockChunks = merged.map(chunk => {
+    const occurrence = occurrences.get(chunk.signature) ?? 0
+    occurrences.set(chunk.signature, occurrence + 1)
+    return { ...chunk, id: `${chunk.signature}:${occurrence}` }
+  })
+  const processedMarkdown = value
+  const lines = newLines
+  const containsToc = processedMarkdown.includes('[') && containsTocPlaceholder(lines)
+  if (containsToc) return null
+
+  const result: PreviewMarkdownResult = {
+    processedMarkdown,
+    hasMath: /\$/.test(processedMarkdown),
+    hasRawHtml: containsRawHtml(processedMarkdown),
+    containsToc: false,
+    sourceLineOffset: 0,
+    lineCount: lines.length,
+    blockChunks: blockChunks.length > 1 ? blockChunks : [],
+  }
+  cachePreviewMarkdown(value, result)
+  return result
+}

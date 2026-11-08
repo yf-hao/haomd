@@ -4,6 +4,7 @@ import {
   preparePreviewMarkdown,
   type PreviewMarkdownResult,
 } from './previewPipeline'
+import { createPreviewDecoder, type PreviewResponse } from './preview/previewTransport'
 
 const CHAT_PREVIEW_WORKER_MIN_CHARS = 2_000
 
@@ -27,6 +28,7 @@ type PreviewWorkerTaskEntry = {
 }
 
 let worker: Worker | null = null
+let decodeWorkerResponse = createPreviewDecoder()
 let activeTask: PreviewWorkerTask | null = null
 let nextTaskId = 0
 const taskQueue: PreviewWorkerTask[] = []
@@ -45,19 +47,22 @@ function getWorker(): Worker | null {
     new URL('../../workers/markdownPreview.worker.ts', import.meta.url),
     { type: 'module' },
   )
-  nextWorker.onmessage = (event: MessageEvent<PreviewMarkdownResult & { id: number }>) => {
+  decodeWorkerResponse = createPreviewDecoder()
+  nextWorker.onmessage = (event: MessageEvent<PreviewResponse>) => {
     const task = activeTask
     if (!task || event.data.id !== task.id) return
 
     activeTask = null
-    const result: PreviewMarkdownResult = {
-      processedMarkdown: event.data.processedMarkdown,
-      hasMath: event.data.hasMath,
-      hasRawHtml: event.data.hasRawHtml,
-      containsToc: event.data.containsToc,
-      sourceLineOffset: event.data.sourceLineOffset,
-      lineCount: event.data.lineCount,
-      blockChunks: event.data.blockChunks,
+    let result: PreviewMarkdownResult
+    try {
+      result = decodeWorkerResponse(event.data)
+    } catch (error) {
+      nextWorker.terminate()
+      if (worker === nextWorker) worker = null
+      decodeWorkerResponse = createPreviewDecoder()
+      task.reject(error)
+      pumpQueue()
+      return
     }
     cachePreviewMarkdown(task.value, result)
     task.resolve(result)
@@ -69,6 +74,7 @@ function getWorker(): Worker | null {
     activeTask = null
     worker?.terminate()
     worker = null
+    decodeWorkerResponse = createPreviewDecoder()
     task?.reject(error)
     pumpQueue()
   }

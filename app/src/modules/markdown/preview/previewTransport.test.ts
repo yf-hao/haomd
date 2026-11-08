@@ -14,6 +14,8 @@ describe('preview transport', () => {
     const response = encode(2, changed)
     expect(response.blockChunks).toBeUndefined()
     expect(response.chunkPatch?.inserted).toHaveLength(1)
+    expect(response.processedMarkdown).toBeUndefined()
+    expect(response.processedTextPatch).toBeDefined()
     const second = decode(structuredClone(response))
     expect(second).toEqual(changed)
     expect(second.blockChunks[0]).toBe(first.blockChunks[0])

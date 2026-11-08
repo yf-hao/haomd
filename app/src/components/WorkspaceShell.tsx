@@ -2617,9 +2617,12 @@ export function WorkspaceShell({
   // already supply a lazy native snapshot and skip this React snapshot path.
   useEffect(() => {
     if (!isPreviewVisible) {
-      previewScheduler.cancel()
+      clearPreviewSyncTimer()
       return
     }
+    // Source editor changes are scheduled directly from CodeMirror; this path only
+    // handles WYSIWYG and other React-owned Markdown updates.
+    if (editMode === 'source') return
     if (skipNextPreviewThrottleRef.current) {
       skipNextPreviewThrottleRef.current = false
       return
@@ -2628,7 +2631,7 @@ export function WorkspaceShell({
     previewScheduler.schedule(() => {
       if (tabId === activeIdRef.current) commitPreviewValue(markdown)
     })
-  }, [markdown, isPreviewVisible, previewScheduler, commitPreviewValue])
+  }, [markdown, isPreviewVisible, editMode, previewScheduler, commitPreviewValue, clearPreviewSyncTimer])
 
   useEffect(() => {
     if (!prevIsPreviewVisibleRef.current && isPreviewVisible) {

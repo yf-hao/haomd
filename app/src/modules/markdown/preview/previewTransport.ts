@@ -7,7 +7,23 @@ type ChunkPatch = {
   inserted: PreviewBlockChunk[]
 }
 
-export type PreviewResponse = Omit<PreviewMarkdownResult, 'blockChunks'> & { id: number } & (
+export type TextPatch = {
+  from: number
+  to: number
+  insert: string
+}
+
+type ProcessedTextPatch = {
+  baseId: number
+  from: number
+  to: number
+  insert: string
+}
+
+export type PreviewResponse = Omit<PreviewMarkdownResult, 'blockChunks' | 'processedMarkdown'> & { id: number } & (
+  | { processedMarkdown: string; processedTextPatch?: never }
+  | { processedMarkdown?: never; processedTextPatch: ProcessedTextPatch }
+) & (
   | { blockChunks: PreviewBlockChunk[]; chunkPatch?: never }
   | { blockChunks?: never; chunkPatch: ChunkPatch }
 )
@@ -20,9 +36,11 @@ function sameChunk(a: PreviewBlockChunk, b: PreviewBlockChunk): boolean {
 /** Session-local transport: unchanged blocks stay on the receiving thread. */
 export function createPreviewEncoder() {
   let previous: { id: number; chunks: PreviewBlockChunk[] } | null = null
-  return (id: number, result: PreviewMarkdownResult): PreviewResponse => {
+  let previousText: { id: number; value: string } | null = null
+  return (id: number, result: PreviewMarkdownResult, textPatch?: TextPatch): PreviewResponse => {
     const { blockChunks: chunks, ...metadata } = result
-    let response: PreviewResponse = { id, ...result }
+    const processedMarkdown = metadata.processedMarkdown
+    let response: PreviewResponse = { id, ...metadata, blockChunks: chunks }
     if (previous) {
       const old = previous.chunks
       let prefix = 0
@@ -31,20 +49,35 @@ export function createPreviewEncoder() {
       while (suffix < old.length - prefix && suffix < chunks.length - prefix &&
         sameChunk(old[old.length - suffix - 1], chunks[chunks.length - suffix - 1])) suffix++
       if (prefix + suffix > 0) {
-        response = { id, ...metadata, chunkPatch: {
+        response = { ...response, blockChunks: undefined, chunkPatch: {
           baseId: previous.id, prefix, suffix, inserted: chunks.slice(prefix, chunks.length - suffix),
-        } }
+        } } as PreviewResponse
       }
     }
+    if (previousText) {
+      const patch = textPatch ?? createTextPatch(previousText.value, processedMarkdown)
+      response = {
+        ...response,
+        processedMarkdown: undefined,
+        processedTextPatch: {
+          baseId: previousText.id,
+          from: patch.from,
+          to: patch.to,
+          insert: patch.insert,
+        },
+      } as PreviewResponse
+    }
     previous = { id, chunks }
+    previousText = { id, value: processedMarkdown }
     return response
   }
 }
 
 export function createPreviewDecoder() {
   let previous: { id: number; chunks: PreviewBlockChunk[] } | null = null
+  let previousText: { id: number; value: string } | null = null
   return (response: PreviewResponse): PreviewMarkdownResult => {
-    const { id, chunkPatch, blockChunks, ...metadata } = response
+    const { id, chunkPatch, blockChunks, processedTextPatch, processedMarkdown, ...metadata } = response
     let chunks: PreviewBlockChunk[]
     if (chunkPatch) {
       const { baseId, prefix, suffix, inserted } = chunkPatch
@@ -57,7 +90,37 @@ export function createPreviewDecoder() {
     } else {
       chunks = blockChunks
     }
+    let text: string
+    if (processedTextPatch) {
+      if (!previousText || previousText.id !== processedTextPatch.baseId ||
+        processedTextPatch.from < 0 || processedTextPatch.to < processedTextPatch.from ||
+        processedTextPatch.to > previousText.value.length) {
+        throw new Error('Preview text transport base mismatch')
+      }
+      text = previousText.value.slice(0, processedTextPatch.from) + processedTextPatch.insert +
+        previousText.value.slice(processedTextPatch.to)
+    } else {
+      text = processedMarkdown
+    }
     previous = { id, chunks }
-    return { ...metadata, blockChunks: chunks }
+    previousText = { id, value: text }
+    return { ...metadata, processedMarkdown: text, blockChunks: chunks }
   }
+}
+
+export function createTextPatch(previous: string, next: string): TextPatch {
+  let from = 0
+  const maxPrefix = Math.min(previous.length, next.length)
+  while (from < maxPrefix && previous.charCodeAt(from) === next.charCodeAt(from)) from++
+  let suffix = 0
+  while (suffix < previous.length - from && suffix < next.length - from &&
+    previous.charCodeAt(previous.length - suffix - 1) === next.charCodeAt(next.length - suffix - 1)) suffix++
+  return { from, to: previous.length - suffix, insert: next.slice(from, next.length - suffix) }
+}
+
+export function applyTextPatch(value: string, patch: TextPatch): string {
+  if (patch.from < 0 || patch.to < patch.from || patch.to > value.length) {
+    throw new Error('Invalid preview text patch')
+  }
+  return value.slice(0, patch.from) + patch.insert + value.slice(patch.to)
 }

@@ -1,17 +1,19 @@
 import { describe, expect, it, vi } from 'vitest'
 import { preparePreviewMarkdown, type PreviewMarkdownResult } from '../previewPipeline'
-import { createPreviewProcessor, type PreviewRequest, type PreviewResponse, type PreviewWorkerPort } from './previewProcessor'
-import { createPreviewEncoder } from './previewTransport'
+import { createPreviewProcessor, type PreviewResponse, type PreviewWorkerPort, type PreviewWorkerRequest } from './previewProcessor'
+import { applyTextPatch, createPreviewEncoder } from './previewTransport'
 
 class FakeWorker implements PreviewWorkerPort {
   encode = createPreviewEncoder()
+  value = ''
   onmessage: PreviewWorkerPort['onmessage'] = null
   onerror: PreviewWorkerPort['onerror'] = null
-  postMessage = vi.fn<(request: PreviewRequest) => void>()
+  postMessage = vi.fn<(request: PreviewWorkerRequest) => void>()
   terminate = vi.fn()
   complete(index: number) {
     const request = this.postMessage.mock.calls[index][0]
-    this.onmessage?.({ data: this.encode(request.id, preparePreviewMarkdown(request.value)) } as MessageEvent<PreviewResponse>)
+    this.value = request.value ?? applyTextPatch(this.value, request.textPatch!)
+    this.onmessage?.({ data: this.encode(request.id, preparePreviewMarkdown(this.value)) } as MessageEvent<PreviewResponse>)
   }
 }
 
@@ -49,7 +51,8 @@ describe('preview processor', () => {
     expect(dependencies.publish).toHaveBeenCalledOnce()
     processor.request('first edit', true)
     expect(dependencies.createWorker).toHaveBeenCalledOnce()
-    expect(worker.postMessage.mock.calls[1][0].value).toBe('first edit')
+    expect(worker.postMessage.mock.calls[1][0].value).toBeUndefined()
+    expect(worker.postMessage.mock.calls[1][0].textPatch).toBeDefined()
     worker.complete(1)
     expect(dependencies.publish.mock.lastCall?.[0].processedMarkdown).toBe('first edit')
   })
@@ -62,7 +65,8 @@ describe('preview processor', () => {
     expect(worker.postMessage).toHaveBeenCalledOnce()
     worker.complete(0)
     expect(dependencies.publish.mock.calls[0][0].processedMarkdown).toBe('first')
-    expect(worker.postMessage.mock.calls[1][0].value).toBe('edit 29')
+    expect(worker.postMessage.mock.calls[1][0].value).toBeUndefined()
+    expect(worker.postMessage.mock.calls[1][0].textPatch).toBeDefined()
     worker.complete(1)
     expect(dependencies.publish.mock.lastCall?.[0].processedMarkdown).toBe('edit 29')
     expect(worker.terminate).not.toHaveBeenCalled()

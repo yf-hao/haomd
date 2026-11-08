@@ -1,14 +1,17 @@
 import type { PreviewMarkdownResult } from '../previewPipeline'
-import { createPreviewDecoder, type PreviewResponse } from './previewTransport'
+import { createPreviewDecoder, createTextPatch, type PreviewResponse, type TextPatch } from './previewTransport'
 
 export type { PreviewResponse } from './previewTransport'
 
 export type PreviewRequest = { id: number; value: string; resourcePath?: string | null }
+export type PreviewWorkerRequest =
+  | { id: number; value: string; textPatch?: never }
+  | { id: number; value?: never; textPatch: TextPatch }
 
 export interface PreviewWorkerPort {
   onmessage: ((event: MessageEvent<PreviewResponse>) => void) | null
   onerror: ((event: ErrorEvent) => void) | null
-  postMessage(request: PreviewRequest): void
+  postMessage(request: PreviewWorkerRequest): void
   terminate(): void
 }
 
@@ -30,6 +33,7 @@ export function createPreviewProcessor(deps: PreviewProcessorDependencies) {
   let published = 0
   let disposed = false
   let workerFailed = false
+  let workerValue: string | null = null
   const decode = createPreviewDecoder()
 
   const publish = (task: PreviewRequest, result: PreviewMarkdownResult) => {
@@ -48,6 +52,7 @@ export function createPreviewProcessor(deps: PreviewProcessorDependencies) {
       worker.terminate()
     }
     worker = null
+    workerValue = null
   }
   const fail = (error: unknown) => {
     if (disposed) return
@@ -60,7 +65,12 @@ export function createPreviewProcessor(deps: PreviewProcessorDependencies) {
   }
   const send = (task: PreviewRequest) => {
     active = task
-    try { worker!.postMessage(task) } catch (error) { fail(error) }
+    try {
+      const request: PreviewWorkerRequest = workerValue === null
+        ? { id: task.id, value: task.value }
+        : { id: task.id, textPatch: createTextPatch(workerValue, task.value) }
+      worker!.postMessage(request)
+    } catch (error) { fail(error) }
   }
   const getWorker = () => {
     if (worker || workerFailed) return worker
@@ -73,6 +83,7 @@ export function createPreviewProcessor(deps: PreviewProcessorDependencies) {
         try { result = decode(event.data) } catch (error) { fail(error); return }
         const completed = active
         active = null
+        workerValue = completed.value
         // Start the newest work before publishing triggers main-thread rendering.
         const next = pending
         pending = null
