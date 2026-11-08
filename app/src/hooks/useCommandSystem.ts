@@ -151,6 +151,7 @@ export function useCommandSystem(params: CommandSystemParams) {
     onPdfDeleteSelected,
     onPdfSelectColorIndex,
     editMode,
+    getEditMode,
     setEditMode,
     confirmLoseChanges,
     hasUnsavedChanges,
@@ -288,6 +289,7 @@ export function useCommandSystem(params: CommandSystemParams) {
         onPdfDeleteSelected,
         onPdfSelectColorIndex,
         editMode,
+        getEditMode,
         setEditMode,
         confirmLoseChanges,
         hasUnsavedChanges,
@@ -373,6 +375,7 @@ export function useCommandSystem(params: CommandSystemParams) {
       onPdfDeleteSelected,
       onPdfSelectColorIndex,
       editMode,
+      getEditMode,
       setEditMode,
       confirmLoseChanges,
       hasUnsavedChanges,
@@ -431,10 +434,11 @@ export function useCommandSystem(params: CommandSystemParams) {
     async (action: string, source: 'local' | 'menu' = 'local') => {
       if (menuDedupActions.has(action)) {
         const recentDispatch = recentDispatchRef.current.get(action)
+        const dedupWindowMs = action === 'toggle_wysiwyg' ? 1_000 : MENU_DUPLICATE_WINDOW_MS
         if (
           recentDispatch &&
           recentDispatch.source !== source &&
-          Date.now() - recentDispatch.timestamp <= MENU_DUPLICATE_WINDOW_MS
+          Date.now() - recentDispatch.timestamp <= dedupWindowMs
         ) {
           return
         }
@@ -496,6 +500,7 @@ export function useCommandSystem(params: CommandSystemParams) {
       const key = e.key.toLowerCase()
       const isMac = typeof navigator !== 'undefined' && /macintosh|mac os x/i.test(navigator.userAgent)
       const isTauri = typeof isTauriEnv === 'function' && !!isTauriEnv()
+      const prefersMenuAccelerator = isTauri && isMac
       const isWysiwygMode = editMode === 'wysiwyg'
       const activeElement = typeof document !== 'undefined'
         ? (document.activeElement as Element | null)
@@ -520,7 +525,6 @@ export function useCommandSystem(params: CommandSystemParams) {
         return
       }
 
-      const prefersMenuAccelerator = isTauri && isMac
       const panelBinding = PANEL_SHORTCUT_BINDINGS.find((binding) => binding.matches(e, key))
       if (panelBinding) {
         if (prefersMenuAccelerator) return

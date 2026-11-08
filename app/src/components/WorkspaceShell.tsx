@@ -481,6 +481,7 @@ export function WorkspaceShell({
     return (localStorage.getItem(STORAGE_EDIT_MODE) as EditMode) || 'source'
   })
   const editModeRef = useRef<EditMode>(editMode)
+  const getCurrentEditMode = useCallback(() => editModeRef.current, [])
   const editorMarkdownRef = useRef(markdownRef.current)
   const isPdfActiveRef = useRef(false)
   useEffect(() => {
@@ -508,7 +509,8 @@ export function WorkspaceShell({
   }, [isTauriEnv, showEditor, showPreview])
 
   const setEditModeWithFlush = useCallback((next: EditMode) => {
-    if (editMode === 'source' && next === 'wysiwyg') {
+    const currentMode = editModeRef.current
+    if (currentMode === 'source' && next === 'wysiwyg') {
       const view = editorViewRef.current
       const selection = view?.state.selection.main
       const cursorLine = selection && view
@@ -526,7 +528,7 @@ export function WorkspaceShell({
       wysiwygEntryMarkdownRef.current = markdownRef.current
       wysiwygIsDirtyRef.current = false
     }
-    if (editMode === 'wysiwyg' && next === 'source') {
+    if (currentMode === 'wysiwyg' && next === 'source') {
       skipWysiwygUnmountFlushRef.current = true
       if (!wysiwygIsDirtyRef.current && wysiwygEntryMarkdownRef.current !== null) {
         // No edits were made — restore the original source to avoid
@@ -563,7 +565,7 @@ export function WorkspaceShell({
         }
       }
     }
-    if (editMode !== next) {
+    if (currentMode !== next) {
       // Invalidate source-editor callbacks before React unmounts or mounts
       // the corresponding editor surface.
       sourceEditorEpochRef.current += 1
@@ -571,7 +573,7 @@ export function WorkspaceShell({
       editModeRef.current = next
     }
     setEditMode(next)
-  }, [editMode])
+  }, [])
 
   beforeActiveTabChangeRef.current = (nextTabId: string | null) => {
     const previousTabId = activeIdRef.current
@@ -4054,7 +4056,7 @@ export function WorkspaceShell({
     onPdfAddDetachedNote: () => pdfShortcutActionsRef.current?.addDetachedNote(),
     onPdfDeleteSelected: () => pdfShortcutActionsRef.current?.deleteSelected(),
     onPdfSelectColorIndex: (index: number) => pdfShortcutActionsRef.current?.selectColorIndex(index),
-    editMode, setEditMode: setEditModeWithFlush,
+    editMode, getEditMode: getCurrentEditMode, setEditMode: setEditModeWithFlush,
     confirmLoseChanges, hasUnsavedChanges, newDocument, setFilePath, applyOpenedContent,
     openFile, openFileInNewTab, importWordFile, openImportedWordDocument, save: saveWithPdfGuard, saveAs: saveAsWithPdfGuard, handleShowRecent: undefined, clearRecentAll,
     createTab, updateActiveMeta, openFolderInSidebar, toggleSidebarVisible, closeCurrentTab,

@@ -58,6 +58,7 @@ export type LayoutCommandContext = StatusContext & {
   onPdfDeleteSelected?: () => void
   onPdfSelectColorIndex?: (index: number) => void
   editMode?: 'source' | 'wysiwyg'
+  getEditMode?: () => 'source' | 'wysiwyg'
   setEditMode?: (mode: 'source' | 'wysiwyg') => void
 }
 
@@ -414,7 +415,8 @@ function createLayoutCommands(ctx: LayoutCommandContext): CommandRegistry {
     },
     toggle_wysiwyg: () => {
       if (!ctx.setEditMode) return
-      const next = ctx.editMode === 'wysiwyg' ? 'source' : 'wysiwyg'
+      const currentMode = ctx.getEditMode?.() ?? ctx.editMode
+      const next = currentMode === 'wysiwyg' ? 'source' : 'wysiwyg'
       ctx.setEditMode(next)
       ctx.setStatusMessage(
         next === 'wysiwyg'
