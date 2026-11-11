@@ -936,7 +936,24 @@ function PdfViewerInner({
   const [translationStatus, setTranslationStatus] = useState<PdfTranslationStatus>('idle')
   const [translationEntry, setTranslationEntry] = useState<PdfTranslationEntry | null>(null)
   const [translationError, setTranslationError] = useState<string | null>(null)
+  const [translationPronunciationError, setTranslationPronunciationError] = useState<string | null>(null)
   const [translationPosition, setTranslationPosition] = useState<NoteEditorPosition | null>(null)
+  const translationDragRef = useRef<{
+    pointerId: number
+    startX: number
+    startY: number
+    startLeft: number
+    startTop: number
+    currentLeft: number
+    currentTop: number
+    popupWidth: number
+    popupHeight: number
+    containerWidth: number
+    containerHeight: number
+  } | null>(null)
+  const translationPendingPointerRef = useRef<PointerEvent | null>(null)
+  const translationDragFrameRef = useRef<number | null>(null)
+  const translationPositionManuallySetRef = useRef(false)
   const [translationSelectionDispatchSuppressed, setTranslationSelectionDispatchSuppressed] = useState(false)
   const [translationSettings, setTranslationSettings] = useState<PdfTranslationSettings>(loadPdfTranslationSettings)
   const [translationSettingsOpen, setTranslationSettingsOpen] = useState(false)
@@ -1182,6 +1199,7 @@ function PdfViewerInner({
     setTranslationError(null)
     setTranslationPosition(null)
     setTranslationSelectionDraft(null)
+    setTranslationPronunciationError(null)
     translationSelectionSnapshotRef.current = null
     setTranslationSettingsOpen(false)
   }, [])
@@ -1212,6 +1230,7 @@ function PdfViewerInner({
     setTranslationEntry(null)
     setTranslationError(null)
     setTranslationPronouncing(false)
+    setTranslationPronunciationError(null)
 
     try {
       const result = await translatePdfSelection({
@@ -1235,24 +1254,78 @@ function PdfViewerInner({
     }
   }, [getSelectionSnapshotKey, suppressTranslationSelectionDispatch, t, translationSettings])
 
-  const handleTranslationPronunciationPlay = useEffectEvent(() => {
+  const handleTranslationPronunciationPlay = useCallback(() => {
     const entry = translationEntry
     if (!entry) return
     const utteranceText = entry.sourceText.trim()
     if (!utteranceText) return
 
-    window.speechSynthesis?.cancel()
     const synth = window.speechSynthesis
-    if (!synth) return
+    if (!synth || typeof SpeechSynthesisUtterance === 'undefined') {
+      setTranslationPronunciationError(t('pdf.translationSpeechUnavailable'))
+      console.error('[PDF pronunciation] Web Speech API unavailable', {
+        speechSynthesis: Boolean(synth),
+        utteranceConstructor: typeof SpeechSynthesisUtterance,
+      })
+      return
+    }
+
+    synth.cancel()
+    setTranslationPronunciationError(null)
+    const voices = synth.getVoices()
+    const lang = getPdfTranslationVoiceLang(entry, translationSettings.sourceLanguage)
+    const normalizedLang = lang.toLowerCase()
+    const matchingVoice = voices.find((voice) => voice.lang.toLowerCase() === normalizedLang)
+      ?? voices.find((voice) => voice.lang.toLowerCase().startsWith(normalizedLang.split('-')[0]))
+    console.info('[PDF pronunciation] playback requested', {
+      lang,
+      text: utteranceText,
+      voices: voices.map((voice) => ({ name: voice.name, lang: voice.lang, default: voice.default })),
+      matchingVoice: matchingVoice ? { name: matchingVoice.name, lang: matchingVoice.lang } : null,
+    })
+
     const utterance = new SpeechSynthesisUtterance(utteranceText)
-    utterance.lang = getPdfTranslationVoiceLang(entry, translationSettings.sourceLanguage)
+    utterance.lang = lang
+    if (matchingVoice) utterance.voice = matchingVoice
     utterance.rate = 0.95
     utterance.pitch = 1
-    utterance.onstart = () => setTranslationPronouncing(true)
-    utterance.onend = () => setTranslationPronouncing(false)
-    utterance.onerror = () => setTranslationPronouncing(false)
+    let startTimer: number | null = window.setTimeout(() => {
+      setTranslationPronouncing(false)
+      setTranslationPronunciationError(t('pdf.translationSpeechNoStart', {
+        count: voices.length,
+        lang,
+      }))
+      console.error('[PDF pronunciation] no playback event received', { lang, voices: voices.length })
+    }, 4000)
+    const clearStartTimer = () => {
+      if (startTimer !== null) {
+        window.clearTimeout(startTimer)
+        startTimer = null
+      }
+    }
+    utterance.onstart = () => {
+      clearStartTimer()
+      console.info('[PDF pronunciation] playback started', { lang, voice: utterance.voice?.name ?? null })
+      setTranslationPronouncing(true)
+    }
+    utterance.onend = () => {
+      clearStartTimer()
+      console.info('[PDF pronunciation] playback ended', { lang })
+      setTranslationPronouncing(false)
+    }
+    utterance.onerror = (event) => {
+      clearStartTimer()
+      console.error('[PDF pronunciation] playback failed', {
+        error: event.error,
+        lang,
+        voice: utterance.voice?.name ?? null,
+        voices: voices.length,
+      })
+      setTranslationPronouncing(false)
+      setTranslationPronunciationError(t('pdf.translationSpeechFailed', { error: event.error }))
+    }
     synth.speak(utterance)
-  })
+  }, [t, translationEntry, translationSettings.sourceLanguage])
 
   useEffect(() => {
     window.localStorage.setItem(PDF_TRANSLATION_SETTINGS_STORAGE_KEY, JSON.stringify(translationSettings))
@@ -2986,12 +3059,84 @@ function PdfViewerInner({
   }, [])
 
   useEffect(() => {
+    translationPositionManuallySetRef.current = false
+    translationDragRef.current = null
+  }, [translationSelectionDraft?.text, translationSelectionDraft?.page, translationOpen])
+
+  useEffect(() => {
+    const applyPointerPosition = (event: PointerEvent) => {
+      const drag = translationDragRef.current
+      const popover = translationPopoverRef.current
+      if (!drag || !popover || drag.pointerId !== event.pointerId) return
+      if (drag.containerWidth <= 0 || drag.containerHeight <= 0) return
+
+      const left = Math.min(
+        Math.max(8, drag.startLeft + event.clientX - drag.startX),
+        Math.max(8, drag.containerWidth - drag.popupWidth - 8),
+      )
+      const top = Math.min(
+        Math.max(8, drag.startTop + event.clientY - drag.startY),
+        Math.max(8, drag.containerHeight - drag.popupHeight - 8),
+      )
+      drag.currentLeft = left
+      drag.currentTop = top
+      translationPositionManuallySetRef.current = true
+      popover.style.transform = `translate3d(${left - drag.startLeft}px, ${top - drag.startTop}px, 0)`
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (translationDragRef.current?.pointerId !== event.pointerId) return
+      translationPendingPointerRef.current = event
+      if (translationDragFrameRef.current !== null) return
+      translationDragFrameRef.current = window.requestAnimationFrame(() => {
+        translationDragFrameRef.current = null
+        const pending = translationPendingPointerRef.current
+        translationPendingPointerRef.current = null
+        if (pending) applyPointerPosition(pending)
+      })
+    }
+
+    const finishDrag = (event: PointerEvent) => {
+      const drag = translationDragRef.current
+      if (!drag || drag.pointerId !== event.pointerId) return
+      if (translationDragFrameRef.current !== null) {
+        window.cancelAnimationFrame(translationDragFrameRef.current)
+        translationDragFrameRef.current = null
+      }
+      translationPendingPointerRef.current = null
+      applyPointerPosition(event)
+      const popover = translationPopoverRef.current
+      if (popover) {
+        popover.style.left = `${drag.currentLeft}px`
+        popover.style.top = `${drag.currentTop}px`
+        popover.style.transform = 'none'
+        popover.style.willChange = ''
+      }
+      setTranslationPosition({ left: drag.currentLeft, top: drag.currentTop })
+      translationDragRef.current = null
+    }
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', finishDrag)
+    window.addEventListener('pointercancel', finishDrag)
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', finishDrag)
+      window.removeEventListener('pointercancel', finishDrag)
+      if (translationDragFrameRef.current !== null) {
+        window.cancelAnimationFrame(translationDragFrameRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
     if (!translationOpen || !translationSelectionDraft) {
       setTranslationPosition(null)
       return
     }
 
     const updatePosition = () => {
+      if (translationPositionManuallySetRef.current) return
       const metrics = viewportRef.current?.getRenderedPageMetrics(translationSelectionDraft.page)
       const mainWidth = viewportRef.current?.getContainerWidth() ?? metrics?.width ?? 0
       const containerHeight = viewportRef.current?.getContainerHeight() ?? metrics?.height ?? 0
@@ -3492,7 +3637,30 @@ function PdfViewerInner({
               style={{ top: `${translationPosition.top}px`, left: `${translationPosition.left}px` }}
               onPointerDownCapture={() => suppressTranslationSelectionDispatch()}
             >
-              <div className="pdf-translation-header">
+              <div
+                className="pdf-translation-header pdf-translation-header--draggable"
+                onPointerDown={(event) => {
+                  if ((event.target as HTMLElement).closest('button')) return
+                  event.preventDefault()
+                  event.currentTarget.setPointerCapture(event.pointerId)
+                  const popupBounds = translationPopoverRef.current?.getBoundingClientRect()
+                  translationDragRef.current = {
+                    pointerId: event.pointerId,
+                    startX: event.clientX,
+                    startY: event.clientY,
+                    startLeft: translationPosition.left,
+                    startTop: translationPosition.top,
+                    currentLeft: translationPosition.left,
+                    currentTop: translationPosition.top,
+                    popupWidth: popupBounds?.width ?? 0,
+                    popupHeight: popupBounds?.height ?? 0,
+                    containerWidth: viewportRef.current?.getContainerWidth() ?? 0,
+                    containerHeight: viewportRef.current?.getContainerHeight() ?? 0,
+                  }
+                  const popover = translationPopoverRef.current
+                  if (popover) popover.style.willChange = 'transform'
+                }}
+              >
                 <span>{translationSettings.sourceLanguage} → {translationSettings.targetLanguage}</span>
                 <div>
                   <button
@@ -3593,6 +3761,9 @@ function PdfViewerInner({
                 </div>
               </div>
               {translationStatus === 'error' && translationError ? <div className="pdf-translation-error">{translationError}</div> : null}
+              {translationPronunciationError ? (
+                <div className="pdf-translation-error" role="status">{translationPronunciationError}</div>
+              ) : null}
               <div className="pdf-translation-actions">
                 {translationStatus === 'loading' ? (
                   <button type="button" onClick={closeTranslation}>{t('pdf.translationStop')}</button>

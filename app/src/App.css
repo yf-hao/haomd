@@ -1706,6 +1706,16 @@ button:disabled {
   color: var(--theme-text-default);
 }
 
+.pdf-translation-header--draggable {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.pdf-translation-header--draggable:active {
+  cursor: grabbing;
+}
+
 .pdf-translation-header button,
 .pdf-translation-actions button {
   border: 0;
@@ -1716,6 +1726,10 @@ button:disabled {
   cursor: pointer;
   font: inherit;
   font-size: 12px;
+}
+
+.pdf-translation-header button {
+  cursor: pointer;
 }
 
 .pdf-translation-body,
@@ -1762,6 +1776,14 @@ button:disabled {
   word-break: break-word;
 }
 
+.pdf-translation-meaning--result {
+  padding: 8px 10px;
+  border-left: 2px solid color-mix(in srgb, var(--theme-accent-primary) 72%, var(--theme-border-subtle));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--theme-accent-primary) 9%, var(--theme-surface-editor));
+  color: color-mix(in srgb, var(--theme-text-default) 88%, var(--theme-accent-primary));
+}
+
 .pdf-translation-meta {
   display: flex;
   flex-wrap: wrap;
@@ -1800,7 +1822,7 @@ button:disabled {
 
 .pdf-translation-pronunciation:disabled {
   opacity: 0.72;
-  cursor: progress;
+  cursor: pointer;
 }
 
 .pdf-translation-pronunciation svg {
