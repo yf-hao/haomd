@@ -7,6 +7,7 @@ export type PdfTranslationEntry = {
   translation: string
   partOfSpeech: string | null
   phonetic: string | null
+  pronunciationAudioUrl: string | null
   definition: string | null
   example: string | null
   mode: 'dictionary' | 'translation'
@@ -84,6 +85,7 @@ function normalizePdfTranslationEntry(raw: string, sourceText: string): PdfTrans
       translation,
       partOfSpeech: typeof parsed.partOfSpeech === 'string' && parsed.partOfSpeech.trim() ? parsed.partOfSpeech.trim() : null,
       phonetic: typeof parsed.phonetic === 'string' && parsed.phonetic.trim() ? parsed.phonetic.trim() : null,
+      pronunciationAudioUrl: null,
       definition: typeof parsed.definition === 'string' && parsed.definition.trim() ? parsed.definition.trim() : null,
       example: typeof parsed.example === 'string' && parsed.example.trim() ? parsed.example.trim() : null,
       mode,
@@ -94,6 +96,7 @@ function normalizePdfTranslationEntry(raw: string, sourceText: string): PdfTrans
       translation: raw.trim() || sourceText,
       partOfSpeech: null,
       phonetic: null,
+      pronunciationAudioUrl: null,
       definition: null,
       example: null,
       mode: fallbackMode,

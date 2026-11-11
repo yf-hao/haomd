@@ -9,7 +9,7 @@ import {
   type ReactNode,
   type ReactElement,
 } from 'react'
-import { save as saveDialog } from '@tauri-apps/plugin-dialog'
+import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 import CodeMirror from '@uiw/react-codemirror'
 import { EditorSelection } from '@codemirror/state'
 import { EditorView, keymap, placeholder as editorPlaceholder } from '@codemirror/view'
@@ -52,6 +52,9 @@ import {
   type AnnotationType,
 } from '../types/annotation'
 import { isDictionaryLikeSelection, translatePdfSelection, type PdfTranslationEntry } from '../translationService'
+import { lookupTraditionalPdfSelection, type DictionaryPronunciationAccent } from '../pdfDictionaryProvider'
+import { openPdfDictionary } from '../pdfDictionaryService'
+import { synthesizeAiPdfPronunciation } from '../pdfAiPronunciationService'
 import { suppressPdfSelectionChangeDispatch } from './pdfSelectionChangeDispatcher'
 
 type PdfReadingState = {
@@ -112,15 +115,11 @@ type AnnotationRect = {
 type PdfTranslationStatus = 'idle' | 'loading' | 'success' | 'error'
 
 type PdfTranslationSettings = {
+  source: 'dictionary' | 'ai'
   sourceLanguage: string
   targetLanguage: string
-}
-
-function getPdfTranslationVoiceLang(entry: PdfTranslationEntry, sourceLanguage: string) {
-  if (sourceLanguage === '英语') return 'en-US'
-  if (sourceLanguage === '中文') return 'zh-CN'
-  if (/[A-Za-z]/.test(entry.sourceText)) return 'en-US'
-  return 'zh-CN'
+  dictionaryPath: string
+  dictionaryAccent: DictionaryPronunciationAccent
 }
 
 function getCenteredTranslationPosition(
@@ -148,8 +147,11 @@ const MAX_STAMP_SIZE = 0.2
 const MAX_TRANSLATION_SELECTION_LENGTH = 8000
 const PDF_TRANSLATION_SETTINGS_STORAGE_KEY = 'pdf-translation-settings-v1'
 const DEFAULT_PDF_TRANSLATION_SETTINGS: PdfTranslationSettings = {
+  source: 'ai',
   sourceLanguage: '英语',
   targetLanguage: '简体中文',
+  dictionaryPath: '',
+  dictionaryAccent: 'british',
 }
 const EMPTY_ANNOTATIONS: Annotation[] = []
 
@@ -159,8 +161,11 @@ function loadPdfTranslationSettings(): PdfTranslationSettings {
     const raw = window.localStorage.getItem(PDF_TRANSLATION_SETTINGS_STORAGE_KEY)
     const parsed = raw ? JSON.parse(raw) as Partial<PdfTranslationSettings> : null
     return {
+      source: parsed?.source === 'dictionary' ? 'dictionary' : 'ai',
       sourceLanguage: parsed?.sourceLanguage || DEFAULT_PDF_TRANSLATION_SETTINGS.sourceLanguage,
       targetLanguage: parsed?.targetLanguage || DEFAULT_PDF_TRANSLATION_SETTINGS.targetLanguage,
+      dictionaryPath: parsed?.dictionaryPath || '',
+      dictionaryAccent: parsed?.dictionaryAccent === 'american' ? 'american' : 'british',
     }
   } catch {
     return DEFAULT_PDF_TRANSLATION_SETTINGS
@@ -958,6 +963,8 @@ function PdfViewerInner({
   const [translationSettings, setTranslationSettings] = useState<PdfTranslationSettings>(loadPdfTranslationSettings)
   const [translationSettingsOpen, setTranslationSettingsOpen] = useState(false)
   const [translationPronouncing, setTranslationPronouncing] = useState(false)
+  const translationPronunciationAudioRef = useRef<HTMLAudioElement | null>(null)
+  const translationPronunciationRequestIdRef = useRef(0)
   const translationMode = translationEntry?.mode ?? (
     isDictionaryLikeSelection(translationSelectionDraft?.text ?? '') ? 'dictionary' : 'translation'
   )
@@ -1191,7 +1198,9 @@ function PdfViewerInner({
     translationRequestIdRef.current += 1
     translationAbortRef.current?.abort()
     translationAbortRef.current = null
-    window.speechSynthesis?.cancel()
+    translationPronunciationRequestIdRef.current += 1
+    translationPronunciationAudioRef.current?.pause()
+    translationPronunciationAudioRef.current = null
     setTranslationPronouncing(false)
     setTranslationOpen(false)
     setTranslationStatus('idle')
@@ -1204,14 +1213,22 @@ function PdfViewerInner({
     setTranslationSettingsOpen(false)
   }, [])
 
-  const startTranslation = useCallback(async () => {
+  const startTranslation = useCallback(async (
+    sourceOverride?: PdfTranslationSettings['source'],
+    dictionaryPathOverride?: string,
+  ) => {
     const selection = selectionDraftRef.current
     if (!selection) return
+    const source = sourceOverride ?? translationSettings.source
+    const dictionaryPath = dictionaryPathOverride ?? translationSettings.dictionaryPath
     suppressTranslationSelectionDispatch()
     const selectionSnapshotKey = getSelectionSnapshotKey(selection)
     translationSelectionSnapshotRef.current = selectionSnapshotKey
     translationSelectionLockRef.current = true
     setTranslationPosition(null)
+    translationPronunciationRequestIdRef.current += 1
+    translationPronunciationAudioRef.current?.pause()
+    translationPronunciationAudioRef.current = null
     if (selection.text.length > MAX_TRANSLATION_SELECTION_LENGTH) {
       setTranslationSelectionDraft(selection)
       setTranslationOpen(true)
@@ -1233,12 +1250,25 @@ function PdfViewerInner({
     setTranslationPronunciationError(null)
 
     try {
-      const result = await translatePdfSelection({
-        text: selection.text,
-        sourceLanguage: translationSettings.sourceLanguage,
-        targetLanguage: translationSettings.targetLanguage,
-        signal: controller.signal,
-      })
+      const result = source === 'dictionary'
+        ? await (async () => {
+          if (!dictionaryPath) {
+            throw new Error(t('pdf.translationDictionaryChoose'))
+          }
+          const dictionaryResult = await lookupTraditionalPdfSelection(
+            dictionaryPath,
+            selection.text,
+            translationSettings.dictionaryAccent,
+          )
+          if (!dictionaryResult) throw new Error(t('pdf.translationDictionaryNoEntry'))
+          return dictionaryResult
+        })()
+        : await translatePdfSelection({
+          text: selection.text,
+          sourceLanguage: translationSettings.sourceLanguage,
+          targetLanguage: translationSettings.targetLanguage,
+          signal: controller.signal,
+        })
       if (translationRequestIdRef.current !== requestId) return
       setTranslationEntry(result)
       setTranslationStatus('success')
@@ -1246,7 +1276,9 @@ function PdfViewerInner({
       if (controller.signal.aborted || translationRequestIdRef.current !== requestId) return
       const message = error instanceof Error ? error.message : String(error)
       setTranslationStatus('error')
-      setTranslationError(t('pdf.translationFailed', { message }))
+      setTranslationError(source === 'dictionary'
+        ? message
+        : t('pdf.translationFailed', { message }))
     } finally {
       if (translationRequestIdRef.current === requestId) {
         translationAbortRef.current = null
@@ -1254,78 +1286,65 @@ function PdfViewerInner({
     }
   }, [getSelectionSnapshotKey, suppressTranslationSelectionDispatch, t, translationSettings])
 
-  const handleTranslationPronunciationPlay = useCallback(() => {
+  const handleChooseTranslationDictionary = useCallback(async () => {
+    try {
+      const selected = await openDialog({
+        title: t('pdf.translationDictionaryChoose'),
+        multiple: false,
+        filters: [{ name: 'MDict Dictionary', extensions: ['mdx'] }],
+      })
+      const path = Array.isArray(selected) ? selected[0] : selected
+      if (!path || typeof path !== 'string') return
+      const info = await openPdfDictionary(path)
+      setTranslationSettings((current) => ({ ...current, source: 'dictionary', dictionaryPath: info.path }))
+      setTranslationError(null)
+      await startTranslation('dictionary', info.path)
+    } catch (error) {
+      setTranslationError(error instanceof Error ? error.message : String(error))
+    }
+  }, [startTranslation, t])
+
+  const handleTranslationPronunciationPlay = useCallback(async () => {
     const entry = translationEntry
     if (!entry) return
     const utteranceText = entry.sourceText.trim()
     if (!utteranceText) return
 
-    const synth = window.speechSynthesis
-    if (!synth || typeof SpeechSynthesisUtterance === 'undefined') {
-      setTranslationPronunciationError(t('pdf.translationSpeechUnavailable'))
-      console.error('[PDF pronunciation] Web Speech API unavailable', {
-        speechSynthesis: Boolean(synth),
-        utteranceConstructor: typeof SpeechSynthesisUtterance,
-      })
-      return
-    }
-
-    synth.cancel()
+    const requestId = ++translationPronunciationRequestIdRef.current
+    translationPronunciationAudioRef.current?.pause()
+    translationPronunciationAudioRef.current = null
+    setTranslationPronouncing(true)
     setTranslationPronunciationError(null)
-    const voices = synth.getVoices()
-    const lang = getPdfTranslationVoiceLang(entry, translationSettings.sourceLanguage)
-    const normalizedLang = lang.toLowerCase()
-    const matchingVoice = voices.find((voice) => voice.lang.toLowerCase() === normalizedLang)
-      ?? voices.find((voice) => voice.lang.toLowerCase().startsWith(normalizedLang.split('-')[0]))
-    console.info('[PDF pronunciation] playback requested', {
-      lang,
-      text: utteranceText,
-      voices: voices.map((voice) => ({ name: voice.name, lang: voice.lang, default: voice.default })),
-      matchingVoice: matchingVoice ? { name: matchingVoice.name, lang: matchingVoice.lang } : null,
-    })
+    try {
+      const audioUrl = translationSettings.source === 'dictionary'
+        ? entry.pronunciationAudioUrl
+        : await synthesizeAiPdfPronunciation(utteranceText)
+      if (translationPronunciationRequestIdRef.current !== requestId) return
+      if (!audioUrl) throw new Error(t('pdf.translationDictionaryAudioMissing'))
 
-    const utterance = new SpeechSynthesisUtterance(utteranceText)
-    utterance.lang = lang
-    if (matchingVoice) utterance.voice = matchingVoice
-    utterance.rate = 0.95
-    utterance.pitch = 1
-    let startTimer: number | null = window.setTimeout(() => {
-      setTranslationPronouncing(false)
-      setTranslationPronunciationError(t('pdf.translationSpeechNoStart', {
-        count: voices.length,
-        lang,
-      }))
-      console.error('[PDF pronunciation] no playback event received', { lang, voices: voices.length })
-    }, 4000)
-    const clearStartTimer = () => {
-      if (startTimer !== null) {
-        window.clearTimeout(startTimer)
-        startTimer = null
+      const audio = new Audio(audioUrl)
+      translationPronunciationAudioRef.current = audio
+      audio.onended = () => {
+        if (translationPronunciationAudioRef.current === audio) translationPronunciationAudioRef.current = null
+        setTranslationPronouncing(false)
       }
-    }
-    utterance.onstart = () => {
-      clearStartTimer()
-      console.info('[PDF pronunciation] playback started', { lang, voice: utterance.voice?.name ?? null })
-      setTranslationPronouncing(true)
-    }
-    utterance.onend = () => {
-      clearStartTimer()
-      console.info('[PDF pronunciation] playback ended', { lang })
+      audio.onerror = () => {
+        if (translationPronunciationAudioRef.current === audio) translationPronunciationAudioRef.current = null
+        setTranslationPronouncing(false)
+        setTranslationPronunciationError(t('pdf.translationSpeechFailed', {
+          error: audio.error?.code ? String(audio.error.code) : 'audio playback error',
+        }))
+      }
+      await audio.play()
+    } catch (error) {
+      if (translationPronunciationRequestIdRef.current !== requestId) return
+      translationPronunciationAudioRef.current?.pause()
+      translationPronunciationAudioRef.current = null
       setTranslationPronouncing(false)
+      const message = error instanceof Error ? error.message : String(error)
+      setTranslationPronunciationError(message)
     }
-    utterance.onerror = (event) => {
-      clearStartTimer()
-      console.error('[PDF pronunciation] playback failed', {
-        error: event.error,
-        lang,
-        voice: utterance.voice?.name ?? null,
-        voices: voices.length,
-      })
-      setTranslationPronouncing(false)
-      setTranslationPronunciationError(t('pdf.translationSpeechFailed', { error: event.error }))
-    }
-    synth.speak(utterance)
-  }, [t, translationEntry, translationSettings.sourceLanguage])
+  }, [t, translationEntry, translationSettings.source])
 
   useEffect(() => {
     window.localStorage.setItem(PDF_TRANSLATION_SETTINGS_STORAGE_KEY, JSON.stringify(translationSettings))
@@ -1333,7 +1352,9 @@ function PdfViewerInner({
 
   useEffect(() => {
     return () => {
-      window.speechSynthesis?.cancel()
+      translationPronunciationRequestIdRef.current += 1
+      translationPronunciationAudioRef.current?.pause()
+      translationPronunciationAudioRef.current = null
     }
   }, [])
 
@@ -3661,7 +3682,9 @@ function PdfViewerInner({
                   if (popover) popover.style.willChange = 'transform'
                 }}
               >
-                <span>{translationSettings.sourceLanguage} → {translationSettings.targetLanguage}</span>
+                <span>{translationSettings.source === 'dictionary'
+                  ? t('pdf.translationSourceTraditional')
+                  : `${translationSettings.sourceLanguage} → ${translationSettings.targetLanguage}`}</span>
                 <div>
                   <button
                     type="button"
@@ -3676,33 +3699,78 @@ function PdfViewerInner({
               </div>
               {translationSettingsOpen ? (
                 <div className="pdf-translation-settings">
-                  <label>
-                    {t('pdf.translationSourceLanguage')}
+                  <label className="pdf-translation-settings-source">
+                    {t('pdf.translationSource')}
                     <select
-                      value={translationSettings.sourceLanguage}
-                      onChange={(event) => setTranslationSettings((current) => ({ ...current, sourceLanguage: event.target.value }))}
+                      value={translationSettings.source}
+                      onChange={(event) => {
+                        const source = event.target.value === 'dictionary' ? 'dictionary' : 'ai'
+                        setTranslationSettings((current) => ({ ...current, source }))
+                        if (selectionDraftRef.current) void startTranslation(source)
+                      }}
                     >
-                      <option value="自动检测">自动检测</option>
-                      <option value="英语">英语</option>
-                      <option value="中文">中文</option>
-                      <option value="日语">日语</option>
-                      <option value="法语">法语</option>
-                      <option value="德语">德语</option>
+                      <option value="dictionary" disabled={!isTauriEnv()}>{t('pdf.translationSourceTraditional')}</option>
+                      <option value="ai">AI</option>
                     </select>
                   </label>
-                  <label>
-                    {t('pdf.translationTargetLanguage')}
-                    <select
-                      value={translationSettings.targetLanguage}
-                      onChange={(event) => setTranslationSettings((current) => ({ ...current, targetLanguage: event.target.value }))}
-                    >
-                      <option value="简体中文">简体中文</option>
-                      <option value="英语">英语</option>
-                      <option value="日语">日语</option>
-                      <option value="法语">法语</option>
-                      <option value="德语">德语</option>
-                    </select>
-                  </label>
+                  {translationSettings.source === 'dictionary' ? (
+                    <>
+                      <label>
+                        {t('pdf.translationDictionaryAccent')}
+                        <select
+                          value={translationSettings.dictionaryAccent}
+                          onChange={(event) => {
+                            const dictionaryAccent = event.target.value === 'american' ? 'american' : 'british'
+                            setTranslationSettings((current) => ({ ...current, dictionaryAccent }))
+                            if (selectionDraftRef.current && translationSettings.source === 'dictionary') {
+                              void startTranslation('dictionary')
+                            }
+                          }}
+                        >
+                          <option value="british">{t('pdf.translationDictionaryBritish')}</option>
+                          <option value="american">{t('pdf.translationDictionaryAmerican')}</option>
+                        </select>
+                      </label>
+                      <div className="pdf-translation-dictionary-picker">
+                        <span title={translationSettings.dictionaryPath}>
+                          {translationSettings.dictionaryPath || t('pdf.translationDictionaryNotSelected')}
+                        </span>
+                        <button type="button" onClick={() => void handleChooseTranslationDictionary()}>
+                          {t('pdf.translationDictionaryChoose')}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <label>
+                        {t('pdf.translationSourceLanguage')}
+                        <select
+                          value={translationSettings.sourceLanguage}
+                          onChange={(event) => setTranslationSettings((current) => ({ ...current, sourceLanguage: event.target.value }))}
+                        >
+                          <option value="自动检测">自动检测</option>
+                          <option value="英语">英语</option>
+                          <option value="中文">中文</option>
+                          <option value="日语">日语</option>
+                          <option value="法语">法语</option>
+                          <option value="德语">德语</option>
+                        </select>
+                      </label>
+                      <label>
+                        {t('pdf.translationTargetLanguage')}
+                        <select
+                          value={translationSettings.targetLanguage}
+                          onChange={(event) => setTranslationSettings((current) => ({ ...current, targetLanguage: event.target.value }))}
+                        >
+                          <option value="简体中文">简体中文</option>
+                          <option value="英语">英语</option>
+                          <option value="日语">日语</option>
+                          <option value="法语">法语</option>
+                          <option value="德语">德语</option>
+                        </select>
+                      </label>
+                    </>
+                  )}
                 </div>
               ) : null}
               <div className="pdf-translation-body">
@@ -3721,7 +3789,7 @@ function PdfViewerInner({
                     {translationEntry?.partOfSpeech ? (
                       <span className="pdf-translation-part-of-speech">{translationEntry.partOfSpeech}</span>
                     ) : null}
-                    {translationEntry?.phonetic ? (
+                    {translationEntry?.phonetic || translationEntry?.pronunciationAudioUrl ? (
                       <button
                         type="button"
                         className="pdf-translation-pronunciation"
@@ -3733,7 +3801,7 @@ function PdfViewerInner({
                         <svg viewBox="0 0 24 24" aria-hidden="true">
                           <path d="M8 5v14l11-7z" />
                         </svg>
-                        <span>{translationEntry.phonetic}</span>
+                        <span>{translationEntry.phonetic || t('pdf.translationPronunciation')}</span>
                       </button>
                     ) : null}
                   </div>

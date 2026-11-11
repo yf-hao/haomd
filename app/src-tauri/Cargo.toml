@@ -7,7 +7,7 @@ authors = ["hao yufeng"]
 license = ""
 repository = ""
 edition = "2021"
-rust-version = "1.77.2"
+rust-version = "1.93.0"
 
 [lib]
 name = "app_lib"
@@ -37,6 +37,7 @@ chrono = { version = "0.4", features = ["clock"] }
 mime_guess = "2"
 percent-encoding = "2"
 base64 = "0.13"
+mdictlib = { version = "0.2.8", features = ["lzo"] }
 url = "2"
 quick-xml = "0.38.4"
 ttf-parser = "0.25"
@@ -50,6 +51,9 @@ lopdf = "0.35"
 rodio = "0.20"
 notify = "6.1"
 sys-locale = "0.3.2"
+
+[patch.crates-io]
+mdictlib = { path = "vendor/mdictlib" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.58", features = ["Win32_Foundation", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_Graphics_Gdi"] }
