@@ -1630,6 +1630,64 @@ button.ghost.ghost-subtle:hover {
   overflow: auto;
 }
 
+.ai-chat-dictionary-pronunciation-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+
+.ai-chat-dictionary-headword {
+  color: var(--theme-text-default);
+  font-size: 1.08em;
+}
+
+.ai-chat-dictionary-part-of-speech {
+  color: var(--theme-text-muted);
+  font-size: 0.9em;
+  font-style: italic;
+}
+
+.ai-chat-dictionary-pronunciation {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 5px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--theme-text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ai-chat-dictionary-pronunciation:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--theme-accent-primary) 12%, transparent);
+  color: var(--theme-text-default);
+}
+
+.ai-chat-dictionary-pronunciation svg {
+  width: 17px;
+  height: 17px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ai-chat-dictionary-phonetic {
+  color: var(--theme-text-muted);
+  font-style: italic;
+  white-space: nowrap;
+}
+
+.ai-chat-dictionary-pronunciation:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
 /* AI Chat 窗口中的 gh-markdown 字体调小一些 */
 .modal.modal-ai-chat .ai-chat-message-assistant .markdown-body.gh-markdown,
 .modal.modal-ai-chat .ai-chat-message-user .markdown-body.gh-markdown,

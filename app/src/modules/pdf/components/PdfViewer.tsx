@@ -9,7 +9,7 @@ import {
   type ReactNode,
   type ReactElement,
 } from 'react'
-import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
+import { save as saveDialog } from '@tauri-apps/plugin-dialog'
 import CodeMirror from '@uiw/react-codemirror'
 import { EditorSelection } from '@codemirror/state'
 import { EditorView, keymap, placeholder as editorPlaceholder } from '@codemirror/view'
@@ -52,8 +52,8 @@ import {
   type AnnotationType,
 } from '../types/annotation'
 import { isDictionaryLikeSelection, translatePdfSelection, type PdfTranslationEntry } from '../translationService'
-import { lookupTraditionalPdfSelection, type DictionaryPronunciationAccent } from '../pdfDictionaryProvider'
-import { openPdfDictionary } from '../pdfDictionaryService'
+import { lookupTraditionalPdfSelection } from '../pdfDictionaryProvider'
+import { getDictionarySettings, subscribeDictionarySettingsChanged } from '../../settings/dictionarySettings'
 import { synthesizeAiPdfPronunciation } from '../pdfAiPronunciationService'
 import { suppressPdfSelectionChangeDispatch } from './pdfSelectionChangeDispatcher'
 
@@ -119,7 +119,7 @@ type PdfTranslationSettings = {
   sourceLanguage: string
   targetLanguage: string
   dictionaryPath: string
-  dictionaryAccent: DictionaryPronunciationAccent
+  dictionaryAccent: 'british' | 'american'
 }
 
 function getCenteredTranslationPosition(
@@ -164,8 +164,8 @@ function loadPdfTranslationSettings(): PdfTranslationSettings {
       source: parsed?.source === 'dictionary' ? 'dictionary' : 'ai',
       sourceLanguage: parsed?.sourceLanguage || DEFAULT_PDF_TRANSLATION_SETTINGS.sourceLanguage,
       targetLanguage: parsed?.targetLanguage || DEFAULT_PDF_TRANSLATION_SETTINGS.targetLanguage,
-      dictionaryPath: parsed?.dictionaryPath || '',
-      dictionaryAccent: parsed?.dictionaryAccent === 'american' ? 'american' : 'british',
+      dictionaryPath: getDictionarySettings().mdxPath,
+      dictionaryAccent: getDictionarySettings().pronunciationAccent,
     }
   } catch {
     return DEFAULT_PDF_TRANSLATION_SETTINGS
@@ -1286,24 +1286,6 @@ function PdfViewerInner({
     }
   }, [getSelectionSnapshotKey, suppressTranslationSelectionDispatch, t, translationSettings])
 
-  const handleChooseTranslationDictionary = useCallback(async () => {
-    try {
-      const selected = await openDialog({
-        title: t('pdf.translationDictionaryChoose'),
-        multiple: false,
-        filters: [{ name: 'MDict Dictionary', extensions: ['mdx'] }],
-      })
-      const path = Array.isArray(selected) ? selected[0] : selected
-      if (!path || typeof path !== 'string') return
-      const info = await openPdfDictionary(path)
-      setTranslationSettings((current) => ({ ...current, source: 'dictionary', dictionaryPath: info.path }))
-      setTranslationError(null)
-      await startTranslation('dictionary', info.path)
-    } catch (error) {
-      setTranslationError(error instanceof Error ? error.message : String(error))
-    }
-  }, [startTranslation, t])
-
   const handleTranslationPronunciationPlay = useCallback(async () => {
     const entry = translationEntry
     if (!entry) return
@@ -1349,6 +1331,14 @@ function PdfViewerInner({
   useEffect(() => {
     window.localStorage.setItem(PDF_TRANSLATION_SETTINGS_STORAGE_KEY, JSON.stringify(translationSettings))
   }, [translationSettings])
+
+  useEffect(() => subscribeDictionarySettingsChanged((dictionarySettings) => {
+    setTranslationSettings((current) => ({
+      ...current,
+      dictionaryPath: dictionarySettings.mdxPath,
+      dictionaryAccent: dictionarySettings.pronunciationAccent,
+    }))
+  }), [])
 
   useEffect(() => {
     return () => {
@@ -3714,32 +3704,12 @@ function PdfViewerInner({
                     </select>
                   </label>
                   {translationSettings.source === 'dictionary' ? (
-                    <>
-                      <label>
-                        {t('pdf.translationDictionaryAccent')}
-                        <select
-                          value={translationSettings.dictionaryAccent}
-                          onChange={(event) => {
-                            const dictionaryAccent = event.target.value === 'american' ? 'american' : 'british'
-                            setTranslationSettings((current) => ({ ...current, dictionaryAccent }))
-                            if (selectionDraftRef.current && translationSettings.source === 'dictionary') {
-                              void startTranslation('dictionary')
-                            }
-                          }}
-                        >
-                          <option value="british">{t('pdf.translationDictionaryBritish')}</option>
-                          <option value="american">{t('pdf.translationDictionaryAmerican')}</option>
-                        </select>
-                      </label>
-                      <div className="pdf-translation-dictionary-picker">
-                        <span title={translationSettings.dictionaryPath}>
-                          {translationSettings.dictionaryPath || t('pdf.translationDictionaryNotSelected')}
-                        </span>
-                        <button type="button" onClick={() => void handleChooseTranslationDictionary()}>
-                          {t('pdf.translationDictionaryChoose')}
-                        </button>
-                      </div>
-                    </>
+                    <div className="pdf-translation-dictionary-picker">
+                      <span title={translationSettings.dictionaryPath}>
+                        {translationSettings.dictionaryPath || t('pdf.translationDictionaryNotSelected')}
+                      </span>
+                      <span>{t('pdf.translationDictionaryManageInSettings')}</span>
+                    </div>
                   ) : (
                     <>
                       <label>

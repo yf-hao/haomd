@@ -1,6 +1,8 @@
 import type { CSSProperties, Dispatch, RefObject, SetStateAction } from 'react'
-import { memo, useCallback } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { MarkdownViewer } from '../../../components/MarkdownViewer'
+import { getDictionarySettings } from '../../settings/dictionarySettings'
+import { openDictionary, readDictionaryAudio } from '../../dictionaryService'
 import type { ChatMessageView } from '../domain/chatSession'
 import type { AssistantToolExecutionView } from '../domain/chatSession'
 import type { EphemeralAiChatMessage, EphemeralImageGenerationResultMessage } from './imageGenerationEphemeral'
@@ -19,6 +21,10 @@ type AiChatMessageItemProps = {
   onSaveToNotes?: (content: string) => void | Promise<void>
   onToggleViewMode?: () => void
   toolExecutionDetailsLabel: string
+  playDictionaryPronunciationLabel: string
+  playDictionaryPronunciationBritishLabel: string
+  playDictionaryPronunciationAmericanLabel: string
+  dictionaryPronunciationFailedLabel: string
   copyMarkdownLabel: string
   insertIntoEditorLabel: string
   replaceSelectionLabel: string
@@ -27,6 +33,88 @@ type AiChatMessageItemProps = {
   showRenderedMarkdownLabel: string
   viewMarkdownSourceLabel: string
   summaryPreservedUserInputLabel: string
+}
+
+function DictionaryPronunciationButton({
+  resourceKey,
+  accent,
+  accentLabel,
+  phonetic,
+  playLabel,
+  failedLabel,
+}: {
+  resourceKey: string
+  accent: 'british' | 'american'
+  accentLabel: string
+  phonetic: string
+  playLabel: string
+  failedLabel: string
+}) {
+  const [loading, setLoading] = useState(false)
+  const [playing, setPlaying] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const phoneticText = phonetic.replace(/^\/+|\/+$/g, '')
+
+  useEffect(() => () => {
+    audioRef.current?.pause()
+    audioRef.current = null
+  }, [])
+
+  const handlePlay = async () => {
+    if (audioRef.current && !audioRef.current.paused) {
+      audioRef.current.pause()
+      setPlaying(false)
+      return
+    }
+
+    setLoading(true)
+    setFailed(false)
+    try {
+      const { mdxPath } = getDictionarySettings()
+      if (!mdxPath) throw new Error('No local dictionary is configured')
+      await openDictionary(mdxPath)
+      const audioUrl = await readDictionaryAudio(mdxPath, resourceKey)
+      if (!audioUrl) throw new Error('Dictionary audio resource is missing')
+      const audio = new Audio(audioUrl)
+      audioRef.current = audio
+      audio.onended = () => setPlaying(false)
+      audio.onerror = () => {
+        setPlaying(false)
+        setFailed(true)
+      }
+      await audio.play()
+      setPlaying(true)
+    } catch (error) {
+      console.warn('[AiChatMessagesPane] dictionary pronunciation playback failed', error)
+      setFailed(true)
+      setPlaying(false)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      className="ai-chat-dictionary-pronunciation"
+      onClick={() => void handlePlay()}
+      disabled={loading}
+      aria-pressed={playing}
+      title={failed ? failedLabel : `${playLabel} (${accentLabel})`}
+      data-accent={accent}
+    >
+      {loading ? <span aria-hidden="true">…</span> : (
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none">
+          <path d="M11 5 6 9H3v6h3l5 4V5Z" />
+          <path d={accent === 'british' ? 'M15 9a4 4 0 0 1 0 6' : 'M15 5a9 9 0 0 1 0 14'} />
+          <path d={accent === 'british' ? 'M18 6a8 8 0 0 1 0 12' : 'M18 2a13 13 0 0 1 0 20'} />
+        </svg>
+      )}
+      <span>{failed ? failedLabel : accentLabel}</span>
+      {phoneticText ? <span className="ai-chat-dictionary-phonetic">/{phoneticText}/</span> : null}
+    </button>
+  )
 }
 
 export type AiChatMessagesPaneProps = {
@@ -54,6 +142,10 @@ export type AiChatMessagesPaneProps = {
   onSaveToNotes?: (content: string) => void | Promise<void>
   setMessageViewModes: Dispatch<SetStateAction<Record<string, MessageViewMode>>>
   toolExecutionDetailsLabel: string
+  playDictionaryPronunciationLabel: string
+  playDictionaryPronunciationBritishLabel: string
+  playDictionaryPronunciationAmericanLabel: string
+  dictionaryPronunciationFailedLabel: string
   copyMarkdownLabel: string
   insertIntoEditorLabel: string
   replaceSelectionLabel: string
@@ -122,6 +214,10 @@ const AiChatMessageItem = memo(({
   onSaveToNotes,
   onToggleViewMode,
   toolExecutionDetailsLabel,
+  playDictionaryPronunciationLabel,
+  playDictionaryPronunciationBritishLabel,
+  playDictionaryPronunciationAmericanLabel,
+  dictionaryPronunciationFailedLabel,
   copyMarkdownLabel,
   insertIntoEditorLabel,
   replaceSelectionLabel,
@@ -142,6 +238,34 @@ const AiChatMessageItem = memo(({
           {summaryPreservedUserInputLabel}
         </div>
       )}
+      {msg.role === 'assistant' && msg.dictionaryPronunciation ? (
+        <div className="ai-chat-dictionary-pronunciation-row">
+          <strong className="ai-chat-dictionary-headword">{msg.dictionaryPronunciation.headword}</strong>
+          {msg.dictionaryPronunciation.partOfSpeech ? (
+            <span className="ai-chat-dictionary-part-of-speech">{msg.dictionaryPronunciation.partOfSpeech}</span>
+          ) : null}
+          {msg.dictionaryPronunciation.britishResourceKey ? (
+            <DictionaryPronunciationButton
+              resourceKey={msg.dictionaryPronunciation.britishResourceKey}
+              accent="british"
+              accentLabel={playDictionaryPronunciationBritishLabel}
+              phonetic={msg.dictionaryPronunciation.phonetic}
+              playLabel={playDictionaryPronunciationLabel}
+              failedLabel={dictionaryPronunciationFailedLabel}
+            />
+          ) : null}
+          {msg.dictionaryPronunciation.americanResourceKey ? (
+            <DictionaryPronunciationButton
+              resourceKey={msg.dictionaryPronunciation.americanResourceKey}
+              accent="american"
+              accentLabel={playDictionaryPronunciationAmericanLabel}
+              phonetic={msg.dictionaryPronunciation.phonetic}
+              playLabel={playDictionaryPronunciationLabel}
+              failedLabel={dictionaryPronunciationFailedLabel}
+            />
+          ) : null}
+        </div>
+      ) : null}
       {msg.role === 'assistant' ? (
         showStreamingIndicator ? (
           <div className="ai-chat-loading-indicator ai-chat-loading-indicator-inline" aria-label={showRenderedMarkdownLabel}>
@@ -217,6 +341,11 @@ const AiChatMessageItem = memo(({
   && prev.msg.source === next.msg.source
   && prev.msg.streaming === next.msg.streaming
   && prev.msg.content === next.msg.content
+  && prev.msg.dictionaryPronunciation?.headword === next.msg.dictionaryPronunciation?.headword
+  && prev.msg.dictionaryPronunciation?.phonetic === next.msg.dictionaryPronunciation?.phonetic
+  && prev.msg.dictionaryPronunciation?.partOfSpeech === next.msg.dictionaryPronunciation?.partOfSpeech
+  && prev.msg.dictionaryPronunciation?.britishResourceKey === next.msg.dictionaryPronunciation?.britishResourceKey
+  && prev.msg.dictionaryPronunciation?.americanResourceKey === next.msg.dictionaryPronunciation?.americanResourceKey
   && prev.displayContent === next.displayContent
   && prev.viewMode === next.viewMode
   && areToolExecutionsEqual(prev.msg.toolExecutions, next.msg.toolExecutions)
@@ -247,6 +376,10 @@ export const AiChatMessagesPane = memo(({
   onSaveToNotes,
   setMessageViewModes,
   toolExecutionDetailsLabel,
+  playDictionaryPronunciationLabel,
+  playDictionaryPronunciationBritishLabel,
+  playDictionaryPronunciationAmericanLabel,
+  dictionaryPronunciationFailedLabel,
   copyMarkdownLabel,
   insertIntoEditorLabel,
   replaceSelectionLabel,
@@ -303,6 +436,10 @@ export const AiChatMessagesPane = memo(({
           })
         }}
         toolExecutionDetailsLabel={toolExecutionDetailsLabel}
+        playDictionaryPronunciationLabel={playDictionaryPronunciationLabel}
+        playDictionaryPronunciationBritishLabel={playDictionaryPronunciationBritishLabel}
+        playDictionaryPronunciationAmericanLabel={playDictionaryPronunciationAmericanLabel}
+        dictionaryPronunciationFailedLabel={dictionaryPronunciationFailedLabel}
         copyMarkdownLabel={copyMarkdownLabel}
         insertIntoEditorLabel={insertIntoEditorLabel}
         replaceSelectionLabel={replaceSelectionLabel}
@@ -331,6 +468,10 @@ export const AiChatMessagesPane = memo(({
     showRenderedMarkdownLabel,
     summaryPreservedUserInputLabel,
     toolExecutionDetailsLabel,
+    playDictionaryPronunciationLabel,
+    playDictionaryPronunciationBritishLabel,
+    playDictionaryPronunciationAmericanLabel,
+    dictionaryPronunciationFailedLabel,
     viewMarkdownSourceLabel,
   ])
 

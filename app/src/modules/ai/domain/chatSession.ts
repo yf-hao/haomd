@@ -19,12 +19,21 @@ export type AssistantToolExecutionView = {
   detail?: string
 }
 
+export type AssistantDictionaryPronunciation = {
+  headword: string
+  phonetic: string
+  partOfSpeech: string
+  britishResourceKey: string | null
+  americanResourceKey: string | null
+}
+
 export type ChatMessageView = {
   id: string
   role: ChatRole
   content: string
   source?: 'original' | 'summary-preserved'
   toolExecutions?: AssistantToolExecutionView[]
+  dictionaryPronunciation?: AssistantDictionaryPronunciation
   /** 是否仍在流式输出中 */
   streaming?: boolean
   /** 是否在 UI 中隐藏该条消息（仍保留在 engineHistory 中） */
@@ -196,6 +205,21 @@ export function upsertAssistantToolExecution(
         toolExecutions: next,
       }
     }),
+  }
+}
+
+export function setAssistantDictionaryPronunciation(
+  state: ConversationState,
+  id: string,
+  dictionaryPronunciation: AssistantDictionaryPronunciation,
+): ConversationState {
+  return {
+    ...state,
+    viewMessages: state.viewMessages.map((message) =>
+      message.id === id && message.role === 'assistant'
+        ? { ...message, dictionaryPronunciation }
+        : message,
+    ),
   }
 }
 

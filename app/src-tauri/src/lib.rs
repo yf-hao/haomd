@@ -15,6 +15,7 @@ mod backup_settings;
 mod calendar_storage;
 mod clipboard_io;
 mod dialog_io;
+mod dictionary;
 mod doc_conversations;
 mod editor_settings;
 mod external_open;
@@ -39,7 +40,6 @@ mod music_playlist;
 mod music_sound;
 mod notes_config;
 mod openai_compat;
-mod pdf_dictionary;
 mod pdf_export;
 mod pdf_pronunciation;
 mod pdf_sessions;
@@ -77,6 +77,7 @@ use backup_settings::*;
 use calendar_storage::*;
 use clipboard_io::*;
 use dialog_io::*;
+use dictionary::*;
 use doc_conversations::*;
 use editor_settings::*;
 use external_open::*;
@@ -96,7 +97,6 @@ use music_playlist::*;
 use music_sound::*;
 use notes_config::*;
 use openai_compat::*;
-use pdf_dictionary::*;
 use pdf_export::*;
 use pdf_pronunciation::*;
 use pdf_sessions::*;
@@ -139,9 +139,9 @@ macro_rules! app_invoke_handler {
             read_file,
             read_binary_file,
             export_pdf_with_annotations,
-            open_pdf_dictionary,
-            lookup_pdf_dictionary,
-            read_pdf_dictionary_audio,
+            open_dictionary,
+            lookup_dictionary,
+            read_dictionary_audio,
             synthesize_pdf_pronunciation,
             write_file,
             write_file_no_recent,
@@ -381,7 +381,7 @@ pub fn run() {
 
     let app = builder
         .manage(McpProcessManager::new())
-        .manage(PdfDictionaryService::default())
+        .manage(DictionaryService::default())
         .register_uri_scheme_protocol("haomd", handle_haomd_protocol)
         .setup(setup_app)
         .invoke_handler(app_invoke_handler!())

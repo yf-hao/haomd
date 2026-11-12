@@ -54,6 +54,9 @@ import { resolveManagedBackgroundImageUrl } from '../modules/theme/backgroundIma
 import type { ThemeMode } from '../modules/theme/schema'
 import { subscribeUiTypographyChanged } from '../modules/settings/uiTypographyRuntime'
 import { builtinBackgroundPresets, getBuiltinBackgroundPresetLabel } from '../modules/theme/backgroundPresets'
+import { getDictionarySettings, saveDictionarySettings, type DictionarySettings } from '../modules/settings/dictionarySettings'
+import { openDictionary } from '../modules/dictionaryService'
+import { isTauriEnv } from '../modules/platform/runtime'
 
 export type SettingsDialogProps = {
   open: boolean
@@ -64,7 +67,7 @@ export type SettingsDialogProps = {
   onUiTypographyChange?: (settings: UiTypographySettings) => void
 }
 
-type SettingsSectionId = 'theme' | 'typography' | 'performance' | 'word-export' | 'search' | 'backup'
+type SettingsSectionId = 'theme' | 'typography' | 'performance' | 'word-export' | 'search' | 'dictionary' | 'backup'
 type ThemePanelTabId = 'theme-preset' | 'backgrounds'
 type WordExportTabId = 'document' | 'layout' | 'diagrams' | 'templates'
 type WordStyleId = 'title' | 'heading1' | 'heading2' | 'heading3' | 'normal'
@@ -181,6 +184,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
   const [backupScope, setBackupScope] = useState<BackupScopeSettings>(getDefaultBackupScopeSettings())
   const [documentRootOptions, setDocumentRootOptions] = useState<string[]>([])
   const [searchSettings, setSearchSettings] = useState<SearchSettings>(getDefaultSearchSettings())
+  const [dictionarySettings, setDictionarySettings] = useState<DictionarySettings>(getDictionarySettings)
   const [performanceSettings, setPerformanceSettings] = useState<PerformanceSettings>(getDefaultPerformanceSettings())
   const [uiTypography, setUiTypography] = useState<UiTypographySettings>(getDefaultUiTypographySettings())
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('theme')
@@ -254,6 +258,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
     setActiveBackupTab('sync')
     setBackupBusy(null)
     setBackupStatus(null)
+    setDictionarySettings(getDictionarySettings())
     setSearchBusy(null)
     setSearchStatus(null)
     hasLocalPreviewEditsRef.current = false
@@ -1130,6 +1135,10 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
       }
       return
     }
+    if (activeSection === 'dictionary') {
+      setDictionarySettings({ mdxPath: '', pronunciationAccent: 'british', useInAiChat: false })
+      return
+    }
     setWordExport(getDefaultWordExportStyleSettings())
   }
 
@@ -1157,6 +1166,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
         saveBackupSettings(webdavBackup),
         saveBackupScopeSettings(backupScope),
       ])
+      saveDictionarySettings(dictionarySettings)
       emitPerformanceSettingsChanged(performanceSettings)
       setSettings(nextSettings)
       originalThemeRef.current = theme
@@ -1187,6 +1197,23 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
       setWordTemplates(items)
     } catch (err) {
       setError((err as Error).message || 'Failed to open word_templates directory')
+    }
+  }
+
+  const handleChooseDictionary = async () => {
+    try {
+      setError(null)
+      const selected = await openDialog({
+        title: t('dictionarySettings.chooseFile'),
+        multiple: false,
+        filters: [{ name: 'MDict Dictionary', extensions: ['mdx'] }],
+      })
+      const path = Array.isArray(selected) ? selected[0] : selected
+      if (!path || typeof path !== 'string') return
+      const info = await openDictionary(path)
+      setDictionarySettings((current) => ({ ...current, mdxPath: info.path }))
+    } catch (err) {
+      setError((err as Error).message || 'Failed to open dictionary')
     }
   }
 
@@ -1363,6 +1390,13 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                 className={`settings-sidebar-item ${activeSection === 'search' ? 'active' : ''}`}
               >
                 {t('settings.search')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveSection('dictionary')}
+                className={`settings-sidebar-item ${activeSection === 'dictionary' ? 'active' : ''}`}
+              >
+                {t('settings.dictionary')}
               </button>
               <button
                 type="button"
@@ -2112,6 +2146,63 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
                 </>
               )}
 
+              {activeSection === 'dictionary' && (
+                <>
+                  <div className="settings-panel-header">
+                    <div className="settings-panel-title">{t('dictionarySettings.title')}</div>
+                    <div className="settings-panel-description">{t('dictionarySettings.description')}</div>
+                  </div>
+                  <div style={fieldGridStyle}>
+                    <div className="settings-field-label">{t('dictionarySettings.file')}</div>
+                    <div className="settings-inline-help" style={{ minWidth: 0 }}>
+                      <span title={dictionarySettings.mdxPath} style={{ display: 'block', overflowWrap: 'anywhere' }}>
+                        {dictionarySettings.mdxPath || t('dictionarySettings.notSelected')}
+                      </span>
+                      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                        <Button type="button" variant="secondary" onClick={() => void handleChooseDictionary()} disabled={!isTauriEnv()}>
+                          {t('dictionarySettings.chooseFile')}
+                        </Button>
+                        {dictionarySettings.mdxPath ? (
+                          <Button
+                            type="button"
+                            variant="tertiary"
+                            onClick={() => setDictionarySettings((current) => ({ ...current, mdxPath: '', useInAiChat: false }))}
+                          >
+                            {t('dictionarySettings.remove')}
+                          </Button>
+                        ) : null}
+                      </div>
+                      {!isTauriEnv() ? <div className="settings-field-description">{t('dictionarySettings.desktopOnly')}</div> : null}
+                    </div>
+                    <div className="settings-field-label">{t('dictionarySettings.pronunciationAccent')}</div>
+                    <select
+                      className="field-select"
+                      value={dictionarySettings.pronunciationAccent}
+                      onChange={(event) => setDictionarySettings((current) => ({
+                        ...current,
+                        pronunciationAccent: event.target.value === 'american' ? 'american' : 'british',
+                      }))}
+                    >
+                      <option value="british">{t('dictionarySettings.british')}</option>
+                      <option value="american">{t('dictionarySettings.american')}</option>
+                    </select>
+                    <div className="settings-field-label">{t('dictionarySettings.aiChatLookup')}</div>
+                    <label className="settings-checkbox-row">
+                      <input
+                        type="checkbox"
+                        checked={dictionarySettings.useInAiChat}
+                        disabled={!dictionarySettings.mdxPath}
+                        onChange={(event) => setDictionarySettings((current) => ({
+                          ...current,
+                          useInAiChat: event.target.checked,
+                        }))}
+                      />
+                      <span>{t('dictionarySettings.aiChatLookupHint')}</span>
+                    </label>
+                  </div>
+                </>
+              )}
+
               {activeSection === 'backup' && (
                 <>
                   <div className="settings-panel-header">
@@ -2532,7 +2623,7 @@ export const SettingsDialog: FC<SettingsDialogProps> = ({
           </div>
         </div>
         <div className="modal-actions">
-          {activeSection === 'word-export' || activeSection === 'typography' || activeSection === 'performance' || (activeSection === 'theme' && activeThemeTab !== 'theme-preset') ? (
+          {activeSection === 'word-export' || activeSection === 'typography' || activeSection === 'performance' || activeSection === 'dictionary' || (activeSection === 'theme' && activeThemeTab !== 'theme-preset') ? (
             <Button variant="tertiary" type="button" onClick={handleReset} disabled={isSaving}>
               {t('common.reset')}
             </Button>

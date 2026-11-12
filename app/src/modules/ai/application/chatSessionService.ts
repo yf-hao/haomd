@@ -18,6 +18,7 @@ import { buildGlobalMemorySystemPrompt, type RequestContext } from '../globalMem
 import {
   type ChatEntryMode,
   type ConversationState,
+  type AssistantDictionaryPronunciation,
   type EntryContext,
   type EngineMessage,
   createInitialConversationState,
@@ -25,6 +26,7 @@ import {
   appendAssistantPlaceholder,
   appendAssistantChunk,
   upsertAssistantToolExecution,
+  setAssistantDictionaryPronunciation,
   completeAssistantMessage,
   truncateAssistantMessage,
 } from '../domain/chatSession'
@@ -118,6 +120,19 @@ import {
 } from '../../document/documentBuiltinTool'
 import type { WorkspaceEntryKind } from '../../workspace/workspaceEntryResolver'
 import type { RemoveBlankLinesScope } from '../../document/application/removeBlankLinesService'
+import { getDictionarySettings } from '../../settings/dictionarySettings'
+import { lookupDictionaryEntry } from '../../dictionary/lookup'
+import {
+  detectTranslationSourceDirective,
+  extractDictionaryTranslationQuery,
+} from '../../dictionary/translationIntent'
+import { formatDictionaryEntryForChat } from '../../dictionary/chatResponse'
+import {
+  buildDictionaryLookupContext,
+  executeLocalDictionaryLookup,
+  LOCAL_DICTIONARY_LOOKUP_TOOL_NAME,
+  localDictionaryLookupToolSchema,
+} from '../../dictionary/aiLookupTool'
 
 export type StartChatOptions = {
   entryMode: ChatEntryMode
@@ -390,6 +405,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
     if (disposed || !options.onStateChange) return
     options.onStateChange(state)
   }
+  const translate = options.t
 
   const flushDocConversationSnapshot = async (allowDisposed = false): Promise<void> => {
     if ((!allowDisposed && disposed) || !boundDocPath || !shouldPersistDocConversation || !provider) return
@@ -564,6 +580,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
     const routingTools = allTools ?? schemaTools
     const readSkillIds = new Set<string>()
     const readWorkflowIds = new Set<string>()
+    let localDictionaryPronunciation = state.viewMessages.find((message) => message.id === assistantId)?.dictionaryPronunciation
     let httpRequestCount = 0
     const conversationMessages = engineHistoryToChatMessages(state.engineHistory)
 
@@ -596,6 +613,10 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
 
         if (result.error || !result.toolCalls?.length) {
           // No tool calls — final answer or error, done
+          if (localDictionaryPronunciation) {
+            state = setAssistantDictionaryPronunciation(state, assistantId, localDictionaryPronunciation)
+            notifyStateChange()
+          }
           break
         }
 
@@ -623,7 +644,9 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
 
           const toolLabel = tc.function.name === HTTP_REQUEST_TOOL_NAME
             ? (options.t?.('ai.httpRequestTool') ?? 'HTTP request')
-            : tc.function.name.replace(/^mcp__/, '').replace(/__/g, '/')
+            : tc.function.name === LOCAL_DICTIONARY_LOOKUP_TOOL_NAME
+              ? (options.t?.('ai.localDictionaryLookupTool') ?? 'Local dictionary lookup')
+              : tc.function.name.replace(/^mcp__/, '').replace(/__/g, '/')
           state = upsertAssistantToolExecution(state, assistantId, {
             id: tc.id,
             label: toolLabel,
@@ -640,7 +663,14 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
 
             // Built-in tools are handled locally; MCP tools are routed to servers
             let toolResult: unknown
-            if (tc.function.name === WRITE_TO_NOTES_TOOL_NAME) {
+            let dictionaryPronunciation: AssistantDictionaryPronunciation | null = null
+            if (tc.function.name === LOCAL_DICTIONARY_LOOKUP_TOOL_NAME) {
+              const dictionaryResult = await executeLocalDictionaryLookup(parsedArgs as { query?: unknown })
+              dictionaryPronunciation = dictionaryResult.pronunciation
+              localDictionaryPronunciation = dictionaryPronunciation ?? localDictionaryPronunciation
+              const { pronunciation: _pronunciation, ...modelResult } = dictionaryResult
+              toolResult = modelResult
+            } else if (tc.function.name === WRITE_TO_NOTES_TOOL_NAME) {
               toolResult = await executeWriteToNotes(parsedArgs as { content?: string })
             } else if (tc.function.name === WORKFLOW_SEARCH_TOOL_NAME) {
               toolResult = await executeWorkflowSearch(parsedArgs as { query?: string })
@@ -848,6 +878,10 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
         state = appendAssistantPlaceholder(state, assistantId)
         notifyStateChange()
       }
+      if (localDictionaryPronunciation) {
+        state = setAssistantDictionaryPronunciation(state, assistantId, localDictionaryPronunciation)
+        notifyStateChange()
+      }
     } finally {
       persistDocConversationSnapshot()
     }
@@ -1034,6 +1068,89 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
         source: { kind: 'uploaded', fileId: u.id },
       }))
 
+      const dictionarySettings = getDictionarySettings()
+      const sourceDirective = detectTranslationSourceDirective(content)
+      if (sourceDirective.source === 'dictionary') {
+        let directResponse: string
+        let directPronunciation: AssistantDictionaryPronunciation | undefined
+        if (!sourceDirective.query) {
+          directResponse = translate?.('dictionarySettings.aiDictionaryNeedsTerm')
+            ?? 'Local dictionary translation currently supports words and phrases. Please provide the text to look up.'
+        } else if (!dictionarySettings.mdxPath) {
+          directResponse = translate?.('dictionarySettings.aiDictionaryNotConfigured')
+            ?? 'No local dictionary is configured. Choose a dictionary file in Settings → Dictionary first.'
+        } else {
+          try {
+            const entry = await lookupDictionaryEntry(
+              dictionarySettings.mdxPath,
+              sourceDirective.query,
+              dictionarySettings.pronunciationAccent,
+              { includeAudio: false },
+            )
+            directPronunciation = entry ? {
+              headword: entry.headword,
+              phonetic: entry.phonetic,
+              partOfSpeech: entry.partOfSpeech,
+              britishResourceKey: entry.britishPronunciationResourceKey,
+              americanResourceKey: entry.americanPronunciationResourceKey,
+            } : undefined
+            directResponse = entry
+              ? formatDictionaryEntryForChat(entry, translate)
+              : translate?.('dictionarySettings.aiDictionaryNotFound', { query: sourceDirective.query })
+                ?? `The local dictionary has no entry for “${sourceDirective.query}”. Check the spelling or phrase.`
+          } catch (error) {
+            console.warn('[ChatSession] Explicit local dictionary lookup failed')
+            directResponse = translate?.('dictionarySettings.aiDictionaryLookupFailed')
+              ?? 'The local dictionary lookup failed. Check the dictionary file configuration.'
+          }
+        }
+
+        state = appendAssistantChunk(state, assistantId, directResponse)
+        if (directPronunciation) {
+          state = setAssistantDictionaryPronunciation(state, assistantId, directPronunciation)
+        }
+        state = completeAssistantMessage(state, assistantId)
+        notifyStateChange()
+        await persistDocConversationSnapshot(true)
+        return
+      }
+
+      const dictionaryQuery = sourceDirective.source === 'automatic'
+        && dictionarySettings.useInAiChat
+        && !options?.attachments?.length
+        ? extractDictionaryTranslationQuery(content)
+        : null
+      let dictionaryPreflight: { query: string; entry: Awaited<ReturnType<typeof lookupDictionaryEntry>> } | null = null
+      if (dictionaryQuery && dictionarySettings.mdxPath) {
+        try {
+          dictionaryPreflight = {
+            query: dictionaryQuery,
+            entry: await lookupDictionaryEntry(
+              dictionarySettings.mdxPath,
+              dictionaryQuery,
+              dictionarySettings.pronunciationAccent,
+              { includeAudio: false },
+            ),
+          }
+        } catch (error) {
+          console.warn('[ChatSession] Local dictionary preflight failed; continuing with AI', error)
+        }
+      }
+      if (dictionaryPreflight?.entry) {
+        state = setAssistantDictionaryPronunciation(
+          state,
+          assistantId,
+          {
+            headword: dictionaryPreflight.entry.headword,
+            phonetic: dictionaryPreflight.entry.phonetic,
+            partOfSpeech: dictionaryPreflight.entry.partOfSpeech,
+            britishResourceKey: dictionaryPreflight.entry.britishPronunciationResourceKey,
+            americanResourceKey: dictionaryPreflight.entry.americanPronunciationResourceKey,
+          },
+        )
+        notifyStateChange()
+      }
+
       // Check if MCP tool calling is active early — tools must be loaded before
       // building the system prompt so the catalog can be injected.
       const effectiveActiveRoleId = state.activeRoleId ?? systemPromptInfo.activeRoleId
@@ -1050,6 +1167,19 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
 
       let clientOverride: IStreamingChatClient | null = null
       let systemPromptForRequest = systemPromptInfo.systemPrompt
+      if (dictionaryPreflight) {
+        systemPromptForRequest += buildDictionaryLookupContext(
+          dictionaryPreflight.query,
+          dictionaryPreflight.entry,
+        )
+      }
+      const canUseLocalDictionaryTool = dictionarySettings.useInAiChat
+        && !!dictionarySettings.mdxPath
+        && sourceDirective.source === 'automatic'
+        && !dictionaryQuery
+      if (canUseLocalDictionaryTool && providerType === 'openai') {
+        systemPromptForRequest += '\n\nWhen a user asks for the translation, meaning, definition, example, or pronunciation of an English word or short phrase, call lookup_local_dictionary before answering. Do not use it for full sentences or paragraphs. If it reports an entry, base the answer on it and briefly identify the local dictionary as the source. The UI displays the headword, phonetic, part of speech, and pronunciation buttons above your answer, so do not repeat those header fields. If the tool reports no entry, answer normally using your language knowledge.'
+      }
       if (provider) {
         const reqContext: RequestContext = {
           source: 'chat-pane',
@@ -1058,7 +1188,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
           docPath: boundDocPath,
         }
         systemPromptForRequest = buildGlobalMemorySystemPrompt(
-          systemPromptInfo.systemPrompt,
+          systemPromptForRequest,
           reqContext,
         )
         // Append compact catalog so the model knows ALL available tools without
@@ -1098,6 +1228,7 @@ export async function createChatSession(options: StartChatOptions): Promise<Chat
       const isOpenAIProvider = providerType === 'openai'
       const builtinTools: OpenAIToolDef[] = isOpenAIProvider
         ? [
+          ...(canUseLocalDictionaryTool ? [localDictionaryLookupToolSchema] : []),
           writeToNotesToolSchema,
           httpRequestToolSchema,
           workflowSearchToolSchema,

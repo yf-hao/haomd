@@ -6,25 +6,25 @@ use serde::Serialize;
 use tauri::State;
 
 #[derive(Clone, Default)]
-pub(crate) struct PdfDictionaryService {
-    opened: Arc<Mutex<Option<OpenedPdfDictionary>>>,
+pub(crate) struct DictionaryService {
+    opened: Arc<Mutex<Option<OpenedDictionary>>>,
 }
 
-struct OpenedPdfDictionary {
+struct OpenedDictionary {
     mdx_path: PathBuf,
     mdx: MdxFile,
     mdd: MddFile,
 }
 
 #[derive(Serialize)]
-pub(crate) struct PdfDictionaryInfo {
+pub(crate) struct DictionaryInfo {
     path: String,
     title: String,
     entries: u64,
 }
 
 #[derive(Serialize)]
-pub(crate) struct PdfDictionaryRecord {
+pub(crate) struct DictionaryRecord {
     key: String,
     html: String,
 }
@@ -50,16 +50,16 @@ fn lock_error() -> String {
 }
 
 #[tauri::command]
-pub(crate) async fn open_pdf_dictionary(
-    state: State<'_, PdfDictionaryService>,
+pub(crate) async fn open_dictionary(
+    state: State<'_, DictionaryService>,
     mdx_path: String,
-) -> Result<PdfDictionaryInfo, String> {
+) -> Result<DictionaryInfo, String> {
     let service = state.inner().clone();
     tokio::task::spawn_blocking(move || {
         let path = PathBuf::from(mdx_path);
         if let Some(opened) = service.opened.lock().map_err(|_| lock_error())?.as_ref() {
             if opened.mdx_path == path {
-                return Ok(PdfDictionaryInfo {
+                return Ok(DictionaryInfo {
                     path: path.to_string_lossy().into_owned(),
                     title: opened
                         .mdx
@@ -74,12 +74,12 @@ pub(crate) async fn open_pdf_dictionary(
         let mdd_path = resolve_mdd_path(&path)?;
         let mdx = MdxFile::open(&path).map_err(|error| format!("无法读取词典索引：{error}"))?;
         let mdd = MddFile::open(&mdd_path).map_err(|error| format!("无法读取词典资源：{error}"))?;
-        let info = PdfDictionaryInfo {
+        let info = DictionaryInfo {
             path: path.to_string_lossy().into_owned(),
             title: mdx.header().title().unwrap_or("本地词典").to_string(),
             entries: mdx.len(),
         };
-        *service.opened.lock().map_err(|_| lock_error())? = Some(OpenedPdfDictionary {
+        *service.opened.lock().map_err(|_| lock_error())? = Some(OpenedDictionary {
             mdx_path: path,
             mdx,
             mdd,
@@ -91,11 +91,11 @@ pub(crate) async fn open_pdf_dictionary(
 }
 
 #[tauri::command]
-pub(crate) async fn lookup_pdf_dictionary(
-    state: State<'_, PdfDictionaryService>,
+pub(crate) async fn lookup_dictionary(
+    state: State<'_, DictionaryService>,
     mdx_path: String,
     word: String,
-) -> Result<Option<PdfDictionaryRecord>, String> {
+) -> Result<Option<DictionaryRecord>, String> {
     let service = state.inner().clone();
     tokio::task::spawn_blocking(move || {
         let opened = service.opened.lock().map_err(|_| lock_error())?;
@@ -107,7 +107,7 @@ pub(crate) async fn lookup_pdf_dictionary(
             .mdx
             .lookup(word.trim())
             .map_err(|error| format!("查询词典失败：{error}"))?;
-        Ok(entry.map(|entry| PdfDictionaryRecord {
+        Ok(entry.map(|entry| DictionaryRecord {
             key: entry.key().to_string(),
             html: entry.text().to_string(),
         }))
@@ -117,8 +117,8 @@ pub(crate) async fn lookup_pdf_dictionary(
 }
 
 #[tauri::command]
-pub(crate) async fn read_pdf_dictionary_audio(
-    state: State<'_, PdfDictionaryService>,
+pub(crate) async fn read_dictionary_audio(
+    state: State<'_, DictionaryService>,
     mdx_path: String,
     resource_key: String,
 ) -> Result<Option<String>, String> {

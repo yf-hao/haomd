@@ -897,6 +897,9 @@ export const AiChatPane: FC<AiChatPaneProps> = ({
       return
     }
 
+    if (contentToSend.trim()) {
+      appendAiInputHistory(directoryKey, contentToSend)
+    }
     await sendMessage(contentToSend, {
       contextPrefix,
       contextPrefixUsed,

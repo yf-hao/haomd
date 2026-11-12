@@ -856,6 +856,9 @@ export const AiChatDialog: FC<AiChatDialogProps> = ({
       return
     }
 
+    if (contentToSend.trim()) {
+      appendAiInputHistory(directoryKey, contentToSend)
+    }
     await sendMessage(contentToSend, {
       contextPrefix,
       contextPrefixUsed,
