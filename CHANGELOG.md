@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.20.0] - 2026-11-15
+
+### 中文
+
+本次更新加入本地词典翻译和网页版 Markdown 文档工作区，并改进 PDF 翻译、文件夹创建与长文档切换体验。
+
+#### 主要更新
+
+* **本地词典**：可在设置中配置本地词典；AI Chat 可优先查询词典翻译单词和词组，也支持明确指定使用词典，并展示完整义项和英美发音。
+* **PDF 翻译**：支持使用本地词典翻译 PDF 选词，并改进翻译结果和发音交互。
+* **网页文档**：在浏览器版主界面增加 Markdown 文档工作区，支持新建、打开、编辑、预览和保存；浏览器草稿可用于意外关闭后的恢复。
+* **文件夹创建**：在 Folders 面板点击空白处可取消选择；未选中文件夹时，可通过系统目录选择器指定新建位置。
+* **长文档切换**：查看 Session 时保留文档编辑器实例，减少切回长文档时的重新初始化。
+
+### English
+
+This release adds local dictionary translation and a browser Markdown workspace, while improving PDF translation, folder creation, and switching back to large documents.
+
+#### Key Updates
+
+* **Local Dictionary**: Configure a local dictionary in Settings. AI Chat can look up word and phrase translations first, supports explicit dictionary requests, and displays complete senses with British and American pronunciations.
+* **PDF Translation**: Translate selected PDF text with the local dictionary and refine translation and pronunciation interactions.
+* **Web Documents**: Add a Markdown workspace to the browser version with create, open, edit, preview, and save actions. Browser drafts can help recover work after an unexpected close.
+* **Folder Creation**: Click blank space in Folders to clear the selection; when no folder is selected, choose a parent directory for a new folder with the system picker.
+* **Large Document Switching**: Keep the editor mounted while viewing Sessions to reduce reinitialization when returning to a large document.
+
 ## [v0.19.0] - 2026-11-08
 
 ### 中文
