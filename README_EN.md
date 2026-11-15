@@ -29,6 +29,7 @@ HaoMD lets you set a **custom background** (including local images) for both the
 ### AI Assistant
 - 🤖 **Multi-Provider Support**: Dify, OpenAI-compatible APIs
 - 📄 **Document Chat**: AI assistant for document analysis and Q&A
+- 📚 **Local Dictionary Translation**: Configure an MDX dictionary for word and phrase lookups, PDF text translation, and British/American pronunciation
 - 🔄 **Directory-based Session Management**: Maintain independent AI conversation contexts per directory
 - ✂️ **Selection Chat**: Ask questions about selected text
 - 🖼️ **Vision Understanding**: Analyze images with AI
@@ -45,6 +46,7 @@ HaoMD lets you set a **custom background** (including local images) for both the
 ![mind ](docs/images/mind.png)
 ### File Management
 - 📁 **File Browser**: Built-in file explorer with folder navigation
+- 🌐 **Browser Document Workspace**: Create, open, edit, preview, and save Markdown files in the browser interface. Supported browsers can write back to an authorized file; others download the file.
 - 🕒 **Recent Files**: Quick access to recently opened files
 - 🔗 **PDF Reader**: Built-in PDF viewing and navigation
 - 🖨️ **Export**: Export to PDF (via system print) and HTML
@@ -110,8 +112,9 @@ markdown/
 │   │   ├── config/         # Configuration files
 │   │   └── types/          # TypeScript type definitions
 │   ├── public/             # Static assets
+│   ├── web/                # Browser app modules
+│   ├── web-lite.html       # Lite web app entry point
 │   └── src-tauri/          # Rust backend (Tauri)
-├── web-chat/               # Web version
 └── package.json
 ```
 
