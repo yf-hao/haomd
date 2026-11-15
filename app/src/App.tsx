@@ -615,6 +615,21 @@ function AppShellContent({
             </svg>
           </button>
 
+          {!isTauriEnv() && (
+            <button
+              type="button"
+              className={`activity-item ${activeLeftPanel === 'browser-documents' ? 'active' : ''}`}
+              onClick={() => handleLeftPanelToggle('browser-documents')}
+              aria-pressed={activeLeftPanel === 'browser-documents'}
+              title="网页文档"
+            >
+              <svg className="activity-icon-browser-documents" viewBox="0 0 24 24" aria-hidden="true" fill="none">
+                <path d="M5 2.75h9l5 5v13.5H5a1 1 0 0 1-1-1V3.75a1 1 0 0 1 1-1Z" />
+                <path d="M14 3v5h5M8 13h8M8 17h8" />
+              </svg>
+            </button>
+          )}
+
           <button
             type="button"
             className={`activity-item ${activeLeftPanel === 'search' ? 'active' : ''}`}

@@ -45,6 +45,7 @@ export type SidebarProps = {
   onToggle: (path: string) => void
   onFileClick: (path: string) => void
   onDirClick?: (path: string) => void  // 文件夹点击回调（用于选中文件夹）
+  onClearDirectorySelection?: () => void
   canPaste?: boolean
   onContextAction?: (payload: SidebarContextActionPayload) => void
   /** 顶部工具栏：在当前文件夹中新建文件 */
@@ -397,7 +398,7 @@ function InlineRenameRow({ level, isFolder, initialName, onConfirm, onCancel }: 
 }
 
 
-export const Sidebar = memo(function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, onToggle, onFileClick, onDirClick, onContextAction, canPaste = false, onToolbarNewFileInCurrentFolder, onToolbarNewFolderInCurrentFolder, onToolbarRefreshCurrentFolder, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel, inlineNewFolderDir, onInlineNewFolderConfirm, onInlineNewFolderCancel, inlineRenamePath, onInlineRenameConfirm, onInlineRenameCancel, activePath, panelWidth, highlightedPaths, onFileVisited, onRequestConfirmDeleteFileVirtualFolder, onMoveFile, onNotify }: SidebarProps) {
+export const Sidebar = memo(function Sidebar({ standaloneFiles, folderRoots, treesByRoot, expanded, onToggle, onFileClick, onDirClick, onClearDirectorySelection, onContextAction, canPaste = false, onToolbarNewFileInCurrentFolder, onToolbarNewFolderInCurrentFolder, onToolbarRefreshCurrentFolder, inlineNewFileDir, onInlineNewFileConfirm, onInlineNewFileCancel, inlineNewFolderDir, onInlineNewFolderConfirm, onInlineNewFolderCancel, inlineRenamePath, onInlineRenameConfirm, onInlineRenameCancel, activePath, panelWidth, highlightedPaths, onFileVisited, onRequestConfirmDeleteFileVirtualFolder, onMoveFile, onNotify }: SidebarProps) {
   const selection = useFileBrowserSelection()
   const selectedPaths = selection.selectedPaths
   const sidebarElement = useRef<HTMLElement | null>(null)
@@ -804,7 +805,14 @@ export const Sidebar = memo(function Sidebar({ standaloneFiles, folderRoots, tre
       }}
       onClickCapture={selectClipboardTarget}
       onContextMenuCapture={selectClipboardTarget}
-      onClick={closeMenu}
+      onClick={(event) => {
+        closeMenu()
+        if (browserSection !== 'folders') return
+        const target = event.target as HTMLElement
+        if (!target.closest('.sidebar-body')) return
+        if (target.closest('.sidebar-folder-row, .folder-section-actions, button, input, [role="button"]')) return
+        onClearDirectorySelection?.()
+      }}
       onContextMenu={(e) => {
         e.preventDefault()
         closeMenu()

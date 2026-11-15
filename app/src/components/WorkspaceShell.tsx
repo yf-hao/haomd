@@ -73,6 +73,7 @@ import { usePdfPanel } from '../hooks/usePdfPanel'
 import { useAiChatPanel } from '../hooks/useAiChatPanel'
 import { useHugeDoc } from '../hooks/useHugeDoc'
 import { useCursorMemory } from '../hooks/useCursorMemory'
+import { BrowserDocumentsWorkspace } from './BrowserDocumentsWorkspace'
 import { useSidebarResize } from '../hooks/useSidebarResize'
 import { useNativeBridge } from '../hooks/useNativeBridge'
 import { useNativePaste } from '../hooks/useNativePaste'
@@ -216,7 +217,7 @@ const preventContainerScroll = (e: React.UIEvent<HTMLElement>) => {
   }
 }
 
-export type LeftPanelId = 'files' | 'search' | 'outline' | 'pdf' | 'sessions' | 'notes' | 'skills' | 'workflows' | null
+export type LeftPanelId = 'files' | 'search' | 'outline' | 'pdf' | 'sessions' | 'notes' | 'skills' | 'workflows' | 'browser-documents' | null
 export type InitialWorkspaceAction = 'new' | 'open' | 'open_folder' | 'open_recent' | null
 
 export interface WorkspaceShellProps {
@@ -3219,18 +3220,13 @@ export function WorkspaceShell({
     return null
   }
 
-  const getTargetFolderForNewFolder = (): string | null => {
-    const baseDirectory = getCurrentSelectionBaseDirectory()
-    if (baseDirectory) {
-      return baseDirectory
-    }
-    setStatusMessage(t('workspace.openFileOrFolderFirst'))
-    return null
-  }
-
   const handleDirClick = useCallback((path: string) => {
     setSelectedFolderPath(path)
     setActiveWorkspaceDirectoryPath(path)
+  }, [])
+
+  const handleClearDirectorySelection = useCallback(() => {
+    setSelectedFolderPath(null)
   }, [])
 
   const handleToolbarNewFileInCurrentFolder = useCallback(() => {
@@ -3294,19 +3290,37 @@ export function WorkspaceShell({
     setInlineNewFileDir(null)
   }, [])
 
-  const handleToolbarNewFolderInCurrentFolder = useCallback(() => {
+  const handleToolbarNewFolderInCurrentFolder = useCallback(async () => {
     if (isCreatingTab) {
       setStatusMessage(t('workspace.creatingTabPleaseWait'))
       return
     }
 
-    const targetFolder = getTargetFolderForNewFolder()
+    let targetFolder = selectedFolderPath
+    if (!targetFolder) {
+      if (!isTauriEnv()) {
+        setStatusMessage(t('workspace.openFileOrFolderFirst'))
+        return
+      }
+      try {
+        const selected = await openDialog({ directory: true, multiple: false })
+        if (!selected) return
+        const pickedPath = Array.isArray(selected) ? selected[0] : selected
+        if (!pickedPath) return
+        targetFolder = pickedPath
+        await sidebar.openFolderAsRoot(pickedPath)
+      } catch (error) {
+        console.warn('[WorkspaceShell] Failed to choose parent directory for new folder', error)
+        setStatusMessage(t('workspace.openFileOrFolderFirst'))
+        return
+      }
+    }
     if (!targetFolder) return
 
     // 确保目标文件夹展开
     sidebar.expandPath(targetFolder)
     setInlineNewFolderDir(targetFolder)
-  }, [isCreatingTab, getTargetFolderForNewFolder, setStatusMessage, sidebar])
+  }, [isCreatingTab, selectedFolderPath, isTauriEnv, setStatusMessage, sidebar])
 
   const handleInlineNewFolderConfirm = useCallback((rawName: string) => {
     console.log('[WorkspaceShell.handleInlineNewFolderConfirm] called', { rawName, inlineNewFolderDir })
@@ -4619,13 +4633,14 @@ export function WorkspaceShell({
               <div className="workspace-background-overlay" aria-hidden="true" />
             </>
           ) : null}
-          <div className="workspace-region-content">
+          <div className={`workspace-region-content ${activeLeftPanel === 'browser-documents' ? 'workspace-region-content-browser-documents' : ''}`}>
         {activeLeftPanel === 'files' && (
           <Sidebar
             standaloneFiles={sidebar.standaloneFiles} folderRoots={sidebar.folderRoots}
             treesByRoot={sidebar.treesByRoot} expanded={sidebar.expanded}
             onToggle={sidebar.toggleNode} onFileClick={openFileFromSidebar}
             onDirClick={handleDirClick}
+            onClearDirectorySelection={handleClearDirectorySelection}
             onMoveFile={handleFileMove}
             canPaste={fileClipboard.canPaste}
             onContextAction={handleSidebarContextAction} activePath={selectedFolderPath ?? activeTab?.path?.replace(/\\/g, '/') ?? null}
@@ -4942,6 +4957,7 @@ export function WorkspaceShell({
         )}
         {activeLeftPanel === 'skills' && <SkillsPanel panelWidth={sidebarWidth} />}
         {activeLeftPanel === 'workflows' && <WorkflowsPanel panelWidth={sidebarWidth} />}
+        {activeLeftPanel === 'browser-documents' && !isTauriEnv() && <BrowserDocumentsWorkspace />}
         {(activeLeftPanel === 'files' || activeLeftPanel === 'search' || activeLeftPanel === 'outline' || activeLeftPanel === 'pdf' || activeLeftPanel === 'sessions' || activeLeftPanel === 'notes' || activeLeftPanel === 'skills' || activeLeftPanel === 'workflows') && (
           <div className={`sidebar-resizer ${isSidebarResizing ? 'active' : ''}`} onMouseDown={handleSidebarResizeStart} />
         )}
