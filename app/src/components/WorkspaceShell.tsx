@@ -4619,6 +4619,8 @@ export function WorkspaceShell({
     onInitialActionHandled,
   ])
 
+  const isSessionWorkspaceVisible = aiChatSessionKey.startsWith('session:') && activeLeftPanel === 'sessions'
+
   return (
     <AiChatCommandBridgeContext.Provider value={aiChatCommandBridge}>
       <>
@@ -4974,7 +4976,15 @@ export function WorkspaceShell({
           ) : null}
           <div className="workspace-column-content">
           {aiChatSessionKey.startsWith('session:') ? (
-            <div style={{ display: activeLeftPanel === 'sessions' ? undefined : 'none', height: '100%' }}>
+            <div
+              style={{
+                display: isSessionWorkspaceVisible ? undefined : 'none',
+                position: 'absolute',
+                inset: 0,
+                zIndex: 2,
+                height: '100%',
+              }}
+            >
             <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, fontSize: 13, height: '100%' }}>{t('workspace.loadingAiPane')}</div>}>
                 <AiChatPaneLazy
                 key={aiChatSessionKey}
@@ -5011,7 +5021,14 @@ export function WorkspaceShell({
             </Suspense>
             </div>
           ) : null}
-          {aiChatSessionKey.startsWith('session:') && activeLeftPanel === 'sessions' ? null : tabs.length === 0 ? (
+          <div
+            className="workspace-document-view"
+            style={isSessionWorkspaceVisible
+              ? { position: 'absolute', inset: 0, visibility: 'hidden', pointerEvents: 'none' }
+              : { position: 'relative', flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+            aria-hidden={isSessionWorkspaceVisible}
+          >
+          {tabs.length === 0 ? (
             <Welcome
               onNewFile={() => createTab()}
               onOpenFile={() => void dispatchAction('open_file')}
@@ -5295,6 +5312,7 @@ export function WorkspaceShell({
               </main>
             </>
           )}
+          </div>
           </div>
         </div>
           </div>
